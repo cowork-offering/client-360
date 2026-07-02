@@ -1,0 +1,13 @@
+{
+  "name": "customer-360",
+  "owner": {
+    "name": "Commercial Credit Reinvented"
+  },
+  "plugins": [
+    {
+      "name": "customer-360-reinvented",
+      "source": "./",
+      "description": "Customer 360 relationship cockpit — Salesforce-hosted Customer360 MCP data plane (8 tools, per-user OAuth) rendered as a live Cowork artifact with an Explain-this AI panel."
+    }
+  ]
+}

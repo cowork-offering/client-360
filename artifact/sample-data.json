@@ -1,0 +1,446 @@
+{
+  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note — field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names.",
+  "meta": {
+    "user": "Fabian Goetzens",
+    "dateISO": "2026-07-02",
+    "generatedAt": "2026-07-02T09:15:00Z",
+    "orgAlias": "bankinggpt",
+    "anchorAccountId": "001bb00001DLtRMAA1",
+    "accent": "#6B1CC4"
+  },
+  "portfolio": {
+    "accounts": [
+      {
+        "accountId": "001bb00001DLtRMAA1",
+        "name": "Piedmont Precision Components, Inc.",
+        "industry": "Manufacturing",
+        "naicsCode": "332710",
+        "annualRevenue": 64500000,
+        "tce": 12500000,
+        "tbe": 12500000,
+        "toe": 4250000,
+        "outstanding": 4250000,
+        "riskRating": "5",
+        "stage": "Credit Decisioning",
+        "packageCount": 1
+      },
+      {
+        "_sample_only": true,
+        "accountId": "001SAMPLE0000BRWT",
+        "name": "Brightwater Foods Group",
+        "industry": "Diversified Holdings",
+        "naicsCode": "311999",
+        "annualRevenue": 96000000,
+        "tce": 28500000,
+        "tbe": 28500000,
+        "toe": 28500000,
+        "outstanding": 28500000,
+        "riskRating": "6",
+        "stage": "Booked",
+        "packageCount": 1
+      },
+      {
+        "_sample_only": true,
+        "accountId": "001SAMPLE0000STRL",
+        "name": "Sterling Fabrication Co.",
+        "industry": "Industrial Supply",
+        "naicsCode": "332999",
+        "annualRevenue": 78500000,
+        "tce": 18000000,
+        "tbe": 18000000,
+        "toe": 16900000,
+        "outstanding": 16900000,
+        "riskRating": "5",
+        "stage": "Booked",
+        "packageCount": 1
+      },
+      {
+        "_sample_only": true,
+        "accountId": "001SAMPLE0000KGSL",
+        "name": "Kingsley Precision Works",
+        "industry": "Manufacturing",
+        "naicsCode": "333000",
+        "annualRevenue": 110000000,
+        "tce": 22000000,
+        "tbe": 22000000,
+        "toe": 9400000,
+        "outstanding": 9400000,
+        "riskRating": "4",
+        "stage": "Booked",
+        "packageCount": 1
+      }
+    ],
+    "bookTotals": {
+      "totalCommitted": 81000000,
+      "totalOutstanding": 59050000,
+      "accountCount": 4,
+      "utilizationPct": 72.9
+    },
+    "signals": {
+      "covenantsDueSoon": [
+        {
+          "accountId": "001bb00001DLtRMAA1",
+          "accountName": "Piedmont Precision Components, Inc.",
+          "covenantType": "Debt Service Coverage Ratio",
+          "nextEvaluationDate": "2026-06-30",
+          "daysUntilNextEvaluation": -2,
+          "overdue": true
+        },
+        {
+          "accountId": "001bb00001DLtRMAA1",
+          "accountName": "Piedmont Precision Components, Inc.",
+          "covenantType": "Minimum Liquidity",
+          "nextEvaluationDate": "2026-09-30",
+          "daysUntilNextEvaluation": 90,
+          "overdue": false
+        },
+        {
+          "accountId": "001SAMPLE0000BRWT",
+          "accountName": "Brightwater Foods Group",
+          "covenantType": "Debt Service Coverage Ratio",
+          "nextEvaluationDate": "2026-08-15",
+          "daysUntilNextEvaluation": 44,
+          "overdue": false
+        }
+      ],
+      "breachedCount": 0,
+      "maturitiesSoon": []
+    },
+    "note": "Rollups are package-level (Σ TCE/TBE/TOE/Outstanding — never a loan sum); risk rating + stage are from each account's highest-TCE package. Book totals span all 4 packaged accounts; the account list is truncated to the highest-TCE 4. Signals are bounded by a 90-day window and capped at 25 rows each; overdue covenants (past due, still active) are included and flagged. Financial / behavioral / risk-migration EWS lives elsewhere in the fleet."
+  },
+  "borrower": {
+    "snapshot": {
+      "accountId": "001bb00001DLtRMAA1",
+      "name": "Piedmont Precision Components, Inc.",
+      "industry": "Manufacturing",
+      "annualRevenue": 64500000,
+      "naicsCode": "332710",
+      "packageCount": 1,
+      "totalCreditExposure": 12500000,
+      "totalBorrowerExposure": 12500000,
+      "totalObligorExposure": 4250000,
+      "totalOutstanding": 4250000,
+      "primaryRiskRating": "5",
+      "primaryStage": "Credit Decisioning",
+      "note": "Use get_relationship_graph, get_exposure, get_covenants for detail."
+    },
+    "graph": {
+      "accountId": "001bb00001DLtRMAA1",
+      "connections": [
+        {
+          "counterpartyId": "001bb00001DLtHOLDCO",
+          "counterpartyName": "Margaret Holloway",
+          "direction": "inbound",
+          "role": "Owner",
+          "ownershipPercent": 100,
+          "indirectOwnershipPercent": null,
+          "totalOwnershipPercent": 100,
+          "isActive": true
+        }
+      ],
+      "legalEntities": [
+        {
+          "accountName": "Piedmont Precision Components, Inc.",
+          "borrowerType": "Borrower",
+          "relationshipType": "Primary Borrower",
+          "ownershipPercent": null,
+          "guarantyAmountType": null,
+          "contingentAmount": null,
+          "loanId": null,
+          "packageId": "a5Fbb000000HA1NEAW"
+        },
+        {
+          "accountName": "Margaret Holloway",
+          "borrowerType": "Guarantor",
+          "relationshipType": "Personal Guaranty",
+          "ownershipPercent": 100,
+          "guarantyAmountType": "Unlimited",
+          "contingentAmount": null,
+          "loanId": null,
+          "packageId": "a5Fbb000000HA1NEAW"
+        }
+      ],
+      "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+    },
+    "exposure": {
+      "accountId": "001bb00001DLtRMAA1",
+      "totalCommitted": 12500000,
+      "totalOutstanding": 4250000,
+      "totalAvailable": 8250000,
+      "facilities": [
+        {
+          "loanId": "a1Xbb000000PLD1",
+          "name": "Piedmont Equipment Term Loan",
+          "productType": "Term Loan",
+          "riskGrade": "5",
+          "committed": 5000000,
+          "outstanding": 2500000,
+          "available": 2500000,
+          "maturityDate": "2029-03-15",
+          "interestRate": 6.75,
+          "totalLendableValue": 4800000,
+          "coverageRatio": 1.92,
+          "coverageShortfall": false,
+          "collateral": [
+            {
+              "loanId": "a1Xbb000000PLD1",
+              "collateralType": "Equipment",
+              "collateralValue": 6000000,
+              "advanceRate": 80,
+              "currentLendableValue": 4800000,
+              "lienPosition": "1st",
+              "pledgedStatus": "Active",
+              "isPrimary": true
+            }
+          ]
+        },
+        {
+          "loanId": "a1Xbb000000PLD2",
+          "name": "Piedmont Working Capital Revolver",
+          "productType": "Revolving Line of Credit",
+          "riskGrade": "5",
+          "committed": 5000000,
+          "outstanding": 1750000,
+          "available": 3250000,
+          "maturityDate": "2027-03-15",
+          "interestRate": 7.25,
+          "totalLendableValue": 3600000,
+          "coverageRatio": 2.06,
+          "coverageShortfall": false,
+          "collateral": [
+            {
+              "loanId": "a1Xbb000000PLD2",
+              "collateralType": "Accounts Receivable",
+              "collateralValue": 3000000,
+              "advanceRate": 80,
+              "currentLendableValue": 2400000,
+              "lienPosition": "1st",
+              "pledgedStatus": "Active",
+              "isPrimary": true
+            },
+            {
+              "loanId": "a1Xbb000000PLD2",
+              "collateralType": "Inventory",
+              "collateralValue": 1500000,
+              "advanceRate": 80,
+              "currentLendableValue": 1200000,
+              "lienPosition": "1st",
+              "pledgedStatus": "Active",
+              "isPrimary": false
+            }
+          ]
+        },
+        {
+          "loanId": "a1Xbb000000PLD3",
+          "name": "Piedmont CapEx Facility",
+          "productType": "Term Loan",
+          "riskGrade": "5",
+          "committed": 2500000,
+          "outstanding": 0,
+          "available": 2500000,
+          "maturityDate": "2028-09-30",
+          "interestRate": 6.9,
+          "totalLendableValue": 1600000,
+          "coverageRatio": null,
+          "coverageShortfall": false,
+          "collateral": [
+            {
+              "loanId": "a1Xbb000000PLD3",
+              "collateralType": "Real Estate",
+              "collateralValue": 2000000,
+              "advanceRate": 80,
+              "currentLendableValue": 1600000,
+              "lienPosition": "1st",
+              "pledgedStatus": "Pending",
+              "isPrimary": true
+            }
+          ]
+        }
+      ],
+      "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+    },
+    "covenants": {
+      "accountId": "001bb00001DLtRMAA1",
+      "covenants": [
+        {
+          "covenantId": "a2Cbb000000CV01",
+          "covenantType": "Debt Service Coverage Ratio",
+          "thresholdValue": 1.25,
+          "actualValue": 1.42,
+          "lastEvaluationStatus": "Compliant",
+          "lastEvaluationDate": "2026-03-31",
+          "nextEvaluationDate": "2026-06-30",
+          "daysUntilNextEvaluation": -2,
+          "frequency": "Quarterly",
+          "breached": false,
+          "covenantStatus": "Active"
+        },
+        {
+          "covenantId": "a2Cbb000000CV02",
+          "covenantType": "Debt-to-Worth",
+          "thresholdValue": 3.0,
+          "actualValue": 2.18,
+          "lastEvaluationStatus": "Compliant",
+          "lastEvaluationDate": "2026-03-31",
+          "nextEvaluationDate": "2026-06-30",
+          "daysUntilNextEvaluation": -2,
+          "frequency": "Quarterly",
+          "breached": false,
+          "covenantStatus": "Active"
+        },
+        {
+          "covenantId": "a2Cbb000000CV03",
+          "covenantType": "Minimum Liquidity",
+          "thresholdValue": 5000000,
+          "actualValue": 8200000,
+          "lastEvaluationStatus": "Compliant",
+          "lastEvaluationDate": "2026-03-31",
+          "nextEvaluationDate": "2026-06-30",
+          "daysUntilNextEvaluation": -2,
+          "frequency": "Quarterly",
+          "breached": false,
+          "covenantStatus": "Active"
+        },
+        {
+          "covenantId": "a2Cbb000000CV04",
+          "covenantType": "Fixed Asset Purchases Limit",
+          "thresholdValue": 7500000,
+          "actualValue": 1250000,
+          "lastEvaluationStatus": "Compliant",
+          "lastEvaluationDate": "2026-03-31",
+          "nextEvaluationDate": "2026-12-31",
+          "daysUntilNextEvaluation": 182,
+          "frequency": "Annual",
+          "breached": false,
+          "covenantStatus": "Active"
+        }
+      ],
+      "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
+    },
+    "opportunities": {
+      "accountId": "001bb00001DLtRMAA1",
+      "opportunities": [
+        {
+          "opportunityId": "006bb000000OPP1",
+          "name": "Piedmont Treasury & Operating Deposits",
+          "stage": "Qualification",
+          "amount": 4200000,
+          "closeDate": "2026-09-30",
+          "type": "New Business",
+          "probability": 30,
+          "ownerName": "Fabian Goetzens"
+        }
+      ],
+      "note": null
+    },
+    "signals": {
+      "accountId": "001bb00001DLtRMAA1",
+      "modifications": [],
+      "modificationClusterFlag": false,
+      "renewals": [],
+      "maturityWatch": [
+        {
+          "loanId": "a1Xbb000000PLD2",
+          "name": "Piedmont Working Capital Revolver",
+          "maturityDate": "2027-03-15",
+          "daysUntilMaturity": 256
+        }
+      ],
+      "guarantorSignals": [],
+      "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+    },
+    "boom": {
+      "ratios": {
+        "revenue": 64500000,
+        "ebitda": 5200000,
+        "ebitdaMargin": 8.06,
+        "totalLeverage": 3.85,
+        "interestCoverage": 2.64
+      },
+      "spread": {
+        "sourceFile": "Piedmont_Precision_FY2025_LTM.xlsx",
+        "periods": [
+          {
+            "period": "FY2023",
+            "revenue": 59100000,
+            "ebitda": 6800000,
+            "margin": 11.51
+          },
+          {
+            "period": "FY2024",
+            "revenue": 62400000,
+            "ebitda": 7200000,
+            "margin": 11.54
+          },
+          {
+            "period": "LTM",
+            "revenue": 64500000,
+            "ebitda": 5200000,
+            "margin": 8.06
+          }
+        ],
+        "lineItems": [
+          {
+            "line": "Revenue",
+            "ltm": 64500000,
+            "priorFy": 62400000
+          },
+          {
+            "line": "Gross Profit",
+            "ltm": 16100000,
+            "priorFy": 17500000
+          },
+          {
+            "line": "EBITDA",
+            "ltm": 5200000,
+            "priorFy": 7200000
+          },
+          {
+            "line": "Net Income",
+            "ltm": 2800000,
+            "priorFy": 4100000
+          },
+          {
+            "line": "Interest Expense",
+            "ltm": 1970000,
+            "priorFy": 1850000
+          },
+          {
+            "line": "Free Cash Flow",
+            "ltm": 4100000,
+            "priorFy": 5800000
+          }
+        ]
+      },
+      "note": "Source: Boom spreading — Piedmont_Precision_FY2025_LTM.xlsx"
+    },
+    "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+    "anchors": [
+      {
+        "label": "Rating",
+        "value": "Grade 5",
+        "sub": "Credit Decisioning",
+        "dir": null
+      },
+      {
+        "label": "Committed",
+        "value": "$12.5M",
+        "sub": "$4.25M drawn",
+        "dir": null
+      },
+      {
+        "label": "DSC",
+        "value": "1.42×",
+        "sub": "Floor 1.25×",
+        "dir": null
+      },
+      {
+        "label": "Leverage",
+        "value": "3.85×",
+        "sub": "Debt/EBITDA",
+        "dir": "down"
+      }
+    ]
+  },
+  "aiPanel": null
+}
