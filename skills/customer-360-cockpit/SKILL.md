@@ -11,11 +11,20 @@ fetches. Interactivity flows back through `window.sendPrompt(...)` → agent re-
 
 **Demo anchor:** Piedmont Precision Components, Inc. · Account `001bb00001DLtRMAA1` · org `bankinggpt`.
 
-## HARD RULE — no fallback data sources
+## STEP 0 — WAIT for the Customer360 server (before anything else)
+
+MCP servers connect lazily; at session start `customer360` often shows "still connecting". You MUST:
+1. Call ToolSearch with query "Customer360Snapshot" — ToolSearch WAITS for connecting servers.
+2. If no match, wait and retry ToolSearch up to 3 more times (it blocks on connecting servers; a
+   Salesforce OAuth token refresh can take ~10-30s).
+3. Only if the server is terminally failed/unauthenticated after retries: STOP and tell the user to
+   authenticate (`/mcp` → customer360 → Authenticate) or check the README config. Do NOT proceed.
+
+## HARD RULE — no fallback data sources (this overrides being helpful)
 
 If the Customer360 MCP tools are NOT available in the session (server disconnected, still
 connecting, or shadowed by a stale plugin-bundled duplicate named `plugin:customer-360-reinvented:customer360`),
-**STOP and tell the user to fix the connection** (README: user-scope `~/.claude.json` entry with
+**STOP and tell the user to fix the connection** — an error message IS the correct deliverable here (README: user-scope `~/.claude.json` entry with
 oauth.clientId; plugin >= v0.1.3 has no bundled server). Do NOT render the cockpit from
 `ncino_deal_prep`, sObject SOQL, or any other source. Reason: those paths sum loan amounts, which
 double-counts nCino limit/sublimit structures (Piedmont: 3 loans sum to $17.5M vs true package-level
