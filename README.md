@@ -35,6 +35,15 @@ the `Customer360` MCP server — no separate `claude mcp add` step. Auth is per-
 by the client at first use; no secrets live in the plugin. The server is declared as a remote HTTP MCP
 server (`type: "http"`).
 
+## Why the plugin does NOT auto-bundle the MCP server
+
+v0.1.x shipped an `mcpServers` entry in plugin.json. Removed in v0.1.3: Salesforce hosted MCP
+requires a pre-registered OAuth client (`oauth.clientId` + fixed `callbackPort`), which a plugin
+manifest cannot carry per-org. The bundled entry therefore registered a second, un-authable copy of
+the server (`plugin:customer-360-reinvented:customer360`, stuck "connecting") alongside the user's
+working config — and agents grabbed the dead one. The server lives in YOUR `~/.claude.json` (below);
+the plugin ships the skill + artifact template only.
+
 ## Install — proven path (Claude Code CLI)
 
 The claude.ai / Cowork connector broker currently fails on Salesforce hosted MCP servers
