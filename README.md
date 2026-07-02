@@ -35,6 +35,35 @@ the `Customer360` MCP server — no separate `claude mcp add` step. Auth is per-
 by the client at first use; no secrets live in the plugin. The server is declared as a remote HTTP MCP
 server (`type: "http"`).
 
+## Install — proven path (Claude Code CLI)
+
+The claude.ai / Cowork connector broker currently fails on Salesforce hosted MCP servers
+("authorized, but returned an error"): the broker sends a GET pre-flight, Salesforce answers a
+spec-compliant 405, the broker treats it as fatal (known: anthropics claude-ai-mcp issues
+#171/#184/#198/#246/#251 — fix in flight). Salesforce also does not support dynamic client
+registration, so the client must present a pre-registered OAuth app.
+
+Working setup today:
+
+1. Install the plugin (skill + artifact template):
+   `/plugin marketplace add weareconnectry/customer-360-reinvented` then
+   `/plugin install customer-360-reinvented@customer-360`
+2. Add the server to `~/.claude.json` under `mcpServers`, with YOUR org's External Client App
+   consumer key (PKCE on; whitelist `http://localhost:7524/callback` in the app):
+
+```json
+"customer360": {
+  "type": "http",
+  "url": "https://api.salesforce.com/platform/mcp/v1/sandbox/custom/Customer360",
+  "oauth": {
+    "clientId": "<YOUR_EXTERNAL_CLIENT_APP_CONSUMER_KEY>",
+    "callbackPort": 7524
+  }
+}
+```
+
+3. `/mcp` → `customer360` → Authenticate → Salesforce sandbox login → Allow.
+
 ## Server URL — verified
 
 `https://api.salesforce.com/platform/mcp/v1/sandbox/custom/Customer360`
