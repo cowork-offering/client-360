@@ -35,23 +35,17 @@ the `Customer360` MCP server — no separate `claude mcp add` step. Auth is per-
 by the client at first use; no secrets live in the plugin. The server is declared as a remote HTTP MCP
 server (`type: "http"`).
 
-## TODOs / verify before demo
+## Server URL — verified
 
-- **[VERIFY] Custom hosted-MCP server URL.** The `mcpServers.customer360.url` in `plugin.json` is a
-  **best-candidate**, not yet confirmed against the live endpoint:
-  `https://api.salesforce.com/platform/mcp/v1/sandbox/custom/Customer360`
-  - Confirmed from Salesforce docs: the base is `https://api.salesforce.com/platform/mcp/v1/`, and
-    **sandbox** orgs carry a `/sandbox/` path segment (this is the `bankinggpt` sandbox, so `/sandbox/`
-    is correct). Standard servers resolve as `.../sandbox/platform/<server-name>` (e.g.
-    `.../sandbox/platform/sobject-all`).
-  - **Unconfirmed:** the path segment for a **custom** `McpServerDefinition`. The docs say only that
-    "the URL for a custom server is unique to that configuration" and do not show the literal custom
-    path. Candidate assumes a `custom/` namespace + the server DeveloperName (`Customer360`). Plausible
-    alternatives: `.../sandbox/Customer360` (bare name, no `custom/`) or a lowercased/slugified name.
-  - **How to resolve authoritatively:** in the `bankinggpt` org, Setup → Integrations → **Salesforce
-    MCP Servers**, open the `Customer 360` custom server — the connection URL is shown there verbatim.
-    Update `plugin.json` with the exact string. (Noland's existing `CreditMemoExperinece` custom server
-    is the reference for the custom-server URL shape in this same org.)
-- **[DEPENDENCY]** `artifact/customer-360-template.html` is built in parallel by another agent; the
-  skill references it by relative path. Verify the template exposes a `<script id="c360-data">` slot and
-  restores active tab + `aiPanel` state on load.
+`https://api.salesforce.com/platform/mcp/v1/sandbox/custom/Customer360`
+
+Confirmed 2026-07-02 two ways: read verbatim from Setup → Integrations → Salesforce MCP Servers →
+Customer 360, and the endpoint's RFC 9728 protected-resource metadata resolves live
+(`https://api.salesforce.com/.well-known/oauth-protected-resource/platform/mcp/v1/sandbox/custom/Customer360`
+→ `scopes_supported: ["mcp_api", "refresh_token"]`). Custom hosted-MCP URL pattern is
+`.../{sandbox/}custom/<DeveloperName>`.
+
+## TODOs / verify before demo
+- **[E2E]** First live run: install plugin → OAuth connect (existing External Client App keys, PKCE) →
+  invoke the 8 tools over MCP → render the artifact. Everything upstream is verified; this transport
+  handshake is the last untested hop.
