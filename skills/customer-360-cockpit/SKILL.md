@@ -11,6 +11,17 @@ fetches. Interactivity flows back through `window.sendPrompt(...)` → agent re-
 
 **Demo anchor:** Piedmont Precision Components, Inc. · Account `001bb00001DLtRMAA1` · org `bankinggpt`.
 
+## HARD RULE — no fallback data sources
+
+If the Customer360 MCP tools are NOT available in the session (server disconnected, still
+connecting, or shadowed by a stale plugin-bundled duplicate named `plugin:customer-360-reinvented:customer360`),
+**STOP and tell the user to fix the connection** (README: user-scope `~/.claude.json` entry with
+oauth.clientId; plugin >= v0.1.3 has no bundled server). Do NOT render the cockpit from
+`ncino_deal_prep`, sObject SOQL, or any other source. Reason: those paths sum loan amounts, which
+double-counts nCino limit/sublimit structures (Piedmont: 3 loans sum to $17.5M vs true package-level
+TCE $12.5M). Package-level rollups exist ONLY in the Customer360 tools. A wrong committed-exposure
+figure in front of a banker is worse than an error message.
+
 ## The two MCP surfaces
 
 **Customer360** — Salesforce-hosted MCP, per-user OAuth (auto-connected by this plugin's `mcpServers`).
