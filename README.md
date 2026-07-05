@@ -84,6 +84,14 @@ Customer 360, and the endpoint's RFC 9728 protected-resource metadata resolves l
 `.../{sandbox/}custom/<DeveloperName>`.
 
 ## TODOs / verify before demo
-- **[E2E]** First live run: install plugin → OAuth connect (existing External Client App keys, PKCE) →
-  invoke the 8 tools over MCP → render the artifact. Everything upstream is verified; this transport
-  handshake is the last untested hop.
+- ~~**[E2E]** First live run~~ **DONE 2026-07-06**: OAuth connect + live MCP tool sweep from Claude
+  Code CLI (Fabian's Mac) against Piedmont (`001bb00001DLtRMAA1`). All tools return real org data.
+  The sweep caught one Apex bug — `Customer360SearchAccounts` emitted `WITH USER_MODE` before the
+  `WHERE` clause (`QueryException: unexpected token: 'WHERE'` on every call) — fixed, deployed to
+  bankinggpt (`0Afbb00000CtctlCAB`), live-verified on all three filter paths.
+- **[Cowork]** claude.ai / Cowork connector still blocked by the upstream broker GET-preflight bug
+  (see Install section). Options: wait for the Anthropic fix, or stand up a thin OAuth-aware proxy
+  on our box (answers GET, forwards POST + `.well-known`, fake DCR returning the pre-registered
+  client ID). Not started.
+- **[Artifact]** First cockpit render with live data ("open the Customer 360 for Piedmont") not yet
+  exercised — next natural step in the local session.
