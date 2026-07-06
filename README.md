@@ -89,9 +89,14 @@ Customer 360, and the endpoint's RFC 9728 protected-resource metadata resolves l
   The sweep caught one Apex bug — `Customer360SearchAccounts` emitted `WITH USER_MODE` before the
   `WHERE` clause (`QueryException: unexpected token: 'WHERE'` on every call) — fixed, deployed to
   bankinggpt (`0Afbb00000CtctlCAB`), live-verified on all three filter paths.
-- **[Cowork]** claude.ai / Cowork connector still blocked by the upstream broker GET-preflight bug
-  (see Install section). Options: wait for the Anthropic fix, or stand up a thin OAuth-aware proxy
-  on our box (answers GET, forwards POST + `.well-known`, fake DCR returning the pre-registered
-  client ID). Not started.
+- **[Cowork]** claude.ai / Cowork connector: CORRECTED DIAGNOSIS 2026-07-06. The "GET-preflight 405
+  bug" theory was wrong — Anthropic traced it (claude-ai-mcp #251, closed May 10): OAuth succeeds,
+  then the `initialize` POST gets a 404/rejection from Salesforce; the 405 is a follow-on artifact.
+  Most reporters fixed it Salesforce-side (activate the MCP server in Setup, exact URL incl.
+  `platform/` segment, ECA per the official blog, API Access Control OFF — known issue
+  a02Ka00000mmerI). BUT custom hosted servers that work via Claude Code and fail via the broker
+  remain an open unresolved issue (#495, June 26). Next: retry the connector with the
+  `Claude_Ai_Integration_via_MCP` ECA consumer key; if it fails with #495's signature, the box
+  OAuth proxy is the workaround (broker → our box → Salesforce, same path as the working CLI).
 - **[Artifact]** First cockpit render with live data ("open the Customer 360 for Piedmont") not yet
   exercised — next natural step in the local session.
