@@ -952,7 +952,7 @@ function renderExplainPanel(componentId, aiPanel){
     + '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+qBtns+'</div>'
     + '<div style="display:flex;gap:8px;align-items:flex-end"><textarea id="explain-input" rows="2" placeholder="Ask a question about this section…" style="flex:1;resize:none;border:1px solid #E4E1EC;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:13px;color:#1A1A1A;line-height:1.4" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'#E4E1EC\'"></textarea>'
     + '<button id="explain-send" aria-label="Send" style="flex:none;width:38px;height:38px;border-radius:10px;border:none;cursor:pointer;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 17 17"><path d="M2 8.5L15 2l-4 13-3-5-5-1.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button></div>'
-    + '<div style="font-size:11px;color:#A5A2AE;margin-top:8px;line-height:1.4">Answers are grounded in this borrower\'s live figures. One round-trip per question.</div>'
+    + '<div style="font-size:11px;color:#A5A2AE;margin-top:8px;line-height:1.4">'+(hasSendPrompt() ? 'Answers are grounded in this borrower\'s live figures. One round-trip per question.' : 'Static view — questions open a copy-ready prompt for the chat.')+'</div>'
     + '</div></div></aside>';
 }
 
@@ -1046,8 +1046,8 @@ function renderPortfolio(data){
     + '</div>';
 
   // Account list (replaces the reference work queue) — sorted tce desc.
-  // Anchor row -> client-side switch to L2 (data already loaded); other rows ->
-  // sendPrompt (guarded) so the agent fetches + update_artifact.
+  // Staged rows (C360_DATA.borrowers) switch to L2 fully client-side; unstaged
+  // rows go through agentAction (sendPrompt when live, copy-prompt modal otherwise).
   var rows = accts.map(function(a,i){
     var g = parseInt(a.riskRating,10);
     var tone = isNaN(g) ? 'neutral' : (g<=4?'green':g<=6?'amber':'red');
@@ -1291,6 +1291,58 @@ function toast(msg){
   clearTimeout(window._toastT); window._toastT = setTimeout(function(){ host.innerHTML=''; }, 4200);
 }
 
+/* No-agent fallback: when window.sendPrompt is unavailable (hosted artifact /
+   static preview), interactions surface the EXACT prompt to paste into the
+   chat instead of silently doing nothing. */
+function copyText(t, btn){
+  function ok(){ if(btn){ btn.textContent='Copied'; setTimeout(function(){ btn.textContent='Copy prompt'; }, 1800);} }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(ok, function(){ legacyCopy(t); ok(); }); }
+  else { legacyCopy(t); ok(); }
+}
+function legacyCopy(t){
+  var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(ta);
+}
+function promptModal(title, promptText){
+  var host = document.getElementById('modal-host') || (function(){ var d=document.createElement('div'); d.id='modal-host'; document.body.appendChild(d); return d; })();
+  host.innerHTML = '<div id="pm-scrim" style="position:fixed;inset:0;z-index:110;background:rgba(20,0,40,.22);backdrop-filter:blur(1px)"></div>'
+    + '<div style="position:fixed;z-index:111;top:50%;left:50%;transform:translate(-50%,-50%);width:460px;max-width:92vw;background:#fff;border-radius:16px;box-shadow:0 24px 64px -12px rgba(20,0,40,.4);padding:22px 24px;animation:panelIn .25s cubic-bezier(.2,.8,.2,1) both">'
+    + '<div style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,#6B1CC4)">Agent action</div>'
+    + '<div style="font-size:16px;font-weight:800;letter-spacing:-.01em;margin:3px 0 10px">'+esc(title)+'</div>'
+    + '<div style="font-size:12.5px;color:#6E6B7B;line-height:1.5;margin-bottom:10px">This view is not connected to the agent (no <code>sendPrompt</code> in this runtime). Paste this prompt into the chat to run it:</div>'
+    + '<div id="pm-text" style="font-size:13px;font-weight:500;color:#1A1A1A;background:#F6F5FA;border:1px solid #ECEAF2;border-radius:10px;padding:11px 13px;line-height:1.5;user-select:all;word-break:break-word">'+esc(promptText)+'</div>'
+    + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">'
+    + '<button id="pm-close" style="cursor:pointer;border:1px solid #E4E1EC;background:#fff;color:#3F3D4A;font-family:inherit;font-size:13px;font-weight:600;padding:9px 16px;border-radius:10px">Close</button>'
+    + '<button id="pm-copy" style="cursor:pointer;border:none;background:var(--accent,#6B1CC4);color:#fff;font-family:inherit;font-size:13px;font-weight:600;padding:9px 16px;border-radius:10px">Copy prompt</button>'
+    + '</div></div>';
+  host.querySelector('#pm-close').onclick = function(){ host.innerHTML=''; };
+  host.querySelector('#pm-scrim').onclick = function(){ host.innerHTML=''; };
+  host.querySelector('#pm-copy').onclick = function(){ copyText(promptText, host.querySelector('#pm-copy')); };
+}
+function agentAction(title, prompt){
+  if(hasSendPrompt()){ window.sendPrompt(prompt); toast('Sent to the agent — '+title); }
+  else { promptModal(title, prompt); }
+}
+
+/* Staged-borrower switch: C360_DATA.borrowers = { accountId: borrowerBundle }.
+   When a portfolio row's account is staged, switching is fully client-side —
+   no agent round-trip. Returns false when the account is not staged. */
+function switchBorrower(accountId){
+  var d = window.C360_DATA || DATA || {};
+  var map = d.borrowers || {};
+  if(!accountId || !map[accountId]) return false;
+  d.borrower = map[accountId];
+  if(d.meta) d.meta.anchorAccountId = accountId;
+  d.aiPanel = null; STATE.explainOpen = null;
+  STATE.activeTab = 'overview'; if(d.meta) d.meta.activeTab = 'overview';
+  DATA = d; window.C360_DATA = d;
+  VM = buildBorrowerVM(d);
+  TAB_CACHE = {};
+  rerenderPanelOnly();
+  setScreen('c360');
+  return true;
+}
+
 function borrowerLabel(){
   var d = window.C360_DATA || {}; var snap = (d.borrower&&d.borrower.snapshot)||{};
   var acct = (snap.accountId) || (d.meta&&d.meta.anchorAccountId) || '';
@@ -1311,17 +1363,20 @@ function activate(target){
     renderTab();
     return;
   }
-  // L1 rows: anchor -> client-side L2; others -> sendPrompt (guarded)
+  // L1 rows: staged account -> instant client-side switch; anchor -> L2;
+  // unstaged -> agentAction (sendPrompt when live, copy-prompt modal otherwise)
   if((el = closestSel(target, '.pf-row'))){
+    var rowId = el.getAttribute('data-account-id');
+    if(switchBorrower(rowId)) return;
     if(el.getAttribute('data-anchor') === '1'){ setScreen('c360'); return; }
-    var p = 'Open Customer 360 for '+el.getAttribute('data-account-name')+' ('+el.getAttribute('data-account-id')+')';
-    if(hasSendPrompt()){ window.sendPrompt(p); } else { toast('Open Customer 360 — '+p); }
+    var rowName = el.getAttribute('data-account-name');
+    agentAction('Open Customer 360 for '+rowName, 'Open Customer 360 for '+rowName+' ('+rowId+')');
     return;
   }
   if(closestSel(target, '#crumb-portfolio')){ setScreen('portfolio'); return; }
   if((el = closestSel(target, '[data-explain]'))){ STATE.explainOpen = el.getAttribute('data-explain'); rerenderPanelOnly(); return; }
-  if(closestSel(target, '#btn-memo')){ var b = borrowerLabel(); var pm = 'Draft the credit memo for '+b.name+' ('+b.accountId+')'; if(hasSendPrompt()){ window.sendPrompt(pm); } else { toast('Draft Credit Memo — '+pm); } return; }
-  if(closestSel(target, '#btn-spread')){ var b2 = borrowerLabel(); var ps = 'Generate the financial spread for '+b2.name; if(hasSendPrompt()){ window.sendPrompt(ps); } else { toast('Generate Spreading — '+ps); } return; }
+  if(closestSel(target, '#btn-memo')){ var b = borrowerLabel(); agentAction('Draft the credit memo', 'Draft the credit memo for '+b.name+' ('+b.accountId+')'); return; }
+  if(closestSel(target, '#btn-spread')){ var b2 = borrowerLabel(); agentAction('Generate the financial spread', 'Generate the financial spread for '+b2.name); return; }
   if((el = closestSel(target, '.suggest-q'))){ submitExplain(STATE.explainOpen, el.getAttribute('data-question')); return; }
   if(closestSel(target, '#explain-send')){ var inp = document.getElementById('explain-input'); submitExplain(STATE.explainOpen, inp ? inp.value : ''); return; }
   if(closestSel(target, '#explain-close') || closestSel(target, '#explain-scrim')){ closePanel(); return; }
@@ -1353,12 +1408,18 @@ function submitExplain(componentId, question){
   // optimistic append client-side (thinking placeholder)
   var d = window.C360_DATA || {};
   if(!d.aiPanel || d.aiPanel.componentId !== componentId){ d.aiPanel = { componentId: componentId, thread: [] }; }
-  d.aiPanel.thread.push({ q: question, a: '' });
-  window.C360_DATA = d;
   var payload = JSON.stringify({ type:'explain', component: componentId, question: question });
-  if(hasSendPrompt()){ window.sendPrompt(payload); }
-  else { toast('Explain (preview) — '+payload); }
-  rerenderPanelOnly();
+  if(hasSendPrompt()){
+    d.aiPanel.thread.push({ q: question, a: '' }); // agent resolves via update_artifact
+    window.C360_DATA = d;
+    window.sendPrompt(payload);
+    rerenderPanelOnly();
+  } else {
+    d.aiPanel.thread.push({ q: question, a: 'This view is not connected to the agent, so live grounded answers are unavailable here. Use "Copy prompt" below to ask in the chat.' });
+    window.C360_DATA = d;
+    rerenderPanelOnly();
+    promptModal('Explain: '+componentId, 'In the Customer 360 for '+borrowerLabel().name+', explain ('+componentId+'): '+question);
+  }
 }
 
 /* ---- boot ---- */

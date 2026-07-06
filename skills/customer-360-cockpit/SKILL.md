@@ -90,9 +90,21 @@ window.C360_DATA = {
     verdict,   // agent-composed banker's sentence, live figures only
     anchors,   // [{ label, value, sub, dir }] agent-composed from live figures only
     aiPanel: { componentId, thread: [{ q, a }] } | null   // §4b, see below
+  },
+  borrowers: {   // STAGE THE WHOLE BOOK (added 2026-07-06): one bundle per portfolio account,
+                 // same shape as `borrower` (verbatim tool responses + composed verdict/anchors;
+                 // boom: null where no Boom file exists). Portfolio row clicks then switch
+                 // borrowers FULLY CLIENT-SIDE — instant, no agent round-trip. Include the anchor.
+    "<accountId>": { snapshot, graph, exposure, covenants, opportunities, signals, boom, verdict, anchors, aiPanel: null }
   }
 }
 ```
+
+**Staging is mandatory, not optional.** Fetch the six anchor tools for EVERY account in
+`portfolio.accounts` (the tools take `List<Request>` — batch all accounts into ONE call per tool,
+six calls total) and fill `borrowers`. This is what makes account switching instant and keeps the
+artifact fully functional in runtimes where `window.sendPrompt` does not exist (hosted artifact
+pages): staged rows switch client-side; only unstaged rows and AI answers need the agent.
 
 - Embed tool responses **verbatim** — field names unchanged, no re-shaping of figures. The artifact
   reads what the server returned. Portfolio ribbon totals now come **server-side** in
@@ -112,6 +124,12 @@ window.C360_DATA = {
 ## sendPrompt interaction loop
 
 Artifact buttons/rows fire `window.sendPrompt(...)`. Handle each payload, then re-render via `update_artifact`.
+
+**Runtime reality (verified 2026-07-06):** `window.sendPrompt` exists only in the widget runtime.
+Hosted artifact pages (`claude.ai/code/artifact/...`) do NOT expose it — there, the template
+degrades gracefully: staged account rows still switch client-side (hence mandatory staging above),
+and agent actions (explain, draft memo, spread, unstaged accounts) open a copy-prompt modal so the
+user pastes the prompt into the chat. Never assume the live loop; never leave an interaction silent.
 
 **Payloads to handle:**
 
