@@ -113,13 +113,32 @@ pages): staged rows switch client-side; only unstaged rows and AI answers need t
 - The agent composes **only** `verdict`, `anchors`, and any agent-composed watch banners — always from
   live figures, citing nothing invented.
 
-## Render as a Cowork artifact
+## Render as a Cowork artifact — use the render script (the fast path)
 
-1. Read the template at `artifact/customer-360-template.html` (relative to plugin root; built in parallel).
-2. Inject the `C360_DATA` JSON into the `<script id="c360-data">` slot (replace its contents wholesale).
-3. `create_artifact` with the resulting HTML.
+The finished artifact is ~170KB of HTML. **Never hand-author or model-generate that HTML, and never
+inject the JSON manually.** Emitting the whole document token-by-token is the slow path bankers feel as
+"the artifact takes ages to load". The bundled `render/assemble-cockpit.mjs` is the ONLY renderer: you
+write a small `data.json`, run one command, and publish the file it produces. Do this every time.
+
+1. **Write the composed `C360_DATA` to a temp JSON file** with the Write tool — e.g. `/tmp/c360-data.json`.
+   Write ONLY the `C360_DATA` object (the `{ meta, portfolio, borrower, borrowers }` contract above),
+   as JSON. Do not wrap it in `window.C360_DATA = …` and do not add a `<script>` tag.
+2. **Run the render script** (it bakes the JSON into the template's data slot and self-verifies):
+   ```
+   node <pluginRoot>/render/assemble-cockpit.mjs --data /tmp/c360-data.json --out /tmp/customer-360.html
+   ```
+   Resolve `<pluginRoot>` robustly: it is the directory that contains `.claude-plugin/` (the same root
+   holding `artifact/`, `skills/`, `render/`). The script defaults the template to
+   `../artifact/customer-360-template.html` relative to itself, so you do not pass `--template`.
+   The script exits non-zero with a clear message on any problem (missing/invalid data, missing required
+   fields, template without the slot). It prints a one-line success summary (bytes written, accounts
+   staged); if it warns that `borrowers` is missing or incomplete, go back and stage the whole book —
+   staging is mandatory (see above).
+3. **Publish `/tmp/customer-360.html` with the artifact tool BY FILE PATH** (`create_artifact`). Do not
+   paste HTML inline; point the tool at the file the script wrote.
 4. **Do NOT open a Chrome tab.** Do NOT call any other widget/HTML builder. The artifact is the deliverable.
-5. Updates are **full-replace** only — re-inject the whole `C360_DATA` and `update_artifact`.
+5. **Updates are full-replace only:** rebuild `data.json` (the whole `C360_DATA`), re-run the script to a
+   fresh `--out`, and `update_artifact` by file path. Never edit the rendered HTML or inject JSON by hand.
 
 ## sendPrompt interaction loop
 

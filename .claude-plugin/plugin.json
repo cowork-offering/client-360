@@ -1,8 +1,8 @@
 {
   "name": "customer-360-reinvented",
   "displayName": "Customer 360 Reinvented",
-  "version": "0.1.5",
-  "description": "Customer 360 Reinvented \u2014 an Accenture accelerator: a relationship-level commercial-credit cockpit for C&I bankers. Reads the customer/obligor group live from Salesforce (nCino + FSC) via the org-hosted Customer360 MCP server (7 read tools, per-user OAuth) plus Boom-spread financials, then renders an interactive Cowork artifact \u2014 ownership graph, exposure & collateral, covenants, whitespace, and structural early-warning signals \u2014 with an 'Explain this' AI panel. Use when a banker asks to open the Customer 360, pull up the relationship view, or answer an account-level portfolio question.",
+  "version": "0.2.0",
+  "description": "Customer 360 Reinvented — an Accenture accelerator: a relationship-level commercial-credit cockpit for C&I bankers. Reads the customer/obligor group live from Salesforce (nCino + FSC) via the org-hosted Customer360 MCP server (7 read tools, per-user OAuth) plus Boom-spread financials, then renders an interactive Cowork artifact — ownership graph, exposure & collateral, covenants, whitespace, and structural early-warning signals — with an 'Explain this' AI panel. Use when a banker asks to open the Customer 360, pull up the relationship view, or answer an account-level portfolio question.",
   "author": {
     "name": "Fabian Goetzens",
     "url": "https://www.accenture.com"
