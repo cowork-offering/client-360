@@ -1,4 +1,4 @@
-# Customer 360 Reinvented
+# Client 360
 
 An Accenture accelerator (bankinggpt engagement). A relationship-level commercial-credit **cockpit**
 for C&I bankers: open the Customer 360 for a borrower and get a live, account-level relationship view —
@@ -40,7 +40,7 @@ server (`type: "http"`).
 v0.1.x shipped an `mcpServers` entry in plugin.json. Removed in v0.1.3: Salesforce hosted MCP
 requires a pre-registered OAuth client (`oauth.clientId` + fixed `callbackPort`), which a plugin
 manifest cannot carry per-org. The bundled entry therefore registered a second, un-authable copy of
-the server (`plugin:customer-360-reinvented:customer360`, stuck "connecting") alongside the user's
+the server (`plugin:client-360:customer360`, stuck "connecting") alongside the user's
 working config — and agents grabbed the dead one. The server lives in YOUR `~/.claude.json` (below);
 the plugin ships the skill + artifact template only.
 
@@ -55,8 +55,8 @@ registration, so the client must present a pre-registered OAuth app.
 Working setup today:
 
 1. Install the plugin (skill + artifact template):
-   `/plugin marketplace add weareconnectry/customer-360-reinvented` then
-   `/plugin install customer-360-reinvented@customer-360`
+   `/plugin marketplace add weareconnectry/client-360` then
+   `/plugin install client-360@client-360`
 2. Add the server to `~/.claude.json` under `mcpServers`, with YOUR org's External Client App
    consumer key (PKCE on; whitelist `http://localhost:7524/callback` in the app):
 
@@ -98,5 +98,6 @@ Customer 360, and the endpoint's RFC 9728 protected-resource metadata resolves l
   showed the 405 was an artifact; the real failures were Salesforce-side config (MCP server
   activation, exact URL, ECA settings, API Access Control — known issue a02Ka00000mmerI). Custom
   servers that still fail via the broker are tracked in #495; ours does not hit it.
-- **[Artifact]** First cockpit render with live data ("open the Customer 360 for Piedmont") not yet
-  exercised — next natural step in the local session.
+- ~~**[Artifact]**~~ **DONE 2026-07-06/08**: live cockpit rendered end to end; v0.2.x added the
+  deterministic assembler (render/assemble-cockpit.mjs) + host-proof interaction fixes; v0.3.0 added
+  the validation stage (covenant effective challenge + data-quality sweep).
