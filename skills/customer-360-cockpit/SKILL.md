@@ -78,7 +78,8 @@ optional): `industry` (exact picklist), `maxAccounts` (default 25, cap 100), `si
 
 ```js
 window.C360_DATA = {
-  meta: { user, dateISO, generatedAt, orgAlias: "bankinggpt", anchorAccountId },
+  meta: { user, dateISO, generatedAt, orgAlias: "bankinggpt", anchorAccountId,
+          validation: { ranAt, checks, findings } },   // ⚙ assembler-computed — see "Validation stage"
   portfolio: {   // from Customer360Portfolio response[0] — accounts[] + bookTotals + signals, verbatim
     accounts: [{ accountId, name, industry, naicsCode, annualRevenue,
                  tce, tbe, toe, outstanding, riskRating, stage, packageCount }],
@@ -89,16 +90,25 @@ window.C360_DATA = {
     boom: { ratios, spread } | null,
     verdict,   // agent-composed banker's sentence, live figures only
     anchors,   // [{ label, value, sub, dir }] agent-composed from live figures only
-    aiPanel: { componentId, thread: [{ q, a }] } | null   // §4b, see below
+    aiPanel: { componentId, thread: [{ q, a }] } | null,   // §4b, see below
+    covenantChallenge: [...]   // ⚙ assembler-computed — do NOT hand-write; see "Validation stage"
   },
   borrowers: {   // STAGE THE WHOLE BOOK (added 2026-07-06): one bundle per portfolio account,
                  // same shape as `borrower` (verbatim tool responses + composed verdict/anchors;
                  // boom: null where no Boom file exists). Portfolio row clicks then switch
                  // borrowers FULLY CLIENT-SIDE — instant, no agent round-trip. Include the anchor.
     "<accountId>": { snapshot, graph, exposure, covenants, opportunities, signals, boom, verdict, anchors, aiPanel: null }
-  }
+    // covenantChallenge is added per bundle by the assembler — do NOT hand-write it.
+  },
+  dataQuality: [...]   // ⚙ assembler-computed — do NOT hand-write; see "Validation stage"
 }
 ```
+
+**⚙ `covenantChallenge`, `dataQuality`, and `meta.validation` are NOT composed by the agent.** They are
+computed deterministically by `render/validate-c360.mjs`, which the assembler runs automatically before
+injection. **Never hand-author them** — write the `{ meta, portfolio, borrower, borrowers }` contract and
+let the assembler add the validation surfaces. Hand-written figures here would defeat the whole point of a
+deterministic, LLM-free challenge stage.
 
 **Staging is mandatory, not optional.** Fetch the six anchor tools for EVERY account in
 `portfolio.accounts` (the tools take `List<Request>` — batch all accounts into ONE call per tool,
@@ -139,6 +149,31 @@ write a small `data.json`, run one command, and publish the file it produces. Do
 4. **Do NOT open a Chrome tab.** Do NOT call any other widget/HTML builder. The artifact is the deliverable.
 5. **Updates are full-replace only:** rebuild `data.json` (the whole `C360_DATA`), re-run the script to a
    fresh `--out`, and `update_artifact` by file path. Never edit the rendered HTML or inject JSON by hand.
+
+## Validation stage (SR 11-7 effective challenge)
+
+The assembler runs `render/validate-c360.mjs` on the composed data **before injection** (skip with
+`--no-validate`). This is the deterministic, LLM-free stage: it recomputes figures with pure arithmetic
+and the model never touches the numbers. It adds two surfaces:
+
+- **`covenantChallenge[]`** (per bundle) — for each nCino covenant, the Boom-implied value recomputed
+  from that borrower's `boom.spread` line items over the **latest spread period** (e.g. FY2025), beside
+  the nCino actual. Standard ratio definitions: DSC = `Adjusted EBITDA / (Interest Expense + CPLTD)`,
+  Debt-to-Worth/Leverage = `Total Debt / Total Equity`, Liquidity = `Cash & Equivalents`, Fixed-Asset
+  Purchases = `Capital Expenditures`. Each entry carries a `status`: **corroborated** (within 15% of the
+  nCino actual and same compliance side), **diverges** (>15% off, or the recompute lands on the opposite
+  compliance side — which also sets `breachRiskFlag: true`), or **not-computable** (no Boom file, no
+  standard mapping, or a missing line item — the `note` says which).
+- **`dataQuality[]`** (top-level) — deterministic data-integrity findings across the staged book
+  (rollup gaps, missing ratings, stale/overdue covenant evaluations, Boom period mismatches, null
+  coverage/utilization), sorted `critical → warn → info`. `meta.validation` records `{ ranAt, checks,
+  findings }`.
+
+**Standard vs contractual definitions — the load-bearing caveat.** The Boom-implied value uses *standard*
+ratio definitions. The bank's *contractual* covenant definitions are nCino-owned and can differ
+(add-backs, rolling averages, pro-forma adjustments, different denominators). So a `diverges` result is a
+**review flag for effective challenge, never a breach determination**. The cockpit must present it that
+way; the `note` on every computed entry says exactly this. Do not render divergence as a covenant breach.
 
 ## sendPrompt interaction loop
 

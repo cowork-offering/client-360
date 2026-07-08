@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
+import { validateC360, challengeCount } from "./validate-c360.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (n) => { const i = process.argv.indexOf(n); return i !== -1 ? process.argv[i + 1] : undefined; };
@@ -58,6 +59,19 @@ if (!data.borrowers || typeof data.borrowers !== "object") {
   }
 }
 const stagedCount = data.borrowers && typeof data.borrowers === "object" ? Object.keys(data.borrowers).length : 0;
+
+// ---------------------------------------------------------------- deterministic validation stage
+// SR 11-7 effective challenge: recompute covenants from the Boom spread + run the data-quality sweep.
+// Runs AFTER data validation and BEFORE injection so the rendered artifact always carries the
+// challenge + dataQuality surfaces. The LLM never computes these figures — this is the only source.
+// --no-validate skips it (raw passthrough).
+const noValidate = process.argv.includes("--no-validate");
+if (!noValidate) {
+  try { validateC360(data); }
+  catch (e) { die(`validation stage failed: ${e.message}`); }
+}
+const challengeN = noValidate ? 0 : challengeCount(data);
+const dqN = noValidate ? 0 : (Array.isArray(data.dataQuality) ? data.dataQuality.length : 0);
 
 // ---------------------------------------------------------------- read the template
 let template;
@@ -118,4 +132,5 @@ while ((m = scriptRe.exec(scanned)) !== null) {
 
 // ---------------------------------------------------------------- success
 const bytes = Buffer.byteLength(output);
-console.log(`OK — wrote ${outPath} (${bytes.toLocaleString()} bytes) · anchor=${data.meta.anchorAccountId} · accounts staged ${stagedCount}/${accountIds.length}`);
+const validateSummary = noValidate ? " · validation SKIPPED" : ` · challenge ${challengeN} covenants · DQ ${dqN} findings`;
+console.log(`OK — wrote ${outPath} (${bytes.toLocaleString()} bytes) · anchor=${data.meta.anchorAccountId} · accounts staged ${stagedCount}/${accountIds.length}${validateSummary}`);

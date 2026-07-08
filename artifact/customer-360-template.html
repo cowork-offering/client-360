@@ -72,6 +72,19 @@
   .suggest-q:hover,.suggest-q:focus-visible{border-color:color-mix(in srgb,var(--accent) 40%,#fff)!important;background:color-mix(in srgb,var(--accent) 5%,#fff)!important}
   #explain-close:hover,#pm-close:hover{background:#F6F5FA!important}
   #explain-input:focus{border-color:var(--accent)!important;outline:none}
+  /* Effective-challenge (Boom-vs-nCino) chips + click-toggled detail.
+     Additive validation layer — only present when covenantChallenge[] is on the data. */
+  .cov-eff{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:4px}
+  .cov-eff-k{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#A5A2AE}
+  .cov-chip{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;border:none;line-height:1.3;transition:filter .15s}
+  button.cov-chip{cursor:pointer}
+  button.cov-chip:hover{filter:brightness(.97)}
+  .cov-chev{transition:transform .18s}
+  button.cov-chip[aria-expanded="true"] .cov-chev{transform:rotate(180deg)}
+  .cov-detail{width:100%;margin-top:2px;font-size:12px;color:#56535F;line-height:1.6;background:#FAF9FC;border:1px solid #F1F0F5;border-radius:9px;padding:9px 12px;text-wrap:pretty}
+  .cov-detail .cov-det-k{font-weight:700;color:#3F3D4A;margin-right:5px}
+  .dq-pill,button.dq-pill{cursor:pointer;border:none;font-family:inherit;transition:filter .15s}
+  button.dq-pill:hover{filter:brightness(.97)}
 </style>
 </head>
 <body>
@@ -190,6 +203,119 @@ function covTone(cov){
   if(st.indexOf('breach')!==-1 || st.indexOf('default')!==-1 || st.indexOf('non-compliant')!==-1 || st.indexOf('noncompliant')!==-1) return 'red';
   if(st.indexOf('watch')!==-1 || st.indexOf('warning')!==-1 || st.indexOf('pending')!==-1) return 'amber';
   return 'green';
+}
+
+/* datetime formatter — validation ranAt carries a timestamp, not just a date */
+function fmtDateTime(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return esc(iso);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ', ' + d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+/* ============================================================================
+   VALIDATION LAYER — Boom-vs-nCino effective challenge + data-quality panel.
+   Both are additive and STRICTLY absence-tolerant: with no covenantChallenge[]
+   on a borrower and no top-level dataQuality[], none of this renders and the UI
+   is byte-for-byte what it was before. All figures come from the data.
+   ========================================================================= */
+function fmtInputs(inp){
+  if(inp===null||inp===undefined) return '';
+  if(typeof inp === 'string') return inp;
+  if(Array.isArray(inp)) return inp.join(', ');
+  try{ return Object.keys(inp).map(function(k){ return k+': '+inp[k]; }).join(' · '); }catch(e){ return String(inp); }
+}
+/* one covenant's effective-challenge line: a tone-coded chip (+ optional
+   click-toggled detail revealing formula / inputs / period).
+   corroborated -> green · diverges -> amber · breachRiskFlag -> red ·
+   not-computable -> neutral. */
+function covChallengeRow(ch){
+  if(!ch) return '';
+  var bi = ch.boomImplied || null;
+  var val = (bi && bi.value!=null) ? fmtCovVal(bi.value) : null;
+  var tone, label;
+  if(ch.status === 'not-computable' || !bi || val===null){
+    tone = 'neutral';
+    label = 'not computable — ' + (ch.note ? String(ch.note) : 'inputs unavailable');
+  } else if(ch.breachRiskFlag === true){
+    tone = 'red';
+    label = 'Boom-implied ' + val + ' crosses threshold ' + fmtCovVal(ch.threshold);
+  } else if(ch.status === 'diverges'){
+    tone = 'amber';
+    label = 'Boom-implied ' + val + ' · diverges from nCino ' + fmtCovVal(ch.nCinoActual);
+  } else {
+    tone = 'green';
+    label = 'Boom-implied ' + val + ' · corroborates';
+  }
+  var hasDetail = !!(bi && (bi.formula || bi.inputs!=null || bi.period));
+  var id = ch.covenantId || ('cc'+Math.random().toString(36).slice(2,8));
+  var dot = '<span style="width:6px;height:6px;border-radius:50%;background:'+S[tone]+';flex:none"></span>';
+  var chip;
+  if(hasDetail){
+    chip = '<button type="button" class="cov-chip" data-cov-toggle="'+attr(id)+'" aria-expanded="false" aria-controls="cov-det-'+attr(id)+'" style="background:'+T[tone]+';color:'+S[tone]+'">'
+      + dot + esc(label)
+      + '<svg class="cov-chev" width="10" height="10" viewBox="0 0 10 10" style="flex:none"><path d="M2.5 3.5L5 6l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+  } else {
+    chip = '<span class="cov-chip" style="background:'+T[tone]+';color:'+S[tone]+'">'+dot+esc(label)+'</span>';
+  }
+  var detail = '';
+  if(hasDetail){
+    var inp = fmtInputs(bi.inputs);
+    detail = '<div class="cov-detail" id="cov-det-'+attr(id)+'" style="display:none">'
+      + (bi.formula ? '<div><span class="cov-det-k">Formula</span>'+esc(bi.formula)+'</div>' : '')
+      + (inp ? '<div><span class="cov-det-k">Inputs</span>'+esc(inp)+'</div>' : '')
+      + (bi.period ? '<div><span class="cov-det-k">Period</span>'+esc(bi.period)+'</div>' : '')
+      + '</div>';
+  }
+  return '<div class="cov-eff" style="grid-column:1 / -1"><span class="cov-eff-k">Effective challenge</span>'+chip+detail+'</div>';
+}
+
+function dqSeverityRank(s){ return s==='critical'?0:s==='warn'?1:2; }
+/* Overview "Data Quality" card — only when dataQuality[] is non-empty. */
+function renderDataQualityCard(data){
+  var list = (data.dataQuality || []).slice();
+  if(!list.length) return '';
+  list.sort(function(a,b){ return dqSeverityRank(a.severity)-dqSeverityRank(b.severity); }); // defensive re-sort
+  var nC=0,nW=0,nI=0;
+  list.forEach(function(x){ if(x.severity==='critical')nC++; else if(x.severity==='warn')nW++; else nI++; });
+  var parts=[];
+  if(nC) parts.push('<span style="color:'+S.red+'">'+nC+' critical</span>');
+  if(nW) parts.push('<span style="color:'+S.amber+'">'+nW+' warning'+(nW>1?'s':'')+'</span>');
+  if(nI) parts.push('<span style="color:#56535F">'+nI+' info</span>');
+  var badge = parts.join('<span style="color:#D2CFDA"> · </span>');
+  var rows = list.map(function(x){
+    var sev = x.severity, crit = sev==='critical';
+    var dot = crit?S.red:sev==='warn'?S.amber:'#8A8794';
+    var acct = x.accountName ? '<span style="color:#8A8794;font-weight:500"> · '+esc(x.accountName)+'</span>' : '';
+    return '<div style="display:flex;gap:11px;align-items:flex-start;padding:11px 18px;border-top:1px solid #F1F0F5;border-left:'+(crit?('3px solid '+S.red):'3px solid transparent')+';background:'+(crit?T.red:'transparent')+'">'
+      + '<span style="width:9px;height:9px;border-radius:50%;background:'+dot+';flex:none;margin-top:4px"></span>'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:'+(crit?S.red:'#A5A2AE')+'">'+esc(x.code||sev)+acct+'</div>'
+      + '<div style="font-size:13px;color:#3F3D4A;line-height:1.5;margin-top:2px;text-wrap:pretty'+(crit?';font-weight:600':'')+'">'+esc(x.message||'')+'</div>'
+      + '</div></div>';
+  }).join('');
+  var val = (data.meta && data.meta.validation) || null;
+  var cap = val ? '<div class="note-cap" style="margin:0;padding:11px 18px 3px;border-top:none">Validation ran '+esc(fmtDateTime(val.ranAt))+' · '+esc(val.checks!=null?val.checks:'—')+' checks · '+esc(val.findings!=null?val.findings:'—')+' findings</div>' : '';
+  return '<div class="card" id="dq-card" style="padding:0;margin-bottom:18px;overflow:hidden">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 12px">'
+    + '<div style="display:flex;align-items:center;gap:9px"><svg width="16" height="16" viewBox="0 0 16 16" style="flex:none;color:'+(nC?S.red:S.amber)+'"><path d="M8 1.6L1 14h14z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.4v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.4" r=".85" fill="currentColor"/></svg>'
+    + '<span style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">Data Quality</span></div>'
+    + '<div style="font-size:12px;font-weight:700">'+badge+'</div></div>'
+    + rows + cap + '</div>';
+}
+/* Verdict-bar pill (L2) + L1 informational chip — shared count logic. */
+function dqTone(list){ var nC=0; list.forEach(function(x){ if(x.severity==='critical')nC++; }); return nC>0?'red':'amber'; }
+function dqPill(data){
+  var list = data.dataQuality || [];
+  if(!list.length) return '';
+  var tone = dqTone(list);
+  return '<button type="button" class="dq-pill" data-goto-tab="overview" aria-label="'+attr(list.length+' data-quality flags — view in Overview')+'" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;background:'+T[tone]+';color:'+S[tone]+'"><span aria-hidden="true">⚠</span>'+list.length+' data-quality flag'+(list.length>1?'s':'')+'</button>';
+}
+function dqChipStatic(data){
+  var list = data.dataQuality || [];
+  if(!list.length) return '';
+  var tone = dqTone(list);
+  return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;background:'+T[tone]+';color:'+S[tone]+'"><span aria-hidden="true">⚠</span>'+list.length+' data-quality flag'+(list.length>1?'s':'')+'</span>';
 }
 
 /* ============================================================================
@@ -339,6 +465,11 @@ function buildBorrowerVM(data){
   vm.grade = snap.primaryRiskRating != null ? String(snap.primaryRiskRating) : null;
   vm.stage = snap.primaryStage || null;
 
+  /* Boom-vs-nCino effective-challenge entries (may be absent on old data) */
+  vm.challenges = b.covenantChallenge || [];
+  vm.challengeById = {};
+  vm.challenges.forEach(function(ch){ if(ch && ch.covenantId) vm.challengeById[ch.covenantId] = ch; });
+
   return vm;
 }
 
@@ -423,6 +554,9 @@ function renderOverview(data, vm){
   var html = '<div>';
   html += sectionHead('Overview · live from source', 'overview', null);
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px">' + cards.join('') + '</div>';
+
+  // Data Quality card — only when validation surfaced findings (absent on old data)
+  html += renderDataQualityCard(data);
 
   // Watch banner — only if agent composed one
   if(vm.raw.watch){
@@ -782,13 +916,15 @@ function renderRisk(data, vm){
       var tone = covTone(c);
       var barColor = S[tone];
       var next = c.nextEvaluationDate ? fmtDate(c.nextEvaluationDate) : (c.daysUntilNextEvaluation!=null?(Math.round(c.daysUntilNextEvaluation)+' days'):'—');
-      return '<div style="display:grid;grid-template-columns:1.6fr 0.9fr 1fr 0.9fr 1.3fr 1fr;gap:14px;padding:14px 24px;font-size:13px;border-top:1px solid #F1F0F5;align-items:center">'
+      var effLine = covChallengeRow(vm.challengeById[c.covenantId]);
+      return '<div style="display:grid;grid-template-columns:1.6fr 0.9fr 1fr 0.9fr 1.3fr 1fr;gap:14px 14px;padding:14px 24px;font-size:13px;border-top:1px solid #F1F0F5;align-items:center">'
         + '<span style="font-weight:600">'+esc(c.covenantType||'Covenant')+'</span>'
         + '<span style="font-weight:700">'+fmtCovVal(c.actualValue)+'</span>'
         + '<span style="color:#8A8794">'+fmtCovThreshold(c.covenantType,c.actualValue,c.thresholdValue)+'</span>'
         + '<span style="font-weight:700;color:'+barColor+'">'+(cush.cushion!=null?((cush.cushion<0?'−':'')+fmtCovVal(Math.abs(cush.cushion))):'—')+'</span>'
         + '<div style="height:6px;background:#ECEAF2;border-radius:6px;overflow:hidden"><div style="height:100%;width:'+(cush.safe===false?0:cush.pct)+'%;background:'+barColor+';border-radius:6px"></div></div>'
-        + '<span style="justify-self:start;font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;background:#F1F0F6;color:#56535F;white-space:nowrap">'+esc(next)+'</span></div>';
+        + '<span style="justify-self:start;font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;background:#F1F0F6;color:#56535F;white-space:nowrap">'+esc(next)+'</span>'
+        + effLine + '</div>';
     }).join('');
     html += '<div class="card" style="padding:8px 0 6px">'
       + '<div style="padding:16px 24px 6px" class="kicker">Financial covenants</div>'
@@ -807,6 +943,8 @@ function renderRisk(data, vm){
       + '<div style="font-size:14px;font-weight:500;line-height:1.5;color:#5A4423">'+breached.length+' covenant'+(breached.length>1?'s':'')+' at or past threshold: '+esc(breached.map(function(c){return c.covenantType;}).join(', '))+'.</div></div></div>';
   }
 
+  // Standard-vs-contractual caveat — rendered ONCE from the first challenge entry's note.
+  if(vm.challenges.length && vm.challenges[0].note){ html += noteCaption(vm.challenges[0].note); }
   html += noteCaption(vm.cov.note);
   html += '</div>';
   return html;
@@ -1089,7 +1227,7 @@ function renderPortfolio(data){
   var listCard = '<div style="background:#fff;border-radius:16px;box-shadow:0 1px 2px rgba(26,10,54,.05),0 6px 22px rgba(26,10,54,.05);overflow:hidden">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px">'
     + '<div><div class="kicker">Book</div><div style="font-size:17px;font-weight:700;margin-top:3px">Relationships by exposure</div></div>'
-    + '<span style="font-size:12px;font-weight:500;color:#8A8794">'+accts.length+' account'+(accts.length===1?'':'s')+' · sorted by TCE</span></div>'
+    + '<div style="display:flex;align-items:center;gap:10px">'+dqChipStatic(data)+'<span style="font-size:12px;font-weight:500;color:#8A8794">'+accts.length+' account'+(accts.length===1?'':'s')+' · sorted by TCE</span></div></div>'
     + '<div>'+rows+'</div></div>';
 
   // Book concentration — computed client-side: industry × Σtce
@@ -1252,7 +1390,8 @@ function l2Chrome(data, vm){
         ? '<span id="crumb-portfolio" role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--accent);font-weight:700"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M9 3L5 7l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Portfolio</span>'
         : '<span style="color:#8A8794;font-weight:700">Portfolio</span>')
     + '<span style="color:#D2CFDA">/</span><span>'+esc(vm.sector)+'</span>'
-    + '<span style="margin-left:6px">'+explainBtn('verdict')+'</span></div>'
+    + '<span style="margin-left:6px">'+explainBtn('verdict')+'</span>'
+    + dqPill(data) + '</div>'
     + '<div style="font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1">'+esc(vm.name)+'</div>'
     + (vm.verdict?'<div style="font-size:14px;font-weight:400;line-height:1.5;color:#56535F;margin:8px 0 13px;max-width:760px;text-wrap:pretty">'+esc(vm.verdict)+'</div>':'<div style="margin:8px 0"></div>')
     + '<div style="display:flex;flex-wrap:wrap;gap:9px">'
@@ -1383,6 +1522,20 @@ function activate(target){
     STATE.activeTab = el.getAttribute('data-tab');
     if(window.C360_DATA && window.C360_DATA.meta) window.C360_DATA.meta.activeTab = STATE.activeTab;
     renderTab();
+    return;
+  }
+  // [data-goto-tab]: verdict-bar data-quality pill -> jump to a tab (Overview)
+  if((el = closestSel(target, '[data-goto-tab]'))){
+    STATE.activeTab = el.getAttribute('data-goto-tab');
+    if(window.C360_DATA && window.C360_DATA.meta) window.C360_DATA.meta.activeTab = STATE.activeTab;
+    renderTab();
+    return;
+  }
+  // effective-challenge chip -> toggle the formula/inputs/period detail (direct DOM, no re-render)
+  if((el = closestSel(target, '[data-cov-toggle]'))){
+    var cid = el.getAttribute('data-cov-toggle');
+    var det = document.getElementById('cov-det-'+cid);
+    if(det){ var isOpen = det.style.display !== 'none'; det.style.display = isOpen ? 'none' : 'block'; el.setAttribute('aria-expanded', isOpen ? 'false' : 'true'); }
     return;
   }
   // L1 rows: staged account -> instant client-side switch; anchor -> L2;
