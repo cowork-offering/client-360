@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AgentChannel } from "../channel/adapter";
-import { createChannel } from "../channel/adapter";
+import { createChannel, formatProbe, probeChannels } from "../channel/adapter";
 import type { ActivityEntry, C360Data, Worklist } from "../data/contract";
 import { deriveWorklist } from "../data/worklist";
 import { loadUi, saveUi, type PersistedUi } from "./persist";
@@ -170,6 +170,19 @@ export function AppProvider({ data, children }: { data: C360Data; children: Reac
   const anchor = data.meta.anchorAccountId;
   const worklist = useMemo(() => deriveWorklist(data), [data]);
   const channel = useMemo(() => createChannel(), []);
+
+  // Channel diagnostics: log ONCE on mount so the founder can read the real
+  // runtime surface straight out of the Cowork console (2026-07-25 — the live
+  // test showed window.sendPrompt is not exposed; this is how we find what is).
+  useEffect(() => {
+    try {
+      const report = probeChannels();
+      console.log("[C360-CHANNEL-PROBE]\n" + formatProbe(report));
+      console.log("[C360-CHANNEL-PROBE] raw", report);
+    } catch {
+      /* diagnostics must never break the render */
+    }
+  }, []);
 
   const [state, dispatch] = useReducer(reducer, initial, (base) => {
     const restored = loadUi(anchor);

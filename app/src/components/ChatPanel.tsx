@@ -1,11 +1,40 @@
 import { useMemo, useState } from "react";
 import { useApp, ACCOUNT_TABS } from "../state/appState";
 import type { AiMessage } from "../data/contract";
-import { newRequestId } from "../channel/adapter";
+import { formatProbe, newRequestId, probeChannels } from "../channel/adapter";
 import { suggestActions, type Suggestion } from "../actions/suggest";
 import { ACTIONS_BY_ID } from "../actions/registry";
 
 type SendState = "idle" | "sending" | "handedOff" | "error";
+
+/** Channel diagnostics disclosure, shown only in the no-channel state.
+ *  Collapsed by default; the probe runs on first open (and not before), so a
+ *  banker who never opens it pays nothing. No polling — one read per open. */
+function ConnectionDetails() {
+  const [report, setReport] = useState<string | null>(null);
+
+  return (
+    <details
+      className="mt-2"
+      onToggle={(e) => {
+        if ((e.currentTarget as HTMLDetailsElement).open && report === null) {
+          try {
+            setReport(formatProbe(probeChannels()));
+          } catch (err) {
+            setReport("probe failed: " + String(err));
+          }
+        }
+      }}
+    >
+      <summary className="cursor-pointer text-[11px] font-semibold text-ink-faint hover:text-ink-muted">
+        Connection details
+      </summary>
+      <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-surface px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+        {report ?? "…"}
+      </pre>
+    </details>
+  );
+}
 
 /** Merge injected threads + session-local messages, dedupe by id (A15). */
 function mergeMessages(threads: AiMessage[], local: AiMessage[]): AiMessage[] {
@@ -205,6 +234,7 @@ export function ChatPanelBody() {
               No agent channel is connected to this artifact. Open the cockpit through the agent to ask questions; the
               staged data stays fully navigable offline.
             </div>
+            <ConnectionDetails />
           </div>
         )}
       </div>
