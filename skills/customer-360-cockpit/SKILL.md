@@ -58,6 +58,13 @@ Customer360 tools.** A wrong committed-exposure figure in front of a banker is w
 
 **Boom** — `boom_get_ratios` + `boom_get_spread` for the Financials tab.
 
+**Doors, not connectors (fleet rule).** Bind to TOOL NAMES found via ToolSearch, never to a specific
+MCP server. The fleet is migrating onto the **IDB Gateway** (AgentCore): Boom already arrives through
+it (`boom-mcp-js` / `boom-mcp-py` targets — same `boom_get_spread`/`boom_get_ratios` tools, gateway
+prefix), and Credit Memo and the Customer360 Salesforce server will follow. Whichever door exposes the
+tool in this session is the right door; if BOTH a direct connector and the gateway expose the same
+tool, prefer the gateway. Never hardcode a server id.
+
 **Every tool takes `List<Request>` and returns `List<Response>`.** For a single request read
 `response[0]`, never a bare object — `Customer360Portfolio` included.
 
@@ -93,7 +100,8 @@ The six detail tools each accept an **inputs array**: `inputs: [{ accountId }, {
 Responses come back positionally — zip each response array back to the accountId you sent at that index.
 
 ### (d) Boom
-`boom_get_ratios` + `boom_get_spread` for the anchor, and for worklist accounts where the file exists
+`boom_get_ratios` + `boom_get_spread` (direct connector or IDB Gateway `boom-mcp-*` target — see the
+doors rule above) for the anchor, and for worklist accounts where the file exists
 and the call is cheap. If either fails or no file exists, set that bundle's `boom` to `null` — **never
 fabricate**. The Financials tab renders an honest gap state.
 
