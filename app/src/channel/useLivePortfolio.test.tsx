@@ -50,9 +50,9 @@ function mountHook(enabled = true) {
 const envelope = (data: unknown) => ({ content: [{ isSuccess: true, errors: null, outputValues: data }] });
 
 describe("useLivePortfolio", () => {
-  it("polls above the platform's ~30s floor", () => {
+  it("never polls — background refetch burned the page connector allowance (2026-07-25 live diagnosis)", () => {
     const h = mountHook();
-    expect(h.captured.opts?.refetchInterval as number).toBeGreaterThanOrEqual(30_000);
+    expect(h.captured.opts?.refetchInterval).toBeUndefined();
   });
 
   it("unwraps the invocable envelope and records cache freshness", () => {

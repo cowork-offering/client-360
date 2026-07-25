@@ -43,7 +43,12 @@ export function useLivePortfolio(enabled: boolean): LivePortfolio {
         }
         setLive({ portfolio: slot.data, storedAt: ev.data?.cache?.storedAt, failure: undefined });
       },
-      { staleTime: 30_000, refetchInterval: 60_000 },
+      // NO refetchInterval: background polling burned the page's connector
+      // allowance and starved the chat (live-diagnosed 2026-07-25 — the test
+      // page with click-only calls survived 10+ LLM asks while the polling
+      // cockpit was throttled at ask 2). Staleness-based refresh only: the
+      // watch replays cache and refreshes when stale on remount/interaction.
+      { staleTime: 120_000 },
     );
     return stop;
   }, [enabled]);
