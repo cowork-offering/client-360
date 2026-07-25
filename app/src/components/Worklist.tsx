@@ -227,7 +227,14 @@ export function Worklist() {
         })
       )}
 
-      {unstaged && <CopyPromptDialog accountName={unstaged.name} accountId={unstaged.accountId} onClose={() => setUnstaged(null)} />}
+      {unstaged && (
+        <CopyPromptDialog
+          cause="unstaged"
+          accountName={unstaged.name}
+          accountId={unstaged.accountId}
+          onClose={() => setUnstaged(null)}
+        />
+      )}
     </Card>
   );
 }

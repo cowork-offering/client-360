@@ -3,18 +3,36 @@ import { Portal } from "./Portal";
 import { useApp } from "../state/appState";
 import { newRequestId } from "../channel/adapter";
 
-/** Unstaged-account fallback (SPEC §12 A17): never an empty workspace. Offer a
- *  copyable prompt to open the account via the agent, plus a direct send when a
- *  channel is live — mirroring the legacy template's no-agent affordance. */
+/** Why the copy-prompt fallback opened. REQUIRED — the two cases read very
+ *  differently to a banker, and the wrong one is actively misleading (a staged
+ *  account was being told it "is not staged"). Making this required means a new
+ *  call site cannot silently inherit the wrong explanation. */
+export type CopyPromptCause =
+  /** The account genuinely has no bundle in this snapshot (A17). */
+  | "unstaged"
+  /** The account IS staged; there is simply no agent channel in this view. */
+  | "no-channel";
+
+const EXPLAINER: Record<CopyPromptCause, string> = {
+  unstaged:
+    "This relationship is on the book but not staged in this cockpit snapshot. Ask the agent to open it — it will reload the cockpit anchored on this account.",
+  "no-channel":
+    "This view isn't connected to the agent. In a live session this action runs automatically — here it's a prompt you can carry over.",
+};
+
+/** Copy-prompt fallback: never a dead end. Offers a copyable prompt plus a
+ *  direct send when a channel is live. */
 export function CopyPromptDialog({
   accountName,
   accountId,
+  cause,
   prompt: promptOverride,
   onClose,
 }: {
   accountName: string;
   accountId: string;
-  /** Custom ask (e.g. a verdict-bar action). Defaults to "open this account". */
+  cause: CopyPromptCause;
+  /** Custom ask (e.g. a registry action). Defaults to "open this account". */
   prompt?: string;
   onClose: () => void;
 }) {
@@ -63,10 +81,7 @@ export function CopyPromptDialog({
         aria-label={`Open ${accountName}`}
       >
         <div className="text-[14px] font-semibold text-ink">{accountName}</div>
-        <div className="mt-1 text-[12px] leading-relaxed text-ink-muted">
-          This relationship is on the book but not staged in this cockpit snapshot. Ask the agent to open it —
-          it will reload the cockpit anchored on this account.
-        </div>
+        <div className="mt-1 text-[12px] leading-relaxed text-ink-muted">{EXPLAINER[cause]}</div>
 
         <div className="mt-3 rounded-md border border-border bg-surface px-3 py-2 font-mono text-[11.5px] text-ink">
           {prompt}

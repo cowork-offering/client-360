@@ -5,7 +5,20 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import sample from "../../artifact/sample-data.json";
+
+const SRC = __dirname;
+const readAllTsx = (dir: string): Array<[string, string]> => {
+  const out: Array<[string, string]> = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) out.push(...readAllTsx(full));
+    else if (e.name.endsWith(".tsx")) out.push([e.name, readFileSync(full, "utf8")]);
+  }
+  return out;
+};
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -25,13 +38,13 @@ afterEach(() => {
   }
 });
 
-function mount(): HTMLDivElement {
+function mount(data: C360Data = sample as unknown as C360Data): HTMLDivElement {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root!.render(
-      <AppProvider data={sample as unknown as C360Data}>
+      <AppProvider data={data}>
         <AppShell />
       </AppProvider>,
     );
@@ -48,6 +61,8 @@ const clickAsync = (el: Element) =>
   act(async () => {
     el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+const openRow = (name: string) =>
+  [...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes(name))!;
 const openAnchor = () =>
   [...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Piedmont Precision"))!;
 const press = (key: string) => act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
@@ -185,6 +200,78 @@ describe("Client Actions panel (A27.4)", () => {
     click(byText(/Client Actions/)!);
     press("Escape");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
+
+describe("CopyPromptDialog explainer variant (founder bug 2026-07-25)", () => {
+  const NOT_STAGED_COPY = /not staged in this cockpit snapshot/;
+  const NO_CHANNEL_COPY = /isn't connected to the agent/;
+
+  it("staged account + no channel ⇒ the no-channel variant, NOT the unstaged one", () => {
+    mount(); // no window.sendPrompt in this env
+    click(openAnchor()); // Piedmont IS staged
+    click(byText(/Client Actions/)!);
+    const btn = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("New Facility Request"),
+    )!;
+    expect(btn.hasAttribute("disabled")).toBe(false); // staged ⇒ available
+    click(btn);
+
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].find((d) =>
+      /Copy prompt/.test(d.textContent ?? ""),
+    )!;
+    expect(dialog.textContent).toMatch(NO_CHANNEL_COPY);
+    expect(dialog.textContent).not.toMatch(NOT_STAGED_COPY);
+  });
+
+  it("activity next-step fallback also uses the no-channel variant", () => {
+    mount();
+    click(openRow("Sterling Fabrication"));
+    click(byText(/Headroom analysis concluded/)!);
+    const step = [...document.querySelector('[aria-modal="true"]')!.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Loan Modification"),
+    )!;
+    click(step);
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].find((d) =>
+      /Copy prompt/.test(d.textContent ?? ""),
+    )!;
+    expect(dialog.textContent).toMatch(NO_CHANNEL_COPY);
+    expect(dialog.textContent).not.toMatch(NOT_STAGED_COPY);
+  });
+
+  it("genuinely unstaged row ⇒ the unstaged variant", () => {
+    // The shipped sample stages every account (correct behaviour), so drop one
+    // bundle to reproduce a genuinely unstaged row.
+    const base = sample as unknown as C360Data;
+    const borrowers = { ...(base.borrowers ?? {}) };
+    delete borrowers["001SAMPLE0000BRWT"];
+    mount({ ...base, borrowers } as C360Data);
+
+    const row = [...document.querySelectorAll('[role="button"]')].find((r) =>
+      r.textContent?.includes("Brightwater Foods"),
+    )!;
+    expect(row.textContent).toContain("not staged"); // the row chip
+    click(row);
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].find((d) =>
+      /Copy prompt/.test(d.textContent ?? ""),
+    )!;
+    expect(dialog.textContent).toMatch(NOT_STAGED_COPY);
+    expect(dialog.textContent).not.toMatch(NO_CHANNEL_COPY);
+  });
+
+  it("INVARIANT — only the worklist's unstaged path may use the unstaged variant", () => {
+    // A staged account can never be told it is not staged. Enforced at the type
+    // level (cause is required) and asserted here across every call site.
+    const files = readAllTsx(join(SRC, "components"));
+    const causes: string[] = [];
+    for (const [name, src] of files) {
+      for (const m of src.matchAll(/cause="([a-z-]+)"/g)) causes.push(`${name}:${m[1]}`);
+    }
+    expect(causes.sort()).toEqual([
+      "ActionsPanel.tsx:no-channel",
+      "ActivityDetailModal.tsx:no-channel",
+      "Worklist.tsx:unstaged",
+    ]);
   });
 });
 

@@ -107,6 +107,9 @@ export function ActionsPanelBody() {
 
       {fallback && accountId && (
         <CopyPromptDialog
+          // Every action requires a staged bundle (registry C1), so reaching
+          // this fallback always means "no channel", never "not staged".
+          cause="no-channel"
           accountName={accountName}
           accountId={accountId}
           prompt={fallback.prompt}

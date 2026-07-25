@@ -306,6 +306,9 @@ export function ActivityDetailModal({
 
       {fallback && (
         <CopyPromptDialog
+          // Next steps come off a staged bundle's activity, so the account is
+          // staged by construction — the only cause here is a missing channel.
+          cause="no-channel"
           accountName={accountName}
           accountId={accountId}
           prompt={fallback.prompt}
