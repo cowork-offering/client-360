@@ -8,7 +8,7 @@ import { ActivityDetailModal } from "../ActivityDetailModal";
 import { LiveDataBar } from "../LiveDataBar";
 
 const EXPLAIN =
-  "Walk me through this relationship's activity — what came in, what the analysis concluded, and what to do next.";
+  "Walk me through this activity: what came in, what was concluded, what is next.";
 
 /** Per-kind presentation. Static map (A20) — no interpolated classes. */
 const KIND_META: Record<ActivityKind, { label: string; tone: "accent" | "neutral" | "user"; icon: React.ReactNode }> = {

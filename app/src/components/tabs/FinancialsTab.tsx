@@ -5,7 +5,7 @@ import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
-  "Explain the Financials tab — the revenue and EBITDA trend, leverage vs the covenant, and interest coverage.";
+  "Explain these financials: the EBITDA trend, leverage, and interest coverage.";
 
 function findLeverage(covs: Covenant[]): Covenant | null {
   for (const c of covs) {

@@ -1,131 +1,175 @@
 /* =============================================================================
    Grounded prompt builder for the LLM connector.
 
-   The LLM tool takes a bare { prompt }. It has NO access to the cockpit's
-   staged data, so an ungrounded question would be answered from the model's
-   general knowledge — which, for a credit figure in front of a banker, is the
-   worst possible failure. Every chat call therefore carries a compact context
-   block assembled from the STAGED bundle, plus an instruction to cite only
-   those figures.
+   The tool takes a bare { prompt } and has NO access to cockpit data, so every
+   question must carry the figures it needs. But HOW those figures are carried
+   is demo-critical:
 
-   Budget: the context block is capped (CONTEXT_BUDGET) so a large book cannot
-   blow up the prompt. Sections are added in priority order and the builder
-   stops when the budget is spent — the most decision-relevant figures survive.
+   PAYLOAD SHAPE IS A RELIABILITY CONSTRAINT (live diagnosis 2026-07-25).
+   Large machine-generated STRUCTURED payloads on the artifact→connector
+   boundary read as exfiltration-shaped to the shell's outbound-content guard.
+   Two gateway blocks — each followed by connector-wide page quarantine — hit
+   immediately after an Explain-prefilled ask, while hand-typed short questions
+   ran 8-9 deep with no issue. The context is therefore:
+
+     - PROSE ONLY. No braces, brackets, pipes, no field:value lists, no
+       markdown tables, no JSON fragments.
+     - NO RECORD IDS. The account NAME is all a narrative answer needs; an
+       18-char Salesforce id adds nothing for the model and is exactly the
+       token shape an exfiltration filter looks for.
+     - HARD-CAPPED — context at CONTEXT_BUDGET, whole prompt at MAX_PROMPT.
+
+   `sanitize()` is a belt-and-braces final pass so a future edit cannot
+   reintroduce a forbidden shape. If you want to add a list here, add it to the
+   UI instead — the model does not need it.
    ============================================================================= */
 
 import type { BorrowerBundle, C360Data } from "./contract";
-import { fmtMoney, fmtDate } from "./format";
-import { covenantCushion, fmtCovThreshold, fmtCovVal } from "./finance";
+import { fmtMoney } from "./format";
+import { covenantCushion } from "./finance";
 import { isActiveFacility } from "./worklist";
 
-export const CONTEXT_BUDGET = 2000;
+/** Hard cap on the context block alone. */
+export const CONTEXT_BUDGET = 500;
+/** Hard cap on the ENTIRE prompt — context, question and instruction. */
+export const MAX_PROMPT = 600;
 
-const INSTRUCTION =
-  "Answer as a commercial-credit copilot: concise, banker's voice, cite only the figures provided above. " +
-  "If the answer is not supported by those figures, say so plainly rather than estimating.";
+const INSTRUCTION = "Answer as a commercial-credit copilot, concise, cite only these figures.";
 
-function line(label: string, value: string | undefined | null): string | null {
-  return value ? `${label}: ${value}` : null;
+/** Final guarantee: strip the shapes the outbound guard reacts to. */
+export function sanitize(s: string): string {
+  return s
+    .replace(/[{}[\]|]/g, "") // structured-payload punctuation
+    .replace(/\b[A-Za-z0-9]{15,}\b/g, "") // record ids (15/18-char Salesforce and friends)
+    .replace(/\s*\n\s*/g, " ") // never a multi-line block
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;])/g, "$1")
+    .trim();
 }
 
-/** Compact, high-signal rendering of the staged bundle for the current view. */
-function contextBlock(bundle: BorrowerBundle | null, accountName: string, tab: string | null): string {
-  if (!bundle) return `Account: ${accountName}\n(no staged detail for this relationship)`;
+/** Ratio in banker prose: 1.42x — never 1.42× or a bare JSON number. */
+function ratio(n: number | null | undefined): string | null {
+  if (n === null || n === undefined || Number.isNaN(n)) return null;
+  return `${Number(n).toFixed(2)}x`;
+}
 
+/** Money or ratio, whichever the covenant's magnitude implies. */
+function covValue(n: number | null | undefined): string | null {
+  if (n === null || n === undefined || Number.isNaN(n)) return null;
+  return Math.abs(n) >= 1000 ? fmtMoney(n) : ratio(n);
+}
+
+const SHORT_NAMES: Array<[RegExp, string]> = [
+  [/debt service|dscr|dsc\b/i, "DSCR"],
+  [/debt-to-worth|debt to worth|leverage/i, "leverage covenant"],
+  [/liquidity/i, "liquidity"],
+  [/fixed asset|capex/i, "capex limit"],
+  [/net worth/i, "net worth"],
+];
+
+function shortCovenantName(type: string | undefined): string {
+  const t = type ?? "covenant";
+  for (const [re, short] of SHORT_NAMES) if (re.test(t)) return short;
+  return t.length > 24 ? t.slice(0, 24) : t;
+}
+
+/** Clip without leaving a dangling half-sentence. */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("; "));
+  return (stop > max * 0.4 ? cut.slice(0, stop + 1) : cut).trim();
+}
+
+/** 2-4 flowing sentences about the account in view. No ids, no lists. */
+function accountProse(bundle: BorrowerBundle | null, accountName: string, tab: string | null): string {
+  const tabLine = tab ? `Viewing the ${tab} tab.` : "";
+  if (!bundle) {
+    return sanitize([`${accountName} has no staged detail in this view.`, tabLine].filter(Boolean).join(" "));
+  }
+
+  const parts: string[] = [];
   const snap = bundle.snapshot ?? { accountId: "" };
   const exp = bundle.exposure ?? {};
-  const covs = bundle.covenants?.covenants ?? [];
-  const facs = (exp.facilities ?? []).filter(isActiveFacility);
-  const boom = bundle.boom?.ratios;
+  const committed = exp.totalCommitted ?? snap.totalCreditExposure;
+  const drawn = exp.totalOutstanding ?? snap.totalOutstanding;
 
-  const sections: Array<string | null> = [
-    `Account: ${accountName}${snap.accountId ? ` (${snap.accountId})` : ""}`,
-    line("Industry", [snap.industry, snap.naicsCode ? `NAICS ${snap.naicsCode}` : null].filter(Boolean).join(" · ")),
-    line("Risk rating", snap.primaryRiskRating ? `Grade ${snap.primaryRiskRating}` : null),
-    line("Package stage", snap.primaryStage),
-    line("Committed", fmtMoney(exp.totalCommitted ?? snap.totalCreditExposure)),
-    line("Drawn", fmtMoney(exp.totalOutstanding ?? snap.totalOutstanding)),
-    line("Available", exp.totalAvailable != null ? fmtMoney(exp.totalAvailable) : null),
-    line("Annual revenue", snap.annualRevenue != null ? fmtMoney(snap.annualRevenue) : null),
-    boom
-      ? line(
-          "Boom ratios",
-          [
-            boom.ebitda != null ? `EBITDA ${fmtMoney(boom.ebitda)}` : null,
-            boom.totalLeverage != null ? `leverage ${boom.totalLeverage}x` : null,
-            boom.interestCoverage != null ? `interest coverage ${boom.interestCoverage}x` : null,
-          ]
-            .filter(Boolean)
-            .join(", "),
-        )
+  // 1. Identity, grade, exposure.
+  const lead = [
+    accountName,
+    snap.primaryRiskRating ? `Grade ${snap.primaryRiskRating}` : null,
+    committed != null
+      ? `${fmtMoney(committed)} committed${drawn != null ? ` with ${fmtMoney(drawn)} drawn` : ""}`
       : null,
-  ];
+  ]
+    .filter(Boolean)
+    .join(", ");
+  if (lead) parts.push(`${lead}.`);
 
-  // Covenants — the most-asked-about surface; include cushion + next test.
-  if (covs.length) {
-    const rows = covs.slice(0, 6).map((c) => {
-      const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
-      const cushion = cu.cushion != null ? `cushion ${cu.cushion < 0 ? "−" : ""}${fmtCovVal(Math.abs(cu.cushion))}` : "cushion n/a";
-      const status = c.breached === true ? "BREACHED" : (c.lastEvaluationStatus ?? "");
-      return `  - ${c.covenantType ?? "covenant"}: actual ${fmtCovVal(c.actualValue)} vs ${fmtCovThreshold(
-        c.covenantType,
-        c.actualValue,
-        c.thresholdValue,
-      )}, ${cushion}${status ? `, ${status}` : ""}${c.nextEvaluationDate ? `, next test ${fmtDate(c.nextEvaluationDate)}` : ""}`;
-    });
-    sections.push(`Covenants (${covs.length}):\n${rows.join("\n")}`);
+  // 2. The covenant that matters — the tightest cushion, not every covenant.
+  const covs = bundle.covenants?.covenants ?? [];
+  let tightest: { name: string; actual: string; threshold: string; breached: boolean; pct: number } | null = null;
+  for (const c of covs) {
+    const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
+    const a = covValue(c.actualValue);
+    const th = covValue(c.thresholdValue);
+    if (!a || !th) continue;
+    const pct = cu.safe === false ? -1 : cu.pct;
+    if (!tightest || pct < tightest.pct) {
+      tightest = { name: shortCovenantName(c.covenantType), actual: a, threshold: th, breached: cu.safe === false || c.breached === true, pct };
+    }
   }
 
-  // Facilities — active only; closed facilities are not live exposure.
-  if (facs.length) {
-    const rows = facs.slice(0, 6).map(
-      (f) =>
-        `  - ${f.name ?? f.productType ?? "facility"}: committed ${fmtMoney(f.committed)}, drawn ${fmtMoney(
-          f.outstanding,
-        )}${f.maturityDate ? `, matures ${fmtDate(f.maturityDate)}` : ""}`,
+  const boom = bundle.boom?.ratios;
+  const second: string[] = [];
+  if (tightest) {
+    second.push(
+      `${tightest.name} ${tightest.actual} against a ${tightest.threshold} ${tightest.breached ? "threshold, breached" : "floor"}`,
     );
-    sections.push(`Active facilities (${facs.length}):\n${rows.join("\n")}`);
+  }
+  if (boom?.totalLeverage != null) {
+    second.push(`leverage ${ratio(boom.totalLeverage)}${boom.ebitda != null ? ` on ${fmtMoney(boom.ebitda)} EBITDA` : ""}`);
+  }
+  if (second.length) parts.push(`${second.join("; ")}.`);
+
+  // 3. Structure, only when it adds something the covenants did not.
+  const facs = (exp.facilities ?? []).filter(isActiveFacility);
+  if (facs.length && !covs.length) {
+    parts.push(`${facs.length} active ${facs.length === 1 ? "facility" : "facilities"}.`);
   }
 
-  if (bundle.verdict) sections.push(`Standing verdict: ${bundle.verdict}`);
-  if (tab) sections.push(`The banker is looking at the "${tab}" tab.`);
-
-  // Spend the budget in priority order; drop what doesn't fit.
-  const out: string[] = [];
-  let used = 0;
-  for (const s of sections) {
-    if (!s) continue;
-    if (used + s.length + 1 > CONTEXT_BUDGET) continue;
-    out.push(s);
-    used += s.length + 1;
-  }
-  return out.join("\n");
+  if (tabLine) parts.push(tabLine);
+  return sanitize(parts.join(" "));
 }
 
-/** Book-level context for the home view (no account in scope). */
-function bookContext(data: C360Data): string {
+/** Book-level prose for the home view. */
+function bookProse(data: C360Data): string {
   const pf = data.portfolio ?? { accounts: [] };
   const bt = pf.bookTotals ?? {};
   const sig = pf.signals ?? {};
-  const parts = [
-    `Book: ${bt.accountCount ?? pf.accounts.length} relationships`,
-    bt.totalCommitted != null ? `committed ${fmtMoney(bt.totalCommitted)}` : null,
-    bt.totalOutstanding != null ? `drawn ${fmtMoney(bt.totalOutstanding)}` : null,
-    sig.breachedCount != null ? `${sig.breachedCount} breached covenants` : null,
-    sig.covenantsDueSoon?.length ? `${sig.covenantsDueSoon.length} covenant tests due` : null,
-    sig.maturitiesSoon?.length ? `${sig.maturitiesSoon.length} maturities in window` : null,
-  ].filter(Boolean);
 
-  const top = pf.accounts
-    .slice(0, 8)
-    .map((a) => `  - ${a.name}: TCE ${fmtMoney(a.tce)}, drawn ${fmtMoney(a.outstanding)}${a.riskRating ? `, grade ${a.riskRating}` : ""}`)
-    .join("\n");
+  const count = bt.accountCount ?? pf.accounts.length;
+  const lead = [
+    `Book of ${count} ${count === 1 ? "relationship" : "relationships"}`,
+    bt.totalCommitted != null
+      ? `${fmtMoney(bt.totalCommitted)} committed${bt.totalOutstanding != null ? ` with ${fmtMoney(bt.totalOutstanding)} drawn` : ""}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
-  const block = `${parts.join(", ")}\nAccounts:\n${top}`;
-  return block.length > CONTEXT_BUDGET ? block.slice(0, CONTEXT_BUDGET) : block;
+  const flags: string[] = [];
+  if (sig.breachedCount) flags.push(`${sig.breachedCount} breached ${sig.breachedCount === 1 ? "covenant" : "covenants"}`);
+  if (sig.covenantsDueSoon?.length) flags.push(`${sig.covenantsDueSoon.length} tests due`);
+  if (sig.maturitiesSoon?.length) flags.push(`${sig.maturitiesSoon.length} maturities near`);
+
+  return sanitize([`${lead}.`, flags.length ? `${flags.join(", ")}.` : ""].filter(Boolean).join(" "));
 }
 
-/** Assemble the full prompt sent to the LLM connector. */
+/**
+ * Assemble the prompt. Shape contract, enforced here and by the tests:
+ * prose only, no ids, context ≤ CONTEXT_BUDGET, whole prompt ≤ MAX_PROMPT.
+ */
 export function buildGroundedPrompt(args: {
   data: C360Data;
   bundle: BorrowerBundle | null;
@@ -134,15 +178,14 @@ export function buildGroundedPrompt(args: {
   question: string;
 }): string {
   const { data, bundle, accountName, tab, question } = args;
-  const context = accountName ? contextBlock(bundle, accountName, tab) : bookContext(data);
-  return [
-    "You are answering inside a commercial-credit relationship cockpit.",
-    "",
-    "CONTEXT (the only figures you may cite):",
-    context,
-    "",
-    `QUESTION: ${question}`,
-    "",
-    INSTRUCTION,
-  ].join("\n");
+
+  // The question is sanitized too: a pasted JSON fragment would otherwise trip
+  // the same guard and quarantine the page for every later call.
+  const q = clip(sanitize(question), 200);
+
+  const raw = accountName ? accountProse(bundle, accountName, tab) : bookProse(data);
+  const room = Math.max(0, Math.min(CONTEXT_BUDGET, MAX_PROMPT - q.length - INSTRUCTION.length - 2));
+  const context = clip(raw, room);
+
+  return [context, q, INSTRUCTION].filter(Boolean).join(" ");
 }

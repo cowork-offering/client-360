@@ -5,7 +5,7 @@ import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
-  "Explain the Structural Signals — the early-warning items (modifications, guarantor signals, breached covenants) and the renewal clock to the nearest maturity.";
+  "Explain the early-warning signals here and the nearest maturity.";
 
 /** Renewal-clock window. DERIVED constant, matches MATURITY_NEAR_WINDOW_DAYS
  *  in data/worklist.ts and the legacy artifact's 270-day watch window (A26.1). */

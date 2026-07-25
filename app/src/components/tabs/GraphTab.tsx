@@ -3,7 +3,7 @@ import { fmtPct } from "../../data/format";
 import { Card, SectionHead, GapChip, EmptyState, NoteCaption } from "../ui";
 
 const EXPLAIN =
-  "Explain the Relationship Graph — the beneficial-ownership structure, who guarantees this credit, and how the legal entities relate.";
+  "Explain the ownership structure and who guarantees this credit.";
 
 function OwnershipTree({ owners, borrowerName, sector }: { owners: Connection[]; borrowerName: string; sector: string }) {
   if (!owners.length) {

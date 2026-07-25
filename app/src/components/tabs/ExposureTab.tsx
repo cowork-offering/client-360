@@ -6,7 +6,7 @@ import { useEnterTransition } from "../../data/motion";
 import { isActiveFacility } from "../../data/worklist";
 
 const EXPLAIN =
-  "Explain the Exposure & Collateral tab — the committed vs drawn split, the coverage ratio, and what secures each facility.";
+  "Explain this exposure: committed versus drawn, coverage, and what secures it.";
 
 const FAC_COLS = "1.3fr 1fr 1fr 1fr 1.1fr 1fr 0.9fr";
 

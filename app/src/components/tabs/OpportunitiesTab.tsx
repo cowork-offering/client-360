@@ -4,7 +4,7 @@ import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { staggerDelay } from "../../data/motion";
 
 const EXPLAIN =
-  "Explain the Opportunities & Whitespace tab — the next best actions, the open pipeline, and the standing deposit cross-sell story.";
+  "Explain the whitespace here and the next best action.";
 
 interface Nba {
   title: string;

@@ -13,7 +13,7 @@ import { Card, SectionHead, GapChip, EmptyState, NoteCaption } from "../ui";
 import { useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
-  "Explain the Covenants tab — how the cushion is computed for each covenant, the effective-challenge chips, and which covenant is closest to its threshold.";
+  "Explain these covenants: which is tightest, and how much cushion is left.";
 
 const COV_COLS = "1.6fr 0.9fr 1fr 0.9fr 1.3fr 1fr";
 
