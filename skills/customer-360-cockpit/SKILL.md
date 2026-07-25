@@ -275,6 +275,23 @@ never a breach determination.** Never present divergence as a covenant breach.
 
 ## RENDER
 
+### FAST FIRST PAINT — two-phase render (default for live runs)
+
+Do not make the banker wait for the whole staging pipeline before seeing anything.
+
+**Phase 1 (publish within the first ~15-20s):** after step (a) plus ONE batched detail call for the
+anchor account only, compose a minimal C360_DATA — `portfolio` verbatim, `borrowers` containing just
+the anchor bundle, `worklist` omitted — and assemble with `--allow-partial` (this is the ONE sanctioned
+use of that flag: a deliberate degraded first paint). Publish it immediately. Unstaged rows render
+with their honest "not staged" state; the KPI band and anchor are fully live.
+
+**Phase 2:** continue the fetch sequence — (b) worklist scope, (c) full batched staging, (d) Boom,
+(e) M365 intake — then compose the FULL C360_DATA, assemble WITHOUT `--allow-partial`, and
+`update_artifact` (full replace). Tell the user in your chat narration that the full book is loading
+between the phases. The artifact preserves their place across the replace.
+
+Skip phase 1 only when the user asked for a single account you can stage in one shot anyway.
+
 Publish the assembled file with the artifact tool **BY FILE PATH** (`create_artifact`) — never paste
 HTML inline. Do NOT open a Chrome tab or call any other widget/HTML builder.
 
