@@ -1,5 +1,5 @@
 {
-  "name": "client-360",
+  "name": "client-360-cockpit",
   "owner": {
     "name": "Commercial Credit Reinvented"
   },
@@ -7,7 +7,7 @@
     {
       "name": "client-360",
       "source": "./",
-      "description": "Customer 360 relationship cockpit — Salesforce-hosted Customer360 MCP data plane (8 tools, per-user OAuth) rendered as a live Cowork artifact with an Explain-this AI panel."
+      "description": "Customer 360 relationship cockpit \u2014 worklist-first React artifact over the Salesforce-hosted Customer360 MCP data plane (8 tools, per-user OAuth): needs-action queue, activity audit trail, covenant effective-challenge, page-agnostic AI chat, data-gated Client Actions."
     }
   ]
 }

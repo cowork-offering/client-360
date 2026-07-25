@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Customer 360 · Relationship Cockpit</title>
+    <!--
+      Data-injection marker — INERT application/json slot. At render time the
+      assembler replaces ONLY the inner text (the /*__C360_DATA__*/ placeholder)
+      with the composed JSON. The static bootstrap in load.ts JSON.parses this
+      slot into window.C360_DATA at startup — no fetch, no eval. Keep the literal
+      below byte-identical; the assembler matches it exactly.
+    -->
+    <script id="c360-data" type="application/json">/*__C360_DATA__*/</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

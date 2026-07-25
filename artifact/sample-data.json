@@ -1,5 +1,5 @@
 {
-  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note — field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names.",
+  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note — field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names. UPDATED 2026-07-23 (Sonnet data/assembler agent, Cockpit v3 rebuild, SPEC.md §5): added the full `borrowers` map (4 bundles — anchor Piedmont duplicated from `borrower` verbatim, plus 3 invented-but-realistic C&I bundles: Brightwater Foods Group [COVENANT_BREACH — DSCR 1.05x vs 1.20x floor, both facilities under-collateralized], Sterling Fabrication Co. [MATURITY_NEAR — $8.0M term loan matures in 75 days], Kingsley Precision Works [MODIFICATION_CLUSTER/RECENTLY_MODIFIED — 2 facility mods in 45 days funding expansion]) and the `worklist` block (accountIds + reason codes). portfolio.signals.breachedCount and maturitiesSoon updated to reflect the new bundles. All three new bundles are SAMPLE-ONLY fictitious data, consistent with their pre-existing portfolio.accounts row figures (TCE/TBE/TOE/outstanding/rating/industry unchanged from the original sample rows). UPDATED 2026-07-23 (v1.1 amendments A9/A10): Brightwater's covenant retest date set to 2026-08-16 — an exact 45-day boundary case vs meta.generatedAt (2026-07-02T09:15:00Z) for the COVENANT_DUE ≤45d threshold; its worklist reasons now list both COVENANT_BREACH and COVENANT_DUE. Kingsley gained a 3rd modification (2026-04-08) so MODIFICATION_CLUSTER's ≥3-in-180d threshold is genuinely satisfied (previously only 2 were on file); RECENTLY_MODIFIED (≤30d) remains satisfied by the existing 2026-06-10 entry (22 days before generatedAt). UPDATED 2026-07-23 (Codex round 2 finding 7): every facility now carries an explicit `status` field (\"Active\" for all pre-existing ones). Kingsley gained a 4th, CLOSED facility — \"Kingsley Original Equipment Term Loan\", status \"Paid Off\", matured 2026-01-15 (in the past vs meta.generatedAt) — to prove the client-side active-facility filter (absent/\"Active\" = active; closed + past-maturity never fires MATURITY_NEAR). Excluded from exposure totals and from signals.maturityWatch. UPDATED 2026-07-25 (SPEC A30 + A29 seam): added optional `activity[]` (Sterling: REQUEST_RECEIVED + ANALYSIS_CONCLUDED; Piedmont: COVENANT_EVALUATED + ANALYSIS_CONCLUDED, both reusing figures already on file) and optional `requests[]` (Sterling only — ONE clearly-synthetic client request, revolver $10.0M -> $13.0M, reference.id prefixed SAMPLE- with no webLink per A29's honest-gap rule). Amounts sized against Sterling's REAL facility data (committed/outstanding/lendable-value), not the coordinator's placeholder figure, so validate-c360's data-quality sweep stays silent.",
   "meta": {
     "user": "Fabian Goetzens",
     "dateISO": "2026-07-02",
@@ -98,13 +98,22 @@
           "accountId": "001SAMPLE0000BRWT",
           "accountName": "Brightwater Foods Group",
           "covenantType": "Debt Service Coverage Ratio",
-          "nextEvaluationDate": "2026-08-15",
-          "daysUntilNextEvaluation": 44,
+          "nextEvaluationDate": "2026-08-16",
+          "daysUntilNextEvaluation": 45,
           "overdue": false
         }
       ],
-      "breachedCount": 0,
-      "maturitiesSoon": []
+      "breachedCount": 1,
+      "maturitiesSoon": [
+        {
+          "loanId": "a1XSAMPLESTRL001",
+          "loanName": "Sterling Equipment Term Loan",
+          "accountId": "001SAMPLE0000STRL",
+          "accountName": "Sterling Fabrication Co.",
+          "maturityDate": "2026-09-15",
+          "daysUntilMaturity": 75
+        }
+      ]
     },
     "note": "Rollups are package-level (Σ TCE/TBE/TOE/Outstanding — never a loan sum); risk rating + stage are from each account's highest-TCE package. Book totals span all 4 packaged accounts; the account list is truncated to the highest-TCE 4. Signals are bounded by a 90-day window and capped at 25 rows each; overdue covenants (past due, still active) are included and flagged. Financial / behavioral / risk-migration EWS lives elsewhere in the fleet."
   },
@@ -192,7 +201,8 @@
               "pledgedStatus": "Active",
               "isPrimary": true
             }
-          ]
+          ],
+          "status": "Active"
         },
         {
           "loanId": "a1Xbb000000PLD2",
@@ -228,7 +238,8 @@
               "pledgedStatus": "Active",
               "isPrimary": false
             }
-          ]
+          ],
+          "status": "Active"
         },
         {
           "loanId": "a1Xbb000000PLD3",
@@ -254,7 +265,8 @@
               "pledgedStatus": "Pending",
               "isPrimary": true
             }
-          ]
+          ],
+          "status": "Active"
         }
       ],
       "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
@@ -278,7 +290,7 @@
         {
           "covenantId": "a2Cbb000000CV02",
           "covenantType": "Debt-to-Worth",
-          "thresholdValue": 3.0,
+          "thresholdValue": 3,
           "actualValue": 2.18,
           "lastEvaluationStatus": "Compliant",
           "lastEvaluationDate": "2026-03-31",
@@ -440,7 +452,1455 @@
         "sub": "Debt/EBITDA",
         "dir": "down"
       }
+    ],
+    "activity": [
+      {
+        "id": "act-piedmont-covenant-001",
+        "ts": "2026-03-31T16:20:00Z",
+        "kind": "COVENANT_EVALUATED",
+        "title": "Debt Service Coverage Ratio tested",
+        "summary": "Quarterly DSCR test completed — 1.42x against a 1.25x floor, compliant.",
+        "reference": {
+          "kind": "covenant",
+          "id": "a2Cbb000000CV01"
+        },
+        "detail": {
+          "body": "DSCR tested at 1.42x against a 1.25x floor — 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
+        }
+      },
+      {
+        "id": "act-piedmont-analysis-001",
+        "ts": "2026-07-02T08:50:00Z",
+        "kind": "ANALYSIS_CONCLUDED",
+        "title": "Relationship review concluded",
+        "summary": "Grade 5, fully collateralised, covenants compliant — EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
+        "detail": {
+          "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+          "nextSteps": [
+            {
+              "actionId": "covenant-review",
+              "note": "Re-run the covenant review ahead of the next scheduled test — the DSCR test date (2026-06-30) has already passed."
+            }
+          ]
+        }
+      }
     ]
   },
-  "aiPanel": null
+  "aiPanel": null,
+  "borrowers": {
+    "001bb00001DLtRMAA1": {
+      "snapshot": {
+        "accountId": "001bb00001DLtRMAA1",
+        "name": "Piedmont Precision Components, Inc.",
+        "industry": "Manufacturing",
+        "annualRevenue": 64500000,
+        "naicsCode": "332710",
+        "packageCount": 1,
+        "totalCreditExposure": 12500000,
+        "totalBorrowerExposure": 12500000,
+        "totalObligorExposure": 4250000,
+        "totalOutstanding": 4250000,
+        "primaryRiskRating": "5",
+        "primaryStage": "Credit Decisioning",
+        "note": "Use get_relationship_graph, get_exposure, get_covenants for detail."
+      },
+      "graph": {
+        "accountId": "001bb00001DLtRMAA1",
+        "connections": [
+          {
+            "counterpartyId": "001bb00001DLtHOLDCO",
+            "counterpartyName": "Margaret Holloway",
+            "direction": "inbound",
+            "role": "Owner",
+            "ownershipPercent": 100,
+            "indirectOwnershipPercent": null,
+            "totalOwnershipPercent": 100,
+            "isActive": true
+          }
+        ],
+        "legalEntities": [
+          {
+            "accountName": "Piedmont Precision Components, Inc.",
+            "borrowerType": "Borrower",
+            "relationshipType": "Primary Borrower",
+            "ownershipPercent": null,
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "loanId": null,
+            "packageId": "a5Fbb000000HA1NEAW"
+          },
+          {
+            "accountName": "Margaret Holloway",
+            "borrowerType": "Guarantor",
+            "relationshipType": "Personal Guaranty",
+            "ownershipPercent": 100,
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "loanId": null,
+            "packageId": "a5Fbb000000HA1NEAW"
+          }
+        ],
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+      },
+      "exposure": {
+        "accountId": "001bb00001DLtRMAA1",
+        "totalCommitted": 12500000,
+        "totalOutstanding": 4250000,
+        "totalAvailable": 8250000,
+        "facilities": [
+          {
+            "loanId": "a1Xbb000000PLD1",
+            "name": "Piedmont Equipment Term Loan",
+            "productType": "Term Loan",
+            "riskGrade": "5",
+            "committed": 5000000,
+            "outstanding": 2500000,
+            "available": 2500000,
+            "maturityDate": "2029-03-15",
+            "interestRate": 6.75,
+            "totalLendableValue": 4800000,
+            "coverageRatio": 1.92,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1Xbb000000PLD1",
+                "collateralType": "Equipment",
+                "collateralValue": 6000000,
+                "advanceRate": 80,
+                "currentLendableValue": 4800000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1Xbb000000PLD2",
+            "name": "Piedmont Working Capital Revolver",
+            "productType": "Revolving Line of Credit",
+            "riskGrade": "5",
+            "committed": 5000000,
+            "outstanding": 1750000,
+            "available": 3250000,
+            "maturityDate": "2027-03-15",
+            "interestRate": 7.25,
+            "totalLendableValue": 3600000,
+            "coverageRatio": 2.06,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1Xbb000000PLD2",
+                "collateralType": "Accounts Receivable",
+                "collateralValue": 3000000,
+                "advanceRate": 80,
+                "currentLendableValue": 2400000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              },
+              {
+                "loanId": "a1Xbb000000PLD2",
+                "collateralType": "Inventory",
+                "collateralValue": 1500000,
+                "advanceRate": 80,
+                "currentLendableValue": 1200000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": false
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1Xbb000000PLD3",
+            "name": "Piedmont CapEx Facility",
+            "productType": "Term Loan",
+            "riskGrade": "5",
+            "committed": 2500000,
+            "outstanding": 0,
+            "available": 2500000,
+            "maturityDate": "2028-09-30",
+            "interestRate": 6.9,
+            "totalLendableValue": 1600000,
+            "coverageRatio": null,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1Xbb000000PLD3",
+                "collateralType": "Real Estate",
+                "collateralValue": 2000000,
+                "advanceRate": 80,
+                "currentLendableValue": 1600000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Pending",
+                "isPrimary": true
+              }
+            ],
+            "status": "Active"
+          }
+        ],
+        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+      },
+      "covenants": {
+        "accountId": "001bb00001DLtRMAA1",
+        "covenants": [
+          {
+            "covenantId": "a2Cbb000000CV01",
+            "covenantType": "Debt Service Coverage Ratio",
+            "thresholdValue": 1.25,
+            "actualValue": 1.42,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-03-31",
+            "nextEvaluationDate": "2026-06-30",
+            "daysUntilNextEvaluation": -2,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2Cbb000000CV02",
+            "covenantType": "Debt-to-Worth",
+            "thresholdValue": 3,
+            "actualValue": 2.18,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-03-31",
+            "nextEvaluationDate": "2026-06-30",
+            "daysUntilNextEvaluation": -2,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2Cbb000000CV03",
+            "covenantType": "Minimum Liquidity",
+            "thresholdValue": 5000000,
+            "actualValue": 8200000,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-03-31",
+            "nextEvaluationDate": "2026-06-30",
+            "daysUntilNextEvaluation": -2,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2Cbb000000CV04",
+            "covenantType": "Fixed Asset Purchases Limit",
+            "thresholdValue": 7500000,
+            "actualValue": 1250000,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-03-31",
+            "nextEvaluationDate": "2026-12-31",
+            "daysUntilNextEvaluation": 182,
+            "frequency": "Annual",
+            "breached": false,
+            "covenantStatus": "Active"
+          }
+        ],
+        "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
+      },
+      "opportunities": {
+        "accountId": "001bb00001DLtRMAA1",
+        "opportunities": [
+          {
+            "opportunityId": "006bb000000OPP1",
+            "name": "Piedmont Treasury & Operating Deposits",
+            "stage": "Qualification",
+            "amount": 4200000,
+            "closeDate": "2026-09-30",
+            "type": "New Business",
+            "probability": 30,
+            "ownerName": "Fabian Goetzens"
+          }
+        ],
+        "note": null
+      },
+      "signals": {
+        "accountId": "001bb00001DLtRMAA1",
+        "modifications": [],
+        "modificationClusterFlag": false,
+        "renewals": [],
+        "maturityWatch": [
+          {
+            "loanId": "a1Xbb000000PLD2",
+            "name": "Piedmont Working Capital Revolver",
+            "maturityDate": "2027-03-15",
+            "daysUntilMaturity": 256
+          }
+        ],
+        "guarantorSignals": [],
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+      },
+      "boom": {
+        "ratios": {
+          "revenue": 64500000,
+          "ebitda": 5200000,
+          "ebitdaMargin": 8.06,
+          "totalLeverage": 3.85,
+          "interestCoverage": 2.64
+        },
+        "spread": {
+          "sourceFile": "Piedmont_Precision_FY2025_LTM.xlsx",
+          "periods": [
+            {
+              "period": "FY2023",
+              "revenue": 59100000,
+              "ebitda": 6800000,
+              "margin": 11.51
+            },
+            {
+              "period": "FY2024",
+              "revenue": 62400000,
+              "ebitda": 7200000,
+              "margin": 11.54
+            },
+            {
+              "period": "LTM",
+              "revenue": 64500000,
+              "ebitda": 5200000,
+              "margin": 8.06
+            }
+          ],
+          "lineItems": [
+            {
+              "line": "Revenue",
+              "ltm": 64500000,
+              "priorFy": 62400000
+            },
+            {
+              "line": "Gross Profit",
+              "ltm": 16100000,
+              "priorFy": 17500000
+            },
+            {
+              "line": "EBITDA",
+              "ltm": 5200000,
+              "priorFy": 7200000
+            },
+            {
+              "line": "Net Income",
+              "ltm": 2800000,
+              "priorFy": 4100000
+            },
+            {
+              "line": "Interest Expense",
+              "ltm": 1970000,
+              "priorFy": 1850000
+            },
+            {
+              "line": "Free Cash Flow",
+              "ltm": 4100000,
+              "priorFy": 5800000
+            }
+          ]
+        },
+        "note": "Source: Boom spreading — Piedmont_Precision_FY2025_LTM.xlsx"
+      },
+      "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+      "anchors": [
+        {
+          "label": "Rating",
+          "value": "Grade 5",
+          "sub": "Credit Decisioning",
+          "dir": null
+        },
+        {
+          "label": "Committed",
+          "value": "$12.5M",
+          "sub": "$4.25M drawn",
+          "dir": null
+        },
+        {
+          "label": "DSC",
+          "value": "1.42×",
+          "sub": "Floor 1.25×",
+          "dir": null
+        },
+        {
+          "label": "Leverage",
+          "value": "3.85×",
+          "sub": "Debt/EBITDA",
+          "dir": "down"
+        }
+      ],
+      "activity": [
+        {
+          "id": "act-piedmont-covenant-001",
+          "ts": "2026-03-31T16:20:00Z",
+          "kind": "COVENANT_EVALUATED",
+          "title": "Debt Service Coverage Ratio tested",
+          "summary": "Quarterly DSCR test completed — 1.42x against a 1.25x floor, compliant.",
+          "reference": {
+            "kind": "covenant",
+            "id": "a2Cbb000000CV01"
+          },
+          "detail": {
+            "body": "DSCR tested at 1.42x against a 1.25x floor — 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
+          }
+        },
+        {
+          "id": "act-piedmont-analysis-001",
+          "ts": "2026-07-02T08:50:00Z",
+          "kind": "ANALYSIS_CONCLUDED",
+          "title": "Relationship review concluded",
+          "summary": "Grade 5, fully collateralised, covenants compliant — EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
+          "detail": {
+            "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+            "nextSteps": [
+              {
+                "actionId": "covenant-review",
+                "note": "Re-run the covenant review ahead of the next scheduled test — the DSCR test date (2026-06-30) has already passed."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "001SAMPLE0000BRWT": {
+      "snapshot": {
+        "accountId": "001SAMPLE0000BRWT",
+        "name": "Brightwater Foods Group",
+        "industry": "Diversified Holdings",
+        "annualRevenue": 96000000,
+        "naicsCode": "311999",
+        "packageCount": 1,
+        "totalCreditExposure": 28500000,
+        "totalBorrowerExposure": 28500000,
+        "totalObligorExposure": 28500000,
+        "totalOutstanding": 28500000,
+        "primaryRiskRating": "6",
+        "primaryStage": "Booked",
+        "note": "Use get_relationship_graph, get_exposure, get_covenants for detail."
+      },
+      "graph": {
+        "accountId": "001SAMPLE0000BRWT",
+        "connections": [
+          {
+            "counterpartyId": "001SAMPLEBRWTHOLD",
+            "counterpartyName": "Brightwater Holdings LLC",
+            "direction": "inbound",
+            "role": "Owner",
+            "ownershipPercent": 100,
+            "indirectOwnershipPercent": null,
+            "totalOwnershipPercent": 100,
+            "isActive": true
+          }
+        ],
+        "legalEntities": [
+          {
+            "accountName": "Brightwater Foods Group",
+            "borrowerType": "Borrower",
+            "relationshipType": "Primary Borrower",
+            "ownershipPercent": null,
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000BRWT1"
+          },
+          {
+            "accountName": "Daniel Ferris",
+            "borrowerType": "Guarantor",
+            "relationshipType": "Personal Guaranty",
+            "ownershipPercent": null,
+            "guarantyAmountType": "Limited",
+            "contingentAmount": 10000000,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000BRWT1"
+          }
+        ],
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+      },
+      "exposure": {
+        "accountId": "001SAMPLE0000BRWT",
+        "totalCommitted": 28500000,
+        "totalOutstanding": 28500000,
+        "totalAvailable": 0,
+        "facilities": [
+          {
+            "loanId": "a1XSAMPLEBRWT001",
+            "name": "Brightwater Foods Senior Term Loan",
+            "productType": "Term Loan",
+            "riskGrade": "6",
+            "committed": 18000000,
+            "outstanding": 18000000,
+            "available": 0,
+            "maturityDate": "2028-11-30",
+            "interestRate": 8.15,
+            "totalLendableValue": 17500000,
+            "coverageRatio": 0.97,
+            "coverageShortfall": true,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLEBRWT001",
+                "collateralType": "Equipment",
+                "collateralValue": 16000000,
+                "advanceRate": 70,
+                "currentLendableValue": 11200000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              },
+              {
+                "loanId": "a1XSAMPLEBRWT001",
+                "collateralType": "Real Estate",
+                "collateralValue": 9000000,
+                "advanceRate": 70,
+                "currentLendableValue": 6300000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": false
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1XSAMPLEBRWT002",
+            "name": "Brightwater Foods Working Capital Revolver",
+            "productType": "Revolving Line of Credit",
+            "riskGrade": "6",
+            "committed": 10500000,
+            "outstanding": 10500000,
+            "available": 0,
+            "maturityDate": "2027-11-30",
+            "interestRate": 8.75,
+            "totalLendableValue": 10000000,
+            "coverageRatio": 0.95,
+            "coverageShortfall": true,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLEBRWT002",
+                "collateralType": "Accounts Receivable",
+                "collateralValue": 9000000,
+                "advanceRate": 80,
+                "currentLendableValue": 7200000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              },
+              {
+                "loanId": "a1XSAMPLEBRWT002",
+                "collateralType": "Inventory",
+                "collateralValue": 4000000,
+                "advanceRate": 70,
+                "currentLendableValue": 2800000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": false
+              }
+            ],
+            "status": "Active"
+          }
+        ],
+        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+      },
+      "covenants": {
+        "accountId": "001SAMPLE0000BRWT",
+        "covenants": [
+          {
+            "covenantId": "a2CSAMPLEBRWT01",
+            "covenantType": "Debt Service Coverage Ratio",
+            "thresholdValue": 1.2,
+            "actualValue": 1.05,
+            "lastEvaluationStatus": "Non-Compliant",
+            "lastEvaluationDate": "2026-06-15",
+            "nextEvaluationDate": "2026-08-16",
+            "daysUntilNextEvaluation": 45,
+            "frequency": "Quarterly",
+            "breached": true,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2CSAMPLEBRWT02",
+            "covenantType": "Debt-to-Worth",
+            "thresholdValue": 4,
+            "actualValue": 3.6,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-15",
+            "nextEvaluationDate": "2026-08-16",
+            "daysUntilNextEvaluation": 45,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2CSAMPLEBRWT03",
+            "covenantType": "Minimum Liquidity",
+            "thresholdValue": 3000000,
+            "actualValue": 3400000,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-15",
+            "nextEvaluationDate": "2026-08-16",
+            "daysUntilNextEvaluation": 45,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          }
+        ],
+        "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
+      },
+      "opportunities": {
+        "accountId": "001SAMPLE0000BRWT",
+        "opportunities": [],
+        "note": "No open opportunities — account flagged for covenant follow-up ahead of relationship expansion conversations."
+      },
+      "signals": {
+        "accountId": "001SAMPLE0000BRWT",
+        "modifications": [],
+        "modificationClusterFlag": false,
+        "renewals": [],
+        "maturityWatch": [],
+        "guarantorSignals": [],
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+      },
+      "boom": {
+        "ratios": {
+          "revenue": 96000000,
+          "ebitda": 6800000,
+          "ebitdaMargin": 7.08,
+          "totalLeverage": 5.9,
+          "interestCoverage": 1.62
+        },
+        "spread": {
+          "sourceFile": "Brightwater_Foods_FY2025_LTM.xlsx",
+          "periods": [
+            {
+              "period": "FY2023",
+              "revenue": 89000000,
+              "ebitda": 9200000,
+              "margin": 10.34
+            },
+            {
+              "period": "FY2024",
+              "revenue": 93500000,
+              "ebitda": 8100000,
+              "margin": 8.66
+            },
+            {
+              "period": "LTM",
+              "revenue": 96000000,
+              "ebitda": 6800000,
+              "margin": 7.08
+            }
+          ],
+          "lineItems": [
+            {
+              "line": "Revenue",
+              "ltm": 96000000,
+              "priorFy": 93500000
+            },
+            {
+              "line": "Gross Profit",
+              "ltm": 21800000,
+              "priorFy": 24900000
+            },
+            {
+              "line": "EBITDA",
+              "ltm": 6800000,
+              "priorFy": 8100000
+            },
+            {
+              "line": "Net Income",
+              "ltm": 1900000,
+              "priorFy": 3600000
+            },
+            {
+              "line": "Interest Expense",
+              "ltm": 4200000,
+              "priorFy": 3850000
+            },
+            {
+              "line": "Free Cash Flow",
+              "ltm": 1050000,
+              "priorFy": 3400000
+            }
+          ]
+        },
+        "note": "Source: Boom spreading — Brightwater_Foods_FY2025_LTM.xlsx"
+      },
+      "verdict": "Grade 6 and fully drawn at $28.5M, Brightwater Foods tripped its Debt Service Coverage covenant at last test (1.05x vs 1.20x floor) with both facilities running below full collateral coverage — flag for immediate covenant follow-up ahead of the August retest.",
+      "anchors": [
+        {
+          "label": "Rating",
+          "value": "Grade 6",
+          "sub": "Booked",
+          "dir": null
+        },
+        {
+          "label": "Committed",
+          "value": "$28.5M",
+          "sub": "Fully drawn",
+          "dir": null
+        },
+        {
+          "label": "DSC",
+          "value": "1.05×",
+          "sub": "Floor 1.20× — breached",
+          "dir": "down"
+        },
+        {
+          "label": "Coverage",
+          "value": "0.97×",
+          "sub": "Blended collateral",
+          "dir": "down"
+        }
+      ],
+      "aiPanel": null
+    },
+    "001SAMPLE0000STRL": {
+      "snapshot": {
+        "accountId": "001SAMPLE0000STRL",
+        "name": "Sterling Fabrication Co.",
+        "industry": "Industrial Supply",
+        "annualRevenue": 78500000,
+        "naicsCode": "332999",
+        "packageCount": 1,
+        "totalCreditExposure": 18000000,
+        "totalBorrowerExposure": 18000000,
+        "totalObligorExposure": 16900000,
+        "totalOutstanding": 16900000,
+        "primaryRiskRating": "5",
+        "primaryStage": "Booked",
+        "note": "Use get_relationship_graph, get_exposure, get_covenants for detail."
+      },
+      "graph": {
+        "accountId": "001SAMPLE0000STRL",
+        "connections": [
+          {
+            "counterpartyId": "001SAMPLESTRLOWNR",
+            "counterpartyName": "Robert Ainsley",
+            "direction": "inbound",
+            "role": "Owner",
+            "ownershipPercent": 100,
+            "indirectOwnershipPercent": null,
+            "totalOwnershipPercent": 100,
+            "isActive": true
+          }
+        ],
+        "legalEntities": [
+          {
+            "accountName": "Sterling Fabrication Co.",
+            "borrowerType": "Borrower",
+            "relationshipType": "Primary Borrower",
+            "ownershipPercent": null,
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000STRL1"
+          },
+          {
+            "accountName": "Robert Ainsley",
+            "borrowerType": "Guarantor",
+            "relationshipType": "Personal Guaranty",
+            "ownershipPercent": 100,
+            "guarantyAmountType": "Limited",
+            "contingentAmount": 5000000,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000STRL1"
+          }
+        ],
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+      },
+      "exposure": {
+        "accountId": "001SAMPLE0000STRL",
+        "totalCommitted": 18000000,
+        "totalOutstanding": 16900000,
+        "totalAvailable": 1100000,
+        "facilities": [
+          {
+            "loanId": "a1XSAMPLESTRL001",
+            "name": "Sterling Equipment Term Loan",
+            "productType": "Term Loan",
+            "riskGrade": "5",
+            "committed": 8000000,
+            "outstanding": 7200000,
+            "available": 800000,
+            "maturityDate": "2026-09-15",
+            "interestRate": 7.1,
+            "totalLendableValue": 8000000,
+            "coverageRatio": 1.11,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLESTRL001",
+                "collateralType": "Equipment",
+                "collateralValue": 10000000,
+                "advanceRate": 80,
+                "currentLendableValue": 8000000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1XSAMPLESTRL002",
+            "name": "Sterling Working Capital Revolver",
+            "productType": "Revolving Line of Credit",
+            "riskGrade": "5",
+            "committed": 10000000,
+            "outstanding": 9700000,
+            "available": 300000,
+            "maturityDate": "2028-01-10",
+            "interestRate": 7.65,
+            "totalLendableValue": 9200000,
+            "coverageRatio": 0.95,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLESTRL002",
+                "collateralType": "Accounts Receivable",
+                "collateralValue": 8000000,
+                "advanceRate": 80,
+                "currentLendableValue": 6400000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              },
+              {
+                "loanId": "a1XSAMPLESTRL002",
+                "collateralType": "Inventory",
+                "collateralValue": 4000000,
+                "advanceRate": 70,
+                "currentLendableValue": 2800000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": false
+              }
+            ],
+            "status": "Active"
+          }
+        ],
+        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+      },
+      "covenants": {
+        "accountId": "001SAMPLE0000STRL",
+        "covenants": [
+          {
+            "covenantId": "a2CSAMPLESTRL01",
+            "covenantType": "Debt Service Coverage Ratio",
+            "thresholdValue": 1.3,
+            "actualValue": 1.38,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-20",
+            "nextEvaluationDate": "2026-10-15",
+            "daysUntilNextEvaluation": 105,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2CSAMPLESTRL02",
+            "covenantType": "Debt-to-Worth",
+            "thresholdValue": 3.5,
+            "actualValue": 2.85,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-20",
+            "nextEvaluationDate": "2026-10-15",
+            "daysUntilNextEvaluation": 105,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2CSAMPLESTRL03",
+            "covenantType": "Minimum Liquidity",
+            "thresholdValue": 2000000,
+            "actualValue": 2650000,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-20",
+            "nextEvaluationDate": "2026-10-15",
+            "daysUntilNextEvaluation": 105,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          }
+        ],
+        "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
+      },
+      "opportunities": {
+        "accountId": "001SAMPLE0000STRL",
+        "opportunities": [
+          {
+            "opportunityId": "006SAMPLESTRL0P1",
+            "name": "Sterling Equipment Term Loan Renewal",
+            "stage": "Proposal",
+            "amount": 8000000,
+            "closeDate": "2026-09-01",
+            "type": "Renewal",
+            "probability": 60,
+            "ownerName": "Fabian Goetzens"
+          }
+        ],
+        "note": null
+      },
+      "signals": {
+        "accountId": "001SAMPLE0000STRL",
+        "modifications": [],
+        "modificationClusterFlag": false,
+        "renewals": [
+          {
+            "loanId": "a1XSAMPLESTRL001",
+            "name": "Sterling Equipment Term Loan",
+            "note": "Renewal under proposal ahead of the September maturity."
+          }
+        ],
+        "maturityWatch": [
+          {
+            "loanId": "a1XSAMPLESTRL001",
+            "name": "Sterling Equipment Term Loan",
+            "maturityDate": "2026-09-15",
+            "daysUntilMaturity": 75
+          }
+        ],
+        "guarantorSignals": [],
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+      },
+      "boom": {
+        "ratios": {
+          "revenue": 78500000,
+          "ebitda": 7450000,
+          "ebitdaMargin": 9.49,
+          "totalLeverage": 2.95,
+          "interestCoverage": 3.35
+        },
+        "spread": {
+          "sourceFile": "Sterling_Fabrication_FY2025_LTM.xlsx",
+          "periods": [
+            {
+              "period": "FY2023",
+              "revenue": 73000000,
+              "ebitda": 7000000,
+              "margin": 9.59
+            },
+            {
+              "period": "FY2024",
+              "revenue": 76200000,
+              "ebitda": 7300000,
+              "margin": 9.58
+            },
+            {
+              "period": "LTM",
+              "revenue": 78500000,
+              "ebitda": 7450000,
+              "margin": 9.49
+            }
+          ],
+          "lineItems": [
+            {
+              "line": "Revenue",
+              "ltm": 78500000,
+              "priorFy": 76200000
+            },
+            {
+              "line": "Gross Profit",
+              "ltm": 19200000,
+              "priorFy": 18600000
+            },
+            {
+              "line": "EBITDA",
+              "ltm": 7450000,
+              "priorFy": 7300000
+            },
+            {
+              "line": "Net Income",
+              "ltm": 3600000,
+              "priorFy": 3450000
+            },
+            {
+              "line": "Interest Expense",
+              "ltm": 2225000,
+              "priorFy": 2180000
+            },
+            {
+              "line": "Free Cash Flow",
+              "ltm": 4650000,
+              "priorFy": 4500000
+            }
+          ]
+        },
+        "note": "Source: Boom spreading — Sterling_Fabrication_FY2025_LTM.xlsx"
+      },
+      "verdict": "Grade 5 and 94% drawn at $16.9M of $18.0M, Sterling remains covenant-compliant across all three tests, but the $8.0M equipment term loan matures in 75 days (Sep 15) — get the renewal decision in front of committee now to avoid a maturity gap.",
+      "anchors": [
+        {
+          "label": "Rating",
+          "value": "Grade 5",
+          "sub": "Booked",
+          "dir": null
+        },
+        {
+          "label": "Committed",
+          "value": "$18.0M",
+          "sub": "$16.9M drawn",
+          "dir": null
+        },
+        {
+          "label": "DSC",
+          "value": "1.38×",
+          "sub": "Floor 1.30×",
+          "dir": null
+        },
+        {
+          "label": "Term Loan Maturity",
+          "value": "75 days",
+          "sub": "Sep 15, 2026",
+          "dir": "down"
+        }
+      ],
+      "aiPanel": null,
+      "requests": [
+        {
+          "id": "req-sterling-revolver-increase-001",
+          "channel": "email",
+          "receivedAt": "2026-06-28T14:32:00Z",
+          "summary": "Sterling Fabrication requests an increase to the Working Capital Revolver from $10.0M to $13.0M to support inventory build ahead of Q4 demand.",
+          "ask": {
+            "type": "facility_increase",
+            "from": 10000000,
+            "to": 13000000
+          },
+          "reference": {
+            "kind": "m365-message",
+            "id": "SAMPLE-AAMkADQ2YjM3STRLREVOLVER0001"
+          },
+          "status": "under_review"
+        }
+      ],
+      "activity": [
+        {
+          "id": "act-sterling-req-001",
+          "ts": "2026-06-28T14:32:00Z",
+          "kind": "REQUEST_RECEIVED",
+          "title": "Revolver increase request received",
+          "summary": "Sterling asked to raise the Working Capital Revolver from $10.0M to $13.0M via email, citing inventory build ahead of Q4 demand.",
+          "reference": {
+            "kind": "m365-message",
+            "id": "SAMPLE-AAMkADQ2YjM3STRLREVOLVER0001"
+          }
+        },
+        {
+          "id": "act-sterling-analysis-001",
+          "ts": "2026-07-01T16:45:00Z",
+          "kind": "ANALYSIS_CONCLUDED",
+          "title": "Headroom analysis concluded",
+          "summary": "Prepped brief on the revolver increase ask: borrowing base is already tight, collateral re-valuation recommended before sizing the modification.",
+          "detail": {
+            "verdict": "Sterling is drawn to $9.7M against a $10.0M revolver (97% utilized, $0.3M available) and the borrowing base is already tight — pledged AR and inventory support $9.2M in lendable value against $9.7M outstanding (0.95x coverage). Covenants remain compliant (DSC 1.38x vs 1.30x floor) but the requested $13.0M limit would need incremental collateral before it clears — recommend a collateral re-valuation alongside the modification, not a standalone limit increase.",
+            "nextSteps": [
+              {
+                "actionId": "collateral-valuation",
+                "note": "Re-value pledged AR and inventory — current lendable value doesn't fully cover today's $9.7M outstanding, let alone a $13.0M limit."
+              },
+              {
+                "actionId": "loan-modification",
+                "note": "Structure the $10.0M -> $13.0M revolver increase as a modification once the collateral base is confirmed."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "001SAMPLE0000KGSL": {
+      "snapshot": {
+        "accountId": "001SAMPLE0000KGSL",
+        "name": "Kingsley Precision Works",
+        "industry": "Manufacturing",
+        "annualRevenue": 110000000,
+        "naicsCode": "333000",
+        "packageCount": 1,
+        "totalCreditExposure": 22000000,
+        "totalBorrowerExposure": 22000000,
+        "totalObligorExposure": 9400000,
+        "totalOutstanding": 9400000,
+        "primaryRiskRating": "4",
+        "primaryStage": "Booked",
+        "note": "Use get_relationship_graph, get_exposure, get_covenants for detail."
+      },
+      "graph": {
+        "accountId": "001SAMPLE0000KGSL",
+        "connections": [
+          {
+            "counterpartyId": "001SAMPLEKGSLTRUST",
+            "counterpartyName": "Kingsley Family Trust",
+            "direction": "inbound",
+            "role": "Owner",
+            "ownershipPercent": 65,
+            "indirectOwnershipPercent": null,
+            "totalOwnershipPercent": 65,
+            "isActive": true
+          },
+          {
+            "counterpartyId": "001SAMPLEKGSLOWEN",
+            "counterpartyName": "Owen Kingsley",
+            "direction": "inbound",
+            "role": "Owner",
+            "ownershipPercent": 35,
+            "indirectOwnershipPercent": null,
+            "totalOwnershipPercent": 35,
+            "isActive": true
+          }
+        ],
+        "legalEntities": [
+          {
+            "accountName": "Kingsley Precision Works",
+            "borrowerType": "Borrower",
+            "relationshipType": "Primary Borrower",
+            "ownershipPercent": null,
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000KGSL1"
+          },
+          {
+            "accountName": "Kingsley Family Trust",
+            "borrowerType": "Guarantor",
+            "relationshipType": "Beneficial Owner",
+            "ownershipPercent": 65,
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000KGSL1"
+          },
+          {
+            "accountName": "Owen Kingsley",
+            "borrowerType": "Guarantor",
+            "relationshipType": "Personal Guaranty",
+            "ownershipPercent": 35,
+            "guarantyAmountType": "Limited",
+            "contingentAmount": 2000000,
+            "loanId": null,
+            "packageId": "a5FSAMPLE000KGSL1"
+          }
+        ],
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+      },
+      "exposure": {
+        "accountId": "001SAMPLE0000KGSL",
+        "totalCommitted": 22000000,
+        "totalOutstanding": 9400000,
+        "totalAvailable": 12600000,
+        "facilities": [
+          {
+            "loanId": "a1XSAMPLEKGSL001",
+            "name": "Kingsley Equipment Term Loan A",
+            "productType": "Term Loan",
+            "riskGrade": "4",
+            "committed": 10000000,
+            "outstanding": 6200000,
+            "available": 3800000,
+            "maturityDate": "2030-05-01",
+            "interestRate": 6.45,
+            "totalLendableValue": 6800000,
+            "coverageRatio": 1.1,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLEKGSL001",
+                "collateralType": "Equipment",
+                "collateralValue": 8500000,
+                "advanceRate": 80,
+                "currentLendableValue": 6800000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1XSAMPLEKGSL002",
+            "name": "Kingsley Working Capital Revolver",
+            "productType": "Revolving Line of Credit",
+            "riskGrade": "4",
+            "committed": 8000000,
+            "outstanding": 3200000,
+            "available": 4800000,
+            "maturityDate": "2028-05-01",
+            "interestRate": 6.95,
+            "totalLendableValue": 5400000,
+            "coverageRatio": 1.69,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLEKGSL002",
+                "collateralType": "Accounts Receivable",
+                "collateralValue": 5000000,
+                "advanceRate": 80,
+                "currentLendableValue": 4000000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": true
+              },
+              {
+                "loanId": "a1XSAMPLEKGSL002",
+                "collateralType": "Inventory",
+                "collateralValue": 2000000,
+                "advanceRate": 70,
+                "currentLendableValue": 1400000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Active",
+                "isPrimary": false
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1XSAMPLEKGSL003",
+            "name": "Kingsley CapEx Facility II",
+            "productType": "Term Loan",
+            "riskGrade": "4",
+            "committed": 4000000,
+            "outstanding": 0,
+            "available": 4000000,
+            "maturityDate": "2029-05-01",
+            "interestRate": 6.6,
+            "totalLendableValue": 2400000,
+            "coverageRatio": null,
+            "coverageShortfall": false,
+            "collateral": [
+              {
+                "loanId": "a1XSAMPLEKGSL003",
+                "collateralType": "Real Estate",
+                "collateralValue": 3000000,
+                "advanceRate": 80,
+                "currentLendableValue": 2400000,
+                "lienPosition": "1st",
+                "pledgedStatus": "Pending",
+                "isPrimary": true
+              }
+            ],
+            "status": "Active"
+          },
+          {
+            "loanId": "a1XSAMPLEKGSL000",
+            "name": "Kingsley Original Equipment Term Loan",
+            "productType": "Term Loan",
+            "riskGrade": "4",
+            "committed": 3000000,
+            "outstanding": 0,
+            "available": 0,
+            "maturityDate": "2026-01-15",
+            "interestRate": 5.95,
+            "totalLendableValue": null,
+            "coverageRatio": null,
+            "coverageShortfall": false,
+            "status": "Paid Off",
+            "collateral": []
+          }
+        ],
+        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math. Totals (totalCommitted/totalOutstanding/totalAvailable) reflect ACTIVE facilities only — the Kingsley Original Equipment Term Loan (status Paid Off, matured 2026-01-15) is excluded."
+      },
+      "covenants": {
+        "accountId": "001SAMPLE0000KGSL",
+        "covenants": [
+          {
+            "covenantId": "a2CSAMPLEKGSL01",
+            "covenantType": "Debt Service Coverage Ratio",
+            "thresholdValue": 1.25,
+            "actualValue": 1.85,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-25",
+            "nextEvaluationDate": "2026-10-10",
+            "daysUntilNextEvaluation": 100,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2CSAMPLEKGSL02",
+            "covenantType": "Debt-to-Worth",
+            "thresholdValue": 3,
+            "actualValue": 1.55,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-25",
+            "nextEvaluationDate": "2026-10-10",
+            "daysUntilNextEvaluation": 100,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          },
+          {
+            "covenantId": "a2CSAMPLEKGSL03",
+            "covenantType": "Minimum Liquidity",
+            "thresholdValue": 4000000,
+            "actualValue": 9100000,
+            "lastEvaluationStatus": "Compliant",
+            "lastEvaluationDate": "2026-06-25",
+            "nextEvaluationDate": "2026-10-10",
+            "daysUntilNextEvaluation": 100,
+            "frequency": "Quarterly",
+            "breached": false,
+            "covenantStatus": "Active"
+          }
+        ],
+        "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
+      },
+      "opportunities": {
+        "accountId": "001SAMPLE0000KGSL",
+        "opportunities": [
+          {
+            "opportunityId": "006SAMPLEKGSL0P1",
+            "name": "Kingsley Precision Works — Equipment Expansion Line",
+            "stage": "Qualification",
+            "amount": 5000000,
+            "closeDate": "2026-11-15",
+            "type": "New Business",
+            "probability": 40,
+            "ownerName": "Fabian Goetzens"
+          }
+        ],
+        "note": null
+      },
+      "signals": {
+        "accountId": "001SAMPLE0000KGSL",
+        "modifications": [
+          {
+            "modificationId": "a3MSAMPLEKGSL01",
+            "modificationType": "Facility Added",
+            "description": "New $4.0M CapEx Facility II booked to fund automation equipment purchase.",
+            "modificationDate": "2026-06-10",
+            "loanId": "a1XSAMPLEKGSL003"
+          },
+          {
+            "modificationId": "a3MSAMPLEKGSL02",
+            "modificationType": "Limit Increase",
+            "description": "Working Capital Revolver increased from $6.0M to $8.0M to support inventory build.",
+            "modificationDate": "2026-05-22",
+            "loanId": "a1XSAMPLEKGSL002"
+          },
+          {
+            "modificationId": "a3MSAMPLEKGSL03",
+            "modificationType": "Covenant Test Frequency Amendment",
+            "description": "Covenant testing cadence realigned to the quarterly reporting calendar ahead of the CapEx facility close.",
+            "modificationDate": "2026-04-08",
+            "loanId": null
+          }
+        ],
+        "modificationClusterFlag": true,
+        "renewals": [],
+        "maturityWatch": [],
+        "guarantorSignals": [],
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+      },
+      "boom": {
+        "ratios": {
+          "revenue": 110000000,
+          "ebitda": 13200000,
+          "ebitdaMargin": 12,
+          "totalLeverage": 1.55,
+          "interestCoverage": 5.4
+        },
+        "spread": {
+          "sourceFile": "Kingsley_Precision_FY2025_LTM.xlsx",
+          "periods": [
+            {
+              "period": "FY2023",
+              "revenue": 98000000,
+              "ebitda": 11200000,
+              "margin": 11.43
+            },
+            {
+              "period": "FY2024",
+              "revenue": 104500000,
+              "ebitda": 12300000,
+              "margin": 11.77
+            },
+            {
+              "period": "LTM",
+              "revenue": 110000000,
+              "ebitda": 13200000,
+              "margin": 12
+            }
+          ],
+          "lineItems": [
+            {
+              "line": "Revenue",
+              "ltm": 110000000,
+              "priorFy": 104500000
+            },
+            {
+              "line": "Gross Profit",
+              "ltm": 30800000,
+              "priorFy": 28900000
+            },
+            {
+              "line": "EBITDA",
+              "ltm": 13200000,
+              "priorFy": 12300000
+            },
+            {
+              "line": "Net Income",
+              "ltm": 8100000,
+              "priorFy": 7400000
+            },
+            {
+              "line": "Interest Expense",
+              "ltm": 2450000,
+              "priorFy": 2300000
+            },
+            {
+              "line": "Free Cash Flow",
+              "ltm": 9600000,
+              "priorFy": 8700000
+            }
+          ]
+        },
+        "note": "Source: Boom spreading — Kingsley_Precision_FY2025_LTM.xlsx"
+      },
+      "verdict": "Grade 4 and only 43% drawn at $9.4M of $22.0M, Kingsley just added a $4.0M CapEx facility and increased its revolver by $2.0M inside six weeks — two modifications close together worth a relationship check-in, though covenants remain comfortably compliant (DSC 1.85x vs 1.25x floor) and EBITDA continues to grow.",
+      "anchors": [
+        {
+          "label": "Rating",
+          "value": "Grade 4",
+          "sub": "Booked",
+          "dir": null
+        },
+        {
+          "label": "Committed",
+          "value": "$22.0M",
+          "sub": "$9.4M drawn",
+          "dir": null
+        },
+        {
+          "label": "DSC",
+          "value": "1.85×",
+          "sub": "Floor 1.25×",
+          "dir": "up"
+        },
+        {
+          "label": "Modifications",
+          "value": "2 in 45 days",
+          "sub": "Cluster flag",
+          "dir": null
+        }
+      ],
+      "aiPanel": null
+    }
+  },
+  "worklist": {
+    "accountIds": [
+      "001bb00001DLtRMAA1",
+      "001SAMPLE0000BRWT",
+      "001SAMPLE0000STRL",
+      "001SAMPLE0000KGSL"
+    ],
+    "reasons": {
+      "001bb00001DLtRMAA1": [
+        "COVENANT_DUE"
+      ],
+      "001SAMPLE0000BRWT": [
+        "COVENANT_BREACH",
+        "COVENANT_DUE"
+      ],
+      "001SAMPLE0000STRL": [
+        "MATURITY_NEAR"
+      ],
+      "001SAMPLE0000KGSL": [
+        "MODIFICATION_CLUSTER",
+        "RECENTLY_MODIFIED"
+      ]
+    }
+  }
 }

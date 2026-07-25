@@ -1,0 +1,477 @@
+/* =============================================================================
+   Customer 360 cockpit — design tokens.
+   LIGHT, like-for-like with the legacy Accenture reference artifact (SPEC §12
+   A24). Tokens stay SEMANTIC (same names as before); values are the legacy
+   light palette. Status inks are the legacy AA-tuned S/T maps. All components
+   consume tokens — zero hardcoded colors (mirrors the LWC rule).
+   Contrast verified in scripts/contrast-check.mjs.
+   ============================================================================= */
+
+:root {
+  color-scheme: light;
+
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Surfaces. */
+  --surface: #f4f3f8; /* page (solid fallback under the radial gradient) */
+  --surface-raised: #ffffff; /* cards */
+  --surface-overlay: #f6f5fa; /* wash */
+  --wash-2: #f1f0f6;
+  --row-divider: #f1f0f5;
+  --border: #eceaf2;
+  --border-strong: #e4e1ec;
+
+  /* Ink. */
+  --ink: #1a1a1a;
+  --ink-muted: #6e6b7b;
+  --ink-label: #8a8794;
+  --ink-body: #56535f;
+  --ink-body-strong: #3f3d4a;
+  /* Legacy kicker/caption ink was #a5a2ae; nudged one step darker so 11px
+     supplementary text clears WCAG AA (>=3:1) while reading identical. */
+  --ink-faint: #8f8c99;
+
+  /* Accent — the legacy engagement accent (meta.accent default). */
+  --accent: #6b1cc4;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(107, 28, 196, 0.1);
+
+  /* Status — legacy S (ink) + T (tint) maps. */
+  --positive: #047857;
+  --positive-bg: #e8f4ef;
+  --warning: #92400e;
+  --warning-bg: #fbf2e7;
+  --critical: #991b1b;
+  --critical-bg: #fbecec;
+  --info: #6b1cc4;
+  --neutral-fg: #56535f;
+  --neutral-bg: #f1f0f6;
+
+  /* Reason-code chips — derived from the legacy status palette (not invented). */
+  /* CLIENT_REQUEST leads the severity order but is not a RISK state — it is
+     accent-led (inbound, actionable) rather than red (something is wrong). */
+  --chip-client-request-bg: var(--accent-wash);
+  --chip-client-request-fg: var(--accent);
+  --chip-covenant-breach-bg: var(--critical-bg);
+  --chip-covenant-breach-fg: var(--critical);
+  --chip-covenant-due-bg: var(--warning-bg);
+  --chip-covenant-due-fg: var(--warning);
+  --chip-maturity-near-bg: var(--accent-wash);
+  --chip-maturity-near-fg: var(--accent);
+  --chip-modification-cluster-bg: var(--neutral-bg);
+  --chip-modification-cluster-fg: var(--neutral-fg);
+  --chip-guarantor-signal-bg: var(--warning-bg);
+  --chip-guarantor-signal-fg: var(--warning);
+  --chip-recently-modified-bg: var(--neutral-bg);
+  --chip-recently-modified-fg: var(--neutral-fg);
+
+  /* Structural / chart neutrals — tokenised so components carry zero literals. */
+  --fill-strong: #36323f; /* drawn bar, avatar */
+  --ink-inverse: #ffffff;
+  --divider-soft: #edecf2;
+  --crumb-sep: #d2cfda;
+  --tree-line: #cdc9db;
+  --scroll-thumb: #d8d5e2;
+  --prose-deep: #2e2640;
+  --warning-prose: #5a4423;
+  --chart-bar-1: #c7c2d4; /* revenue */
+  --chart-bar-2: #4a4754; /* EBITDA */
+  --ambient-2: #2f7fd0; /* second ambient bloom */
+  --gloss: rgba(255, 255, 255, 0.3); /* inset highlight on the primary action */
+  --frost-nav: rgba(244, 243, 248, 0.72); /* sticky top nav */
+  --frost-bar: rgba(255, 255, 255, 0.82); /* sticky verdict bar */
+  --frost-shadow: 0 1px 0 rgba(20, 0, 40, 0.06), 0 10px 30px -18px rgba(20, 0, 40, 0.25);
+  --nav-shadow: 0 1px 0 rgba(20, 0, 40, 0.07);
+  --scrim: rgba(20, 0, 40, 0.18);
+  --shadow-node: 0 1px 2px rgba(26, 10, 54, 0.06); /* ownership-tree owner box */
+  --shadow-panel: 0 24px 60px -12px rgba(20, 0, 40, 0.3), 0 8px 20px -8px rgba(20, 0, 40, 0.2);
+  --shadow-borrower: 0 10px 26px -8px rgba(107, 28, 196, 0.42); /* borrower node */
+
+  /* ---------------------------------------------------------------- z-scale
+     ONE overlay scale (A31.1). Every floating surface reads from this — never
+     a bare z-[NN] class, which is how the activity modal ended up beneath the
+     sticky nav. Modals additionally PORTAL to <body> so no ancestor stacking
+     context (the frosted verdict bar) or overflow container can clip them. */
+  --z-verdict: 40;
+  --z-nav: 60;
+  --z-panel: 70;
+  --z-fab: 71;
+  --z-palette: 80;
+  --z-modal: 100;
+
+  /* User-driven activity (A31.3) — violet, distinct from the accent used for
+     inbound client requests and from the neutral system tone. */
+  --user-tone: #6038ea;
+  --user-tone-wash: rgba(96, 56, 234, 0.1);
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow-raised: 0 1px 2px rgba(26, 10, 54, 0.05), 0 6px 20px rgba(26, 10, 54, 0.045);
+  --shadow-card: 0 1px 2px rgba(26, 10, 54, 0.05), 0 6px 22px rgba(26, 10, 54, 0.05);
+  --shadow-card-hover: 0 2px 4px rgba(26, 10, 54, 0.06), 0 14px 34px rgba(26, 10, 54, 0.1);
+
+  /* Layout scale (A25.3) — ONE container width + ONE gutter, consumed by every
+     screen so cards share exact edges. Never hand-roll a page margin. */
+  --page-max: 1340px;
+  --gutter: 24px;
+  --stack: 16px;
+
+  /* Motion scale (A25.4) — short, decelerating, banking-sober. */
+  --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
+  --dur-fast: 130ms;
+  --dur-mid: 260ms;
+  --dur-dial: 640ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(135% 85% at 50% -12%, #fbfafe 0%, #f4f3f8 44%);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Legacy kicker (used across tabs). */
+.kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 8px;
+  border: 3px solid var(--surface);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  height: 0;
+  width: 0;
+}
+
+/* ---------------------------------------------------------------- layout
+   One container, one gutter — every screen uses this (A25.3). */
+.page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+/* ---------------------------------------------------------------- motion
+   All effects are transform/opacity only (no layout-thrashing properties) and
+   are neutralised wholesale by the reduced-motion block below. */
+
+@keyframes c360-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes c360-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes c360-slide-in {
+  from {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Staggered row entrance — delay is set inline per index (capped). */
+.c360-row-in {
+  animation: c360-rise var(--dur-mid) var(--ease-out) both;
+}
+
+/* Tab cross-fade — keyed on the active tab so it replays per switch. */
+.c360-tab-in {
+  animation: c360-fade 140ms var(--ease-out) both;
+}
+
+/* Chat drawer slide. */
+.c360-drawer-in {
+  animation: c360-slide-in var(--dur-mid) var(--ease-out) both;
+}
+
+/* Hover elevation for cards + rows — 1px lift, transform/shadow only. */
+.c360-hover-lift {
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+  will-change: transform;
+}
+.c360-hover-lift:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translate3d(0, -1px, 0);
+}
+
+/* Dials, gauges + bars tween to value on entry. stroke-dashoffset is
+   compositor-friendly; meters scale rather than animating width/height so no
+   animation ever triggers layout. */
+.c360-dial {
+  transition: stroke-dashoffset var(--dur-dial) var(--ease-out);
+}
+/* Horizontal meter: full-width track child, revealed via scaleX from the left. */
+.c360-meter-x {
+  transform-origin: left center;
+  transition: transform var(--dur-dial) var(--ease-out);
+  will-change: transform;
+}
+/* Vertical chart bar: grown via scaleY from the baseline. */
+.c360-meter-y {
+  transform-origin: bottom center;
+  transition: transform var(--dur-dial) var(--ease-out);
+  will-change: transform;
+}
+/* The one bar carrying inline text (drawn-vs-committed) cannot scale without
+   distorting its label, so it animates width — a single 640ms entry tween on
+   one flex child, never a loop. */
+.c360-meter-w {
+  transition: width var(--dur-dial) var(--ease-out);
+}
+
+/* Press/active feedback — every interactive control answers within 100ms
+   (A26.2). Colour + a sub-pixel scale, both compositor-only. */
+.c360-press {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform 90ms var(--ease-out);
+}
+.c360-press:active {
+  transform: scale(0.97);
+}
+
+/* Row hover — tint + a whisper of inset travel, no layout shift. */
+.c360-row {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.c360-row:hover {
+  background: var(--surface-overlay);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* ---------------------------------------------------------------- FAB + panels
+   A27.1. Spring-open motion is transform/opacity only, anchored bottom-right. */
+
+@keyframes c360-panel-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+.c360-panel-in {
+  transform-origin: bottom right;
+  animation: c360-panel-in 220ms var(--ease-out) both;
+}
+
+.c360-fab {
+  box-shadow:
+    0 6px 18px -4px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 2px 6px rgba(20, 0, 40, 0.18);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+  will-change: transform;
+}
+.c360-fab:hover {
+  transform: translate3d(0, -2px, 0) scale(1.05);
+  box-shadow:
+    0 10px 26px -4px color-mix(in srgb, var(--accent) 65%, transparent),
+    0 3px 10px rgba(20, 0, 40, 0.22);
+}
+.c360-fab:active {
+  transform: translate3d(0, 0, 0) scale(0.95);
+}
+.c360-fab-glyph {
+  transition: transform var(--dur-mid) var(--ease-out);
+}
+.c360-fab-glyph[data-open="1"] {
+  transform: rotate(90deg);
+}
+.c360-fab-badge {
+  animation: c360-rise 240ms var(--ease-out) both;
+}
+
+/* Client Actions trigger (A31.4) — one step above the ghost: a refined branded
+   control. Accent ink on a soft accent wash with a hairline accent border at
+   rest; hover deepens the wash and the border. Still small and quiet. */
+.c360-accent-btn {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.c360-accent-btn:hover,
+.c360-accent-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* User-driven activity rows sit on a faint violet wash so they read as "you
+   did this" at a glance, without shouting (A31.3). */
+.c360-activity-user {
+  background: color-mix(in srgb, var(--user-tone) 4%, var(--surface-raised));
+}
+
+/* Action rows in the Client Actions panel. */
+.c360-action-row {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.c360-action-row:hover:not(:disabled) {
+  background: var(--surface-overlay);
+}
+
+/* Primary/secondary action buttons (A25.5). */
+.c360-btn {
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out);
+}
+.c360-btn:hover {
+  transform: translate3d(0, -1px, 0);
+  filter: brightness(1.04);
+}
+.c360-btn:active {
+  transform: translate3d(0, 0, 0) scale(0.985);
+}
+
+/* ---------------------------------------------------------------- ambient
+   Profile-header cinematic wash (A25.2): two accent blooms on a >20s drift.
+   Sits behind content, never interactive, contained by the header's overflow. */
+.c360-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.c360-ambient span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(60px);
+  will-change: transform, opacity;
+}
+.c360-ambient-a {
+  width: 46%;
+  height: 220%;
+  top: -60%;
+  left: 8%;
+  background: var(--accent);
+  opacity: 0.05;
+  animation: c360-drift-a 28s ease-in-out infinite alternate;
+}
+.c360-ambient-b {
+  width: 38%;
+  height: 200%;
+  top: -50%;
+  right: 6%;
+  background: var(--ambient-2);
+  opacity: 0.035;
+  animation: c360-drift-b 34s ease-in-out infinite alternate;
+}
+@keyframes c360-drift-a {
+  from {
+    transform: translate3d(-4%, 0, 0) scale(1);
+    opacity: 0.035;
+  }
+  to {
+    transform: translate3d(6%, 3%, 0) scale(1.12);
+    opacity: 0.055;
+  }
+}
+@keyframes c360-drift-b {
+  from {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+    opacity: 0.045;
+  }
+  to {
+    transform: translate3d(-5%, -2%, 0) scale(1);
+    opacity: 0.025;
+  }
+}
+
+/* Reduced motion: everything resolves to its final state instantly. The
+   infinite ambient drift is stopped outright (a 0.001s infinite loop would
+   still repaint), leaving a static wash. Hover lift is dropped to shadow only. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.001s !important;
+    animation-duration: 0.001s !important;
+    animation-delay: 0s !important;
+  }
+  .c360-ambient-a,
+  .c360-ambient-b {
+    animation: none !important;
+  }
+  .c360-hover-lift:hover {
+    transform: none !important;
+  }
+}

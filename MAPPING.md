@@ -115,7 +115,7 @@ If `borrower.boom` is null → whole tab renders gap state "Boom spread not fetc
 ### Tab 7 — Risk & Covenants
 | Panel | Source |
 |---|---|
-| Stat strip | Rating `snapshot.primaryRiskRating`; **PD / Last rated / Migration = GAP chips** (IRIS/Snowflake owns these; not wired v1) |
+| Stat strip | Rating `snapshot.primaryRiskRating`; **PD / Last rated / Migration = GAP chips** (Snowflake owns these; not wired v1) |
 | Covenant table | `covenants.covenants[]`: covenantType, thresholdValue, actualValue, lastEvaluationStatus, lastEvaluationDate, nextEvaluationDate, daysUntilNextEvaluation, frequency, breached, covenantStatus. Cushion + cushion-bar % computed client-side (actual vs threshold, direction-aware ≥/≤). **Trend column: omit** (no source). |
 | Watch banner | breached rows or thin cushions only; agent-composed; else omit |
 | Caption | `covenants.note` |

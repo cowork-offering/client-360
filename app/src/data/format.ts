@@ -1,0 +1,50 @@
+/* Display formatting — all client-side, mirrors the legacy template helpers. */
+
+import { dayDiff } from "./time";
+
+export function fmtMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return "$" + (n / 1e9).toFixed(2).replace(/\.00$/, "") + "B";
+  if (abs >= 1e6) return "$" + (n / 1e6).toFixed(2).replace(/\.00$/, "") + "M";
+  if (abs >= 1e3) return "$" + (n / 1e3).toFixed(0) + "K";
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+
+export function fmtPct(n: number | null | undefined, dp = 1): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return Number(n).toFixed(dp) + "%";
+}
+
+export function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Activity timestamp relative to the render clock (A30.2): "3d ago",
+ *  "today", "in 2d". Falls back to the absolute date when either side is
+ *  unparseable — never a fabricated interval. */
+export function fmtRelative(ts: string | null | undefined, generatedAt: string | null | undefined): string {
+  if (!ts) return "—";
+  if (!generatedAt) return fmtDate(ts);
+  const d = dayDiff(ts, generatedAt);
+  if (d === null) return fmtDate(ts);
+  if (d === 0) return "today";
+  if (d < 0) {
+    const n = Math.abs(d);
+    if (n === 1) return "yesterday";
+    if (n < 30) return `${n}d ago`;
+    if (n < 365) return `${Math.round(n / 30)}mo ago`;
+    return `${Math.round(n / 365)}y ago`;
+  }
+  return d === 1 ? "tomorrow" : `in ${d}d`;
+}
+
+/** Signed day count → compact "in 44d" / "12d ago" / "today". */
+export function fmtDays(days: number | null | undefined): string {
+  if (days === null || days === undefined || Number.isNaN(days)) return "—";
+  if (days === 0) return "today";
+  return days > 0 ? `in ${days}d` : `${Math.abs(days)}d ago`;
+}
