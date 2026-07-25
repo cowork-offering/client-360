@@ -6,9 +6,9 @@ description: Open the Customer 360 relationship cockpit — a worklist-first com
 # Customer 360 Cockpit (v3)
 
 Render a **worklist-first** credit cockpit as a Cowork artifact. You fetch every figure from MCP tools
-and compose `C360_DATA`; the assembler bakes that JSON into a **prebuilt React bundle**. The artifact
-renders the JSON — it never fetches. Interactivity flows back through `window.sendPrompt(...)` → you
-re-fetch → re-assemble → full artifact replace.
+and compose `C360_DATA`; the assembler bakes that JSON into a **prebuilt React bundle**, which renders
+it and never fetches. Interactivity flows back via `window.sendPrompt(...)` → re-fetch → re-assemble →
+full artifact replace.
 
 **Demo anchor:** Piedmont Precision Components, Inc. · Account `001bb00001DLtRMAA1` · org `bankinggpt`.
 
@@ -59,7 +59,7 @@ Customer360 tools.** A wrong committed-exposure figure in front of a banker is w
 **Boom** — `boom_get_ratios` + `boom_get_spread` for the Financials tab.
 
 **Every tool takes `List<Request>` and returns `List<Response>`.** For a single request read
-`response[0]` — never treat the response as a bare object. This applies to `Customer360Portfolio` too.
+`response[0]`, never a bare object — `Customer360Portfolio` included.
 
 ---
 
@@ -67,9 +67,9 @@ Customer360 tools.** A wrong committed-exposure figure in front of a banker is w
 
 ### (a) One `Customer360Portfolio` call
 Request (all optional): `industry`, `maxAccounts` (default 25, cap 100), `signalWindowDays` (default 90).
-Returns `accounts[]` (sorted TCE desc, truncated to `maxAccounts`), `bookTotals`
-(`totalCommitted`, `totalOutstanding`, `accountCount`, `utilizationPct`), and `signals`
-(`covenantsDueSoon[]` cap 25, `breachedCount`, `maturitiesSoon[]` cap 25).
+Returns `accounts[]` (TCE desc, truncated to `maxAccounts`), `bookTotals` (`totalCommitted`,
+`totalOutstanding`, `accountCount`, `utilizationPct`), and `signals` (`covenantsDueSoon[]` cap 25,
+`breachedCount`, `maturitiesSoon[]` cap 25).
 
 `bookTotals.accountCount` spans **ALL** packaged accounts, not the truncated list — never infer book
 size from `accounts.length`.
@@ -80,9 +80,8 @@ maturities in window, modification clustering, or guarantor signals. Build the i
 `signals.covenantsDueSoon[].accountId` ∪ `signals.maturitiesSoon[].accountId` ∪ any account you have
 reason to believe carries structural signals.
 
-- **Cap at ~30 accounts.** Beyond that the queue stops being a queue.
-- **If the book is smaller than the cap, stage everything** — full staging is always better.
-- Always include the anchor account.
+- **Cap at ~30 accounts** — beyond that the queue stops being a queue.
+- **If the book is smaller than the cap, stage everything.** Always include the anchor.
 
 ### (c) Stage details for ALL worklist accounts — BATCHED
 The six detail tools each accept an **inputs array**: `inputs: [{ accountId }, { accountId }, …]`.
@@ -98,7 +97,39 @@ Responses come back positionally — zip each response array back to the account
 and the call is cheap. If either fails or no file exists, set that bundle's `boom` to `null` — **never
 fabricate**. The Financials tab renders an honest gap state.
 
-### (e) Compose `C360_DATA`
+### (e) OPTIONAL — M365 client-request intake
+
+**Opportunistic by design: if M365 is not connected, SKIP THIS ENTIRE STEP SILENTLY.** No error, no
+warning, no gap chip, no mention in the render. A missing channel is **not** a data gap — the cockpit
+renders exactly as it would have without this step. Never block, never wait, never fail on mail.
+
+1. **Detect.** ToolSearch for a Microsoft 365 / Outlook mail-search tool (names vary by connector —
+   try `outlook email search`, `mail search`). **Not found ⇒ skip the step and proceed to (f).**
+2. **Search.** Recent inbound mail only (last ~30 days, cap ~25 results), querying **per staged
+   worklist account name**. Entity resolution is **conservative**: attach a message to an account only
+   when the account name clearly appears. Ambiguous matches are **ignored** — you may mention them in
+   your chat narration as unmatched, but they never reach the render.
+3. **Ingest genuine requests.** For each clear match that reads as a client *ask* — increase, renewal,
+   new facility, payoff, service change — judge **intent, not keywords**. Populate `requests[]` plus a
+   `REQUEST_RECEIVED` entry in that bundle's `activity[]`:
+   - `reference: { kind: "m365-message", id: <real message id>, webLink: <real link> }` — both real,
+     both from the message. This is the one place a `webLink` is permitted.
+   - `receivedAt` / `ts` = the message's **actual** timestamp. It must predate `meta.generatedAt`; if
+     clock skew puts it later, clamp to `generatedAt` and say so in your narration.
+   - `summary` = a faithful one-sentence restatement. `ask` amounts parsed from the email text
+     (DERIVED — the message is the citation).
+   - **No matching mail ⇒ no `requests[]`.** That is correct output, not a failure.
+4. **Conclude on it.** For each ingested request add an `ANALYSIS_CONCLUDED` entry computed from the
+   **staged** data — verdict and headroom measured against the ask (AGENT provenance) — with
+   `detail.nextSteps` referencing real registry action ids. Same shape as the bundled sample scenario,
+   but every figure from live data.
+5. **Failure = skip.** Any M365 error or timeout ⇒ abandon the step, render anyway, and note in your
+   chat reply that mail intake was unavailable this run. The render never waits on mail.
+
+**In a live run the bundled sample scenarios are irrelevant** — you are rendering the real book, and
+this intake is the **only** source of `requests[]`.
+
+### (f) Compose `C360_DATA`
 Shape source of truth: **`app/src/data/contract.ts`**. Read it if unsure — it is authoritative and
 carries the provenance map.
 
@@ -169,8 +200,9 @@ carries the provenance map.
   `app/src/actions/registry.ts` (`generate-spreading`, `draft-credit-memo`, `loan-modification`,
   `renewal`, `covenant-review`, `collateral-valuation`, `annual-review`, `risk-rating-review`,
   `new-facility-request`, `create-service-request`). Unknown ids are silently dropped.
-- `reference.webLink` must be **omitted** unless a real link exists — the UI renders the id as plain
-  text and must never show a fabricated link.
+- `reference.webLink` is **omitted unless a real link exists**. A real M365 message link from step (e)
+  is exactly that case and belongs here; anything else stays absent and the UI renders the id as plain
+  text. Never show a fabricated link.
 
 ### Composition rules
 - Embed tool responses **verbatim** — field names unchanged, figures un-reshaped.
@@ -186,10 +218,10 @@ node <pluginRoot>/render/assemble-cockpit.mjs --data /tmp/c360-data.json --out /
 ```
 
 Resolve `<pluginRoot>` as the directory containing `.claude-plugin/` (also holds `app/`, `artifact/`,
-`render/`, `skills/`). `--template` defaults to `artifact/customer-360-template.html` — do not pass it.
+`render/`, `skills/`). `--template` defaults to the committed template — do not pass it.
 
-1. **Write the composed object to a temp JSON file** with the Write tool. Write ONLY the `C360_DATA`
-   object — no `window.C360_DATA =` wrapper, no `<script>` tag.
+1. **Write the composed object to a temp JSON file.** ONLY the `C360_DATA` object — no
+   `window.C360_DATA =` wrapper, no `<script>` tag.
 2. **Run the command above.** Pass no other flags in a normal run.
 3. On success it prints one line: bytes written (code + data split), anchor, and accounts staged.
 
@@ -227,24 +259,24 @@ the model never touches these numbers. It adds:
   staged book, sorted critical → warn → info.
 
 **Standard vs contractual definitions — load-bearing caveat.** The Boom-implied value uses *standard*
-ratio definitions; the bank's *contractual* definitions are nCino-owned and can differ (add-backs,
-rolling averages, pro-forma adjustments). A `diverges` result is a **review flag for effective
-challenge, never a breach determination.** Never present divergence as a covenant breach.
+ratio definitions; the bank's *contractual* ones are nCino-owned and can differ (add-backs, rolling
+averages, pro-forma adjustments). A `diverges` result is a **review flag for effective challenge,
+never a breach determination.** Never present divergence as a covenant breach.
 
 ---
 
 ## RENDER
 
-Publish the assembled file with the artifact tool **BY FILE PATH** (`create_artifact`). Do not paste
+Publish the assembled file with the artifact tool **BY FILE PATH** (`create_artifact`) — never paste
 HTML inline. Do NOT open a Chrome tab or call any other widget/HTML builder.
 
 **Updates are full-replace only:** rebuild the whole `C360_DATA`, re-run the assembler to a fresh
 `--out`, and `update_artifact` by file path. Never edit rendered HTML or inject JSON by hand.
 
-The artifact detects `window.sendPrompt` **per request**, so a channel that appears after first paint
-still works. Where no channel exists (hosted artifact pages), it degrades honestly: all staged data
-stays navigable, and actions open a copy-prompt dialog instead of a dead spinner. Never assume the
-live loop exists; never leave an interaction silent.
+The artifact detects `window.sendPrompt` **per request**, so a channel appearing after first paint
+still works. With no channel (hosted artifact pages) it degrades honestly: staged data stays
+navigable and actions open a copy-prompt dialog, never a dead spinner. Never assume the live loop
+exists; never leave an interaction silent.
 
 ---
 
@@ -307,23 +339,23 @@ are well-formed instructions naming the account and id:
 | `Create a service request for <name> (<id>).` | servicing prep |
 
 **Until v2 gated writes exist, every action is analysis and preparation only.** Never claim a record
-was created, a memo was filed, a modification was staged, or anything was written to nCino. Produce
-the analysis, say plainly what the banker would need to approve, and stop. Claiming a write that did
-not happen is the single worst failure mode in this skill.
+was created, a memo filed, a modification staged, or anything written to nCino. Produce the analysis,
+say what the banker would need to approve, and stop. Claiming a write that did not happen is the
+single worst failure mode in this skill.
 
 ---
 
 ## STALE-INSTRUCTION GUARDS
 
-- **Never hand-author or model-generate the artifact HTML.** It is a compiled React bundle. Emitting
+- **Never hand-author or model-generate the artifact HTML.** It is a compiled React bundle; emitting
   a document token-by-token is the slow path bankers feel as "the artifact takes ages to load".
 - **Never inject the JSON yourself.** The assembler owns the data slot and asserts it exactly once.
-- **Never rebuild the app** as part of a render run. `artifact/customer-360-template.html` is
-  committed and current; `npm run build` in `app/` is a development step, not a render step.
+- **Never rebuild the app** during a render run. The template is committed and current; `npm run
+  build` in `app/` is a development step, not a render step.
 - **Never per-account loops** for the six detail tools — batch the inputs array (six calls total).
 - **Never invent figures.** A number renders only if it traces to a tool-response field.
 - **Gap ≠ blank.** Missing data renders its provenance ("not in source system" / "not wired v1 —
-  lives in X"). Each tool's `note` renders as a small provenance caption.
+  lives in X"). Each tool's `note` renders as a provenance caption.
 - **Never render PD, a composite health index, or a KYC "cleared" pill** — no source exists.
 - Where the org's truth IS the story, show the **real zero with provenance** — Piedmont: "$0 — no
   deposit relationship on file" (0 Deposit records), never an invented wallet size.
@@ -333,8 +365,8 @@ not happen is the single worst failure mode in this skill.
 
 ## Gotchas
 
-- **`overdue` semantics** — a `covenantsDueSoon` row with `overdue: true` is **past due but still
-  active** (`daysUntilNextEvaluation` negative). Render escalated, not "upcoming".
+- **`overdue` semantics** — `overdue: true` means **past due but still active**
+  (`daysUntilNextEvaluation` negative). Render escalated, not "upcoming".
 - **`utilizationPct` can be `null`** (Σtce = 0) → "—", never 0.
 - **`coverageRatio` can be `null`** (≠ 0) → "—", never 0 or a computed guess.
 - **Package-level rollups never sum loan amounts** — TCE/TBE/TOE/Outstanding come from rollup fields.
@@ -344,5 +376,5 @@ not happen is the single worst failure mode in this skill.
   that window.
 - **Dates are ISO strings** (`YYYY-MM-DD`). All formatting is client-side.
 - **A closed facility is not booked exposure** — the client treats a facility as active only when
-  `status` is absent or "Active"; closed/paid-off facilities are excluded from maturity signals and
-  from coverage math. Pass `status` through verbatim when the org carries it.
+  `status` is absent or "Active"; closed/paid-off ones are excluded from maturity signals and coverage
+  math. Pass `status` through verbatim when the org carries it.
