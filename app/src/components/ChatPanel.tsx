@@ -5,6 +5,7 @@ import { formatProbe, newRequestId, probeChannels } from "../channel/adapter";
 import { mcpAvailable, type McpFailure } from "../channel/mcp";
 import { askCopilot } from "../channel/cockpitTools";
 import { resolveBundle } from "../actions/registry";
+import { ActionPanel } from "./ActionPanel";
 import { suggestActions, type Suggestion } from "../actions/suggest";
 import { ACTIONS_BY_ID } from "../actions/registry";
 
@@ -60,6 +61,9 @@ function SuggestionChips({
   onPick,
 }: {
   suggestions: Suggestion[];
+  /** Whether the CHANNEL is unusable. Panel-backed chips ignore it: opening the
+   *  Action Panel is local UI and needs no channel, exactly as the Client
+   *  Actions row does (A33.1.1 — the three entry points must behave alike). */
   disabled: boolean;
   onPick: (s: Suggestion) => void;
 }) {
@@ -70,7 +74,7 @@ function SuggestionChips({
         <button
           key={s.id}
           type="button"
-          disabled={disabled}
+          disabled={disabled && !ACTIONS_BY_ID[s.id]?.hasPanel}
           onClick={() => onPick(s)}
           title={s.prompt}
           className="c360-press rounded-full border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted hover:border-accent hover:text-accent disabled:opacity-50"
@@ -117,6 +121,8 @@ export function ChatPanelBody() {
   // retried: the contract forbids it for non-retryable codes, and the trust
   // budget that produces blocked_by_policy would only burn further.
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
+  // A33.1.1 entry point 3 of 3.
+  const [panelActionId, setPanelActionId] = useState<string | null>(null);
   const [answerMeta, setAnswerMeta] = useState<{ model?: string; costUsd?: number } | null>(null);
   const canSend = available && !sending && state.draft.trim().length > 0;
 
@@ -125,6 +131,12 @@ export function ChatPanelBody() {
    *  chips have no registry action, so nothing is logged. */
   async function sendSuggestion(s: Suggestion) {
     const action = ACTIONS_BY_ID[s.id];
+    // A33.1.2 — a chip for a panel-backed action opens the SAME modal the
+    // Client Actions row and the activity next-step open.
+    if (ACTIONS_BY_ID[s.id]?.hasPanel) {
+      setPanelActionId(s.id);
+      return;
+    }
     if (action && account?.accountId) {
       dispatch({ type: "LOG_ACTION", accountId: account.accountId, actionLabel: action.label });
     }
@@ -196,6 +208,7 @@ export function ChatPanelBody() {
 
   return (
     <div className="flex h-full flex-col">
+      {panelActionId && <ActionPanel actionId={panelActionId} onClose={() => setPanelActionId(null)} />}
       {/* Messages */}
       <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
         {messages.length === 0 ? (

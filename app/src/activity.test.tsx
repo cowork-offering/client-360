@@ -284,8 +284,10 @@ describe("A31.3 — ACTION_TRIGGERED session activity", () => {
     mount();
     click(openRow("Sterling Fabrication"));
     click(byText(/Client Actions/)!);
+    // Use a NON-panel action: panel-backed actions now open the Action Panel
+    // instead of firing, and nothing is triggered until the confirm gesture.
     const btn = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Create Service Request"),
+      b.textContent?.includes("New Facility Request"),
     )!;
     return { sendPrompt, btn };
   }
@@ -295,7 +297,7 @@ describe("A31.3 — ACTION_TRIGGERED session activity", () => {
     await clickAsync(btn);
     press("Escape");
     const text = container!.textContent ?? "";
-    expect(text).toContain("Create Service Request");
+    expect(text).toContain("New Facility Request");
     expect(text).toContain("Sent to the desk");
     expect(text).toContain("You · just now");
   });

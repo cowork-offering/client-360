@@ -22,6 +22,26 @@ if (markerCount !== 1) {
   process.exit(1);
 }
 
+// FAIL-CLOSED GATE (A33.5.3): the NOT-LIVE simulation adapter must never reach
+// a shipped artifact. Its plan bodies are stripped by Rollup because the guard
+// reads `import.meta.env.DEV` alone; this asserts that stayed true, so a future
+// edit to that guard fails the build instead of shipping fabricated plans.
+const SIMULATION_MARKERS = [
+  "sim-staging",
+  "Files a new collateral valuation",
+  "Stages an annual credit review for",
+  "Create the collateral valuation",
+  "CollateralValuationTrigger",
+  "slackv2.caseTrigger",
+  "Re-query the collateral record",
+];
+const leaked = SIMULATION_MARKERS.filter((m) => html.includes(m));
+if (leaked.length) {
+  console.error(`FAIL: simulated plan content reached the bundle: ${leaked.join(", ")}`);
+  console.error("The simulation guard must remain a bare `import.meta.env.DEV` check so Rollup can strip it.");
+  process.exit(1);
+}
+
 console.log(`bundle: dist/cockpit.html — ${bytes.toLocaleString()} bytes (${mib.toFixed(3)} MiB)`);
 if (mib > 1.5) {
   console.error(`FAIL: bundle ${mib.toFixed(3)} MiB exceeds 1.5 MiB budget`);

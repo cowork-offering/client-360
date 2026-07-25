@@ -3,7 +3,8 @@ import type { Anchor, BorrowerBundle } from "../data/contract";
 import { STATUS } from "../data/finance";
 import { PageContainer } from "./ui";
 import { AccentureCaretWatermark, AmbientWash } from "./brand";
-import { PackageStageChip, gradeColor } from "./RiskGrade";
+import { gradeColor } from "./RiskGrade";
+import { PackageStageChip } from "./PackageStage";
 import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { TabContent } from "./tabs";
 
@@ -113,7 +114,7 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[28px] font-extrabold leading-tight tracking-tight">{name}</span>
-              <PackageStageChip stage={snap?.primaryStage ?? null} />
+              <PackageStageChip snapshot={snap} />
             </div>
             {bundle.verdict && (
               <div className="my-2 max-w-[760px] text-[14px] leading-relaxed text-ink-body" style={{ textWrap: "pretty" as never }}>

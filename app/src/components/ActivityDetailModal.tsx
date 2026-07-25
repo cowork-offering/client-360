@@ -8,6 +8,7 @@ import { ActionGlyph } from "./ActionIcon";
 import { ReferenceCitation } from "./tabs/ActivityTab";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 import { Portal } from "./Portal";
+import { ActionPanel } from "./ActionPanel";
 
 /* Activity detail popup (SPEC §12 A30.3) — the demo centerpiece.
    FloatingPanel family contract: focus-trapped, Esc-closable, focus returns to
@@ -75,6 +76,8 @@ export function ActivityDetailModal({
   const panelRef = useRef<HTMLDivElement>(null);
   const [sentId, setSentId] = useState<string | null>(null);
   const [fallback, setFallback] = useState<{ prompt: string } | null>(null);
+  // A33.1.1 entry point 2 of 3.
+  const [panelActionId, setPanelActionId] = useState<string | null>(null);
 
   const accountId = state.accountId ?? bundle.snapshot?.accountId ?? "";
   const accountName =
@@ -150,6 +153,10 @@ export function ActivityDetailModal({
 
   async function run(step: (typeof steps)[number]) {
     if (!step.availability.available) return;
+    if (step.action.hasPanel) {
+      setPanelActionId(step.action.id);
+      return;
+    }
     if (!channel.available()) {
       setFallback({ prompt: step.prompt });
       return;
@@ -303,6 +310,10 @@ export function ActivityDetailModal({
           )}
         </div>
       </div>
+
+      {panelActionId && (
+        <ActionPanel actionId={panelActionId} onClose={() => setPanelActionId(null)} />
+      )}
 
       {fallback && (
         <CopyPromptDialog

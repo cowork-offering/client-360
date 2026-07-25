@@ -28,18 +28,3 @@ function gradeNumber(grade: string | null | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-/** Package lifecycle stage (A28.2) — a PACKAGE attribute, explicitly labelled
- *  so it can never be misread as a customer-level rating. */
-export function PackageStageChip({ stage }: { stage: string | null }) {
-  if (!stage) return null;
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1 text-[11px] font-semibold"
-      style={{ background: "var(--wash-2)", color: "var(--ink-body)" }}
-    >
-      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">Package</span>
-      <span className="h-2.5 w-px" style={{ background: "var(--border-strong)" }} />
-      {stage}
-    </span>
-  );
-}

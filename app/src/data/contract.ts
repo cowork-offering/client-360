@@ -75,6 +75,10 @@ export const PROVENANCE = {
   "borrower.verdict": { kind: "AGENT", source: "Agent-composed prose over live Customer360* figures. Rendered verbatim; never generated in-app and never source-guaranteed" },
   "borrower.anchors[]": { kind: "AGENT", source: "Agent-composed anchor chips (label/value/sub/dir) summarising live figures; rendered verbatim" },
   "borrower.snapshot.primaryStage": { kind: "NCINO", source: "Customer360Snapshot — package stage" },
+  "borrower.snapshot.productPackageId": { kind: "NCINO", source: "Customer360Snapshot — the deal container, anchor for the A33.3.6 deep link" },
+  "borrower.snapshot.packageStage": { kind: "NCINO", source: "Customer360Snapshot — managed LLC_BI__Stage__c, the authoritative package stage (A33.3.7)" },
+  "borrower.snapshot.localCreditStage": { kind: "NCINO", source: "Customer360Snapshot — local cm_Credit_Stage__c. NOT an authority; read only to raise a DQ finding on disagreement" },
+  "display.packageStageDq": { kind: "DERIVED", source: "A33.3.7 — flags when cm_Credit_Stage__c disagrees with the managed LLC_BI__Stage__c" },
   "borrower.snapshot.note": { kind: "NCINO", source: "Customer360Snapshot — tool note" },
   "borrower.exposure.totalCommitted": { kind: "NCINO", source: "Customer360Exposure — Σ facility commitments" },
   "borrower.exposure.totalOutstanding": { kind: "NCINO", source: "Customer360Exposure — Σ drawn" },
@@ -82,6 +86,7 @@ export const PROVENANCE = {
   "borrower.exposure.facilities[].coverageRatio": { kind: "NCINO", source: "Customer360Exposure — org-computed per-facility coverage; nullable, renders '—'" },
   "borrower.exposure.facilities[].coverageShortfall": { kind: "NCINO", source: "Customer360Exposure — org-computed shortfall flag; drives the facility status chip" },
   "borrower.exposure.facilities[].status": { kind: "NCINO", source: "Customer360Exposure — lifecycle status; absent ⇒ treated active (F6)" },
+  "borrower.exposure.facilities[].loanCovenants[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan_Covenant__c junction rows; an empty array is a fact, not a gap" },
   "borrower.exposure.facilities[].riskGrade": { kind: "NCINO", source: "Customer360Exposure — per-facility risk grade" },
   "borrower.exposure.facilities[].interestRate": { kind: "NCINO", source: "Customer360Exposure — note rate" },
   "borrower.exposure.facilities[].maturityDate": { kind: "NCINO", source: "Customer360Exposure — facility maturity" },
@@ -93,6 +98,7 @@ export const PROVENANCE = {
   "borrower.signals.guarantorSignals[]": { kind: "NCINO", source: "Customer360StructuralSignals — guarantor distress" },
   "borrower.signals.renewals[]": { kind: "NCINO", source: "Customer360StructuralSignals — in-flight renewals" },
   "meta.generatedAt": { kind: "DERIVED", source: "Assembler-stamped at render time — the deterministic clock for all time derivation (A10)" },
+  "meta.instanceUrl": { kind: "NCINO", source: "Session org Lightning host, supplied by the assembler for the A33.3.6 deep link. Never hardcoded, never reconstructed from an org id" },
   "meta.user": { kind: "NCINO", source: "Session user, rendered in the nav" },
   "aiPanel.threads[]": { kind: "AGENT", source: "Agent-authored chat history (A12); plain text, rendered verbatim (A13)" },
   "borrower.activity[].detail.verdict": { kind: "AGENT", source: "Agent-composed conclusion on the relationship/request; rendered verbatim" },
@@ -104,6 +110,8 @@ export const PROVENANCE = {
   // --- derived --------------------------------------------------------------
   "borrower.covenantChallenge[]": { kind: "DERIVED", source: "Assembler validateC360 — recomputes each covenant from the Boom spread and compares to the nCino evaluation (SR 11-7 effective challenge). Inputs: BOOM + NCINO" },
   "worklist.reasons": { kind: "DERIVED", source: "data/worklist.ts — thresholds vs meta.generatedAt (A10)" },
+  "display.suggestionTrigger": { kind: "DERIVED", source: "actions/suggestionEngine.ts — deterministic Tier 1 math over staged figures against a bank-policy threshold (A33.2)" },
+  "display.panelPrefill": { kind: "DERIVED", source: "actions/schemas.ts — panel field values mapped from staged records; per-field provenance carried on the field itself (A33.1.3)" },
   "borrower.activity[].detail.ask": { kind: "DERIVED", source: "Parsed from the source client message (from/to amounts, facility)" },
   "display.clientRequestReason": { kind: "DERIVED", source: "CLIENT_REQUEST fires when the bundle carries a REQUEST_RECEIVED activity entry or a requests[] entry" },
   "display.activityRelativeTime": { kind: "DERIVED", source: "activity[].ts − meta.generatedAt, whole UTC days" },
@@ -155,6 +163,11 @@ export interface Meta {
   dateISO?: string;
   orgAlias?: string;
   orgLabel?: string;
+  /** A33.3.6 — the session org's Lightning host, used to build the deep link to
+   *  the Product Package. NEVER hardcoded and never reconstructed from an org id
+   *  or a guessed my.salesforce.com host. Absent means the link renders as a
+   *  disabled chip with the record id as selectable text. */
+  instanceUrl?: string;
   user?: string;
   accent?: string;
   screen?: string;
@@ -216,6 +229,14 @@ export interface Portfolio {
 
 export interface Snapshot {
   accountId: Id;
+  /** The deal container. Anchor for the A33.3.6 deep link. */
+  productPackageId?: string;
+  /** A33.3.7 — the MANAGED package stage field. This is the authority.
+   *  Display-only; the credit lifecycle a banker means is the LOAN stage. */
+  packageStage?: string;
+  /** The LOCAL field. NOT an authority and never read as one. Rendered only to
+   *  raise a data-quality finding when it disagrees with the managed field. */
+  localCreditStage?: string;
   name?: string;
   industry?: string;
   annualRevenue?: number;
@@ -255,6 +276,15 @@ export interface Collateral {
   isPrimary?: boolean;
 }
 
+/** A `LLC_BI__Loan_Covenant__c` junction row. nCino canon: a renewal clones the
+ *  JUNCTION, not the covenant, so these are what carry onto a new facility. */
+export interface LoanCovenantJunction {
+  id?: string;
+  name?: string;
+  covenantType?: string;
+  covenantId?: string;
+}
+
 export interface Facility {
   loanId?: string;
   /** Lifecycle status. Absent or "Active" ⇒ active (F6). Explicitly closed /
@@ -272,6 +302,9 @@ export interface Facility {
   coverageRatio?: number | null;
   coverageShortfall?: boolean;
   collateral?: Collateral[];
+  /** Loan-level covenant junctions. An EMPTY array is a legitimate fact (all of
+   *  Piedmont's covenants are Account-level), not missing data. */
+  loanCovenants?: LoanCovenantJunction[];
 }
 
 export interface Connection {

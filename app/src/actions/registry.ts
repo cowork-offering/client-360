@@ -47,6 +47,11 @@ export interface ClientAction {
   promptTemplate: string;
   /** PLANNED SEAM — v2 gated write via an Apex invocable. Unused in v1. */
   apexAction?: { tool: string; params: Record<string, string> };
+  /** A33.1.2 — declared for SHIPPING actions only. An action with no schema
+   *  does not open the Action Panel and stays analysis-only. The schema itself
+   *  is built per-context in actions/schemas.ts; this flag is the registry's
+   *  single source of truth for "does this action have a panel". */
+  hasPanel?: true;
 }
 
 export type ActionIcon =
@@ -212,6 +217,7 @@ export const ACTIONS: ClientAction[] = [
           ? { available: true }
           : { available: false, reason: "No collateral pledged against these facilities" },
       ),
+    hasPanel: true,
   },
   {
     id: "annual-review",
@@ -223,6 +229,7 @@ export const ACTIONS: ClientAction[] = [
     promptTemplate: "Run the annual credit review for {account} ({accountId}).",
     availability: (data, accountId) => withBundle(data, accountId, requireActivePackage),
     apexAction: { tool: "ncino_start_annual_review", params: { accountId: "{accountId}" } },
+    hasPanel: true,
   },
   {
     id: "risk-rating-review",
@@ -262,6 +269,7 @@ export const ACTIONS: ClientAction[] = [
     promptTemplate: "Create a service request for {account} ({accountId}).",
     availability: (data, accountId) => withBundle(data, accountId, () => STAGED_ONLY),
     apexAction: { tool: "ncino_create_service_request", params: { accountId: "{accountId}" } },
+    hasPanel: true,
   },
 ];
 

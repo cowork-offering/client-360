@@ -7,6 +7,7 @@ import { executeAction } from "../actions/execute";
 import { resolveBundle } from "../actions/registry";
 import { ActionGlyph } from "./ActionIcon";
 import { CopyPromptDialog } from "./CopyPromptDialog";
+import { ActionPanel } from "./ActionPanel";
 
 /** Client Actions control center (A27.4). Every registry action is listed,
  *  grouped by category. Unavailable actions stay visible and disabled with the
@@ -18,6 +19,8 @@ export function ActionsPanelBody() {
   const [failure, setFailure] = useState<{ id: string; failure: McpFailure } | null>(null);
   const [answer, setAnswer] = useState<{ id: string; text: string } | null>(null);
   const [fallback, setFallback] = useState<{ prompt: string } | null>(null);
+  // A33.1.1 entry point 1 of 3.
+  const [panelActionId, setPanelActionId] = useState<string | null>(null);
 
   const accountId = state.view === "account" ? state.accountId : null;
   const account = accountId ? data.portfolio.accounts.find((a) => a.accountId === accountId) : null;
@@ -25,6 +28,12 @@ export function ActionsPanelBody() {
 
   async function run(action: ClientAction) {
     if (!accountId) return;
+    // A33.1.2 — an action that declares a panel opens it instead of firing.
+    // The panel owns the confirm gesture; nothing executes from this row.
+    if (action.hasPanel) {
+      setPanelActionId(action.id);
+      return;
+    }
     const prompt = renderPrompt(action, accountName, accountId);
     setFailure(null);
     setAnswer(null);
@@ -154,6 +163,10 @@ export function ActionsPanelBody() {
           </section>
         );
       })}
+
+      {panelActionId && (
+        <ActionPanel actionId={panelActionId} onClose={() => setPanelActionId(null)} />
+      )}
 
       {fallback && accountId && (
         <CopyPromptDialog
