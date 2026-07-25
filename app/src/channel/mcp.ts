@@ -149,7 +149,14 @@ function fixCopy(code: McpErrorCode, server: string, tool: string): string {
     case "not_in_manifest":
       return `This cockpit isn't authorised to call ${tool} on ${server}.`;
     case "blocked_by_policy":
-      return `Your organisation's policy blocks ${tool} on ${server}.`;
+      // NOT an org policy and NOT the connector. Settled diagnosis: this is the
+      // claude.ai shell's per-page-session trust budget on the artifact-to-
+      // connector bridge — it burns with call volume and payload shape, hides
+      // the whole connector from the page when tripped, and expires on its own.
+      // Blaming "your organisation's policy" alarmed bankers and sent them
+      // hunting a non-existent IT ticket, so the copy names the real cause and
+      // the real fix.
+      return "The workspace paused AI chat for this page session — a platform safety limit, not the Gateway and not your bank's policy. Reload the cockpit to continue; your place is kept.";
     case "approval_required":
       return `${tool} needs per-call approval, which artifacts don't support yet.`;
     case "tool_error":

@@ -99,12 +99,135 @@ describe("prompt shape contract (gateway-block fix)", () => {
   });
 });
 
+/** Every account tab the workspace can be on. */
+const TABS = [
+  "Activity",
+  "Exposure & Collateral",
+  "Covenants",
+  "Relationship Graph",
+  "Opportunities",
+  "Structural Signals",
+  "Financials",
+];
+
+describe("tab-aware context (round 2)", () => {
+  it("holds the shape contract on EVERY tab, for both staged accounts", () => {
+    for (const tab of TABS) {
+      for (const [name, b] of [["Piedmont Precision Components, Inc.", bundle], ["Sterling Fabrication Co.", sterling]] as const) {
+        for (const question of explainPrefills()) {
+          const p = buildGroundedPrompt({ data: DATA, bundle: b, accountName: name, tab, question });
+          expect(p, `${tab} / ${name}`).not.toMatch(FORBIDDEN);
+          expect(p, `${tab} / ${name}`).not.toMatch(RECORD_ID);
+          expect(p).not.toContain("\n");
+          expect(p.length, `${tab} / ${name} -> ${p.length}`).toBeLessThanOrEqual(MAX_PROMPT);
+        }
+      }
+    }
+  });
+
+  it("Covenants tab carries the two tightest covenants with thresholds and next test", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Covenants", question: "q" });
+    expect(p).toMatch(/DSCR \d+\.\d+x against a \d+\.\d+x floor/);
+    expect(p).toMatch(/next test \w+ \d+, \d{4}/);
+    // Two covenants, not a dump of all four.
+    expect((p.match(/against a/g) ?? []).length).toBe(2);
+  });
+
+  it("Exposure tab carries the facility list and collateral coverage", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Exposure & Collateral", question: "q" });
+    expect(p).toMatch(/\d+ active facilities/);
+    expect(p).toMatch(/drawn/);
+    expect(p).toMatch(/Lendable collateral \$[\d.]+M, coverage \d+\.\d+x/);
+    expect(p).not.toMatch(/against a .* floor/); // covenant sentence replaced
+  });
+
+  it("Financials tab carries EBITDA, leverage and interest coverage", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Financials", question: "q" });
+    expect(p).toMatch(/EBITDA \$[\d.]+M/);
+    expect(p).toMatch(/leverage \d+\.\d+x/);
+    expect(p).toMatch(/interest coverage \d+\.\d+x/);
+  });
+
+  it("Activity tab carries the open client request ask", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle: sterling, accountName: "Sterling Fabrication Co.", tab: "Activity", question: "q" });
+    expect(p).toMatch(/Open client request: facility increase from \$[\d.]+M to \$[\d.]+M/);
+  });
+
+  it("Relationship Graph tab carries owners and guarantors", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Relationship Graph", question: "q" });
+    expect(p).toMatch(/Owners: .+ \d+ percent/);
+    expect(p).toMatch(/guarantor/);
+  });
+
+  it("Opportunities tab carries the open opportunity", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Opportunities", question: "q" });
+    expect(p).toMatch(/Open opportunity: .+\$[\d.]+M/);
+  });
+
+  it("Structural Signals tab carries the nearest maturity", () => {
+    const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Structural Signals", question: "q" });
+    expect(p).toMatch(/nearest maturity in \d+ days/);
+  });
+
+  it("keeps the identity lead sentence on every tab", () => {
+    for (const tab of TABS) {
+      const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont Precision Components, Inc.", tab, question: "q" });
+      expect(p, tab).toContain("Piedmont Precision Components, Inc., Grade 5");
+      expect(p, tab).toContain("committed");
+    }
+  });
+
+  it("says nothing extra when a tab's data is not staged", () => {
+    const bare = { snapshot: { accountId: "X", name: "Bare Co.", primaryRiskRating: "4" } };
+    for (const tab of TABS) {
+      const p = buildGroundedPrompt({ data: DATA, bundle: bare as never, accountName: "Bare Co.", tab, question: "q" });
+      expect(p, tab).toContain("Bare Co., Grade 4.");
+      expect(p, tab).toContain(`Viewing the ${tab} tab.`);
+      expect(p, tab).not.toMatch(/against a|EBITDA|Owners:|Open opportunity|Signals:/);
+    }
+  });
+});
+
+describe("pre-computed cushions (no unit maths for the model)", () => {
+  const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Covenants", question: "q" });
+
+  it("gives the cushion in BOTH the ratio and percent forms", () => {
+    expect(p).toMatch(/cushion \d+\.\d+x or about \d+ percent/);
+  });
+
+  it("never emits bps or a bare percent sign the model could misread", () => {
+    expect(p).not.toMatch(/\bbps\b/);
+    expect(p).not.toContain("%");
+  });
+
+  it("states a breach as a breach, not a negative cushion", () => {
+    const b = JSON.parse(JSON.stringify(bundle));
+    b.covenants.covenants = [{ covenantType: "Debt Service Coverage Ratio", actualValue: 1.1, thresholdValue: 1.25, breached: true }];
+    const q = buildGroundedPrompt({ data: DATA, bundle: b, accountName: "X", tab: "Covenants", question: "q" });
+    expect(q).toMatch(/breached by \d+\.\d+x/);
+    expect(q).not.toMatch(/cushion -/);
+  });
+});
+
+describe("no-inference instruction", () => {
+  const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Covenants", question: "q" });
+
+  it("forbids inference and estimation outright", () => {
+    expect(p).toMatch(/Never infer or estimate/);
+    expect(p).toMatch(/Use only these figures/);
+  });
+
+  it("gives the model the safe alternative — name the tab that holds it", () => {
+    expect(p).toMatch(/not staged and name the tab that holds it/);
+  });
+});
+
 describe("the figures still survive as prose", () => {
   const p = buildGroundedPrompt({
     data: DATA,
     bundle,
     accountName: "Piedmont Precision Components, Inc.",
-    tab: "Covenants",
+    tab: null,
     question: "How much DSC headroom is left?",
   });
 
@@ -128,10 +251,14 @@ describe("the figures still survive as prose", () => {
     expect(p).toMatch(/EBITDA/);
   });
 
-  it("says which tab the banker is on, and asks the question", () => {
-    expect(p).toContain("Viewing the Covenants tab.");
+  it("asks the question and carries the instruction", () => {
     expect(p).toContain("How much DSC headroom is left?");
-    expect(p).toMatch(/cite only these figures/);
+    expect(p).toMatch(/Use only these figures/);
+  });
+
+  it("says which tab the banker is on when there is one", () => {
+    const q = buildGroundedPrompt({ data: DATA, bundle, accountName: "X", tab: "Covenants", question: "y" });
+    expect(q).toContain("Viewing the Covenants tab.");
   });
 
   it("reads as sentences — no field:value pairs", () => {

@@ -113,6 +113,10 @@ export function ChatPanelBody() {
   const available = live || channel.available();
   const sending = sendState === "sending";
   const [failure, setFailure] = useState<McpFailure | null>(null);
+  // Last question, so a failed ask can be retried by a USER GESTURE. Never auto-
+  // retried: the contract forbids it for non-retryable codes, and the trust
+  // budget that produces blocked_by_policy would only burn further.
+  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [answerMeta, setAnswerMeta] = useState<{ model?: string; costUsd?: number } | null>(null);
   const canSend = available && !sending && state.draft.trim().length > 0;
 
@@ -145,6 +149,7 @@ export function ChatPanelBody() {
     dispatch({ type: "SET_DRAFT", draft: "" });
     setSendState("sending");
     setFailure(null);
+    setLastQuestion(prompt);
 
     // LIVE PATH — ask the credit copilot through the connector, grounded in the
     // staged bundle, and render the answer in-thread.
@@ -220,10 +225,21 @@ export function ChatPanelBody() {
       </div>
 
       {sendState === "error" && (
-        <div className="flex-none border-t border-divider px-4 py-2 text-[10.5px]" style={{ color: "var(--critical)" }}>
+        <div className="flex-none border-t border-divider px-4 py-2">
           {/* Branch on the error CODE — never one catch-all banner (it would
               hide the single action that fixes the page). */}
-          {failure ? failure.fix : "Could not reach the desk. Try again from an agent-connected session."}
+          <div className="text-[10.5px] leading-relaxed" style={{ color: "var(--critical)" }}>
+            {failure ? failure.fix : "Could not reach the desk. Try again from an agent-connected session."}
+          </div>
+          {lastQuestion && (
+            <button
+              type="button"
+              onClick={() => void send(lastQuestion)}
+              className="c360-press mt-1.5 rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-ink-muted hover:text-ink"
+            >
+              Ask again
+            </button>
+          )}
         </div>
       )}
       {sendState === "handedOff" && (

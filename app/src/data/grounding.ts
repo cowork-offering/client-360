@@ -24,8 +24,8 @@
    UI instead — the model does not need it.
    ============================================================================= */
 
-import type { BorrowerBundle, C360Data } from "./contract";
-import { fmtMoney } from "./format";
+import type { BorrowerBundle, C360Data, Covenant } from "./contract";
+import { fmtDate, fmtMoney } from "./format";
 import { covenantCushion } from "./finance";
 import { isActiveFacility } from "./worklist";
 
@@ -34,7 +34,14 @@ export const CONTEXT_BUDGET = 500;
 /** Hard cap on the ENTIRE prompt — context, question and instruction. */
 export const MAX_PROMPT = 600;
 
-const INSTRUCTION = "Answer as a commercial-credit copilot, concise, cite only these figures.";
+/* The model is a general Bedrock endpoint with no cockpit knowledge. Left to
+   itself it speculates ("the graph likely shows...", "implied ~$15.75M") and
+   invents units ("17 bps" for a 0.17x cushion). Both are unacceptable in front
+   of a banker, so the instruction forbids inference outright and gives the
+   model a SAFE ALTERNATIVE — naming the tab that holds the missing figure —
+   which is more useful than a guess anyway. */
+const INSTRUCTION =
+  "Answer as a commercial-credit copilot, concise. Use only these figures; if one is not here, say it is not staged and name the tab that holds it. Never infer or estimate.";
 
 /** Final guarantee: strip the shapes the outbound guard reacts to. */
 export function sanitize(s: string): string {
@@ -81,6 +88,156 @@ function clip(text: string, max: number): string {
   return (stop > max * 0.4 ? cut.slice(0, stop + 1) : cut).trim();
 }
 
+/** Cushion PRE-COMPUTED in both forms so the model never does unit maths.
+ *  The "17 bps" and "13.6 percent" errors in the live transcript were both the
+ *  model converting a ratio it was handed raw. */
+function cushionPhrase(c: Covenant): string | null {
+  const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
+  if (cu.cushion === null) return null;
+  const abs = covValue(Math.abs(cu.cushion));
+  if (!abs) return null;
+  return cu.safe === false ? `breached by ${abs}` : `cushion ${abs} or about ${cu.pct} percent`;
+}
+
+/** One covenant as a full sentence clause, cushion included. */
+function covenantClause(c: Covenant): string | null {
+  const a = covValue(c.actualValue);
+  const th = covValue(c.thresholdValue);
+  if (!a || !th) return null;
+  const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
+  const parts = [`${shortCovenantName(c.covenantType)} ${a} against a ${th} ${cu.safe === false ? "threshold" : "floor"}`];
+  const cush = cushionPhrase(c);
+  if (cush) parts.push(cush);
+  if (c.nextEvaluationDate) parts.push(`next test ${fmtDate(c.nextEvaluationDate)}`);
+  return parts.join(", ");
+}
+
+/** Covenants sorted tightest-first (breached ahead of everything). */
+function byTightest(covs: Covenant[]): Covenant[] {
+  return covs
+    .filter((c) => c.actualValue != null && c.thresholdValue != null)
+    .slice()
+    .sort((a, b) => {
+      const ca = covenantCushion(a.covenantType, a.actualValue, a.thresholdValue);
+      const cb = covenantCushion(b.covenantType, b.actualValue, b.thresholdValue);
+      return (ca.safe === false ? -1 : ca.pct) - (cb.safe === false ? -1 : cb.pct);
+    });
+}
+
+function shortProductType(name?: string, product?: string): string {
+  const s = (product ?? name ?? "facility").toLowerCase();
+  if (s.includes("revolv")) return "revolver";
+  if (s.includes("term")) return "term loan";
+  if (s.includes("capex")) return "capex facility";
+  if (s.includes("line")) return "line of credit";
+  return "facility";
+}
+
+/** Tab-specific figures — selected INSTEAD of the generic sentence, so the
+ *  budget goes to what the banker is actually looking at. Everything here comes
+ *  from staged data; an unstaged tab simply contributes nothing and the
+ *  instruction tells the model to say so. */
+function tabSentence(bundle: BorrowerBundle, tab: string | null): string | null {
+  const exp = bundle.exposure ?? {};
+  const covs = bundle.covenants?.covenants ?? [];
+  const facs = (exp.facilities ?? []).filter(isActiveFacility);
+  const boom = bundle.boom?.ratios;
+
+  if (tab === "Exposure & Collateral") {
+    if (!facs.length) return null;
+    const list = facs
+      .slice(0, 3)
+      .map((f) => {
+        const bits = [fmtMoney(f.committed), shortProductType(f.name, f.productType)].filter(Boolean).join(" ");
+        return f.outstanding != null ? `${bits}, ${fmtMoney(f.outstanding)} drawn` : bits;
+      })
+      .join("; ");
+    const more = facs.length > 3 ? ` and ${facs.length - 3} more` : "";
+    let lendable = 0;
+    let has = false;
+    for (const f of facs) if (f.totalLendableValue != null) { lendable += f.totalLendableValue; has = true; }
+    const drawn = exp.totalOutstanding;
+    const coverage = has && drawn ? ` Lendable collateral ${fmtMoney(lendable)}, coverage ${(lendable / drawn).toFixed(2)}x.` : "";
+    return `${facs.length} active ${facs.length === 1 ? "facility" : "facilities"}: ${list}${more}.${coverage}`;
+  }
+
+  if (tab === "Covenants") {
+    const clauses = byTightest(covs).slice(0, 2).map(covenantClause).filter(Boolean) as string[];
+    if (!clauses.length) return null;
+    // Capitalise each clause so joining with a full stop still reads as prose.
+    return `${clauses.map((c) => c[0].toUpperCase() + c.slice(1)).join(". ")}.`;
+  }
+
+  if (tab === "Activity") {
+    const req = (bundle.requests ?? [])[0];
+    const ask = req?.ask ?? (bundle.activity ?? []).find((a) => a.kind === "REQUEST_RECEIVED")?.detail?.ask;
+    if (!ask) return null;
+    const what = (ask.type ?? "request").replace(/[_-]+/g, " ");
+    const move = ask.from != null && ask.to != null ? ` from ${fmtMoney(ask.from)} to ${fmtMoney(ask.to)}` : "";
+    return `Open client request: ${what}${move}.`;
+  }
+
+  if (tab === "Financials") {
+    if (!boom) return null;
+    const bits = [
+      boom.ebitda != null ? `EBITDA ${fmtMoney(boom.ebitda)}` : null,
+      boom.totalLeverage != null ? `leverage ${ratio(boom.totalLeverage)}` : null,
+      boom.interestCoverage != null ? `interest coverage ${ratio(boom.interestCoverage)}` : null,
+    ].filter(Boolean);
+    return bits.length ? `${bits.join(", ")}.` : null;
+  }
+
+  if (tab === "Relationship Graph") {
+    const conns = bundle.graph?.connections ?? [];
+    const owners = conns.filter((c) => (c.totalOwnershipPercent ?? c.ownershipPercent ?? 0) > 0);
+    const guarantors = (bundle.graph?.legalEntities ?? []).filter((e) =>
+      (e.borrowerType ?? "").toLowerCase().includes("guarantor"),
+    );
+    if (!owners.length && !guarantors.length) return null;
+    const o = owners
+      .slice(0, 2)
+      .map((c) => `${c.counterpartyName ?? "owner"} ${c.totalOwnershipPercent ?? c.ownershipPercent} percent`)
+      .join(", ");
+    const g = guarantors.length ? `${guarantors.length} guarantor${guarantors.length === 1 ? "" : "s"} on file` : "";
+    return [o ? `Owners: ${o}.` : "", g ? `${g}.` : ""].filter(Boolean).join(" ");
+  }
+
+  if (tab === "Opportunities") {
+    const opp = (bundle.opportunities?.opportunities ?? [])[0];
+    if (!opp) return null;
+    const bits = [opp.name, opp.amount != null ? fmtMoney(opp.amount) : null, opp.stage].filter(Boolean).join(", ");
+    return `Open opportunity: ${bits}.`;
+  }
+
+  if (tab === "Structural Signals") {
+    const sig = bundle.signals ?? {};
+    const bits: string[] = [];
+    const near = (sig.maturityWatch ?? []).find((m) => m.daysUntilMaturity != null);
+    if (near) bits.push(`nearest maturity in ${near.daysUntilMaturity} days`);
+    if (sig.modifications?.length) bits.push(`${sig.modifications.length} modifications`);
+    if (sig.guarantorSignals?.length) bits.push(`${sig.guarantorSignals.length} guarantor signals`);
+    return bits.length ? `Signals: ${bits.join(", ")}.` : null;
+  }
+
+  // No tab (or one with nothing staged): the generic read — tightest covenant
+  // plus leverage, which is what a banker asks about first.
+  const generic: string[] = [];
+  const tightest = byTightest(covs)[0];
+  if (tightest) {
+    const clause = covenantClause(tightest);
+    if (clause) generic.push(clause);
+  }
+  if (boom?.totalLeverage != null) {
+    generic.push(`leverage ${ratio(boom.totalLeverage)}${boom.ebitda != null ? ` on ${fmtMoney(boom.ebitda)} EBITDA` : ""}`);
+  }
+  // With no covenants staged, the facility count is the next most useful
+  // structural fact — and it must reflect ACTIVE facilities only.
+  if (!tightest && facs.length) {
+    generic.push(`${facs.length} active ${facs.length === 1 ? "facility" : "facilities"}`);
+  }
+  return generic.length ? `${generic.join("; ")}.` : null;
+}
+
 /** 2-4 flowing sentences about the account in view. No ids, no lists. */
 function accountProse(bundle: BorrowerBundle | null, accountName: string, tab: string | null): string {
   const tabLine = tab ? `Viewing the ${tab} tab.` : "";
@@ -94,7 +251,7 @@ function accountProse(bundle: BorrowerBundle | null, accountName: string, tab: s
   const committed = exp.totalCommitted ?? snap.totalCreditExposure;
   const drawn = exp.totalOutstanding ?? snap.totalOutstanding;
 
-  // 1. Identity, grade, exposure.
+  // Lead sentence is ALWAYS identity, grade and exposure.
   const lead = [
     accountName,
     snap.primaryRiskRating ? `Grade ${snap.primaryRiskRating}` : null,
@@ -106,39 +263,10 @@ function accountProse(bundle: BorrowerBundle | null, accountName: string, tab: s
     .join(", ");
   if (lead) parts.push(`${lead}.`);
 
-  // 2. The covenant that matters — the tightest cushion, not every covenant.
-  const covs = bundle.covenants?.covenants ?? [];
-  let tightest: { name: string; actual: string; threshold: string; breached: boolean; pct: number } | null = null;
-  for (const c of covs) {
-    const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
-    const a = covValue(c.actualValue);
-    const th = covValue(c.thresholdValue);
-    if (!a || !th) continue;
-    const pct = cu.safe === false ? -1 : cu.pct;
-    if (!tightest || pct < tightest.pct) {
-      tightest = { name: shortCovenantName(c.covenantType), actual: a, threshold: th, breached: cu.safe === false || c.breached === true, pct };
-    }
-  }
-
-  const boom = bundle.boom?.ratios;
-  const second: string[] = [];
-  if (tightest) {
-    second.push(
-      `${tightest.name} ${tightest.actual} against a ${tightest.threshold} ${tightest.breached ? "threshold, breached" : "floor"}`,
-    );
-  }
-  if (boom?.totalLeverage != null) {
-    second.push(`leverage ${ratio(boom.totalLeverage)}${boom.ebitda != null ? ` on ${fmtMoney(boom.ebitda)} EBITDA` : ""}`);
-  }
-  if (second.length) parts.push(`${second.join("; ")}.`);
-
-  // 3. Structure, only when it adds something the covenants did not.
-  const facs = (exp.facilities ?? []).filter(isActiveFacility);
-  if (facs.length && !covs.length) {
-    parts.push(`${facs.length} active ${facs.length === 1 ? "facility" : "facilities"}.`);
-  }
-
+  const tabInfo = tabSentence(bundle, tab);
+  if (tabInfo) parts.push(tabInfo);
   if (tabLine) parts.push(tabLine);
+
   return sanitize(parts.join(" "));
 }
 

@@ -57,6 +57,28 @@ describe("error doctrine", () => {
     expect(describeFailure({ code: "server_not_connected" }, "IDB Gateway", "X").fix).toMatch(/Add IDB Gateway/);
   });
 
+  it("blocked_by_policy names the platform limit, never the bank or the connector", () => {
+    const fix = describeFailure({ code: "blocked_by_policy" }, "IDB Gateway", "get_llm_response").fix;
+    // The real cause: the shell's per-page-session trust budget, which expires.
+    expect(fix).toMatch(/paused/i);
+    expect(fix).toMatch(/platform safety limit/i);
+    expect(fix).toMatch(/reload/i); // the actual fix, and that state is kept
+    expect(fix).toMatch(/your place is kept/i);
+    // It must NOT blame the org or the connector — that sent bankers hunting a
+    // non-existent IT ticket.
+    expect(fix).not.toMatch(/organisation|organization/i);
+    expect(fix).not.toMatch(/policy blocks/i);
+    expect(fix).toMatch(/not the Gateway and not your bank's policy/i); // explicit disclaimer
+  });
+
+  it("leaves genuine authz copy untouched", () => {
+    expect(describeFailure({ code: "needs_reauth" }, "Customer 360", "X").fix).toMatch(/Reconnect Customer 360/);
+    expect(describeFailure({ code: "server_not_connected" }, "IDB Gateway", "X").fix).toMatch(/Add IDB Gateway/);
+    for (const c of ["needs_reauth", "server_not_connected"]) {
+      expect(describeFailure({ code: c }, "S", "T").fix).not.toMatch(/paused|platform safety limit/i);
+    }
+  });
+
   it("treats unknown codes as upstream_error", () => {
     expect(describeFailure({ code: "some_new_code" }, "S", "T").code).toBe("upstream_error");
   });
