@@ -2,10 +2,13 @@ import { useMemo, useState } from "react";
 import { useApp, ACCOUNT_TABS } from "../state/appState";
 import type { AiMessage } from "../data/contract";
 import { formatProbe, newRequestId, probeChannels } from "../channel/adapter";
+import { mcpAvailable, type McpFailure } from "../channel/mcp";
+import { askCopilot } from "../channel/cockpitTools";
+import { resolveBundle } from "../actions/registry";
 import { suggestActions, type Suggestion } from "../actions/suggest";
 import { ACTIONS_BY_ID } from "../actions/registry";
 
-type SendState = "idle" | "sending" | "handedOff" | "error";
+type SendState = "idle" | "sending" | "handedOff" | "answered" | "error";
 
 /** Channel diagnostics disclosure, shown only in the no-channel state.
  *  Collapsed by default; the probe runs on first open (and not before), so a
@@ -106,8 +109,11 @@ export function ChatPanelBody() {
     [data, worklist, account],
   );
 
-  const available = channel.available();
+  const live = mcpAvailable();
+  const available = live || channel.available();
   const sending = sendState === "sending";
+  const [failure, setFailure] = useState<McpFailure | null>(null);
+  const [answerMeta, setAnswerMeta] = useState<{ model?: string; costUsd?: number } | null>(null);
   const canSend = available && !sending && state.draft.trim().length > 0;
 
   /** Chip click: send, and if the chip is registry-backed log it to the
@@ -123,7 +129,7 @@ export function ChatPanelBody() {
 
   async function send(text: string) {
     const prompt = text.trim();
-    if (!prompt || !channel.available() || sending) return;
+    if (!prompt || !available || sending) return;
 
     const requestId = newRequestId();
     dispatch({
@@ -138,6 +144,38 @@ export function ChatPanelBody() {
     });
     dispatch({ type: "SET_DRAFT", draft: "" });
     setSendState("sending");
+    setFailure(null);
+
+    // LIVE PATH — ask the credit copilot through the connector, grounded in the
+    // staged bundle, and render the answer in-thread.
+    if (live) {
+      try {
+        const answer = await askCopilot({
+          data,
+          bundle: resolveBundle(data, account?.accountId ?? null),
+          accountName: account?.name ?? null,
+          tab: tabLabel,
+          question: prompt,
+        });
+        dispatch({
+          type: "PUSH_MESSAGE",
+          message: {
+            id: `${requestId}-answer`,
+            role: "agent",
+            text: answer.text || "The copilot returned an empty answer.",
+            ts: new Date().toISOString(),
+          },
+        });
+        setAnswerMeta({ model: answer.model, costUsd: answer.costUsd });
+        setSendState("answered");
+      } catch (e) {
+        setFailure(e as McpFailure);
+        setSendState("error");
+      }
+      return;
+    }
+
+    // Legacy prompt-bridge path (no capability in this view).
     try {
       await channel.request(prompt, {
         requestId,
@@ -181,14 +219,22 @@ export function ChatPanelBody() {
         )}
       </div>
 
-      {(sendState === "handedOff" || sendState === "error") && (
-        <div
-          className="flex-none border-t border-divider px-4 py-2 text-[10.5px]"
-          style={{ color: sendState === "error" ? "var(--critical)" : "var(--ink-faint)" }}
-        >
-          {sendState === "error"
-            ? "Could not reach the desk. Try again from an agent-connected session."
-            : "Handed off to the desk. The cockpit refreshes in place when the answer lands."}
+      {sendState === "error" && (
+        <div className="flex-none border-t border-divider px-4 py-2 text-[10.5px]" style={{ color: "var(--critical)" }}>
+          {/* Branch on the error CODE — never one catch-all banner (it would
+              hide the single action that fixes the page). */}
+          {failure ? failure.fix : "Could not reach the desk. Try again from an agent-connected session."}
+        </div>
+      )}
+      {sendState === "handedOff" && (
+        <div className="flex-none border-t border-divider px-4 py-2 text-[10.5px] text-ink-faint">
+          Handed off to the desk. The cockpit refreshes in place when the answer lands.
+        </div>
+      )}
+      {sendState === "answered" && answerMeta?.model && (
+        <div className="flex-none border-t border-divider px-4 py-1.5 text-[10px] text-ink-faint">
+          {answerMeta.model}
+          {answerMeta.costUsd != null ? ` · $${answerMeta.costUsd.toFixed(4)}` : ""}
         </div>
       )}
 

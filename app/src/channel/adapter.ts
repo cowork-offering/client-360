@@ -15,6 +15,8 @@
    state survives that replace via sessionStorage (state/persist.ts).
    ============================================================================= */
 
+import { mcpAvailable } from "./mcp";
+
 export interface ChannelContext {
   requestId: string;
   accountId?: string;
@@ -27,6 +29,8 @@ export interface ChannelContext {
    live Cowork test showed window.sendPrompt is NOT exposed in that runtime.
    None of them is assumed to exist — each is probed and invoked defensively. */
 export type ChannelKind =
+  /** window.claude.mcp — the PROVEN live channel (2026-07-25). Primary. */
+  | "mcp"
   | "sendPrompt"
   | "claude.sendPrompt"
   | "claude.complete"
@@ -73,6 +77,9 @@ function fnAt(path: () => unknown): Fn | null {
 type Candidate = { kind: ChannelKind; style: "text" | "tool"; resolve: () => Fn | null };
 
 const CANDIDATES: Candidate[] = [
+  // `mcp` is resolved separately (it is a namespace, not a callable) — see
+  // detectCandidate(). The rest are the legacy/speculative prompt bridges kept
+  // as fallbacks for runtimes without the capability.
   { kind: "sendPrompt", style: "text", resolve: () => fnAt(() => host().sendPrompt) },
   { kind: "claude.sendPrompt", style: "text", resolve: () => fnAt(() => host().claude?.sendPrompt) },
   { kind: "claude.complete", style: "text", resolve: () => fnAt(() => host().claude?.complete) },
@@ -86,6 +93,9 @@ function detectCandidate(): Candidate | null {
 }
 
 function detectKind(): ChannelKind {
+  // The capability gate wins outright: when window.claude.mcp exists the
+  // cockpit talks to connectors directly and never needs a prompt bridge.
+  if (mcpAvailable()) return "mcp";
   return detectCandidate()?.kind ?? "none";
 }
 
@@ -108,6 +118,13 @@ export function createChannel(): AgentChannel {
     available: () => detectKind() !== "none",
     async request(prompt, ctx) {
       // A14 — re-detect at request time, never cached from mount.
+      if (mcpAvailable()) {
+        // Under the mcp capability the prompt bridge is not the transport;
+        // callers use the typed connector methods (see channel/mcp.ts and the
+        // useCockpitTools hook). Reaching here means a caller has not been
+        // migrated — fail loudly rather than silently no-op.
+        throw new Error("mcp channel is live — use the typed connector calls, not request()");
+      }
       const candidate = detectCandidate();
       if (!candidate) throw new Error("no agent channel");
 
@@ -240,6 +257,7 @@ export function probeChannels(): ProbeEntry[] {
   // 1. The documented surface + the candidate bridges.
   out.push(entry("window.sendPrompt", () => w.sendPrompt, true));
   out.push(entry("window.claude", () => w.claude, true));
+  out.push(entry("window.claude.mcp", () => (w.claude as Record<string, unknown> | undefined)?.mcp, true));
   out.push(entry("window.openai", () => w.openai, true));
 
   // 2. Frame relationship — parent access may legitimately throw cross-origin.

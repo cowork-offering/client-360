@@ -1,6 +1,9 @@
 import { useApp } from "../state/appState";
 import { fmtMoney, fmtPct } from "../data/format";
 import { useCountUp, staggerDelay } from "../data/motion";
+import { mcpAvailable } from "../channel/mcp";
+import { useLivePortfolio } from "../channel/useLivePortfolio";
+import { fmtRelative } from "../data/format";
 
 type Tone = "neutral" | "warning" | "critical";
 
@@ -45,7 +48,10 @@ function KpiCell({ kpi, index }: { kpi: Kpi; index: number }) {
 
 export function KpiBand() {
   const { data, worklist } = useApp();
-  const pf = data.portfolio ?? { accounts: [] };
+  // Live book totals when the capability is present; the staged snapshot
+  // otherwise. A failed refresh keeps the staged figures visible.
+  const live = useLivePortfolio(mcpAvailable());
+  const pf = live.portfolio ?? data.portfolio ?? { accounts: [] };
   const accts = pf.accounts ?? [];
 
   let sumTce = 0;
@@ -98,10 +104,24 @@ export function KpiBand() {
   ];
 
   return (
-    <div className="flex flex-wrap overflow-hidden rounded-[16px] bg-raised" style={{ boxShadow: "var(--shadow-card)" }}>
-      {kpis.map((k, i) => (
-        <KpiCell key={k.label} kpi={k} index={i} />
-      ))}
+    <div className="overflow-hidden rounded-[16px] bg-raised" style={{ boxShadow: "var(--shadow-card)" }}>
+      <div className="flex flex-wrap">
+        {kpis.map((k, i) => (
+          <KpiCell key={k.label} kpi={k} index={i} />
+        ))}
+      </div>
+      {(live.storedAt != null || live.failure) && (
+        <div className="flex items-center gap-2 border-t border-divider px-5 py-1.5 text-[10.5px]">
+          {live.storedAt != null && (
+            <span className="text-ink-faint">
+              Live book data as of {fmtRelative(new Date(live.storedAt).toISOString(), data.meta?.generatedAt ?? "")}
+            </span>
+          )}
+          {live.failure && (
+            <span style={{ color: live.failure.retract ? "var(--critical)" : "var(--warning)" }}>{live.failure.fix}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

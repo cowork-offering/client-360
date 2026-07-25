@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { AgentChannel } from "../channel/adapter";
 import { createChannel, formatProbe, probeChannels } from "../channel/adapter";
-import type { ActivityEntry, C360Data, Worklist } from "../data/contract";
+import type { ActivityEntry, BorrowerBundle, C360Data, Worklist } from "../data/contract";
 import { deriveWorklist } from "../data/worklist";
 import { loadUi, saveUi, type PersistedUi } from "./persist";
 
@@ -50,6 +50,11 @@ export interface ViewState {
   seenServerCount: number;
   /** Session-local ACTION_TRIGGERED entries per account (A31.3). */
   sessionActivity: Record<string, ActivityEntry[]>;
+  /** Live patches fetched from the org this session, merged over the staged
+   *  bundle at read time. Session-local — a fresh injection supersedes them. */
+  livePatches: Record<string, Partial<BorrowerBundle>>;
+  /** Freshness per account, from result.cache.storedAt (never Date.now). */
+  liveStoredAt: Record<string, number>;
 }
 
 type Action =
@@ -59,6 +64,8 @@ type Action =
   | { type: "SET_PANEL"; panel: PanelKind }
   | { type: "SET_SEEN"; count: number }
   | { type: "LOG_ACTION"; accountId: string; actionLabel: string }
+  | { type: "PATCH_BUNDLE"; accountId: string; patch: Partial<BorrowerBundle>; storedAt?: number }
+  | { type: "INGEST_REQUESTS"; accountId: string; entries: ActivityEntry[] }
   | { type: "SET_DRAFT"; draft: string }
   | { type: "PUSH_MESSAGE"; message: LocalMessage }
   | { type: "RESTORE"; ui: Partial<PersistedUi> };
@@ -72,6 +79,8 @@ const initial: ViewState = {
   localMessages: [],
   seenServerCount: 0,
   sessionActivity: {},
+  livePatches: {},
+  liveStoredAt: {},
 };
 
 function reducer(state: ViewState, action: Action): ViewState {
@@ -109,6 +118,30 @@ function reducer(state: ViewState, action: Action): ViewState {
           ...state.sessionActivity,
           // Newest first, capped so a long session cannot grow unbounded.
           [action.accountId]: [entry, ...prev].slice(0, 25),
+        },
+      };
+    }
+    case "PATCH_BUNDLE": {
+      const prev = state.livePatches[action.accountId] ?? {};
+      return {
+        ...state,
+        livePatches: { ...state.livePatches, [action.accountId]: { ...prev, ...action.patch } },
+        liveStoredAt:
+          action.storedAt != null
+            ? { ...state.liveStoredAt, [action.accountId]: action.storedAt }
+            : state.liveStoredAt,
+      };
+    }
+    case "INGEST_REQUESTS": {
+      const prev = state.sessionActivity[action.accountId] ?? [];
+      const seen = new Set(prev.map((e) => e.id));
+      const fresh = action.entries.filter((e) => !seen.has(e.id));
+      if (!fresh.length) return state;
+      return {
+        ...state,
+        sessionActivity: {
+          ...state.sessionActivity,
+          [action.accountId]: [...fresh, ...prev].slice(0, 25),
         },
       };
     }

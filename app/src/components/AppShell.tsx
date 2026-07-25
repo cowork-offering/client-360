@@ -9,11 +9,15 @@ import { EmptyState, PageContainer } from "./ui";
 
 export function AppShell() {
   const { data, state } = useApp();
-  const bundle =
+  const staged =
     state.view === "account" && state.accountId
       ? (data.borrowers ?? {})[state.accountId] ??
         (data.borrower?.snapshot?.accountId === state.accountId ? data.borrower : undefined)
       : undefined;
+  // Live refreshes are merged OVER the staged snapshot at read time, so a
+  // partial refresh never blanks a slice the org failed to return.
+  const patch = state.accountId ? state.livePatches[state.accountId] : undefined;
+  const bundle = staged && patch ? { ...staged, ...patch } : staged;
 
   return (
     <div className="flex h-screen flex-col">

@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useApp } from "../state/appState";
 import { ACTIONS, CATEGORY_ORDER, renderPrompt, type ClientAction } from "../actions/registry";
 import { newRequestId } from "../channel/adapter";
+import { mcpAvailable, type McpFailure } from "../channel/mcp";
+import { executeAction } from "../actions/execute";
+import { resolveBundle } from "../actions/registry";
 import { ActionGlyph } from "./ActionIcon";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 
@@ -11,6 +14,9 @@ import { CopyPromptDialog } from "./CopyPromptDialog";
 export function ActionsPanelBody() {
   const { data, channel, state, dispatch } = useApp();
   const [sentId, setSentId] = useState<string | null>(null);
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ id: string; failure: McpFailure } | null>(null);
+  const [answer, setAnswer] = useState<{ id: string; text: string } | null>(null);
   const [fallback, setFallback] = useState<{ prompt: string } | null>(null);
 
   const accountId = state.view === "account" ? state.accountId : null;
@@ -20,6 +26,37 @@ export function ActionsPanelBody() {
   async function run(action: ClientAction) {
     if (!accountId) return;
     const prompt = renderPrompt(action, accountName, accountId);
+    setFailure(null);
+    setAnswer(null);
+
+    // LIVE PATH — execute through the connectors. No copy-prompt dialog here:
+    // that fallback exists only where there is no capability at all.
+    if (mcpAvailable()) {
+      setRunningId(action.id);
+      try {
+        const result = await executeAction({
+          action,
+          data,
+          bundle: resolveBundle(data, accountId),
+          accountId,
+          accountName,
+          tab: "Client Actions",
+        });
+        if (result.patch) {
+          dispatch({ type: "PATCH_BUNDLE", accountId, patch: result.patch, storedAt: result.storedAt });
+        }
+        dispatch({ type: "LOG_ACTION", accountId, actionLabel: action.label });
+        if (result.text) setAnswer({ id: action.id, text: result.text });
+        setSentId(action.id);
+      } catch (e) {
+        setFailure({ id: action.id, failure: e as McpFailure });
+      } finally {
+        setRunningId(null);
+      }
+      return;
+    }
+
+    // No capability in this view — carry the ask into a live session.
     if (!channel.available()) {
       setFallback({ prompt });
       return;
@@ -76,18 +113,31 @@ export function ActionsPanelBody() {
                       >
                         {action.label}
                       </span>
-                      {sent && (
+                      {runningId === action.id && (
+                        <span className="text-[9.5px] font-bold uppercase tracking-wide text-ink-faint">Running…</span>
+                      )}
+                      {sent && runningId !== action.id && (
                         <span
                           className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
                           style={{ background: "var(--positive-bg)", color: "var(--positive)" }}
                         >
-                          Sent to desk
+                          {mcpAvailable() ? "Done" : "Sent to desk"}
                         </span>
                       )}
                     </span>
                     <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-muted">
                       {action.description}
                     </span>
+                    {answer?.id === action.id && (
+                      <span className="mt-2 block whitespace-pre-wrap rounded-md border border-border bg-surface px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-body">
+                        {answer.text}
+                      </span>
+                    )}
+                    {failure?.id === action.id && (
+                      <span className="mt-1.5 block text-[11px] font-semibold" style={{ color: "var(--critical)" }}>
+                        {failure.failure.fix}
+                      </span>
+                    )}
                     {!available && reason && (
                       <span className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
                         <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
