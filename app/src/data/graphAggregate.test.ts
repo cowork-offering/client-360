@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { C360Data } from "./contract";
-import { aggregateInvolvements, collapseConnections, connectionOwnership } from "./graphAggregate";
+import { aggregateGuarantorSignals, aggregateInvolvements, collapseConnections, connectionOwnership } from "./graphAggregate";
 import live from "../../../artifact/live-data.json";
 
 /* =============================================================================
@@ -143,5 +143,41 @@ describe("the edges", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].facilityCount).toBe(2);
     expect(rows[1].facilityCount).toBe(1);
+  });
+});
+
+
+describe("Hartwell — a guarantor signal repeated once per facility", () => {
+  const raw = (HARTWELL.signals?.guarantorSignals ?? []) as Array<Record<string, unknown>>;
+  const rows = aggregateGuarantorSignals(raw);
+
+  it("starts from 14 real org rows for 3 guarantors", () => {
+    expect(raw).toHaveLength(14);
+    expect(new Set(raw.map((g) => g.guarantorName)).size).toBe(3);
+  });
+
+  it("aggregates to one row per guarantor, with the facility count", () => {
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => [r.guarantorName, r.facilityCount])).toEqual([
+      ["James Hartwell", 6],
+      ["Hartwell Industrial Holdings LLC", 6],
+      ["Elena Hartwell", 2],
+    ]);
+  });
+
+  it("keeps the grade recorded on any row of the group", () => {
+    expect(rows.find((r) => r.guarantorName === "Hartwell Industrial Holdings LLC")!.highestRiskGrade).toBe("4");
+  });
+
+  it("groups by account id, so two guarantors sharing a name stay separate", () => {
+    const out = aggregateGuarantorSignals([
+      { guarantorAccountId: "A", guarantorName: "J. Hartwell", highestRiskGrade: "4" },
+      { guarantorAccountId: "B", guarantorName: "J. Hartwell", highestRiskGrade: "6" },
+    ]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("survives absent signals", () => {
+    expect(aggregateGuarantorSignals(undefined)).toEqual([]);
   });
 });

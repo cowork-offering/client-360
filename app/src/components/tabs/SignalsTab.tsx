@@ -1,4 +1,5 @@
 import type { BorrowerBundle } from "../../data/contract";
+import { aggregateGuarantorSignals } from "../../data/graphAggregate";
 import { fmtDate } from "../../data/format";
 import { arc, covenantCushion, fmtCovThreshold, fmtCovVal, STATUS, type Tone } from "../../data/finance";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
@@ -41,10 +42,15 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
       date: eff ? fmtDate(eff) : "",
     });
   }
-  for (const g of sig.guarantorSignals ?? []) {
+  // ONE ROW PER GUARANTOR. The org records the involvement against every loan,
+  // so a guarantor on six facilities arrives as six identical signals; six
+  // copies of one alert is not six alerts, and rendering them that way buries
+  // everything underneath.
+  for (const g of aggregateGuarantorSignals(sig.guarantorSignals as Array<Record<string, unknown>> | undefined)) {
     if (g.riskStatus || g.highestRiskGrade) {
+      const across = g.facilityCount > 1 ? ` · across ${g.facilityCount} facilities` : "";
       ews.push({
-        title: "Guarantor signal · " + (g.guarantorName ?? "guarantor"),
+        title: "Guarantor signal · " + (g.guarantorName ?? "guarantor") + across,
         severity: g.highestRiskGrade && /[6-9]/.test(String(g.highestRiskGrade)) ? "Watch" : "Info",
         body: "Risk status " + (g.riskStatus ?? "—") + (g.highestRiskGrade ? `, highest grade ${g.highestRiskGrade}` : ""),
         date: "",

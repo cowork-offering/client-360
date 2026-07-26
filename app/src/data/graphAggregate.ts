@@ -170,3 +170,56 @@ export function aggregateInvolvements(entities: LegalEntity[] | undefined): Aggr
     .sort((a, b) => a.firstSeen - b.firstSeen)
     .map(({ firstSeen: _firstSeen, ...row }) => row);
 }
+
+
+/* --------------------------------------------------- structural signals */
+
+export interface AggregatedGuarantorSignal {
+  guarantorAccountId?: string;
+  guarantorName?: string;
+  riskStatus?: string;
+  highestRiskGrade?: string;
+  /** How many org rows carried this same signal, one per facility guaranteed. */
+  facilityCount: number;
+}
+
+/**
+ * One row per guarantor, not one per facility they guarantee.
+ *
+ * Same standing rule as the graph: the org records the involvement against
+ * every loan, so a guarantor on six facilities produced six identical alert
+ * rows. Six copies of one alert is not six alerts, and rendering them that way
+ * buries the other signals underneath.
+ */
+export function aggregateGuarantorSignals(
+  signals: Array<Record<string, unknown>> | undefined,
+): AggregatedGuarantorSignal[] {
+  const groups = new Map<string, AggregatedGuarantorSignal & { firstSeen: number }>();
+
+  (signals ?? []).forEach((g, i) => {
+    const id = typeof g.guarantorAccountId === "string" ? g.guarantorAccountId : undefined;
+    const name = typeof g.guarantorName === "string" ? g.guarantorName : undefined;
+    const key = id ?? name ?? `row-${i}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.facilityCount += 1;
+      // A grade or status recorded on any row is the guarantor's.
+      existing.riskStatus = existing.riskStatus ?? (typeof g.riskStatus === "string" ? g.riskStatus : undefined);
+      existing.highestRiskGrade =
+        existing.highestRiskGrade ?? (typeof g.highestRiskGrade === "string" ? g.highestRiskGrade : undefined);
+      return;
+    }
+    groups.set(key, {
+      guarantorAccountId: id,
+      guarantorName: name,
+      riskStatus: typeof g.riskStatus === "string" ? g.riskStatus : undefined,
+      highestRiskGrade: typeof g.highestRiskGrade === "string" ? g.highestRiskGrade : undefined,
+      facilityCount: 1,
+      firstSeen: i,
+    });
+  });
+
+  return [...groups.values()]
+    .sort((a, b) => a.firstSeen - b.firstSeen)
+    .map(({ firstSeen: _f, ...row }) => row);
+}

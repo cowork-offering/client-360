@@ -269,3 +269,19 @@ describe("the founder's button, on the real bundle", () => {
     expect(row.textContent).toContain("Final Review");
   });
 });
+
+
+describe("signals show one alert per guarantor, not one per facility", () => {
+  it("names each Hartwell guarantor once, with the facility span", () => {
+    mount(live as unknown as C360Data);
+    openAccount("Hartwell Precision Manufacturing LLC");
+    const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Structural Signals")!;
+    click(button);
+    const text = container!.textContent ?? "";
+    // The org sends 14 rows for 3 guarantors. The founder saw six identical
+    // "Guarantor signal" lines; there is now one, and it says how far it reaches.
+    const alerts = text.split("Guarantor signal").length - 1;
+    expect(alerts).toBeLessThanOrEqual(3);
+    expect(text).toContain("across 6 facilities");
+  });
+});
