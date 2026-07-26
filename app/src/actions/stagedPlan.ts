@@ -69,26 +69,68 @@ export interface StagedOutput {
   provenance?: Record<string, unknown>;
 }
 
-/** A33.5.3 — no staged output may carry a record id. Salesforce ids are 15 or
- *  18 char alphanumerics; anything that shape in a staged plan means a write
- *  already happened, which would break the whole preview guarantee. */
+/* A33.5.3 — a staged plan must not prove that something was already written.
+ *
+ * SCOPE, learned the hard way (live 2026-07-26): a blanket "no id-shaped string
+ * anywhere" check contradicts the spec it enforces. `accountId`,
+ * `productPackageId` and `stagingId` are part of A33.5.3's own common output,
+ * and A26 provenance citations ARE record ids by design. Flagging those blocked
+ * every legitimate live plan.
+ *
+ * The real fence is narrower and sharper: an id belonging to a WRITE TARGET
+ * object has no business in a staged plan, because stage_* created nothing. So:
+ *
+ *   1. Write-target prefixes are refused ANYWHERE, whitelist included. Finding a
+ *      valuation, Case or Review id in a plan means a record exists.
+ *   2. Everything else is refused only OUTSIDE the known id carriers, which
+ *      catches a stray resultRecordId or outcome reference.
+ */
+
+/** Key-prefix to object, for the three objects these tools actually write. */
+export const WRITE_TARGET_ID_PREFIXES: Record<string, string> = {
+  a34: "collateral valuation",
+  "500": "service request",
+  a5n: "credit review",
+};
+
+/** Fields that legitimately carry an org record id (A33.5.3 common output). */
+const ID_CARRYING_KEYS = new Set(["accountId", "productPackageId", "stagingId", "decisionToken"]);
+
+const RECORD_ID = /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/;
+
+/** True for a provenance citation path: A26 says the citation IS the record id. */
+function isProvenanceCitation(path: string): boolean {
+  return /^provenance\b/.test(path) && /\bcitation$/.test(path);
+}
+
 export function assertNoRecordIds(plan: StagedOutput): string[] {
   const violations: string[] = [];
-  const ID = /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/;
-  const walk = (value: unknown, path: string) => {
+
+  const walk = (value: unknown, path: string, key: string) => {
     if (typeof value === "string") {
-      // The staging id and plan hash are ours, not org record ids.
-      if (path !== "stagingId" && path !== "planHash" && ID.test(value)) {
-        violations.push(`${path} looks like an org record id (${value})`);
+      if (!RECORD_ID.test(value)) return;
+
+      // 1. A write-target id is a hard block wherever it appears.
+      const target = WRITE_TARGET_ID_PREFIXES[value.slice(0, 3)];
+      if (target) {
+        violations.push(
+          `${path} looks like an org record id (${value}), and it belongs to the ${target} this plan would create, so something was already written`,
+        );
+        return;
       }
+
+      // 2. Otherwise only flag ids outside the known carriers.
+      if (ID_CARRYING_KEYS.has(key) || isProvenanceCitation(path)) return;
+      violations.push(`${path} looks like an org record id (${value})`);
       return;
     }
-    if (Array.isArray(value)) return value.forEach((v, i) => walk(v, `${path}[${i}]`));
+    if (Array.isArray(value)) return value.forEach((v, i) => walk(v, `${path}[${i}]`, key));
     if (value && typeof value === "object") {
-      for (const [k, v] of Object.entries(value)) walk(v, path ? `${path}.${k}` : k);
+      for (const [k, v] of Object.entries(value)) walk(v, path ? `${path}.${k}` : k, k);
     }
   };
-  walk(plan, "");
+
+  walk(plan, "", "");
   return violations;
 }
 

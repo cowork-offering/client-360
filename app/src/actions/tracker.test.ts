@@ -267,6 +267,81 @@ describe("A33.5.3 — staged output is a plan, and only a plan", () => {
     expect(assertNoRecordIds(p).length).toBeGreaterThan(0);
   });
 
+  describe("the guard is field-scoped, not blanket (live fix 2026-07-26)", () => {
+    /** The REAL StageResult Fabian's live call returned. Every id below is a
+     *  legitimate carrier per A33.5.3 and A26, and none proves a write. */
+    const realPlan = () =>
+      ({
+        stagingId: "a8abb00001KtalSAAR",
+        planHash: "9f2c1d",
+        decisionToken: "dtServerTokenAbc",
+        summary: "Files a collateral valuation.",
+        warnings: [],
+        suggestions: [],
+        accountId: "001bb00001DLtRMAA1",
+        productPackageId: "a5Fbb000000HA1NEAW",
+        provenance: { "LLC_BI__Collateral__c": { citation: "a35bb000000zOgXAAU", source: "NCINO_RECORD" } },
+        steps: [
+          {
+            id: "s1",
+            type: "write" as const,
+            label: "Create the collateral valuation",
+            objectName: "LLC_BI__Collateral_Valuation__c",
+            fields: ["LLC_BI__Value__c"],
+          },
+        ],
+      }) as never;
+
+    it("(a) the real live plan passes the gate", () => {
+      expect(assertNoRecordIds(realPlan())).toEqual([]);
+    });
+
+    it("does not flag the spec's own id carriers", () => {
+      for (const key of ["accountId", "productPackageId", "stagingId", "decisionToken"]) {
+        const p = realPlan() as unknown as Record<string, unknown>;
+        expect(assertNoRecordIds(p as never).join(" "), key).not.toContain(key);
+      }
+    });
+
+    it("does not flag a provenance citation, which IS a record id by design", () => {
+      expect(assertNoRecordIds(realPlan()).join(" ")).not.toContain("citation");
+    });
+
+    it("(b) still blocks a stray resultRecordId outside the carriers", () => {
+      const p = realPlan() as unknown as Record<string, unknown>;
+      p.resultRecordId = "a99bb00000zzzzzAAA";
+      const v = assertNoRecordIds(p as never);
+      expect(v).toHaveLength(1);
+      expect(v[0]).toContain("looks like an org record id");
+    });
+
+    it("(b) still blocks a WRITE-TARGET id anywhere, whitelist included", () => {
+      for (const [prefix, label] of [["a34", "collateral valuation"], ["500", "service request"], ["a5n", "credit review"]]) {
+        // Even in a whitelisted carrier: a created record's id has no place here.
+        const p = realPlan() as unknown as Record<string, unknown>;
+        p.accountId = `${prefix}bb00000zzzzzAAA`;
+        const v = assertNoRecordIds(p as never);
+        expect(v.length, prefix).toBeGreaterThan(0);
+        expect(v[0], prefix).toContain(label);
+        expect(v[0], prefix).toContain("already written");
+      }
+    });
+
+    it("(b) blocks a write-target id buried in a step field", () => {
+      const p = realPlan() as unknown as { steps: Array<{ fields: string[] }> };
+      p.steps[0].fields.push("a34bb00000zzzzzAAA");
+      expect(assertNoRecordIds(p as never).length).toBeGreaterThan(0);
+    });
+
+    it("(c) the blocker copy for a real block is unchanged", () => {
+      const p = realPlan() as unknown as Record<string, unknown>;
+      p.resultRecordId = "a99bb00000zzzzzAAA";
+      expect(assertNoRecordIds(p as never)[0]).toBe(
+        "resultRecordId looks like an org record id (a99bb00000zzzzzAAA)",
+      );
+    });
+  });
+
   it("hashes the plan over its ordered steps and values", () => {
     const a = simulateStagedOutput({ actionId: "annual-review", accountName: "T", suggestions: [] })!;
     const b = simulateStagedOutput({ actionId: "annual-review", accountName: "T", suggestions: [] })!;
