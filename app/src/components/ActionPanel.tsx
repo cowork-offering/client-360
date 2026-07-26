@@ -3,7 +3,7 @@ import { useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { ACTIONS_BY_ID } from "../actions/registry";
 import { buildPanelSchema } from "../actions/schemas";
-import { chipFor, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
+import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
 import { computeSuggestions, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
 import type { ProvenanceKind } from "../data/contract";
 import { fmtMoney } from "../data/format";
@@ -153,6 +153,15 @@ function FieldRow({
         />
       )}
 
+      {field.gap && (
+        <div className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" className="mt-0.5 flex-none">
+            <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M8 4.8v.1M8 7v3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          {field.gap.reason}
+        </div>
+      )}
       {field.help && <div className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">{field.help}</div>}
     </div>
   );
@@ -327,6 +336,9 @@ export function ActionPanel({
   if (!action || !schema) return null;
 
   const missing = unfilledRequired({ ...schema, fields: schema.fields.map((f) => ({ ...f, value: values[f.key] })) });
+  // Honest-gap discipline: a missing write anchor blocks staging outright. We
+  // never substitute a different record's id to get past it.
+  const blockers = stagingBlockers(schema);
 
   /** A33.1.7 — attribution for edited agent prose. Ledger-bound, never injected. */
   const attribution: NarrativeAttribution | null = editedFields.length
@@ -396,6 +408,11 @@ export function ActionPanel({
    *  present; falls back to the NOT-LIVE adapter under dev/test only. */
   async function stage() {
     setToolError(null);
+    // Defence in depth: the button is disabled, and the call is refused anyway.
+    if (blockers.length) {
+      setToolError({ code: "NOT_STAGEABLE", message: blockers.map((b) => b.gap!.reason).join(" ") });
+      return;
+    }
 
     if (mcpAvailable() && isWriteAction(actionId)) {
       const payload = stagePayload();
@@ -593,9 +610,11 @@ export function ActionPanel({
           {phase === "form" && (
           <div className="flex flex-none items-center gap-3 border-t border-divider px-5 py-3">
             <div className="flex-1 text-[11px] text-ink-muted">
-              {missing.length > 0
-                ? `${missing.length} required ${missing.length === 1 ? "field" : "fields"} still to complete.`
-                : `Creates a ${schema.writeObjectLabel}.`}
+              {blockers.length > 0
+                ? blockers.map((b) => b.gap!.reason).join(" ")
+                : missing.length > 0
+                  ? `${missing.length} required ${missing.length === 1 ? "field" : "fields"} still to complete.`
+                  : `Creates a ${schema.writeObjectLabel}.`}
             </div>
             {attribution && <span className="text-[10px] text-ink-faint">narrative edited</span>}
             <button
@@ -608,7 +627,7 @@ export function ActionPanel({
             {mcpAvailable() && isWriteAction(actionId) ? (
               <button
                 type="button"
-                disabled={missing.length > 0 || staging}
+                disabled={missing.length > 0 || blockers.length > 0 || staging}
                 onClick={() => void stage()}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
@@ -618,8 +637,8 @@ export function ActionPanel({
             ) : isSimulationAllowed() ? (
               <button
                 type="button"
-                disabled={missing.length > 0}
-                onClick={stage}
+                disabled={missing.length > 0 || blockers.length > 0}
+                onClick={() => void stage()}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
               >

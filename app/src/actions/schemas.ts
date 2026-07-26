@@ -40,12 +40,19 @@ const picklist = (ctx: SchemaContext, object: string, fieldName: string): string
 
 /** The pledge carrying the largest lendable value on an ACTIVE facility — the
  *  natural anchor for a revaluation. */
-function primaryPledge(bundle: BorrowerBundle | null): { facility: Facility; type?: string; value?: number } | null {
-  let best: { facility: Facility; type?: string; value?: number } | null = null;
+function primaryPledge(
+  bundle: BorrowerBundle | null,
+): { facility: Facility; type?: string; value?: number; collateralId?: string } | null {
+  let best: { facility: Facility; type?: string; value?: number; collateralId?: string } | null = null;
   for (const f of bundle?.exposure?.facilities ?? []) {
     for (const c of f.collateral ?? []) {
       const v = c.currentLendableValue ?? c.collateralValue;
-      if (best === null || (v ?? 0) > (best.value ?? 0)) best = { facility: f, type: c.collateralType, value: v };
+      // Deterministic largest-pledge selection. We deliberately do NOT prefer a
+      // pledge that happens to carry an id: that would hide a staging gap
+      // behind a different, arbitrary record.
+      if (best === null || (v ?? 0) > (best.value ?? 0)) {
+        best = { facility: f, type: c.collateralType, value: v, collateralId: c.collateralId };
+      }
     }
   }
   return best;
@@ -64,12 +71,23 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
         key: "collateral",
         label: "Collateral",
         type: "readonly",
+        // Label may name the facility for the banker's benefit; the ANCHOR must
+        // not. The write goes to LLC_BI__Collateral__c, so the citation is the
+        // collateral record id or nothing at all.
         value: pledge ? `${pledge.type ?? "Collateral"} on ${pledge.facility.name ?? "facility"}` : null,
-        prefill: { source: "NCINO_RECORD", citation: pledge?.facility.loanId },
+        prefill: { source: "NCINO_RECORD", citation: pledge?.collateralId },
         editable: false,
         editableReason: "set once at creation",
         required: true,
         target: { object: OBJ, field: "LLC_BI__Collateral__c" },
+        gap: pledge?.collateralId
+          ? undefined
+          : {
+              reason: pledge
+                ? "The collateral record id is not staged in this view, so there is nothing to write the valuation against."
+                : "No collateral is pledged against the active facilities on this relationship.",
+              blocksStaging: true,
+            },
       }),
       field({
         key: "source",

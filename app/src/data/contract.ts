@@ -51,6 +51,7 @@ export const PROVENANCE = {
   "borrower.snapshot.primaryRiskRating": { kind: "NCINO", source: "Customer360Snapshot — nCino risk grade" },
   "borrower.exposure.facilities[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan__c" },
   "borrower.exposure.facilities[].collateral[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan_Collateral2__c" },
+  "borrower.exposure.facilities[].collateral[].collateralId": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Collateral__c record id from the pledge junction. The only valid anchor for a valuation write; absent means the id was not staged and the action is blocked" },
   "borrower.exposure.facilities[].totalLendableValue": { kind: "NCINO", source: "Customer360Exposure — org-computed Current_Lendable_Value" },
   "borrower.covenants.covenants[]": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant2__c" },
   "borrower.graph.connections[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Connection__c" },
@@ -267,6 +268,11 @@ export interface Covenant {
 
 export interface Collateral {
   loanId?: string;
+  /** The COLLATERAL record id (LLC_BI__Collateral__c). Distinct from `loanId`,
+   *  which is the FACILITY the pledge hangs off. A valuation is written against
+   *  this id and never against the facility: the org refuses a facility id,
+   *  correctly. Absent when the assembler did not stage it. */
+  collateralId?: string;
   collateralType?: string;
   collateralValue?: number;
   advanceRate?: number;

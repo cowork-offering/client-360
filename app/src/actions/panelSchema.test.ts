@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { BorrowerBundle } from "../data/contract";
 import { ACTIONS, ACTIONS_BY_ID } from "./registry";
 import { buildPanelSchema, PANEL_SCHEMAS } from "./schemas";
-import { bankerEntryFields, chipFor, PREFILL_PROVENANCE, unfilledRequired } from "./panelSchema";
+import { bankerEntryFields, chipFor, PREFILL_PROVENANCE, stagingBlockers, unfilledRequired } from "./panelSchema";
 import { DEMO_POLICY_PACK } from "../policy/policyPack";
 
 const SHIPPING = ["collateral-valuation", "create-service-request", "annual-review"];
@@ -158,6 +158,74 @@ describe("the banker confirms, never transcribes (A33.1.4)", () => {
     const v = buildPanelSchema("collateral-valuation", ctx)!.fields.find((f) => f.key === "value")!;
     expect(v.value).toBe(4_000_000);
     expect(v.prefill.source).toBe("NCINO_RECORD");
+  });
+});
+
+describe("the valuation anchor is the COLLATERAL id, never the facility id", () => {
+  /** The live defect: a facility loanId was sent as collateralId and the org
+   *  refused it, correctly. The anchor now comes only from the pledge row. */
+  const withId: BorrowerBundle = {
+    snapshot: { accountId: "001X", name: "Testco" },
+    exposure: {
+      facilities: [
+        {
+          loanId: "a1Xbb000000PLD1",
+          name: "Equipment Term Loan",
+          collateral: [{ collateralType: "Equipment", currentLendableValue: 4_800_000, collateralId: "a35bb000000zOgXAAU" }],
+        },
+      ],
+    },
+  };
+
+  it("cites the collateral record id when the pledge carries one", () => {
+    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!.fields.find((x) => x.key === "collateral")!;
+    expect(f.prefill.citation).toBe("a35bb000000zOgXAAU");
+    expect(f.gap).toBeUndefined();
+  });
+
+  it("NEVER falls back to the facility loanId", () => {
+    const f = buildPanelSchema("collateral-valuation", ctx)!.fields.find((x) => x.key === "collateral")!;
+    // ctx's bundle has a pledge but no collateralId.
+    expect(f.prefill.citation).toBeUndefined();
+    expect(f.prefill.citation).not.toBe("L1");
+  });
+
+  it("renders a named gap and BLOCKS staging when the id is not staged", () => {
+    const schema = buildPanelSchema("collateral-valuation", ctx)!;
+    const f = schema.fields.find((x) => x.key === "collateral")!;
+    expect(f.gap?.blocksStaging).toBe(true);
+    expect(f.gap?.reason).toMatch(/collateral record id is not staged/);
+    expect(stagingBlockers(schema).map((x) => x.key)).toEqual(["collateral"]);
+  });
+
+  it("does not block when the id is present", () => {
+    expect(stagingBlockers(buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!)).toEqual([]);
+  });
+
+  it("says so plainly when no collateral is pledged at all", () => {
+    const bare = { snapshot: { accountId: "001X" }, exposure: { facilities: [] } };
+    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: bare as never })!.fields.find((x) => x.key === "collateral")!;
+    expect(f.gap?.reason).toMatch(/No collateral is pledged/);
+    expect(f.gap?.blocksStaging).toBe(true);
+  });
+
+  it("the label may still name the facility for the banker", () => {
+    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!.fields.find((x) => x.key === "collateral")!;
+    expect(String(f.value)).toContain("Equipment Term Loan");
+  });
+
+  it("the sample-only bundles show the honest gap rather than an org error", () => {
+    // Sterling and friends carry no collateralId anywhere, so their valuation
+    // action must never reach the tool.
+    const sterling = { snapshot: { accountId: "001SAMPLE0000STRL" }, exposure: { facilities: [{ loanId: "L9", collateral: [{ collateralType: "Inventory", collateralValue: 1 }] }] } };
+    const schema = buildPanelSchema("collateral-valuation", { ...ctx, bundle: sterling as never })!;
+    expect(stagingBlockers(schema).length).toBe(1);
+  });
+
+  it("the other two actions are unaffected and still stageable", () => {
+    for (const id of ["create-service-request", "annual-review"]) {
+      expect(stagingBlockers(buildPanelSchema(id, ctx)!), id).toEqual([]);
+    }
   });
 });
 

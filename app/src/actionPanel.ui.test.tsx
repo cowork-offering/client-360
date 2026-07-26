@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { vi } from "vitest";
 import sample from "../../artifact/sample-data.json";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -186,6 +187,55 @@ describe("A33.1.2/A33.1.3 — schema-driven render and chips", () => {
     expect(panel("Annual Review")!.textContent).toContain("edited by you");
     // A33.1.7: nothing is injected into the field text itself.
     expect((area as HTMLTextAreaElement).value).toBe("revised by the banker");
+  });
+});
+
+describe("collateral anchor gap blocks the tool (live defect 2026-07-26)", () => {
+  /** Install a live mcp capability whose callTool we can assert was NEVER hit. */
+  function installLiveMcp() {
+    const callTool = vi.fn().mockResolvedValue({ payload: { content: [{ isSuccess: true, outputValues: { ok: true, result: {} } }] } });
+    (window as unknown as { claude?: unknown }).claude = {
+      mcp: { callTool, watchTool: vi.fn().mockReturnValue(() => {}), listTools: vi.fn(), invalidate: vi.fn() },
+    };
+    return callTool;
+  }
+
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  it("renders the named gap instead of a stageable form", () => {
+    installLiveMcp();
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    // The sample stages no collateral record id, so the honest gap shows.
+    expect(text).toMatch(/collateral record id is not staged|No collateral is pledged/);
+  });
+
+  it("disables the staging gesture, so the tool is never called", () => {
+    const callTool = installLiveMcp();
+    openActionPanel("Collateral Valuation");
+    const review = [...panel("Collateral Valuation")!.querySelectorAll("button")].find((b) =>
+      /Review the plan/.test(b.textContent ?? ""),
+    );
+    if (review) {
+      expect(review.hasAttribute("disabled")).toBe(true);
+      click(review); // a disabled button fires nothing, but assert the outcome
+    }
+    const staged = callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"));
+    expect(staged).toHaveLength(0);
+  });
+
+  it("never sends a facility id as the collateral anchor", () => {
+    const callTool = installLiveMcp();
+    openActionPanel("Collateral Valuation");
+    for (const call of callTool.mock.calls) {
+      const input = call[2] as { inputs?: Array<Record<string, unknown>> } | undefined;
+      for (const row of input?.inputs ?? []) {
+        // a1X... is a Loan id prefix; it must never appear as collateralId.
+        expect(String(row.collateralId ?? "")).not.toMatch(/^a1X/);
+      }
+    }
   });
 });
 

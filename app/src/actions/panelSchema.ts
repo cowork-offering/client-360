@@ -80,6 +80,10 @@ export interface PanelField {
   target: PanelFieldTarget;
   /** Short banker-facing note rendered under the field (a caveat, a scale). */
   help?: string;
+  /** Set when the value could NOT be sourced. Carries the honest reason, and
+   *  when the field anchors the write it also blocks staging: we would rather
+   *  say what is missing than send the org an id we know is the wrong type. */
+  gap?: { reason: string; blocksStaging: boolean };
 }
 
 /** A33.1.7 — editing AGENT prose does NOT change its ProvenanceKind. The honest
@@ -116,6 +120,12 @@ export function unfilledRequired(schema: PanelSchema): PanelField[] {
   return schema.fields.filter(
     (f) => f.required && f.prefill.source !== "BANKER" && (f.value === null || f.value === undefined || f.value === ""),
   );
+}
+
+/** Gaps that stop the action being staged at all. Rendered in the panel and
+ *  checked before any tool call, so a knowingly-wrong payload is never sent. */
+export function stagingBlockers(schema: PanelSchema): PanelField[] {
+  return schema.fields.filter((f) => f.gap?.blocksStaging);
 }
 
 /** Fields the banker must type because no source exists. Each must be justified
