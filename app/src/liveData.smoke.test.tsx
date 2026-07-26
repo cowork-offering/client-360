@@ -107,13 +107,16 @@ for (const [fileName, data] of FILES) {
 }
 
 describe("the shapes a real bundle is allowed to arrive in", () => {
-  it("tolerates anchors as an OBJECT, which is how the live merge produced them", () => {
+  it("tolerates anchors in EITHER shape, whatever the producer sends", () => {
     // The crash: every sample bundle carried `anchors` as an array of chips, so
     // the header mapped over it. One real bundle carried an object, and .map
-    // threw straight through the workspace.
+    // threw straight through the workspace. The producer has since corrected
+    // the shape, which is exactly why the guard must stay: the cockpit cannot
+    // depend on a producer never regressing.
     const hartwell = (live as unknown as C360Data).borrowers?.["001bb00001I7FPNAA3"];
     expect(hartwell).toBeTruthy();
-    expect(Array.isArray(hartwell!.anchors)).toBe(false);
+    expect(() => readAnchors(hartwell)).not.toThrow();
+    expect(readAnchors({ ...hartwell!, anchors: { accountId: "x" } as never })).toEqual([]);
   });
 
   it("tolerates a bundle with no boom, no verdict and no requests", () => {
@@ -183,5 +186,55 @@ describe("readAnchors tolerates whatever a producer sends", () => {
     expect(readAnchors({ snapshot: { accountId: "x" }, anchors: mixed } as never)).toEqual([
       { label: "Rating", value: "Grade 5" },
     ]);
+  });
+});
+
+
+describe("no list surface renders raw org row multiplicity", () => {
+  const HARTWELL = "Hartwell Precision Manufacturing LLC";
+  const data = live as unknown as C360Data;
+
+  const graphText = () => {
+    mount(data);
+    openAccount(HARTWELL);
+    const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Relationship Graph")!;
+    click(button);
+    return container!.textContent ?? "";
+  };
+
+  it("shows each mirrored counterparty ONCE", () => {
+    const text = graphText();
+    for (const name of ["Hartwell Industrial Holdings LLC", "Hartwell Logistics LLC", "James Hartwell", "Elena Hartwell"]) {
+      const hits = text.split(name).length - 1;
+      expect(hits, `${name} rendered ${hits} times`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("never shows the mirror's generic role", () => {
+    // "Child" and "Company" are the reflections of Parent and Owner, not
+    // relationships in their own right.
+    const text = graphText();
+    expect(text).not.toContain("· Child");
+    expect(text).not.toContain("· Company");
+  });
+
+  it("shows one borrower involvement with its facility count, not six rows", () => {
+    const text = graphText();
+    expect(text).toContain("6 facilities");
+    // The borrower's own name appears once in the involvement list.
+    const rows = [...container!.querySelectorAll("div")].filter((d) => d.textContent?.trim().startsWith(HARTWELL));
+    expect(rows.length).toBeLessThan(6);
+  });
+
+  it("leaves Piedmont's unduplicated graph alone", () => {
+    mount(data);
+    openAccount("Piedmont Precision Components, Inc.");
+    const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Relationship Graph")!;
+    click(button);
+    const text = container!.textContent ?? "";
+    expect(text).toContain("Margaret Holloway");
+    expect(text).toContain("Personal Guaranty");
+    // One facility each: no count is claimed where there is nothing to count.
+    expect(text).not.toContain("facilities");
   });
 });

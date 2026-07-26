@@ -1,5 +1,6 @@
 import type { BorrowerBundle, Connection } from "../../data/contract";
 import { fmtPct } from "../../data/format";
+import { collapseConnections, aggregateInvolvements } from "../../data/graphAggregate";
 import { Card, SectionHead, GapChip, EmptyState, NoteCaption } from "../ui";
 
 const EXPLAIN =
@@ -62,11 +63,12 @@ function OwnershipTree({ owners, borrowerName, sector }: { owners: Connection[];
 
 export function GraphTab({ bundle }: { bundle: BorrowerBundle }) {
   const graph = bundle.graph ?? {};
-  const conns = graph.connections ?? [];
-  const owners = conns.filter(
-    (c) => (c.ownershipPercent != null && c.ownershipPercent > 0) || (c.totalOwnershipPercent != null && c.totalOwnershipPercent > 0),
-  );
-  const les = graph.legalEntities ?? [];
+  // The org stores each connection BOTH ways and repeats an involvement once
+  // per facility. Aggregate by identity before rendering anything: raw row
+  // multiplicity is the org's storage shape, not a fact about the relationship.
+  const conns = collapseConnections(graph.connections);
+  const owners = conns.filter((c) => (c.ownershipPercent ?? 0) > 0);
+  const les = aggregateInvolvements(graph.legalEntities);
   const guarantors = les.filter((e) => (e.borrowerType ?? "").toLowerCase().includes("guarantor"));
 
   const snap = bundle.snapshot ?? { accountId: "" };
@@ -97,6 +99,7 @@ export function GraphTab({ bundle }: { bundle: BorrowerBundle }) {
                   {e.relationshipType ?? e.borrowerType ?? "—"}
                   {e.guarantyAmountType ? ` · ${e.guarantyAmountType}` : ""}
                   {e.ownershipPercent != null ? ` · ${fmtPct(e.ownershipPercent, 0)}` : ""}
+                  {e.facilityCount > 1 ? ` · ${e.facilityCount} facilities` : ""}
                 </span>
               </div>
             ))}

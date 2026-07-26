@@ -384,13 +384,38 @@ cannot tell, can tell and the answer is no, and yes.
 The facility selector is a RECORD chooser, not an org picklist: it declares `optionsAreRecords` and is
 excluded from the A33.1.6 value-set rule, which stays strict for everything that is a picklist.
 
+### STANDING RULE — aggregate by identity, never render row multiplicity
+
+**A real org read WILL carry bidirectional and per-child duplication.** Two shapes of it, both observed
+on live Hartwell data:
+
+- **Connections are MIRRORED.** The org stores each relationship from both sides and the read returns
+  both: 8 rows for 4 relationships. The pair is one fact written twice, and the halves are NOT equally
+  informative — "Parent, 100 percent" and "Child, null" are the same holding-company edge seen from
+  opposite ends.
+- **Involvements repeat PER FACILITY.** One Borrower row per loan: 6 identical rows at 100 percent for
+  a borrower with six facilities.
+
+Every list surface therefore aggregates by IDENTITY before rendering. Connections collapse by
+counterparty, keeping the NAMED role over the mirror's generic one (`Child`, `Company`) and taking the
+ownership percent from whichever side recorded it; ties break on original order, so the same payload
+always renders the same way. Involvements aggregate by (entity, role) with a facility count —
+"Borrower, 100 percent, 6 facilities" instead of six identical lines.
+
+This is a PRESENTATION decision, not a data correction: the tool returns true org rows, and the tab is
+what owes the banker one line per real thing. Fixtures for these tests are the real payloads, and
+Piedmont's unduplicated graph is pinned alongside to prove aggregation does not distort data that was
+never duplicated.
+
 ### Live crash: a real bundle in a shape no sample used (2026-07-26)
 
 A relationship merged from real Customer360 responses rendered a BLANK profile. Root cause:
 `anchors` arrived as an OBJECT (`{accountId, productPackageId}`) where every staged bundle had carried
 an ARRAY of chips, so `(bundle.anchors ?? []).map(...)` threw and React unmounted the whole workspace.
 
-`readAnchors()` now filters to well-formed chips and returns `[]` for anything else: the producer's
+The producer has since corrected that bundle's shape, which is exactly why the guard stays: the
+cockpit cannot depend on a producer never regressing. `readAnchors()` filters to well-formed chips and
+returns `[]` for anything else: the producer's
 shape is not the cockpit's to police, but rendering what it can and showing an honest gap for the rest
 is. Malformed entries are dropped individually; the strip renders the chips that are real.
 
