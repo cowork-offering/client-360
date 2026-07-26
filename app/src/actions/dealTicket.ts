@@ -24,8 +24,10 @@ import type { BorrowerBundle } from "../data/contract";
 import type { PanelSchema } from "./panelSchema";
 import type { Briefing } from "./briefing";
 import { fmtMoney } from "../data/format";
-import { fmtRatio } from "../data/finance";
+import { covenantCushion, fmtCovVal, fmtRatio } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
+import { draftForAction } from "./drafts";
+import type { ReasonCode } from "../data/contract";
 
 export interface TicketLayout {
   title: string;
@@ -141,4 +143,85 @@ export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, va
   }
 
   return deltas;
+}
+
+
+/* ------------------------------------------------------- what a review covers */
+
+export interface TicketFact {
+  label: string;
+  value: string;
+  note?: string;
+}
+
+/**
+ * The annual review's equivalent of the valuation's delta: what this review
+ * will actually cover, read from staged data.
+ *
+ * Same silence-over-invention rule. A missing input removes its LINE, it does
+ * not produce a zero, an "unknown" or a dash: the strip states facts or says
+ * nothing at all.
+ */
+export function reviewFacts(bundle: BorrowerBundle | null, reasons: ReasonCode[] = []): TicketFact[] {
+  if (!bundle) return [];
+  const facts: TicketFact[] = [];
+
+  // Covenants: how many are measurable, how many hold, and where it is tightest.
+  const covs = bundle.covenants?.covenants ?? [];
+  const measured = covs.filter((c) => c.actualValue != null && c.thresholdValue != null);
+  if (measured.length) {
+    let tightest: { type: string; pct: number; actual: number; threshold: number } | null = null;
+    let holding = 0;
+    for (const c of measured) {
+      const cu = covenantCushion(c.covenantType, c.actualValue!, c.thresholdValue!);
+      if (cu.safe !== false) holding += 1;
+      const pct = cu.safe === false ? -1 : cu.pct;
+      if (!tightest || pct < tightest.pct) {
+        tightest = { type: c.covenantType ?? "covenant", pct, actual: c.actualValue!, threshold: c.thresholdValue! };
+      }
+    }
+    facts.push({
+      label: "Covenants",
+      value: `${holding} of ${measured.length} within threshold`,
+      note: tightest
+        ? `tightest is ${tightest.type} at ${fmtCovVal(tightest.actual)} against ${fmtCovVal(tightest.threshold)}`
+        : undefined,
+    });
+  }
+
+  // Utilisation: only when BOTH sides are staged. One without the other is not
+  // a percentage of anything.
+  const committed = bundle.exposure?.totalCommitted;
+  const drawn = bundle.exposure?.totalOutstanding;
+  if (typeof committed === "number" && committed > 0 && typeof drawn === "number") {
+    facts.push({
+      label: "Utilisation",
+      value: `${Math.round((drawn / committed) * 100)} percent`,
+      note: `${fmtMoney(drawn)} drawn of ${fmtMoney(committed)} committed`,
+    });
+  }
+
+  const active = (bundle.exposure?.facilities ?? []).filter(isActiveFacility);
+  if (active.length) {
+    facts.push({
+      label: "In scope",
+      value: `${active.length} active ${active.length === 1 ? "facility" : "facilities"}`,
+      note: bundle.snapshot?.primaryRiskRating ? `carried at grade ${bundle.snapshot.primaryRiskRating}` : undefined,
+    });
+  }
+
+  // What the drafted narratives will carry. Every figure in them is registered
+  // against a staged path, which is the claim worth making here.
+  const drafts = draftForAction("annual-review", bundle, reasons);
+  const written = Object.values(drafts).filter((d) => d.text);
+  if (written.length) {
+    const figures = new Set(written.flatMap((d) => d.figures.map((f) => f.rendered)));
+    facts.push({
+      label: "Narratives",
+      value: `${written.length} drafted`,
+      note: figures.size ? `citing ${figures.size} staged ${figures.size === 1 ? "figure" : "figures"}, each traceable` : undefined,
+    });
+  }
+
+  return facts;
 }

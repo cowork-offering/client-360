@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Briefing } from "../actions/briefing";
-import { buildTicket, promptFor, ticketDeltas, type TicketDelta } from "../actions/dealTicket";
+import { buildTicket, promptFor, reviewFacts, ticketDeltas, type TicketDelta, type TicketFact } from "../actions/dealTicket";
 import type { PanelField, PanelSchema } from "../actions/panelSchema";
-import type { BorrowerBundle } from "../data/contract";
+import type { BorrowerBundle, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
 
 /* =============================================================================
@@ -292,6 +292,22 @@ function DeltaReadout({ deltas }: { deltas: TicketDelta[] }) {
   );
 }
 
+/** What a review will cover. Facts from staged data, or nothing. */
+function FactStrip({ title, facts }: { title: string; facts: TicketFact[] }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[10px] px-3.5 py-3" style={{ background: "var(--surface-overlay)" }}>
+      <div className="kicker">{title}</div>
+      {facts.map((f) => (
+        <div key={f.label} className="flex flex-wrap items-baseline gap-x-2">
+          <span className="text-[11px] font-semibold text-ink-label">{f.label}</span>
+          <span className="text-[13px] font-bold text-ink">{f.value}</span>
+          {f.note && <span className="w-full text-[10.5px] text-ink-faint">{f.note}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ ticket */
 
 export function DealTicket({
@@ -301,6 +317,7 @@ export function DealTicket({
   bundle,
   values,
   editedFields,
+  reasons,
   onChange,
   renderChip,
   sheetCloserRef,
@@ -312,6 +329,8 @@ export function DealTicket({
   bundle: BorrowerBundle | null;
   values: Record<string, unknown>;
   editedFields: string[];
+  /** Why this action is on the queue; seeds the drafted narratives. */
+  reasons: ReasonCode[];
   onChange: (field: PanelField, v: unknown) => void;
   renderChip: (field: PanelField, edited: boolean) => ReactNode;
   /** Esc must close an open sheet BEFORE the panel (A31.1 stacking). */
@@ -326,6 +345,7 @@ export function DealTicket({
   const ticket = buildTicket(actionId, schema, briefing);
   const hero = ticket.heroKey ? byKey.get(ticket.heroKey) : undefined;
   const deltas = ticketDeltas(actionId, bundle, values);
+  const facts = actionId === "annual-review" ? reviewFacts(bundle, reasons) : [];
   const blockingGaps = schema.fields.filter((f) => f.gap);
 
   useEffect(() => {
@@ -412,6 +432,9 @@ export function DealTicket({
 
       {/* Live delta: nothing renders until every input it needs is present. */}
       {deltas.length > 0 && <DeltaReadout deltas={deltas} />}
+
+      {/* The review's equivalent: what it will cover, from staged data only. */}
+      {facts.length > 0 && <FactStrip title="What this review covers" facts={facts} />}
 
       {/* Properties. */}
       {ticket.pillKeys.length > 0 && (

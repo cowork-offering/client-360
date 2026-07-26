@@ -107,6 +107,7 @@ export const PROVENANCE = {
   "borrower.activity[].detail.headroom": { kind: "AGENT", source: "Agent-composed capacity read supporting the verdict" },
   "borrower.activity[].detail.risks": { kind: "AGENT", source: "Agent-composed risk list on the concluded analysis" },
   "borrower.activity[].detail.body": { kind: "AGENT", source: "Agent-composed narrative body of the entry" },
+  "display.actionHistory": { kind: "NCINO", source: "Customer360ActionHistory — the durable action trail, newest first. Survives a reload; supersedes the session echo for the same stagingId" },
   "display.activity.executed": { kind: "DERIVED", source: "A30 — minted from the execute_* response when the banker confirms a plan. Session-local, actor is the signed-in user, carries the created record id and the stagingId for audit" },
   "borrower.activity[].detail.nextSteps": { kind: "AGENT", source: "Agent-selected registry action ids (A30.4). Shared state: feeds the detail popup, the chat chips and the actions panel" },
 
@@ -462,6 +463,9 @@ export type ActivityKind =
    *  trail whether it landed or not, so the failure kind is logged too. */
   | "ACTION_EXECUTED"
   | "ACTION_EXECUTION_FAILED"
+  /** The org holds a staging row that was never confirmed. Real trail content:
+   *  someone built a plan and stopped. Neither a write nor a failure. */
+  | "ACTION_STAGED"
   | "REQUEST_RECEIVED"
   | "ANALYSIS_CONCLUDED"
   | "COVENANT_EVALUATED"
@@ -499,6 +503,32 @@ export interface RequestAsk {
   facilityName?: string;
 }
 
+/**
+ * One row of the DURABLE action trail, read back from the org
+ * (`Customer360ActionHistory`). Distinct from the session-local echo the panel
+ * mints at execute time: this survives a reload, a republish and a new banker.
+ * Built against the declared shape; the seam swaps when the envelope is observed.
+ */
+export interface ActionHistoryRow {
+  stagingId: string;
+  actionId?: string;
+  status?: string;
+  actorUserId?: string;
+  approverUserId?: string;
+  executedAt?: string;
+  createdDate?: string;
+  resultRecordId?: string;
+  /** The org's name for the created record. Null on an unexecuted row (nothing
+   *  was created) AND on a completed row whose read-back failed — two different
+   *  facts, told apart by `status`. */
+  resultRecordName?: string;
+  accountId?: string;
+  productPackageId?: string;
+  collateralId?: string;
+  /** Whether the staging row still carries its plan hash. */
+  planHashPresent?: boolean;
+}
+
 export interface ActivityDetail {
   /** Full narrative body (AGENT for analysis/request briefs). */
   body?: string;
@@ -528,6 +558,10 @@ export interface ActivityEntry {
    *  dropped on a fresh data injection — acceptable until the v2 audit path
    *  persists them server-side. */
   sessionLocal?: boolean;
+  /** Read back from the org's own action trail, not minted in this session.
+   *  Renders a distinct chip: "the org says this happened" is a stronger claim
+   *  than "this page did it a moment ago". */
+  orgConfirmed?: boolean;
   reference?: ActivityReference;
   detail?: ActivityDetail;
 }

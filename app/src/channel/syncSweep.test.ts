@@ -44,7 +44,8 @@ describe("every line is bound to a real call", () => {
     for (const tool of DETAIL_TOOLS) expect(calls).toContain(tool);
     expect(calls).toContain(TOOLS.portfolio);
     expect(calls).toContain(TOOLS.mailSearch);
-    expect(calls).toHaveLength(DETAIL_TOOLS.length + 2);
+    expect(calls).toContain(TOOLS.actionHistory);
+    expect(calls).toHaveLength(DETAIL_TOOLS.length + 3);
 
     // Every line ends settled, and no line ticked before the one before it.
     const order = result.lines.map((l) => l.id);
@@ -210,7 +211,7 @@ describe("budget discipline", () => {
   it("costs one round of reads per sweep, not one per line", async () => {
     const callTool = installMcp((_s, tool) => (tool === TOOLS.mailSearch ? { payload: { value: [] } } : ok({ ok: true })));
     await runSyncSweep(SWEEP);
-    expect(callTool.mock.calls.length).toBeLessThanOrEqual(8);
+    expect(callTool.mock.calls.length).toBeLessThanOrEqual(9);
   });
 
   it("reads only: every call is marked read on the connector", async () => {
@@ -218,7 +219,7 @@ describe("budget discipline", () => {
     await runSyncSweep(SWEEP);
     for (const call of callTool.mock.calls) {
       expect([SERVERS.customer360, SERVERS.m365]).toContain(String(call[0]));
-      expect([TOOLS.mailSearch, TOOLS.portfolio, ...DETAIL_TOOLS]).toContain(String(call[1]));
+      expect([TOOLS.mailSearch, TOOLS.portfolio, TOOLS.actionHistory, ...DETAIL_TOOLS]).toContain(String(call[1]));
     }
   });
 });

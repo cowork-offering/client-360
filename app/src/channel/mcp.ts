@@ -68,6 +68,8 @@ export const TOOLS = {
   opportunities: "Customer360Opportunities",
   structuralSignals: "Customer360StructuralSignals",
   searchAccounts: "Customer360SearchAccounts",
+  // The durable action trail. Read-only; deploying in parallel with this UI.
+  actionHistory: "Customer360ActionHistory",
   boomRatios: "boom-mcp-js___boom_get_ratios",
   boomSpread: "boom-mcp-js___boom_get_spread",
   llm: "idb-bg-api-target-get-llm-response-staging___get_llm_response",

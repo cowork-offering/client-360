@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createdRecordId, executedActivityEntry } from "./executedActivity";
+import { createdRecordId, executedActivityEntry, historyActivityEntry, mergeTrail } from "./executedActivity";
 import type { ExecuteResult } from "../channel/writeTools";
 
 const OK: ExecuteResult = {
@@ -133,5 +133,128 @@ describe("a failed execution is trail-worthy too", () => {
 
   it("logs nothing at all when nothing was attempted", () => {
     expect(executedActivityEntry({ ...BASE, outcome: { ...OK, terminalState: "" } })).toBeNull();
+  });
+});
+
+describe("the org's durable action trail (observed envelope 2026-07-26)", () => {
+  /** A row exactly as Customer360ActionHistory returns it, verbatim shape. */
+  const ROW = {
+    stagingId: "a8abb00001KtalSAAR",
+    actionId: "collateral-valuation",
+    status: "Completed",
+    actorUserId: "005bb00000ftouDAAQ",
+    approverUserId: "005bb00000ftouDAAQ",
+    createdDate: "2026-07-25T20:18:36Z",
+    executedAt: "2026-07-25T20:19:02Z",
+    resultRecordId: "a34bb00000399FFAAY",
+    resultRecordName: "CV-0000000002",
+    planHashPresent: true,
+  };
+
+  it("keys identically to the session echo, so the two dedupe", () => {
+    const org = historyActivityEntry(ROW)!;
+    const session = executedActivityEntry(BASE)!;
+    expect(org.id).toBe(session.id);
+    expect(org.id).toBe("exec-a8abb00001KtalSAAR");
+  });
+
+  it("is marked as coming from the org, not from this session", () => {
+    const e = historyActivityEntry(ROW)!;
+    expect(e.orgConfirmed).toBe(true);
+    expect(e.sessionLocal).toBeUndefined();
+    expect(e.kind).toBe("ACTION_EXECUTED");
+    expect(e.title).toBe("Collateral valuation CV-0000000002 filed");
+    expect(e.actor).toBe("005bb00000ftouDAAQ");
+  });
+
+  it("uses the executed time, falling back to the created time", () => {
+    expect(historyActivityEntry(ROW)!.ts).toBe(ROW.executedAt);
+    expect(historyActivityEntry({ ...ROW, executedAt: undefined })!.ts).toBe(ROW.createdDate);
+    expect(historyActivityEntry({ ...ROW, executedAt: undefined, createdDate: undefined })).toBeNull();
+  });
+
+  it("links to the created record when the org address is known", () => {
+    const e = historyActivityEntry(ROW, "https://x.lightning.force.com")!;
+    expect(e.reference?.webLink).toContain("/LLC_BI__Collateral_Valuation__c/a34bb00000399FFAAY/view");
+  });
+
+  it("keeps the staging id, the approver and the org's own status in the detail", () => {
+    const body = historyActivityEntry(ROW)!.detail!.body!;
+    expect(body).toContain("a8abb00001KtalSAAR");
+    expect(body).toContain("005bb00000ftouDAAQ");
+    expect(body).toContain("The org records this as Completed.");
+  });
+
+  it("renders a Staged row as real history: built, never confirmed", () => {
+    const e = historyActivityEntry({
+      ...ROW,
+      status: "Staged",
+      executedAt: undefined,
+      resultRecordId: undefined,
+      resultRecordName: undefined,
+    })!;
+    expect(e.kind).toBe("ACTION_STAGED");
+    expect(e.title).toBe("Collateral valuation staged, never filed");
+    expect(e.summary).toContain("Nothing was written.");
+    // Not a failure, and not a write: it claims neither.
+    expect(e.title).not.toContain("did not complete");
+    expect(e.reference).toBeUndefined();
+  });
+
+  it("treats a null name on a STAGED row as simply unexecuted", () => {
+    const e = historyActivityEntry({ ...ROW, status: "Staged", resultRecordName: undefined })!;
+    expect(e.title).not.toContain("name not confirmed");
+  });
+
+  it("treats a null name on a COMPLETED row as the verification failure it is", () => {
+    const e = historyActivityEntry({ ...ROW, resultRecordName: undefined })!;
+    expect(e.kind).toBe("ACTION_EXECUTED");
+    expect(e.title).toBe("Collateral valuation filed, name not confirmed");
+    expect(e.summary).toContain("filed but unverified");
+  });
+
+  it("carries an unrecognised status verbatim rather than guessing at it", () => {
+    const e = historyActivityEntry({ ...ROW, status: "Superseded" })!;
+    expect(e.title).toBe("Collateral valuation recorded as Superseded");
+    expect(e.kind).toBe("ACTION_STAGED");
+  });
+
+  it("names the annual review by the org's own record name", () => {
+    const e = historyActivityEntry({ ...ROW, actionId: "annual-review", resultRecordName: "R-4", resultRecordId: "a5nbb0001" })!;
+    expect(e.title).toBe("Annual credit review R-4 filed");
+  });
+
+  it("drops a row with no staging id rather than rendering an undedupable one", () => {
+    expect(historyActivityEntry({ ...ROW, stagingId: "" })).toBeNull();
+  });
+});
+
+describe("merging the trail", () => {
+  const staged = { id: "baked-1", ts: "2026-07-01T00:00:00Z", kind: "ANALYSIS_CONCLUDED" as const, title: "Analysis" };
+  const session = { id: "exec-S1", ts: "2026-07-26T11:00:00Z", kind: "ACTION_EXECUTED" as const, title: "Session echo", sessionLocal: true };
+  const org = { id: "exec-S1", ts: "2026-07-26T11:04:00Z", kind: "ACTION_EXECUTED" as const, title: "Org record", orgConfirmed: true };
+
+  it("lets the org row win over the session echo of the same execution", () => {
+    const out = mergeTrail([org], [session], [staged]);
+    expect(out).toHaveLength(2);
+    expect(out[0].title).toBe("Org record");
+    expect(out[0].orgConfirmed).toBe(true);
+  });
+
+  it("renders the session echo instantly while the org has nothing yet", () => {
+    const out = mergeTrail([], [session], [staged]);
+    expect(out[0].title).toBe("Session echo");
+    expect(out[0].sessionLocal).toBe(true);
+  });
+
+  it("renders the durable trail with no session entries at all", () => {
+    const out = mergeTrail([org], [], [staged]);
+    expect(out.map((e) => e.id)).toEqual(["exec-S1", "baked-1"]);
+  });
+
+  it("keeps everything newest first", () => {
+    const older = { id: "exec-S0", ts: "2026-07-20T00:00:00Z", kind: "ACTION_EXECUTED" as const, title: "Older" };
+    const out = mergeTrail([org, older], [], [staged]);
+    expect(out.map((e) => e.ts)).toEqual(["2026-07-26T11:04:00Z", "2026-07-20T00:00:00Z", "2026-07-01T00:00:00Z"]);
   });
 });

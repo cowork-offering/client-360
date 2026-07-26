@@ -171,6 +171,37 @@ a message attaches to an account only when the account name clearly appears.
 | Action Panel "Review the plan" | `stage_<action>` | `callTool`, **uncached, no retry**, user gesture |
 | Confirm gate "Confirm and file" | `execute_<action>` | `callTool`, **uncached, never auto-retried** |
 
+### The durable action trail
+
+`Customer360ActionHistory` (input `accountId` + `limit`; entries newest first, org default cap 50) is
+fetched as one more line in the sync sweep and merged into the Activity tab.
+
+**Observed envelope, 2026-07-26.** It is a READ tool, so `outputValues` carries `accountId` / `count`
+/ `entries` DIRECTLY — no `ok`/`result` wrapper, which belongs to the write tools whose outcome is a
+thing that either happened or did not. Datetimes come back space-separated (`2026-07-25 20:18:36`) and
+are normalised to ISO instants at the seam, stamped Z; anything unparseable drops the row rather than
+placing a real event at a wrong point in the trail.
+
+**Status vocabulary: `Staged` and `Completed`.** A Staged row is real history — a plan built and
+confirmed by nobody — and renders as `ACTION_STAGED` ("staged, never filed"), which claims neither a
+write nor a failure. Any status the cockpit does not recognise is carried verbatim ("recorded as
+Superseded") rather than mapped onto a claim it cannot support.
+
+**A null `resultRecordName` means two different things, told apart by status.** On a `Completed` row
+it is the read-back failure the null-means-unverified doctrine covers, and the entry says "filed, name
+not confirmed". On a `Staged` row nothing was created, so no name is expected and none is claimed. Session echo and org row are keyed
+IDENTICALLY (`exec-<stagingId>`), so they dedupe with no second matching rule and the org row wins:
+same event, stronger evidence. The echo still renders instantly at execute time, which is what keeps
+the tab feeling live, and the durable rows render for a fresh session with no echoes at all.
+
+The two are visually distinct, because they are different claims: "This session" versus "On record in
+nCino".
+
+**Seamed like WP5.** Built against the declared shape while the Apex lane deploys. Until the tool
+exists the call fails with a not-in-manifest code, the sweep treats it as not part of this view, and
+the line removes itself silently — the cockpit shows the session echo alone, exactly as before. The
+sweep is now up to 9 read calls on one gesture.
+
 ### The sync sweep (WP7)
 
 One button in the account header replaced the separate "Refresh from org" and "Check my inbox"

@@ -20,6 +20,7 @@ afterEach(() => {
   container = null;
   resetModalStack();
   delete (window as unknown as { claude?: unknown }).claude;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   try {
     sessionStorage.clear();
@@ -74,10 +75,15 @@ const EXECUTED = {
   },
 };
 
-function installMcp() {
+function installMcp(history?: unknown[]) {
   const callTool = vi.fn(async (_server: string, tool: string, _input?: unknown) => {
     if (tool.startsWith("stage_")) return envelope(PLAN);
     if (tool.startsWith("execute_")) return envelope(EXECUTED);
+    // OBSERVED: a read tool, so outputValues carries the payload directly.
+    if (tool === "Customer360ActionHistory") {
+      return envelope({ accountId: "001SAMPLE0000STRL", count: (history ?? []).length, entries: history ?? [] });
+    }
+    if (tool === "outlook_email_search") return { payload: { value: [] } };
     return envelope({});
   });
   (window as unknown as { claude?: unknown }).claude = {
@@ -108,6 +114,109 @@ const flush = async () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 };
+
+describe("the durable trail from the org", () => {
+  const ROW = {
+    stagingId: "a8abb00001PRIORAAA",
+    actionId: "collateral-valuation",
+    status: "Completed",
+    approverUserId: "005bb00000ftouDAAQ",
+    // Space-separated, exactly as the org returns it.
+    createdDate: "2026-07-25 20:18:36",
+    executedAt: "2026-07-25 20:19:02",
+    resultRecordId: "a34bb00000PRIOR1AAA",
+    resultRecordName: "CV-0000000001",
+    planHashPresent: true,
+  };
+
+  async function syncWithHistory(rows: unknown[]) {
+    installMcp(rows);
+    mount(liveData());
+    click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
+    click(byText(/^Sync$/)!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+  }
+
+  it("renders actions filed before this session, with zero session entries", async () => {
+    vi.useFakeTimers();
+    await syncWithHistory([ROW]);
+    const rows = [...document.querySelectorAll("[data-origin-detail]")];
+    const org = rows.find((r) => /CV-0000000001/.test(r.closest("button")?.textContent ?? ""));
+    expect(org, "the org's own trail must render without any session echo").toBeTruthy();
+    expect(org!.getAttribute("data-origin-detail")).toBe("org");
+    expect(org!.textContent).toContain("On record in nCino");
+  });
+
+  it("renders a Staged-only row as history in its own right", async () => {
+    vi.useFakeTimers();
+    await syncWithHistory([
+      { ...ROW, stagingId: "a8abb00001STAGEDAAA", status: "Staged", executedAt: null, resultRecordId: null, resultRecordName: null },
+    ]);
+    const row = [...document.querySelectorAll("button")].find((b) => /staged, never filed/.test(b.textContent ?? ""));
+    expect(row, "a staged-but-never-confirmed action is real trail content").toBeTruthy();
+    expect(row!.querySelector('[data-origin-detail="org"]')).toBeTruthy();
+  });
+
+  it("lets the org row supersede this session's echo of the same execution", async () => {
+    vi.useFakeTimers();
+    installMcp([{ ...ROW, stagingId: "a8abb00001KtalSAAR", resultRecordName: "CV-0000000002" }]);
+    mount(liveData());
+    click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
+
+    // File it in this session first: the echo renders instantly.
+    click(byText(/Client Actions/)!);
+    click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) => b.textContent?.includes("Collateral Valuation"))!);
+    click(byText(/Review the plan/)!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    click(byText(/Confirm and file/)!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    press("Escape");
+    press("Escape");
+    expect([...document.querySelectorAll('[data-origin-detail="session"]')].length).toBe(1);
+
+    // Then sync: the org's row replaces it, one entry not two.
+    click(byText(/^Sync$/)!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+    const filed = [...document.querySelectorAll("button")].filter((b) => /CV-0000000002/.test(b.textContent ?? ""));
+    expect(filed).toHaveLength(1);
+    expect(filed[0].querySelector('[data-origin-detail="org"]')).toBeTruthy();
+    expect(filed[0].querySelector('[data-origin-detail="session"]')).toBeNull();
+  });
+
+  it("shows no history line at all when the tool is not deployed", async () => {
+    vi.useFakeTimers();
+    const callTool = vi.fn(async (_server: string, tool: string) => {
+      if (tool === "Customer360ActionHistory") throw { code: "not_in_manifest", message: "no such tool" };
+      if (tool === "outlook_email_search") return { payload: { value: [] } };
+      return envelope({});
+    });
+    (window as unknown as { claude?: unknown }).claude = {
+      mcp: { callTool, watchTool: vi.fn().mockReturnValue(() => {}), listTools: vi.fn(), invalidate: vi.fn() },
+    };
+    mount(liveData());
+    click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
+    click(byText(/^Sync$/)!);
+    // Past the portfolio and the six detail lines, so the history line has had
+    // its turn: it removed itself rather than reporting a failure.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_600);
+    });
+    const console = document.querySelector('[role="status"]')!;
+    expect(console.textContent).toContain("Your inbox for this relationship");
+    expect(console.textContent).not.toContain("Actions filed against this relationship");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+  });
+});
 
 describe("an executed action is VISIBLE in the Activity tab (live defect 2026-07-26)", () => {
   it("uses one account key for the writer and the reader", async () => {

@@ -778,6 +778,7 @@ export function ActionPanel({
                 bundle={bundle}
                 values={values}
                 editedFields={editedFields}
+                reasons={reasons}
                 onChange={setField}
                 sheetCloserRef={sheetCloserRef}
                 sheetHost={panelEl}

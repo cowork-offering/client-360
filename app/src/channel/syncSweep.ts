@@ -15,9 +15,9 @@
    says so on its line. A failed sweep never blanks the workspace.
    ============================================================================= */
 
-import type { ActivityEntry, BorrowerBundle, Id } from "../data/contract";
+import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, Id } from "../data/contract";
 import { callTool, DETAIL_TOOLS, SERVERS, TOOLS, unwrapInvocable, type McpFailure, type McpOk } from "./mcp";
-import { matchesAccount, searchMailbox, type MailHit } from "./cockpitTools";
+import { fetchActionHistory, matchesAccount, searchMailbox, type MailHit } from "./cockpitTools";
 
 export type SyncLineState = "pending" | "running" | "done" | "failed";
 
@@ -37,6 +37,9 @@ export interface SyncResult {
   storedAt?: number;
   /** Inbound mail that resolved to this account, as activity entries. */
   requests: ActivityEntry[];
+  /** The org's durable action trail. Undefined when the tool is not in this
+   *  view at all, which is different from an empty trail. */
+  history?: ActionHistoryRow[];
   /** True when a read failed and its section kept the previous value. */
   partial: boolean;
 }
@@ -97,15 +100,18 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
     callTool(SERVERS.customer360, tool, { inputs: [{ accountId }] }, { read: true, cache: { staleTime: 15_000 } }),
   );
   const mailCall = searchMailbox(accountName);
+  const historyCall = fetchActionHistory(accountId);
   // Nothing here may reject unhandled while a slower line is still displaying.
   const settled = <T,>(p: Promise<T>) => p.then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
   const portfolio = settled(portfolioCall);
   const details = detailCalls.map(settled);
   const mail = settled(mailCall);
+  const history = settled(historyCall);
 
   const lines: SyncLine[] = [
     { id: "portfolio", label: "Portfolio position", state: "pending" },
     ...DETAIL_TOOLS.map((_, i) => ({ id: DETAIL_KEYS[i], label: DETAIL_LABELS[i], state: "pending" as SyncLineState })),
+    { id: "history", label: "Actions filed against this relationship", state: "pending" },
     { id: "mail", label: "Your inbox for this relationship", state: "pending" },
   ];
   const emit = () => opts.onLines?.(lines.map((l) => ({ ...l })));
@@ -114,6 +120,7 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   let storedAt: number | undefined;
   let partial = false;
   let requests: ActivityEntry[] = [];
+  let historyRows: ActionHistoryRow[] | undefined;
 
   const KEPT = "This section did not come back. The previous value is still shown.";
   /** What landing a result says about its line: a note, or an honest failure. */
@@ -170,6 +177,13 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
     });
   }
 
+  // Until the read tool is deployed this line removes itself, exactly like the
+  // mailbox line does when Microsoft 365 is absent.
+  await step("history", history, ({ rows }: { rows: ActionHistoryRow[] }) => {
+    historyRows = rows;
+    return rows.length ? `${rows.length} on record` : "none on record";
+  });
+
   await step("mail", mail, ({ hits }: { hits: MailHit[] }) => {
     const matched = hits.filter((h) => matchesAccount(h, accountName));
     requests = matched.map((m) => ({
@@ -187,5 +201,5 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
     return matched.length ? `${matched.length} matched` : "nothing new";
   });
 
-  return { lines, patch, storedAt, requests, partial };
+  return { lines, patch, storedAt, requests, history: historyRows, partial };
 }

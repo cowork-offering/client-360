@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ActivityEntry, ActivityKind, BorrowerBundle } from "../../data/contract";
 import { fmtDate, fmtRelative } from "../../data/format";
 import { accountKey, useApp } from "../../state/appState";
+import { historyActivityEntry, mergeTrail } from "../../actions/executedActivity";
 import { staggerDelay } from "../../data/motion";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { ActivityDetailModal } from "../ActivityDetailModal";
@@ -41,6 +42,16 @@ const KIND_META: Record<ActivityKind, { label: string; tone: "accent" | "neutral
       <>
         <path d="M9 3.2l6 10.4H3L9 3.2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
         <path d="M9 7.3v3.1M9 12.2v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </>
+    ),
+  },
+  ACTION_STAGED: {
+    label: "You · staged",
+    tone: "user",
+    icon: (
+      <>
+        <path d="M4.2 3.4h6.3l3.3 3.3v7.9a1 1 0 01-1 1H4.2a1 1 0 01-1-1V4.4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M6.4 10.6h5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
       </>
     ),
   },
@@ -172,7 +183,7 @@ function TimelineRow({
             </span>
           )}
           <span className="ml-auto text-[11px] text-ink-faint" title={fmtDate(entry.ts)}>
-            {isUser ? (
+            {isUser && !entry.orgConfirmed ? (
               <span style={{ color: "var(--user-tone)" }} className="font-semibold">
                 {entry.actor ?? "You"} · just now
               </span>
@@ -185,6 +196,29 @@ function TimelineRow({
           <span className="mt-1 block text-[12.5px] leading-relaxed text-ink-body">{entry.summary}</span>
         )}
         <span className="mt-2 flex flex-wrap items-center gap-3">
+          {/* Session echo and org record are different claims and look it: one
+              says "this page just did that", the other says "the system of
+              record holds it". */}
+          {entry.orgConfirmed ? (
+            <span
+              data-origin-detail="org"
+              className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+              style={{ background: "var(--positive-bg)", color: "var(--positive)" }}
+            >
+              On record in nCino
+            </span>
+          ) : (
+            entry.sessionLocal &&
+            isUser && (
+              <span
+                data-origin-detail="session"
+                className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+                style={{ background: "var(--wash-2)", color: "var(--ink-muted)" }}
+              >
+                This session
+              </span>
+            )
+          )}
           <ReferenceCitation reference={entry.reference} />
           {(entry.detail?.nextSteps?.length ?? 0) > 0 && (
             <span className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>
@@ -204,12 +238,16 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
   const generatedAt = data.meta?.generatedAt ?? "";
   const accountId = accountKey(state.accountId, bundle.snapshot?.accountId);
 
-  // Baked events + this session's ACTION_TRIGGERED entries, newest first — the
-  // narrative spine reads top-down from "what just happened" (A31.3).
+  // The org's durable trail + this session's own entries + the baked events,
+  // newest first. The org row wins over the session echo of the same execution,
+  // so a reload shows the same history a fresh session would (A30 / A31.3).
   const entries = useMemo(() => {
     const local = state.sessionActivity[accountId] ?? [];
-    return [...local, ...(bundle.activity ?? [])].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
-  }, [bundle.activity, state.sessionActivity, accountId]);
+    const org = (state.actionHistory[accountId] ?? [])
+      .map((r) => historyActivityEntry(r, data.meta?.instanceUrl))
+      .filter((e): e is ActivityEntry => e !== null);
+    return mergeTrail(org, local, bundle.activity ?? []);
+  }, [bundle.activity, state.sessionActivity, state.actionHistory, accountId, data.meta?.instanceUrl]);
   const open = entries.find((e) => e.id === openId) ?? null;
 
   return (

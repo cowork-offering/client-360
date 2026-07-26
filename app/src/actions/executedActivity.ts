@@ -17,7 +17,7 @@
    would hide a real verification failure behind copy that reads like success.
    ============================================================================= */
 
-import type { ActivityEntry } from "../data/contract";
+import type { ActionHistoryRow, ActivityEntry } from "../data/contract";
 import type { ExecuteResult } from "../channel/writeTools";
 import { CREATED_OBJECT, recordDeepLink } from "../components/DeepLink";
 
@@ -134,4 +134,97 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
         .join(" "),
     },
   };
+}
+
+
+/* ------------------------------------------------- the org's durable trail */
+
+/** Banker language for an action id the org recorded. */
+const ACTION_LABEL: Record<string, string> = {
+  "collateral-valuation": "Collateral valuation",
+  "create-service-request": "Service request",
+  "annual-review": "Annual credit review",
+};
+
+/**
+ * One org-history row as a trail entry.
+ *
+ * Keyed IDENTICALLY to the session echo (`exec-<stagingId>`) so the two dedupe
+ * against each other without a second matching rule: the org row is the same
+ * event, read back from the system of record.
+ */
+export function historyActivityEntry(row: ActionHistoryRow, instanceUrl?: string): ActivityEntry | null {
+  if (!row.stagingId) return null;
+  const label = (row.actionId && ACTION_LABEL[row.actionId]) ?? "Action";
+  const ts = row.executedAt ?? row.createdDate;
+  if (!ts) return null; // an entry with no time cannot be placed on a timeline
+
+  const object = row.actionId ? CREATED_OBJECT[row.actionId]?.object : undefined;
+  const href = recordDeepLink(instanceUrl, object, row.resultRecordId);
+  const status = row.status ?? "";
+  const completed = status.toLowerCase() === "completed";
+  const staged = status.toLowerCase() === "staged";
+  const name = row.resultRecordName ?? null;
+
+  const base = {
+    id: `exec-${row.stagingId}`,
+    ts,
+    actor: row.approverUserId ?? row.actorUserId,
+    orgConfirmed: true,
+    detail: {
+      body: [
+        `Staged as ${row.stagingId}.`,
+        row.resultRecordId ? `Record ${row.resultRecordId}.` : null,
+        row.approverUserId ? `Confirmed by ${row.approverUserId}.` : null,
+        row.status ? `The org records this as ${row.status}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    },
+  };
+
+  if (completed) {
+    // The null-name doctrine applies HERE and only here: on a completed row a
+    // missing name means the read-back failed, which is a verification failure
+    // worth saying out loud. On a staged row it means nothing was created.
+    return {
+      ...base,
+      kind: "ACTION_EXECUTED",
+      title: name ? `${label} ${name} filed` : `${label} filed, name not confirmed`,
+      summary: name ? undefined : "The org completed this but did not return the record name, so it is filed but unverified.",
+      reference: row.resultRecordId
+        ? { kind: "ncino-record", id: row.resultRecordId, label: object, source: "Customer 360", webLink: href ?? undefined }
+        : undefined,
+    };
+  }
+
+  // Staged, and anything else the org may report: neither a write nor a
+  // failure. The org's own word for the state is carried verbatim rather than
+  // being mapped onto a claim we cannot support.
+  return {
+    ...base,
+    kind: "ACTION_STAGED",
+    title: staged ? `${label} staged, never filed` : `${label} recorded as ${row.status ?? "unknown"}`,
+    summary: staged ? "A plan was built and confirmed by nobody. Nothing was written." : undefined,
+  };
+}
+
+/**
+ * The trail the Activity tab renders: the org's durable rows, the session's own
+ * echoes, and the staged history, newest first.
+ *
+ * ORG WINS. When both describe the same stagingId the org row replaces the
+ * session echo — same event, stronger evidence. A session echo with no org row
+ * yet still renders instantly, which is what makes the tab feel live.
+ */
+export function mergeTrail(
+  orgRows: ActivityEntry[],
+  sessionEntries: ActivityEntry[],
+  staged: ActivityEntry[],
+): ActivityEntry[] {
+  const byId = new Map<string, ActivityEntry>();
+  for (const e of staged) byId.set(e.id, e);
+  for (const e of sessionEntries) byId.set(e.id, e);
+  for (const e of orgRows) byId.set(e.id, e);
+  return [...byId.values()].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
 }

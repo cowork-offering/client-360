@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { AgentChannel } from "../channel/adapter";
 import { createChannel, formatProbe, probeChannels } from "../channel/adapter";
-import type { ActivityEntry, BorrowerBundle, C360Data, Worklist } from "../data/contract";
+import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, C360Data, Worklist } from "../data/contract";
 import { deriveWorklist } from "../data/worklist";
 import { loadUi, saveUi, type PersistedUi } from "./persist";
 
@@ -55,6 +55,9 @@ export interface ViewState {
   livePatches: Record<string, Partial<BorrowerBundle>>;
   /** Freshness per account, from result.cache.storedAt (never Date.now). */
   liveStoredAt: Record<string, number>;
+  /** The org's durable action trail per account, from the last sync. Absent
+   *  means never fetched; empty means the org says nothing was filed. */
+  actionHistory: Record<string, ActionHistoryRow[]>;
   /** Display ids a sync just changed. The value pulses where it already sits,
    *  then this clears — it is a notification, not a data state. */
   pulse: string[];
@@ -70,6 +73,7 @@ type Action =
   | { type: "LOG_ACTIVITY"; accountId: string; entry: ActivityEntry }
   | { type: "PATCH_BUNDLE"; accountId: string; patch: Partial<BorrowerBundle>; storedAt?: number }
   | { type: "INGEST_REQUESTS"; accountId: string; entries: ActivityEntry[] }
+  | { type: "SET_ACTION_HISTORY"; accountId: string; rows: ActionHistoryRow[] }
   | { type: "PULSE"; ids: string[] }
   | { type: "CLEAR_PULSE" }
   | { type: "SET_DRAFT"; draft: string }
@@ -87,6 +91,7 @@ const initial: ViewState = {
   sessionActivity: {},
   livePatches: {},
   liveStoredAt: {},
+  actionHistory: {},
   pulse: [],
 };
 
@@ -141,6 +146,10 @@ function reducer(state: ViewState, action: Action): ViewState {
         },
       };
     }
+    case "SET_ACTION_HISTORY":
+      // Replaces wholesale: the org's answer is the whole trail as of that read,
+      // not a delta to merge into a stale one.
+      return { ...state, actionHistory: { ...state.actionHistory, [action.accountId]: action.rows } };
     case "PULSE":
       return { ...state, pulse: action.ids };
     case "CLEAR_PULSE":

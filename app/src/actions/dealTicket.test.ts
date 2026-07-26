@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { buildTicket, promptFor, ticketDeltas } from "./dealTicket";
+import { buildTicket, promptFor, reviewFacts, ticketDeltas } from "./dealTicket";
 import { buildBriefing } from "./briefing";
 import { buildPanelSchema } from "./schemas";
 import sample from "../../../artifact/sample-data.json";
@@ -134,5 +134,62 @@ describe("the delta readout", () => {
     expect(ticketDeltas("annual-review", bundle, { reviewType: "Annual" })).toEqual([]);
     expect(ticketDeltas("create-service-request", bundle, { subject: "x" })).toEqual([]);
     expect(ticketDeltas("collateral-valuation", null, { value: 1 })).toEqual([]);
+  });
+});
+
+describe("what an annual review covers", () => {
+  const bundle: BorrowerBundle = {
+    snapshot: { accountId: "001X", primaryRiskRating: "5" },
+    exposure: {
+      totalCommitted: 18_000_000,
+      totalOutstanding: 16_900_000,
+      facilities: [{ loanId: "a1X1", totalLendableValue: 8_000_000 }],
+    },
+    covenants: {
+      covenants: [
+        { covenantId: "c1", covenantType: "Debt Service Coverage Ratio", actualValue: 1.38, thresholdValue: 1.3 },
+        { covenantId: "c2", covenantType: "Total Leverage", actualValue: 2.95, thresholdValue: 3.5 },
+      ],
+    },
+  };
+
+  it("summarises the covenant position and names where it is tightest", () => {
+    const facts = reviewFacts(bundle);
+    const cov = facts.find((f) => f.label === "Covenants")!;
+    expect(cov.value).toBe("2 of 2 within threshold");
+    expect(cov.note).toContain("Debt Service Coverage Ratio");
+  });
+
+  it("states utilisation only when both sides are staged", () => {
+    expect(reviewFacts(bundle).find((f) => f.label === "Utilisation")!.value).toBe("94 percent");
+    const noDrawn = structuredClone(bundle);
+    delete noDrawn.exposure!.totalOutstanding;
+    expect(reviewFacts(noDrawn).some((f) => f.label === "Utilisation")).toBe(false);
+  });
+
+  it("drops a line rather than inventing a value for it", () => {
+    const bare: BorrowerBundle = { snapshot: { accountId: "001X" } };
+    const facts = reviewFacts(bare);
+    expect(facts.some((f) => f.label === "Covenants")).toBe(false);
+    expect(facts.some((f) => f.label === "Utilisation")).toBe(false);
+    expect(facts.some((f) => f.label === "In scope")).toBe(false);
+    // Nothing renders a dash, a zero or an "unknown".
+    for (const f of facts) expect(f.value).not.toMatch(/^(—|0|unknown)$/i);
+  });
+
+  it("counts an unmeasurable covenant out rather than calling it compliant", () => {
+    const partial = structuredClone(bundle);
+    partial.covenants!.covenants!.push({ covenantId: "c3", covenantType: "Fixed Charge", actualValue: undefined });
+    expect(reviewFacts(partial).find((f) => f.label === "Covenants")!.value).toBe("2 of 2 within threshold");
+  });
+
+  it("says what the narratives will carry, and that every figure traces", () => {
+    const n = reviewFacts(bundle).find((f) => f.label === "Narratives")!;
+    expect(n.value).toMatch(/^\d+ drafted$/);
+    expect(n.note).toContain("traceable");
+  });
+
+  it("has nothing to say without a bundle", () => {
+    expect(reviewFacts(null)).toEqual([]);
   });
 });

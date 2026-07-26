@@ -61,6 +61,7 @@ const envelope = (outputValues: unknown) => ({
 function installMcp(exposure?: Record<string, unknown>) {
   const callTool = vi.fn(async (_server: string, tool: string) => {
     if (tool === TOOLS.mailSearch) return { payload: { value: [] } };
+    if (tool === TOOLS.actionHistory) return envelope({ rows: [] });
     if (tool === TOOLS.exposure && exposure) return envelope(exposure);
     return envelope({});
   });
@@ -160,7 +161,9 @@ describe("the sweep", () => {
     click(byText(/^Sync$/)!);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
+      // Nine paced lines land at ~4.05s; the report is held on the console for
+      // 900ms after that, so read it inside that window.
+      await vi.advanceTimersByTimeAsync(4_500);
     });
     expect(document.querySelector('[role="status"]')?.textContent).toContain("Everything current, nothing new.");
   });
@@ -170,6 +173,7 @@ describe("the sweep", () => {
     const callTool = vi.fn(async (_server: string, tool: string) => {
       if (tool === TOOLS.exposure) throw { code: "upstream_error", message: "boom" };
       if (tool === TOOLS.mailSearch) return { payload: { value: [] } };
+      if (tool === TOOLS.actionHistory) return envelope({ rows: [] });
       return envelope({});
     });
     (window as unknown as { claude?: unknown }).claude = {

@@ -126,6 +126,7 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
       requestCount = result.requests.length;
 
       dispatch({ type: "PATCH_BUNDLE", accountId, patch: result.patch, storedAt: result.storedAt });
+      if (result.history) dispatch({ type: "SET_ACTION_HISTORY", accountId, rows: result.history });
       if (result.requests.length) dispatch({ type: "INGEST_REQUESTS", accountId, entries: result.requests });
     } catch {
       // A sweep that falls over keeps the workspace exactly as it was. The
