@@ -544,6 +544,161 @@ describe("WP7.4 — the execution", () => {
   });
 });
 
+describe("the terminal deep link targets the record that was just filed", () => {
+  const INSTANCE = "https://bankinggpt.lightning.force.com";
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  async function fileIt(actionLabel: string, execute?: unknown) {
+    installWriteMcp(execute ? { execute } : {});
+    openActionPanel(actionLabel, "Sterling Fabrication", { userId: APPROVER_ID, instanceUrl: INSTANCE });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    return panel(actionLabel)!;
+  }
+
+  it("opens the created review, not the package", async () => {
+    const p = await fileIt("Annual Review");
+    const hero = p.querySelector('[data-deeplink="record"]') as HTMLAnchorElement;
+    expect(hero.getAttribute("href")).toBe(`${INSTANCE}/lightning/r/LLC_BI__Review__c/a5nbb000000ABCDEAA/view`);
+    expect(hero.textContent).toContain("Open in nCino");
+  });
+
+  it("keeps the deal as a secondary link on the same terminal state", async () => {
+    const p = await fileIt("Annual Review");
+    // The sample stages no productPackageId, so the package affordance is the
+    // honest disabled chip. It is still SECONDARY copy, and still present.
+    const secondary = p.querySelector('[data-deeplink="package"]')!;
+    expect(secondary.textContent).toContain("View deal in nCino");
+    expect(secondary.querySelector('[aria-disabled="true"]')).toBeTruthy();
+  });
+
+  it("names the right object per action", async () => {
+    const p = await fileIt("Create Service Request", {
+      ok: true,
+      error: null,
+      result: {
+        stagingId: "a8abb00001KtalSAAR",
+        terminalState: "success",
+        outcome: "The service request was created and verified.",
+        caseId: "500bb00000XYZ123AAA",
+        // Both planned steps must come back: a step the executor did not report
+        // on is not verified, and the terminal state is not success.
+        steps: [
+          { id: "s1", type: "write", label: "Create the credit review", state: "verified" },
+          { id: "s2", type: "verification", label: "Confirm the review exists", state: "verified" },
+        ],
+      },
+    });
+    expect((p.querySelector('[data-deeplink="record"]') as HTMLAnchorElement).getAttribute("href")).toBe(
+      `${INSTANCE}/lightning/r/Case/500bb00000XYZ123AAA/view`,
+    );
+  });
+
+  it("falls back to the disabled chip with a selectable id when the org address is absent", async () => {
+    installWriteMcp();
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    const p = panel("Annual Review")!;
+    const hero = p.querySelector('[data-deeplink="record"]')!;
+    expect(hero.tagName).not.toBe("A");
+    expect(hero.querySelector('[aria-disabled="true"]')).toBeTruthy();
+    expect(hero.textContent).toContain("a5nbb000000ABCDEAA");
+  });
+
+  it("still points at the package when nothing was filed", async () => {
+    const p = await fileIt("Annual Review", {
+      ok: true,
+      error: null,
+      result: {
+        stagingId: "a8abb00001KtalSAAR",
+        terminalState: "failed",
+        outcome: "Nothing was written.",
+        steps: [{ id: "s1", type: "write", label: "Create the credit review", state: "failed", detail: "INSUFFICIENT_ACCESS" }],
+      },
+    });
+    expect(p.querySelector('[data-deeplink="record"]')).toBeNull();
+    expect(p.querySelector('[data-deeplink="package"]')!.textContent).toContain("Open in nCino");
+  });
+});
+
+describe("an executed action lands in the Activity trail (A30)", () => {
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  async function fileThenReadActivity(execute?: unknown) {
+    installWriteMcp(execute ? { execute } : {});
+    openActionPanel("Annual Review", "Sterling Fabrication", {
+      userId: APPROVER_ID,
+      instanceUrl: "https://bankinggpt.lightning.force.com",
+    });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    press("Escape"); // close the panel
+    press("Escape"); // close the Client Actions sheet
+    return document.body.textContent ?? "";
+  }
+
+  it("appears immediately, with no Sync, naming the record and what it was filed against", async () => {
+    const text = await fileThenReadActivity();
+    expect(text).toContain("Annual credit review filed against Sterling Fabrication Co.");
+    // A30.4 — marked user-originated, and attributed to the acting user.
+    const row = [...document.querySelectorAll('[data-origin="user"]')].find((r) =>
+      /Annual credit review filed/.test(r.textContent ?? ""),
+    )!;
+    expect(row).toBeTruthy();
+    expect(row.textContent).toContain("Fabian Goetzens");
+  });
+
+  it("carries the record link and keeps the staging id for audit", async () => {
+    await fileThenReadActivity();
+    const entry = [...document.querySelectorAll("button")].find((b) =>
+      /Annual credit review filed/.test(b.textContent ?? ""),
+    )!;
+    click(entry);
+    const modal = document.querySelector('[role="dialog"]')!;
+    expect(modal.textContent).toContain("a5nbb000000ABCDEAA");
+    expect(modal.textContent).toContain("a8abb00001KtalSAAR");
+  });
+
+  it("logs a failed execution too, with the failing step and its code", async () => {
+    const text = await fileThenReadActivity({
+      ok: true,
+      error: null,
+      result: {
+        stagingId: "a8abb00001KtalSAAR",
+        terminalState: "partial",
+        outcome: "The review was created but could not be verified.",
+        steps: [
+          { id: "s1", type: "write", label: "Create the credit review", state: "failed", detail: "INSUFFICIENT_ACCESS_ON_CROSS_REFERENCE_ENTITY" },
+        ],
+      },
+    });
+    expect(text).toContain("Annual credit review did not complete");
+    const row = [...document.querySelectorAll('[data-origin="user"]')].find((r) =>
+      /did not complete/.test(r.textContent ?? ""),
+    )!;
+    expect(row).toBeTruthy();
+  });
+
+  it("logs one entry per execution, however many times the tracker re-renders", async () => {
+    await fileThenReadActivity();
+    const entries = [...document.querySelectorAll("button")].filter((b) =>
+      /Annual credit review filed/.test(b.textContent ?? ""),
+    );
+    expect(entries).toHaveLength(1);
+  });
+});
+
 describe("the execute payload, pinned to the shape the org accepted (live defect 2026-07-26)", () => {
   afterEach(() => {
     delete (window as unknown as { claude?: unknown }).claude;

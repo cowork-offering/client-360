@@ -67,6 +67,7 @@ type Action =
   | { type: "SET_PANEL"; panel: PanelKind }
   | { type: "SET_SEEN"; count: number }
   | { type: "LOG_ACTION"; accountId: string; actionLabel: string }
+  | { type: "LOG_ACTIVITY"; accountId: string; entry: ActivityEntry }
   | { type: "PATCH_BUNDLE"; accountId: string; patch: Partial<BorrowerBundle>; storedAt?: number }
   | { type: "INGEST_REQUESTS"; accountId: string; entries: ActivityEntry[] }
   | { type: "PULSE"; ids: string[] }
@@ -124,6 +125,19 @@ function reducer(state: ViewState, action: Action): ViewState {
           ...state.sessionActivity,
           // Newest first, capped so a long session cannot grow unbounded.
           [action.accountId]: [entry, ...prev].slice(0, 25),
+        },
+      };
+    }
+    case "LOG_ACTIVITY": {
+      // Same session-local shelf and the same cap as LOG_ACTION. Deduped by id
+      // so a re-render or a replayed execute cannot double-log one write.
+      const prev = state.sessionActivity[action.accountId] ?? [];
+      if (prev.some((e) => e.id === action.entry.id)) return state;
+      return {
+        ...state,
+        sessionActivity: {
+          ...state.sessionActivity,
+          [action.accountId]: [action.entry, ...prev].slice(0, 25),
         },
       };
     }

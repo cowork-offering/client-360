@@ -3,7 +3,7 @@ import type { Snapshot } from "../data/contract";
 import type { StagedOutput } from "../actions/stagedPlan";
 import { actionTerminal, blockingPrecondition, STEP_TYPE_LABEL, type StepState, type TrackerState } from "../actions/tracker";
 import type { DecisionToken } from "../actions/decisionToken";
-import { OpenInNcino } from "./DeepLink";
+import { OpenCreatedRecord, OpenInNcino } from "./DeepLink";
 import type { ExecuteResult } from "../channel/writeTools";
 import { compilePace } from "../actions/compile";
 
@@ -72,12 +72,15 @@ function useReveal(count: number, paused: boolean): number {
 
 export function StepTracker({
   plan,
+  actionId,
   state,
   token,
   snapshot,
   outcome,
 }: {
   plan: StagedOutput;
+  /** Which registry action filed this, so the deep link can name its object. */
+  actionId: string;
   state: TrackerState;
   token: DecisionToken | null;
   snapshot: Snapshot | undefined;
@@ -179,16 +182,27 @@ export function StepTracker({
         </div>
       )}
 
-      {/* A33.3.6 — every terminal state offers the deep link. On success it is
-          the hero: the banker's next move is in nCino, not here. */}
-      <div className="flex items-center gap-2 px-5 py-4">
-        <OpenInNcino snapshot={snapshot} />
-        {!revealing && terminal !== "success" && (
-          <span className="text-[11px] leading-relaxed text-ink-muted">
-            {terminal === "partial"
-              ? "Resume from the step above once the cause is cleared."
-              : "Nothing was verified, so there is nothing to open yet."}
-          </span>
+      {/* A33.3.6, refined 2026-07-26. On success the HERO opens the record that
+          was just filed; the package stays as a secondary link. Everywhere else
+          the package is still the only sensible target, because no record was
+          created to open. */}
+      <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+        {!revealing && filed && terminal === "success" ? (
+          <>
+            <OpenCreatedRecord actionId={actionId} recordId={filed.id} />
+            <OpenInNcino snapshot={snapshot} secondary />
+          </>
+        ) : (
+          <>
+            <OpenInNcino snapshot={snapshot} />
+            {!revealing && (
+              <span className="text-[11px] leading-relaxed text-ink-muted">
+                {terminal === "partial"
+                  ? "Resume from the step above once the cause is cleared."
+                  : "Nothing was verified, so there is nothing to open yet."}
+              </span>
+            )}
+          </>
         )}
       </div>
     </div>

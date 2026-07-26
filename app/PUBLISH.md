@@ -223,6 +223,24 @@ The execute payload is pinned by test to exactly five fields, taken from the sta
 the client-minted record is bookkeeping and never reaches the wire), `approverUserId`. Nothing about a
 staged plan is persisted, so no republish can resurrect a stale `stagingId` against a newer `planHash`.
 
+### After a successful write (2026-07-26)
+
+The terminal state's HERO link opens the record that was just filed
+(`/lightning/r/<object>/<id>/view`, mapped per action: `LLC_BI__Collateral_Valuation__c` / `Case` /
+`LLC_BI__Review__c`). The Product Package link stays as a secondary "View deal in nCino". Absent
+`meta.instanceUrl`, both fall back to the disabled chip with the id as selectable text — no host is
+ever guessed.
+
+Every execution also lands in the Activity tab as a session-local, user-originated entry
+(`ACTION_EXECUTED` / `ACTION_EXECUTION_FAILED`), attributed to the acting user, carrying the record
+deep link and retaining the `stagingId` in the detail for audit. It renders immediately; no Sync is
+needed, because the event happened in this session rather than being read from the org.
+
+**The executor returns record IDS, not record NAMES.** There is no `CV-0000000002` anywhere in the
+artifact, so none is written into the trail: the entry names the object, what it was filed against
+(from staged data), and the real id. A record Name in the copy would require the execute tools to
+return one.
+
 ### Write tools (WP5)
 
 `stage_*` performs **zero domain-object DML** — it validates, computes and returns an immutable plan

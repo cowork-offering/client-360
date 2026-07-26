@@ -107,6 +107,7 @@ export const PROVENANCE = {
   "borrower.activity[].detail.headroom": { kind: "AGENT", source: "Agent-composed capacity read supporting the verdict" },
   "borrower.activity[].detail.risks": { kind: "AGENT", source: "Agent-composed risk list on the concluded analysis" },
   "borrower.activity[].detail.body": { kind: "AGENT", source: "Agent-composed narrative body of the entry" },
+  "display.activity.executed": { kind: "DERIVED", source: "A30 — minted from the execute_* response when the banker confirms a plan. Session-local, actor is the signed-in user, carries the created record id and the stagingId for audit" },
   "borrower.activity[].detail.nextSteps": { kind: "AGENT", source: "Agent-selected registry action ids (A30.4). Shared state: feeds the detail popup, the chat chips and the actions panel" },
 
   // --- derived --------------------------------------------------------------
@@ -456,6 +457,11 @@ export type ActivityKind =
   /** A31.3 — the banker triggered a registry action. Session-local until the
    *  v2 write/audit path persists it; never fabricated as historical. */
   | "ACTION_TRIGGERED"
+  /** A30 — the banker confirmed a plan and the org executed it. Session-local
+   *  on the same terms as ACTION_TRIGGERED: an attempted write belongs in the
+   *  trail whether it landed or not, so the failure kind is logged too. */
+  | "ACTION_EXECUTED"
+  | "ACTION_EXECUTION_FAILED"
   | "REQUEST_RECEIVED"
   | "ANALYSIS_CONCLUDED"
   | "COVENANT_EVALUATED"

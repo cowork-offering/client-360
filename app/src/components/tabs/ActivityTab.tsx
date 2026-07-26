@@ -21,6 +21,29 @@ const KIND_META: Record<ActivityKind, { label: string; tone: "accent" | "neutral
       </>
     ),
   },
+  // A30.4 — both execution kinds are USER-ORIGINATED and carry the user tone,
+  // exactly like ACTION_TRIGGERED. A write the banker attempted and lost is
+  // still a thing the banker did.
+  ACTION_EXECUTED: {
+    label: "You · filed",
+    tone: "user",
+    icon: (
+      <>
+        <path d="M4.2 3.4h6.3l3.3 3.3v7.9a1 1 0 01-1 1H4.2a1 1 0 01-1-1V4.4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M6.2 10.2l1.9 1.9 3.5-4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ),
+  },
+  ACTION_EXECUTION_FAILED: {
+    label: "You · not filed",
+    tone: "user",
+    icon: (
+      <>
+        <path d="M9 3.2l6 10.4H3L9 3.2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M9 7.3v3.1M9 12.2v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </>
+    ),
+  },
   REQUEST_RECEIVED: {
     label: "Client request",
     tone: "accent",
@@ -132,6 +155,8 @@ function TimelineRow({
       {/* Card */}
       <button
         type="button"
+        // A30.4 — user-originated entries are marked as such, not merely tinted.
+        data-origin={isUser ? "user" : "system"}
         onClick={onOpen}
         className={`c360-action-row mb-3 flex-1 rounded-[10px] border border-border bg-raised px-4 py-3 text-left${isUser ? " c360-activity-user" : ""}`}
         style={rule ? { borderLeft: `3px solid ${rule}` } : undefined}

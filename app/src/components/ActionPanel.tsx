@@ -22,6 +22,7 @@ import { mcpAvailable } from "../channel/mcp";
 import { observedPicklistMap } from "../actions/observedPicklists";
 import { newRequestId } from "../channel/adapter";
 import { initTracker, type TrackerState } from "../actions/tracker";
+import { executedActivityEntry } from "../actions/executedActivity";
 import type { DecisionToken } from "../actions/decisionToken";
 
 /* =============================================================================
@@ -310,7 +311,7 @@ export function ActionPanel({
   onClose: () => void;
   returnFocusTo?: () => HTMLElement | null;
 }) {
-  const { data, state, worklist } = useApp();
+  const { data, state, worklist, dispatch } = useApp();
   const panelRef = useRef<HTMLDivElement>(null);
 
   const action = ACTIONS_BY_ID[actionId];
@@ -605,6 +606,21 @@ export function ActionPanel({
 
   function onConfirmed(t: DecisionToken, executed?: ExecuteResult) {
     setToken(t);
+
+    // A30 — the trail records what the banker did, success or not. Rendered
+    // immediately on the Activity tab; no Sync required, because this event
+    // happened here rather than being read from the org.
+    if (executed) {
+      const entry = executedActivityEntry({
+        actionId,
+        outcome: executed,
+        target: readonlyAnchorLabel(),
+        actor: data.meta?.user,
+        instanceUrl: data.meta?.instanceUrl,
+      });
+      if (entry) dispatch({ type: "LOG_ACTIVITY", accountId, entry });
+    }
+
     if (plan) {
       const base = initTracker(plan.steps);
       // The tracker consumes the executor's step states verbatim; the state
@@ -622,6 +638,14 @@ export function ActionPanel({
       setOutcome(executed ?? null);
     }
     setPhase("tracker");
+  }
+
+  /** What the action was filed against, in the panel's own banker language:
+   *  the readonly anchor field the schema already renders. Staged text, never
+   *  a record name the executor did not return. */
+  function readonlyAnchorLabel(): string | undefined {
+    const anchor = schema?.fields.find((f) => f.key === "collateral" || f.key === "account");
+    return typeof anchor?.value === "string" && anchor.value ? anchor.value : undefined;
   }
 
   /** Stepping back preserves everything the banker entered. The plan is kept
@@ -699,6 +723,7 @@ export function ActionPanel({
             {phase === "tracker" && plan && tracker && (
               <StepTracker
                 plan={plan}
+                actionId={actionId}
                 state={tracker}
                 token={token}
                 snapshot={bundle?.snapshot}
