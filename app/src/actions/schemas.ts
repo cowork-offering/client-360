@@ -15,6 +15,9 @@
    ============================================================================= */
 
 import type { BorrowerBundle, Facility } from "../data/contract";
+import { fmtMoney } from "../data/format";
+import { fmtCovVal } from "../data/finance";
+import { isActiveFacility } from "../data/worklist";
 import type { PanelField, PanelSchema } from "./panelSchema";
 import { PREFILL_PROVENANCE } from "./panelSchema";
 
@@ -358,9 +361,469 @@ export const PANEL_SCHEMAS: Record<string, SchemaBuilder> = {
   "collateral-valuation": collateralValuationSchema,
   "create-service-request": serviceRequestSchema,
   "annual-review": annualReviewSchema,
+  "new-facility-request": newFacilitySchema,
+  "risk-rating-review": riskRatingSchema,
+  "covenant-review": covenantReviewSchema,
+  "loan-modification": (ctx) => facilityChangeSchema(ctx, "modification"),
+  renewal: (ctx) => facilityChangeSchema(ctx, "renewal"),
 };
 
 export function buildPanelSchema(actionId: string, ctx: SchemaContext): PanelSchema | null {
   const builder = PANEL_SCHEMAS[actionId];
   return builder ? builder(ctx) : null;
+}
+
+/* =============================================================================
+   WAVE 2 (A33.5.7 frozen contracts)
+
+   Built against the CONTRACT while the Apex lane deploys, on the same seam
+   discipline as WP5: field names and option sets are declared here once, so the
+   swap when observed envelopes land is a single edit per action.
+
+   Two of the five stage but cannot execute (LV06). That is a property of the
+   tool map, not of these schemas: the ticket is complete and the plan is real,
+   and the confirm gate is where the held state is explained.
+   ============================================================================= */
+
+/** The facility a modification or renewal acts on: the largest active one. */
+function primaryFacility(bundle: BorrowerBundle | null): Facility | null {
+  let best: Facility | null = null;
+  for (const f of (bundle?.exposure?.facilities ?? []).filter(isActiveFacility)) {
+    if (!best || (f.committed ?? 0) > (best.committed ?? 0)) best = f;
+  }
+  return best;
+}
+
+/** The commitment the client actually asked for, when one is staged. */
+function requestedCommitment(bundle: BorrowerBundle | null): number | null {
+  const ask = (bundle?.requests ?? [])[0]?.ask;
+  return typeof ask?.to === "number" ? ask.to : null;
+}
+
+function newFacilitySchema(ctx: SchemaContext): PanelSchema {
+  const OBJ = "LLC_BI__Loan__c";
+  const pkg = ctx.bundle?.snapshot?.productPackageId;
+
+  return {
+    writeObject: OBJ,
+    writeObjectLabel: "facility request",
+    intro:
+      "Requests a new facility on this relationship's package. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later.",
+    fields: [
+      field({
+        key: "account",
+        label: "Relationship",
+        type: "readonly",
+        value: ctx.accountName,
+        prefill: { source: "NCINO_RECORD", citation: ctx.accountId },
+        editable: false,
+        editableReason: "the action is anchored on this relationship",
+        required: true,
+        target: { object: OBJ, field: "LLC_BI__Account__c" },
+      }),
+      field({
+        key: "package",
+        label: "Package",
+        type: "readonly",
+        value: pkg ? "This relationship's deal package" : null,
+        prefill: { source: "NCINO_RECORD", citation: pkg },
+        editable: false,
+        editableReason: "the facility hangs off the existing package",
+        required: true,
+        target: { object: OBJ, field: "LLC_BI__Product_Package__c" },
+        gap: pkg
+          ? undefined
+          : {
+              reason: "No product package is staged for this relationship, so there is nothing to hang a new facility off.",
+              blocksStaging: true,
+            },
+      }),
+      field({
+        key: "amount",
+        label: "Amount",
+        type: "currency",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        required: true,
+        target: { object: OBJ, field: "LLC_BI__Amount__c" },
+      }),
+      field({
+        key: "productType",
+        label: "Product",
+        type: "picklist",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        // PROBE 5, finding 2: the org self-populates this to `Construction`
+        // when it is left blank, and then builds the loan's Name from it. A
+        // tool that does not collect Product ships loans mislabelled.
+        required: true,
+        optionsFrom: { object: OBJ, field: "LLC_BI__Product__c" },
+        options: picklist(ctx, OBJ, "LLC_BI__Product__c"),
+        target: { object: OBJ, field: "LLC_BI__Product__c" },
+        help: "Left blank, the org files this as Construction and names the loan accordingly.",
+      }),
+      field({
+        key: "termMonths",
+        label: "Term (months)",
+        type: "text",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Term__c" },
+      }),
+      field({
+        key: "purpose",
+        label: "Primary loan purpose",
+        type: "picklist",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        // PROBE 5, finding 4: of the two fields LV12/LV13 gate, the org
+        // pre-fills Application Method and leaves this one null. It is the one
+        // thing the banker actually has to supply, and it lives on the Loan
+        // DETAIL, which the org creates asynchronously.
+        required: true,
+        optionsFrom: { object: "LLC_BI__Loan_Detail__c", field: "LLC_BI__Primary_Loan_Purpose__c" },
+        options: picklist(ctx, "LLC_BI__Loan_Detail__c", "LLC_BI__Primary_Loan_Purpose__c"),
+        target: { object: "LLC_BI__Loan_Detail__c", field: "LLC_BI__Primary_Loan_Purpose__c" },
+        help: "Written to the Loan Detail once the org has created it.",
+      }),
+      field({
+        key: "applicationMethod",
+        label: "Application method",
+        type: "readonly",
+        value: "Online",
+        prefill: { source: "COMPUTED", citation: "org-defaulted on the Loan Detail; nothing is sent for it" },
+        editable: false,
+        editableReason: "the org fills this in",
+        required: false,
+        target: { object: "LLC_BI__Loan_Detail__c", field: "LLC_BI__Application_Method__c" },
+      }),
+      field({
+        key: "loanOfficer",
+        label: "Loan officer",
+        type: "readonly",
+        value: "Assigned by the org",
+        prefill: { source: "COMPUTED", citation: "org-assigned; ACNPEX_AccountOwnerAsLoanOfficer overwrites anything set here" },
+        editable: false,
+        editableReason: "the org assigns this and overwrites what we send",
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Loan_Officer__c" },
+        help: "Set by nCino's own assignment routine, so the cockpit does not propose one.",
+      }),
+    ],
+  };
+}
+
+function riskRatingSchema(ctx: SchemaContext): PanelSchema {
+  // PROBE 4 (ledger wave 3): the object is LLC_BI__Annual_Review__c. There is
+  // no LLC_BI__Risk_Rating_Review__c in this org; the label/API mismatch is
+  // A33.4.7. It has no RecordTypeId and no OwnerId, and it is a cascade-delete
+  // child of Account. Every field below was read back by the insert probe.
+  const OBJ = "LLC_BI__Annual_Review__c";
+  const grade = ctx.bundle?.snapshot?.primaryRiskRating;
+  const computed = ctx.bundle?.snapshot?.computedRiskRating;
+
+  return {
+    writeObject: OBJ,
+    writeObjectLabel: "risk rating review",
+    intro:
+      "Records a rating review against this relationship. It is created In Review; the org's own decision path owns Approved and Declined. An override is the banker's call, and the org requires it to carry a reason.",
+    fields: [
+      field({
+        key: "account",
+        label: "Relationship",
+        type: "readonly",
+        value: ctx.accountName,
+        prefill: { source: "NCINO_RECORD", citation: ctx.accountId },
+        editable: false,
+        editableReason: "the action is anchored on this relationship",
+        required: true,
+        target: { object: OBJ, field: "LLC_BI__Account__c" },
+      }),
+      field({
+        key: "status",
+        label: "Status",
+        type: "readonly",
+        // PROBE 4: an omitted status lands in `Not Approved`, which reads as a
+        // DECISION rather than an absent value. The tool sets In Review
+        // explicitly for exactly that reason.
+        value: "In Review",
+        prefill: { source: "COMPUTED", citation: "set explicitly; the org would otherwise default this to Not Approved" },
+        editable: false,
+        editableReason: "the tool creates at In Review and stops",
+        required: true,
+        target: { object: OBJ, field: "LLC_BI__Status__c" },
+        help: "Left unset, the org files this as Not Approved, which reads as a decision nobody made.",
+      }),
+      field({
+        key: "computedGrade",
+        label: "Computed grade",
+        type: "readonly",
+        value: computed != null ? `Grade ${computed}` : null,
+        prefill: { source: "NCINO_RECORD", citation: "Customer360Snapshot — the org's computed grade" },
+        editable: false,
+        editableReason: "the org computes this",
+        required: false,
+        target: { staging: true },
+      }),
+      field({
+        key: "finalGrade",
+        label: "Final grade",
+        type: "readonly",
+        value: grade != null ? `Grade ${grade}` : null,
+        prefill: { source: "NCINO_RECORD", citation: "Customer360Snapshot — nCino risk grade" },
+        editable: false,
+        editableReason: "the org's decision path sets the final grade",
+        required: false,
+        // Displayed, never targeted: A33.1.6 bans this field as a write target
+        // and the decision path owns it.
+        target: { staging: true },
+      }),
+      // OBSERVED: the stage tool takes four NAMED factor actuals. They are the
+      // inputs the org computes the grade from, so the ticket collects them.
+      ...([
+        ["cashFlowCoverage", "Cash flow coverage"],
+        ["revenueGrowth", "Revenue growth"],
+        ["managementExperience", "Management experience"],
+        ["creditScore", "Credit score"],
+      ] as Array<[string, string]>).map(([key, label]) =>
+        field({
+          key,
+          label,
+          type: "currency",
+          value: null,
+          prefill: { source: "BANKER" },
+          editable: true,
+          required: false,
+          target: { object: OBJ, field: `LLC_BI__${label.replace(/ /g, "_")}_actual__c` },
+        }),
+      ),
+      field({
+        key: "overrideValue",
+        label: "Override grade",
+        type: "currency",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Overridden_Risk_Grade_Value__c" },
+        help: "Leave empty to accept the computed grade.",
+      }),
+      field({
+        key: "overrideComment",
+        label: "Reason for the override",
+        type: "longtext",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        // Conditionally required: see `overrideNeedsComment` below. The schema
+        // cannot express "required when another field is set", so the rule is a
+        // function the panel and the tests share rather than a duplicated
+        // condition in each.
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Comments__c" },
+      }),
+    ],
+  };
+}
+
+/**
+ * The org's validation rule, stated once: an override without a reason is
+ * refused. Enforced in the panel so the banker learns it here rather than from
+ * a rejected write.
+ */
+export function overrideNeedsComment(values: Record<string, unknown>): boolean {
+  const v = values.overrideValue;
+  const set = typeof v === "number" ? v > 0 : typeof v === "string" && v.trim() !== "" && Number(v) > 0;
+  const comment = typeof values.overrideComment === "string" ? values.overrideComment.trim() : "";
+  return set && comment === "";
+}
+
+export const OVERRIDE_COMMENT_REQUIRED = "An override requires a stated reason.";
+
+function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
+  const OBJ = "LLC_BI__Covenant_Compliance2__c";
+  // UPDATE-only: the assessment lands on a compliance record that already
+  // exists. Same doctrine as the collateral anchor — no id, no staging.
+  const cov = (ctx.bundle?.covenants?.covenants ?? []).find((c) => c.complianceId) ?? (ctx.bundle?.covenants?.covenants ?? [])[0];
+  const complianceId = cov?.complianceId;
+
+  return {
+    writeObject: OBJ,
+    writeObjectLabel: "covenant assessment",
+    intro:
+      "Records an assessment against the existing compliance record. Status changes are recorded on that record; the bank's approval process governs new compliance periods.",
+    fields: [
+      field({
+        key: "covenant",
+        label: "Covenant",
+        type: "readonly",
+        value: cov ? `${cov.covenantType ?? "Covenant"}${cov.thresholdValue != null ? ` against ${fmtCovVal(cov.thresholdValue)}` : ""}` : null,
+        prefill: { source: "NCINO_RECORD", citation: complianceId },
+        editable: false,
+        editableReason: "the assessment updates this compliance record",
+        required: true,
+        target: { object: OBJ, field: "Id" },
+        gap: complianceId
+          ? undefined
+          : {
+              reason: cov
+                ? "The compliance record id is not staged in this view, so there is nothing to record an assessment against."
+                : "No covenants are staged for this relationship.",
+              blocksStaging: true,
+            },
+      }),
+      field({
+        key: "assessmentResult",
+        label: "Assessment",
+        type: "picklist",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        required: true,
+        optionsFrom: { object: OBJ, field: "LLC_BI__Status__c" },
+        options: picklist(ctx, OBJ, "LLC_BI__Status__c"),
+        target: { object: OBJ, field: "LLC_BI__Status__c" },
+      }),
+      field({
+        key: "observedValue",
+        label: "Reported actual",
+        type: "readonly",
+        // No write target for this was probed, so it is context, not a field we
+        // claim to set. The assessment is what this action records.
+        value: cov?.actualValue != null ? fmtCovVal(cov.actualValue) : null,
+        prefill: { source: "NCINO_RECORD", citation: "Customer360Covenants — last reported actual" },
+        editable: false,
+        editableReason: "read from the covenant",
+        required: false,
+        target: { staging: true },
+      }),
+      field({
+        key: "assessmentNarrative",
+        label: "Assessment notes",
+        type: "longtext",
+        value: null,
+        prefill: { source: "AGENT_NARRATIVE" },
+        editable: true,
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Reason_for_Exception__c" },
+      }),
+    ],
+  };
+}
+
+/** Modification and renewal share their anchor and most of their shape: both
+ *  act on an existing booked facility and both are staged, never executed. */
+function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewal"): PanelSchema {
+  const OBJ = "LLC_BI__Loan__c";
+  const fac = primaryFacility(ctx.bundle);
+  const asked = requestedCommitment(ctx.bundle);
+
+  const anchor = field({
+    key: "facility",
+    label: "Facility",
+    type: "readonly",
+    value: fac ? `${fac.name ?? "Facility"}${fac.committed != null ? ` at ${fmtMoney(fac.committed)}` : ""}` : null,
+    prefill: { source: "NCINO_RECORD", citation: fac?.loanId },
+    editable: false,
+    editableReason: "the change is anchored on this facility",
+    required: true,
+    target: { object: OBJ, field: "Id" },
+    gap: fac?.loanId
+      ? undefined
+      : {
+          reason: "No active facility is staged on this relationship, so there is nothing to change.",
+          blocksStaging: true,
+        },
+  });
+
+  const reason = field({
+    key: kind === "renewal" ? "renewalReason" : "modificationReason",
+    label: "Reason",
+    type: "longtext",
+    value: null,
+    prefill: { source: "AGENT_NARRATIVE" },
+    editable: true,
+    required: false,
+    target: { object: OBJ, field: "LLC_BI__Change_Reason__c" },
+  });
+
+  if (kind === "renewal") {
+    return {
+      writeObject: OBJ,
+      writeObjectLabel: "renewal",
+      intro: "Builds the renewal plan for this facility. The plan is staged and preserved; filing it awaits the org's own approval path.",
+      fields: [
+        anchor,
+        field({
+          key: "newMaturityDate",
+          label: "New maturity",
+          type: "date",
+          value: null,
+          prefill: { source: "BANKER" },
+          editable: true,
+          required: true,
+          target: { object: OBJ, field: "LLC_BI__Maturity_Date__c" },
+          help: fac?.maturityDate ? `Currently matures ${fac.maturityDate}.` : undefined,
+        }),
+        field({
+          key: "newCommitment",
+          label: "Commitment on renewal",
+          type: "currency",
+          value: fac?.committed ?? null,
+          prefill:
+            fac?.committed != null
+              ? { source: "NCINO_RECORD", citation: "current commitment on the facility" }
+              : { source: "BANKER" },
+          editable: true,
+          required: false,
+          target: { object: OBJ, field: "LLC_BI__Amount__c" },
+        }),
+        reason,
+      ],
+    };
+  }
+
+  return {
+    writeObject: OBJ,
+    writeObjectLabel: "modification",
+    intro: "Builds the modification plan for this facility. The plan is staged and preserved; filing it awaits the org's own approval path.",
+    fields: [
+      anchor,
+      field({
+        key: "newCommitment",
+        label: "New commitment",
+        type: "currency",
+        // The client's own ask when one is staged: the banker should not have to
+        // retype a number the relationship already carries.
+        value: asked ?? fac?.committed ?? null,
+        // The source is whatever ACTUALLY filled it. Claiming an nCino prefill
+        // on an empty field would say the org answered when it did not, and
+        // would hide real banker work behind a provenance chip.
+        prefill: asked
+          ? { source: "CLIENT_REQUEST", citation: (ctx.bundle?.requests ?? [])[0]?.reference?.id }
+          : fac?.committed != null
+            ? { source: "NCINO_RECORD", citation: "current commitment on the facility" }
+            : { source: "BANKER" },
+        editable: true,
+        required: true,
+        target: { object: OBJ, field: "LLC_BI__Amount__c" },
+      }),
+      field({
+        key: "effectiveDate",
+        label: "Effective date",
+        type: "date",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Effective_Date__c" },
+      }),
+      reason,
+    ],
+  };
 }

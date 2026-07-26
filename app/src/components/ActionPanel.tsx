@@ -3,7 +3,7 @@ import { accountKey, useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
 import { ACTIONS_BY_ID } from "../actions/registry";
-import { buildPanelSchema } from "../actions/schemas";
+import { buildPanelSchema, overrideNeedsComment, OVERRIDE_COMMENT_REQUIRED } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
 import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
 import { runCompile, type CompileLine } from "../actions/compile";
@@ -18,7 +18,15 @@ import { fmtMoney } from "../data/format";
 import { ConfirmGate } from "./ConfirmGate";
 import { StepTracker } from "./StepTracker";
 import { isSimulationAllowed, simulateStagedOutput, type StagedOutput } from "../actions/stagedPlan";
-import { isWriteAction, stageAction, type ExecuteResult, type StagePayloads, type ToolError } from "../channel/writeTools";
+import {
+  executeAction,
+  isWriteAction,
+  resolveApproverUserId,
+  stageAction,
+  type ExecuteResult,
+  type StagePayloads,
+  type ToolError,
+} from "../channel/writeTools";
 import { mcpAvailable } from "../channel/mcp";
 import { observedPicklistMap } from "../actions/observedPicklists";
 import { newRequestId } from "../channel/adapter";
@@ -377,6 +385,7 @@ export function ActionPanel({
   const [toolError, setToolError] = useState<ToolError | null>(null);
   const [live, setLive] = useState(false);
   const [outcome, setOutcome] = useState<ExecuteResult | null>(null);
+  const [continuing, setContinuing] = useState(false);
   /** Stable across a stage/execute pair and across resume (A33.3.5). Ours, not
    *  nCino's: the platform is known to duplicate on failed background Apex. */
   const idempotencyKeyRef = useRef<string>(newRequestId());
@@ -442,6 +451,9 @@ export function ActionPanel({
   // Honest-gap discipline: a missing write anchor blocks staging outright. We
   // never substitute a different record's id to get past it.
   const blockers = stagingBlockers(schema);
+  /** The org's validation rule, enforced here so the banker learns it from the
+   *  ticket rather than from a rejected write. */
+  const overrideGap = actionId === "risk-rating-review" && overrideNeedsComment(values) ? OVERRIDE_COMMENT_REQUIRED : null;
 
   /** True once the banker has edited away from the values the plan was built
    *  from. The plan on the Plan step is then a description of something that is
@@ -464,16 +476,27 @@ export function ActionPanel({
   function stagePayload(): StagePayloads[keyof StagePayloads] | null {
     const idempotencyKey = idempotencyKeyRef.current;
     const v = (k: string) => (values[k] === "" ? null : (values[k] ?? null));
+    const nOf = (k: string) => {
+      const raw = v(k);
+      if (raw === null || raw === undefined) return null;
+      const n = typeof raw === "number" ? raw : Number(raw);
+      return Number.isFinite(n) ? n : null;
+    };
+    const citationOf = (key: string) => {
+      const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
+      return typeof c === "string" && c ? c : null;
+    };
     const rationale = engine.suggestions.filter((s) => !declined[s.id]).map((s) => s.rationale).join(" ") || undefined;
+    const packageId = bundle?.snapshot?.productPackageId ?? null;
 
     if (actionId === "collateral-valuation") {
-      const collateralId = String(schema?.fields.find((f) => f.key === "collateral")?.prefill.citation ?? "");
+      const collateralId = citationOf("collateral");
       if (!collateralId) return null;
       return {
         idempotencyKey,
         rationale,
         collateralId,
-        value: typeof v("value") === "number" ? (v("value") as number) : null,
+        value: nOf("value"),
         valuationDate: v("valuationDate") as string | null,
         type: v("type") as string | null,
         source: v("source") as string | null,
@@ -481,6 +504,7 @@ export function ActionPanel({
         primary: values.primary === true,
       };
     }
+
     if (actionId === "create-service-request") {
       const req = (bundle?.requests ?? [])[0];
       return {
@@ -494,12 +518,88 @@ export function ActionPanel({
         referenceWebLink: req?.reference?.webLink ?? null,
       };
     }
+
+    if (actionId === "new-facility-request") {
+      // Anchored on the PACKAGE, not the account: that is what the org hangs a
+      // facility off, and it is the only id the observed request carries.
+      if (!packageId) return null;
+      return {
+        idempotencyKey,
+        rationale,
+        productPackageId: packageId,
+        product: v("productType") as string | null,
+        amount: nOf("amount"),
+        termMonths: nOf("termMonths"),
+        primaryLoanPurpose: v("purpose") as string | null,
+      };
+    }
+
+    if (actionId === "risk-rating-review") {
+      const computed = Number(bundle?.snapshot?.computedRiskRating);
+      return {
+        idempotencyKey,
+        accountId,
+        rationale,
+        computedRiskGradeValue: Number.isFinite(computed) ? computed : null,
+        cashFlowCoverageActual: nOf("cashFlowCoverage"),
+        revenueGrowthActual: nOf("revenueGrowth"),
+        managementExperienceActual: nOf("managementExperience"),
+        creditScoreActual: nOf("creditScore"),
+        comments: v("overrideComment") as string | null,
+        overriddenRiskGradeValue: nOf("overrideValue"),
+      };
+    }
+
+    if (actionId === "covenant-review") {
+      const complianceId = citationOf("covenant");
+      if (!complianceId) return null;
+      const observed = nOf("observedValue");
+      return {
+        idempotencyKey,
+        accountId,
+        rationale,
+        covenantComplianceId: complianceId,
+        result: v("assessmentResult") as string | null,
+        // Observed as a STRING on the wire.
+        observedValue: observed === null ? null : String(observed),
+        narrative: v("assessmentNarrative") as string | null,
+        comments: null,
+      };
+    }
+
+    if (actionId === "loan-modification") {
+      const loanId = citationOf("facility");
+      if (!loanId) return null;
+      return {
+        idempotencyKey,
+        rationale,
+        loanId,
+        productPackageId: packageId,
+        requestedAmount: nOf("newCommitment"),
+        requestedTermMonths: nOf("requestedTermMonths"),
+        requestedRate: nOf("requestedRate"),
+      };
+    }
+
+    if (actionId === "renewal") {
+      const loanId = citationOf("facility");
+      if (!loanId) return null;
+      return {
+        idempotencyKey,
+        rationale,
+        loanId,
+        productPackageId: packageId,
+        newMaturityDate: v("newMaturityDate") as string | null,
+        requestedRate: nOf("requestedRate"),
+      };
+    }
+
     return {
       idempotencyKey,
       accountId,
       rationale,
       reviewType: v("reviewType") as string | null,
-      productPackageId: bundle?.snapshot?.productPackageId ?? null,
+      productPackageId: packageId,
       narrative: v("narrative") as string | null,
       relationshipSummary: v("relationshipSummary") as string | null,
       strengthsNarrative: v("strengths") as string | null,
@@ -536,6 +636,7 @@ export function ActionPanel({
             if (blockers.length) {
               throw { code: "NOT_STAGEABLE", message: blockers.map((b) => b.gap!.reason).join(" ") };
             }
+            if (overrideGap) throw { code: "VALIDATION_FAILED", message: overrideGap };
             payload = stagePayload();
             if (!payload && mcpAvailable() && isWriteAction(actionId)) {
               throw { code: "PRECONDITION", message: "This relationship has no pledged collateral to value." };
@@ -667,6 +768,33 @@ export function ActionPanel({
     return typeof anchor?.value === "string" && anchor.value ? anchor.value : undefined;
   }
 
+  /**
+   * The SECOND invocation of a two-phase execute (new facility).
+   *
+   * USER GESTURE ONLY, and it re-sends the same stagingId, planHash and token:
+   * the org treats it as a resume, not a new write, and its idempotency key is
+   * the one the stage minted. Nothing polls; if the org is still not finished
+   * it says so again and the affordance stays.
+   */
+  async function continueExecution() {
+    if (!plan || !token || continuing) return;
+    const approverUserId = resolveApproverUserId(data.meta);
+    if (!approverUserId || !plan.decisionToken) return;
+    setContinuing(true);
+    try {
+      const again = await executeAction(actionId as never, {
+        idempotencyKey: idempotencyKeyRef.current,
+        stagingId: plan.stagingId,
+        planHash: plan.planHash,
+        decisionToken: plan.decisionToken,
+        approverUserId,
+      });
+      if (again.ok) onConfirmed(token, again.result);
+    } finally {
+      setContinuing(false);
+    }
+  }
+
   /** Stepping back preserves everything the banker entered. The plan is kept
    *  too, so a step forward without edits shows the same plan and the same
    *  hash; edits make it stale, and the briefing says so. */
@@ -750,6 +878,8 @@ export function ActionPanel({
                 token={token}
                 snapshot={bundle?.snapshot}
                 outcome={outcome}
+                continuing={continuing}
+                onContinue={outcome?.resumable ? () => void continueExecution() : undefined}
                 onChange={setTracker}
               />
             )}
@@ -874,7 +1004,9 @@ export function ActionPanel({
             <div className="flex-1 text-[11px] text-ink-muted">
               {blockers.length > 0
                 ? blockers.map((b) => b.gap!.reason).join(" ")
-                : missing.length > 0
+                : overrideGap
+                  ? overrideGap
+                  : missing.length > 0
                   ? `${missing.length} required ${missing.length === 1 ? "field" : "fields"} still to complete.`
                   : `Creates a ${schema.writeObjectLabel}.`}
             </div>
@@ -889,7 +1021,7 @@ export function ActionPanel({
             {(mcpAvailable() && isWriteAction(actionId)) || isSimulationAllowed() ? (
               <button
                 type="button"
-                disabled={missing.length > 0 || blockers.length > 0}
+                disabled={missing.length > 0 || blockers.length > 0 || overrideGap !== null}
                 onClick={() => (plan && !planIsStale ? setPhase("confirm") : void stage())}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}

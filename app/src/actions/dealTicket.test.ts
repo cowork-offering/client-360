@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { buildTicket, promptFor, reviewFacts, ticketDeltas } from "./dealTicket";
+import { buildTicket, deltaHeading, promptFor, ratingFacts, reviewFacts, ticketDeltas } from "./dealTicket";
 import { buildBriefing } from "./briefing";
-import { buildPanelSchema } from "./schemas";
+import { buildPanelSchema, overrideNeedsComment } from "./schemas";
 import sample from "../../../artifact/sample-data.json";
 
 const DATA = sample as unknown as C360Data;
 const BUNDLES = Object.entries(DATA.borrowers ?? {});
-const ACTIONS = ["annual-review", "collateral-valuation", "create-service-request"];
+const ACTIONS = [
+  "annual-review",
+  "collateral-valuation",
+  "create-service-request",
+  "new-facility-request",
+  "risk-rating-review",
+  "covenant-review",
+  "loan-modification",
+  "renewal",
+];
 
 function ticketFor(actionId: string, accountId: string, bundle: BorrowerBundle) {
   const name = bundle.snapshot?.name ?? "the relationship";
@@ -44,6 +53,10 @@ describe("the ticket is a view over the schema, never a second declaration", () 
     expect(ticketFor("collateral-valuation", id, b as BorrowerBundle).ticket.heroKey).toBe("value");
     expect(ticketFor("create-service-request", id, b as BorrowerBundle).ticket.heroKey).toBe("subject");
     expect(ticketFor("annual-review", id, b as BorrowerBundle).ticket.heroKey).toBe("reviewType");
+    expect(ticketFor("new-facility-request", id, b as BorrowerBundle).ticket.heroKey).toBe("amount");
+    expect(ticketFor("loan-modification", id, b as BorrowerBundle).ticket.heroKey).toBe("newCommitment");
+    expect(ticketFor("renewal", id, b as BorrowerBundle).ticket.heroKey).toBe("newMaturityDate");
+    expect(ticketFor("covenant-review", id, b as BorrowerBundle).ticket.heroKey).toBe("assessmentResult");
   });
 
   it("names every section against a field the schema actually has", () => {
@@ -191,5 +204,140 @@ describe("what an annual review covers", () => {
 
   it("has nothing to say without a bundle", () => {
     expect(reviewFacts(null)).toEqual([]);
+  });
+});
+
+describe("wave 2 — the modification's delta drama", () => {
+  const bundle: BorrowerBundle = {
+    snapshot: { accountId: "001X" },
+    exposure: {
+      totalCommitted: 10_000_000,
+      totalOutstanding: 9_000_000,
+      facilities: [{ loanId: "a1X1", committed: 10_000_000, totalLendableValue: 12_000_000 }],
+    },
+    boom: { ratios: { ebitda: 5_000_000, totalLeverage: 2.0 } },
+  };
+
+  it("moves commitment, coverage and leverage together", () => {
+    const d = ticketDeltas("loan-modification", bundle, { newCommitment: 13_000_000 });
+    expect(d.map((x) => x.label)).toEqual(["Commitment", "Collateral coverage", "Total leverage"]);
+    expect(d[0]).toMatchObject({ before: "$10M", after: "$13M", direction: "up" });
+    // 12.0M lendable over 13.0M committed.
+    expect(d[1]).toMatchObject({ before: "1.20×", after: "0.92×", direction: "down" });
+    // +3.0M of debt on 5.0M of EBITDA: 2.00x becomes 2.60x, and MORE leverage
+    // is a worse position, so the direction reads as a fall.
+    expect(d[2]).toMatchObject({ before: "2.00x", after: "2.60x", direction: "down" });
+  });
+
+  it("restates leverage on unchanged earnings, and says so", () => {
+    const d = ticketDeltas("loan-modification", bundle, { newCommitment: 13_000_000 });
+    expect(d[2].note).toContain("earnings unchanged");
+  });
+
+  it("drops the leverage line when Boom staged no EBITDA to restate on", () => {
+    const noBoom = structuredClone(bundle);
+    delete noBoom.boom;
+    const d = ticketDeltas("loan-modification", noBoom, { newCommitment: 13_000_000 });
+    expect(d.map((x) => x.label)).toEqual(["Commitment", "Collateral coverage"]);
+  });
+
+  it("drops the coverage line when a lendable value is missing, never treating it as zero", () => {
+    const partial = structuredClone(bundle);
+    delete partial.exposure!.facilities![0].totalLendableValue;
+    expect(ticketDeltas("loan-modification", partial, { newCommitment: 13_000_000 }).map((x) => x.label)).toEqual([
+      "Commitment",
+      "Total leverage",
+    ]);
+  });
+
+  it("says nothing until a new commitment is entered", () => {
+    expect(ticketDeltas("loan-modification", bundle, {})).toEqual([]);
+    expect(ticketDeltas("loan-modification", bundle, { newCommitment: 0 })).toEqual([]);
+  });
+
+  it("adds a new facility to the book total", () => {
+    const d = ticketDeltas("new-facility-request", bundle, { amount: 5_000_000 });
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ label: "Total committed", before: "$10M", after: "$15M", direction: "up" });
+  });
+
+  it("has nothing to say for a renewal's maturity date", () => {
+    expect(ticketDeltas("renewal", bundle, { newMaturityDate: "2027-01-01" })).toEqual([]);
+  });
+});
+
+describe("wave 2 — the rating position", () => {
+  it("states the grade on file", () => {
+    const b: BorrowerBundle = { snapshot: { accountId: "001X", primaryRiskRating: "5" } };
+    expect(ratingFacts(b)[0]).toMatchObject({ label: "Current grade", value: "Grade 5" });
+  });
+
+  it("reports a computed grade ONLY when the org staged one", () => {
+    const b: BorrowerBundle = { snapshot: { accountId: "001X", primaryRiskRating: "5" } };
+    expect(ratingFacts(b).some((f) => f.label === "Computed grade")).toBe(false);
+
+    const withComputed: BorrowerBundle = { snapshot: { accountId: "001X", primaryRiskRating: "5", computedRiskRating: "6" } };
+    const f = ratingFacts(withComputed).find((x) => x.label === "Computed grade")!;
+    expect(f.value).toBe("Grade 6");
+    expect(f.note).toContain("differs");
+  });
+
+  it("shows the override as the banker's own call once one is entered", () => {
+    const b: BorrowerBundle = { snapshot: { accountId: "001X", primaryRiskRating: "5" } };
+    const f = ratingFacts(b, { overrideValue: 4 }).find((x) => x.label === "Override")!;
+    expect(f.value).toBe("Grade 4");
+    expect(f.note).toContain("stated reason");
+  });
+
+  it("has nothing to say without a bundle", () => {
+    expect(ratingFacts(null)).toEqual([]);
+  });
+});
+
+describe("wave 2 — an override requires a stated reason (org VR)", () => {
+  it("refuses an override with no reason", () => {
+    expect(overrideNeedsComment({ overrideValue: 4 })).toBe(true);
+    expect(overrideNeedsComment({ overrideValue: 4, overrideComment: "   " })).toBe(true);
+    expect(overrideNeedsComment({ overrideValue: "4" })).toBe(true);
+  });
+
+  it("is satisfied by a reason, and irrelevant without an override", () => {
+    expect(overrideNeedsComment({ overrideValue: 4, overrideComment: "Collateral position improved." })).toBe(false);
+    expect(overrideNeedsComment({})).toBe(false);
+    expect(overrideNeedsComment({ overrideValue: 0 })).toBe(false);
+    expect(overrideNeedsComment({ overrideComment: "orphan reason" })).toBe(false);
+  });
+});
+
+describe("the valuation readout never claims the rollup will fire (Probe 6)", () => {
+  it("says IMPLIES, and carries the org's actual behaviour as a caveat", () => {
+    const h = deltaHeading("collateral-valuation");
+    expect(h.title).toBe("What this valuation implies");
+    expect(h.caveat).toContain("does not move the collateral value");
+    expect(h.caveat).toContain("Add Valuation");
+    // The one sentence the ledger forbids.
+    expect(`${h.title} ${h.caveat}`.toLowerCase()).not.toContain("coverage improves");
+  });
+
+  it("qualifies the lendable line as conditional on a revaluation", () => {
+    const bundle: BorrowerBundle = {
+      snapshot: { accountId: "001X" },
+      exposure: {
+        totalOutstanding: 10_000_000,
+        facilities: [
+          {
+            loanId: "a1X1",
+            totalLendableValue: 8_000_000,
+            collateral: [{ collateralId: "COL1", advanceRate: 80, currentLendableValue: 8_000_000 }],
+          },
+        ],
+      },
+    };
+    expect(ticketDeltas("collateral-valuation", bundle, { value: 12_000_000 })[0].note).toContain("if the collateral is revalued");
+  });
+
+  it("leaves every other action's heading plain", () => {
+    expect(deltaHeading("loan-modification")).toEqual({ title: "What this changes" });
+    expect(deltaHeading("new-facility-request").caveat).toBeUndefined();
   });
 });

@@ -156,6 +156,100 @@ function serviceRequest(b: BorrowerBundle | null, name: string): Briefing {
   };
 }
 
+function newFacility(b: BorrowerBundle | null, name: string): Briefing {
+  const figures: DraftFigure[] = [];
+  const committed = money(b?.exposure?.totalCommitted, "borrower.exposure.totalCommitted", figures);
+  return {
+    subject: {
+      title: `New facility for ${name}`,
+      context: `${committed ? `${name} is carried at ${committed} committed today. ` : ""}nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`,
+    },
+    lead: [
+      t("This requests a "),
+      f("amount", "enter the amount"),
+      t(" "),
+      f("productType", "choose the product"),
+      t(" facility for "),
+      f("termMonths", "enter the term"),
+      t(" months, for "),
+      f("purpose", "choose the purpose"),
+      t("."),
+    ],
+    figures,
+    sections: [],
+  };
+}
+
+function riskRating(b: BorrowerBundle | null, name: string): Briefing {
+  const grade = b?.snapshot?.primaryRiskRating;
+  return {
+    subject: {
+      title: `Risk rating review for ${name}`,
+      context: grade != null ? `Carried at grade ${grade} today.` : "No risk grade is staged for this relationship.",
+    },
+    lead: [
+      t("Leave the override empty to accept the computed grade, or set "),
+      f("overrideValue", "enter the override"),
+      t(" and say why. The review is filed In Review; the org's own decision path owns the outcome."),
+    ],
+    figures: [],
+    sections: ["overrideComment"],
+  };
+}
+
+function covenantReview(b: BorrowerBundle | null): Briefing {
+  const figures: DraftFigure[] = [];
+  const cov = (b?.covenants?.covenants ?? []).find((c) => c.complianceId) ?? (b?.covenants?.covenants ?? [])[0];
+  const type = cov?.covenantType ?? "the covenant";
+  return {
+    subject: {
+      title: `Assessment of ${type}`,
+      context:
+        "Status changes are recorded on the existing compliance record; the bank's approval process governs new compliance periods.",
+    },
+    lead: [t(`This records ${type} as `), f("assessmentResult", "choose the assessment"), t(".")],
+    figures,
+    sections: ["assessmentNarrative"],
+  };
+}
+
+function facilityChange(b: BorrowerBundle | null, name: string, kind: "modification" | "renewal"): Briefing {
+  const figures: DraftFigure[] = [];
+  const drawn = money(b?.exposure?.totalOutstanding, "borrower.exposure.totalOutstanding", figures);
+  const held = "The plan is staged and preserved; filing it awaits nCino's own approval path.";
+
+  if (kind === "renewal") {
+    return {
+      subject: { title: `Renewal for ${name}`, context: held },
+      lead: [
+        t("This renews the facility to "),
+        f("newMaturityDate", "pick the new maturity"),
+        t(" at "),
+        f("newCommitment", "enter the commitment"),
+        t("."),
+      ],
+      figures,
+      sections: ["renewalReason"],
+    };
+  }
+
+  return {
+    subject: {
+      title: `Modification for ${name}`,
+      context: `${drawn ? `${drawn} is drawn today. ` : ""}${held}`,
+    },
+    lead: [
+      t("This moves the commitment to "),
+      f("newCommitment", "enter the new commitment"),
+      t(", effective "),
+      f("effectiveDate", "pick the effective date"),
+      t("."),
+    ],
+    figures,
+    sections: ["modificationReason"],
+  };
+}
+
 export function buildBriefing(
   actionId: string,
   schema: PanelSchema | null,
@@ -167,6 +261,11 @@ export function buildBriefing(
   if (actionId === "annual-review") return annualReview(schema, bundle, accountName, reasons);
   if (actionId === "collateral-valuation") return collateralValuation(schema, accountName);
   if (actionId === "create-service-request") return serviceRequest(bundle, accountName);
+  if (actionId === "new-facility-request") return newFacility(bundle, accountName);
+  if (actionId === "risk-rating-review") return riskRating(bundle, accountName);
+  if (actionId === "covenant-review") return covenantReview(bundle);
+  if (actionId === "loan-modification") return facilityChange(bundle, accountName, "modification");
+  if (actionId === "renewal") return facilityChange(bundle, accountName, "renewal");
   return null;
 }
 

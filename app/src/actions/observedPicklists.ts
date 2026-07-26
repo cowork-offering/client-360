@@ -39,7 +39,21 @@ const ACTIONS_API_2026_07_26 =
 
 const LIVE_DESCRIBE_2026_07_26 = "live describe 2026-07-26 (sf sobject describe, active values)";
 
+const CONTRACT_A33_5_7 = "A33.5.7 contract freeze, org picklist relayed 2026-07-26 (not yet re-verified against a live describe from this session)";
+
 export const OBSERVED_PICKLISTS: Record<string, ObservedPicklist> = {
+  // Wave 2. Relayed from the frozen contract rather than described here, so the
+  // citation says exactly that: it is somebody else's describe, not ours.
+  "LLC_BI__Covenant_Compliance2__c.LLC_BI__Status__c": {
+    values: ["Compliant", "Exception"],
+    complete: true,
+    citation: CONTRACT_A33_5_7,
+  },
+  "LLC_BI__Loan__c.LLC_BI__Product__c": {
+    values: ["Construction", "Equipment", "Line of Credit", "HELOC", "Purchase", "Deposit", "Term"],
+    complete: true,
+    citation: CONTRACT_A33_5_7,
+  },
   // The org has already answered this one, so the panel must never block on it:
   // the tool creates a real LLC_BI__Review__c and the banker has to be able to
   // say which kind of review it is.

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   executeAction,
+  isExecutionHeld,
   resolveApproverUserId,
   isWriteAction,
   parseLegalValues,
@@ -76,21 +77,55 @@ const VALIDATION_FAILED = {
 const PAYLOAD = { idempotencyKey: "idem-1", collateralId: "a34bb00000398KnAAI", value: 1000 };
 
 describe("tool registry", () => {
-  it("names the six deployed write tools", () => {
-    expect(Object.values(WRITE_TOOLS).flatMap((t) => [t.stage, t.execute]).sort()).toEqual([
+  it("names every stage tool and every execute tool that exists", () => {
+    expect(Object.values(WRITE_TOOLS).flatMap((t) => [t.stage, t.execute]).filter(Boolean).sort()).toEqual([
       "execute_annual_review",
       "execute_collateral_valuation",
+      "execute_covenant_review",
+      "execute_new_facility",
+      "execute_risk_rating_review",
       "execute_service_request",
       "stage_annual_review",
       "stage_collateral_valuation",
+      "stage_covenant_review",
+      "stage_loan_modification",
+      "stage_new_facility",
+      "stage_renewal",
+      "stage_risk_rating_review",
       "stage_service_request",
     ]);
+  });
+
+  it("holds execution for modification and renewal, with no tool name invented", () => {
+    // LV06: the org will not run a credit action against a facility that has
+    // not been Booked through its own approval path, so no execute tool exists.
+    // A null here is the honest record of that; a plausible-looking name would
+    // be a lie the panel would eventually try to call.
+    expect(WRITE_TOOLS["loan-modification"].execute).toBeNull();
+    expect(WRITE_TOOLS.renewal.execute).toBeNull();
+    expect(isExecutionHeld("loan-modification")).toBe(true);
+    expect(isExecutionHeld("renewal")).toBe(true);
+    expect(isExecutionHeld("collateral-valuation")).toBe(false);
+  });
+
+  it("refuses to execute a held action rather than calling a tool that is not there", async () => {
+    const callTool = installMcp(envelope({ ok: true, result: {} }));
+    const out = await executeAction("loan-modification", {
+      idempotencyKey: "k",
+      stagingId: "s",
+      planHash: "h",
+      decisionToken: "t",
+      approverUserId: "005bb00000ftouDAAQ",
+    });
+    expect(out.ok).toBe(false);
+    expect(out.ok === false && out.error.code).toBe("EXECUTION_HELD");
+    expect(callTool).not.toHaveBeenCalled();
   });
 
   it("exposes them on the manifest constants too", () => {
     for (const t of Object.values(WRITE_TOOLS)) {
       expect(Object.values(TOOLS)).toContain(t.stage);
-      expect(Object.values(TOOLS)).toContain(t.execute);
+      if (t.execute) expect(Object.values(TOOLS)).toContain(t.execute);
     }
   });
 
@@ -287,8 +322,9 @@ describe("execute_* — the shape read from the Apex Request classes", () => {
     expect(out.result.steps.map((s) => s.state)).toEqual(["verified", "filed_unverified"]);
   });
 
-  it("routes each action to its own execute tool", async () => {
+  it("routes each executable action to its own execute tool", async () => {
     for (const [actionId, tools] of Object.entries(WRITE_TOOLS)) {
+      if (!tools.execute) continue; // held: covered above
       const callTool = installMcp(envelope(EXEC_RESULT));
       await executeAction(actionId as keyof typeof WRITE_TOOLS, EXEC_PAYLOAD);
       expect(callTool.mock.calls[0][1]).toBe(tools.execute);

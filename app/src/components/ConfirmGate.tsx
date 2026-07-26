@@ -5,7 +5,15 @@ import { SIMULATION_BANNER, assertNoRecordIds } from "../actions/stagedPlan";
 import { computeSuggestions, detectDrift, type DriftReason } from "../actions/suggestionEngine";
 import { validatePlan } from "../actions/transitionAllowlist";
 import { mintDecisionToken, type DecisionToken } from "../actions/decisionToken";
-import { isWriteAction, executeAction, resolveApproverUserId, type ExecuteResult, type ToolError } from "../channel/writeTools";
+import {
+  EXECUTION_HELD_COPY,
+  executeAction,
+  isExecutionHeld,
+  isWriteAction,
+  resolveApproverUserId,
+  type ExecuteResult,
+  type ToolError,
+} from "../channel/writeTools";
 import { mcpAvailable } from "../channel/mcp";
 import { STEP_TYPE_LABEL } from "../actions/tracker";
 import { resolveBundle } from "../actions/registry";
@@ -86,7 +94,13 @@ export function ConfirmGate({
   // A33.5.3 — a staged plan carrying a record id means something already wrote.
   const idLeaks = useMemo(() => assertNoRecordIds(plan), [plan]);
 
-  const blocked = violations.length > 0 || idLeaks.length > 0;
+  // LV06: the plan is real and staged, and there is no execute tool to run it.
+  // The ORG's own verdict wins when it speaks: `executionHeld` + `heldReason`
+  // come back on the observed stage response, and the reason is rendered
+  // verbatim rather than restated from our own copy.
+  const held = plan.executionHeld === true || isExecutionHeld(actionId);
+  const heldReason = plan.heldReason ?? EXECUTION_HELD_COPY;
+  const blocked = violations.length > 0 || idLeaks.length > 0 || held;
 
   async function confirm() {
     setError(null);
@@ -267,6 +281,27 @@ export function ConfirmGate({
         </div>
       )}
 
+      {held && (
+        <div className="border-b border-divider px-5 py-4">
+          <div className="rounded-[10px] px-3.5 py-3" style={{ background: "var(--warning-bg)" }}>
+            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--warning)" }}>
+              Staged, not filed
+            </div>
+            <p className="mt-1.5 text-[12px] leading-relaxed" style={{ color: "var(--warning-prose)" }}>
+              {heldReason}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {typeof plan.covenantCarryoverCount === "number" && (
+        <div className="border-b border-divider px-5 py-3 text-[11.5px] leading-relaxed text-ink-muted">
+          {plan.covenantCarryoverCount === 0
+            ? "No loan-level covenants are attached to this facility, so nothing would carry over."
+            : `${plan.covenantCarryoverCount} loan-level ${plan.covenantCarryoverCount === 1 ? "covenant carries" : "covenants carry"} over to the new facility.`}
+        </div>
+      )}
+
       {drift && (
         <div className="border-b border-divider px-5 py-4">
           <DriftNotice drift={drift} />
@@ -330,7 +365,7 @@ export function ConfirmGate({
           className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
           style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
         >
-          {executing ? "Working…" : drift ? "Confirm the new figures" : simulated ? "Confirm" : "Confirm and file"}
+          {held ? "Filing is on hold" : executing ? "Working…" : drift ? "Confirm the new figures" : simulated ? "Confirm" : "Confirm and file"}
         </button>
       </div>
     </div>

@@ -49,11 +49,13 @@ export const PROVENANCE = {
 
   "borrower.snapshot": { kind: "NCINO", source: "Customer360Snapshot — LLC_BI__Product_Package__c" },
   "borrower.snapshot.primaryRiskRating": { kind: "NCINO", source: "Customer360Snapshot — nCino risk grade" },
+  "borrower.snapshot.computedRiskRating": { kind: "NCINO", source: "Customer360Snapshot — the org's computed grade. Rendered only when staged; the cockpit derives no grade of its own" },
   "borrower.exposure.facilities[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan__c" },
   "borrower.exposure.facilities[].collateral[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan_Collateral2__c" },
   "borrower.exposure.facilities[].collateral[].collateralId": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Collateral__c record id from the pledge junction. The only valid anchor for a valuation write; absent means the id was not staged and the action is blocked" },
   "borrower.exposure.facilities[].totalLendableValue": { kind: "NCINO", source: "Customer360Exposure — org-computed Current_Lendable_Value" },
   "borrower.covenants.covenants[]": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant2__c" },
+  "borrower.covenants.covenants[].complianceId": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant_Compliance__c record id. The only valid anchor for a covenant assessment, which is UPDATE-only; absent blocks the action" },
   "borrower.graph.connections[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Connection__c" },
   "borrower.graph.legalEntities[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Legal_Entities__c" },
   "borrower.opportunities.opportunities[]": { kind: "NCINO", source: "Customer360Opportunities — open Opportunity" },
@@ -260,12 +262,21 @@ export interface Snapshot {
   totalObligorExposure?: number;
   totalOutstanding?: number;
   primaryRiskRating?: string;
+  /** The org's own computed grade, when it stages one. Never derived here:
+   *  there is no grade model in the artifact, and a credit grade that looks
+   *  computed but is not would be the worst thing this cockpit could render. */
+  computedRiskRating?: string;
   primaryStage?: string;
   note?: string;
 }
 
 export interface Covenant {
   covenantId?: string;
+  /** The COMPLIANCE record (LLC_BI__Covenant_Compliance__c) an assessment is
+   *  written against. Distinct from `covenantId`, which is the covenant
+   *  definition. A covenant review is UPDATE-only, so absent means the action
+   *  is blocked rather than silently anchored on the wrong record. */
+  complianceId?: string;
   covenantType?: string;
   thresholdValue?: number;
   actualValue?: number;

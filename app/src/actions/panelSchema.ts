@@ -118,7 +118,15 @@ export function chipFor(field: PanelField): ProvenanceKind | null {
  *  test can assert the panel never silently asks a banker to transcribe. */
 export function unfilledRequired(schema: PanelSchema): PanelField[] {
   return schema.fields.filter(
-    (f) => f.required && f.prefill.source !== "BANKER" && (f.value === null || f.value === undefined || f.value === ""),
+    (f) =>
+      f.required &&
+      f.prefill.source !== "BANKER" &&
+      // A field carrying a BLOCKING GAP is not an assembly defect: its
+      // emptiness is already explained, already surfaced to the banker, and
+      // already stopping the action. Counting it here too would report one
+      // missing fact twice, the second time as banker work it is not.
+      !f.gap?.blocksStaging &&
+      (f.value === null || f.value === undefined || f.value === ""),
   );
 }
 

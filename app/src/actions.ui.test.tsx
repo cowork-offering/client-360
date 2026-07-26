@@ -211,8 +211,10 @@ describe("CopyPromptDialog explainer variant (founder bug 2026-07-25)", () => {
     mount(); // no window.sendPrompt in this env
     click(openAnchor()); // Piedmont IS staged
     click(byText(/Client Actions/)!);
+    // A non-panel action: wave 2 gave New Facility Request a ticket, so the
+    // copy-prompt fallback is now demonstrated on one that still narrates.
     const btn = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("New Facility Request"),
+      b.textContent?.includes("Draft Credit Memo"),
     )!;
     expect(btn.hasAttribute("disabled")).toBe(false); // staged ⇒ available
     click(btn);
@@ -224,7 +226,11 @@ describe("CopyPromptDialog explainer variant (founder bug 2026-07-25)", () => {
     expect(dialog.textContent).not.toMatch(NOT_STAGED_COPY);
   });
 
-  it("activity next-step fallback also uses the no-channel variant", () => {
+  it("an activity next step for a ticketed action opens the ticket, not a prompt", () => {
+    // Wave 2 gave every staged next-step action a ticket, so this path no
+    // longer reaches the copy-prompt fallback at all. The fallback itself stays
+    // covered by the Client Actions case above; what matters here is that the
+    // next step behaves like the other two entry points (A33.1.1).
     mount();
     click(openRow("Sterling Fabrication"));
     click(byText(/Headroom analysis concluded/)!);
@@ -232,11 +238,10 @@ describe("CopyPromptDialog explainer variant (founder bug 2026-07-25)", () => {
       b.textContent?.includes("Loan Modification"),
     )!;
     click(step);
-    const dialog = [...document.querySelectorAll('[role="dialog"]')].find((d) =>
-      /Copy prompt/.test(d.textContent ?? ""),
-    )!;
-    expect(dialog.textContent).toMatch(NO_CHANNEL_COPY);
-    expect(dialog.textContent).not.toMatch(NOT_STAGED_COPY);
+    expect(
+      [...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Loan Modification"),
+    ).toBe(true);
+    expect([...document.querySelectorAll('[role="dialog"]')].some((d) => /Copy prompt/.test(d.textContent ?? ""))).toBe(false);
   });
 
   it("genuinely unstaged row ⇒ the unstaged variant", () => {

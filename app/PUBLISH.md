@@ -311,6 +311,100 @@ and a line telling the banker to verify it in nCino, and the trail entry says th
 back to a generic label: that would hide a real verification failure behind copy that reads like
 success. The deep link is still offered in that state, because the record does exist.
 
+### Corrections from PROBE-LEDGER wave 3
+
+Read after the wave-2 build; each of these overturned something the panel had assumed.
+
+- **A filed valuation does NOT move the collateral value.** Probe 6 settled it negative in both arms:
+  the rollup is bound to nCino's Add Valuation button, and `Auto_Update_Collateral_Value` does not
+  substitute. The valuation readout is therefore headed "What this valuation implies", not "What this
+  changes", and carries the org's actual behaviour as a caveat. The ledger's rule — "any future claim
+  of coverage improvement from a filed valuation is false" — is pinned by test.
+- **Risk Rating Review writes to `LLC_BI__Annual_Review__c`.** There is no `LLC_BI__Risk_Rating_Review__c`
+  in this org; the label/API mismatch is A33.4.7. The object has no `RecordTypeId` and no `OwnerId`, and
+  `LLC_BI__Status__c` defaults to `Not Approved` — an omitted status reads as a DECISION, so the ticket
+  sets `In Review` explicitly and says why in the field help.
+- **The covenant compliance object is `LLC_BI__Covenant_Compliance2__c`.**
+- **The org rewrites the Loan `Name` and self-populates `LLC_BI__Product__c` to `Construction`.** The
+  ticket proposes no name, says so, and makes Product required (7 values incl. Deposit).
+- **`LLC_BI__Application_Method__c` is org-defaulted (`Online`); `LLC_BI__Primary_Loan_Purpose__c` is
+  not.** Of the two fields LV12/LV13 gate, only the purpose is collected — and it lives on the Loan
+  Detail, which the org creates asynchronously about four seconds later via a FLOW, with no
+  `AsyncApexJob` row to poll.
+- **`LLC_BI__RootLoanId__c` does not exist here**; no chain-walking references any.
+
+### Wave 2 seam swap (observed 2026-07-26)
+
+Every wave-2 payload now carries field names copied verbatim from request bodies the org accepted.
+Two shapes were wrong in the contract build and are fixed: a new facility is anchored on
+`productPackageId` with NO `accountId`, and its product field is `product`; the risk rating factor
+scores are four NAMED fields (`cashFlowCoverageActual`, `revenueGrowthActual`,
+`managementExperienceActual`, `creditScoreActual`), not a map. The covenant assessment sends
+`covenantComplianceId` and an `observedValue` that is a STRING on the wire.
+
+`executionHeld` and `heldReason` come back on the modification and renewal stage responses, and the
+gate now renders the ORG's reason verbatim rather than restating our own copy. `covenantCarryoverCount`
+is surfaced per A33.2.4(c).
+
+**Two-phase execute for new facility — VERIFIED live.** The in-transaction wait was architecturally
+impossible: the Loan Detail is created by an AFTER-COMMIT flow, so no synchronous poll can see it, and
+the busy-spin hit the Apex CPU ceiling before its own timeout could fire (the superseded defect run
+rolled back atomically and created nothing). Execution is two invocations. The first returns `partial`
+with `write_loan` and `verify_loan` verified, `wait_loan_detail` **waiting**, and the org's own
+sentence: *"nCino creates the Loan Detail moments after this filing, in a separate transaction. It
+cannot be seen from here."* The banker's **Continue** gesture makes the second, which re-queries once
+and completes: purpose written, stage hopped to Proposal, hop re-verified, and `observe_loan_officer`
+honestly `filed_unverified` because org automation assigned it. Still-waiting keeps the affordance and
+is never rendered as a failure — nothing has gone wrong, the org simply has not finished.
+
+**The resume resends the stage `decisionToken`, and that is deliberate.** The token is single-use
+SEMANTICALLY — invocation 1 consumes it and stamps `cm_Token_Consumed_At` exactly once — but the wire
+requires its PRESENCE on the resume as a transport formality: `decisionToken` is declared
+`required=true` on the invocable variable, so a null or omitted token is rejected at the platform
+boundary with `REQUIRED_FIELD_MISSING`, before Apex runs. The Apex resume path never reads it (it
+dispatches on staging status). So the Continue gesture sends the identical five-field payload,
+original token included, pinned by test at both the channel and panel layers. A third identical call
+replays: same `loanId`, no duplicate.
+
+**One field name in the whole wave-2 surface is still inferred:** `overriddenRiskGradeValue`. The
+staged plan writes `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool accepts an override, but the
+observed probe never sent one; the name follows its observed sibling `computedRiskGradeValue`. It is
+marked as inferred in the type.
+
+The org-assigned facility name is reported from `recordName`, never echoed back from anything the
+panel sent — the org rewrites `Name` as `Account - Product - Amount`.
+
+**`execute_covenant_review` has never been run live.** Its first invocation is founder-gated because
+it updates an existing compliance record and no throwaway substitute exists — a hand-created one would
+itself fire the Create-triggered approval flow and raise a work item at a named human. The tool is
+contract-observed and stage-observed; the execute path is not.
+
+### Wave 2 — five more tickets (contracts frozen, tools not yet observed)
+
+New Facility, Risk Rating Review, Covenant Review, Loan Modification and Renewal have full tickets,
+schemas and registry wiring. Manifest constants cover 14 write-tool names: 6 stage/execute pairs plus
+`stage_loan_modification` and `stage_renewal`.
+
+**Execution is HELD for modification and renewal.** `WRITE_TOOLS[...].execute` is `null`, not a
+plausible name we hope exists: nCino requires a facility to be Booked through its own Submit for
+Approval before a credit action can run against it (org rule LV06), so no execute tool was built.
+Staging is real — the plan and the ledger row are genuine — and the confirm gate renders the held
+state with that sentence, gesture disabled. `executeAction` refuses a held action before calling
+anything.
+
+**Built against the contract, not observed wire.** The Apex Request classes for these five are not
+deployed, so `StagePayloads` carries PROVISIONAL field names, declared in one place so the seam swap
+is a single edit per action. Option sets relayed from the frozen contract (loan products, assessment
+results) are cited as relayed, not as described by this session.
+
+Other probe-settled specifics: the org names the loan on creation and the cockpit proposes no name;
+Loan Detail arrives asynchronously; the loan officer is org-assigned and displayed readonly because
+the ACNPEX routine overwrites it; a covenant assessment is UPDATE-only and blocks without a staged
+compliance record id (the collateral-anchor doctrine); the approval-chain warning is gone, replaced by
+"status changes are recorded on the existing compliance record; the bank's approval process governs
+new compliance periods"; and a rating override with no reason is refused in the ticket rather than by
+a rejected write.
+
 ### Write tools (WP5)
 
 `stage_*` performs **zero domain-object DML** — it validates, computes and returns an immutable plan

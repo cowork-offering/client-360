@@ -33,6 +33,9 @@ export const CREATED_OBJECT: Record<string, { object: string; label: string }> =
   "collateral-valuation": { object: "LLC_BI__Collateral_Valuation__c", label: "collateral valuation" },
   "create-service-request": { object: "Case", label: "service request" },
   "annual-review": { object: "LLC_BI__Review__c", label: "annual credit review" },
+  "risk-rating-review": { object: "LLC_BI__Annual_Review__c", label: "risk rating review" },
+  "new-facility-request": { object: "LLC_BI__Loan__c", label: "facility" },
+  "covenant-review": { object: "LLC_BI__Covenant_Compliance2__c", label: "covenant assessment" },
 };
 
 /** The record the write just created. Hero on a successful terminal state. */

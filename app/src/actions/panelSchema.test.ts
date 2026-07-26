@@ -7,7 +7,19 @@ import { buildPanelSchema, PANEL_SCHEMAS } from "./schemas";
 import { bankerEntryFields, chipFor, PREFILL_PROVENANCE, stagingBlockers, unfilledRequired } from "./panelSchema";
 import { DEMO_POLICY_PACK } from "../policy/policyPack";
 
-const SHIPPING = ["collateral-valuation", "create-service-request", "annual-review"];
+/** Every action with a ticket. Wave 1 shipped three; wave 2 added five, two of
+ *  which stage but cannot execute (LV06) — a property of the tool map, not of
+ *  the panel, so they still belong here. */
+const SHIPPING = [
+  "collateral-valuation",
+  "create-service-request",
+  "annual-review",
+  "new-facility-request",
+  "risk-rating-review",
+  "covenant-review",
+  "loan-modification",
+  "renewal",
+];
 
 const bundle: BorrowerBundle = {
   snapshot: { accountId: "001X", name: "Testco", primaryRiskRating: "5" },
@@ -25,7 +37,7 @@ const bundle: BorrowerBundle = {
 const ctx = { bundle, accountId: "001X", accountName: "Testco" };
 
 describe("registry integration (A33.1.2)", () => {
-  it("declares a panel on exactly the three shipping actions", () => {
+  it("declares a panel on exactly the shipping actions", () => {
     const withPanel = ACTIONS.filter((a) => a.hasPanel).map((a) => a.id).sort();
     expect(withPanel).toEqual([...SHIPPING].sort());
   });
@@ -38,7 +50,7 @@ describe("registry integration (A33.1.2)", () => {
     }
   });
 
-  it("the other seven actions have no panel and stay analysis-only", () => {
+  it("the remaining actions have no panel and stay analysis-only", () => {
     for (const a of ACTIONS.filter((x) => !SHIPPING.includes(x.id))) {
       expect(a.hasPanel, a.id).toBeUndefined();
       expect(buildPanelSchema(a.id, ctx), a.id).toBeNull();

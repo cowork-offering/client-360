@@ -39,6 +39,8 @@ export function createdRecordId(actionId: string, outcome: ExecuteResult): strin
   if (actionId === "collateral-valuation") return outcome.valuationId;
   if (actionId === "create-service-request") return outcome.caseId;
   if (actionId === "annual-review") return outcome.reviewId;
+  if (actionId === "risk-rating-review") return outcome.riskRatingReviewId;
+  if (actionId === "new-facility-request") return outcome.loanId;
   return undefined;
 }
 
@@ -144,6 +146,11 @@ const ACTION_LABEL: Record<string, string> = {
   "collateral-valuation": "Collateral valuation",
   "create-service-request": "Service request",
   "annual-review": "Annual credit review",
+  "risk-rating-review": "Risk rating review",
+  "new-facility-request": "Facility",
+  "covenant-review": "Covenant assessment",
+  "loan-modification": "Modification",
+  renewal: "Renewal",
 };
 
 /**

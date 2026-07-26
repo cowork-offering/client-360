@@ -82,6 +82,18 @@ export const TOOLS = {
   executeServiceRequest: "execute_service_request",
   stageAnnualReview: "stage_annual_review",
   executeAnnualReview: "execute_annual_review",
+  // Wave 2. Built against the frozen contracts; the seam swaps on observation.
+  stageNewFacility: "stage_new_facility",
+  executeNewFacility: "execute_new_facility",
+  stageRiskRatingReview: "stage_risk_rating_review",
+  executeRiskRatingReview: "execute_risk_rating_review",
+  stageCovenantReview: "stage_covenant_review",
+  executeCovenantReview: "execute_covenant_review",
+  // Modification and renewal STAGE only. There is no execute_* for either: the
+  // org requires a facility to reach Booked through its own Submit for Approval
+  // before a credit action may run (LV06), so no execute tool was built.
+  stageLoanModification: "stage_loan_modification",
+  stageRenewal: "stage_renewal",
 } as const;
 
 /** The six per-account detail tools, in the order the app stages them. */

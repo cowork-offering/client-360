@@ -25,7 +25,26 @@ export const WRITE_TOOLS = {
   "collateral-valuation": { stage: "stage_collateral_valuation", execute: "execute_collateral_valuation" },
   "create-service-request": { stage: "stage_service_request", execute: "execute_service_request" },
   "annual-review": { stage: "stage_annual_review", execute: "execute_annual_review" },
+  "new-facility-request": { stage: "stage_new_facility", execute: "execute_new_facility" },
+  "risk-rating-review": { stage: "stage_risk_rating_review", execute: "execute_risk_rating_review" },
+  "covenant-review": { stage: "stage_covenant_review", execute: "execute_covenant_review" },
+  // EXECUTE HELD. `execute` is null, not a name we hope exists: the tool was
+  // never built, because nCino requires a facility to be Booked through its own
+  // Submit for Approval before a credit action can run against it (LV06).
+  // Staging is real and the staged plan is preserved; the gate says so.
+  "loan-modification": { stage: "stage_loan_modification", execute: null },
+  renewal: { stage: "stage_renewal", execute: null },
 } as const;
+
+/** Actions whose plan can be STAGED but not executed from here (LV06). */
+export function isExecutionHeld(actionId: string): boolean {
+  return isWriteAction(actionId) && WRITE_TOOLS[actionId].execute === null;
+}
+
+/** The banker-facing explanation of the held state. One sentence of cause, one
+ *  of consequence, and the reassurance that the work is not lost. */
+export const EXECUTION_HELD_COPY =
+  "Staging works; execution awaits an approved facility path: nCino requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.";
 
 export type WriteActionId = keyof typeof WRITE_TOOLS;
 
@@ -77,6 +96,31 @@ export interface ExecuteResult {
   recordName?: string | null;
   /** The thing the record was filed against, named by the org. */
   anchorName?: string | null;
+  riskRatingReviewId?: string;
+  loanId?: string;
+  /**
+   * TWO-PHASE EXECUTE (new facility).
+   *
+   * The in-transaction wait was architecturally impossible: the Loan Detail is
+   * created by an AFTER-COMMIT flow, so no synchronous poll can ever see it,
+   * and the busy-spin hit the Apex CPU ceiling before its own timeout could
+   * fire (PROBE-LEDGER wave 4, `execute_new_facility` OBSERVED_FAILED).
+   *
+   * So execution is two invocations. The first returns `partial` with the loan
+   * written and `wait_loan_detail` waiting; the banker's Continue gesture makes
+   * the second, which re-queries once and either finishes or reports still
+   * waiting. STILL WAITING IS NEVER A FAILURE: nothing has gone wrong, the org
+   * simply has not finished yet.
+   */
+  resumable?: boolean;
+  /** The org's own sentence about what a Continue would do. Rendered
+   *  verbatim: it is the tool's explanation, not ours to paraphrase. */
+  resumeDescriptor?: string;
+  /** The facility's stage as the org holds it right now. */
+  stage?: string;
+  loanDetailId?: string;
+  executionHeld?: boolean;
+  heldReason?: string;
 }
 
 /* ------------------------------------------------------------- unwrapping */
@@ -199,6 +243,73 @@ export interface StagePayloads {
     guarantorNarrative?: string | null;
     riskRatingComments?: string | null;
   };
+
+  /* ---- WAVE 2 -------------------------------------------------------------
+     OBSERVED 2026-07-26 (/tmp/wave2-envelopes.json). Every field below is
+     copied verbatim from a request body the org actually accepted. Two notes:
+
+     - `new-facility-request` carries NO accountId: it is anchored on the
+       product package, which is what the org hangs a facility off.
+     - the risk rating factor scores are four NAMED fields, not a map. */
+
+  "new-facility-request": {
+    idempotencyKey: string;
+    rationale?: string;
+    productPackageId: string;
+    /** `LLC_BI__Product__c`. Collected because the org files a blank one as
+     *  `Construction` and then names the loan from it. */
+    product?: string | null;
+    amount?: number | null;
+    termMonths?: number | null;
+    /** `LLC_BI__Primary_Loan_Purpose__c` on the async-created Loan Detail. */
+    primaryLoanPurpose?: string | null;
+  };
+  "risk-rating-review": {
+    idempotencyKey: string;
+    rationale?: string;
+    accountId: string;
+    computedRiskGradeValue?: number | null;
+    cashFlowCoverageActual?: number | null;
+    revenueGrowthActual?: number | null;
+    managementExperienceActual?: number | null;
+    creditScoreActual?: number | null;
+    comments?: string | null;
+    /** PROVISIONAL NAME. The staged plan writes
+     *  `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool accepts an
+     *  override, but the observed probe never sent one. This name follows the
+     *  convention of its observed sibling `computedRiskGradeValue`; it is
+     *  INFERRED, not observed, and is the one field in this block that is. */
+    overriddenRiskGradeValue?: number | null;
+  };
+  "covenant-review": {
+    idempotencyKey: string;
+    rationale?: string;
+    accountId: string;
+    /** UPDATE-only: the existing compliance record this assessment lands on. */
+    covenantComplianceId: string;
+    result?: string | null;
+    /** Observed as a STRING on the wire, not a number. */
+    observedValue?: string | null;
+    narrative?: string | null;
+    comments?: string | null;
+  };
+  "loan-modification": {
+    idempotencyKey: string;
+    rationale?: string;
+    loanId: string;
+    productPackageId?: string | null;
+    requestedAmount?: number | null;
+    requestedTermMonths?: number | null;
+    requestedRate?: number | null;
+  };
+  renewal: {
+    idempotencyKey: string;
+    rationale?: string;
+    loanId: string;
+    productPackageId?: string | null;
+    newMaturityDate?: string | null;
+    requestedRate?: number | null;
+  };
 }
 
 /** Call `stage_*`. USER GESTURE ONLY — never on mount, never polled. */
@@ -227,6 +338,9 @@ export async function stageAction<K extends WriteActionId>(
     warnings: Array.isArray(r.warnings) ? r.warnings.map(String) : [],
     suggestions: [],
     provenanceJson: typeof r.provenanceJson === "string" ? r.provenanceJson : undefined,
+    executionHeld: r.executionHeld === true,
+    heldReason: typeof r.heldReason === "string" ? r.heldReason : undefined,
+    covenantCarryoverCount: typeof r.covenantCarryoverCount === "number" ? r.covenantCarryoverCount : undefined,
     provenance: parseProvenance(r.provenanceJson),
   }));
 }
@@ -267,14 +381,32 @@ export function resolveApproverUserId(meta: { user?: string; userId?: string } |
   return null;
 }
 
+/**
+ * RESUME CONTRACT (observed 2026-07-26).
+ *
+ * `decisionToken` is declared `required=true` on the invocable variable, and
+ * the Actions API enforces that at the PLATFORM boundary: a null or omitted
+ * token on invocation 2 is rejected before Apex runs, with
+ * `REQUIRED_FIELD_MISSING`. The Apex resume path never reads it (it dispatches
+ * on staging status), so the token is single-use SEMANTICALLY — invocation 1
+ * consumes it and stamps `cm_Token_Consumed_At` exactly once — while the wire
+ * still requires its PRESENCE on the resume as a transport formality.
+ *
+ * So the caller resends the original stage token. That is the natural caller
+ * behaviour and the one the verified envelope captured.
+ */
 /** Call `execute_*`. USER GESTURE ONLY, and only behind a confirmed plan. */
 export async function executeAction(
   actionId: WriteActionId,
   payload: ExecutePayload,
 ): Promise<ToolOutcome<ExecuteResult>> {
+  const tool = WRITE_TOOLS[actionId].execute;
+  // Defence in depth: the gate disables the gesture, and the call is refused
+  // anyway rather than sending a tool name that does not exist.
+  if (!tool) return { ok: false, error: { code: "EXECUTION_HELD", message: EXECUTION_HELD_COPY, resumable: false } };
   const res = await callTool(
     SERVERS.customer360,
-    WRITE_TOOLS[actionId].execute,
+    tool,
     { inputs: [payload] },
     // A write is never cached and never auto-retried: an ambiguous transport
     // outcome is not proof the tool did not run.
@@ -289,6 +421,14 @@ export async function executeAction(
     valuationId: typeof r.valuationId === "string" ? r.valuationId : undefined,
     caseId: typeof r.caseId === "string" ? r.caseId : undefined,
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
+    riskRatingReviewId: typeof r.riskRatingReviewId === "string" ? r.riskRatingReviewId : undefined,
+    loanId: typeof r.loanId === "string" ? r.loanId : undefined,
+    resumable: r.resumable === true,
+    resumeDescriptor: typeof r.resumeDescriptor === "string" ? r.resumeDescriptor : undefined,
+    stage: typeof r.stage === "string" ? r.stage : undefined,
+    loanDetailId: typeof r.loanDetailId === "string" ? r.loanDetailId : undefined,
+    executionHeld: r.executionHeld === true,
+    heldReason: typeof r.heldReason === "string" ? r.heldReason : undefined,
     // `recordName` is canonical; the per-action aliases carry the SAME fact for
     // tools that predate it. All absent means the read-back did not confirm a
     // name, which is a state the UI must show rather than fill in.

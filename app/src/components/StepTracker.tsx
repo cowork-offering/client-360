@@ -98,6 +98,8 @@ export function StepTracker({
   token,
   snapshot,
   outcome,
+  onContinue,
+  continuing,
 }: {
   plan: StagedOutput;
   /** Which registry action filed this, so the deep link can name its object. */
@@ -107,6 +109,10 @@ export function StepTracker({
   snapshot: Snapshot | undefined;
   /** Present once the executor has run. Its own words win over ours. */
   outcome?: ExecuteResult | null;
+  /** Present when the org says the plan can be resumed. A USER GESTURE makes
+   *  the second call; nothing here polls and nothing retries on its own. */
+  onContinue?: () => void;
+  continuing?: boolean;
   onChange?: (s: TrackerState) => void;
 }) {
   const terminal = actionTerminal(state, plan.steps);
@@ -218,6 +224,34 @@ export function StepTracker({
             verify it landed as intended.
           </div>
           <div className="mt-1 font-mono text-[11px] text-ink-faint">{filed.id}</div>
+        </div>
+      )}
+
+      {/* TWO-PHASE EXECUTE. The org is still working and has said so; that is
+          not a failure and must never read as one. The banker's gesture makes
+          the second call, consistent with the no-auto-retry doctrine. */}
+      {!revealing && outcome?.resumable && onContinue && (
+        <div className="border-b border-divider px-5 py-4">
+          <div className="rounded-[10px] px-3.5 py-3" style={{ background: "var(--warning-bg)" }}>
+            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--warning)" }}>
+              Waiting on the org
+            </div>
+            <p className="mt-1.5 text-[12px] leading-relaxed" style={{ color: "var(--warning-prose)" }}>
+              {/* The tool's own sentence when it gives one: it knows what a
+                  Continue would do, and paraphrasing it would only blur it. */}
+              {outcome.resumeDescriptor ??
+                "What was written is written. The org is still finishing, in a transaction this page cannot see. Nothing is retried on its own: continue when you are ready and the cockpit checks once more."}
+            </p>
+            <button
+              type="button"
+              onClick={onContinue}
+              disabled={continuing}
+              className="c360-btn mt-2.5 rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
+              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+            >
+              {continuing ? "Checking…" : "Continue"}
+            </button>
+          </div>
         </div>
       )}
 

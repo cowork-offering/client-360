@@ -7,7 +7,16 @@ import sample from "../../../artifact/sample-data.json";
 
 const DATA = sample as unknown as C360Data;
 const BUNDLES = Object.entries(DATA.borrowers ?? {});
-const PANEL_ACTIONS = ["annual-review", "collateral-valuation", "create-service-request"];
+const PANEL_ACTIONS = [
+  "annual-review",
+  "collateral-valuation",
+  "create-service-request",
+  "new-facility-request",
+  "risk-rating-review",
+  "covenant-review",
+  "loan-modification",
+  "renewal",
+];
 const REASONS: ReasonCode[] = ["COVENANT_BREACH", "MATURITY_NEAR"];
 
 function build(actionId: string, accountId: string, bundle: BorrowerBundle) {
@@ -57,7 +66,10 @@ describe("the briefing composes over the schema, it does not replace it", () => 
 
   it("has no panel and no briefing for an action without a schema", () => {
     const [id, b] = BUNDLES[0];
-    expect(buildBriefing("renewal", buildPanelSchema("renewal", { bundle: b as BorrowerBundle, accountId: id, accountName: "x" }), b as BorrowerBundle, "x")).toBeNull();
+    // Draft Credit Memo stays analysis-only: no schema, so no briefing.
+    const schema = buildPanelSchema("draft-credit-memo", { bundle: b as BorrowerBundle, accountId: id, accountName: "x" });
+    expect(schema).toBeNull();
+    expect(buildBriefing("draft-credit-memo", schema, b as BorrowerBundle, "x")).toBeNull();
   });
 });
 

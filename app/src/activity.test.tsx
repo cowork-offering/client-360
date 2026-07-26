@@ -182,7 +182,10 @@ describe("A30.3 — detail popup", () => {
     expect(m.textContent).toContain("Loan Modification");
   });
 
-  it("sends a next-step action through the channel", async () => {
+  it("opens the ticket for a next-step action that has one (A33.1.1)", async () => {
+    // Loan Modification became panel-backed in wave 2, so the next step now
+    // opens its ticket instead of narrating a prompt. The entry point is the
+    // same modal the Client Actions row and the chat chip open.
     const sendPrompt = vi.fn();
     (window as unknown as { sendPrompt: unknown }).sendPrompt = sendPrompt;
     mount();
@@ -190,9 +193,12 @@ describe("A30.3 — detail popup", () => {
     click(byText(/Headroom analysis concluded/)!);
     const step = [...modal()!.querySelectorAll("button")].find((b) => b.textContent?.includes("Loan Modification"))!;
     await clickAsync(step);
-    expect(sendPrompt).toHaveBeenCalledTimes(1);
-    expect(String(sendPrompt.mock.calls[0][0])).toContain("loan modification for Sterling Fabrication Co.");
-    expect(modal()!.textContent).toContain("Sent to desk");
+    expect(
+      [...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Loan Modification"),
+    ).toBe(true);
+    // A ticket is opened locally: nothing is narrated to the desk until the
+    // banker confirms a plan.
+    expect(sendPrompt).not.toHaveBeenCalled();
   });
 
   it("closes on Escape", () => {
@@ -284,10 +290,11 @@ describe("A31.3 — ACTION_TRIGGERED session activity", () => {
     mount();
     click(openRow("Sterling Fabrication"));
     click(byText(/Client Actions/)!);
-    // Use a NON-panel action: panel-backed actions now open the Action Panel
+    // Use a NON-panel action: panel-backed actions open the Action Panel
     // instead of firing, and nothing is triggered until the confirm gesture.
+    // Wave 2 gave five more actions tickets, so this is now Draft Credit Memo.
     const btn = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("New Facility Request"),
+      b.textContent?.includes("Draft Credit Memo"),
     )!;
     return { sendPrompt, btn };
   }
@@ -297,7 +304,7 @@ describe("A31.3 — ACTION_TRIGGERED session activity", () => {
     await clickAsync(btn);
     press("Escape");
     const text = container!.textContent ?? "";
-    expect(text).toContain("New Facility Request");
+    expect(text).toContain("Draft Credit Memo");
     expect(text).toContain("Sent to the desk");
     expect(text).toContain("You · just now");
   });

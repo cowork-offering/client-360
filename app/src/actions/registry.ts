@@ -172,6 +172,7 @@ export const ACTIONS: ClientAction[] = [
       "Start a loan modification for {account} ({accountId}) — summarise the booked facilities and the modification options.",
     availability: (data, accountId) => withBundle(data, accountId, requireActivePackage),
     apexAction: { tool: "ncino_create_modification", params: { accountId: "{accountId}" } },
+     hasPanel: true,
   },
   {
     id: "renewal",
@@ -184,6 +185,7 @@ export const ACTIONS: ClientAction[] = [
       "Begin the renewal workflow for {account} ({accountId}) — start with the facility closest to maturity.",
     availability: (data, accountId) => withBundle(data, accountId, requireActivePackage),
     apexAction: { tool: "ncino_create_renewal", params: { accountId: "{accountId}" } },
+     hasPanel: true,
   },
   {
     id: "covenant-review",
@@ -200,6 +202,7 @@ export const ACTIONS: ClientAction[] = [
           ? { available: true }
           : { available: false, reason: "No covenants recorded for this relationship" },
       ),
+     hasPanel: true,
   },
   {
     id: "collateral-valuation",
@@ -247,6 +250,7 @@ export const ACTIONS: ClientAction[] = [
           : { available: false, reason: "No risk rating on file for this borrower" },
       ),
     apexAction: { tool: "ncino_update_risk_rating", params: { accountId: "{accountId}" } },
+     hasPanel: true,
   },
   {
     id: "new-facility-request",
@@ -258,6 +262,7 @@ export const ACTIONS: ClientAction[] = [
     promptTemplate: "Structure a new facility request for {account} ({accountId}).",
     availability: (data, accountId) => withBundle(data, accountId, () => STAGED_ONLY),
     apexAction: { tool: "ncino_create_loan", params: { accountId: "{accountId}" } },
+     hasPanel: true,
   },
   {
     id: "create-service-request",

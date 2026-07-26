@@ -55,6 +55,13 @@ export interface StagedOutput {
   productPackageId?: string;
   /** Per-field provenance map, delivered as a JSON STRING on the wire. */
   provenanceJson?: string;
+  /** OBSERVED on stage_loan_modification / stage_renewal. The ORG's own word
+   *  for whether this plan can be executed, and its reason verbatim. The client
+   *  has a tool map that says the same thing; when both speak, the org wins. */
+  executionHeld?: boolean;
+  heldReason?: string;
+  /** A33.2.4(c) — loan-level covenants that would carry to the clone. */
+  covenantCarryoverCount?: number;
   /** Hash over the ordered steps plus resolved field values. Immutable.
    *  `execute_*` refuses a mismatch. */
   planHash: string;

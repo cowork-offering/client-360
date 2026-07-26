@@ -128,8 +128,9 @@ describe("A33.1.1 — one modal, three entry points", () => {
   });
 
   it("a non-panel action still fires directly instead of opening a modal", () => {
-    openActionPanel("New Facility Request");
-    expect(panel("New Facility Request")).toBeNull();
+    // Wave 2 gave New Facility Request a ticket; Draft Credit Memo still narrates.
+    openActionPanel("Draft Credit Memo");
+    expect(panel("Draft Credit Memo")).toBeNull();
   });
 });
 
@@ -319,6 +320,221 @@ describe("WP7.1 — the panel opens on a briefing, not a form", () => {
   });
 });
 
+describe("the two-phase facility execute, through the panel", () => {
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  const PHASE = (resumable: boolean) => ({
+    ok: true,
+    error: null,
+    result: {
+      stagingId: "a8abb00001KtalSAAR",
+      terminalState: resumable ? "partial" : "success",
+      stage: resumable ? "Qualification" : "Proposal",
+      resumable,
+      resumeDescriptor: resumable
+        ? "Continue this action to verify the Loan Detail and complete the move to Proposal. No new confirmation is needed: the same plan is still running."
+        : null,
+      loanId: "a4Zbb0000027KdZEAU",
+      recordName: "ZZ - Term - $750,000.00",
+      outcome: resumable ? "Filed at Qualification." : "Completed and moved to Proposal.",
+      steps: [
+        { id: "s1", type: "write", label: "Create the credit review", state: "verified" },
+        {
+          id: "s2",
+          type: "verification",
+          label: "Confirm the review exists",
+          state: resumable ? "waiting" : "verified",
+          detail: resumable ? "It cannot be seen from here." : "Done.",
+        },
+      ],
+    },
+  });
+
+  it("offers Continue while the org is still working, and never calls it a failure", async () => {
+    installWriteMcp({ execute: PHASE(true) });
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    const p = panel("Annual Review")!;
+    expect(p.textContent).toContain("Waiting on the org");
+    expect(p.textContent).toContain("No new confirmation is needed");
+    expect(p.textContent).not.toContain("Failed");
+    expect([...p.querySelectorAll("button")].some((b) => b.textContent === "Continue")).toBe(true);
+  });
+
+  it("resends the same five-field payload on the Continue gesture", async () => {
+    const callTool = installWriteMcp({ execute: PHASE(true) });
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    click([...panel("Annual Review")!.querySelectorAll("button")].find((b) => b.textContent === "Continue")!);
+    await flush();
+
+    const executes = callTool.mock.calls.filter((c) => String(c[1]).startsWith("execute_"));
+    expect(executes).toHaveLength(2);
+    const first = inputsOf(executes[0]);
+    const second = inputsOf(executes[1]);
+    // The resume is the SAME identity, token included: the platform rejects a
+    // null token with REQUIRED_FIELD_MISSING before Apex ever runs.
+    expect(second).toEqual(first);
+    expect(second.decisionToken).toBe("dt-server-001");
+  });
+
+  it("keeps the affordance when the org is still not finished", async () => {
+    installWriteMcp({ execute: PHASE(true) });
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    click([...panel("Annual Review")!.querySelectorAll("button")].find((b) => b.textContent === "Continue")!);
+    await flush();
+    expect([...panel("Annual Review")!.querySelectorAll("button")].some((b) => b.textContent === "Continue")).toBe(true);
+  });
+});
+
+describe("wave 2 — the five new tickets", () => {
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  const setInput = (el: Element, value: string) =>
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+  // One mount per case: the harness keeps a single root, so looping mounts
+  // inside one test would leave four orphaned trees in the document.
+  it.each(["New Facility Request", "Risk Rating Review", "Covenant Review", "Loan Modification", "Renewal"])(
+    "opens a ticket for %s",
+    (label) => {
+      openActionPanel(label);
+      expect(panel(label)).toBeTruthy();
+    },
+  );
+
+  it("prefills the modification from the client's own ask", () => {
+    openActionPanel("Loan Modification");
+    const hero = panel("Loan Modification")!.querySelector("#hero-newCommitment") as HTMLInputElement;
+    // Sterling asked to go from $10.0M to $13.0M; the banker retypes nothing.
+    expect(hero.value).toBe("13000000");
+    expect(panel("Loan Modification")!.textContent).toContain("Derived");
+  });
+
+  it("shows the modification's coverage and leverage move as the ask changes", () => {
+    openActionPanel("Loan Modification");
+    const p = panel("Loan Modification")!;
+    expect(p.textContent).toContain("Commitment");
+    expect(p.textContent).toContain("Collateral coverage");
+    setInput(p.querySelector("#hero-newCommitment")!, "");
+    expect(panel("Loan Modification")!.textContent).not.toContain("What this changes");
+  });
+
+  it("holds filing on a modification, and says exactly why", () => {
+    installWriteMcp();
+    openActionPanel("Loan Modification");
+    click(byText(/Review the plan/)!);
+    return flush().then(() => {
+      const p = panel("Loan Modification")!;
+      expect(p.textContent).toContain("Staged, not filed");
+      expect(p.textContent).toContain("org rule LV06");
+      expect(p.textContent).toContain("The staged plan is preserved.");
+      const confirm = [...p.querySelectorAll("button")].find((b) => /Filing is on hold/.test(b.textContent ?? ""))!;
+      expect(confirm.hasAttribute("disabled")).toBe(true);
+    });
+  });
+
+  it("still stages a real plan for a held action", async () => {
+    const callTool = installWriteMcp();
+    openActionPanel("Loan Modification");
+    click(byText(/Review the plan/)!);
+    await flush();
+    expect(callTool.mock.calls.filter((c) => String(c[1]) === "stage_loan_modification")).toHaveLength(1);
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("execute_"))).toHaveLength(0);
+  });
+
+  it("refuses to stage a rating override with no reason, and says the rule", () => {
+    openActionPanel("Risk Rating Review");
+    const p = panel("Risk Rating Review")!;
+    setInput(p.querySelector("#hero-overrideValue")!, "4");
+    const after = panel("Risk Rating Review")!;
+    expect(after.textContent).toContain("An override requires a stated reason.");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("accepts the override once a reason is written", () => {
+    openActionPanel("Risk Rating Review");
+    setInput(panel("Risk Rating Review")!.querySelector("#hero-overrideValue")!, "4");
+    const card = [...panel("Risk Rating Review")!.querySelectorAll("button")].find((b) =>
+      /Reason for the override/.test(b.textContent ?? ""),
+    )!;
+    click(card);
+    const area = panel("Risk Rating Review")!.querySelector("textarea")!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(area, "Collateral position improved materially since the last review.");
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(panel("Risk Rating Review")!.textContent).not.toContain("An override requires a stated reason.");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("blocks a covenant assessment with no compliance record to update", () => {
+    openActionPanel("Covenant Review");
+    const p = panel("Covenant Review")!;
+    // Same doctrine as the collateral anchor: no id staged, no staging.
+    expect(p.textContent).toMatch(/compliance record id is not staged|No covenants are staged/);
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("carries the settled covenant copy, and no approval-chain warning", () => {
+    openActionPanel("Covenant Review");
+    const text = panel("Covenant Review")!.textContent ?? "";
+    expect(text).toContain("the bank's approval process governs new compliance periods");
+    // The probe settled it: an update-only write cannot start the chain.
+    expect(text.toLowerCase()).not.toContain("approval chain");
+  });
+
+  it("says the org names the loan, and never proposes one", () => {
+    openActionPanel("New Facility Request");
+    const p = panel("New Facility Request")!;
+    expect(p.textContent).toContain("nCino names the loan itself on creation");
+    expect(p.querySelector("#f-name")).toBeNull();
+    expect(p.textContent).toContain("Loan Detail");
+  });
+
+  it("shows the loan officer as org-assigned rather than asking for one", () => {
+    openActionPanel("New Facility Request");
+    expandAllFields();
+    const p = panel("New Facility Request")!;
+    expect(p.textContent).toContain("the org assigns this and overwrites what we send");
+  });
+
+  it("offers the seven products the org describes, and nothing else", () => {
+    openActionPanel("New Facility Request");
+    const pill = [...panel("New Facility Request")!.querySelectorAll("button")].find((b) => /Product/.test(b.textContent ?? ""))!;
+    click(pill);
+    const sheet = [...document.querySelectorAll('[role="dialog"]')].find((d) => d.getAttribute("aria-label") === "Product")!;
+    expect([...sheet.querySelectorAll("[aria-pressed]")].map((b) => b.textContent?.trim())).toEqual([
+      "Construction",
+      "Equipment",
+      "Line of Credit",
+      "HELOC",
+      "Purchase",
+      "Deposit",
+      "Term",
+    ]);
+  });
+});
+
 describe("WP8 — the deal ticket", () => {
   const setInput = (el: Element, value: string) =>
     act(() => {
@@ -345,10 +561,14 @@ describe("WP8 — the deal ticket", () => {
     openActionPanel("Collateral Valuation");
     const p = panel("Collateral Valuation")!;
     const hero = p.querySelector("#hero-value") as HTMLInputElement;
-    // The pledge value is prefilled, so the readout is already showing.
-    expect(p.textContent).toContain("What this changes");
+    // The pledge value is prefilled, so the readout is already showing. Its
+    // heading says IMPLIES, not CHANGES: Probe 6 settled that filing a
+    // valuation does not move the collateral value.
+    expect(p.textContent).toContain("What this valuation implies");
+    expect(p.textContent).toContain("It does not move the collateral value");
+    expect(p.textContent).not.toContain("What this changes");
     setInput(hero, "");
-    expect(panel("Collateral Valuation")!.textContent).not.toContain("What this changes");
+    expect(panel("Collateral Valuation")!.textContent).not.toContain("What this valuation implies");
     setInput(panel("Collateral Valuation")!.querySelector("#hero-value")!, "12000000");
     expect(panel("Collateral Valuation")!.textContent).toContain("Collateral coverage");
   });

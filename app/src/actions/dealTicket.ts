@@ -45,6 +45,11 @@ const HERO: Record<string, string> = {
   "collateral-valuation": "value",
   "create-service-request": "subject",
   "annual-review": "reviewType",
+  "new-facility-request": "amount",
+  "risk-rating-review": "overrideValue",
+  "covenant-review": "assessmentResult",
+  "loan-modification": "newCommitment",
+  renewal: "newMaturityDate",
 };
 
 export function buildTicket(actionId: string, schema: PanelSchema, briefing: Briefing): TicketLayout {
@@ -57,6 +62,25 @@ export function buildTicket(actionId: string, schema: PanelSchema, briefing: Bri
     pillKeys: owned.filter((k) => k !== heroKey),
     sections: briefing.sections.filter((k) => schema.fields.some((f) => f.key === k)),
   };
+}
+
+/**
+ * The heading a delta readout carries, and the caveat under it.
+ *
+ * Collateral valuation gets a different heading from every other action because
+ * it is the one case where the figures move and the ORG DOES NOT: filing the
+ * valuation records the number, and the collateral keeps its old value until
+ * someone presses nCino's Add Valuation button (Probe 6, confirmed negative).
+ */
+export function deltaHeading(actionId: string): { title: string; caveat?: string } {
+  if (actionId === "collateral-valuation") {
+    return {
+      title: "What this valuation implies",
+      caveat:
+        "Filing here records the valuation. It does not move the collateral value: nCino updates that from its own Add Valuation button, so coverage is unchanged until it does.",
+    };
+  }
+  return { title: "What this changes" };
 }
 
 /** The prompt a pill or the hero shows when its value is still empty. */
@@ -79,15 +103,27 @@ export interface TicketDelta {
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /**
- * What the hero value does to the figures the cockpit already renders.
+ * What the hero value MEANS for the figures the cockpit already renders.
  *
- * Collateral coverage only, because it is the only action whose input moves a
- * figure elsewhere in the product. The math is the same as the Exposure tab's:
- * lendable value over drawn. Any missing input returns [] and the readout does
- * not render — a coverage ratio computed from a guess is worse than silence.
+ * READ THE COLLATERAL CASE CAREFULLY. Probe 6 (PROBE-LEDGER wave 3) settled it
+ * negative and permanently: filing a valuation does NOT move
+ * `LLC_BI__Collateral__c.LLC_BI__Value__c`, not synchronously and not within 45
+ * seconds, and the `Auto_Update_Collateral_Value` flag does not change that.
+ * nCino binds the rollup to its own Add Valuation button and there is no
+ * headless equivalent. The ledger's words: "Any future claim of coverage
+ * improvement from a filed valuation is false."
+ *
+ * So this readout states what the NEW FIGURE IMPLIES, and the caller renders it
+ * under a heading that says so. It is not a forecast of what filing will do.
+ *
+ * Any missing input returns [] and nothing renders — a coverage ratio computed
+ * from a guess is worse than silence.
  */
 export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, values: Record<string, unknown>): TicketDelta[] {
-  if (actionId !== "collateral-valuation" || !bundle) return [];
+  if (!bundle) return [];
+  if (actionId === "new-facility-request") return newFacilityDeltas(bundle, values);
+  if (actionId === "loan-modification") return commitmentDeltas(bundle, num(values.newCommitment));
+  if (actionId !== "collateral-valuation") return [];
 
   const proposed = num(values.value);
   if (proposed === null || proposed <= 0) return [];
@@ -125,7 +161,7 @@ export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, va
       before: fmtMoney(totalLendable),
       after: fmtMoney(lendableAfter),
       direction: lendableAfter > totalLendable ? "up" : lendableAfter < totalLendable ? "down" : "flat",
-      note: `at the pledge's ${advanceRate} percent advance rate`,
+      note: `at the pledge's ${advanceRate} percent advance rate, if the collateral is revalued`,
     },
   ];
 
@@ -145,6 +181,82 @@ export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, va
   return deltas;
 }
 
+
+/** A new facility adds to the book: what the relationship carries afterwards. */
+function newFacilityDeltas(bundle: BorrowerBundle, values: Record<string, unknown>): TicketDelta[] {
+  const amount = num(values.amount);
+  const committed = num(bundle.exposure?.totalCommitted);
+  if (amount === null || amount <= 0 || committed === null) return [];
+  const after = committed + amount;
+  return [
+    {
+      label: "Total committed",
+      before: fmtMoney(committed),
+      after: fmtMoney(after),
+      direction: "up",
+      note: `across this relationship's facilities`,
+    },
+  ];
+}
+
+/**
+ * The modification's drama, and it is real drama: moving a commitment moves
+ * coverage and leverage at once, and the banker should see both before staging.
+ *
+ * Coverage is lendable over the PROPOSED commitment (the suggestion engine's
+ * own basis). Leverage is Boom's, restated against the new commitment only when
+ * Boom staged the debt figure it was computed from; otherwise that line is
+ * absent rather than approximated.
+ */
+function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null): TicketDelta[] {
+  const committed = num(bundle.exposure?.totalCommitted);
+  if (proposed === null || proposed <= 0 || committed === null || committed <= 0) return [];
+
+  const out: TicketDelta[] = [
+    {
+      label: "Commitment",
+      before: fmtMoney(committed),
+      after: fmtMoney(proposed),
+      direction: proposed > committed ? "up" : proposed < committed ? "down" : "flat",
+      note: "on this relationship",
+    },
+  ];
+
+  let lendable = 0;
+  let haveLendable = true;
+  for (const f of (bundle.exposure?.facilities ?? []).filter(isActiveFacility)) {
+    const v = num(f.totalLendableValue);
+    if (v === null) haveLendable = false;
+    else lendable += v;
+  }
+  if (haveLendable && lendable > 0) {
+    const before = lendable / committed;
+    const after = lendable / proposed;
+    out.push({
+      label: "Collateral coverage",
+      before: fmtRatio(before),
+      after: fmtRatio(after),
+      direction: after > before ? "up" : after < before ? "down" : "flat",
+      note: `${fmtMoney(lendable)} lendable against the commitment`,
+    });
+  }
+
+  const ebitda = num(bundle.boom?.ratios?.ebitda);
+  const leverage = num(bundle.boom?.ratios?.totalLeverage);
+  if (ebitda !== null && ebitda > 0 && leverage !== null) {
+    // Restated on the same EBITDA: the ask changes the debt, not the earnings.
+    const after = leverage + (proposed - committed) / ebitda;
+    out.push({
+      label: "Total leverage",
+      before: `${leverage.toFixed(2)}x`,
+      after: `${after.toFixed(2)}x`,
+      direction: after > leverage ? "down" : after < leverage ? "up" : "flat",
+      note: `on ${fmtMoney(ebitda)} of EBITDA, earnings unchanged`,
+    });
+  }
+
+  return out;
+}
 
 /* ------------------------------------------------------- what a review covers */
 
@@ -223,5 +335,40 @@ export function reviewFacts(bundle: BorrowerBundle | null, reasons: ReasonCode[]
     });
   }
 
+  return facts;
+}
+
+
+/**
+ * What a rating review has to work with: the grade on file, and the computed
+ * grade WHEN the staged inputs derive one.
+ *
+ * There is no grade model in the artifact, so a computed grade is only ever
+ * reported when the org itself staged one. Inventing a number here would be the
+ * worst kind of fabrication: a credit grade that looks computed and is not.
+ */
+export function ratingFacts(bundle: BorrowerBundle | null, values: Record<string, unknown> = {}): TicketFact[] {
+  if (!bundle) return [];
+  const facts: TicketFact[] = [];
+  const grade = bundle.snapshot?.primaryRiskRating;
+  if (grade != null) facts.push({ label: "Current grade", value: `Grade ${grade}`, note: "on file in nCino" });
+
+  const computed = bundle.snapshot?.computedRiskRating;
+  if (computed != null) {
+    facts.push({
+      label: "Computed grade",
+      value: `Grade ${computed}`,
+      note: grade != null && String(computed) !== String(grade) ? "differs from the grade on file" : "agrees with the grade on file",
+    });
+  }
+
+  const override = num(values.overrideValue);
+  if (override !== null && override > 0) {
+    facts.push({
+      label: "Override",
+      value: `Grade ${override}`,
+      note: "a banker's call, and the org requires a stated reason",
+    });
+  }
   return facts;
 }

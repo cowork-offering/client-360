@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Briefing } from "../actions/briefing";
-import { buildTicket, promptFor, reviewFacts, ticketDeltas, type TicketDelta, type TicketFact } from "../actions/dealTicket";
+import {
+  buildTicket,
+  deltaHeading,
+  promptFor,
+  ratingFacts,
+  reviewFacts,
+  ticketDeltas,
+  type TicketDelta,
+  type TicketFact,
+} from "../actions/dealTicket";
 import type { PanelField, PanelSchema } from "../actions/panelSchema";
 import type { BorrowerBundle, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
@@ -268,10 +277,10 @@ function NarrativeCard({
 
 /* ----------------------------------------------------------------- deltas */
 
-function DeltaReadout({ deltas }: { deltas: TicketDelta[] }) {
+function DeltaReadout({ deltas, heading }: { deltas: TicketDelta[]; heading: { title: string; caveat?: string } }) {
   return (
     <div className="flex flex-col gap-2 rounded-[10px] px-3.5 py-3" style={{ background: "var(--surface-overlay)" }}>
-      <div className="kicker">What this changes</div>
+      <div className="kicker">{heading.title}</div>
       {deltas.map((d) => {
         const tone = d.direction === "up" ? "var(--positive)" : d.direction === "down" ? "var(--critical)" : "var(--ink-muted)";
         return (
@@ -288,6 +297,11 @@ function DeltaReadout({ deltas }: { deltas: TicketDelta[] }) {
           </div>
         );
       })}
+      {heading.caveat && (
+        <p className="mt-0.5 text-[10.5px] leading-relaxed" style={{ color: "var(--warning)" }}>
+          {heading.caveat}
+        </p>
+      )}
     </div>
   );
 }
@@ -345,7 +359,13 @@ export function DealTicket({
   const ticket = buildTicket(actionId, schema, briefing);
   const hero = ticket.heroKey ? byKey.get(ticket.heroKey) : undefined;
   const deltas = ticketDeltas(actionId, bundle, values);
-  const facts = actionId === "annual-review" ? reviewFacts(bundle, reasons) : [];
+  const facts =
+    actionId === "annual-review"
+      ? reviewFacts(bundle, reasons)
+      : actionId === "risk-rating-review"
+        ? ratingFacts(bundle, values)
+        : [];
+  const factTitle = actionId === "annual-review" ? "What this review covers" : "The rating position";
   const blockingGaps = schema.fields.filter((f) => f.gap);
 
   useEffect(() => {
@@ -431,10 +451,10 @@ export function DealTicket({
       )}
 
       {/* Live delta: nothing renders until every input it needs is present. */}
-      {deltas.length > 0 && <DeltaReadout deltas={deltas} />}
+      {deltas.length > 0 && <DeltaReadout deltas={deltas} heading={deltaHeading(actionId)} />}
 
       {/* The review's equivalent: what it will cover, from staged data only. */}
-      {facts.length > 0 && <FactStrip title="What this review covers" facts={facts} />}
+      {facts.length > 0 && <FactStrip title={factTitle} facts={facts} />}
 
       {/* Properties. */}
       {ticket.pillKeys.length > 0 && (
