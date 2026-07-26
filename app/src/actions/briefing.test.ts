@@ -137,3 +137,42 @@ describe("the facility is a choice only when there is one to make", () => {
     expect(briefingFor(["Booked"], "renewal").subject.context).toContain("is the booked facility");
   });
 });
+
+
+describe("a new facility joins a deal, and the ticket says which", () => {
+  const withPackage = {
+    snapshot: { accountId: "001X", name: "Testco", productPackageId: "a5F" },
+    exposure: {
+      totalCommitted: 46_000_000,
+      facilities: [
+        { loanId: "L1", status: "Open" },
+        { loanId: "L2", status: "Open" },
+        { loanId: "L3", status: "Paid Off" },
+      ],
+    },
+  } as BorrowerBundle;
+
+  const subjectFor = (bundle: BorrowerBundle) => {
+    const schema = buildPanelSchema("new-facility-request", { bundle, accountId: "001X", accountName: "Testco" })!;
+    return buildBriefing("new-facility-request", schema, bundle, "Testco")!.subject;
+  };
+
+  it("names the package it files under and the members it joins", () => {
+    const s = subjectFor(withPackage);
+    expect(s.context).toContain("Filing under this relationship's credit package");
+    // Two live facilities; the paid-off one is not a member you join.
+    expect(s.context).toContain("joining 2 existing facilities");
+    expect(s.context).toContain("$46M committed");
+  });
+
+  it("says one facility in the singular", () => {
+    const one = structuredClone(withPackage);
+    one.exposure!.facilities = [{ loanId: "L1", status: "Open" }];
+    expect(subjectFor(one).context).toContain("joining 1 existing facility");
+  });
+
+  it("keeps the create-package line on a fresh relationship", () => {
+    const fresh = { snapshot: { accountId: "001X", name: "Testco" } } as BorrowerBundle;
+    expect(subjectFor(fresh).context).toContain("No credit package exists yet");
+  });
+});

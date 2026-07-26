@@ -160,12 +160,14 @@ function serviceRequest(b: BorrowerBundle | null, name: string): Briefing {
 function newFacility(b: BorrowerBundle | null, name: string): Briefing {
   const figures: DraftFigure[] = [];
   const hasPackage = Boolean(b?.snapshot?.productPackageId);
+  // A new facility JOINS a deal; it is not a floating loan. Say what it joins.
+  const memberCount = (b?.exposure?.facilities ?? []).filter(isActiveFacility).length;
   const committed = money(b?.exposure?.totalCommitted, "borrower.exposure.totalCommitted", figures);
   return {
     subject: {
       title: `New facility for ${name}`,
       context: hasPackage
-        ? `${committed ? `${name} is carried at ${committed} committed today. ` : ""}nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
+        ? `Filing under this relationship's credit package, joining ${memberCount} existing ${memberCount === 1 ? "facility" : "facilities"}${committed ? ` and ${committed} committed` : ""}. nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
         : `No credit package exists yet for this relationship. One will be created first, the way nCino's own wizard does, and the facility filed under it. ${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership, which a facility insert does not do on its own. The org names both records itself.`,
     },
     lead: [
