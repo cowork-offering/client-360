@@ -572,170 +572,150 @@
       },
       "exposure": {
         "accountId": "001bb00001DLtRMAA1",
-        "totalCommitted": 12500000,
-        "totalOutstanding": 4250000,
-        "totalAvailable": 8250000,
         "facilities": [
           {
-            "loanId": "a1Xbb000000PLD1",
-            "name": "Piedmont Equipment Term Loan",
-            "productType": "Term Loan",
-            "riskGrade": "5",
-            "committed": 5000000,
-            "outstanding": 2500000,
-            "available": 2500000,
-            "maturityDate": "2029-04-07T11:49:49",
-            "interestRate": 6.75,
-            "totalLendableValue": 4800000,
-            "coverageRatio": 1.92,
-            "coverageShortfall": false,
-            "collateral": [
-              {
-                "loanId": "a1Xbb000000PLD1",
-                "collateralType": "Equipment",
-                "collateralValue": 6000000,
-                "advanceRate": 80,
-                "currentLendableValue": 4800000,
-                "lienPosition": "1st",
-                "pledgedStatus": "Active",
-                "isPrimary": true,
-                "collateralId": "a35bb000000zOgXAAU",
-                "collateralName": "COL-000758"
-              }
-            ],
+            "totalLendableValue": 0,
             "status": "Open",
             "stage": "Final Review",
-            "productPackageId": "a5Fbb000000HA1NEAW"
+            "riskGrade": "5",
+            "productType": "Non-Real Estate",
+            "productPackageId": "a5Fbb000000HA1NEAW",
+            "outstanding": 0,
+            "name": "Piedmont Precision Components, Inc. - Line of Credit - $7,500,000.00",
+            "maturityDate": "2027-07-15",
+            "loanId": "a4Zbb000001zEQTEA2",
+            "interestRate": null,
+            "coverageShortfall": false,
+            "coverageRatio": null,
+            "committed": 7500000,
+            "collateral": [],
+            "available": 0
           },
           {
-            "loanId": "a1Xbb000000PLD2",
-            "name": "Piedmont Working Capital Revolver",
-            "productType": "Revolving Line of Credit",
+            "totalLendableValue": 0,
+            "status": "Open",
+            "stage": "Final Review",
             "riskGrade": "5",
-            "committed": 5000000,
-            "outstanding": 1750000,
-            "available": 3250000,
-            "maturityDate": "2027-04-07T11:49:49",
-            "interestRate": 7.25,
-            "totalLendableValue": 3600000,
-            "coverageRatio": 2.06,
+            "productType": "Non-Real Estate",
+            "productPackageId": "a5Fbb000000HA1NEAW",
+            "outstanding": 0,
+            "name": "Piedmont Precision Components, Inc. - Line of Credit - $5,000,000.00",
+            "maturityDate": "2027-07-15",
+            "loanId": "a4Zbb000001vavpEAA",
+            "interestRate": null,
             "coverageShortfall": false,
+            "coverageRatio": null,
+            "committed": 5000000,
+            "collateral": [],
+            "available": 0
+          },
+          {
+            "totalLendableValue": 14000000,
+            "status": "Open",
+            "stage": "Final Review",
+            "riskGrade": "5",
+            "productType": "Non-Real Estate",
+            "productPackageId": "a5Fbb000000HA1NEAW",
+            "outstanding": 0,
+            "name": "Piedmont Precision Components, Inc. - Equipment - $5,000,000.00",
+            "maturityDate": "2031-07-15",
+            "loanId": "a4Zbb000001vaxREAQ",
+            "interestRate": null,
+            "coverageShortfall": false,
+            "coverageRatio": null,
+            "committed": 5000000,
             "collateral": [
               {
-                "loanId": "a1Xbb000000PLD2",
-                "collateralType": "Accounts Receivable",
-                "collateralValue": 3000000,
-                "advanceRate": 80,
-                "currentLendableValue": 2400000,
-                "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true,
-                "collateralId": "a35bb000000zObhAAE",
-                "collateralName": "COL-000755"
+                "loanId": "a4Zbb000001vaxREAQ",
+                "lienPosition": "1st",
+                "isPrimary": false,
+                "currentLendableValue": 10000000,
+                "collateralValue": 12500000,
+                "collateralType": "UCC-Equipment",
+                "collateralName": "COL-000758",
+                "collateralId": "a35bb000000zOgXAAU",
+                "advanceRate": 80
               },
               {
-                "loanId": "a1Xbb000000PLD2",
-                "collateralType": "Inventory",
-                "collateralValue": 1500000,
-                "advanceRate": 80,
-                "currentLendableValue": 1200000,
-                "lienPosition": "1st",
-                "pledgedStatus": "Active",
-                "isPrimary": false,
-                "collateralId": "a35bb000000zObhAAE",
-                "collateralName": "COL-000755"
-              }
-            ],
-            "status": "Open",
-            "stage": "Final Review",
-            "productPackageId": "a5Fbb000000HA1NEAW"
-          },
-          {
-            "loanId": "a1Xbb000000PLD3",
-            "name": "Piedmont CapEx Facility",
-            "productType": "Term Loan",
-            "riskGrade": "5",
-            "committed": 2500000,
-            "outstanding": 0,
-            "available": 2500000,
-            "maturityDate": "2028-10-23T11:49:49",
-            "interestRate": 6.9,
-            "totalLendableValue": 1600000,
-            "coverageRatio": null,
-            "coverageShortfall": false,
-            "collateral": [
-              {
-                "loanId": "a1Xbb000000PLD3",
-                "collateralType": "Real Estate",
-                "collateralValue": 2000000,
-                "advanceRate": 80,
-                "currentLendableValue": 1600000,
-                "lienPosition": "1st",
                 "pledgedStatus": "Pending",
-                "isPrimary": true
+                "loanId": "a4Zbb000001vaxREAQ",
+                "lienPosition": "1st",
+                "isPrimary": true,
+                "currentLendableValue": 4000000,
+                "collateralValue": 5000000,
+                "collateralType": "UCC-Equipment",
+                "collateralName": "COL-000757",
+                "collateralId": "a35bb000000zOevAAE",
+                "advanceRate": 80
               }
             ],
-            "status": "Open",
-            "stage": "Final Review",
-            "productPackageId": "a5Fbb000000HA1NEAW"
+            "available": 0
           }
         ],
-        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
+        "totalAvailable": 0,
+        "totalCommitted": 17500000,
+        "totalOutstanding": 0
       },
       "covenants": {
         "accountId": "001bb00001DLtRMAA1",
         "covenants": [
           {
-            "covenantId": "a2Cbb000000CV01",
-            "covenantType": "Debt Service Coverage Ratio",
             "thresholdValue": 1.25,
-            "actualValue": 1.42,
+            "nextEvaluationDate": "2026-07-31",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
-            "lastEvaluationDate": "2026-04-23T11:49:49",
-            "nextEvaluationDate": "2026-07-23T11:49:49",
-            "daysUntilNextEvaluation": -2,
+            "lastEvaluationDate": "2026-04-30",
             "frequency": "Quarterly",
+            "daysUntilNextEvaluation": 5,
+            "covenantType": "Debt Service Coverage of Borrower",
+            "covenantStatus": "Compliant",
+            "covenantId": "a3Bbb000000ND7pEAG",
             "breached": false,
-            "covenantStatus": "Active"
+            "actualValue": 1.42
           },
           {
-            "covenantId": "a2Cbb000000CV02",
-            "covenantType": "Debt-to-Worth",
             "thresholdValue": 3,
-            "actualValue": 2.18,
+            "nextEvaluationDate": "2026-07-31",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
-            "lastEvaluationDate": "2026-04-23T11:49:49",
-            "nextEvaluationDate": "2026-07-23T11:49:49",
-            "daysUntilNextEvaluation": -2,
+            "lastEvaluationDate": "2026-04-30",
             "frequency": "Quarterly",
+            "daysUntilNextEvaluation": 5,
+            "covenantType": "Maximum Debt to Worth",
+            "covenantStatus": "Compliant",
+            "covenantId": "a3Bbb000000ND9REAW",
             "breached": false,
-            "covenantStatus": "Active"
+            "actualValue": 2.18
           },
           {
-            "covenantId": "a2Cbb000000CV03",
-            "covenantType": "Minimum Liquidity",
             "thresholdValue": 5000000,
-            "actualValue": 8200000,
+            "nextEvaluationDate": "2026-07-31",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
-            "lastEvaluationDate": "2026-04-23T11:49:49",
-            "nextEvaluationDate": "2026-07-23T11:49:49",
-            "daysUntilNextEvaluation": -2,
+            "lastEvaluationDate": "2026-04-30",
             "frequency": "Quarterly",
+            "daysUntilNextEvaluation": 5,
+            "covenantType": "Minimum Liquidity",
+            "covenantStatus": "Compliant",
+            "covenantId": "a3Bbb000000NDB3EAO",
             "breached": false,
-            "covenantStatus": "Active"
+            "actualValue": 8200000
           },
           {
-            "covenantId": "a2Cbb000000CV04",
-            "covenantType": "Fixed Asset Purchases Limit",
             "thresholdValue": 7500000,
-            "actualValue": 1250000,
+            "nextEvaluationDate": "2026-12-31",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
-            "lastEvaluationDate": "2026-04-23T11:49:49",
-            "nextEvaluationDate": "2027-01-23T11:49:49",
-            "daysUntilNextEvaluation": 182,
-            "frequency": "Annual",
+            "lastEvaluationDate": "2026-04-30",
+            "frequency": "Annually",
+            "daysUntilNextEvaluation": 158,
+            "covenantType": "Fixed Asset Purchases",
+            "covenantStatus": "Compliant",
+            "covenantId": "a3Bbb000000NDCfEAO",
             "breached": false,
-            "covenantStatus": "Active"
+            "actualValue": 1250000
           }
         ],
         "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
@@ -1977,6 +1957,8 @@
                 "currentLendableValue": 9600000,
                 "collateralValue": 12000000,
                 "collateralType": "UCC-Accounts",
+                "collateralName": "COL-000762",
+                "collateralId": "a35bb0000013xz3AAA",
                 "advanceRate": 80
               },
               {
@@ -1987,6 +1969,8 @@
                 "currentLendableValue": 4000000,
                 "collateralValue": 8000000,
                 "collateralType": "UCC-Inventory",
+                "collateralName": "COL-000763",
+                "collateralId": "a35bb0000013y0fAAA",
                 "advanceRate": 50
               }
             ],
@@ -2016,6 +2000,8 @@
                 "currentLendableValue": 10500000,
                 "collateralValue": 14000000,
                 "collateralType": "Real Estate-Warehouse",
+                "collateralName": "COL-000765",
+                "collateralId": "a35bb0000013y3tAAA",
                 "advanceRate": 75
               }
             ],
@@ -2045,6 +2031,8 @@
                 "currentLendableValue": 7500000,
                 "collateralValue": 10000000,
                 "collateralType": "UCC-Equipment",
+                "collateralName": "COL-000764",
+                "collateralId": "a35bb0000013y2HAAQ",
                 "advanceRate": 75
               }
             ],
@@ -2074,6 +2062,8 @@
                 "currentLendableValue": 10500000,
                 "collateralValue": 14000000,
                 "collateralType": "Real Estate-Warehouse",
+                "collateralName": "COL-000765",
+                "collateralId": "a35bb0000013y3tAAA",
                 "advanceRate": 75
               }
             ],
@@ -2103,6 +2093,8 @@
                 "currentLendableValue": 7500000,
                 "collateralValue": 10000000,
                 "collateralType": "UCC-Equipment",
+                "collateralName": "COL-000764",
+                "collateralId": "a35bb0000013y2HAAQ",
                 "advanceRate": 75
               }
             ],
@@ -2132,6 +2124,8 @@
                 "currentLendableValue": 9600000,
                 "collateralValue": 12000000,
                 "collateralType": "UCC-Accounts",
+                "collateralName": "COL-000762",
+                "collateralId": "a35bb0000013xz3AAA",
                 "advanceRate": 80
               }
             ],
@@ -2149,6 +2143,7 @@
           {
             "thresholdValue": 80,
             "nextEvaluationDate": "2026-07-31",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Monthly",
@@ -2162,6 +2157,7 @@
           {
             "thresholdValue": 1.25,
             "nextEvaluationDate": "2026-09-30",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2175,6 +2171,7 @@
           {
             "thresholdValue": 3,
             "nextEvaluationDate": "2026-09-30",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2188,6 +2185,7 @@
           {
             "thresholdValue": 5000000,
             "nextEvaluationDate": "2026-09-30",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2201,6 +2199,7 @@
           {
             "thresholdValue": 1.15,
             "nextEvaluationDate": "2026-09-30",
+            "latestComplianceId": null,
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2214,6 +2213,7 @@
           {
             "thresholdValue": null,
             "nextEvaluationDate": "2026-11-01",
+            "latestComplianceId": null,
             "lastEvaluationStatus": null,
             "lastEvaluationDate": null,
             "frequency": "One-Off",
