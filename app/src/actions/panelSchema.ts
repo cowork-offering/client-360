@@ -37,6 +37,8 @@ export const PREFILL_PROVENANCE: Record<PrefillSource, ProvenanceKind | null> = 
 };
 
 export type PanelFieldType =
+  /** Several records chosen at once. Value is an array of ids. */
+  | "multiselect"
   | "currency"
   | "date"
   | "picklist"
@@ -76,6 +78,12 @@ export interface PanelField {
   required: boolean;
   /** Populated at runtime from the org describe; never authored in the schema. */
   options?: string[];
+  /** A context line under each option, positionally: what the record is, what
+   *  it secures, what it is worth. A chooser without it is a list of names. */
+  optionDetails?: string[];
+  /** Per-option value entry (collateral valuation). Value lives in the panel's
+   *  values under this key, as a map of option id to number. */
+  perItemValueKey?: string;
   /** Display labels for `options`, positionally. Present only on a RECORD
    *  chooser, where the value is an id and the label is for the banker: two
    *  facilities can share a name, and an option keyed on the name would let the

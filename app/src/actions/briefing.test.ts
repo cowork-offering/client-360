@@ -111,9 +111,9 @@ describe("the briefing may no more invent a number than a draft", () => {
 });
 
 
-describe("the facility is a choice only when there is one to make", () => {
+describe("the facility selection is always part of a credit action", () => {
   const facilities = (stages: string[]) =>
-    stages.map((stage, i) => ({ loanId: `L${i}`, name: `Facility ${i}`, stage, status: "Active" }));
+    stages.map((stage, i) => ({ loanId: `L${i}`, name: `Facility ${i}`, stage, status: "Open", productPackageId: "a5F" }));
 
   const briefingFor = (stages: string[], actionId = "loan-modification") => {
     const bundle = { snapshot: { accountId: "001X", name: "Testco" }, exposure: { facilities: facilities(stages) } } as BorrowerBundle;
@@ -121,58 +121,23 @@ describe("the facility is a choice only when there is one to make", () => {
     return buildBriefing(actionId, schema, bundle, "Testco")!;
   };
 
-  it("asks which facility when more than one is booked", () => {
-    const b = briefingFor(["Booked", "Booked"]);
-    expect(b.lead.some((s) => s.kind === "field" && s.fieldKey === "facility")).toBe(true);
+  it("asks which facilities the action covers", () => {
+    for (const actionId of ["loan-modification", "renewal"]) {
+      const b = briefingFor(["Booked", "Booked"], actionId);
+      expect(b.lead.some((s) => s.kind === "field" && s.fieldKey === "facility"), actionId).toBe(true);
+    }
   });
 
-  it("names the only booked facility instead of asking", () => {
-    const b = briefingFor(["Booked", "Final Review"]);
-    expect(b.lead.some((s) => s.kind === "field" && s.fieldKey === "facility")).toBe(false);
-    expect(b.subject.context).toContain("Facility 0 is the booked facility on this relationship");
-  });
-
-  it("does the same on a renewal", () => {
-    expect(briefingFor(["Booked", "Booked"], "renewal").lead.some((s) => s.kind === "field" && s.fieldKey === "facility")).toBe(true);
-    expect(briefingFor(["Booked"], "renewal").subject.context).toContain("is the booked facility");
-  });
-});
-
-
-describe("a new facility joins a deal, and the ticket says which", () => {
-  const withPackage = {
-    snapshot: { accountId: "001X", name: "Testco", productPackageId: "a5F" },
-    exposure: {
-      totalCommitted: 46_000_000,
-      facilities: [
-        { loanId: "L1", status: "Open" },
-        { loanId: "L2", status: "Open" },
-        { loanId: "L3", status: "Paid Off" },
-      ],
-    },
-  } as BorrowerBundle;
-
-  const subjectFor = (bundle: BorrowerBundle) => {
-    const schema = buildPanelSchema("new-facility-request", { bundle, accountId: "001X", accountName: "Testco" })!;
-    return buildBriefing("new-facility-request", schema, bundle, "Testco")!.subject;
-  };
-
-  it("names the package it files under and the members it joins", () => {
-    const s = subjectFor(withPackage);
-    expect(s.context).toContain("Filing under this relationship's credit package");
-    // Two live facilities; the paid-off one is not a member you join.
-    expect(s.context).toContain("joining 2 existing facilities");
-    expect(s.context).toContain("$46M committed");
-  });
-
-  it("says one facility in the singular", () => {
-    const one = structuredClone(withPackage);
-    one.exposure!.facilities = [{ loanId: "L1", status: "Open" }];
-    expect(subjectFor(one).context).toContain("joining 1 existing facility");
-  });
-
-  it("keeps the create-package line on a fresh relationship", () => {
-    const fresh = { snapshot: { accountId: "001X", name: "Testco" } } as BorrowerBundle;
-    expect(subjectFor(fresh).context).toContain("No credit package exists yet");
+  it("preselects the single booked facility rather than opening empty", () => {
+    const bundle = {
+      snapshot: { accountId: "001X", name: "Testco" },
+      exposure: { facilities: facilities(["Booked", "Final Review"]) },
+    } as BorrowerBundle;
+    const f = buildPanelSchema("loan-modification", { bundle, accountId: "001X", accountName: "Testco" })!.fields.find(
+      (x) => x.key === "facility",
+    )!;
+    expect(f.value).toEqual(["L0"]);
+    expect(f.options).toEqual(["L0"]);
+    expect(f.disabledOptions).toEqual([{ value: "Facility 1", reason: "at Final Review" }]);
   });
 });

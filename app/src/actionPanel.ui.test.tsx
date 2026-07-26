@@ -561,16 +561,14 @@ describe("wave 2 — the five new tickets", () => {
   it("offers only booked facilities in the selector, and says why the others are out", () => {
     // Kingsley: two booked, one at Final Review, one paid off.
     openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
-    const pill = [...panel("Loan Modification")!.querySelectorAll("button")].find((b) =>
-      /Facility/.test(b.textContent ?? ""),
-    )!;
-    click(pill);
-    const sheet = [...document.querySelectorAll('[role="dialog"]')].find((d) => d.getAttribute("aria-label") === "Facility")!;
-    expect([...sheet.querySelectorAll("[aria-pressed]")].map((b) => b.textContent?.trim())).toEqual([
+    const p = panel("Loan Modification")!;
+    // A multi-select block, not a sheet: the banker reads the list.
+    const boxes = [...p.querySelectorAll('input[type="checkbox"]')];
+    expect(boxes.map((b) => b.getAttribute("aria-label"))).toEqual([
       "Kingsley Equipment Term Loan A",
       "Kingsley Working Capital Revolver",
     ]);
-    const off = [...sheet.querySelectorAll("[data-disabled-option]")].map((d) => ({
+    const off = [...p.querySelectorAll("[data-disabled-option]")].map((d) => ({
       value: d.getAttribute("data-disabled-option"),
       text: d.textContent,
     }));
@@ -580,11 +578,10 @@ describe("wave 2 — the five new tickets", () => {
 
   it("preselects a booked facility so the ticket opens ready", () => {
     openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
-    const p = panel("Loan Modification")!;
-    const pill = [...p.querySelectorAll("button")].find((b) => /Facility/.test(b.textContent ?? ""))!;
-    // Not a prompt: a booked facility is already chosen.
-    expect(pill.textContent).toContain("Sterling");
-    expect(pill.textContent).not.toContain("choose the facility");
+    const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    // Exactly one is already ticked: the ticket opens ready, not empty.
+    expect(boxes.filter((b) => b.checked)).toHaveLength(1);
+    expect(boxes[0].getAttribute("aria-label")).toContain("Sterling");
   });
 
   it("F7 — refuses to stage a facility whose own package is not staged", async () => {
@@ -619,6 +616,34 @@ describe("wave 2 — the five new tickets", () => {
       await flush();
     }
     expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(0);
+  });
+
+  it("blocks staging when several facilities are selected, and names what is missing", () => {
+    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+    const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    // Tick a second booked facility: the UI allows it, the wire does not.
+    click(boxes[1]);
+    const p = panel("Loan Modification")!;
+    expect(p.textContent).toContain("needs the package-level tool");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("stages happily once the selection is back to one facility", () => {
+    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+    const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    click(boxes[1]);
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+    click([...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')][1]);
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("blocks a bulk valuation the same way, in its own words", () => {
+    openActionPanel("Collateral Valuation", "Sterling Fabrication", undefined, true);
+    const boxes = [...panel("Collateral Valuation")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    if (boxes.length < 2) return; // this bundle stages a single record
+    click(boxes[0]);
+    click(boxes[1]);
+    expect(panel("Collateral Valuation")!.textContent).toContain("needs the bulk tool");
   });
 
   it.each(["Loan Modification", "Renewal"])("withholds %s when nothing is booked, with the reason", (label) => {

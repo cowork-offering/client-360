@@ -17,6 +17,8 @@
 import type { BorrowerBundle, Facility } from "../data/contract";
 import { fmtCovVal } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
+import { collateralDetail, collateralRecords } from "../data/collateralRecords";
+import { fmtMoney } from "../data/format";
 import { bookedFacilities, bookedFacilityGap, facilityLabel, unbookedFacilities } from "../data/facilityStage";
 import type { PanelField, PanelSchema } from "./panelSchema";
 import { PREFILL_PROVENANCE } from "./panelSchema";
@@ -64,6 +66,7 @@ function primaryPledge(
 function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
   const OBJ = "LLC_BI__Collateral_Valuation__c";
   const pledge = primaryPledge(ctx.bundle);
+  const records = collateralRecords(ctx.bundle);
 
   return {
     writeObject: OBJ,
@@ -71,19 +74,26 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
     intro: "Records a new valuation against the pledged collateral. The lendable value on the collateral record is a formula and is not written here.",
     fields: [
       field({
-        key: "collateral",
-        label: "Collateral",
-        type: "readonly",
-        // Label may name the facility for the banker's benefit; the ANCHOR must
-        // not. The write goes to LLC_BI__Collateral__c, so the citation is the
-        // collateral record id or nothing at all.
-        value: pledge ? `${pledge.type ?? "Collateral"} on ${pledge.facility.name ?? "facility"}` : null,
-        prefill: { source: "NCINO_RECORD", citation: pledge?.collateralId },
-        editable: false,
-        editableReason: "set once at creation",
+        key: "records",
+        label: "Collateral to revalue",
+        type: "multiselect",
+        // Chosen from the relationship's collateral RECORDS, deduped from the
+        // per-facility pledges: a banker revalues a piece of security once, not
+        // once per loan it happens to secure.
+        value: records.length === 1 && records[0].collateralId ? [records[0].collateralId] : [],
+        prefill: { source: "NCINO_RECORD", citation: "Customer360Exposure — pledged collateral records" },
+        editable: true,
         required: true,
+        optionsAreRecords: true,
+        options: records.filter((r) => r.collateralId).map((r) => r.collateralId!),
+        optionLabels: records.filter((r) => r.collateralId).map((r) => r.collateralType ?? "Collateral"),
+        optionDetails: records.filter((r) => r.collateralId).map(collateralDetail),
+        disabledOptions: records
+          .filter((r) => !r.collateralId)
+          .map((r) => ({ value: r.collateralType ?? "Collateral", reason: "no collateral record id staged" })),
+        perItemValueKey: "recordValues",
         target: { object: OBJ, field: "LLC_BI__Collateral__c" },
-        gap: pledge?.collateralId
+        gap: records.some((r) => r.collateralId)
           ? undefined
           : {
               reason: pledge
@@ -347,7 +357,10 @@ function annualReviewSchema(ctx: SchemaContext): PanelSchema {
   return {
     writeObject: OBJ,
     writeObjectLabel: "annual credit review",
-    intro: "Stages an annual credit review at In Progress with the drafted narratives. The bank's own Submit for Approval process mints Complete; this tool never does.",
+    intro:
+      "CREDIT REVIEW. " +
+      REVIEW_FORK["annual-review"].explains +
+      " Distinct from a Risk Rating Review, which refreshes the relationship's grade instead.",
     fields: [...head, ...narratives],
   };
 }
@@ -513,7 +526,9 @@ function riskRatingSchema(ctx: SchemaContext): PanelSchema {
     writeObject: OBJ,
     writeObjectLabel: "risk rating review",
     intro:
-      "Records a rating review against this relationship. It is created In Review; the org's own decision path owns Approved and Declined. An override is the banker's call, and the org requires it to carry a reason.",
+      "RISK RATING REVIEW. " +
+      REVIEW_FORK["risk-rating-review"].explains +
+      " Distinct from a Credit Review, which is the periodic review of the deal itself. Created In Review; the org's own decision path owns Approved and Declined, and an override needs a stated reason.",
     fields: [
       field({
         key: "account",
@@ -637,6 +652,37 @@ export const OVERRIDE_COMMENT_REQUIRED = "An override requires a stated reason."
  * is BLOCKED with this said out loud. Silently dropping what somebody typed is
  * the one option that is not available.
  */
+/**
+ * The wire files ONE valuation per call. The selection step is genuinely better
+ * UX — the banker sees every pledge with its context and picks — but staging N
+ * selections would mean N plans, N hashes and N tokens behind a gate whose whole
+ * contract is one plan, one confirm. Looping them and calling it "one plan"
+ * would be the fake claim this campaign has spent itself avoiding.
+ *
+ * So multi-select renders, and staging more than one is BLOCKED with the reason.
+ * The block lifts the day the bulk `items[]` envelope lands.
+ */
+export const BULK_FACILITIES_PENDING =
+  "A credit action covering several facilities at once needs the package-level tool, which is not deployed yet. Choose one facility to stage this action, or wait for multi-facility filing.";
+
+export const BULK_VALUATION_PENDING =
+  "Filing several valuations at once needs the bulk tool, which is not deployed yet. Choose one piece of collateral to stage this valuation, or wait for bulk filing.";
+
+/** Credit Review and Risk Rating Review are DIFFERENT INSTRUMENTS on different
+ *  objects. The banker must know which one they are raising. */
+export const REVIEW_FORK = {
+  "annual-review": {
+    instrument: "Credit Review",
+    explains:
+      "The periodic credit review on the deal: Annual, AdHoc or Problem Loan. Staged at In Progress with the drafted narratives; the bank's own Submit for Approval process mints Complete, and this tool never does.",
+  },
+  "risk-rating-review": {
+    instrument: "Risk Rating Review",
+    explains:
+      "The account-level rating refresh. It records the scoring inputs and the org computes the grade. It carries no facility scope: the rating is the relationship's, not a loan's.",
+  },
+} as const;
+
 export const OVERRIDE_NOT_YET_FILEABLE =
   "Filing an override needs one live-probe confirmation of the org's field name, coming in the next wave. Clear the override to stage this review, or keep it and wait.";
 
@@ -742,18 +788,26 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
 
   const anchor = field({
     key: "facility",
-    label: "Facility",
-    type: "picklist",
+    label: "Facilities in this credit action",
+    // PACKAGE-CENTRIC: a credit action runs on the PACKAGE and covers the
+    // facilities selected within it, which is how nCino frames it. The wire
+    // still takes one loanId, so selecting several is blocked until the
+    // facilityIds envelope lands — see BULK_FACILITIES_PENDING.
+    type: "multiselect",
     // One booked facility is the answer, not a question: preselect it.
-    value: chosen?.loanId ?? null,
+    value: chosen?.loanId ? [chosen.loanId] : [],
     prefill: chosen ? { source: "NCINO_RECORD", citation: chosen.loanId } : { source: "BANKER" },
-    editable: booked.length > 1,
-    editableReason: booked.length > 1 ? undefined : "the only booked facility on this relationship",
+    editable: true,
     required: true,
     optionsAreRecords: true,
     // The VALUE is the record id; the label is what the banker reads.
     options: booked.map((f) => f.loanId ?? ""),
     optionLabels: booked.map(facilityLabel),
+    optionDetails: booked.map((f) =>
+      [f.committed != null ? `${fmtMoney(f.committed)} committed` : null, f.maturityDate ? `matures ${f.maturityDate}` : null, "Booked"]
+        .filter(Boolean)
+        .join(" · "),
+    ),
     disabledOptions: blocked.map((b) => ({ value: facilityLabel(b.facility), reason: b.reason })),
     target: { object: OBJ, field: "Id" },
     gap: chosen

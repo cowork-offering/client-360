@@ -214,25 +214,30 @@ describe("the valuation anchor is the COLLATERAL id, never the facility id", () 
     },
   };
 
-  it("cites the collateral record id when the pledge carries one", () => {
-    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!.fields.find((x) => x.key === "collateral")!;
-    expect(f.prefill.citation).toBe("a35bb000000zOgXAAU");
+  it("offers the collateral record id as the only selectable option", () => {
+    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!.fields.find((x) => x.key === "records")!;
+    expect(f.options).toEqual(["a35bb000000zOgXAAU"]);
+    // One record, so it is preselected: there is nothing to choose.
+    expect(f.value).toEqual(["a35bb000000zOgXAAU"]);
     expect(f.gap).toBeUndefined();
   });
 
-  it("NEVER falls back to the facility loanId", () => {
-    const f = buildPanelSchema("collateral-valuation", ctx)!.fields.find((x) => x.key === "collateral")!;
-    // ctx's bundle has a pledge but no collateralId.
-    expect(f.prefill.citation).toBeUndefined();
-    expect(f.prefill.citation).not.toBe("L1");
+  it("NEVER offers the facility loanId as a valuation anchor", () => {
+    const f = buildPanelSchema("collateral-valuation", ctx)!.fields.find((x) => x.key === "records")!;
+    // ctx's bundle has a pledge but no collateralId: nothing is selectable, and
+    // the pledge is listed as unanchorable rather than silently anchored on the
+    // facility that happens to hold it.
+    expect(f.options).toEqual([]);
+    expect(JSON.stringify(f)).not.toContain("L1");
+    expect(f.disabledOptions?.[0].reason).toContain("no collateral record id staged");
   });
 
   it("renders a named gap and BLOCKS staging when the id is not staged", () => {
     const schema = buildPanelSchema("collateral-valuation", ctx)!;
-    const f = schema.fields.find((x) => x.key === "collateral")!;
+    const f = schema.fields.find((x) => x.key === "records")!;
     expect(f.gap?.blocksStaging).toBe(true);
     expect(f.gap?.reason).toMatch(/collateral record id is not staged/);
-    expect(stagingBlockers(schema).map((x) => x.key)).toEqual(["collateral"]);
+    expect(stagingBlockers(schema).map((x) => x.key)).toEqual(["records"]);
   });
 
   it("does not block when the id is present", () => {
@@ -241,14 +246,15 @@ describe("the valuation anchor is the COLLATERAL id, never the facility id", () 
 
   it("says so plainly when no collateral is pledged at all", () => {
     const bare = { snapshot: { accountId: "001X" }, exposure: { facilities: [] } };
-    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: bare as never })!.fields.find((x) => x.key === "collateral")!;
+    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: bare as never })!.fields.find((x) => x.key === "records")!;
     expect(f.gap?.reason).toMatch(/No collateral is pledged/);
     expect(f.gap?.blocksStaging).toBe(true);
   });
 
-  it("the label may still name the facility for the banker", () => {
-    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!.fields.find((x) => x.key === "collateral")!;
-    expect(String(f.value)).toContain("Equipment Term Loan");
+  it("names what each record secures, so the banker knows which piece it is", () => {
+    const f = buildPanelSchema("collateral-valuation", { ...ctx, bundle: withId })!.fields.find((x) => x.key === "records")!;
+    expect(f.optionLabels).toEqual(["Equipment"]);
+    expect(f.optionDetails?.[0]).toContain("secures Equipment Term Loan");
   });
 
   it("the sample-only bundles show the honest gap rather than an org error", () => {

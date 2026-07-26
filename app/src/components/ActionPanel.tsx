@@ -9,6 +9,8 @@ import {
   overrideNeedsComment,
   OVERRIDE_COMMENT_REQUIRED,
   OVERRIDE_NOT_YET_FILEABLE,
+  BULK_VALUATION_PENDING,
+  BULK_FACILITIES_PENDING,
 } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
 import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
@@ -463,6 +465,20 @@ export function ActionPanel({
   const blockers = stagingBlockers(schema);
   /** The org's validation rule, enforced here so the banker learns it from the
    *  ticket rather than from a rejected write. */
+  /** Selections the wire cannot carry yet. The UI is real; the block is honest
+   *  and names what is missing rather than filing N plans as if they were one. */
+  const bulkGap = (() => {
+    if (actionId === "collateral-valuation") {
+      const n = Array.isArray(values.records) ? (values.records as string[]).length : 0;
+      return n > 1 ? BULK_VALUATION_PENDING : null;
+    }
+    if (actionId === "loan-modification" || actionId === "renewal") {
+      const n = Array.isArray(values.facility) ? (values.facility as string[]).length : 0;
+      return n > 1 ? BULK_FACILITIES_PENDING : null;
+    }
+    return null;
+  })();
+
   const overrideGap =
     actionId === "risk-rating-review"
       ? overrideNeedsComment(values)
@@ -514,8 +530,11 @@ export function ActionPanel({
      *  share a name, so a label lookup would silently pick whichever came
      *  first. */
     const selectedFacility = () => {
-      const picked = values.facility;
-      return bookedFacilities(bundle).find((f) => f.loanId && f.loanId === picked) ?? null;
+      const picked = Array.isArray(values.facility) ? (values.facility as string[]) : [];
+      // ONE facility on the wire today. Several is blocked upstream, not
+      // quietly narrowed to whichever came first.
+      if (picked.length !== 1) return null;
+      return bookedFacilities(bundle).find((f) => f.loanId && f.loanId === picked[0]) ?? null;
     };
     const citationOf = (key: string) => {
       const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
@@ -533,13 +552,19 @@ export function ActionPanel({
     const packageId = bundle?.snapshot?.productPackageId ?? null;
 
     if (actionId === "collateral-valuation") {
-      const collateralId = citationOf("collateral");
+      // The selection step chooses collateral RECORDS. The wire takes one
+      // valuation per call, so a multi-selection is blocked upstream rather
+      // than quietly filed as N separate plans dressed up as one.
+      const chosen = Array.isArray(values.records) ? (values.records as string[]) : [];
+      const collateralId = chosen.length === 1 ? chosen[0] : null;
       if (!collateralId) return null;
+      const perItem = (values.recordValues as Record<string, unknown>) ?? {};
+      const itemValue = typeof perItem[collateralId] === "number" ? (perItem[collateralId] as number) : null;
       return {
         idempotencyKey,
         rationale,
         collateralId,
-        value: nOf("value"),
+        value: itemValue ?? nOf("value"),
         valuationDate: v("valuationDate") as string | null,
         type: v("type") as string | null,
         source: v("source") as string | null,
@@ -677,6 +702,7 @@ export function ActionPanel({
               throw { code: "NOT_STAGEABLE", message: blockers.map((b) => b.gap!.reason).join(" ") };
             }
             if (overrideGap) throw { code: "VALIDATION_FAILED", message: overrideGap };
+            if (bulkGap) throw { code: "NOT_STAGEABLE", message: bulkGap };
             payload = stagePayload();
             if (!payload && mcpAvailable() && isWriteAction(actionId)) {
               throw { code: "PRECONDITION", message: "This relationship has no pledged collateral to value." };
@@ -1009,6 +1035,7 @@ export function ActionPanel({
                 editedFields={editedFields}
                 reasons={reasons}
                 onChange={setField}
+                onValueMap={(key, map) => setValues((prev) => ({ ...prev, [key]: map }))}
                 sheetCloserRef={sheetCloserRef}
                 sheetHost={panelEl}
                 renderChip={(f, edited) => {
@@ -1103,8 +1130,8 @@ export function ActionPanel({
             <div className="flex-1 text-[11px] text-ink-muted">
               {blockers.length > 0
                 ? blockers.map((b) => b.gap!.reason).join(" ")
-                : overrideGap
-                  ? overrideGap
+                : (overrideGap ?? bulkGap)
+                  ? (overrideGap ?? bulkGap)
                   : missing.length > 0
                   ? `${missing.length} required ${missing.length === 1 ? "field" : "fields"} still to complete.`
                   : `Creates a ${schema.writeObjectLabel}.`}
@@ -1120,7 +1147,7 @@ export function ActionPanel({
             {(mcpAvailable() && isWriteAction(actionId)) || isSimulationAllowed() ? (
               <button
                 type="button"
-                disabled={missing.length > 0 || blockers.length > 0 || overrideGap !== null}
+                disabled={missing.length > 0 || blockers.length > 0 || overrideGap !== null || bulkGap !== null}
                 onClick={() => (plan && !planIsStale ? setPhase("confirm") : void stage())}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}

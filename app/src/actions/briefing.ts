@@ -116,7 +116,9 @@ function collateralValuation(schema: PanelSchema, name: string): Briefing {
       context: `Pledged by ${name}${carried ? ` and carried today at ${carried}` : ""}. Lendable value is a formula on the collateral record and is not written here.`,
     },
     lead: [
-      t(`This values the ${label} pledged by ${name}${carried ? `, carried today at ${carried}` : ""}. The new figure is `),
+      t(`This values collateral pledged by ${name}${carried ? `, carried today at ${carried}` : ""}. Choose what to revalue in `),
+      f("records", "choose the collateral"),
+      t(". The new figure is "),
       f("value", "enter the valuation"),
       t(" as at "),
       f("valuationDate", "pick the valuation date"),
@@ -242,7 +244,8 @@ function facilityChange(b: BorrowerBundle | null, name: string, kind: "modificat
         context: only && !picks ? `${only} is the booked facility on this relationship. ${held}` : held,
       },
       lead: [
-        ...(picks ? [t("This renews "), f("facility", "choose the facility")] : [t("This renews the facility")]),
+        t("This renews "),
+        f("facility", "choose the facilities"),
         t(" to "),
         f("newMaturityDate", "pick the new maturity"),
         t(" at "),
@@ -260,7 +263,9 @@ function facilityChange(b: BorrowerBundle | null, name: string, kind: "modificat
       context: `${drawn ? `${drawn} is drawn today. ` : ""}${only && !picks ? `${only} is the booked facility on this relationship. ` : ""}${held}`,
     },
     lead: [
-      ...(picks ? [t("This modifies "), f("facility", "choose the facility"), t(", moving the commitment to ")] : [t("This moves the commitment to ")]),
+      t("This modifies "),
+      f("facility", "choose the facilities"),
+      t(", moving the commitment to "),
       f("newCommitment", "enter the new commitment"),
       t(" over "),
       f("requestedTermMonths", "enter the term"),

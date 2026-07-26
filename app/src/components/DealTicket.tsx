@@ -237,6 +237,96 @@ function Pill({
   );
 }
 
+/* ------------------------------------------------------------ multiselect */
+
+/**
+ * Several records chosen at once, each with its context and, where the action
+ * needs one, its own value entry.
+ *
+ * Rendered inline rather than in a sheet: a multi-select with a context line
+ * per row is a list the banker reads, not a menu they dip into.
+ */
+function MultiSelectRows({
+  field,
+  selected,
+  perItem,
+  onToggle,
+  onItemValue,
+}: {
+  field: PanelField;
+  selected: string[];
+  /** Absent until the banker enters the first value. */
+  perItem?: Record<string, unknown>;
+  onToggle: (id: string) => void;
+  onItemValue: (id: string, v: number | null) => void;
+}) {
+  const options = field.options ?? [];
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {options.map((id, i) => {
+        const on = selected.includes(id);
+        return (
+          <div
+            key={id}
+            className="rounded-[10px] border px-3 py-2.5"
+            style={{
+              borderColor: on ? "var(--accent)" : "var(--border)",
+              background: on ? "var(--accent-wash)" : "var(--surface)",
+            }}
+          >
+            <label className="flex cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={on}
+                aria-label={field.optionLabels?.[i] ?? id}
+                onChange={() => onToggle(id)}
+                className="mt-0.5 flex-none"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12.5px] font-semibold text-ink">{field.optionLabels?.[i] ?? id}</span>
+                {field.optionDetails?.[i] && (
+                  <span className="mt-0.5 block text-[10.5px] leading-relaxed text-ink-faint">{field.optionDetails[i]}</span>
+                )}
+              </span>
+            </label>
+
+            {/* Per-item entry appears only for what the banker actually chose. */}
+            {on && field.perItemValueKey && (
+              <div className="mt-2 flex items-baseline gap-1.5 pl-[26px]">
+                <span className="text-[11px] font-semibold text-ink-muted">New value</span>
+                <span className="text-[13px] font-bold text-ink-muted">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={`New value for ${field.optionLabels?.[i] ?? id}`}
+                  value={typeof perItem?.[id] === "number" ? String(perItem[id]) : ""}
+                  onChange={(e) => onItemValue(id, Number(e.target.value) || null)}
+                  className="tnum w-full border-0 bg-transparent p-0 text-[15px] font-extrabold text-ink placeholder:text-[12px] placeholder:font-semibold placeholder:text-ink-faint focus:outline-none"
+                  placeholder="enter the new valuation"
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {(field.disabledOptions ?? []).map((o) => (
+        <div
+          key={`off-${o.value}`}
+          data-disabled-option={o.value}
+          aria-disabled="true"
+          className="flex items-center gap-2 rounded-[10px] border border-dashed px-3 py-2.5 text-[12.5px]"
+          style={{ borderColor: "var(--border)", color: "var(--ink-faint)" }}
+        >
+          <span className="flex-1 whitespace-normal break-words">{o.value}</span>
+          <span className="flex-none text-[10.5px]">{o.reason}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- narrative */
 
 function NarrativeCard({
@@ -358,6 +448,7 @@ export function DealTicket({
   editedFields,
   reasons,
   onChange,
+  onValueMap,
   renderChip,
   sheetCloserRef,
   sheetHost,
@@ -371,6 +462,8 @@ export function DealTicket({
   /** Why this action is on the queue; seeds the drafted narratives. */
   reasons: ReasonCode[];
   onChange: (field: PanelField, v: unknown) => void;
+  /** Writes a keyed map (per-item values) into the panel's values. */
+  onValueMap?: (key: string, map: Record<string, unknown>) => void;
   renderChip: (field: PanelField, edited: boolean) => ReactNode;
   /** Esc must close an open sheet BEFORE the panel (A31.1 stacking). */
   sheetCloserRef: React.MutableRefObject<(() => void) | null>;
@@ -481,12 +574,41 @@ export function DealTicket({
       {/* The review's equivalent: what it will cover, from staged data only. */}
       {facts.length > 0 && <FactStrip title={factTitle} facts={facts} />}
 
+      {/* Multi-selects: the records this action acts on. */}
+      {ticket.pillKeys
+        .map((key) => byKey.get(key))
+        .filter((f): f is PanelField => Boolean(f) && f!.type === "multiselect")
+        .map((f) => (
+          <div key={f.key} className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="kicker">{f.label}</span>
+              {renderChip(f, editedFields.includes(f.key))}
+            </div>
+            <MultiSelectRows
+              field={f}
+              selected={Array.isArray(values[f.key]) ? (values[f.key] as string[]) : []}
+              perItem={(f.perItemValueKey ? values[f.perItemValueKey] : undefined) as Record<string, unknown>}
+              onToggle={(id) => {
+                const now = Array.isArray(values[f.key]) ? (values[f.key] as string[]) : [];
+                onChange(f, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]);
+              }}
+              onItemValue={(id, v) => {
+                if (!f.perItemValueKey) return;
+                const map = { ...((values[f.perItemValueKey] as Record<string, unknown>) ?? {}) };
+                if (v === null) delete map[id];
+                else map[id] = v;
+                onValueMap?.(f.perItemValueKey, map);
+              }}
+            />
+          </div>
+        ))}
+
       {/* Properties. */}
       {ticket.pillKeys.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
           {ticket.pillKeys.map((key) => {
             const field = byKey.get(key);
-            if (!field) return null;
+            if (!field || field.type === "multiselect") return null;
             return (
               <Pill
                 key={key}

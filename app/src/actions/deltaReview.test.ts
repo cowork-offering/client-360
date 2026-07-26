@@ -90,8 +90,8 @@ describe("F6 — the chooser is keyed on the record id, not the label", () => {
     expect(new Set(f.options).size).toBe(2);
   });
 
-  it("preselects by id", () => {
-    expect(schemaFor("loan-modification", twins).fields.find((x) => x.key === "facility")!.value).toBe("L1");
+  it("preselects by id, as a selection of one", () => {
+    expect(schemaFor("loan-modification", twins).fields.find((x) => x.key === "facility")!.value).toEqual(["L1"]);
   });
 });
 
