@@ -402,11 +402,72 @@ export function unwrapLlm(payload: unknown): LlmAnswer {
 }
 
 /** outlook_email_search returns a list; [] is an honest "no matches". */
+/** Fields that make a row a MESSAGE rather than an envelope artefact. */
+const MESSAGE_FIELDS = ["subject", "id", "internetMessageId", "sender", "receivedDateTime", "webLink", "summary"];
+
+function looksLikeMessage(row: Record<string, unknown>): boolean {
+  return MESSAGE_FIELDS.some((f) => row[f] !== undefined);
+}
+
+const isRow = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * Every shape the mail search has actually answered in.
+ *
+ * LIVE DEFECT 2026-07-27: a search matching exactly ONE email returns a single
+ * BARE OBJECT — not an array, not `{value}`. This returned [] and the sweep
+ * reported "nothing new", which is precisely the founder's one-test-email case:
+ * the tool found the mail and the cockpit threw it away.
+ *
+ * So: an array passes through; a wrapper key is unwrapped; a bare object is a
+ * list of one; a string payload is parsed as JSON and then, failing that, as
+ * JSONL. A trailing paging row is dropped rather than rendered as a message
+ * with no subject.
+ */
 export function unwrapMail(payload: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(payload)) return payload as Array<Record<string, unknown>>;
-  const p = (payload ?? {}) as { results?: unknown; messages?: unknown; value?: unknown };
-  for (const candidate of [p.results, p.messages, p.value]) {
-    if (Array.isArray(candidate)) return candidate as Array<Record<string, unknown>>;
+  // A paging tail carries no message fields, so the same predicate drops it:
+  // one rule, rather than a list of shapes to keep in step.
+  return collectMailRows(payload).filter(looksLikeMessage);
+}
+
+function collectMailRows(payload: unknown): Array<Record<string, unknown>> {
+  if (payload === null || payload === undefined) return [];
+  if (Array.isArray(payload)) return payload.filter(isRow);
+
+  if (typeof payload === "string") {
+    const text = payload.trim();
+    if (!text) return [];
+    try {
+      return collectMailRows(JSON.parse(text));
+    } catch {
+      // JSONL: one JSON document per line, which is how some gateways stream
+      // multiple results. A line that will not parse is skipped, not guessed at.
+      const rows: Array<Record<string, unknown>> = [];
+      for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          rows.push(...collectMailRows(parsed));
+        } catch {
+          /* not a document; skip */
+        }
+      }
+      return rows;
+    }
   }
-  return [];
+
+  if (!isRow(payload)) return [];
+
+  const p = payload as { results?: unknown; messages?: unknown; value?: unknown; items?: unknown };
+  for (const candidate of [p.results, p.messages, p.value, p.items]) {
+    if (Array.isArray(candidate)) return candidate.filter(isRow);
+    // A wrapper around a single result is still a single result.
+    if (isRow(candidate)) return [candidate];
+    if (typeof candidate === "string") return collectMailRows(candidate);
+  }
+
+  // A BARE MESSAGE OBJECT: the observed single-match shape. An object with no
+  // message fields at all is an empty envelope, not a message.
+  return looksLikeMessage(payload) ? [payload] : [];
 }

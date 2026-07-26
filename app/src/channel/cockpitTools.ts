@@ -224,9 +224,15 @@ export async function searchMailbox(accountName: string): Promise<{ hits: MailHi
   const hits: MailHit[] = rows.slice(0, 25).map((m) => ({
     id: str(m.id) ?? str(m.messageId),
     subject: str(m.subject),
-    from: readSender(m.from) ?? readSender(m.sender) ?? str(m.fromAddress),
-    receivedAt: str(m.receivedDateTime) ?? str(m.receivedAt) ?? str(m.date),
-    preview: str(m.bodyPreview) ?? str(m.preview) ?? str(m.snippet),
+    // `sender` is the observed field and arrives as a plain address string; the
+    // Graph object shape is kept because both surfaces are real.
+    from: readSender(m.sender) ?? readSender(m.from) ?? str(m.fromAddress),
+    receivedAt: str(m.receivedDateTime) ?? str(m.sentDateTime) ?? str(m.receivedAt) ?? str(m.date),
+    // OBSERVED: the body preview arrives as `summary`. The older keys stay as
+    // fallbacks for whichever surface answers, but summary is the one this
+    // search actually sends, and reading it wrong left every preview blank AND
+    // hid the body text from the matcher.
+    preview: str(m.summary) ?? str(m.bodyPreview) ?? str(m.preview) ?? str(m.snippet),
     webLink: str(m.webLink) ?? str(m.link),
   }));
   return { hits, storedAt: res.cache?.storedAt };
