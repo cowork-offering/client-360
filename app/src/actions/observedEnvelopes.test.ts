@@ -495,3 +495,131 @@ describe("package-first new facility (VERIFIED live 2026-07-26)", () => {
     expect(out.ok && out.result.steps.map((s) => s.id)).toEqual(ids);
   });
 });
+
+
+describe("bulk collateral valuation (OBSERVED live 2026-07-27)", () => {
+  const sent = async (values: Record<string, unknown>) => {
+    const callTool = installMcp(PLAN);
+    await stageAction("collateral-valuation", values as never);
+    return (callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> }).inputs[0];
+  };
+
+  it("sends items[] ONLY, with no flat collateralId or value", async () => {
+    const body = await sent({
+      idempotencyKey: "observe-bulk-20260727-002",
+      rationale: "r",
+      items: [
+        { collateralId: "a35bb0000013xz3AAA", value: 12_000_000, valuationDate: "2026-07-27", type: "Net Orderly Liquidation Value", source: "Receivables Aging", description: "d", primary: false },
+      ],
+    });
+    expect(Object.keys(body).sort()).toEqual(["idempotencyKey", "items", "rationale"]);
+    // Mixing flat fields with items[] is REFUSED by the tool.
+    expect(body.collateralId).toBeUndefined();
+    expect(body.value).toBeUndefined();
+  });
+
+  it("carries the observed per-item keys", async () => {
+    const body = await sent({
+      idempotencyKey: "k",
+      items: [{ collateralId: "C1", value: 1, valuationDate: "2026-07-27", type: "T", source: "S", description: "d", primary: false }],
+    });
+    expect(Object.keys((body.items as Array<Record<string, unknown>>)[0]).sort()).toEqual([
+      "collateralId",
+      "description",
+      "primary",
+      "source",
+      "type",
+      "valuationDate",
+      "value",
+    ]);
+  });
+
+  it("reads the per-item plan the tool returns", async () => {
+    installMcp({
+      ok: true,
+      error: null,
+      result: {
+        ...PLAN.result,
+        itemCount: 2,
+        productPackageId: "a5Fbb000000IHFJEA4",
+        items: [
+          { collateralId: "a35bb0000013xz3AAA", collateralName: "COL-000762", value: 12_000_000, writeStepId: "write_valuation_0", verifyStepId: "verify_valuation_0", rollupStepId: "verify_rollup_0" },
+          { collateralId: "a35bb0000013y0fAAA", collateralName: "COL-000763", value: 8_000_000, writeStepId: "write_valuation_1", verifyStepId: "verify_valuation_1", rollupStepId: "verify_rollup_1" },
+        ],
+      },
+    });
+    const out = await stageAction("collateral-valuation", { idempotencyKey: "k", items: [] } as never);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.itemCount).toBe(2);
+    expect(out.result.items?.map((i) => i.collateralName)).toEqual(["COL-000762", "COL-000763"]);
+    expect(out.result.items?.[1].rollupStepId).toBe("verify_rollup_1");
+    // The tool resolves the package itself; the panel never guesses it.
+    expect(out.result.productPackageId).toBe("a5Fbb000000IHFJEA4");
+  });
+
+  it("keeps ONE token for the whole batch: the execute payload is unchanged", async () => {
+    const callTool = installMcp({
+      ok: true,
+      error: null,
+      result: { stagingId: "s", terminalState: "success", steps: [], items: [] },
+    });
+    const payload = {
+      idempotencyKey: "observe-bulk-20260727-002",
+      stagingId: "a8abb00001KvCOBAA3",
+      planHash: "6a4331a4",
+      decisionToken: "tok",
+      approverUserId: "005bb00000ftouDAAQ",
+    };
+    await executeAction("collateral-valuation", payload);
+    expect((callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> }).inputs[0]).toEqual(payload);
+  });
+
+  it("parses each item's own filed result, including an unverified one", async () => {
+    installMcp({
+      ok: true,
+      error: null,
+      result: {
+        stagingId: "s",
+        terminalState: "success",
+        steps: [],
+        items: [
+          { collateralId: "C1", collateralName: "COL-000762", valuationId: "a34a", recordName: "CV-0000000010", anchorName: "COL-000762", collateralValueMoved: false },
+          { collateralId: "C2", collateralName: "COL-000763", valuationId: "a34b", recordName: null, collateralValueMoved: false },
+        ],
+      },
+    });
+    const out = await executeAction("collateral-valuation", {
+      idempotencyKey: "k",
+      stagingId: "s",
+      planHash: "h",
+      decisionToken: "t",
+      approverUserId: "005bb00000ftouDAAQ",
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.items).toHaveLength(2);
+    expect(out.result.items![0].recordName).toBe("CV-0000000010");
+    // Per-item unverified carries the same semantic as the single-record case.
+    expect(out.result.items![1].recordName).toBeNull();
+    // No item may claim a coverage improvement (Probe 6, confirmed negative).
+    for (const item of out.result.items!) expect(item.collateralValueMoved).toBe(false);
+  });
+
+  it("surfaces a batch refusal's position text verbatim", async () => {
+    installMcp({
+      ok: false,
+      error: {
+        code: "VALIDATION_FAILED",
+        message: "item 2 of 2: Source: bad value for restricted picklist field: Nonsense. Legal values are: Appraisal, Receivables Aging",
+      },
+      result: null,
+    });
+    const out = await stageAction("collateral-valuation", { idempotencyKey: "k", items: [] } as never);
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.error.message).toContain("item 2 of 2");
+    // The per-item legal list is still parsed from the tool's own words.
+    expect(out.error.legalValues).toEqual(["Appraisal", "Receivables Aging"]);
+  });
+});

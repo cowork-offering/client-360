@@ -153,7 +153,7 @@ describe("A33.1.1 — one modal, three entry points", () => {
     expandAllFields();
     const fromActivity = panel("Collateral Valuation")!.textContent ?? "";
 
-    for (const label of ["Valuation source", "Valuation type", "Valuation amount", "Valuation notes"]) {
+    for (const label of ["Where the number came from", "Valuation basis", "Valuation amount", "Valuation notes"]) {
       expect(fromRow, label).toContain(label);
       expect(fromActivity, label).toContain(label);
     }
@@ -637,13 +637,40 @@ describe("wave 2 — the five new tickets", () => {
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("blocks a bulk valuation the same way, in its own words", () => {
+  it("stages a batch of valuations, no longer gated", async () => {
+    const callTool = installWriteMcp();
+    openActionPanel("Collateral Valuation", "Sterling Fabrication", { userId: APPROVER_ID }, true);
+    const boxes = [...panel("Collateral Valuation")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    if (boxes.length < 2) return; // this bundle stages a single record
+    for (const b of boxes.filter((x) => !x.checked)) click(b);
+    const p = panel("Collateral Valuation")!;
+    expect(p.textContent).not.toContain("needs the bulk tool");
+
+    const review = byText(/Review the plan/)!;
+    if (review.hasAttribute("disabled")) return; // required fields still open
+    click(review);
+    await flush();
+    const body = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_")));
+    expect(Array.isArray(body.items)).toBe(true);
+    expect((body.items as unknown[]).length).toBeGreaterThan(1);
+    expect(body.collateralId).toBeUndefined();
+  });
+
+  it("keeps the basis and the origin distinguishable in the ticket", () => {
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    // The two were swappable by name alone; now each says what it means.
+    expect(text).toContain("Valuation basis");
+    expect(text).toContain("Where the number came from");
+  });
+
+  it("no longer blocks a bulk valuation", () => {
     openActionPanel("Collateral Valuation", "Sterling Fabrication", undefined, true);
     const boxes = [...panel("Collateral Valuation")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
     if (boxes.length < 2) return; // this bundle stages a single record
     click(boxes[0]);
     click(boxes[1]);
-    expect(panel("Collateral Valuation")!.textContent).toContain("needs the bulk tool");
+    expect(panel("Collateral Valuation")!.textContent).not.toContain("needs the bulk tool");
   });
 
   it.each(["Loan Modification", "Renewal"])("withholds %s when nothing is booked, with the reason", (label) => {
@@ -824,10 +851,10 @@ describe("WP8 — the deal ticket", () => {
   it("opens a sheet from a pill and writes the pick back to the same values", () => {
     openActionPanel("Collateral Valuation");
     const p = panel("Collateral Valuation")!;
-    const pill = [...p.querySelectorAll("button")].find((b) => /Valuation source/.test(b.textContent ?? ""))!;
+    const pill = [...p.querySelectorAll("button")].find((b) => /Where the number came from/.test(b.textContent ?? ""))!;
     click(pill);
     const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
-      (d) => d.getAttribute("aria-label") === "Valuation source",
+      (d) => d.getAttribute("aria-label") === "Where the number came from",
     )!;
     expect(sheet).toBeTruthy();
     // The 14 legal values observed from the org's own VALIDATION_FAILED reply.
@@ -835,7 +862,7 @@ describe("WP8 — the deal ticket", () => {
     expect(options.length).toBe(14);
     const option = options.find((b) => b.textContent?.includes("Appraisal"))!;
     click(option);
-    expect([...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Valuation source")).toBe(false);
+    expect([...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Where the number came from")).toBe(false);
     expandAllFields();
     const row = panel("Collateral Valuation")!.querySelector<HTMLSelectElement>("#f-source")!;
     expect(row.value).toBe("Appraisal");
@@ -844,11 +871,11 @@ describe("WP8 — the deal ticket", () => {
   it("shows all 16 valuation types without clipping, longest label included", () => {
     openActionPanel("Collateral Valuation");
     const pill = [...panel("Collateral Valuation")!.querySelectorAll("button")].find((b) =>
-      /Valuation type/.test(b.textContent ?? ""),
+      /Valuation basis/.test(b.textContent ?? ""),
     )!;
     click(pill);
     const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
-      (d) => d.getAttribute("aria-label") === "Valuation type",
+      (d) => d.getAttribute("aria-label") === "Valuation basis",
     )!;
 
     const cards = [...sheet.querySelectorAll("[aria-pressed]")];

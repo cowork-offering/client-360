@@ -44,6 +44,17 @@ export interface PlanStep {
   transition?: { field: string; from: string; to: string };
 }
 
+/** One collateral record inside a bulk valuation plan, with the step ids that
+ *  will report on it. A failure on one item is reported against ITS collateral. */
+export interface StagedItem {
+  collateralId: string;
+  collateralName?: string;
+  value?: number | null;
+  writeStepId?: string;
+  verifyStepId?: string;
+  rollupStepId?: string;
+}
+
 export interface StagedOutput {
   stagingId: string;
   /** Minted server-side and bound to stagingId + planHash + user. Null on an
@@ -66,6 +77,9 @@ export interface StagedOutput {
    *  will carry. The org's own naming convention, computed server-side. */
   createsPackage?: boolean;
   plannedPackageName?: string;
+  /** Bulk valuation: what the plan will file, per collateral record. */
+  items?: StagedItem[];
+  itemCount?: number;
   /** Hash over the ordered steps plus resolved field values. Immutable.
    *  `execute_*` refuses a mismatch. */
   planHash: string;

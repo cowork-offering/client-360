@@ -18,7 +18,7 @@
    ============================================================================= */
 
 import { callTool, SERVERS, unwrapInvocableOne, type McpFailure } from "./mcp";
-import type { PlanStep, StagedOutput, StepType } from "../actions/stagedPlan";
+import type { PlanStep, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
 
 /** The six deployed write tools. */
 export const WRITE_TOOLS = {
@@ -89,6 +89,22 @@ export interface ToolError {
 
 export type ToolOutcome<T> = { ok: true; result: T } | { ok: false; error: ToolError };
 
+/** One collateral's own outcome inside a batch. A failure on one is reported
+ *  against THAT collateral and does not discard the others. */
+export interface ExecutedItem {
+  collateralId: string;
+  collateralName?: string;
+  valuationId?: string;
+  /** Null means the read-back did not confirm it: filed, unverified. Same
+   *  semantic as the single-record case, per item. */
+  recordName?: string | null;
+  anchorName?: string | null;
+  /** Probe 6 settled this negative: a filed valuation does not move the
+   *  collateral value. Each item reports its own answer and none may claim a
+   *  coverage improvement. */
+  collateralValueMoved?: boolean;
+}
+
 export interface ExecuteStepResult {
   id: string;
   type: string;
@@ -122,6 +138,8 @@ export interface ExecuteResult {
   anchorName?: string | null;
   riskRatingReviewId?: string;
   loanId?: string;
+  /** Bulk valuation: one result per collateral record. */
+  items?: ExecutedItem[];
   /** The package the facility was filed on. Created by the plan when the
    *  relationship had none; observed as `productPackageId`, not `packageId`. */
   productPackageId?: string;
@@ -179,6 +197,19 @@ function toPlanStep(raw: Record<string, unknown>): PlanStep {
     state: typeof raw.state === "string" ? raw.state : undefined,
     detail: typeof raw.detail === "string" ? raw.detail : undefined,
     waitBudgetMs: typeof raw.waitBudgetMs === "number" ? raw.waitBudgetMs : undefined,
+  };
+}
+
+/** One planned item, defensively: a row without a collateralId cannot be
+ *  reported against anything and is dropped rather than rendered anonymous. */
+function toStagedItem(raw: Record<string, unknown>): StagedItem {
+  return {
+    collateralId: String(raw.collateralId ?? ""),
+    collateralName: typeof raw.collateralName === "string" ? raw.collateralName : undefined,
+    value: typeof raw.value === "number" ? raw.value : null,
+    writeStepId: typeof raw.writeStepId === "string" ? raw.writeStepId : undefined,
+    verifyStepId: typeof raw.verifyStepId === "string" ? raw.verifyStepId : undefined,
+    rollupStepId: typeof raw.rollupStepId === "string" ? raw.rollupStepId : undefined,
   };
 }
 
@@ -242,16 +273,27 @@ function unwrapToolOutcome<T>(payload: unknown, map: (r: Record<string, unknown>
 /* ------------------------------------------------------------------ stage */
 
 export interface StagePayloads {
+  /**
+   * ITEMS[] ONLY, observed 2026-07-27. Mixing flat fields with `items[]` is
+   * REFUSED by the tool, and so is a duplicate `collateralId` within a batch.
+   * One item is a batch of one: there is no separate single-item shape.
+   */
   "collateral-valuation": {
     idempotencyKey: string;
     rationale?: string;
-    collateralId: string;
-    value?: number | null;
-    valuationDate?: string | null;
-    type?: string | null;
-    source?: string | null;
-    description?: string | null;
-    primary?: boolean;
+    items: Array<{
+      collateralId: string;
+      value?: number | null;
+      valuationDate?: string | null;
+      /** LLC_BI__Type__c — the valuation BASIS (Net Orderly Liquidation Value,
+       *  Fair Market Value, …). NOT where the number came from. */
+      type?: string | null;
+      /** LLC_BI__Source__c — the ORIGIN of the number (Appraisal, Receivables
+       *  Aging, Inventory Report). NOT the basis it was struck on. */
+      source?: string | null;
+      description?: string | null;
+      primary?: boolean;
+    }>;
   };
   "create-service-request": {
     idempotencyKey: string;
@@ -384,6 +426,8 @@ export async function stageAction<K extends WriteActionId>(
     provenanceJson: typeof r.provenanceJson === "string" ? r.provenanceJson : undefined,
     executionHeld: r.executionHeld === true,
     heldReason: typeof r.heldReason === "string" ? r.heldReason : undefined,
+    items: Array.isArray(r.items) ? (r.items as Array<Record<string, unknown>>).map(toStagedItem) : undefined,
+    itemCount: typeof r.itemCount === "number" ? r.itemCount : undefined,
     createsPackage: r.createsPackage === true,
     plannedPackageName: typeof r.plannedPackageName === "string" ? r.plannedPackageName : undefined,
     covenantCarryoverCount: typeof r.covenantCarryoverCount === "number" ? r.covenantCarryoverCount : undefined,
@@ -473,6 +517,16 @@ export async function executeAction(
     caseId: typeof r.caseId === "string" ? r.caseId : undefined,
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
     riskRatingReviewId: typeof r.riskRatingReviewId === "string" ? r.riskRatingReviewId : undefined,
+    items: Array.isArray(r.items)
+      ? (r.items as Array<Record<string, unknown>>).map((raw) => ({
+          collateralId: String(raw.collateralId ?? ""),
+          collateralName: typeof raw.collateralName === "string" ? raw.collateralName : undefined,
+          valuationId: typeof raw.valuationId === "string" ? raw.valuationId : undefined,
+          recordName: typeof raw.recordName === "string" ? raw.recordName : null,
+          anchorName: typeof raw.anchorName === "string" ? raw.anchorName : null,
+          collateralValueMoved: typeof raw.collateralValueMoved === "boolean" ? raw.collateralValueMoved : undefined,
+        }))
+      : undefined,
     productPackageId: typeof r.productPackageId === "string" ? r.productPackageId : undefined,
     packageCreated: typeof r.packageCreated === "boolean" ? r.packageCreated : r.packageCreated === null ? null : undefined,
     involvementId: typeof r.involvementId === "string" ? r.involvementId : undefined,

@@ -104,7 +104,7 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
       }),
       field({
         key: "source",
-        label: "Valuation source",
+        label: "Where the number came from",
         type: "picklist",
         value: null,
         prefill: { source: "BANKER" },
@@ -113,10 +113,11 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
         optionsFrom: { object: OBJ, field: "LLC_BI__Source__c" },
         options: picklist(ctx, OBJ, "LLC_BI__Source__c"),
         target: { object: OBJ, field: "LLC_BI__Source__c" },
+        help: "The ORIGIN of the figure: an appraisal, a receivables aging, an inventory report.",
       }),
       field({
         key: "type",
-        label: "Valuation type",
+        label: "Valuation basis",
         type: "picklist",
         value: null,
         prefill: { source: "BANKER" },
@@ -125,6 +126,7 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
         optionsFrom: { object: OBJ, field: "LLC_BI__Type__c" },
         options: picklist(ctx, OBJ, "LLC_BI__Type__c"),
         target: { object: OBJ, field: "LLC_BI__Type__c" },
+        help: "The BASIS the figure was struck on: net orderly liquidation, fair market value, and so on.",
       }),
       field({
         key: "valuationDate",
@@ -652,21 +654,8 @@ export const OVERRIDE_COMMENT_REQUIRED = "An override requires a stated reason."
  * is BLOCKED with this said out loud. Silently dropping what somebody typed is
  * the one option that is not available.
  */
-/**
- * The wire files ONE valuation per call. The selection step is genuinely better
- * UX — the banker sees every pledge with its context and picks — but staging N
- * selections would mean N plans, N hashes and N tokens behind a gate whose whole
- * contract is one plan, one confirm. Looping them and calling it "one plan"
- * would be the fake claim this campaign has spent itself avoiding.
- *
- * So multi-select renders, and staging more than one is BLOCKED with the reason.
- * The block lifts the day the bulk `items[]` envelope lands.
- */
 export const BULK_FACILITIES_PENDING =
   "A credit action covering several facilities at once needs the package-level tool, which is not deployed yet. Choose one facility to stage this action, or wait for multi-facility filing.";
-
-export const BULK_VALUATION_PENDING =
-  "Filing several valuations at once needs the bulk tool, which is not deployed yet. Choose one piece of collateral to stage this valuation, or wait for bulk filing.";
 
 /** Credit Review and Risk Rating Review are DIFFERENT INSTRUMENTS on different
  *  objects. The banker must know which one they are raising. */

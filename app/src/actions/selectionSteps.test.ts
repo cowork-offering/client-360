@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { buildPanelSchema, BULK_FACILITIES_PENDING, BULK_VALUATION_PENDING, REVIEW_FORK } from "./schemas";
+import { buildPanelSchema, BULK_FACILITIES_PENDING, REVIEW_FORK } from "./schemas";
 import { collateralDetail, collateralRecords, valuableRecords } from "../data/collateralRecords";
 import live from "../../../artifact/live-data.json";
 
@@ -98,16 +98,11 @@ describe("collateral records: one row per piece of security, not per pledge", ()
   });
 });
 
-describe("the wire files one at a time, and the ticket says so", () => {
-  it("names what is missing rather than looping N plans", () => {
-    expect(BULK_VALUATION_PENDING).toContain("not deployed yet");
-    expect(BULK_VALUATION_PENDING).toContain("Choose one piece of collateral");
+describe("valuations file as a batch; facilities still file one at a time", () => {
+  it("no longer gates a multi-record valuation: the items[] envelope is observed", () => {
+    // The gate and its tests were deleted together, per the commit directive.
     expect(BULK_FACILITIES_PENDING).toContain("not deployed yet");
     expect(BULK_FACILITIES_PENDING).toContain("Choose one facility");
-    // Never a claim that several were filed as one.
-    for (const copy of [BULK_VALUATION_PENDING, BULK_FACILITIES_PENDING]) {
-      expect(copy.toLowerCase()).not.toContain("one plan");
-    }
   });
 });
 

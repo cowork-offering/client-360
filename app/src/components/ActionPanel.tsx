@@ -9,7 +9,6 @@ import {
   overrideNeedsComment,
   OVERRIDE_COMMENT_REQUIRED,
   OVERRIDE_NOT_YET_FILEABLE,
-  BULK_VALUATION_PENDING,
   BULK_FACILITIES_PENDING,
 } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
@@ -468,10 +467,8 @@ export function ActionPanel({
   /** Selections the wire cannot carry yet. The UI is real; the block is honest
    *  and names what is missing rather than filing N plans as if they were one. */
   const bulkGap = (() => {
-    if (actionId === "collateral-valuation") {
-      const n = Array.isArray(values.records) ? (values.records as string[]).length : 0;
-      return n > 1 ? BULK_VALUATION_PENDING : null;
-    }
+    // Collateral valuation files a BATCH now: the items[] envelope is observed
+    // and its gate is gone. Modification and renewal still take one facility.
     if (actionId === "loan-modification" || actionId === "renewal") {
       const n = Array.isArray(values.facility) ? (values.facility as string[]).length : 0;
       return n > 1 ? BULK_FACILITIES_PENDING : null;
@@ -552,24 +549,33 @@ export function ActionPanel({
     const packageId = bundle?.snapshot?.productPackageId ?? null;
 
     if (actionId === "collateral-valuation") {
-      // The selection step chooses collateral RECORDS. The wire takes one
-      // valuation per call, so a multi-selection is blocked upstream rather
-      // than quietly filed as N separate plans dressed up as one.
+      // ITEMS[] ONLY. One selection is a batch of one: the tool has no separate
+      // single-item shape, and mixing flat fields with items[] is REFUSED.
       const chosen = Array.isArray(values.records) ? (values.records as string[]) : [];
-      const collateralId = chosen.length === 1 ? chosen[0] : null;
-      if (!collateralId) return null;
+      // A duplicate collateralId in a batch is refused too. The chooser cannot
+      // produce one; this makes sure a future edit cannot either.
+      const unique = [...new Set(chosen)];
+      if (!unique.length) return null;
+
       const perItem = (values.recordValues as Record<string, unknown>) ?? {};
-      const itemValue = typeof perItem[collateralId] === "number" ? (perItem[collateralId] as number) : null;
-      return {
-        idempotencyKey,
-        rationale,
-        collateralId,
-        value: itemValue ?? nOf("value"),
+      // Basis, origin, date and notes describe the valuation EXERCISE and apply
+      // to every item in it. Only the figure is per collateral record.
+      const shared = {
         valuationDate: v("valuationDate") as string | null,
         type: v("type") as string | null,
         source: v("source") as string | null,
         description: v("description") as string | null,
         primary: values.primary === true,
+      };
+
+      return {
+        idempotencyKey,
+        rationale,
+        items: unique.map((collateralId) => ({
+          collateralId,
+          value: typeof perItem[collateralId] === "number" ? (perItem[collateralId] as number) : nOf("value"),
+          ...shared,
+        })),
       };
     }
 

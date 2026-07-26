@@ -210,6 +210,37 @@ export function StepTracker({
         </div>
       )}
 
+      {/* A BATCH reports per collateral. One row per item, each with its own
+          filed name or its own unverified state: a failure on one is reported
+          against that collateral and never hidden behind a batch-level green. */}
+      {!revealing && (outcome?.items?.length ?? 0) > 1 && (
+        <div className="c360-row-land border-b border-divider px-5 py-4">
+          <div className="kicker mb-2">Filed, per collateral</div>
+          <div className="flex flex-col gap-2">
+            {outcome!.items!.map((item) => (
+              <div key={item.collateralId} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[12.5px] font-semibold text-ink">{item.collateralName ?? item.collateralId}</span>
+                {item.recordName ? (
+                  <span className="text-[12px] text-ink-body">filed as {item.recordName}</span>
+                ) : (
+                  <span className="text-[12px]" style={{ color: "var(--warning)" }}>
+                    filed, name not confirmed
+                  </span>
+                )}
+                {item.valuationId && <span className="font-mono text-[10.5px] text-ink-faint">{item.valuationId}</span>}
+                {/* Probe 6: the rollup does not fire headlessly. Each item says
+                    so for itself; none of them claims a coverage improvement. */}
+                {item.collateralValueMoved === false && (
+                  <span className="w-full text-[10.5px] text-ink-faint">
+                    The collateral value did not change, so no coverage improvement is claimed.
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* The stamp. Sober by design: a record was filed, which is a fact, not a
           celebration. It appears only once every row has landed. */}
       {!revealing && filed && filed.nameConfirmed && terminal === "success" && (
