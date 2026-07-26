@@ -165,12 +165,44 @@ a message attaches to an account only when the account name clearly appears.
 |---|---|---|
 | Home KPI band | `Customer360Portfolio` | **`watchTool`**, `staleTime: 30s`, `refetchInterval: 60s` |
 | Chat | `get_llm_response` with a grounded prompt | `callTool`, read |
-| "Refresh from org" (Activity tab) | the six `Customer360*` detail tools | `callTool`, read, `staleTime: 15s` |
+| "Sync" (account header) | `Customer360Portfolio` + the six `Customer360*` detail tools + `outlook_email_search` | `callTool`, read, `staleTime: 15s` (mail 60s), one user gesture |
 | Generate Spreading action | `boom_get_ratios` + `boom_get_spread` | `callTool`, read, `staleTime: 30s` |
 | Other registry actions | `get_llm_response`, framed as **preparation** | `callTool`, read |
-| "Check my inbox" | `outlook_email_search` | `callTool`, read, `staleTime: 60s` |
 | Action Panel "Review the plan" | `stage_<action>` | `callTool`, **uncached, no retry**, user gesture |
 | Confirm gate "Confirm and file" | `execute_<action>` | `callTool`, **uncached, never auto-retried** |
+
+### The sync sweep (WP7)
+
+One button in the account header replaced the separate "Refresh from org" and "Check my inbox"
+controls. It is a single user gesture firing **up to 8 read calls**: the portfolio read, the six
+detail tools, and one mailbox search. The button is disabled for the duration, so a sweep cannot
+overlap itself. There is **no auto-sync and no polling** on this surface.
+
+Each console line is bound to its own call and cannot tick before that call has returned; the
+display pacing is a floor, never a substitute for the work. A failed read leaves its section on the
+previous value and says so on its line, and the workspace is never blanked. When Microsoft 365 is
+not part of the view the mailbox line is removed silently, per the A29 opportunistic-skip rule.
+
+### The compile sequence (WP7)
+
+"Review the plan" runs a four-line build sequence, and each line wraps a real operation: gathering the
+prefills, recomputing the suggestions and checking for drift, the `stage_*` call in flight, and
+validating the plan that came back against the transition allowlist. A line cannot tick before its own
+operation has returned; the ~450ms pacing floor can delay a fast line and can never advance a slow one.
+
+A failure **stops the sequence on its own line** and renders the typed error (plus the org error string)
+there — the sequence is the error surface. A domain refusal (`VALIDATION_FAILED`, `PRECONDITION`,
+`NOT_STAGEABLE`, `blocked_by_policy`, `bad_request`) offers no retry, because re-sending the identical
+request would be refused identically. A transport or transient failure offers one user-gesture retry.
+Lines below the failure stay dim: they never ran.
+
+The execution reveal on the tracker is **presentation only**. The executor has already returned every
+step's final state and the eight-state machine still owns every transition; the reveal only paces how
+those settled states are shown. No row ever displays a state the executor did not return, and the
+"Filed" stamp appears only on a `success` terminal state.
+
+`prefers-reduced-motion` collapses the pacing floor to zero and disables every sweep, slide, reveal and
+pulse animation outright, rather than running them at 0.001s.
 
 ### Write tools (WP5)
 

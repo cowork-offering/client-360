@@ -311,8 +311,10 @@ describe("verdict bar (A27.4 / A28)", () => {
     const triggers = [...document.querySelectorAll("#c360-client-actions-trigger")];
     expect(triggers).toHaveLength(1);
     expect(triggers[0].closest("header")).toBeNull();
-    // Sibling of the stat cells: shares the strip row container.
+    // Shares the strip row container with the stat cells. Since WP7 it sits in
+    // the trigger group alongside Sync, which is still on that same row.
     const cell = container!.querySelector('[title="nCino risk rating"]')!;
-    expect(triggers[0].parentElement).toBe(cell.parentElement);
+    const strip = cell.parentElement!;
+    expect(triggers[0].parentElement!.parentElement).toBe(strip);
   });
 });

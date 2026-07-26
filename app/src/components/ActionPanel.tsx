@@ -4,8 +4,15 @@ import { Portal } from "./Portal";
 import { ACTIONS_BY_ID } from "../actions/registry";
 import { buildPanelSchema } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
-import { computeSuggestions, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
-import type { ProvenanceKind } from "../data/contract";
+import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
+import { runCompile, type CompileLine } from "../actions/compile";
+import { CompileScreen } from "./CompileScreen";
+import { validatePlan } from "../actions/transitionAllowlist";
+import { assertNoRecordIds } from "../actions/stagedPlan";
+import { withDrafts } from "../actions/drafts";
+import { buildBriefing } from "../actions/briefing";
+import { BriefingCard } from "./BriefingCard";
+import type { ProvenanceKind, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
 import { ConfirmGate } from "./ConfirmGate";
 import { StepTracker } from "./StepTracker";
@@ -242,6 +249,58 @@ function GapNote({ gap }: { gap: NamedGap }) {
   );
 }
 
+type Phase = "form" | "compile" | "confirm" | "tracker";
+
+/** Briefing -> Plan -> Execution. Compile is the bridge between the first two,
+ *  so it shows as the Plan step already being worked on. */
+const STEPS: Array<{ id: Phase; label: string }> = [
+  { id: "form", label: "Briefing" },
+  { id: "confirm", label: "Plan" },
+  { id: "tracker", label: "Execution" },
+];
+
+function Stepper({ phase, onBack }: { phase: Phase; onBack: () => void }) {
+  const index = phase === "compile" ? 1 : STEPS.findIndex((s) => s.id === phase);
+  // Only the Plan step may walk back. Once a plan has been filed there is no
+  // stepping back to edit it: the record exists, and pretending otherwise would
+  // be the one dishonest thing on this screen.
+  const canGoBack = phase === "confirm";
+
+  return (
+    <div className="flex items-center gap-1.5 border-b border-divider px-5 py-2">
+      {STEPS.map((s, i) => {
+        const here = i === index;
+        return (
+          <span key={s.id} className="flex items-center gap-1.5">
+            {i > 0 && (
+              <span className="text-[10px] text-ink-faint" aria-hidden="true">
+                /
+              </span>
+            )}
+            {i < index && canGoBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="c360-press rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-muted hover:text-ink"
+              >
+                {s.label}
+              </button>
+            ) : (
+              <span
+                aria-current={here ? "step" : undefined}
+                className="px-1.5 py-0.5 text-[11px] font-semibold"
+                style={{ color: here ? "var(--accent)" : i < index ? "var(--ink-muted)" : "var(--ink-faint)" }}
+              >
+                {s.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ActionPanel({
   actionId,
   onClose,
@@ -251,7 +310,7 @@ export function ActionPanel({
   onClose: () => void;
   returnFocusTo?: () => HTMLElement | null;
 }) {
-  const { data, state } = useApp();
+  const { data, state, worklist } = useApp();
   const panelRef = useRef<HTMLDivElement>(null);
 
   const action = ACTIONS_BY_ID[actionId];
@@ -264,9 +323,28 @@ export function ActionPanel({
    *  they supersede the partial observed cache for that field. */
   const [legalValues, setLegalValues] = useState<Record<string, string[]>>({});
 
-  const schema = useMemo(
-    () => buildPanelSchema(actionId, { bundle, accountId, accountName, orgPicklists: { ...observedPicklistMap(), ...legalValues } }),
-    [actionId, bundle, accountId, accountName, legalValues],
+  /** Why this action is on the queue. Seeds the drafted recommendation and the
+   *  briefing's opening line; never invented, always the derived worklist.
+   *  Keyed so the memos below depend on the reasons, not on a fresh array. */
+  const reasonKey = (worklist.reasons[accountId] ?? []).join("|");
+  const reasons = useMemo(() => (reasonKey ? (reasonKey.split("|") as ReasonCode[]) : []), [reasonKey]);
+
+  /** The schema, then the agent's drafts overlaid onto it (WP7.2). The overlay
+   *  only fills AGENT_NARRATIVE fields the panel would otherwise open empty, so
+   *  every contract the classic form obeys is untouched. */
+  const schema = useMemo(() => {
+    const base = buildPanelSchema(actionId, {
+      bundle,
+      accountId,
+      accountName,
+      orgPicklists: { ...observedPicklistMap(), ...legalValues },
+    });
+    return base ? withDrafts(base, actionId, bundle, reasons) : null;
+  }, [actionId, bundle, accountId, accountName, legalValues, reasons]);
+
+  const briefing = useMemo(
+    () => buildBriefing(actionId, schema, bundle, accountName, reasons),
+    [actionId, schema, bundle, accountName, reasons],
   );
 
   const [values, setValues] = useState<Record<string, unknown>>(() =>
@@ -274,12 +352,17 @@ export function ActionPanel({
   );
   const [editedFields, setEditedFields] = useState<string[]>([]);
   const [declined, setDeclined] = useState<Record<string, string>>({});
-  /** form -> confirm -> tracker. */
-  const [phase, setPhase] = useState<"form" | "confirm" | "tracker">("form");
+  /** briefing -> compile -> plan -> execution. Compile is the bridge, not a
+   *  stop on the stepper: it is how the plan gets built. */
+  const [phase, setPhase] = useState<Phase>("form");
+  const [showAllFields, setShowAllFields] = useState(false);
+  const [compileLines, setCompileLines] = useState<CompileLine[]>([]);
+  /** The values the current plan was built from. Editing away from these means
+   *  the plan on the next screen is stale and has to be rebuilt. */
+  const [stagedValues, setStagedValues] = useState<string | null>(null);
   const [plan, setPlan] = useState<StagedOutput | null>(null);
   const [tracker, setTracker] = useState<TrackerState | null>(null);
   const [token, setToken] = useState<DecisionToken | null>(null);
-  const [staging, setStaging] = useState(false);
   const [toolError, setToolError] = useState<ToolError | null>(null);
   const [live, setLive] = useState(false);
   const [outcome, setOutcome] = useState<ExecuteResult | null>(null);
@@ -339,6 +422,11 @@ export function ActionPanel({
   // Honest-gap discipline: a missing write anchor blocks staging outright. We
   // never substitute a different record's id to get past it.
   const blockers = stagingBlockers(schema);
+
+  /** True once the banker has edited away from the values the plan was built
+   *  from. The plan on the Plan step is then a description of something that is
+   *  no longer what would be filed. */
+  const planIsStale = plan !== null && stagedValues !== null && stagedValues !== JSON.stringify(values);
 
   /** A33.1.7 — attribution for edited agent prose. Ledger-bound, never injected. */
   const attribution: NarrativeAttribution | null = editedFields.length
@@ -404,57 +492,114 @@ export function ActionPanel({
     };
   }
 
-  /** USER GESTURE ONLY. Calls the live stage tool when the capability is
-   *  present; falls back to the NOT-LIVE adapter under dev/test only. */
+  /** USER GESTURE ONLY, and the whole sequence runs on that one gesture.
+   *
+   *  Each line below wraps a REAL operation. Nothing is narrated that does not
+   *  happen, and a line cannot tick before its own operation has returned. A
+   *  failure stops the sequence on its line and the error is rendered there. */
   async function stage() {
     setToolError(null);
-    // Defence in depth: the button is disabled, and the call is refused anyway.
-    if (blockers.length) {
-      setToolError({ code: "NOT_STAGEABLE", message: blockers.map((b) => b.gap!.reason).join(" ") });
-      return;
-    }
+    setPhase("compile");
 
-    if (mcpAvailable() && isWriteAction(actionId)) {
-      const payload = stagePayload();
-      if (!payload) {
-        setToolError({ code: "PRECONDITION", message: "This relationship has no pledged collateral to value." });
-        return;
-      }
-      setStaging(true);
-      try {
-        const outcome = await stageAction(actionId, payload as never);
-        if (!outcome.ok) {
-          setToolError(outcome.error);
-          // The tool returns the legal picklist set on a mismatch; adopt it.
-          if (outcome.error.legalValues?.length) {
-            const target = /type/i.test(outcome.error.message) ? "LLC_BI__Type__c" : "LLC_BI__Source__c";
-            setLegalValues((prev) => ({
-              ...prev,
-              [`LLC_BI__Collateral_Valuation__c.${target}`]: outcome.error.legalValues!,
-            }));
-          }
-          return;
-        }
-        setPlan({ ...outcome.result, suggestions: engine.suggestions.filter((s) => !declined[s.id]) });
-        setLive(true);
-        setPhase("confirm");
-      } catch (e) {
-        const f = e as { fix?: string; message?: string };
-        setToolError({ code: "TRANSPORT", message: f.fix ?? f.message ?? String(e) });
-      } finally {
-        setStaging(false);
-      }
-      return;
-    }
+    let payload: ReturnType<typeof stagePayload> = null;
+    let built: StagedOutput | null = null;
+    let fromLiveTool = false;
 
-    const simulated = simulateStagedOutput({
-      actionId,
-      accountName,
-      suggestions: engine.suggestions.filter((s) => !declined[s.id]),
-    });
-    if (!simulated) return; // no live tool, no simulation: nothing to confirm
-    setPlan(simulated);
-    setLive(false);
+    const outcome = await runCompile(
+      [
+        {
+          id: "prefills",
+          label: "Gathering the prefills",
+          run: () => {
+            // Defence in depth: the gesture is disabled on a blocking gap, and
+            // the sequence refuses it again here.
+            if (blockers.length) {
+              throw { code: "NOT_STAGEABLE", message: blockers.map((b) => b.gap!.reason).join(" ") };
+            }
+            payload = stagePayload();
+            if (!payload && mcpAvailable() && isWriteAction(actionId)) {
+              throw { code: "PRECONDITION", message: "This relationship has no pledged collateral to value." };
+            }
+            const filled = schema!.fields.filter((f) => values[f.key] !== null && values[f.key] !== undefined && values[f.key] !== "");
+            return `${filled.length} of ${schema!.fields.length} fields carry a value`;
+          },
+        },
+        {
+          id: "recompute",
+          label: "Recomputing the figures and checking for drift",
+          run: () => {
+            const fresh = computeSuggestions({ data, bundle, actionId });
+            const moved = detectDrift(engine.suggestions, fresh, data.meta?.generatedAt ?? "");
+            if (moved.length) {
+              throw {
+                code: "VALIDATION_FAILED",
+                message: "The figures moved while this was open, so the plan would have been built on numbers you did not see. Reopen the briefing and check them.",
+              };
+            }
+            return fresh.suggestions.length
+              ? `${fresh.suggestions.length} finding${fresh.suggestions.length === 1 ? "" : "s"} still stands`
+              : "no findings outstanding";
+          },
+        },
+        {
+          id: "stage",
+          label: "Sending it to the org to be staged",
+          run: async () => {
+            if (!(mcpAvailable() && isWriteAction(actionId))) {
+              built = simulateStagedOutput({
+                actionId,
+                accountName,
+                suggestions: engine.suggestions.filter((s) => !declined[s.id]),
+              });
+              if (!built) throw { code: "NOT_STAGEABLE", message: "There is no staging tool for this action in this view." };
+              return "simulated, nothing left this page";
+            }
+            const res = await stageAction(actionId, payload as never);
+            if (!res.ok) {
+              // The tool returns the legal picklist set on a mismatch; adopt it
+              // so the briefing can offer the real values on the next attempt.
+              if (res.error.legalValues?.length) {
+                const target = /type/i.test(res.error.message) ? "LLC_BI__Type__c" : "LLC_BI__Source__c";
+                setLegalValues((prev) => ({
+                  ...prev,
+                  [`LLC_BI__Collateral_Valuation__c.${target}`]: res.error.legalValues!,
+                }));
+              }
+              throw res.error;
+            }
+            built = { ...res.result, suggestions: engine.suggestions.filter((s) => !declined[s.id]) };
+            fromLiveTool = true;
+            return "the org accepted it";
+          },
+        },
+        {
+          id: "plan",
+          label: "Checking the plan that came back",
+          run: () => {
+            if (!built) throw { code: "TRANSPORT", message: "The staging call returned no plan." };
+            const violations = validatePlan(built.steps);
+            if (violations.length) {
+              throw {
+                code: "VALIDATION_FAILED",
+                message: `Step ${violations[0].stepId}: ${violations[0].reason}`,
+              };
+            }
+            const leaks = assertNoRecordIds(built);
+            if (leaks.length) throw { code: "VALIDATION_FAILED", message: leaks[0] };
+            return `${built.steps.length} step${built.steps.length === 1 ? "" : "s"}`;
+          },
+        },
+      ],
+      { onLines: setCompileLines },
+    );
+
+    if (!outcome.ok) {
+      setToolError(outcome.error);
+      return; // the compile screen holds, with the error on its own line
+    }
+    setPlan(built);
+    setLive(fromLiveTool);
+    setStagedValues(JSON.stringify(values));
     setPhase("confirm");
   }
 
@@ -477,6 +622,14 @@ export function ActionPanel({
       setOutcome(executed ?? null);
     }
     setPhase("tracker");
+  }
+
+  /** Stepping back preserves everything the banker entered. The plan is kept
+   *  too, so a step forward without edits shows the same plan and the same
+   *  hash; edits make it stale, and the briefing says so. */
+  function stepBack() {
+    setToolError(null);
+    setPhase(phase === "tracker" ? "confirm" : "form");
   }
 
   function setField(f: PanelField, v: unknown) {
@@ -525,14 +678,20 @@ export function ActionPanel({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
+          <Stepper phase={phase} onBack={stepBack} />
+
+          <div key={phase} className="c360-step-in min-h-0 flex-1 overflow-auto">
+            {phase === "compile" && (
+              <CompileScreen lines={compileLines} onRetry={() => void stage()} onBack={() => setPhase("form")} />
+            )}
+
             {phase === "confirm" && plan && (
               <ConfirmGate
                 plan={plan}
                 actionId={actionId}
                 simulated={!live}
                 idempotencyKey={idempotencyKeyRef.current}
-                onBack={() => setPhase("form")}
+                onBack={stepBack}
                 onConfirmed={onConfirmed}
               />
             )}
@@ -550,7 +709,35 @@ export function ActionPanel({
 
             {phase === "form" && (
             <>
-            {/* Suggestions and gaps first: they may change what the banker enters. */}
+            {/* A re-stage after edits is a NEW plan and a new hash. Say so
+                rather than letting the banker assume the plan they already saw
+                still describes what would be filed. */}
+            {planIsStale && (
+              <div className="border-b border-divider px-5 py-3">
+                <div className="rounded-[10px] px-3.5 py-2.5" style={{ background: "var(--warning-bg)" }}>
+                  <div className="text-[12px] leading-relaxed" style={{ color: "var(--warning-prose)" }}>
+                    The figures changed, so the plan will be rebuilt. The one you saw no longer describes what would be filed.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* WP7.1 — the panel opens on the composed proposal, not a form. */}
+            {briefing && (
+              <BriefingCard
+                briefing={briefing}
+                schema={schema}
+                values={values}
+                editedFields={editedFields}
+                onChange={setField}
+                renderChip={(f, edited) => {
+                  const kind = chipFor(f);
+                  return kind ? <ProvenanceChip kind={kind} citation={f.prefill.citation} edited={edited} /> : null;
+                }}
+              />
+            )}
+
+            {/* Suggestions and gaps next: they may change what the banker enters. */}
             {(engine.suggestions.length > 0 || engine.gaps.length > 0) && (
               <div className="flex flex-col gap-2 border-b border-divider px-5 py-4">
                 <div className="kicker">What the figures say</div>
@@ -592,21 +779,44 @@ export function ActionPanel({
               </div>
             )}
 
-            {schema.fields.map((f) => (
-              <FieldRow
-                key={f.key}
-                field={f}
-                value={values[f.key]}
-                edited={editedFields.includes(f.key)}
-                onChange={(v) => setField(f, v)}
-              />
-            ))}
+            {/* The completeness and audit view. Every field the write touches,
+                in schema order, with its provenance. Kept, not replaced. */}
+            {briefing && (
+              <button
+                type="button"
+                aria-expanded={showAllFields}
+                onClick={() => setShowAllFields((v) => !v)}
+                className="c360-press flex w-full items-center gap-2 border-t border-divider px-5 py-2.5 text-[11.5px] font-semibold text-ink-muted hover:text-ink"
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                  className="c360-twist flex-none"
+                  style={{ transform: showAllFields ? "rotate(90deg)" : "none" }}
+                >
+                  <path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+                All fields ({schema.fields.length})
+              </button>
+            )}
+
+            {(!briefing || showAllFields) &&
+              schema.fields.map((f) => (
+                <FieldRow
+                  key={f.key}
+                  field={f}
+                  value={values[f.key]}
+                  edited={editedFields.includes(f.key)}
+                  onChange={(v) => setField(f, v)}
+                />
+              ))}
             </>
             )}
           </div>
 
-          {/* Footer: the confirm GATE itself lands in the next round; this is the
-              schema-completeness state only. */}
+          {/* Footer: schema completeness, and the gesture that builds the plan. */}
           {phase === "form" && (
           <div className="flex flex-none items-center gap-3 border-t border-divider px-5 py-3">
             <div className="flex-1 text-[11px] text-ink-muted">
@@ -624,25 +834,15 @@ export function ActionPanel({
             >
               Close
             </button>
-            {mcpAvailable() && isWriteAction(actionId) ? (
-              <button
-                type="button"
-                disabled={missing.length > 0 || blockers.length > 0 || staging}
-                onClick={() => void stage()}
-                className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
-                style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
-              >
-                {staging ? "Staging…" : "Review the plan"}
-              </button>
-            ) : isSimulationAllowed() ? (
+            {(mcpAvailable() && isWriteAction(actionId)) || isSimulationAllowed() ? (
               <button
                 type="button"
                 disabled={missing.length > 0 || blockers.length > 0}
-                onClick={() => void stage()}
+                onClick={() => (plan && !planIsStale ? setPhase("confirm") : void stage())}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
               >
-                Review the plan
+                {plan && !planIsStale ? "Back to the plan" : planIsStale ? "Rebuild the plan" : "Review the plan"}
               </button>
             ) : (
               <span className="text-[11px] text-ink-faint" title="The staging tools are not deployed yet">

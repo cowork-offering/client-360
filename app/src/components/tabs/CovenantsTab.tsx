@@ -10,6 +10,7 @@ import {
   type Tone,
 } from "../../data/finance";
 import { Card, SectionHead, GapChip, EmptyState, NoteCaption } from "../ui";
+import { Pulse } from "../Pulse";
 import { useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
@@ -142,8 +143,14 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
                 style={{ gridTemplateColumns: COV_COLS }}
               >
                 <span className="font-semibold">{c.covenantType ?? "Covenant"}</span>
-                <span className="font-bold">{fmtCovVal(c.actualValue)}</span>
-                <span className="text-ink-label">{fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)}</span>
+                <span className="font-bold">
+                  <Pulse id={`covenant.${c.covenantId}.actualValue`}>{fmtCovVal(c.actualValue)}</Pulse>
+                </span>
+                <span className="text-ink-label">
+                  <Pulse id={`covenant.${c.covenantId}.thresholdValue`}>
+                    {fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)}
+                  </Pulse>
+                </span>
                 <span className="font-bold" style={{ color: barColor }}>
                   {cush.cushion != null ? `${cush.cushion < 0 ? "−" : ""}${fmtCovVal(Math.abs(cush.cushion))}` : "—"}
                 </span>

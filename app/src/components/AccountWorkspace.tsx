@@ -7,6 +7,7 @@ import { gradeColor } from "./RiskGrade";
 import { PackageStageChip } from "./PackageStage";
 import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { TabContent } from "./tabs";
+import { SyncButton } from "./SyncSweep";
 
 /** One cell of the anchor/stat strip. Every cell shares this shape; the rating
  *  cell differs ONLY by status-toned value text plus the tick scale (founder
@@ -121,25 +122,28 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
                 {bundle.verdict}
               </div>
             )}
-            {/* Stat strip + Client Actions on ONE row: the trigger is a sibling
-                of the strip, right-aligned to the same grid, so nothing floats
-                free in the header (founder feedback 2026-07-25). */}
+            {/* Stat strip + the two triggers on ONE row, right-aligned to the
+                same grid so nothing floats free (founder feedback 2026-07-25).
+                Sync is secondary; Client Actions keeps the accent. */}
             <div className="mt-3 flex flex-wrap items-stretch gap-2.5">
               {(bundle.anchors ?? []).map((a) => (
                 <AnchorCell key={a.label} a={a} grade={grade} />
               ))}
-              <button
-                id={ACTIONS_TRIGGER_ID}
-                type="button"
-                onClick={() => dispatch({ type: "SET_PANEL", panel: state.panel === "actions" ? "none" : "actions" })}
-                aria-expanded={state.panel === "actions"}
-                className="c360-press c360-accent-btn ml-auto inline-flex flex-none items-center gap-1.5 self-center rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
-              >
-                <svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true">
-                  <path d="M3 5.4h12M3 9h12M3 12.6h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                Client Actions
-              </button>
+              <span className="ml-auto flex items-center gap-2 self-center">
+                <SyncButton accountId={snap.accountId} accountName={name} bundle={bundle} />
+                <button
+                  id={ACTIONS_TRIGGER_ID}
+                  type="button"
+                  onClick={() => dispatch({ type: "SET_PANEL", panel: state.panel === "actions" ? "none" : "actions" })}
+                  aria-expanded={state.panel === "actions"}
+                  className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
+                >
+                  <svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true">
+                    <path d="M3 5.4h12M3 9h12M3 12.6h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  Client Actions
+                </button>
+              </span>
             </div>
           </div>
         </PageContainer>

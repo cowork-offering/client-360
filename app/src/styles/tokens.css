@@ -296,6 +296,71 @@ body {
   transform: scale(0.97);
 }
 
+/* Disclosure chevron — transform only, so it composites and the global
+   reduced-motion rule above collapses it to instant. */
+.c360-twist {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+/* Sync sweep — the only looping animation in the app, and it runs only while a
+   real call is in flight. Reduced motion stops it dead (below). */
+@keyframes c360-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.c360-sync-spin {
+  animation: c360-sync-spin 780ms linear infinite;
+}
+
+/* Stepper transitions — Briefing / Plan / Execution slide in on the same
+   axis the stepper reads. Transform + opacity only, so it composites. */
+@keyframes c360-step-in {
+  from {
+    opacity: 0;
+    transform: translate3d(14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+.c360-step-in {
+  animation: c360-step-in 180ms var(--ease-out) both;
+}
+
+/* Execution reveal — a tracker row landing its final state. */
+@keyframes c360-row-land {
+  from {
+    opacity: 0.35;
+    transform: translate3d(0, 3px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+.c360-row-land {
+  animation: c360-row-land 220ms var(--ease-out) both;
+}
+
+/* Delta pulse — a changed figure lights where it already sits, once. Colour
+   only: no movement, no layout shift, nothing to chase across the page. */
+@keyframes c360-pulse {
+  0% {
+    background: var(--accent-wash);
+    box-shadow: 0 0 0 3px var(--accent-wash);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.c360-pulse {
+  border-radius: 5px;
+  animation: c360-pulse 1600ms var(--ease-out) both;
+}
+
 /* Row hover — tint + a whisper of inset travel, no layout shift. */
 .c360-row {
   transition:
@@ -468,7 +533,17 @@ body {
     animation-delay: 0s !important;
   }
   .c360-ambient-a,
-  .c360-ambient-b {
+  .c360-ambient-b,
+  /* A spinner at 0.001s is a strobe, and a pulse the viewer asked not to see is
+     still motion. Both stop entirely rather than run fast. */
+  .c360-sync-spin,
+  .c360-pulse {
+    animation: none !important;
+  }
+  /* Slides and reveals become instant: the content is there, the movement is
+     not. Duration alone would still animate opacity from 0 for a frame. */
+  .c360-step-in,
+  .c360-row-land {
     animation: none !important;
   }
   .c360-hover-lift:hover {

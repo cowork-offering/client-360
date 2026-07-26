@@ -5,7 +5,6 @@ import { useApp } from "../../state/appState";
 import { staggerDelay } from "../../data/motion";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { ActivityDetailModal } from "../ActivityDetailModal";
-import { LiveDataBar } from "../LiveDataBar";
 
 const EXPLAIN =
   "Walk me through this activity: what came in, what was concluded, what is next.";
@@ -191,7 +190,6 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
   return (
     <div className="flex flex-col gap-4">
       <SectionHead kicker="Activity · audit trail" explain={EXPLAIN} />
-      <LiveDataBar accountId={accountId} accountName={bundle.snapshot?.name ?? "this relationship"} />
 
       <Card hover={false} className="px-5 py-5">
         {entries.length === 0 ? (

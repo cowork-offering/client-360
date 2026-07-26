@@ -55,6 +55,9 @@ export interface ViewState {
   livePatches: Record<string, Partial<BorrowerBundle>>;
   /** Freshness per account, from result.cache.storedAt (never Date.now). */
   liveStoredAt: Record<string, number>;
+  /** Display ids a sync just changed. The value pulses where it already sits,
+   *  then this clears — it is a notification, not a data state. */
+  pulse: string[];
 }
 
 type Action =
@@ -66,6 +69,8 @@ type Action =
   | { type: "LOG_ACTION"; accountId: string; actionLabel: string }
   | { type: "PATCH_BUNDLE"; accountId: string; patch: Partial<BorrowerBundle>; storedAt?: number }
   | { type: "INGEST_REQUESTS"; accountId: string; entries: ActivityEntry[] }
+  | { type: "PULSE"; ids: string[] }
+  | { type: "CLEAR_PULSE" }
   | { type: "SET_DRAFT"; draft: string }
   | { type: "PUSH_MESSAGE"; message: LocalMessage }
   | { type: "RESTORE"; ui: Partial<PersistedUi> };
@@ -81,6 +86,7 @@ const initial: ViewState = {
   sessionActivity: {},
   livePatches: {},
   liveStoredAt: {},
+  pulse: [],
 };
 
 function reducer(state: ViewState, action: Action): ViewState {
@@ -121,6 +127,10 @@ function reducer(state: ViewState, action: Action): ViewState {
         },
       };
     }
+    case "PULSE":
+      return { ...state, pulse: action.ids };
+    case "CLEAR_PULSE":
+      return state.pulse.length ? { ...state, pulse: [] } : state;
     case "PATCH_BUNDLE": {
       const prev = state.livePatches[action.accountId] ?? {};
       return {

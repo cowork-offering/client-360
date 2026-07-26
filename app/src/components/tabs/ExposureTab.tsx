@@ -3,6 +3,7 @@ import { fmtMoney, fmtPct, fmtDate } from "../../data/format";
 import { fmtRatio, fmtRate, STATUS, type Tone } from "../../data/finance";
 import { Card, SectionHead, GapChip, EmptyState, NoteCaption, StatCell, ToneChip } from "../ui";
 import { useEnterTransition } from "../../data/motion";
+import { Pulse } from "../Pulse";
 import { isActiveFacility } from "../../data/worklist";
 
 const EXPLAIN =
@@ -54,9 +55,9 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
 
       {/* stat strip */}
       <Card className="flex flex-wrap items-center gap-x-10 gap-y-4 px-6 py-4">
-        <StatCell label="Committed" value={fmtMoney(committed)} />
+        <StatCell label="Committed" value={<Pulse id="exposure.totalCommitted">{fmtMoney(committed)}</Pulse>} />
         <div className="h-8 w-px bg-border" />
-        <StatCell label="Drawn" value={fmtMoney(drawn)} />
+        <StatCell label="Drawn" value={<Pulse id="exposure.totalOutstanding">{fmtMoney(drawn)}</Pulse>} />
         <div className="h-8 w-px bg-border" />
         <StatCell label="Collateral coverage" value={covLabel} color={STATUS[covTone].fg} />
       </Card>
@@ -136,10 +137,16 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
           >
             <span className="font-bold">{f.name ?? "Facility"}</span>
             <span className="text-ink-body-strong">{f.productType ?? "—"}</span>
-            <span className="font-semibold">{fmtMoney(f.committed)}</span>
-            <span className="font-semibold">{fmtMoney(f.outstanding)}</span>
+            <span className="font-semibold">
+              <Pulse id={`facility.${f.loanId}.committed`}>{fmtMoney(f.committed)}</Pulse>
+            </span>
+            <span className="font-semibold">
+              <Pulse id={`facility.${f.loanId}.outstanding`}>{fmtMoney(f.outstanding)}</Pulse>
+            </span>
             <span className="text-ink-body">{f.interestRate != null ? fmtRate(f.interestRate) : "—"}</span>
-            <span className="text-ink-body">{fmtDate(f.maturityDate)}</span>
+            <span className="text-ink-body">
+              <Pulse id={`facility.${f.loanId}.maturityDate`}>{fmtDate(f.maturityDate)}</Pulse>
+            </span>
             <span className="justify-self-start">
               {!isActiveFacility(f) ? (
                 <ToneChip tone="neutral">{f.status ?? "Closed"}</ToneChip>
