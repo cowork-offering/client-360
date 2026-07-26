@@ -11,6 +11,7 @@ import {
 } from "../../data/finance";
 import { Card, SectionHead, GapChip, EmptyState, NoteCaption } from "../ui";
 import { Pulse } from "../Pulse";
+import { groupCovenants } from "../../data/collateralRecords";
 import { useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
@@ -97,6 +98,7 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
   const challengeById = new Map<string, CovenantChallenge>();
   for (const ch of bundle.covenantChallenge ?? []) if (ch.covenantId) challengeById.set(ch.covenantId, ch);
 
+  const groups = groupCovenants(covs);
   const breached = covs.filter((c) => {
     const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
     return c.breached === true || cu.safe === false;
@@ -120,14 +122,18 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
 
       {covs.length ? (
         <Card className="py-1">
-          <div className="kicker px-6 pb-1.5 pt-4">Financial covenants</div>
+          <div className="kicker px-6 pb-1.5 pt-4">
+            {/* Grouped only when the read says how these covenants are scoped.
+                Absent means unknown, and one honest list beats a wrong guess. */}
+            {groups.grouped ? "Account covenants" : "Financial covenants"}
+          </div>
           <div
             className="grid gap-3.5 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
             style={{ gridTemplateColumns: COV_COLS }}
           >
             <span>Covenant</span><span>Actual</span><span>Threshold</span><span>Cushion</span><span>Headroom</span><span>Next test</span>
           </div>
-          {covs.map((c, i) => {
+          {(groups.grouped ? groups.account : covs).map((c, i) => {
             const cush = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
             const tone = covTone(c);
             const barColor = STATUS[tone].fg;
@@ -167,6 +173,25 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
               </div>
             );
           })}
+
+          {/* FACILITY COVENANTS, named by the loan they bind. Rendered only
+              when the read tells us which loans a covenant is attached to. */}
+          {groups.byFacility.map((f) => (
+            <div key={f.loanId ?? f.loanName} className="border-t border-divider">
+              <div className="kicker px-6 pb-1.5 pt-4">Facility covenants · {f.loanName}</div>
+              {f.covenants.map((c, i) => (
+                <div
+                  key={c.covenantId ?? i}
+                  className="grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
+                  style={{ gridTemplateColumns: COV_COLS }}
+                >
+                  <span className="font-semibold">{c.covenantType ?? "Covenant"}</span>
+                  <span className="font-bold">{fmtCovVal(c.actualValue)}</span>
+                  <span className="text-ink-label">{fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
         </Card>
       ) : (
         <Card className="p-6">

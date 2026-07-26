@@ -24,11 +24,20 @@
 
 import type { Connection, LegalEntity } from "./contract";
 
-/** Roles the mirror side generates, which carry no information of their own.
- *  "Child" is the reflection of "Parent"; "Company" the reflection of an owner. */
-const MIRROR_ROLES = new Set(["child", "company", "affiliate"]);
+/**
+ * Roles the MIRROR side generates: the same edge, described from the far end.
+ *
+ * "Child" is what the holding company's row calls the operating company;
+ * "Company" is what a person's ownership row calls the business. Neither
+ * describes the COUNTERPARTY relative to the account being viewed, which is the
+ * only thing a banker reading this relationship wants.
+ */
+const GENERIC_MIRROR_ROLES = new Set(["child", "company", "affiliate", "related", ""]);
 
-const isMirrorRole = (role: string | undefined) => MIRROR_ROLES.has((role ?? "").trim().toLowerCase());
+/** Does this row's role describe the counterparty in its own terms? */
+export function isSpecificRole(role: string | undefined): boolean {
+  return !GENERIC_MIRROR_ROLES.has((role ?? "").trim().toLowerCase());
+}
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -43,22 +52,6 @@ export function connectionOwnership(c: Connection): number | null {
   return total !== null && total > 0 ? total : null;
 }
 
-/**
- * How much this side of a mirrored pair actually tells us. Higher wins.
- *
- * A named role dominates every numeric signal: "Owner" with no percent is more
- * use to a banker than "Company" with one, because the second is the mirror's
- * own artefact.
- */
-function informationScore(c: Connection): number {
-  let score = 0;
-  if (!isMirrorRole(c.role)) score += 8;
-  if (num(c.ownershipPercent) !== null) score += 4;
-  if (num(c.indirectOwnershipPercent) !== null) score += 2;
-  if ((num(c.totalOwnershipPercent) ?? 0) > 0) score += 1;
-  return score;
-}
-
 export interface CollapsedConnection {
   counterpartyId?: string;
   counterpartyName?: string;
@@ -71,12 +64,20 @@ export interface CollapsedConnection {
 }
 
 /**
- * One row per counterparty, merged from however many directions the org stored.
+ * One row per counterparty, NORMALISED TO THE VIEWED ACCOUNT'S PERSPECTIVE.
  *
- * Deterministic throughout: rows group by counterparty id (falling back to the
- * name when the id is absent), the winner is the highest information score, and
- * ties break on the original order so the same payload always renders the same
- * way.
+ * The rule, and it is a rule rather than a score:
+ *   - group by counterparty id, falling back to the name when no id is staged;
+ *   - keep the role that describes the COUNTERPARTY relative to this account,
+ *     which means a specific role beats a generic mirror;
+ *   - carry the LARGEST ownership percent either half of the pair knows, since
+ *     the mirror routinely carries 0 where the named side carries the figure;
+ *   - break every remaining tie on original order, so one payload always
+ *     renders one way.
+ *
+ * Derived from the rule, not from one relationship's four counterparties: a
+ * pair of generics, a lone mirror row, a missing percent and a person-account
+ * counterparty all still resolve to one coherent line.
  */
 export function collapseConnections(connections: Connection[] | undefined): CollapsedConnection[] {
   const groups = new Map<string, { rows: Connection[]; firstSeen: number }>();
@@ -91,20 +92,18 @@ export function collapseConnections(connections: Connection[] | undefined): Coll
   return [...groups.values()]
     .sort((a, b) => a.firstSeen - b.firstSeen)
     .map(({ rows }) => {
-      let best = rows[0];
-      let bestScore = informationScore(best);
-      for (const row of rows.slice(1)) {
-        const score = informationScore(row);
-        // Strictly greater: an equal score keeps the earlier row, which is what
-        // makes the tie-break deterministic.
-        if (score > bestScore) {
-          best = row;
-          bestScore = score;
-        }
-      }
-      // Ownership is taken from whichever side knows it, not only the winner:
-      // the mirror can carry the percent while the named side does not.
-      const ownership = rows.reduce<number | null>((acc, r) => acc ?? connectionOwnership(r), null);
+      // The first row whose role describes the counterparty; else the first row,
+      // so a pair of generics still yields exactly one line.
+      const best = rows.find((r) => isSpecificRole(r.role)) ?? rows[0];
+
+      // The percent can sit on either half, and the halves disagree: the mirror
+      // routinely carries 0 where the named side carries the real figure. Take
+      // the largest thing either side actually knows.
+      const ownership = rows.reduce<number | null>((acc, r) => {
+        const own = connectionOwnership(r);
+        if (own === null) return acc;
+        return acc === null ? own : Math.max(acc, own);
+      }, null);
       return {
         counterpartyId: best.counterpartyId,
         counterpartyName: best.counterpartyName,

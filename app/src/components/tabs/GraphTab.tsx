@@ -68,6 +68,9 @@ export function GraphTab({ bundle }: { bundle: BorrowerBundle }) {
   // multiplicity is the org's storage shape, not a fact about the relationship.
   const conns = collapseConnections(graph.connections);
   const owners = conns.filter((c) => (c.ownershipPercent ?? 0) > 0);
+  // Everything the ownership tree cannot show: affiliates, parents with no
+  // recorded percent, anything the org related without quantifying.
+  const others = conns.filter((c) => !((c.ownershipPercent ?? 0) > 0));
   const les = aggregateInvolvements(graph.legalEntities);
   const guarantors = les.filter((e) => (e.borrowerType ?? "").toLowerCase().includes("guarantor"));
 
@@ -89,6 +92,25 @@ export function GraphTab({ bundle }: { bundle: BorrowerBundle }) {
             ))}
           </div>
         )}
+        {/* RELATED PARTIES: every collapsed connection that is not an owner.
+            An affiliate with no ownership percent is still a relationship, and
+            the ownership tree has nowhere to put it — it used to render
+            nowhere at all. */}
+        {others.length > 0 && (
+          <div className="mt-5">
+            <div className="kicker mb-2">Related parties</div>
+            {others.map((c, i) => (
+              <div key={c.counterpartyId ?? i} className="flex items-center justify-between border-t border-divider py-2.5 text-[13px]">
+                <span className="font-semibold">{c.counterpartyName ?? "—"}</span>
+                <span className="text-ink-body">
+                  {c.role ?? "Related"}
+                  {c.ownershipPercent != null ? ` · ${fmtPct(c.ownershipPercent, 0)}` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {les.length > 0 && (
           <div className="mt-5">
             <div className="kicker mb-2">Legal entities & roles</div>

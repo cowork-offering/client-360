@@ -55,6 +55,9 @@ export const PROVENANCE = {
   "borrower.exposure.facilities[].collateral[].collateralId": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Collateral__c record id from the pledge junction. The only valid anchor for a valuation write; absent means the id was not staged and the action is blocked" },
   "borrower.exposure.facilities[].totalLendableValue": { kind: "NCINO", source: "Customer360Exposure — org-computed Current_Lendable_Value" },
   "borrower.covenants.covenants[]": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant2__c" },
+  "borrower.exposure.facilities[].collateral[].collateralName": { kind: "NCINO", source: "Customer360Exposure — the collateral's autonumber name" },
+  "borrower.exposure.facilities[].collateral[].collateralDescription": { kind: "NCINO", source: "Customer360Exposure — friendly description, additive; absent falls back to the autonumber name" },
+  "borrower.covenants.covenants[].attachedLoans": { kind: "NCINO", source: "Customer360Covenants — loans this covenant is attached to. Empty means account-level; ABSENT means the read predates the field and the cockpit groups nothing" },
   "borrower.covenants.covenants[].complianceId": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant_Compliance__c record id. The only valid anchor for a covenant assessment, which is UPDATE-only; absent blocks the action" },
   "borrower.graph.connections[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Connection__c" },
   "borrower.graph.legalEntities[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Legal_Entities__c" },
@@ -283,6 +286,10 @@ export interface Covenant {
   thresholdValue?: number;
   actualValue?: number;
   lastEvaluationStatus?: string;
+  /** The facilities this covenant is attached to. An EMPTY array means the
+   *  covenant is account-level. ABSENT means the read does not carry the field
+   *  yet, which is not the same fact and must not be read as either. */
+  attachedLoans?: Array<{ loanId?: string; loanName?: string }>;
   lastEvaluationDate?: string;
   nextEvaluationDate?: string;
   daysUntilNextEvaluation?: number;
@@ -298,6 +305,11 @@ export interface Collateral {
    *  this id and never against the facility: the org refuses a facility id,
    *  correctly. Absent when the assembler did not stage it. */
   collateralId?: string;
+  /** The org's autonumber name, e.g. COL-000762. */
+  collateralName?: string;
+  /** A friendly description, added additively to the read. Rendered when
+   *  present; the autonumber name is the fallback, never a guess. */
+  collateralDescription?: string;
   collateralType?: string;
   collateralValue?: number;
   advanceRate?: number;

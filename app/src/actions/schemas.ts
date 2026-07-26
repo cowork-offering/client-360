@@ -86,7 +86,7 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
         required: true,
         optionsAreRecords: true,
         options: records.filter((r) => r.collateralId).map((r) => r.collateralId!),
-        optionLabels: records.filter((r) => r.collateralId).map((r) => r.collateralType ?? "Collateral"),
+        optionLabels: records.filter((r) => r.collateralId).map((r) => r.displayName),
         optionDetails: records.filter((r) => r.collateralId).map(collateralDetail),
         disabledOptions: records
           .filter((r) => !r.collateralId)

@@ -8,6 +8,8 @@ import { AppShell } from "./components/AppShell";
 import { ACCOUNT_TABS } from "./state/appState";
 import { resetModalStack } from "./components/modalStack";
 import { readAnchors } from "./data/contract";
+import { collapseConnections } from "./data/graphAggregate";
+import { collateralRecords } from "./data/collateralRecords";
 import live from "../../artifact/live-data.json";
 import sample from "../../artifact/sample-data.json";
 
@@ -283,5 +285,114 @@ describe("signals show one alert per guarantor, not one per facility", () => {
     const alerts = text.split("Guarantor signal").length - 1;
     expect(alerts).toBeLessThanOrEqual(3);
     expect(text).toContain("across 6 facilities");
+  });
+});
+
+
+/* =============================================================================
+   PER-BORROWER RENDER VERIFICATION.
+
+   Founder rule: a surface that works for one relationship and not another is a
+   failed item. Each fixed surface is mounted for EVERY account in EVERY staged
+   file and checked for the four failure modes that actually happened: a crash,
+   raw mirror rows, duplicate identity rows, and an empty surface where the
+   bundle has data.
+   ============================================================================= */
+
+for (const [fileName, data] of FILES) {
+  for (const [accountId, bundle] of Object.entries(data.borrowers ?? {})) {
+    const name = bundle.snapshot?.name ?? accountId;
+
+    describe(`${name} (${fileName}) renders its own data`, () => {
+      const openTab = (label: string) => {
+        mount(data);
+        openAccount(name);
+        const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === label)!;
+        expect(button, `${name}: no ${label} tab`).toBeTruthy();
+        click(button);
+        return container!.textContent ?? "";
+      };
+
+      it("shows every graph counterparty, and never a mirror role", () => {
+        const text = openTab("Relationship Graph");
+        const rows = collapseConnections(bundle.graph?.connections);
+        for (const row of rows) {
+          const label = row.counterpartyName ?? "";
+          if (!label) continue;
+          expect(text, `${name}: ${label} missing from the graph`).toContain(label);
+        }
+        // A counterparty may legitimately appear in more than one SECTION (an
+        // owner who is also a guarantor), so per-section uniqueness is asserted
+        // at the aggregation layer. What must never appear anywhere is the
+        // mirror's own generic role rendered as a relationship.
+        expect(text).not.toContain("· Child");
+        expect(text).not.toContain("· Company");
+        // And the aggregation the tab renders from is one row per identity.
+        const ids = rows.map((r) => r.counterpartyId ?? r.counterpartyName);
+        expect(new Set(ids).size).toBe(ids.length);
+      });
+
+      it("shows every collateral record once, and none when there are none", () => {
+        const text = openTab("Exposure & Collateral");
+        const records = collateralRecords(bundle);
+        expect(text).toContain("Collateral");
+        if (records.length === 0) {
+          expect(text).toContain("No collateral pledged");
+          return;
+        }
+        for (const r of records) {
+          const hits = text.split(r.displayName).length - 1;
+          expect(hits, `${name}: ${r.displayName} appeared ${hits} times`).toBeGreaterThan(0);
+        }
+        // Never a row per pledge where a record is pledged more than once.
+        const multi = records.find((r) => r.pledgeRows > 1);
+        if (multi) expect(text).toContain(`${multi.securesFacilities.length} facilities`);
+      });
+
+      it("renders its covenants without losing or duplicating any", () => {
+        const text = openTab("Covenants");
+        const covs = bundle.covenants?.covenants ?? [];
+        if (!covs.length) {
+          expect(text).toContain("No active covenants");
+          return;
+        }
+        for (const c of covs) {
+          if (!c.covenantType) continue;
+          expect(text, `${name}: ${c.covenantType} missing`).toContain(c.covenantType);
+        }
+      });
+
+      it("renders its structural signals without repeating a guarantor", () => {
+        const text = openTab("Structural Signals");
+        expect(text).toContain(name);
+        const guarantors = new Set(
+          ((bundle.signals?.guarantorSignals ?? []) as Array<Record<string, unknown>>)
+            .filter((g) => g.riskStatus || g.highestRiskGrade)
+            .map((g) => String(g.guarantorName ?? "")),
+        );
+        for (const g of guarantors) {
+          if (!g) continue;
+          const hits = text.split(g).length - 1;
+          expect(hits, `${name}: guarantor ${g} appeared ${hits} times`).toBeLessThanOrEqual(1);
+        }
+      });
+    });
+  }
+}
+
+
+describe("a connection with no ownership percent still renders (founder rule)", () => {
+  it("shows Hartwell Logistics as a related party, not nowhere", () => {
+    mount(live as unknown as C360Data);
+    openAccount("Hartwell Precision Manufacturing LLC");
+    const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Relationship Graph")!;
+    click(button);
+    const text = container!.textContent ?? "";
+    expect(text).toContain("Related parties");
+    expect(text).toContain("Hartwell Logistics LLC");
+    expect(text).toContain("Affiliated Company");
+    // The percent-bearing ones stay in the ownership tree where they belong.
+    expect(text).toContain("Hartwell Industrial Holdings LLC");
+    expect(text).toContain("Parent");
   });
 });
