@@ -230,6 +230,31 @@ export interface ExecutePayload {
   approverUserId: string;
 }
 
+/**
+ * The Salesforce user id the execute tools will accept as `approverUserId`.
+ *
+ * LIVE DEFECT, 2026-07-26. The panel was sending `meta.user`, which is the
+ * DISPLAY NAME ("Fabian Goetzens"). The Apex checks, in order: staging row →
+ * planHash → `approverUserId` equals the running identity → token hash. The
+ * name failed the third check, so every attempt died BEFORE token redemption
+ * and the staging rows all sat at Staged with cm_Token_Consumed_At__c null.
+ *
+ * So this refuses anything that is not shaped like a user id. Fail closed: it
+ * is better to say the id is not staged than to send a value the org will
+ * refuse and report as a generic tool failure.
+ */
+const SF_USER_ID = /^005[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$/;
+
+export function resolveApproverUserId(meta: { user?: string; userId?: string } | undefined): string | null {
+  // `userId` is the field the assembler stages for this. `user` is checked only
+  // because an assembler that stages the id there is still correct; a name
+  // there is not, and falls through to null.
+  for (const candidate of [meta?.userId, meta?.user]) {
+    if (typeof candidate === "string" && SF_USER_ID.test(candidate.trim())) return candidate.trim();
+  }
+  return null;
+}
+
 /** Call `execute_*`. USER GESTURE ONLY, and only behind a confirmed plan. */
 export async function executeAction(
   actionId: WriteActionId,

@@ -81,6 +81,7 @@ export const PROVENANCE = {
   "borrower.snapshot.localCreditStage": { kind: "NCINO", source: "Customer360Snapshot — local cm_Credit_Stage__c. NOT an authority; read only to raise a DQ finding on disagreement" },
   "display.packageStageDq": { kind: "DERIVED", source: "A33.3.7 — flags when cm_Credit_Stage__c disagrees with the managed LLC_BI__Stage__c" },
   "borrower.snapshot.note": { kind: "NCINO", source: "Customer360Snapshot — tool note" },
+  "meta.userId": { kind: "NCINO", source: "Assembler — UserInfo.getUserId() of the connector identity. The only accepted approverUserId on execute_*; absent means the confirm gesture fails closed rather than sending a name the org will refuse" },
   "borrower.exposure.totalCommitted": { kind: "NCINO", source: "Customer360Exposure — Σ facility commitments" },
   "borrower.exposure.totalOutstanding": { kind: "NCINO", source: "Customer360Exposure — Σ drawn" },
   "borrower.exposure.totalAvailable": { kind: "NCINO", source: "Customer360Exposure — Σ available" },
@@ -169,7 +170,16 @@ export interface Meta {
    *  or a guessed my.salesforce.com host. Absent means the link renders as a
    *  disabled chip with the record id as selectable text. */
   instanceUrl?: string;
+  /** DISPLAY name of the viewer. Rendered, never sent to a tool. */
   user?: string;
+  /**
+   * The SALESFORCE USER ID (005…) of the connector identity, staged by the
+   * assembler. This is the ONLY value the execute tools accept as
+   * `approverUserId`: the Apex compares it to the running identity before it
+   * will redeem a decision token, so a display name or an email is refused
+   * and nothing is written (live defect, 2026-07-26).
+   */
+  userId?: string;
   accent?: string;
   screen?: string;
   activeTab?: string;

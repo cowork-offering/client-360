@@ -26,13 +26,18 @@ afterEach(() => {
   }
 });
 
-function mount(): HTMLDivElement {
+/** The Salesforce user id the org proved it accepts, staged as the assembler
+ *  must stage it. Without this the confirm gesture fails closed by design. */
+const APPROVER_ID = "005bb00000ftouDAAQ";
+
+function mount(meta?: Record<string, unknown>): HTMLDivElement {
+  const data = meta ? ({ ...DATA, meta: { ...DATA.meta, ...meta } } as C360Data) : DATA;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
     root!.render(
-      <AppProvider data={DATA}>
+      <AppProvider data={data}>
         <AppShell />
       </AppProvider>,
     );
@@ -60,8 +65,8 @@ const expandAllFields = () => {
 };
 
 /** Open an account, its Client Actions sheet, then a panel-backed action row. */
-function openActionPanel(actionLabel: string, account = "Sterling Fabrication") {
-  mount();
+function openActionPanel(actionLabel: string, account = "Sterling Fabrication", meta?: Record<string, unknown>) {
+  mount(meta);
   click(openRow(account));
   click(byText(/Client Actions/)!);
   const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
@@ -326,7 +331,7 @@ const stageEnvelope = (outputValues: unknown) => ({
 
 /** A live connector whose stage/execute results the test controls. */
 function installWriteMcp(over: { stage?: unknown; execute?: unknown; stageThrows?: unknown } = {}) {
-  const callTool = vi.fn(async (_server: string, tool: string) => {
+  const callTool = vi.fn(async (_server: string, tool: string, _input?: unknown) => {
     if (tool.startsWith("stage_")) {
       if (over.stageThrows) throw over.stageThrows;
       return stageEnvelope(over.stage ?? STAGE_PLAN);
@@ -356,6 +361,10 @@ function installWriteMcp(over: { stage?: unknown; execute?: unknown; stageThrows
   };
   return callTool;
 }
+
+/** The single `inputs[0]` row a Customer 360 invocable call carries. */
+const inputsOf = (call: unknown[] | undefined): Record<string, unknown> =>
+  ((call?.[2] as { inputs?: Array<Record<string, unknown>> } | undefined)?.inputs ?? [{}])[0];
 
 const flush = async () => {
   await act(async () => {
@@ -485,7 +494,7 @@ describe("WP7.4 — the execution", () => {
   });
 
   async function executeAndLand() {
-    openActionPanel("Annual Review");
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
     click(byText(/Review the plan/)!);
     await flush();
     click(byText(/Confirm and file/)!);
@@ -532,6 +541,132 @@ describe("WP7.4 — the execution", () => {
     expect(p.textContent).toContain("can be resumed from here");
     // No stamp on a partial: nothing is claimed as filed and verified.
     expect(p.textContent).not.toContain("Filed — ");
+  });
+});
+
+describe("the execute payload, pinned to the shape the org accepted (live defect 2026-07-26)", () => {
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  async function confirmWith(meta: Record<string, unknown>) {
+    const callTool = installWriteMcp();
+    openActionPanel("Annual Review", "Sterling Fabrication", meta);
+    click(byText(/Review the plan/)!);
+    await flush();
+    const confirm = byText(/Confirm and file/);
+    if (confirm) {
+      click(confirm);
+      await flush();
+    }
+    return callTool;
+  }
+
+  it("sends EXACTLY the five fields, with the stage result's values verbatim", async () => {
+    const callTool = await confirmWith({ userId: APPROVER_ID });
+    const executeCall = callTool.mock.calls.find((c) => String(c[1]).startsWith("execute_"))!;
+    expect(executeCall).toBeTruthy();
+
+    // Positional envelope: one input row, so element 0 of the response is this
+    // call's outcome and nothing is silently misaligned.
+    expect((executeCall[2] as { inputs: unknown[] }).inputs).toHaveLength(1);
+    const stageKey = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_"))).idempotencyKey;
+
+    // The whole payload, not a subset: an extra field is as much a defect as a
+    // wrong one, and the Apex reads these five by name.
+    expect(inputsOf(executeCall)).toEqual({
+      idempotencyKey: stageKey,
+      stagingId: STAGE_PLAN.result.stagingId,
+      planHash: STAGE_PLAN.result.planHash,
+      decisionToken: STAGE_PLAN.result.decisionToken,
+      approverUserId: APPROVER_ID,
+    });
+  });
+
+  it("reuses the STAGE idempotency key, which is the pairing the org round trip proved", async () => {
+    const callTool = await confirmWith({ userId: APPROVER_ID });
+    const stage = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_")));
+    const execute = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("execute_")));
+    expect(execute.idempotencyKey).toBe(stage.idempotencyKey);
+    expect(String(execute.idempotencyKey)).not.toBe("");
+  });
+
+  it("sends the SERVER decision token, never the client-minted record", async () => {
+    const callTool = await confirmWith({ userId: APPROVER_ID });
+    const execute = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("execute_")));
+    expect(execute.decisionToken).toBe("dt-server-001");
+    // The client mint is a bookkeeping cache: its shape must never appear here.
+    expect(String(execute.decisionToken)).not.toMatch(/^c360-/);
+  });
+
+  it("never puts a display name on the wire, and says why instead", async () => {
+    // The live defect: meta.user is "Fabian Goetzens", and the Apex compares
+    // approverUserId to the running identity BEFORE redeeming the token.
+    const callTool = await confirmWith({ user: "Fabian Goetzens", userId: undefined });
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("execute_"))).toHaveLength(0);
+    expect(panel("Annual Review")!.textContent).toContain("no Salesforce user id");
+  });
+
+  it("accepts the id from meta.user when the assembler stages it there", async () => {
+    const callTool = await confirmWith({ user: APPROVER_ID });
+    const execute = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("execute_")));
+    expect(execute.approverUserId).toBe(APPROVER_ID);
+  });
+
+  it("surfaces the org's own code and words on a precondition refusal", async () => {
+    installWriteMcp({
+      execute: { ok: false, error: { code: "PRECONDITION", message: "approverUserId does not match the running identity." }, result: null },
+    });
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    const p = panel("Annual Review")!;
+    expect(p.textContent).toContain("PRECONDITION");
+    expect(p.textContent).toContain("approverUserId does not match the running identity.");
+    // Never the platform's generic line in place of the org's own.
+    expect(p.textContent).not.toContain("but reported a failure");
+  });
+});
+
+describe("no staged plan can survive a republish", () => {
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  it("never persists a stagingId, planHash or token, so none can be resurrected stale", async () => {
+    installWriteMcp();
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+
+    // Everything the session writes down, across every key it owns.
+    const stored = Object.keys(sessionStorage)
+      .map((k) => sessionStorage.getItem(k) ?? "")
+      .join(" ");
+    for (const secret of [STAGE_PLAN.result.stagingId, STAGE_PLAN.result.planHash, STAGE_PLAN.result.decisionToken]) {
+      expect(stored, secret).not.toContain(secret);
+    }
+    expect(stored).not.toContain("stagingId");
+  });
+
+  it("drops the plan entirely when the panel closes", async () => {
+    const callTool = installWriteMcp();
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    press("Escape");
+
+    click(byText(/Client Actions/)!);
+    const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Annual Review"),
+    )!;
+    click(row);
+    // Reopened on the briefing, with no plan to step forward to.
+    expect(byText(/Back to the plan/)).toBeUndefined();
+    expect(byText(/Review the plan/)).toBeTruthy();
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(1);
   });
 });
 

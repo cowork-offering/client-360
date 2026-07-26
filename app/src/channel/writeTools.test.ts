@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   executeAction,
+  resolveApproverUserId,
   isWriteAction,
   parseLegalValues,
   parseProvenance,
@@ -292,5 +293,35 @@ describe("execute_* — the shape read from the Apex Request classes", () => {
       await executeAction(actionId as keyof typeof WRITE_TOOLS, EXEC_PAYLOAD);
       expect(callTool.mock.calls[0][1]).toBe(tools.execute);
     }
+  });
+});
+
+
+describe("resolveApproverUserId (live defect 2026-07-26)", () => {
+  it("accepts a 15 or 18 character Salesforce user id", () => {
+    expect(resolveApproverUserId({ userId: "005bb00000ftouDAAQ" })).toBe("005bb00000ftouDAAQ");
+    expect(resolveApproverUserId({ userId: "005bb00000ftouD" })).toBe("005bb00000ftouD");
+  });
+
+  it("refuses a display name, an email and an empty view", () => {
+    // The exact value the panel used to send. It failed the org's running
+    // identity check before the token was ever redeemed.
+    expect(resolveApproverUserId({ user: "Fabian Goetzens" })).toBeNull();
+    expect(resolveApproverUserId({ user: "fabian.goetzens@connectry.io" })).toBeNull();
+    expect(resolveApproverUserId({})).toBeNull();
+    expect(resolveApproverUserId(undefined)).toBeNull();
+  });
+
+  it("refuses an id of another sObject type", () => {
+    expect(resolveApproverUserId({ userId: "001bb00001DLtRMAA1" })).toBeNull(); // Account
+    expect(resolveApproverUserId({ userId: "a34bb00000399FFAAY" })).toBeNull(); // valuation
+  });
+
+  it("prefers the staged userId over anything in the display field", () => {
+    expect(resolveApproverUserId({ user: "Fabian Goetzens", userId: "005bb00000ftouDAAQ" })).toBe("005bb00000ftouDAAQ");
+  });
+
+  it("trims surrounding whitespace rather than sending it", () => {
+    expect(resolveApproverUserId({ userId: "  005bb00000ftouDAAQ " })).toBe("005bb00000ftouDAAQ");
   });
 });

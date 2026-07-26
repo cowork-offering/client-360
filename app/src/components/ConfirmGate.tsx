@@ -5,7 +5,7 @@ import { SIMULATION_BANNER, assertNoRecordIds } from "../actions/stagedPlan";
 import { computeSuggestions, detectDrift, type DriftReason } from "../actions/suggestionEngine";
 import { validatePlan } from "../actions/transitionAllowlist";
 import { mintDecisionToken, type DecisionToken } from "../actions/decisionToken";
-import { isWriteAction, executeAction, type ExecuteResult, type ToolError } from "../channel/writeTools";
+import { isWriteAction, executeAction, resolveApproverUserId, type ExecuteResult, type ToolError } from "../channel/writeTools";
 import { mcpAvailable } from "../channel/mcp";
 import { STEP_TYPE_LABEL } from "../actions/tracker";
 import { resolveBundle } from "../actions/registry";
@@ -107,6 +107,11 @@ export function ConfirmGate({
       return;
     }
 
+    // The org checks this against the RUNNING IDENTITY before it will redeem
+    // the token. A display name fails that check and nothing is written, so
+    // the gesture stops here rather than producing a generic tool failure.
+    const approverUserId = resolveApproverUserId(data.meta);
+
     // The SERVER mints the authoritative token at stage time and redeems it on
     // execute. The client record below is a cache of that fact, exactly as the
     // tracker's step state is a cache of the staging record (A33.3.3).
@@ -125,6 +130,15 @@ export function ConfirmGate({
       return;
     }
 
+    if (!approverUserId) {
+      setError(
+        "This view has no Salesforce user id for the signed-in identity, and the org will not file a record without one. The cockpit needs meta.userId staged before this can be confirmed.",
+      );
+      return;
+    }
+
+    // The SERVER token from the staging result, verbatim. The client-minted
+    // record above is a bookkeeping cache and must never reach the wire.
     const serverToken = plan.decisionToken;
     if (!serverToken) {
       setError(
@@ -136,11 +150,14 @@ export function ConfirmGate({
     setExecuting(true);
     try {
       const outcome = await executeAction(actionId, {
+        // Exactly the five fields Execute*.cls reads, each taken from the
+        // staging result verbatim. The idempotency key is the STAGE key: that
+        // pairing is what the proven Apex round trip used.
         idempotencyKey: idempotencyKey ?? plan.stagingId,
         stagingId: plan.stagingId,
         planHash: plan.planHash,
         decisionToken: serverToken,
-        approverUserId: userId,
+        approverUserId,
       });
       if (!outcome.ok) {
         setToolError(outcome.error);
@@ -148,8 +165,15 @@ export function ConfirmGate({
       }
       onConfirmed(record, outcome.result);
     } catch (e) {
-      const f = e as { fix?: string; message?: string };
-      setToolError({ code: "TRANSPORT", message: f.fix ?? f.message ?? String(e) });
+      // The org's own words first. The platform's generic "ran the tool but
+      // reported a failure" hid a precondition refusal for a whole live test
+      // session, so the raw message and code lead and the fix copy follows.
+      const f = e as { code?: string; fix?: string; message?: string };
+      setToolError({
+        code: f.code ?? "TRANSPORT",
+        message: f.message ?? f.fix ?? String(e),
+        orgError: f.message && f.fix && f.message !== f.fix ? f.fix : undefined,
+      });
     } finally {
       setExecuting(false);
     }
@@ -252,12 +276,25 @@ export function ConfirmGate({
       {toolError && (
         <div className="border-b border-divider px-5 py-4">
           <div className="rounded-[10px] px-3.5 py-3" style={{ background: "var(--critical-bg)" }}>
-            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--critical)" }}>
-              This did not go through
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--critical)" }}>
+                This did not go through
+              </span>
+              <span
+                className="rounded-[5px] px-1.5 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-wide"
+                style={{ background: "var(--critical-bg)", color: "var(--critical)", border: "1px solid var(--critical)" }}
+              >
+                {toolError.code}
+              </span>
             </div>
             <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--critical)" }}>
               {toolError.message}
             </div>
+            {toolError.orgError && (
+              <div className="mt-1 font-mono text-[10.5px] leading-relaxed" style={{ color: "var(--critical)" }}>
+                {toolError.orgError}
+              </div>
+            )}
             {toolError.resumable === false && (
               <div className="mt-1 text-[11.5px]" style={{ color: "var(--critical)" }}>
                 Nothing was written. Adjust the details and stage it again.

@@ -204,6 +204,25 @@ those settled states are shown. No row ever displays a state the executor did no
 `prefers-reduced-motion` collapses the pacing floor to zero and disables every sweep, slide, reveal and
 pulse animation outright, rather than running them at 0.001s.
 
+### `meta.userId` is REQUIRED to file anything (live defect, 2026-07-26)
+
+`execute_*` checks four preconditions in order: staging row by `stagingId` → `planHash` equality →
+**`approverUserId` equals the running identity** → decision-token hash, single use. The panel was
+sending `meta.user`, which is the DISPLAY NAME. Every confirm therefore failed the third check before
+the token was ever redeemed: org forensics showed all staging rows at `Status=Staged` with
+`cm_Token_Consumed_At__c` NULL, and the banker saw only the platform's generic "ran the tool but
+reported a failure".
+
+The assembler MUST stage `meta.userId` as the Salesforce user id (`005…`) of the connector identity.
+The panel now refuses anything that is not shaped like a user id and **fails closed with a named
+reason** rather than sending a value the org will reject. `meta.user` is still accepted if the
+assembler happens to stage the id there; a name in either field is refused.
+
+The execute payload is pinned by test to exactly five fields, taken from the stage result verbatim:
+`idempotencyKey` (the STAGE key, reused), `stagingId`, `planHash`, `decisionToken` (the SERVER token —
+the client-minted record is bookkeeping and never reaches the wire), `approverUserId`. Nothing about a
+staged plan is persisted, so no republish can resurrect a stale `stagingId` against a newer `planHash`.
+
 ### Write tools (WP5)
 
 `stage_*` performs **zero domain-object DML** — it validates, computes and returns an immutable plan
