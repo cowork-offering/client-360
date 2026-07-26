@@ -238,3 +238,34 @@ describe("no list surface renders raw org row multiplicity", () => {
     expect(text).not.toContain("facilities");
   });
 });
+
+
+describe("the founder's button, on the real bundle", () => {
+  const data = live as unknown as C360Data;
+
+  it("offers Loan Modification and Renewal on Hartwell's booked facilities", () => {
+    mount(data);
+    openAccount("Hartwell Precision Manufacturing LLC");
+    const trigger = [...container!.querySelectorAll("button")].find((b) => /Client Actions/.test(b.textContent ?? ""))!;
+    click(trigger);
+    for (const label of ["Loan Modification", "Renewal"]) {
+      const row = [...document.querySelectorAll('[role="dialog"]')]
+        .flatMap((d) => [...d.querySelectorAll("button")])
+        .find((b) => b.textContent?.includes(label))!;
+      expect(row, `${label} missing from Client Actions`).toBeTruthy();
+      expect(row.hasAttribute("disabled"), `${label} is greyed out on six booked loans`).toBe(false);
+    }
+  });
+
+  it("still greys them on Piedmont, and says the facilities are at Final Review", () => {
+    mount(data);
+    openAccount("Piedmont Precision Components, Inc.");
+    const trigger = [...container!.querySelectorAll("button")].find((b) => /Client Actions/.test(b.textContent ?? ""))!;
+    click(trigger);
+    const row = [...document.querySelectorAll('[role="dialog"]')]
+      .flatMap((d) => [...d.querySelectorAll("button")])
+      .find((b) => b.textContent?.includes("Loan Modification"))!;
+    expect(row.hasAttribute("disabled")).toBe(true);
+    expect(row.textContent).toContain("Final Review");
+  });
+});

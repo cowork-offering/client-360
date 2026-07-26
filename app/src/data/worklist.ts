@@ -58,9 +58,27 @@ function isBreached(cov: Covenant): boolean {
 
 /** A facility counts as active when status is absent or explicitly "Active"
  *  (F6). Closed / paid-off facilities never drive maturity alerts or display. */
+/**
+ * Is this facility LIVE?
+ *
+ * VOCABULARY, and it is the org's, not ours. A real loan's status is `Open`:
+ * that is the value every live facility carries in bankinggpt, and `Booked +
+ * Open` is the combination a credit action requires. `Active` is the sample-era
+ * word and stays accepted so older staged bundles keep working; absent stays
+ * active per F6.
+ *
+ * LIVE DEFECT 2026-07-26: this accepted only `""` and `active`, so every real
+ * facility read as inactive. Modification and renewal greyed out on a
+ * relationship with six booked loans, coverage math dropped them, and maturity
+ * alerts went silent. One word, and the whole live surface behaved as if the
+ * relationship had no facilities at all.
+ *
+ * Everything else stays inactive on purpose: Paid Off, Closed, Withdrawn and
+ * Hold are all real states, and none of them is a facility you can act on.
+ */
 export function isActiveFacility(f: { status?: string }): boolean {
   const s = (f.status ?? "").trim().toLowerCase();
-  return s === "" || s === "active";
+  return s === "" || s === "active" || s === "open";
 }
 
 /** True when the relationship carries an inbound client request — either a

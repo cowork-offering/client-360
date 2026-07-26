@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, Facility } from "./contract";
 import { bookedFacilities, bookedFacilityAvailability, facilityLabel, facilityStagesStaged, unbookedFacilities } from "./facilityStage";
 import { ACTIONS_BY_ID } from "../actions/registry";
+import live from "../../../artifact/live-data.json";
 import type { C360Data } from "./contract";
 
 /* =============================================================================
@@ -111,5 +112,84 @@ describe("the registry gates modification and renewal on it", () => {
     const data = dataWith(bundleWith([FINAL_REVIEW]));
     expect(ACTIONS_BY_ID["loan-modification"].availability(data, "001X").reason).toContain("modifications apply");
     expect(ACTIONS_BY_ID.renewal.availability(data, "001X").reason).toContain("renewals apply");
+  });
+});
+
+
+/* =============================================================================
+   THE REAL BUNDLES. The regression that greyed out the founder's buttons was
+   exactly this, and nothing in the suite looked at live data — every fixture
+   used the sample-era `Active`, so the org's own `Open` was never exercised.
+   ============================================================================= */
+
+describe("live data — the org's real facilities are live facilities", () => {
+  const LIVE = live as unknown as C360Data;
+  const HARTWELL = LIVE.borrowers?.["001bb00001I7FPNAA3"]!;
+  const PIEDMONT = LIVE.borrowers?.["001bb00001DLtRMAA1"]!;
+
+  it("every real facility carries status Open, which is what broke", () => {
+    const statuses = new Set((HARTWELL.exposure?.facilities ?? []).map((f) => f.status));
+    expect([...statuses]).toEqual(["Open"]);
+  });
+
+  it("counts Hartwell's six Booked + Open facilities as bookable", () => {
+    expect(bookedFacilities(HARTWELL)).toHaveLength(6);
+  });
+
+  it("OFFERS modification and renewal on Hartwell", () => {
+    const data = {
+      meta: { anchorAccountId: "001bb00001I7FPNAA3", generatedAt: "2026-07-26T00:00:00Z" },
+      portfolio: { accounts: [{ accountId: "001bb00001I7FPNAA3", name: "Hartwell", tce: 1 }] },
+      borrowers: { "001bb00001I7FPNAA3": HARTWELL },
+    } as unknown as C360Data;
+    for (const id of ["loan-modification", "renewal"]) {
+      const r = ACTIONS_BY_ID[id].availability(data, "001bb00001I7FPNAA3");
+      expect(r.available, `${id} must be offered on a relationship with six booked loans`).toBe(true);
+    }
+  });
+
+  it("still WITHHOLDS them on Piedmont, whose facilities are at Final Review", () => {
+    const data = {
+      meta: { anchorAccountId: "001bb00001DLtRMAA1", generatedAt: "2026-07-26T00:00:00Z" },
+      portfolio: { accounts: [{ accountId: "001bb00001DLtRMAA1", name: "Piedmont", tce: 1 }] },
+      borrowers: { "001bb00001DLtRMAA1": PIEDMONT },
+    } as unknown as C360Data;
+    const r = ACTIONS_BY_ID["loan-modification"].availability(data, "001bb00001DLtRMAA1");
+    expect(r.available).toBe(false);
+    expect(r.reason).toContain("Final Review");
+    // Open, but not booked: the status was never the thing standing in the way.
+    expect(PIEDMONT.exposure?.facilities?.every((f) => f.status === "Open")).toBe(true);
+  });
+});
+
+describe("the vocabulary, exactly", () => {
+  const withStatus = (status: string | undefined) =>
+    bundleWith([{ loanId: "L1", name: "F", stage: "Booked", ...(status === undefined ? {} : { status }) }]);
+
+  it("treats the org's Open, the sample's Active and an absent status as live", () => {
+    for (const status of ["Open", "open", " Open ", "Active", "active", undefined, ""]) {
+      expect(bookedFacilities(withStatus(status)), String(status)).toHaveLength(1);
+    }
+  });
+
+  it("keeps every other real state inactive", () => {
+    for (const status of ["Paid Off", "Closed", "Withdrawn", "Hold", "Pre-Approval"]) {
+      expect(bookedFacilities(withStatus(status)), status).toHaveLength(0);
+    }
+  });
+
+  it("gives a Hold facility a reason that reads as its state", () => {
+    const out = unbookedFacilities(bundleWith([{ loanId: "L1", name: "Revolver", stage: "Booked", status: "Hold" }]));
+    expect(out).toHaveLength(1);
+    // The org's own word, not a paraphrase of it.
+    expect(out[0].reason).toBe("Hold");
+  });
+
+  it("still separates cannot-tell from none-are-booked after the fix", () => {
+    expect(bookedFacilityAvailability(bundleWith([{ loanId: "L1", status: "Open" }])).reason).toContain("not staged in this view");
+    expect(
+      bookedFacilityAvailability(bundleWith([{ loanId: "L1", status: "Open", stage: "Final Review" }])).reason,
+    ).toContain("Requires a booked facility");
+    expect(bookedFacilityAvailability(bundleWith([{ loanId: "L1", status: "Open", stage: "Booked" }]))).toEqual({ available: true });
   });
 });

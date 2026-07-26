@@ -374,7 +374,7 @@ real reason — and no ticket opens. Inside the ticket the facility selector off
 facilities; the others are LISTED with their stage rather than hidden, so a banker hunting for a
 facility learns why it is not on offer.
 
-**⚠️ THE STAGE FIELD IS NOT FLOWING YET, so both actions are unavailable on every relationship.**
+**The stage field now flows** on the live read, alongside the facility's own package id.
 `Facility.stage` (`LLC_BI__Stage__c`) is new on the contract and additive on the `Customer360Exposure`
 read; until the Apex lane emits it, the predicate FAILS CLOSED with "Facility stages are not staged in
 this view, so a booked facility cannot be confirmed". That is deliberate: absent is not the same as
@@ -383,6 +383,25 @@ cannot tell, can tell and the answer is no, and yes.
 
 The facility selector is a RECORD chooser, not an org picklist: it declares `optionsAreRecords` and is
 excluded from the A33.1.6 value-set rule, which stays strict for everything that is a picklist.
+
+### Live vocabulary: a real facility's status is `Open`
+
+`isActiveFacility` accepted only `""` and `active` — the sample-era words. Every real facility in the
+org carries **`Open`**, so every one of them read as inactive: modification and renewal greyed out on a
+relationship with six booked loans, coverage math dropped them, maturity alerts went silent and the
+exposure tab rendered them as closed. One word, and the whole live surface behaved as if the
+relationship had no facilities.
+
+The check now accepts `""` (absent, per F6), `active` (sample-era bundles) and **`open`** (the org).
+Everything else stays inactive on purpose: `Paid Off`, `Closed`, `Withdrawn` and `Hold` are all real
+states and none is a facility you can act on. One function serves every consumer — availability, the
+facility selector, coverage math, maturity derivation, the drafts and the grounding prompt.
+
+**The regression that bit had no test looking at it**, because every fixture in the suite used the
+sample vocabulary. The suite now asserts against the REAL bundles: Hartwell's six Booked + Open
+facilities make modification and renewal AVAILABLE, and Piedmont's Open-but-Final-Review facilities
+still withhold them with the right reason. `Booked + Open` is the credit-action-valid combination, and
+the status was never the thing standing in Piedmont's way.
 
 ### STANDING RULE — aggregate by identity, never render row multiplicity
 
