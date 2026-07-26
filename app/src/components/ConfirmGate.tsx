@@ -5,6 +5,8 @@ import { SIMULATION_BANNER, assertNoRecordIds } from "../actions/stagedPlan";
 import { computeSuggestions, detectDrift, type DriftReason } from "../actions/suggestionEngine";
 import { validatePlan } from "../actions/transitionAllowlist";
 import { mintDecisionToken, type DecisionToken } from "../actions/decisionToken";
+import { isWriteAction, executeAction, type ExecuteResult, type ToolError } from "../channel/writeTools";
+import { mcpAvailable } from "../channel/mcp";
 import { STEP_TYPE_LABEL } from "../actions/tracker";
 import { resolveBundle } from "../actions/registry";
 
@@ -58,6 +60,7 @@ export function ConfirmGate({
   plan,
   actionId,
   simulated,
+  idempotencyKey,
   onConfirmed,
   onBack,
 }: {
@@ -65,12 +68,16 @@ export function ConfirmGate({
   actionId: string;
   /** True when the plan came from the NOT-LIVE adapter. */
   simulated: boolean;
-  onConfirmed: (token: DecisionToken) => void;
+  /** Stable across the stage/execute pair and across resume. */
+  idempotencyKey?: string;
+  onConfirmed: (token: DecisionToken, executed?: ExecuteResult) => void;
   onBack: () => void;
 }) {
   const { data, state } = useApp();
   const [drift, setDrift] = useState<DriftReason[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [toolError, setToolError] = useState<ToolError | null>(null);
 
   const bundle = resolveBundle(data, state.accountId);
 
@@ -81,8 +88,9 @@ export function ConfirmGate({
 
   const blocked = violations.length > 0 || idLeaks.length > 0;
 
-  function confirm() {
+  async function confirm() {
     setError(null);
+    setToolError(null);
 
     // A33.2.7 — MANDATORY recompute. A plan is never executed against figures
     // the banker did not see.
@@ -98,10 +106,52 @@ export function ConfirmGate({
       setError("The confirmation must name the banker making it, and this view has no user.");
       return;
     }
+
+    // The SERVER mints the authoritative token at stage time and redeems it on
+    // execute. The client record below is a cache of that fact, exactly as the
+    // tracker's step state is a cache of the staging record (A33.3.3).
+    let record: DecisionToken;
     try {
-      onConfirmed(mintDecisionToken({ stagingId: plan.stagingId, planHash: plan.planHash, userId }));
+      record = mintDecisionToken({ stagingId: plan.stagingId, planHash: plan.planHash, userId });
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
+      return;
+    }
+
+    // No live capability, or a simulated plan: record the confirmation and show
+    // the tracker. Nothing executes, which is the fail-closed path.
+    if (simulated || !mcpAvailable() || !isWriteAction(actionId)) {
+      onConfirmed(record);
+      return;
+    }
+
+    const serverToken = plan.decisionToken;
+    if (!serverToken) {
+      setError(
+        "This plan carries no confirmation token from the staging call, so it cannot be executed. Stage it again.",
+      );
+      return;
+    }
+
+    setExecuting(true);
+    try {
+      const outcome = await executeAction(actionId, {
+        idempotencyKey: idempotencyKey ?? plan.stagingId,
+        stagingId: plan.stagingId,
+        planHash: plan.planHash,
+        decisionToken: serverToken,
+        approverUserId: userId,
+      });
+      if (!outcome.ok) {
+        setToolError(outcome.error);
+        return;
+      }
+      onConfirmed(record, outcome.result);
+    } catch (e) {
+      const f = e as { fix?: string; message?: string };
+      setToolError({ code: "TRANSPORT", message: f.fix ?? f.message ?? String(e) });
+    } finally {
+      setExecuting(false);
     }
   }
 
@@ -199,6 +249,24 @@ export function ConfirmGate({
         </div>
       )}
 
+      {toolError && (
+        <div className="border-b border-divider px-5 py-4">
+          <div className="rounded-[10px] px-3.5 py-3" style={{ background: "var(--critical-bg)" }}>
+            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--critical)" }}>
+              This did not go through
+            </div>
+            <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--critical)" }}>
+              {toolError.message}
+            </div>
+            {toolError.resumable === false && (
+              <div className="mt-1 text-[11.5px]" style={{ color: "var(--critical)" }}>
+                Nothing was written. Adjust the details and stage it again.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="border-b border-divider px-5 py-3 text-[12px]" style={{ color: "var(--critical)" }}>
           {error}
@@ -220,12 +288,12 @@ export function ConfirmGate({
         <div className="flex-1" />
         <button
           type="button"
-          disabled={blocked}
-          onClick={confirm}
+          disabled={blocked || executing}
+          onClick={() => void confirm()}
           className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
           style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
         >
-          {drift ? "Confirm the new figures" : "Confirm and stage"}
+          {executing ? "Working…" : drift ? "Confirm the new figures" : simulated ? "Confirm" : "Confirm and file"}
         </button>
       </div>
     </div>

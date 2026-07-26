@@ -3,6 +3,7 @@ import type { StagedOutput } from "../actions/stagedPlan";
 import { actionTerminal, blockingPrecondition, STEP_TYPE_LABEL, type StepState, type TrackerState } from "../actions/tracker";
 import type { DecisionToken } from "../actions/decisionToken";
 import { OpenInNcino } from "./DeepLink";
+import type { ExecuteResult } from "../channel/writeTools";
 
 /* A33.3.3 / A33.3.5 — the tracker shows WHERE a plan got to, never a false
    green. Failure is located, preserved and resumable; a timeout reads as filed
@@ -32,11 +33,14 @@ export function StepTracker({
   state,
   token,
   snapshot,
+  outcome,
 }: {
   plan: StagedOutput;
   state: TrackerState;
   token: DecisionToken | null;
   snapshot: Snapshot | undefined;
+  /** Present once the executor has run. Its own words win over ours. */
+  outcome?: ExecuteResult | null;
   onChange?: (s: TrackerState) => void;
 }) {
   const terminal = actionTerminal(state, plan.steps);
@@ -45,7 +49,17 @@ export function StepTracker({
     <div className="flex flex-col">
       <div className="border-b border-divider px-5 py-4">
         <div className="kicker mb-1.5">Progress</div>
-        <p className="text-[12.5px] leading-relaxed text-ink-body">{TERMINAL_COPY[terminal]}</p>
+        <p className="text-[12.5px] leading-relaxed text-ink-body">{outcome?.outcome || TERMINAL_COPY[terminal]}</p>
+        {outcome?.replayed && (
+          <p className="mt-1 text-[11px] text-ink-muted">
+            This had already been filed under the same key, so nothing was written again.
+          </p>
+        )}
+        {outcome?.collateralValueMoved === false && (
+          <p className="mt-1 text-[11px] text-ink-muted">
+            The collateral value did not change, so no coverage improvement is claimed.
+          </p>
+        )}
         {token && (
           <p className="mt-1 text-[10.5px] text-ink-faint">
             Confirmed by {token.userId}. This records that a named person saw this plan, and nothing more.

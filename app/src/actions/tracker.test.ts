@@ -20,7 +20,7 @@ const CTX = { preconditionsVerified: true, freshGesture: false, planHashMatches:
 const RESUME_OK = { preconditionsVerified: true, freshGesture: true, planHashMatches: true, requeried: true };
 
 const plan: PlanStep[] = [
-  { id: "s1", type: "write", label: "write", object: "Case", fields: [{ field: "Status", value: "New" }] },
+  { id: "s1", type: "write", label: "write", objectName: "Case", fields: ["Status"] },
   { id: "s2", type: "verification", label: "verify", dependsOn: ["s1"] },
   { id: "s3", type: "handoff", label: "hand off", dependsOn: ["s2"] },
 ];
@@ -263,7 +263,7 @@ describe("A33.5.3 — staged output is a plan, and only a plan", () => {
 
   it("detects a record id if one ever leaked into a plan", () => {
     const p = simulateStagedOutput({ actionId: "create-service-request", accountName: "T", suggestions: [] })!;
-    p.steps[0].fields!.push({ field: "Id", value: "500bb00000qor81AAA" });
+    p.steps[0].fields!.push("500bb00000qor81AAA");
     expect(assertNoRecordIds(p).length).toBeGreaterThan(0);
   });
 
@@ -341,6 +341,6 @@ describe("A33.3.1 — confirm gate vocabulary", () => {
   it("the annual review plan hands off rather than completing", () => {
     const p = simulateStagedOutput({ actionId: "annual-review", accountName: "T", suggestions: [] })!;
     expect(p.steps.some((s) => s.type === "handoff")).toBe(true);
-    expect(p.steps.some((s) => (s.fields ?? []).some((f) => String(f.value) === "Complete"))).toBe(false);
+    expect(p.steps.some((s) => (s.fields ?? []).some((f) => String(f) === "Complete"))).toBe(false);
   });
 });

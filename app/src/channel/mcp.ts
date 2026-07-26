@@ -72,6 +72,14 @@ export const TOOLS = {
   boomSpread: "boom-mcp-js___boom_get_spread",
   llm: "idb-bg-api-target-get-llm-response-staging___get_llm_response",
   mailSearch: "outlook_email_search",
+  // WP5 write tools, deployed 2026-07-26. stage_* performs ZERO domain DML;
+  // every org write is behind the token-gated execute_*.
+  stageCollateralValuation: "stage_collateral_valuation",
+  executeCollateralValuation: "execute_collateral_valuation",
+  stageServiceRequest: "stage_service_request",
+  executeServiceRequest: "execute_service_request",
+  stageAnnualReview: "stage_annual_review",
+  executeAnnualReview: "execute_annual_review",
 } as const;
 
 /** The six per-account detail tools, in the order the app stages them. */

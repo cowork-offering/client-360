@@ -10,6 +10,10 @@ import { fmtMoney } from "../data/format";
 import { ConfirmGate } from "./ConfirmGate";
 import { StepTracker } from "./StepTracker";
 import { isSimulationAllowed, simulateStagedOutput, type StagedOutput } from "../actions/stagedPlan";
+import { isWriteAction, stageAction, type ExecuteResult, type StagePayloads, type ToolError } from "../channel/writeTools";
+import { mcpAvailable } from "../channel/mcp";
+import { observedPicklistMap } from "../actions/observedPicklists";
+import { newRequestId } from "../channel/adapter";
 import { initTracker, type TrackerState } from "../actions/tracker";
 import type { DecisionToken } from "../actions/decisionToken";
 
@@ -247,9 +251,13 @@ export function ActionPanel({
     data.portfolio.accounts.find((a) => a.accountId === accountId)?.name ?? data.borrower?.snapshot?.name ?? "this relationship";
   const bundle = (data.borrowers ?? {})[accountId] ?? (data.borrower?.snapshot?.accountId === accountId ? data.borrower : null);
 
+  /** Legal values the tool returned on a VALIDATION_FAILED. Authoritative:
+   *  they supersede the partial observed cache for that field. */
+  const [legalValues, setLegalValues] = useState<Record<string, string[]>>({});
+
   const schema = useMemo(
-    () => buildPanelSchema(actionId, { bundle, accountId, accountName }),
-    [actionId, bundle, accountId, accountName],
+    () => buildPanelSchema(actionId, { bundle, accountId, accountName, orgPicklists: { ...observedPicklistMap(), ...legalValues } }),
+    [actionId, bundle, accountId, accountName, legalValues],
   );
 
   const [values, setValues] = useState<Record<string, unknown>>(() =>
@@ -262,6 +270,13 @@ export function ActionPanel({
   const [plan, setPlan] = useState<StagedOutput | null>(null);
   const [tracker, setTracker] = useState<TrackerState | null>(null);
   const [token, setToken] = useState<DecisionToken | null>(null);
+  const [staging, setStaging] = useState(false);
+  const [toolError, setToolError] = useState<ToolError | null>(null);
+  const [live, setLive] = useState(false);
+  const [outcome, setOutcome] = useState<ExecuteResult | null>(null);
+  /** Stable across a stage/execute pair and across resume (A33.3.5). Ours, not
+   *  nCino's: the platform is known to duplicate on failed background Apex. */
+  const idempotencyKeyRef = useRef<string>(newRequestId());
 
   const engine = useMemo(
     () => computeSuggestions({ data, bundle, actionId }),
@@ -324,7 +339,97 @@ export function ActionPanel({
    *  SHIPPED artifact there is nothing to call and the action stays
    *  analysis-only exactly as today. The simulation adapter is gated to tests
    *  and the dev server, and it says so on the gate when it is used. */
-  function stage() {
+  /** Build the tool payload from the panel values. Field names come from the
+   *  deployed Apex Request classes, read not guessed. */
+  function stagePayload(): StagePayloads[keyof StagePayloads] | null {
+    const idempotencyKey = idempotencyKeyRef.current;
+    const v = (k: string) => (values[k] === "" ? null : (values[k] ?? null));
+    const rationale = engine.suggestions.filter((s) => !declined[s.id]).map((s) => s.rationale).join(" ") || undefined;
+
+    if (actionId === "collateral-valuation") {
+      const collateralId = String(schema?.fields.find((f) => f.key === "collateral")?.prefill.citation ?? "");
+      if (!collateralId) return null;
+      return {
+        idempotencyKey,
+        rationale,
+        collateralId,
+        value: typeof v("value") === "number" ? (v("value") as number) : null,
+        valuationDate: v("valuationDate") as string | null,
+        type: v("type") as string | null,
+        source: v("source") as string | null,
+        description: v("description") as string | null,
+        primary: values.primary === true,
+      };
+    }
+    if (actionId === "create-service-request") {
+      const req = (bundle?.requests ?? [])[0];
+      return {
+        idempotencyKey,
+        accountId,
+        rationale,
+        requestType: v("type") as string | null,
+        summary: (v("subject") ?? v("description")) as string | null,
+        referenceKind: req?.reference?.kind ?? null,
+        referenceId: req?.reference?.id ?? null,
+        referenceWebLink: req?.reference?.webLink ?? null,
+      };
+    }
+    return {
+      idempotencyKey,
+      accountId,
+      rationale,
+      reviewType: v("reviewType") as string | null,
+      productPackageId: bundle?.snapshot?.productPackageId ?? null,
+      narrative: v("narrative") as string | null,
+      relationshipSummary: v("relationshipSummary") as string | null,
+      strengthsNarrative: v("strengths") as string | null,
+      weaknessNarrative: v("weaknesses") as string | null,
+      recommendationNarrative: v("recommendation") as string | null,
+      collateralAnalysisNarrative: v("collateralAnalysis") as string | null,
+      financialAnalystNarrative: v("financialAnalysis") as string | null,
+      guarantorNarrative: v("guarantor") as string | null,
+      riskRatingComments: v("riskRatingComments") as string | null,
+    };
+  }
+
+  /** USER GESTURE ONLY. Calls the live stage tool when the capability is
+   *  present; falls back to the NOT-LIVE adapter under dev/test only. */
+  async function stage() {
+    setToolError(null);
+
+    if (mcpAvailable() && isWriteAction(actionId)) {
+      const payload = stagePayload();
+      if (!payload) {
+        setToolError({ code: "PRECONDITION", message: "This relationship has no pledged collateral to value." });
+        return;
+      }
+      setStaging(true);
+      try {
+        const outcome = await stageAction(actionId, payload as never);
+        if (!outcome.ok) {
+          setToolError(outcome.error);
+          // The tool returns the legal picklist set on a mismatch; adopt it.
+          if (outcome.error.legalValues?.length) {
+            const target = /type/i.test(outcome.error.message) ? "LLC_BI__Type__c" : "LLC_BI__Source__c";
+            setLegalValues((prev) => ({
+              ...prev,
+              [`LLC_BI__Collateral_Valuation__c.${target}`]: outcome.error.legalValues!,
+            }));
+          }
+          return;
+        }
+        setPlan({ ...outcome.result, suggestions: engine.suggestions.filter((s) => !declined[s.id]) });
+        setLive(true);
+        setPhase("confirm");
+      } catch (e) {
+        const f = e as { fix?: string; message?: string };
+        setToolError({ code: "TRANSPORT", message: f.fix ?? f.message ?? String(e) });
+      } finally {
+        setStaging(false);
+      }
+      return;
+    }
+
     const simulated = simulateStagedOutput({
       actionId,
       accountName,
@@ -332,12 +437,28 @@ export function ActionPanel({
     });
     if (!simulated) return; // no live tool, no simulation: nothing to confirm
     setPlan(simulated);
+    setLive(false);
     setPhase("confirm");
   }
 
-  function onConfirmed(t: DecisionToken) {
+  function onConfirmed(t: DecisionToken, executed?: ExecuteResult) {
     setToken(t);
-    if (plan) setTracker(initTracker(plan.steps));
+    if (plan) {
+      const base = initTracker(plan.steps);
+      // The tracker consumes the executor's step states verbatim; the state
+      // machine still owns every transition from here.
+      setTracker(
+        executed
+          ? {
+              steps: base.steps.map((s) => {
+                const live = executed.steps.find((x) => x.id === s.id);
+                return live ? { id: s.id, state: live.state as typeof s.state, note: live.detail } : s;
+              }),
+            }
+          : base,
+      );
+      setOutcome(executed ?? null);
+    }
     setPhase("tracker");
   }
 
@@ -392,7 +513,8 @@ export function ActionPanel({
               <ConfirmGate
                 plan={plan}
                 actionId={actionId}
-                simulated
+                simulated={!live}
+                idempotencyKey={idempotencyKeyRef.current}
                 onBack={() => setPhase("form")}
                 onConfirmed={onConfirmed}
               />
@@ -404,6 +526,7 @@ export function ActionPanel({
                 state={tracker}
                 token={token}
                 snapshot={bundle?.snapshot}
+                outcome={outcome}
                 onChange={setTracker}
               />
             )}
@@ -431,6 +554,24 @@ export function ActionPanel({
                 {engine.gaps.map((g, i) => (
                   <GapNote key={`${g.ruleId}-${i}`} gap={g} />
                 ))}
+              </div>
+            )}
+
+            {toolError && (
+              <div className="border-b border-divider px-5 py-3">
+                <div className="rounded-[10px] px-3.5 py-2.5" style={{ background: "var(--critical-bg)" }}>
+                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--critical)" }}>
+                    {toolError.code === "VALIDATION_FAILED" ? "The org rejected a value" : "The tool could not stage this"}
+                  </div>
+                  <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--critical)" }}>
+                    {toolError.message}
+                  </div>
+                  {toolError.orgError && (
+                    <div className="mt-1 font-mono text-[10.5px]" style={{ color: "var(--critical)" }}>
+                      {toolError.orgError}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -464,7 +605,17 @@ export function ActionPanel({
             >
               Close
             </button>
-            {isSimulationAllowed() ? (
+            {mcpAvailable() && isWriteAction(actionId) ? (
+              <button
+                type="button"
+                disabled={missing.length > 0 || staging}
+                onClick={() => void stage()}
+                className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
+                style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+              >
+                {staging ? "Staging…" : "Review the plan"}
+              </button>
+            ) : isSimulationAllowed() ? (
               <button
                 type="button"
                 disabled={missing.length > 0}

@@ -26,7 +26,13 @@ Pass this as the `capabilities` input to the Artifact tool:
           "Customer360Exposure",
           "Customer360Covenants",
           "Customer360Opportunities",
-          "Customer360StructuralSignals"
+          "Customer360StructuralSignals",
+          "stage_collateral_valuation",
+          "execute_collateral_valuation",
+          "stage_service_request",
+          "execute_service_request",
+          "stage_annual_review",
+          "execute_annual_review"
         ]
       },
       {
@@ -84,8 +90,14 @@ observed one real request/response pair for it. Status of each tool in this mani
 | `Customer360Opportunities` | yes | **no — pattern-inferred** |
 | `Customer360StructuralSignals` | yes | **no — pattern-inferred** |
 | `boom-mcp-js___boom_get_spread` | yes | **no — pattern-inferred** |
+| `stage_collateral_valuation` | yes | **yes** (WP2 live 2026-07-26, incl. a VALIDATION_FAILED domain failure) |
+| `execute_collateral_valuation` | yes | **no — same envelope family, not yet exercised end to end** |
+| `stage_service_request` | yes | **no — same envelope family** |
+| `execute_service_request` | yes | **no — same envelope family** |
+| `stage_annual_review` | yes | **no — same envelope family** |
+| `execute_annual_review` | yes | **no — same envelope family** |
 
-The six inferred tools are assumed to share the envelope of their observed siblings (the Salesforce
+The remaining inferred tools are assumed to share the envelope of their observed siblings (the Salesforce
 invocable envelope for the `Customer360*` family, the clean-JSON gateway payload for `boom_get_spread`).
 That assumption is **reasonable but unverified**.
 
@@ -157,8 +169,28 @@ a message attaches to an account only when the account name clearly appears.
 | Generate Spreading action | `boom_get_ratios` + `boom_get_spread` | `callTool`, read, `staleTime: 30s` |
 | Other registry actions | `get_llm_response`, framed as **preparation** | `callTool`, read |
 | "Check my inbox" | `outlook_email_search` | `callTool`, read, `staleTime: 60s` |
+| Action Panel "Review the plan" | `stage_<action>` | `callTool`, **uncached, no retry**, user gesture |
+| Confirm gate "Confirm and file" | `execute_<action>` | `callTool`, **uncached, never auto-retried** |
 
-**No writes.** The write-shaped actions (modification, renewal, new facility, service request) produce
+### Write tools (WP5)
+
+`stage_*` performs **zero domain-object DML** — it validates, computes and returns an immutable plan
+(`stagingId`, `planHash`, `decisionToken`, `steps[]`, `warnings[]`). Verified live: after a staging call
+the target object still held zero rows. Every org write happens behind `execute_*`, which requires the
+server-minted single-use `decisionToken` bound to that exact `planHash`.
+
+Client discipline for these two:
+- **User gesture only.** Staging is the "Review the plan" button; executing is the confirm gesture.
+- **Never cached, never auto-retried.** An ambiguous transport outcome is not proof the tool did not
+  run, so a write is re-issued only behind a fresh gesture (A33.3.3 resume preconditions).
+- **`idempotencyKey` is ours**, stable across the stage/execute pair and across resume. The platform is
+  known to duplicate on failed background Apex, so idempotency is never assumed from nCino.
+- **Domain failure is not transport failure.** `isSuccess:true` with `outputValues.ok === false` is a
+  successful invocation reporting a rejected value; it renders the org's own message, and when the tool
+  returns the legal picklist set the panel adopts it.
+- `provenanceJson` arrives as a **string** and is parsed defensively.
+
+**The other actions still perform no writes.** The remaining write-shaped actions (modification, renewal, new facility, service request) produce
 a grounded analysis plus an explicit statement of what a credit officer would need to approve, and are
 instructed never to imply a record was created. Their `apexAction` seam names the future callTool
 target and stays unwired until v2 gated writes exist.

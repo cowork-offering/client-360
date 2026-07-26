@@ -17,19 +17,19 @@ import type { Suggestion } from "./suggestionEngine";
 
 export type StepType = "write" | "verification" | "wait" | "handoff" | "observed_side_effect";
 
-export interface PlanStepField {
-  field: string;
-  value?: unknown;
-  /** Banker-facing label so no UI renders an API name. */
-  label?: string;
-}
-
 export interface PlanStep {
   id: string;
   type: StepType;
   label: string;
-  object?: string;
-  fields?: PlanStepField[];
+  /** Wire name is `objectName` (WP2 observed 2026-07-26), not `object`. */
+  objectName?: string;
+  /** The wire carries FIELD NAMES only, not values: the resolved values live in
+   *  the plan hash, server-side. Client-side value checks therefore apply only
+   *  to locally-built plans. */
+  fields?: string[];
+  /** Server-supplied step state; the tracker seeds from this. */
+  state?: string;
+  detail?: string;
   /** Automation this write is expected to wake. Surfaced before confirming. */
   automationWoken?: string[];
   /** The query that proves the write landed (verification steps). */
@@ -46,6 +46,15 @@ export interface PlanStep {
 
 export interface StagedOutput {
   stagingId: string;
+  /** Minted server-side and bound to stagingId + planHash + user. Null on an
+   *  idempotent replay, because the caller already holds it. */
+  decisionToken?: string | null;
+  /** True when this idempotency key had already staged. Nothing was re-planned. */
+  replayed?: boolean;
+  accountId?: string;
+  productPackageId?: string;
+  /** Per-field provenance map, delivered as a JSON STRING on the wire. */
+  provenanceJson?: string;
   /** Hash over the ordered steps plus resolved field values. Immutable.
    *  `execute_*` refuses a mismatch. */
   planHash: string;
@@ -117,7 +126,7 @@ export const SIMULATION_BANNER =
 function hashPlan(steps: PlanStep[]): string {
   // Deterministic, order-sensitive, and dependent on resolved field values, so
   // any edit to the plan changes the hash exactly as the real tool's does.
-  const material = JSON.stringify(steps.map((s) => [s.id, s.type, s.object ?? "", s.fields ?? [], s.transition ?? null]));
+  const material = JSON.stringify(steps.map((s) => [s.id, s.type, s.objectName ?? "", s.fields ?? [], s.transition ?? null]));
   let h = 0;
   for (let i = 0; i < material.length; i++) {
     h = (Math.imul(31, h) + material.charCodeAt(i)) | 0;
@@ -148,11 +157,8 @@ export function simulateStagedOutput(args: {
         id: "s1",
         type: "write",
         label: "Create the collateral valuation",
-        object: "LLC_BI__Collateral_Valuation__c",
-        fields: [
-          { field: "LLC_BI__Active__c", value: "true", label: "Active" },
-          { field: "LLC_BI__Primary__c", value: "true", label: "Primary" },
-        ],
+        objectName: "LLC_BI__Collateral_Valuation__c",
+        fields: ["LLC_BI__Active__c", "LLC_BI__Primary__c"],
         automationWoken: ["CollateralValuationTrigger, before insert"],
       },
       {
@@ -172,8 +178,8 @@ export function simulateStagedOutput(args: {
       id: "s1",
       type: "write",
       label: "Create the service request",
-      object: "Case",
-      fields: [{ field: "Status", value: "New", label: "Status" }],
+      objectName: "Case",
+      fields: ["Status"],
       automationWoken: ["FinServ.CaseTrigger", "slackv2.caseTrigger"],
     });
     steps.push({
@@ -192,8 +198,8 @@ export function simulateStagedOutput(args: {
         id: "s1",
         type: "write",
         label: "Create the credit review",
-        object: "LLC_BI__Review__c",
-        fields: [{ field: "LLC_BI__Status__c", value: "In Progress", label: "Status" }],
+        objectName: "LLC_BI__Review__c",
+        fields: ["LLC_BI__Status__c"],
         automationWoken: ["Review After Save assigns the record type and the loan officer"],
       },
       {

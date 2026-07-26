@@ -168,8 +168,11 @@ export interface StepFieldWrite {
 export interface ValidatableStep {
   id: string;
   type: string;
+  /** Locally-built plans use `object`; the live wire uses `objectName`. */
   object?: string;
-  fields?: StepFieldWrite[];
+  objectName?: string;
+  /** Locally-built plans carry values; the wire carries field NAMES only. */
+  fields?: Array<StepFieldWrite | string>;
   /** Present when the step transitions rather than creates. */
   transition?: { field: string; from: string; to: string };
   /** Preconditions the executor has verified, for conditional transitions. */
@@ -182,26 +185,33 @@ const asString = (v: unknown) => (v === undefined || v === null ? "" : String(v)
  * Validate one step against the allowlist. Returns every violation rather than
  * the first, so a malformed plan reports fully instead of one problem at a time.
  */
-export function validateStep(step: ValidatableStep): AllowlistViolation[] {
-  // Non-write steps touch nothing, so nothing to police.
-  if (step.type !== "write" || !step.object) return [];
+/** Normalise both shapes: locally-built `{field, value}` and the wire's bare name. */
+function normalizeFields(fields: ValidatableStep["fields"]): StepFieldWrite[] {
+  return (fields ?? []).map((f) => (typeof f === "string" ? { field: f } : f));
+}
 
-  const policy = TRANSITION_ALLOWLIST[step.object];
+export function validateStep(step: ValidatableStep): AllowlistViolation[] {
+  const objectName = step.object ?? step.objectName;
+  // Non-write steps touch nothing, so nothing to police.
+  if (step.type !== "write" || !objectName) return [];
+
+  const policy = TRANSITION_ALLOWLIST[objectName];
   if (!policy) {
-    return [{ stepId: step.id, object: step.object, reason: `${step.object} is not on the transition allowlist` }];
+    return [{ stepId: step.id, object: objectName, reason: `${objectName} is not on the transition allowlist` }];
   }
 
   const out: AllowlistViolation[] = [];
+  const fields = normalizeFields(step.fields);
 
   if (policy.held) {
-    out.push({ stepId: step.id, object: step.object, reason: `held: ${policy.held}` });
+    out.push({ stepId: step.id, object: objectName, reason: `held: ${policy.held}` });
   }
 
   // Refused fields, whatever the operation.
-  for (const f of step.fields ?? []) {
+  for (const f of fields) {
     const refused = policy.refusedFields.find((r) => r.field === f.field);
     if (refused) {
-      out.push({ stepId: step.id, object: step.object, reason: `${f.field} may never be written: ${refused.reason}` });
+      out.push({ stepId: step.id, object: objectName, reason: `${f.field} may never be written: ${refused.reason}` });
     }
   }
 
@@ -212,13 +222,13 @@ export function validateStep(step: ValidatableStep): AllowlistViolation[] {
     if (!t) {
       out.push({
         stepId: step.id,
-        object: step.object,
+        object: objectName,
         reason: `transition ${step.transition.field} ${step.transition.from} to ${step.transition.to} is not permitted on ${policy.label}`,
       });
     } else if (t.condition && !(step.satisfiedConditions ?? []).includes(t.condition)) {
       out.push({
         stepId: step.id,
-        object: step.object,
+        object: objectName,
         reason: `transition requires the ${t.condition} precondition, which is not satisfied`,
       });
     }
@@ -227,17 +237,19 @@ export function validateStep(step: ValidatableStep): AllowlistViolation[] {
 
   // A create.
   if (!policy.mayCreate) {
-    out.push({ stepId: step.id, object: step.object, reason: `${policy.label} may never be created by this tool` });
+    out.push({ stepId: step.id, object: objectName, reason: `${policy.label} may never be created by this tool` });
     return out;
   }
 
   // Any state field the policy pins must carry the pinned value.
+  // Value pinning only applies where values are present: the live wire carries
+  // field NAMES, and the server enforces the values itself.
   for (const pinned of policy.createStates) {
-    const written = (step.fields ?? []).find((f) => f.field === pinned.field);
-    if (written && asString(written.value) !== pinned.value) {
+    const written = fields.find((f) => f.field === pinned.field);
+    if (written && written.value !== undefined && asString(written.value) !== pinned.value) {
       out.push({
         stepId: step.id,
-        object: step.object,
+        object: objectName,
         reason: `${pinned.field} may only be created as ${pinned.value}, got ${asString(written.value)}`,
       });
     }
