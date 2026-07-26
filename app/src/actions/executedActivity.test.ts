@@ -7,6 +7,8 @@ const OK: ExecuteResult = {
   terminalState: "success",
   outcome: "The valuation was created and verified. The collateral rollup did not change.",
   valuationId: "a34bb00000399FFAAY",
+  recordName: "CV-0000000002",
+  anchorName: "COL-000758",
   steps: [{ id: "s1", type: "write", label: "Create the valuation", state: "verified" }],
 };
 
@@ -23,10 +25,11 @@ describe("the created record id, per action", () => {
 });
 
 describe("the trail entry for an execution", () => {
-  it("names the object and what it was filed against, in banker language", () => {
+  it("names the record and its anchor with the org's own names", () => {
     const e = executedActivityEntry({ ...BASE, target: "Equipment on Term Loan A" })!;
     expect(e.kind).toBe("ACTION_EXECUTED");
-    expect(e.title).toBe("Collateral valuation filed against Equipment on Term Loan A");
+    // The org's anchorName wins over the panel's staged label for the same thing.
+    expect(e.title).toBe("Collateral valuation CV-0000000002 filed against COL-000758");
     expect(e.actor).toBe("Fabian Goetzens");
     expect(e.sessionLocal).toBe(true);
     expect(e.ts).toBe("2026-07-26T12:00:00.000Z");
@@ -52,11 +55,43 @@ describe("the trail entry for an execution", () => {
     expect(executedActivityEntry(BASE)!.detail?.body).toContain("a8abb00001KtalSAAR");
   });
 
-  it("invents no record name: only ids the executor actually returned", () => {
-    const e = executedActivityEntry(BASE)!;
+  it("falls back to the panel's staged label when the org names no anchor", () => {
+    const e = executedActivityEntry({ ...BASE, outcome: { ...OK, anchorName: null }, target: "Equipment on Term Loan A" })!;
+    expect(e.title).toBe("Collateral valuation CV-0000000002 filed against Equipment on Term Loan A");
+  });
+
+  it("reads the per-action aliases as the same fact, via the parser", () => {
+    // recordName is canonical; caseNumber/reviewName carry it on older tools.
+    const e = executedActivityEntry({ ...BASE, actionId: "create-service-request", outcome: { ...OK, valuationId: undefined, caseId: "500X", recordName: "00001234" } })!;
+    expect(e.title).toContain("Service request 00001234 filed");
+  });
+});
+
+describe("a null recordName is a verification failure, never a label to paper over", () => {
+  const UNVERIFIED = { ...OK, recordName: null, terminalState: "partial" };
+
+  it("says the name was not confirmed rather than naming the object generically", () => {
+    const e = executedActivityEntry({ ...BASE, outcome: UNVERIFIED })!;
+    expect(e.title).toBe("Collateral valuation filed against COL-000758, name not confirmed");
+    // The failure must not be dressed as a clean filing.
+    expect(e.title).not.toBe("Collateral valuation filed against COL-000758");
+  });
+
+  it("still records it as an execution: the record exists and its id is real", () => {
+    const e = executedActivityEntry({ ...BASE, outcome: UNVERIFIED })!;
+    expect(e.kind).toBe("ACTION_EXECUTED");
+    expect(e.reference?.id).toBe("a34bb00000399FFAAY");
+  });
+
+  it("states the read-back failure in the detail", () => {
+    const e = executedActivityEntry({ ...BASE, outcome: UNVERIFIED })!;
+    expect(e.detail?.body).toContain("filed but unverified");
+  });
+
+  it("does not claim a name anywhere in the entry", () => {
+    const e = executedActivityEntry({ ...BASE, outcome: UNVERIFIED })!;
     const text = `${e.title} ${e.summary} ${e.detail?.body}`;
     expect(text).not.toMatch(/CV-\d+/);
-    expect(text).toContain("a34bb00000399FFAAY");
   });
 
   it("says so when the write was replayed under the same key", () => {
@@ -86,7 +121,7 @@ describe("a failed execution is trail-worthy too", () => {
   it("logs the failing step and the org's own code", () => {
     const e = executedActivityEntry({ ...BASE, outcome: BAD, target: "Equipment on Term Loan A" })!;
     expect(e.kind).toBe("ACTION_EXECUTION_FAILED");
-    expect(e.title).toBe("Collateral valuation did not complete against Equipment on Term Loan A");
+    expect(e.title).toBe("Collateral valuation did not complete against COL-000758");
     expect(e.detail?.body).toContain("Stopped at: Create the valuation.");
     expect(e.detail?.body).toContain("INSUFFICIENT_ACCESS_ON_CROSS_REFERENCE_ENTITY");
     expect(e.detail?.body).toContain("Terminal state partial");

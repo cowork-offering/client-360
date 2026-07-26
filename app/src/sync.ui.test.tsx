@@ -201,9 +201,10 @@ describe("reduced motion", () => {
     expect(reduced).toContain("animation: none !important");
   });
 
-  it("collapses the stepper slide and the execution reveal outright", () => {
+  it("collapses the stepper slide, the execution reveal and the option sheet", () => {
     expect(reduced).toContain(".c360-step-in");
     expect(reduced).toContain(".c360-row-land");
+    expect(reduced).toContain(".c360-sheet-in");
   });
 
   it("collapses SEQUENCE pacing, so lines resolve as fast as the work", () => {

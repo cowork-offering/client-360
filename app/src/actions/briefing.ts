@@ -25,7 +25,16 @@ export type BriefingSegment =
   /** Renders the schema field as an inline-editable chip, in place. */
   | { kind: "field"; fieldKey: string; prompt: string };
 
+export interface BriefingSubject {
+  /** What this action is, naming what it acts on. */
+  title: string;
+  /** The staged context a banker needs before touching anything. */
+  context: string;
+}
+
 export interface Briefing {
+  /** Identity and context for the ticket's subject card. */
+  subject: BriefingSubject;
   /** The composed proposal sentences. */
   lead: BriefingSegment[];
   /** Figures rendered in `lead`, each traced to staged data. */
@@ -78,6 +87,7 @@ function annualReview(schema: PanelSchema, b: BorrowerBundle | null, name: strin
     " The review is created at In Progress; the bank's own Submit for Approval process is what completes it.";
 
   return {
+    subject: { title: `Annual credit review for ${name}`, context: `${scale}${queue}` },
     lead: [
       t("This raises a "),
       f("reviewType", "choose the review type"),
@@ -100,6 +110,10 @@ function collateralValuation(schema: PanelSchema, name: string): Briefing {
   );
 
   return {
+    subject: {
+      title: `Valuation of ${label}`,
+      context: `Pledged by ${name}${carried ? ` and carried today at ${carried}` : ""}. Lendable value is a formula on the collateral record and is not written here.`,
+    },
     lead: [
       t(`This values the ${label} pledged by ${name}${carried ? `, carried today at ${carried}` : ""}. The new figure is `),
       f("value", "enter the valuation"),
@@ -122,6 +136,12 @@ function serviceRequest(b: BorrowerBundle | null, name: string): Briefing {
   const via = req?.reference?.kind ? ` It came in by ${String(req.reference.kind).toLowerCase()}.` : "";
 
   return {
+    subject: {
+      title: `Service request for ${name}`,
+      context: req?.summary
+        ? `The client's own words: "${req.summary}"`
+        : "No client request is staged against this relationship, so this one is being raised from scratch.",
+    },
     lead: [
       t(req ? `${name} has an open request on file. This logs ` : `This logs `),
       f("subject", "write the subject"),

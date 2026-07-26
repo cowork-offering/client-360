@@ -7,9 +7,14 @@
    attempted write is trail-worthy, and a trail that only records what worked is
    not an audit trail.
 
-   HONEST NAMING. The executor returns record IDS, not record NAMES: there is no
-   "CV-0000000002" anywhere in the artifact, so none is written. The entry says
-   what object was filed, against which staged thing, and carries the real id.
+   HONEST NAMING. The executor returns `recordName` and `anchorName` when the
+   org read them back, and the entry uses them: "Collateral valuation
+   CV-0000000002 filed against COL-000758".
+
+   A NULL `recordName` is not a missing nicety. It means the verification
+   read-back FAILED — the filed_unverified case — so the entry says the name was
+   not confirmed instead of falling back to a generic label. A fallback there
+   would hide a real verification failure behind copy that reads like success.
    ============================================================================= */
 
 import type { ActivityEntry } from "../data/contract";
@@ -55,7 +60,12 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
   const label = CREATED_OBJECT[actionId]?.label ?? "action";
   const recordId = createdRecordId(actionId, outcome);
   const succeeded = outcome.terminalState === "success";
-  const against = target ? ` against ${target}` : "";
+  // The org's own name for what this was filed against wins over the panel's
+  // staged label for the same thing.
+  const anchor = outcome.anchorName ?? target;
+  const against = anchor ? ` against ${anchor}` : "";
+  const recordName = outcome.recordName ?? null;
+  const nameConfirmed = recordName !== null;
 
   if (!outcome.terminalState) return null;
 
@@ -68,12 +78,17 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
     sessionLocal: true,
   };
 
-  if (succeeded) {
+  if (succeeded || (recordId && !nameConfirmed)) {
     const href = recordDeepLink(instanceUrl, CREATED_OBJECT[actionId]?.object, recordId);
+    // Named: "Collateral valuation CV-0000000002 filed against COL-000758".
+    // Unnamed: the read-back failed, and the title says exactly that.
+    const title = nameConfirmed
+      ? `${sentenceCase(label)} ${recordName} filed${against}`
+      : `${sentenceCase(label)} filed${against}, name not confirmed`;
     return {
       ...base,
       kind: "ACTION_EXECUTED",
-      title: `${sentenceCase(label)} filed${against}`,
+      title,
       // The executor's own sentence, not a restatement of it.
       summary: outcome.outcome || undefined,
       reference: {
@@ -88,6 +103,9 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
       detail: {
         body: [
           outcome.outcome,
+          nameConfirmed
+            ? null
+            : "The verification read-back did not return the record name, so this is filed but unverified.",
           recordId ? `Record ${recordId}.` : null,
           outcome.stagingId ? `Staged as ${outcome.stagingId}.` : null,
           outcome.replayed ? "Replayed under the same idempotency key; nothing was written twice." : null,

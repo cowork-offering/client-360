@@ -100,6 +100,9 @@
   --z-fab: 71;
   --z-palette: 80;
   --z-modal: 100;
+  /* Inside a modal, above its content. A31.1: sheets stack on the panel that
+     owns them, never on the page. */
+  --z-sheet: 110;
 
   /* User-driven activity (A31.3) — violet, distinct from the accent used for
      inbound client requests and from the neutral system tone. */
@@ -329,6 +332,21 @@ body {
   animation: c360-step-in 180ms var(--ease-out) both;
 }
 
+/* Option sheet — rises from the bottom of the panel it belongs to. */
+@keyframes c360-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+.c360-sheet-in {
+  animation: c360-sheet-in 190ms var(--ease-out) both;
+}
+
 /* Execution reveal — a tracker row landing its final state. */
 @keyframes c360-row-land {
   from {
@@ -543,7 +561,8 @@ body {
   /* Slides and reveals become instant: the content is there, the movement is
      not. Duration alone would still animate opacity from 0 for a frame. */
   .c360-step-in,
-  .c360-row-land {
+  .c360-row-land,
+  .c360-sheet-in {
     animation: none !important;
   }
   .c360-hover-lift:hover {

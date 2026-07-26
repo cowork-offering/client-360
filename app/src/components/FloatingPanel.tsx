@@ -1,5 +1,6 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Portal } from "./Portal";
+import { isTopmost, pushModal } from "./modalStack";
 
 /* Shared shell for the chat and Client Actions panels (A27.1 / A27.4) — one
    visual family, one keyboard contract:
@@ -31,6 +32,9 @@ export function FloatingPanel({
   footer?: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const layerId = useId();
+
+  useEffect(() => pushModal(layerId), [layerId]);
 
   useEffect(() => {
     const node = panelRef.current;
@@ -46,6 +50,9 @@ export function FloatingPanel({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
+        // A31.1 — Escape belongs to the innermost layer. When a deeper modal is
+        // open this panel is not it, and closing here would take both down.
+        if (!isTopmost(layerId)) return;
         onClose();
         return;
       }
@@ -85,7 +92,7 @@ export function FloatingPanel({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, layerId]);
 
   const geometry =
     variant === "popover"

@@ -185,13 +185,17 @@ describe("A33.1.2/A33.1.3 — schema-driven render and chips", () => {
     expect(p.textContent).toContain("never written by this tool");
   });
 
-  it("disables a picklist whose org options have not loaded, and says so", () => {
+  it("offers no value set the org has not supplied, on either surface", () => {
     openActionPanel("Annual Review");
-    // The briefing chip is the first surface the banker meets: also disabled,
-    // and honest about why rather than offering an invented value set.
-    const chipSelect = panel("Annual Review")!.querySelector("select")!;
-    expect(chipSelect.hasAttribute("disabled")).toBe(true);
-    expect(chipSelect.textContent).toContain("options not loaded");
+    // The ticket's hero opens a sheet, and the sheet says where the values come
+    // from rather than inventing any.
+    click(panel("Annual Review")!.querySelector("#hero-reviewType")!);
+    const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
+      (d) => d.getAttribute("aria-label") === "Review type",
+    )!;
+    expect(sheet.textContent).toContain("come from the org and have not loaded");
+    expect(sheet.querySelectorAll("[aria-pressed]")).toHaveLength(0);
+    press("Escape");
 
     expandAllFields();
     const p = panel("Annual Review")!;
@@ -269,8 +273,11 @@ describe("WP7.1 — the panel opens on a briefing, not a form", () => {
 
   it("edits a drafted narrative in place and marks it edited", () => {
     openActionPanel("Annual Review");
-    const edit = [...panel("Annual Review")!.querySelectorAll("button")].find((b) => b.textContent === "Edit")!;
-    click(edit);
+    // The narrative cards are collapsed; opening one reveals it for editing.
+    const card = [...panel("Annual Review")!.querySelectorAll("button")].find((b) =>
+      /Relationship summary/.test(b.textContent ?? ""),
+    )!;
+    click(card);
     const area = panel("Annual Review")!.querySelector("textarea")!;
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
@@ -287,6 +294,99 @@ describe("WP7.1 — the panel opens on a briefing, not a form", () => {
     for (const label of ["Review type", "Guarantor analysis", "Risk rating comments", "Review stage (nCino)"]) {
       expect(p.textContent, label).toContain(label);
     }
+  });
+});
+
+describe("WP8 — the deal ticket", () => {
+  const setInput = (el: Element, value: string) =>
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+  it("opens on a subject card naming what this is and what it acts on", () => {
+    openActionPanel("Annual Review");
+    const p = panel("Annual Review")!;
+    expect(p.textContent).toContain("Annual credit review for Sterling Fabrication Co.");
+    expect(p.textContent).toMatch(/is carried at \$[\d.]+[KMB] committed/);
+  });
+
+  it("leads with the hero value, not a field list", () => {
+    openActionPanel("Collateral Valuation");
+    const hero = panel("Collateral Valuation")!.querySelector("#hero-value") as HTMLInputElement;
+    expect(hero).toBeTruthy();
+    expect(hero.getAttribute("aria-label")).toBe("Valuation amount (required)");
+  });
+
+  it("computes the delta live off the hero value, and shows nothing before it", () => {
+    openActionPanel("Collateral Valuation");
+    const p = panel("Collateral Valuation")!;
+    const hero = p.querySelector("#hero-value") as HTMLInputElement;
+    // The pledge value is prefilled, so the readout is already showing.
+    expect(p.textContent).toContain("What this changes");
+    setInput(hero, "");
+    expect(panel("Collateral Valuation")!.textContent).not.toContain("What this changes");
+    setInput(panel("Collateral Valuation")!.querySelector("#hero-value")!, "12000000");
+    expect(panel("Collateral Valuation")!.textContent).toContain("Collateral coverage");
+  });
+
+  it("opens a sheet from a pill and writes the pick back to the same values", () => {
+    openActionPanel("Collateral Valuation");
+    const p = panel("Collateral Valuation")!;
+    const pill = [...p.querySelectorAll("button")].find((b) => /Valuation source/.test(b.textContent ?? ""))!;
+    click(pill);
+    const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
+      (d) => d.getAttribute("aria-label") === "Valuation source",
+    )!;
+    expect(sheet).toBeTruthy();
+    // The 14 legal values observed from the org's own VALIDATION_FAILED reply.
+    const options = [...sheet.querySelectorAll("[aria-pressed]")];
+    expect(options.length).toBe(14);
+    const option = options.find((b) => b.textContent?.includes("Appraisal"))!;
+    click(option);
+    expect([...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Valuation source")).toBe(false);
+    expandAllFields();
+    const row = panel("Collateral Valuation")!.querySelector<HTMLSelectElement>("#f-source")!;
+    expect(row.value).toBe("Appraisal");
+  });
+
+  it("closes the sheet on Escape and leaves the panel open (A31.1)", () => {
+    openActionPanel("Annual Review");
+    click(panel("Annual Review")!.querySelector("#hero-reviewType")!);
+    expect([...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Review type")).toBe(true);
+    press("Escape");
+    expect([...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Review type")).toBe(false);
+    expect(panel("Annual Review")).toBeTruthy();
+    press("Escape");
+    expect(panel("Annual Review")).toBeNull();
+  });
+
+  it("collapses the drafted narratives but still says what they contain", () => {
+    openActionPanel("Annual Review");
+    const p = panel("Annual Review")!;
+    expect(p.querySelectorAll("textarea")).toHaveLength(0);
+    // The collapsed card is not an empty label: the draft is legible from it.
+    expect(p.textContent).toContain("Relationship summary");
+    expect(p.textContent).toMatch(/risk grade \d/);
+  });
+
+  it("a pill edit and the classic row edit the same value", () => {
+    openActionPanel("Collateral Valuation");
+    const date = panel("Collateral Valuation")!.querySelector('input[type="date"]')!;
+    setInput(date, "2026-08-01");
+    expandAllFields();
+    expect(panel("Collateral Valuation")!.querySelector<HTMLInputElement>("#f-valuationDate")!.value).toBe("2026-08-01");
+  });
+
+  it("states a blocking gap on the ticket, where the banker is reading", () => {
+    openActionPanel("Collateral Valuation");
+    expect(panel("Collateral Valuation")!.textContent).toMatch(/collateral record id is not staged|No collateral is pledged/);
+  });
+
+  it("keeps the provenance chips the previous presentations carried", () => {
+    openActionPanel("Create Service Request");
+    expect(panel("Create Service Request")!.textContent).toContain("Derived");
   });
 });
 
@@ -346,6 +446,8 @@ function installWriteMcp(over: { stage?: unknown; execute?: unknown; stageThrows
             terminalState: "success",
             outcome: "The review was created and verified.",
             reviewId: "a5nbb000000ABCDEAA",
+            recordName: "REV-0000000012",
+            anchorName: "Sterling Fabrication Co.",
             steps: [
               { id: "s1", type: "write", label: "Create the credit review", state: "verified" },
               { id: "s2", type: "verification", label: "Confirm the review exists", state: "verified" },
@@ -505,7 +607,7 @@ describe("WP7.4 — the execution", () => {
     installWriteMcp();
     await executeAndLand();
     const p = panel("Annual Review")!;
-    expect(p.textContent).toContain("Filed — annual credit review");
+    expect(p.textContent).toContain("Filed REV-0000000012 against Sterling Fabrication Co.");
     expect(p.textContent).toContain("a5nbb000000ABCDEAA");
     expect(p.textContent).toContain("Open in nCino");
   });
@@ -650,10 +752,10 @@ describe("an executed action lands in the Activity trail (A30)", () => {
 
   it("appears immediately, with no Sync, naming the record and what it was filed against", async () => {
     const text = await fileThenReadActivity();
-    expect(text).toContain("Annual credit review filed against Sterling Fabrication Co.");
+    expect(text).toContain("Annual credit review REV-0000000012 filed against Sterling Fabrication Co.");
     // A30.4 — marked user-originated, and attributed to the acting user.
     const row = [...document.querySelectorAll('[data-origin="user"]')].find((r) =>
-      /Annual credit review filed/.test(r.textContent ?? ""),
+      /Annual credit review REV-0000000012 filed/.test(r.textContent ?? ""),
     )!;
     expect(row).toBeTruthy();
     expect(row.textContent).toContain("Fabian Goetzens");
@@ -662,7 +764,7 @@ describe("an executed action lands in the Activity trail (A30)", () => {
   it("carries the record link and keeps the staging id for audit", async () => {
     await fileThenReadActivity();
     const entry = [...document.querySelectorAll("button")].find((b) =>
-      /Annual credit review filed/.test(b.textContent ?? ""),
+      /Annual credit review REV-0000000012 filed/.test(b.textContent ?? ""),
     )!;
     click(entry);
     const modal = document.querySelector('[role="dialog"]')!;
@@ -693,7 +795,7 @@ describe("an executed action lands in the Activity trail (A30)", () => {
   it("logs one entry per execution, however many times the tracker re-renders", async () => {
     await fileThenReadActivity();
     const entries = [...document.querySelectorAll("button")].filter((b) =>
-      /Annual credit review filed/.test(b.textContent ?? ""),
+      /Annual credit review REV-0000000012 filed/.test(b.textContent ?? ""),
     );
     expect(entries).toHaveLength(1);
   });
@@ -811,9 +913,10 @@ describe("no staged plan can survive a republish", () => {
     openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
     click(byText(/Review the plan/)!);
     await flush();
+    // One Escape closes the panel only (A31.1): the Client Actions sheet it was
+    // opened from is still there to reopen it from.
     press("Escape");
-
-    click(byText(/Client Actions/)!);
+    expect(panel("Annual Review")).toBeNull();
     const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("Annual Review"),
     )!;

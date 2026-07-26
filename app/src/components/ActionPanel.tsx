@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { useApp } from "../state/appState";
 import { Portal } from "./Portal";
+import { isTopmost, pushModal } from "./modalStack";
 import { ACTIONS_BY_ID } from "../actions/registry";
 import { buildPanelSchema } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
@@ -11,7 +12,7 @@ import { validatePlan } from "../actions/transitionAllowlist";
 import { assertNoRecordIds } from "../actions/stagedPlan";
 import { withDrafts } from "../actions/drafts";
 import { buildBriefing } from "../actions/briefing";
-import { BriefingCard } from "./BriefingCard";
+import { DealTicket } from "./DealTicket";
 import type { ProvenanceKind, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
 import { ConfirmGate } from "./ConfirmGate";
@@ -313,6 +314,9 @@ export function ActionPanel({
 }) {
   const { data, state, worklist, dispatch } = useApp();
   const panelRef = useRef<HTMLDivElement>(null);
+  const layerId = useId();
+
+  useEffect(() => pushModal(layerId), [layerId]);
 
   const action = ACTIONS_BY_ID[actionId];
   const accountId = state.accountId ?? "";
@@ -370,6 +374,8 @@ export function ActionPanel({
   /** Stable across a stage/execute pair and across resume (A33.3.5). Ours, not
    *  nCino's: the platform is known to duplicate on failed background Apex. */
   const idempotencyKeyRef = useRef<string>(newRequestId());
+  /** Set by the ticket while an option sheet is open (A31.1 stacking). */
+  const sheetCloserRef = useRef<(() => void) | null>(null);
 
   const engine = useMemo(
     () => computeSuggestions({ data, bundle, actionId }),
@@ -386,6 +392,13 @@ export function ActionPanel({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
+        if (!isTopmost(layerId)) return;
+        // A31.1 stacking: an open option sheet is the innermost layer, so Esc
+        // closes that first and the panel stays where the banker left it.
+        if (sheetCloserRef.current) {
+          sheetCloserRef.current();
+          return;
+        }
         onClose();
         return;
       }
@@ -415,7 +428,7 @@ export function ActionPanel({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, layerId]);
 
   if (!action || !schema) return null;
 
@@ -749,12 +762,15 @@ export function ActionPanel({
 
             {/* WP7.1 — the panel opens on the composed proposal, not a form. */}
             {briefing && (
-              <BriefingCard
+              <DealTicket
+                actionId={actionId}
                 briefing={briefing}
                 schema={schema}
+                bundle={bundle}
                 values={values}
                 editedFields={editedFields}
                 onChange={setField}
+                sheetCloserRef={sheetCloserRef}
                 renderChip={(f, edited) => {
                   const kind = chipFor(f);
                   return kind ? <ProvenanceChip kind={kind} citation={f.prefill.citation} edited={edited} /> : null;

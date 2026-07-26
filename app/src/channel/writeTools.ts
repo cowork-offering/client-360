@@ -65,6 +65,18 @@ export interface ExecuteResult {
   valuationId?: string;
   caseId?: string;
   reviewId?: string;
+  /**
+   * The created record's NAME, read back from the org after the write.
+   *
+   * CRITICAL SEMANTIC (Apex builder, 2026-07-26): this is null EXACTLY when the
+   * verification read-back failed — the `filed_unverified` case. A null here is
+   * therefore evidence of a verification failure, not a missing nicety, and it
+   * must never be papered over with a generic label. Doing so would hide a real
+   * failure behind copy that reads like success.
+   */
+  recordName?: string | null;
+  /** The thing the record was filed against, named by the org. */
+  anchorName?: string | null;
 }
 
 /* ------------------------------------------------------------- unwrapping */
@@ -277,6 +289,11 @@ export async function executeAction(
     valuationId: typeof r.valuationId === "string" ? r.valuationId : undefined,
     caseId: typeof r.caseId === "string" ? r.caseId : undefined,
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
+    // `recordName` is canonical; the per-action aliases carry the SAME fact for
+    // tools that predate it. All absent means the read-back did not confirm a
+    // name, which is a state the UI must show rather than fill in.
+    recordName: str(r.recordName) ?? str(r.caseNumber) ?? str(r.reviewName) ?? null,
+    anchorName: str(r.anchorName) ?? null,
     steps: Array.isArray(r.steps)
       ? r.steps.map((s) => {
           const raw = s as Record<string, unknown>;
@@ -291,6 +308,9 @@ export async function executeAction(
       : [],
   }));
 }
+
+/** A non-empty string, or undefined. Blank is not a name. */
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
 /** Banker-readable copy for a domain failure, keeping the org's own words. */
 export function toolErrorCopy(e: ToolError): string {

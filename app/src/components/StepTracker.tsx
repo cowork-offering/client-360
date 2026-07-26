@@ -38,13 +38,34 @@ const TERMINAL_COPY: Record<string, string> = {
   failed: "Nothing was verified. The plan stopped at the first failure.",
 };
 
-/** The record the write created, in banker language with its id underneath. */
-function filedRecord(outcome: ExecuteResult | null | undefined): { label: string; id: string } | null {
+/**
+ * The record the write created.
+ *
+ * `name` is null EXACTLY when the org's verification read-back failed, which is
+ * the `filed_unverified` case. That null is EVIDENCE, so it is carried through
+ * as `nameConfirmed: false` and shown as such. Substituting a generic label
+ * here would turn a real verification failure into copy that reads like
+ * success, which is the one thing this stamp must never do.
+ */
+interface FiledRecord {
+  label: string;
+  id: string;
+  name: string | null;
+  anchor: string | null;
+  nameConfirmed: boolean;
+}
+
+function filedRecord(outcome: ExecuteResult | null | undefined): FiledRecord | null {
   if (!outcome) return null;
-  if (outcome.valuationId) return { label: "collateral valuation", id: outcome.valuationId };
-  if (outcome.caseId) return { label: "service request", id: outcome.caseId };
-  if (outcome.reviewId) return { label: "annual credit review", id: outcome.reviewId };
-  return null;
+  const id = outcome.valuationId ?? outcome.caseId ?? outcome.reviewId;
+  if (!id) return null;
+  const label = outcome.valuationId
+    ? "collateral valuation"
+    : outcome.caseId
+      ? "service request"
+      : "annual credit review";
+  const name = outcome.recordName ?? null;
+  return { label, id, name, anchor: outcome.anchorName ?? null, nameConfirmed: name !== null };
 }
 
 /** Reveal the settled rows one at a time. Returns how many have landed. */
@@ -175,10 +196,28 @@ export function StepTracker({
 
       {/* The stamp. Sober by design: a record was filed, which is a fact, not a
           celebration. It appears only once every row has landed. */}
-      {!revealing && filed && terminal === "success" && (
+      {!revealing && filed && filed.nameConfirmed && terminal === "success" && (
         <div className="c360-row-land border-b border-divider px-5 py-4">
-          <div className="text-[15px] font-extrabold tracking-tight text-ink">Filed — {filed.label}</div>
+          <div className="text-[15px] font-extrabold tracking-tight text-ink">
+            Filed {filed.name}
+            {filed.anchor ? ` against ${filed.anchor}` : ""}
+          </div>
           <div className="mt-0.5 font-mono text-[11px] text-ink-faint">{filed.id}</div>
+        </div>
+      )}
+
+      {/* Filed, but the org could not read it back. The record exists and the
+          id is real; the name is not confirmed, and saying so is the point. */}
+      {!revealing && filed && !filed.nameConfirmed && (
+        <div className="c360-row-land border-b border-divider px-5 py-4">
+          <div className="text-[15px] font-extrabold tracking-tight" style={{ color: "var(--warning)" }}>
+            Filed, name not confirmed
+          </div>
+          <div className="mt-1 text-[11.5px] leading-relaxed text-ink-body">
+            The {filed.label} was written, but the read-back that confirms it did not come back. Open it in nCino to
+            verify it landed as intended.
+          </div>
+          <div className="mt-1 font-mono text-[11px] text-ink-faint">{filed.id}</div>
         </div>
       )}
 
@@ -187,7 +226,7 @@ export function StepTracker({
           the package is still the only sensible target, because no record was
           created to open. */}
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-        {!revealing && filed && terminal === "success" ? (
+        {!revealing && filed ? (
           <>
             <OpenCreatedRecord actionId={actionId} recordId={filed.id} />
             <OpenInNcino snapshot={snapshot} secondary />

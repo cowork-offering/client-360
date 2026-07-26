@@ -183,6 +183,31 @@ display pacing is a floor, never a substitute for the work. A failed read leaves
 previous value and says so on its line, and the workspace is never blanked. When Microsoft 365 is
 not part of the view the mailbox line is removed silently, per the A29 opportunistic-skip rule.
 
+### The deal ticket (WP8)
+
+The action panel opens on a ticket, not a form and not a paragraph: subject card (what this is and
+what it acts on) → hero input (the one value carrying the decision) → live delta readout → property
+pills, each opening a slide-up sheet of option cards → drafted narratives as collapsed cards → the
+unchanged footer.
+
+It is a PRESENTATION over the same `PanelSchema` and the same briefing declaration every earlier
+surface read: which fields the banker owns, in what order, is declared once. A pill writes the
+identical `values` entry the classic "All fields" row writes, and a test pins that.
+
+The delta readout runs the Exposure tab's own coverage math (lendable over drawn) on the hero value
+and renders NOTHING when any input is missing — a missing lendable value is not a zero, and a ratio
+computed from a guess is worse than silence. Only collateral valuation has one, because it is the only
+action whose input moves a figure the cockpit renders elsewhere.
+
+Option sheets offer the org's value set and nothing else; absent, the sheet says where the values come
+from rather than inventing any.
+
+**Modal stacking fix.** Every layer listens for Escape on `window` in the capture phase, and capture
+listeners on one target fire in REGISTRATION order — so the outermost panel heard Escape first and one
+press collapsed two layers at once. `stopPropagation` cannot fix this (it stops other targets, not
+other listeners on the same target). Layers now register in a modal stack and act only when topmost:
+Escape closes the option sheet, then the action panel, then the Client Actions sheet, one press each.
+
 ### The compile sequence (WP7)
 
 "Review the plan" runs a four-line build sequence, and each line wraps a real operation: gathering the
@@ -236,10 +261,16 @@ Every execution also lands in the Activity tab as a session-local, user-originat
 deep link and retaining the `stagingId` in the detail for audit. It renders immediately; no Sync is
 needed, because the event happened in this session rather than being read from the org.
 
-**The executor returns record IDS, not record NAMES.** There is no `CV-0000000002` anywhere in the
-artifact, so none is written into the trail: the entry names the object, what it was filed against
-(from staged data), and the real id. A record Name in the copy would require the execute tools to
-return one.
+**`recordName` / `anchorName`, and what a null means.** The execute tools return the created record's
+name and the name of what it was filed against, and both the Filed stamp and the trail entry use them:
+"Filed CV-0000000002 against COL-000758". `recordName` is canonical; the per-action aliases
+(`caseNumber`, `reviewName`) carry the same fact on tools that predate it.
+
+A **null `recordName` is not a missing nicety — it means the verification read-back FAILED**, the
+`filed_unverified` case. The UI therefore renders "Filed, name not confirmed" with the real record id
+and a line telling the banker to verify it in nCino, and the trail entry says the same. It NEVER falls
+back to a generic label: that would hide a real verification failure behind copy that reads like
+success. The deep link is still offered in that state, because the record does exist.
 
 ### Write tools (WP5)
 
