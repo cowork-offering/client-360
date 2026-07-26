@@ -76,6 +76,11 @@ export interface PanelField {
   required: boolean;
   /** Populated at runtime from the org describe; never authored in the schema. */
   options?: string[];
+  /** Display labels for `options`, positionally. Present only on a RECORD
+   *  chooser, where the value is an id and the label is for the banker: two
+   *  facilities can share a name, and an option keyed on the name would let the
+   *  payload resolve to whichever happened to be first. */
+  optionLabels?: string[];
   /**
    * TRUE when the options are STAGED RECORDS rather than an org picklist's
    * value set — a facility chooser, not a `LLC_BI__Status__c`.

@@ -41,7 +41,14 @@ function withBookedFacilities(data: C360Data): C360Data {
   for (const b of Object.values(next.borrowers ?? {})) {
     let booked = 0;
     for (const f of b.exposure?.facilities ?? []) {
-      if (f.status === "Paid Off") continue;
+      // EVERY facility gets a stage: partial stage data is "cannot tell", so a
+      // fixture that leaves one blank is testing the wrong thing.
+      // A credit action anchors on the facility AND its own package.
+      f.productPackageId = "a5Fbb000000HA1NEAW";
+      if (f.status === "Paid Off") {
+        f.stage = "Booked";
+        continue;
+      }
       f.stage = booked < 2 ? "Booked" : "Final Review";
       booked += 1;
     }
@@ -578,6 +585,40 @@ describe("wave 2 — the five new tickets", () => {
     // Not a prompt: a booked facility is already chosen.
     expect(pill.textContent).toContain("Sterling");
     expect(pill.textContent).not.toContain("choose the facility");
+  });
+
+  it("F7 — refuses to stage a facility whose own package is not staged", async () => {
+    const callTool = installWriteMcp();
+    // Booked, but with no package of its own: the correspondence between the
+    // facility and a package cannot be proven, so nothing is sent.
+    const data = structuredClone(DATA) as C360Data;
+    for (const b of Object.values(data.borrowers ?? {})) {
+      for (const f of b.exposure?.facilities ?? []) {
+        f.stage = "Booked";
+        delete f.productPackageId;
+      }
+    }
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <AppProvider data={data}>
+          <AppShell />
+        </AppProvider>,
+      );
+    });
+    click(openRow("Sterling Fabrication"));
+    click(byText(/Client Actions/)!);
+    click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Loan Modification"),
+    )!);
+    const review = byText(/Review the plan/);
+    if (review && !review.hasAttribute("disabled")) {
+      click(review);
+      await flush();
+    }
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(0);
   });
 
   it.each(["Loan Modification", "Renewal"])("withholds %s when nothing is booked, with the reason", (label) => {

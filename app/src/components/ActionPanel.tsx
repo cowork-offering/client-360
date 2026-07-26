@@ -21,7 +21,7 @@ import { buildBriefing } from "../actions/briefing";
 import { DealTicket } from "./DealTicket";
 import type { ProvenanceKind, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
-import { bookedFacilities, facilityLabel } from "../data/facilityStage";
+import { bookedFacilities } from "../data/facilityStage";
 import { ConfirmGate } from "./ConfirmGate";
 import { StepTracker } from "./StepTracker";
 import { isSimulationAllowed, simulateStagedOutput, type StagedOutput } from "../actions/stagedPlan";
@@ -510,12 +510,12 @@ export function ActionPanel({
       const n = typeof raw === "number" ? raw : Number(raw);
       return Number.isFinite(n) ? n : null;
     };
-    /** The booked facility the banker picked, resolved through the SAME label
-     *  the selector renders, so the choice and the id cannot drift apart. */
-    const selectedFacilityId = (): string | null => {
+    /** The booked facility the banker picked, resolved BY ID. Two facilities can
+     *  share a name, so a label lookup would silently pick whichever came
+     *  first. */
+    const selectedFacility = () => {
       const picked = values.facility;
-      const match = bookedFacilities(bundle).find((f) => facilityLabel(f) === picked);
-      return match?.loanId ?? null;
+      return bookedFacilities(bundle).find((f) => f.loanId && f.loanId === picked) ?? null;
     };
     const citationOf = (key: string) => {
       const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
@@ -567,11 +567,12 @@ export function ActionPanel({
       // EXACTLY ONE ANCHOR, both variants observed: the package when the
       // relationship has one, otherwise the account, which is the org's cue to
       // create the package first. Sending both, or neither, is not a shape the
-      // tool has ever accepted.
+      // tool has ever accepted — and a BLANK account id is neither.
+      if (!packageId && !accountId.trim()) return null;
       return {
         idempotencyKey,
         rationale,
-        ...(packageId ? { productPackageId: packageId } : { accountId }),
+        ...(packageId ? { productPackageId: packageId } : { accountId: accountId.trim() }),
         product: v("productType") as string | null,
         amount: nOf("amount"),
         termMonths: nOf("termMonths"),
@@ -600,44 +601,37 @@ export function ActionPanel({
     if (actionId === "covenant-review") {
       const complianceId = citationOf("covenant");
       if (!complianceId) return null;
+      const observed = nOf("observedValue");
       return {
         idempotencyKey,
         accountId,
         rationale,
         covenantComplianceId: complianceId,
         result: v("assessmentResult") as string | null,
-        // The reported actual is CONTEXT, not an input: the schema renders it
-        // read-only and no write semantics for it were ever probed. The builder
-        // now agrees with the schema instead of quietly disagreeing.
+        // Observed as a STRING on the wire, and only sent when there is one.
+        ...(observed === null ? {} : { observedValue: String(observed) }),
         narrative: v("assessmentNarrative") as string | null,
+        comments: v("assessmentNarrative") as string | null,
       };
     }
 
-    if (actionId === "loan-modification") {
-      const loanId = selectedFacilityId();
-      if (!loanId) return null;
-      return {
-        idempotencyKey,
-        rationale,
-        loanId,
-        productPackageId: packageId,
-        requestedAmount: nOf("newCommitment"),
-        requestedTermMonths: nOf("requestedTermMonths"),
-        requestedRate: nOf("requestedRate"),
-      };
-    }
-
-    if (actionId === "renewal") {
-      const loanId = selectedFacilityId();
-      if (!loanId) return null;
-      return {
-        idempotencyKey,
-        rationale,
-        loanId,
-        productPackageId: packageId,
-        newMaturityDate: v("newMaturityDate") as string | null,
-        requestedRate: nOf("requestedRate"),
-      };
+    if (actionId === "loan-modification" || actionId === "renewal") {
+      const facility = selectedFacility();
+      // FAIL CLOSED on the package. The anchor must be the package the CHOSEN
+      // facility hangs off, not whichever one the relationship snapshot names:
+      // a facility from another package staged against this one is a write
+      // aimed at the wrong deal. When the exposure row does not carry its own
+      // package, the correspondence cannot be proven and nothing is sent.
+      if (!facility?.loanId || !facility.productPackageId) return null;
+      const common = { idempotencyKey, rationale, loanId: facility.loanId, productPackageId: facility.productPackageId };
+      return actionId === "loan-modification"
+        ? {
+            ...common,
+            requestedAmount: nOf("newCommitment"),
+            requestedTermMonths: nOf("requestedTermMonths"),
+            requestedRate: nOf("requestedRate"),
+          }
+        : { ...common, newMaturityDate: v("newMaturityDate") as string | null, requestedRate: nOf("requestedRate") };
     }
 
     return {

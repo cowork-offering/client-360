@@ -384,6 +384,39 @@ cannot tell, can tell and the answer is no, and yes.
 The facility selector is a RECORD chooser, not an org picklist: it declares `optionsAreRecords` and is
 excluded from the A33.1.6 value-set rule, which stays strict for everything that is a picklist.
 
+### Delta review fixes (Codex, second pass)
+
+Eight fixed, one refuted with proof.
+
+- **Facility stages: partial data is CANNOT TELL.** The check was `some`, so one staged facility out of
+  four let the cockpit confidently report "none of these are booked". Now `every`. This is the whole
+  point of failing closed and it was half-broken.
+- **The facility chooser is keyed on the record id**, with labels for display. Two facilities can share
+  a name; keyed on the label they collapsed into one option and the payload resolved to whichever came
+  first.
+- **The package anchor comes from the CHOSEN facility, not the relationship snapshot.** A facility from
+  another package staged against this one is a write aimed at the wrong deal. `Facility.productPackageId`
+  is new on the contract and additive on the `Customer360Exposure` read; **until it flows, modification
+  and renewal refuse to stage** rather than guess the correspondence.
+- **A blank `accountId` is not an anchor** on the package-first variant; staging is refused.
+- **The staging gap is built from the availability rule**, so the three outcomes stay three sentences
+  even when the panel is reached outside the gate.
+- **Covenant `observedValue` and `comments` are sent** — the observed envelope carries both, and the
+  envelope is the authority. The field is editable again with an honest note; its target stays staging
+  because the WIRE contract is known and the org column is not.
+- **The borrowing-structure claim is made only where a plan proves it.** The package-first plan carries
+  `write_involvement`; the existing-package plan, as observed, does not. Copy follows the observed plan.
+- **`packageCreated` is TRI-STATE.** The resume returns `null`, and coercing that to `false` made a
+  created package vanish from the terminal state on Continue. The package name is carried forward from
+  the first invocation, which is the only one that asserts it.
+
+**REFUTED — `Term` cannot reach the Product sheet.** The cache holds six, the schema offers exactly the
+cache, and the `VALIDATION_FAILED` supersede path writes only `LLC_BI__Collateral_Valuation__c` keys, so
+no legal list can land on the Product field. Four tests prove the chain. Documented deliberately: if the
+org itself ever returned `Term` for that field, the org would be the authority and the panel would show
+it — the cockpit does not second-guess an org list. That cannot happen while the Apex validates the
+record-type-scoped six.
+
 ### Wave 2.1 — package-first new facility (VERIFIED live, seams closed)
 
 `stage_new_facility` takes **exactly one anchor**, and both variants are observed: a relationship WITH

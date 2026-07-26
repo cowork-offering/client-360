@@ -25,8 +25,17 @@ import { fmtMoney } from "../data/format";
 
 const isEmpty = (v: unknown) => v === null || v === undefined || v === "";
 
+/** What the banker reads for a value. On a record chooser the value is an id,
+ *  so the label is looked up positionally; everywhere else the value IS the
+ *  label. */
+const labelForValue = (field: PanelField, value: unknown): string => {
+  const i = (field.options ?? []).indexOf(String(value));
+  return i >= 0 ? (field.optionLabels?.[i] ?? String(value)) : String(value);
+};
+
 const display = (field: PanelField, value: unknown): string => {
   if (isEmpty(value)) return "";
+  if (field.optionsAreRecords) return labelForValue(field, value);
   if (field.type === "currency" && typeof value === "number") return fmtMoney(value);
   if (field.type === "boolean") return value === true ? "Yes" : "No";
   return String(value);
@@ -123,7 +132,7 @@ function OptionSheet({
                       color: picked ? "var(--accent)" : "var(--ink)",
                     }}
                   >
-                    <span className="flex-1 whitespace-normal break-words">{o}</span>
+                    <span className="flex-1 whitespace-normal break-words">{labelForValue(field, o)}</span>
                     {picked && (
                       <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
                         <path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -434,7 +443,7 @@ export function DealTicket({
                 className="flex-1 truncate text-[24px] font-extrabold leading-tight tracking-tight"
                 style={{ color: isEmpty(values[hero.key]) ? "var(--ink-faint)" : "var(--ink)" }}
               >
-                {isEmpty(values[hero.key]) ? promptFor(briefing, hero.key) : String(values[hero.key])}
+                {isEmpty(values[hero.key]) ? promptFor(briefing, hero.key) : display(hero, values[hero.key])}
               </span>
               <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" className="flex-none text-ink-faint">
                 <path d="M2.5 4.5L6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

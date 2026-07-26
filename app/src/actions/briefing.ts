@@ -165,7 +165,7 @@ function newFacility(b: BorrowerBundle | null, name: string): Briefing {
     subject: {
       title: `New facility for ${name}`,
       context: hasPackage
-        ? `${committed ? `${name} is carried at ${committed} committed today. ` : ""}${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership: a facility insert creates no such row on its own. nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
+        ? `${committed ? `${name} is carried at ${committed} committed today. ` : ""}nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
         : `No credit package exists yet for this relationship. One will be created first, the way nCino's own wizard does, and the facility filed under it. ${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership, which a facility insert does not do on its own. The org names both records itself.`,
     },
     lead: [
@@ -211,7 +211,13 @@ function covenantReview(b: BorrowerBundle | null): Briefing {
       context:
         "Status changes are recorded on the existing compliance record; the bank's approval process governs new compliance periods.",
     },
-    lead: [t(`This records ${type} as `), f("assessmentResult", "choose the assessment"), t(".")],
+    lead: [
+      t(`This records ${type} as `),
+      f("assessmentResult", "choose the assessment"),
+      t(" at an observed "),
+      f("observedValue", "enter the observed value"),
+      t("."),
+    ],
     figures,
     sections: ["assessmentNarrative"],
   };

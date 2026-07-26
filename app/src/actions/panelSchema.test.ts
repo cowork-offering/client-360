@@ -159,8 +159,9 @@ describe("editability is a property of the org (A33.1.6)", () => {
       )!;
       expect(f.optionsAreRecords, id).toBe(true);
       expect(f.optionsFrom, id).toBeUndefined();
-      // Only the booked one is choosable; the other is listed with its stage.
-      expect(f.options, id).toEqual(["Term Loan"]);
+      // Options carry the record ID; the label is display only.
+      expect(f.options, id).toEqual(["L1"]);
+      expect(f.optionLabels, id).toEqual(["Term Loan"]);
       expect(f.disabledOptions, id).toEqual([{ value: "Revolver", reason: "at Final Review" }]);
     }
   });

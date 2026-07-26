@@ -125,7 +125,10 @@ export interface ExecuteResult {
   /** The package the facility was filed on. Created by the plan when the
    *  relationship had none; observed as `productPackageId`, not `packageId`. */
   productPackageId?: string;
-  packageCreated?: boolean;
+  /** TRI-STATE. `true` on the invocation that created it, `null` on the resume
+   *  (the org is not re-asserting it), absent when no package was involved.
+   *  Coercing null to false would make a created package vanish on Continue. */
+  packageCreated?: boolean | null;
   /** The borrowing-structure row: the relationship added as Borrower. */
   involvementId?: string;
   /** The record's status as the org holds it, e.g. "In Review". Observed. */
@@ -471,7 +474,7 @@ export async function executeAction(
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
     riskRatingReviewId: typeof r.riskRatingReviewId === "string" ? r.riskRatingReviewId : undefined,
     productPackageId: typeof r.productPackageId === "string" ? r.productPackageId : undefined,
-    packageCreated: r.packageCreated === true,
+    packageCreated: typeof r.packageCreated === "boolean" ? r.packageCreated : r.packageCreated === null ? null : undefined,
     involvementId: typeof r.involvementId === "string" ? r.involvementId : undefined,
     status: typeof r.status === "string" ? r.status : undefined,
     loanId: typeof r.loanId === "string" ? r.loanId : undefined,

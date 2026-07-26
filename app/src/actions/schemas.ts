@@ -17,7 +17,7 @@
 import type { BorrowerBundle, Facility } from "../data/contract";
 import { fmtCovVal } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
-import { bookedFacilities, facilityLabel, unbookedFacilities } from "../data/facilityStage";
+import { bookedFacilities, bookedFacilityGap, facilityLabel, unbookedFacilities } from "../data/facilityStage";
 import type { PanelField, PanelSchema } from "./panelSchema";
 import { PREFILL_PROVENANCE } from "./panelSchema";
 
@@ -386,8 +386,12 @@ function newFacilitySchema(ctx: SchemaContext): PanelSchema {
   return {
     writeObject: OBJ,
     writeObjectLabel: "facility request",
+    // The borrowing-structure claim is made ONLY for the package-first variant,
+    // which is the one whose observed plan carries `write_involvement`. The
+    // existing-package plan has never been observed with that step, and the
+    // confirm gate renders whatever the org actually returns either way.
     intro: pkg
-      ? "Requests a new facility on this relationship's package, with the borrower added to its borrowing structure at 100 percent. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later."
+      ? "Requests a new facility on this relationship's package. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later."
       : "Requests a new facility for this relationship. No credit package exists yet, so one is created first and the facility filed under it, with the borrower added to its borrowing structure at 100 percent. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later.",
     fields: [
       field({
@@ -687,16 +691,21 @@ function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
       }),
       field({
         key: "observedValue",
-        label: "Reported actual",
-        type: "readonly",
-        // No write target for this was probed, so it is context, not a field we
-        // claim to set. The assessment is what this action records.
-        value: cov?.actualValue != null ? fmtCovVal(cov.actualValue) : null,
-        prefill: { source: "NCINO_RECORD", citation: "Customer360Covenants — last reported actual" },
-        editable: false,
-        editableReason: "read from the covenant",
+        label: "Observed value",
+        type: "currency",
+        // The observed envelope carries `observedValue`, so the tool takes it
+        // and the banker may correct the last reported actual before recording
+        // the assessment. The org field it lands on was never probed, so the
+        // target stays staging: the WIRE contract is known, the org column is not.
+        value: cov?.actualValue ?? null,
+        prefill:
+          cov?.actualValue != null
+            ? { source: "NCINO_RECORD", citation: "Customer360Covenants — last reported actual" }
+            : { source: "BANKER" },
+        editable: true,
         required: false,
         target: { staging: true },
+        help: "Prefilled from the covenant's last reported actual. Correct it if the assessment is on a different figure.",
       }),
       field({
         key: "assessmentNarrative",
@@ -736,19 +745,23 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
     label: "Facility",
     type: "picklist",
     // One booked facility is the answer, not a question: preselect it.
-    value: chosen ? facilityLabel(chosen) : null,
+    value: chosen?.loanId ?? null,
     prefill: chosen ? { source: "NCINO_RECORD", citation: chosen.loanId } : { source: "BANKER" },
     editable: booked.length > 1,
     editableReason: booked.length > 1 ? undefined : "the only booked facility on this relationship",
     required: true,
     optionsAreRecords: true,
-    options: booked.map(facilityLabel),
+    // The VALUE is the record id; the label is what the banker reads.
+    options: booked.map((f) => f.loanId ?? ""),
+    optionLabels: booked.map(facilityLabel),
     disabledOptions: blocked.map((b) => ({ value: facilityLabel(b.facility), reason: b.reason })),
     target: { object: OBJ, field: "Id" },
     gap: chosen
       ? undefined
       : {
-          reason: "No booked facility is staged on this relationship, so there is nothing a credit action can run against.",
+          // Built from the availability rule, so "cannot tell" and "none are
+          // booked" stay different sentences here too.
+          reason: bookedFacilityGap(ctx.bundle, kind === "renewal" ? "renewals" : "modifications") ?? "",
           blocksStaging: true,
         },
   });

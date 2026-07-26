@@ -22,9 +22,18 @@ import { isActiveFacility } from "./worklist";
 
 export const BOOKED = "Booked";
 
-/** Whether ANY staged facility carries a stage value at all. */
+/**
+ * Whether EVERY candidate facility carries a stage.
+ *
+ * `some` was wrong and dangerously so: with one facility staged and three not,
+ * the cockpit would confidently report "none of these are booked" when it had
+ * only ever seen one of them. Partial data is "cannot tell", and the difference
+ * between cannot-tell and no is the whole point of failing closed.
+ */
 export function facilityStagesStaged(bundle: BorrowerBundle | null): boolean {
-  return (bundle?.exposure?.facilities ?? []).some((f) => typeof f.stage === "string" && f.stage.trim() !== "");
+  const facilities = bundle?.exposure?.facilities ?? [];
+  if (!facilities.length) return false;
+  return facilities.every((f) => typeof f.stage === "string" && f.stage.trim() !== "");
 }
 
 const isBooked = (f: Facility) => (f.stage ?? "").trim().toLowerCase() === BOOKED.toLowerCase();
@@ -74,6 +83,15 @@ export interface BookedAvailability {
  *   - staged, none booked -> withheld, and we can say exactly why
  *   - at least one booked -> offered
  */
+/** The reason a ticket cannot be staged, in the SAME words the availability
+ *  gate uses. The panel can be reached outside that gate (a deep link, a stale
+ *  chip), and a banker who gets there deserves the real reason rather than a
+ *  generic one. */
+export function bookedFacilityGap(bundle: BorrowerBundle | null, actionNoun = "modifications"): string | null {
+  const r = bookedFacilityAvailability(bundle, actionNoun);
+  return r.available ? null : (r.reason ?? "No booked facility is staged on this relationship.");
+}
+
 export function bookedFacilityAvailability(bundle: BorrowerBundle | null, actionNoun = "modifications"): BookedAvailability {
   const facilities = bundle?.exposure?.facilities ?? [];
   if (!facilities.length) return { available: false, reason: "No facilities are staged for this relationship" };

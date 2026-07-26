@@ -374,8 +374,10 @@ describe("A30.4 — next steps are shared state", () => {
    *  what the next-step-to-chip path is actually about. */
   const bookedData = (() => {
     const next = structuredClone(DATA) as C360Data;
+    // Every facility carries a stage: a partially staged bundle reads as
+    // "cannot tell", which is a different test.
     const facs = next.borrowers?.[STERLING]?.exposure?.facilities ?? [];
-    if (facs[0]) facs[0].stage = "Booked";
+    facs.forEach((f, i) => (f.stage = i === 0 ? "Booked" : "Final Review"));
     return next;
   })();
 

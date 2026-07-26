@@ -64,9 +64,12 @@ describe("Probe 8 — the covenant compliance object", () => {
     expect(schemaFor("covenant-review").writeObject).toBe("LLC_BI__Covenant_Compliance2__c");
   });
 
-  it("records no observed value, because no write target for one was probed", () => {
+  it("takes an observed value on the WIRE, without claiming an org column", () => {
+    // The observed request carries `observedValue`, so the tool accepts it and
+    // the field is editable. The org column it lands on was never probed, so
+    // the target stays staging: the wire contract is known, the column is not.
     const f = schemaFor("covenant-review").fields.find((x) => x.key === "observedValue")!;
-    expect(f.editable).toBe(false);
+    expect(f.editable).toBe(true);
     expect(f.target).toEqual({ staging: true });
   });
 });
@@ -133,10 +136,11 @@ describe("wave 2.1 — a package-less relationship is not a dead end", () => {
     expect(schemaFor(withoutPackage).intro).toContain("created first");
   });
 
-  it("states the borrowing structure in BOTH cases: a facility insert creates none", () => {
-    for (const b of [withPackage, withoutPackage]) {
-      expect(schemaFor(b).intro).toContain("borrowing structure at 100 percent");
-    }
+  it("claims the borrowing structure ONLY where a plan has proven it", () => {
+    // The package-first plan carries `write_involvement`; the existing-package
+    // plan, as observed in wave 4b, does not. Copy follows the observed plan.
+    expect(schemaFor(withoutPackage).intro).toContain("borrowing structure at 100 percent");
+    expect(schemaFor(withPackage).intro).not.toContain("borrowing structure");
   });
 
   it("keeps the probe-backed naming fact in BOTH cases", () => {

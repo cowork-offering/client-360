@@ -202,7 +202,7 @@ export function StepTracker({
 
       {/* The package the plan created, when it created one. A second record was
           filed and the banker should know its name and be able to open it. */}
-      {!revealing && outcome?.packageCreated && outcome.productPackageId && (
+      {!revealing && outcome?.packageCreated === true && outcome.productPackageId && (
         <div className="c360-row-land border-b border-divider px-5 py-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Credit package created</div>
           <div className="mt-0.5 text-[12.5px] font-semibold text-ink">{outcome.anchorName ?? "New credit package"}</div>
@@ -273,7 +273,7 @@ export function StepTracker({
         {!revealing && filed ? (
           <>
             <OpenCreatedRecord actionId={actionId} recordId={filed.id} />
-            {outcome?.packageCreated && outcome.productPackageId ? (
+            {outcome?.packageCreated === true && outcome.productPackageId ? (
               <OpenCreatedPackage packageId={outcome.productPackageId} />
             ) : (
               <OpenInNcino snapshot={snapshot} secondary />
