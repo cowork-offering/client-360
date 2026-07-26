@@ -1,5 +1,5 @@
 import { useApp, ACCOUNT_TABS, type AccountTab } from "../state/appState";
-import type { Anchor, BorrowerBundle } from "../data/contract";
+import { readAnchors, type Anchor, type BorrowerBundle } from "../data/contract";
 import { STATUS } from "../data/finance";
 import { PageContainer } from "./ui";
 import { AccentureCaretWatermark, AmbientWash } from "./brand";
@@ -126,7 +126,7 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
                 same grid so nothing floats free (founder feedback 2026-07-25).
                 Sync is secondary; Client Actions keeps the accent. */}
             <div className="mt-3 flex flex-wrap items-stretch gap-2.5">
-              {(bundle.anchors ?? []).map((a) => (
+              {readAnchors(bundle).map((a) => (
                 <AnchorCell key={a.label} a={a} grade={grade} />
               ))}
               <span className="ml-auto flex items-center gap-2 self-center">

@@ -639,6 +639,28 @@ export interface BorrowerBundle {
   anchors?: Anchor[];
 }
 
+/**
+ * The anchor chips a bundle carries, defensively.
+ *
+ * LIVE DEFECT 2026-07-26: a bundle merged from real tool responses arrived with
+ * `anchors` as an OBJECT (`{accountId, productPackageId}`) where every staged
+ * bundle had used an ARRAY of chips. `.map` threw straight through the account
+ * workspace and the founder got a blank profile.
+ *
+ * The producer's shape is not ours to police, but the cockpit's job is to
+ * render what it can and show an honest gap for the rest — never to crash. So
+ * anything that is not a well-formed chip is simply not a chip: the strip
+ * renders the ones that are, or renders nothing.
+ */
+export function readAnchors(bundle: BorrowerBundle | null | undefined): Anchor[] {
+  const raw = bundle?.anchors as unknown;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (a): a is Anchor =>
+      typeof a === "object" && a !== null && typeof (a as Anchor).label === "string" && typeof (a as Anchor).value === "string",
+  );
+}
+
 export interface Worklist {
   accountIds: Id[];
   reasons: Record<Id, ReasonCode[]>;

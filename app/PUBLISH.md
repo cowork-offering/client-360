@@ -384,6 +384,24 @@ cannot tell, can tell and the answer is no, and yes.
 The facility selector is a RECORD chooser, not an org picklist: it declares `optionsAreRecords` and is
 excluded from the A33.1.6 value-set rule, which stays strict for everything that is a picklist.
 
+### Live crash: a real bundle in a shape no sample used (2026-07-26)
+
+A relationship merged from real Customer360 responses rendered a BLANK profile. Root cause:
+`anchors` arrived as an OBJECT (`{accountId, productPackageId}`) where every staged bundle had carried
+an ARRAY of chips, so `(bundle.anchors ?? []).map(...)` threw and React unmounted the whole workspace.
+
+`readAnchors()` now filters to well-formed chips and returns `[]` for anything else: the producer's
+shape is not the cockpit's to police, but rendering what it can and showing an honest gap for the rest
+is. Malformed entries are dropped individually; the strip renders the chips that are real.
+
+**The permanent guard is `liveData.smoke.test.tsx`:** it mounts EVERY account in EVERY staged data file
+and walks EVERY tab, asserting the workspace still names the relationship. A gap state passes; a blank
+screen does not. Unit tests over helpers could not have caught this — only mounting the real data did.
+
+The other four suspects on the same bundle were checked and are each already handled honestly, now
+with tests naming them: no Boom workbook (the Financials tab states its gap), no `verdict`, no
+`requests`, a covenant with null actual and threshold, and a facility that matured in the past.
+
 ### Delta review fixes (Codex, second pass)
 
 Eight fixed, one refuted with proof.

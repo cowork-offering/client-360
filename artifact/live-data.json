@@ -2499,10 +2499,32 @@
         "renewals": []
       },
       "activity": [],
-      "anchors": {
-        "accountId": "001bb00001I7FPNAA3",
-        "productPackageId": "a5Fbb000000IHFJEA4"
-      }
+      "anchors": [
+        {
+          "label": "Rating",
+          "value": "Grade 4",
+          "sub": "Booked",
+          "dir": null
+        },
+        {
+          "label": "Committed",
+          "value": "$46.0M",
+          "sub": "$31.0M drawn",
+          "dir": null
+        },
+        {
+          "label": "DSC",
+          "value": "1.38\u00d7",
+          "sub": "Floor 1.25\u00d7",
+          "dir": null
+        },
+        {
+          "label": "FCC",
+          "value": "1.22\u00d7",
+          "sub": "Floor 1.15\u00d7 tight",
+          "dir": "down"
+        }
+      ]
     }
   },
   "worklist": {
