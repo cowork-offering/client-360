@@ -78,11 +78,56 @@ export interface SweepOptions {
   /** Floor on how long a line is displayed before it may tick. */
   minPace?: number;
   onLines?: (lines: SyncLine[]) => void;
+  /** Launch pacing, overridable for tests. */
+  launchGapMs?: number;
+  maxInFlight?: number;
   /** Injected for tests. */
   sleep?: (ms: number) => Promise<void>;
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** At most this many connector calls in flight at once. */
+export const MAX_IN_FLIGHT = 2;
+/** Spacing between launches, so the bridge never sees a burst. */
+export const LAUNCH_GAP_MS = 200;
+
+/**
+ * Start work with a concurrency cap and a gap between launches.
+ *
+ * Order is preserved: callers get their promise back immediately and the pacer
+ * decides when the underlying call actually starts.
+ */
+export function createPacer({ gap, limit, sleep }: { gap: number; limit: number; sleep: (ms: number) => Promise<void> }) {
+  let inFlight = 0;
+  const queue: Array<() => void> = [];
+  let lastLaunch: Promise<void> = Promise.resolve();
+
+  const release = () => {
+    inFlight -= 1;
+    const next = queue.shift();
+    if (next) next();
+  };
+
+  return function run<T>(fn: () => Promise<T>): Promise<T> {
+    const slot = new Promise<void>((resolve) => {
+      const take = () => {
+        inFlight += 1;
+        resolve();
+      };
+      if (inFlight < limit) take();
+      else queue.push(take);
+    });
+    const spaced = lastLaunch.then(() => sleep(gap));
+    lastLaunch = spaced;
+    return Promise.all([slot, spaced]).then(() => {
+      const p = fn();
+      p.then(release, release);
+      return p;
+    });
+  };
+}
+
 
 /**
  * Run the sweep. All calls are fired at the start, on the single gesture, so
@@ -94,19 +139,37 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   const minPace = opts.minPace ?? 450;
   const sleep = opts.sleep ?? wait;
 
-  // ---- fire everything, once, on the gesture -----------------------------
-  const portfolioCall = callTool(SERVERS.customer360, TOOLS.portfolio, { inputs: [{}] }, { read: true, cache: { staleTime: 15_000 } });
-  const detailCalls = DETAIL_TOOLS.map((tool) =>
-    callTool(SERVERS.customer360, tool, { inputs: [{ accountId }] }, { read: true, cache: { staleTime: 15_000 } }),
-  );
-  const mailCall = searchMailbox(accountName);
-  const historyCall = fetchActionHistory(accountId);
+  // ---- launch, PACED, on the one gesture ---------------------------------
+  //
+  // These used to fire all nine at once. The artifact-connector bridge does not
+  // like a nine-call burst: the founder saw random lines reporting the customer
+  // briefly unreachable, intermittently and on no particular line, which is what
+  // burst turbulence looks like from the inside.
+  //
+  // So at most TWO are in flight and each launch is spaced by a small gap. The
+  // console already presents the lines sequentially, so perceived latency barely
+  // moves; the bridge simply stops seeing a burst.
+  //
+  // There is NO retry here on purpose. `callTool` already retries once for a
+  // read the platform stamped retryable, so a second layer would mean two
+  // retries and a bigger burst — the opposite of the fix.
+  const pace = createPacer({ gap: opts.launchGapMs ?? LAUNCH_GAP_MS, limit: opts.maxInFlight ?? MAX_IN_FLIGHT, sleep });
+
   // Nothing here may reject unhandled while a slower line is still displaying.
   const settled = <T,>(p: Promise<T>) => p.then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, e }));
-  const portfolio = settled(portfolioCall);
-  const details = detailCalls.map(settled);
-  const mail = settled(mailCall);
-  const history = settled(historyCall);
+
+  const portfolio = settled(
+    pace(() => callTool(SERVERS.customer360, TOOLS.portfolio, { inputs: [{}] }, { read: true, cache: { staleTime: 15_000 } })),
+  );
+  // SCOPE: only the OPEN account's detail is read. The sweep has never fanned
+  // out across the book, and this is where that would show up if it ever did.
+  const details = DETAIL_TOOLS.map((tool) =>
+    settled(
+      pace(() => callTool(SERVERS.customer360, tool, { inputs: [{ accountId }] }, { read: true, cache: { staleTime: 15_000 } })),
+    ),
+  );
+  const mail = settled(pace(() => searchMailbox(accountName)));
+  const history = settled(pace(() => fetchActionHistory(accountId)));
 
   const lines: SyncLine[] = [
     { id: "portfolio", label: "Portfolio position", state: "pending" },
