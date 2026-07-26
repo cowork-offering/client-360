@@ -131,3 +131,36 @@ export function OpenInNcino({ snapshot, secondary }: { snapshot: Snapshot | unde
     </span>
   );
 }
+
+
+/** The credit package a plan created, when it created one. Secondary to the
+ *  facility itself: the banker filed a facility and got a package with it. */
+export function OpenCreatedPackage({ packageId }: { packageId: string }) {
+  const { data } = useApp();
+  const href = recordDeepLink(data.meta?.instanceUrl, "LLC_BI__Product_Package__c", packageId);
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        data-deeplink="created-package"
+        className="c360-press inline-flex items-center gap-1.5 rounded-[8px] px-2 py-1 text-[11px] font-semibold text-ink-muted underline decoration-dotted underline-offset-2 hover:text-ink"
+      >
+        Open the new package
+      </a>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2" data-deeplink="created-package">
+      <span className="text-[11px] font-semibold text-ink-faint" aria-disabled="true">
+        Open the new package
+      </span>
+      <span className="select-all font-mono text-[10.5px] text-ink-muted" title="Package record id">
+        {packageId}
+      </span>
+    </span>
+  );
+}

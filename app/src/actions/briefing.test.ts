@@ -109,3 +109,31 @@ describe("the briefing may no more invent a number than a draft", () => {
     expect(briefingText(without!)).not.toContain("It is on the queue because");
   });
 });
+
+
+describe("the facility is a choice only when there is one to make", () => {
+  const facilities = (stages: string[]) =>
+    stages.map((stage, i) => ({ loanId: `L${i}`, name: `Facility ${i}`, stage, status: "Active" }));
+
+  const briefingFor = (stages: string[], actionId = "loan-modification") => {
+    const bundle = { snapshot: { accountId: "001X", name: "Testco" }, exposure: { facilities: facilities(stages) } } as BorrowerBundle;
+    const schema = buildPanelSchema(actionId, { bundle, accountId: "001X", accountName: "Testco" })!;
+    return buildBriefing(actionId, schema, bundle, "Testco")!;
+  };
+
+  it("asks which facility when more than one is booked", () => {
+    const b = briefingFor(["Booked", "Booked"]);
+    expect(b.lead.some((s) => s.kind === "field" && s.fieldKey === "facility")).toBe(true);
+  });
+
+  it("names the only booked facility instead of asking", () => {
+    const b = briefingFor(["Booked", "Final Review"]);
+    expect(b.lead.some((s) => s.kind === "field" && s.fieldKey === "facility")).toBe(false);
+    expect(b.subject.context).toContain("Facility 0 is the booked facility on this relationship");
+  });
+
+  it("does the same on a renewal", () => {
+    expect(briefingFor(["Booked", "Booked"], "renewal").lead.some((s) => s.kind === "field" && s.fieldKey === "facility")).toBe(true);
+    expect(briefingFor(["Booked"], "renewal").subject.context).toContain("is the booked facility");
+  });
+});

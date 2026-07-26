@@ -122,6 +122,12 @@ export interface ExecuteResult {
   anchorName?: string | null;
   riskRatingReviewId?: string;
   loanId?: string;
+  /** The package the facility was filed on. Created by the plan when the
+   *  relationship had none; observed as `productPackageId`, not `packageId`. */
+  productPackageId?: string;
+  packageCreated?: boolean;
+  /** The borrowing-structure row: the relationship added as Borrower. */
+  involvementId?: string;
   /** The record's status as the org holds it, e.g. "In Review". Observed. */
   status?: string;
   /**
@@ -283,7 +289,14 @@ export interface StagePayloads {
   "new-facility-request": {
     idempotencyKey: string;
     rationale?: string;
-    productPackageId: string;
+    /**
+     * EXACTLY ONE ANCHOR (both variants observed). A relationship WITH a package
+     * sends `productPackageId` and no `accountId`; one WITHOUT sends `accountId`
+     * and no `productPackageId`, and the returned plan opens with a
+     * `create_package` step the way nCino's own wizard does.
+     */
+    productPackageId?: string;
+    accountId?: string;
     /** `LLC_BI__Product__c`. Collected because the org files a blank one as
      *  `Construction` and then names the loan from it. */
     product?: string | null;
@@ -368,6 +381,8 @@ export async function stageAction<K extends WriteActionId>(
     provenanceJson: typeof r.provenanceJson === "string" ? r.provenanceJson : undefined,
     executionHeld: r.executionHeld === true,
     heldReason: typeof r.heldReason === "string" ? r.heldReason : undefined,
+    createsPackage: r.createsPackage === true,
+    plannedPackageName: typeof r.plannedPackageName === "string" ? r.plannedPackageName : undefined,
     covenantCarryoverCount: typeof r.covenantCarryoverCount === "number" ? r.covenantCarryoverCount : undefined,
     provenance: parseProvenance(r.provenanceJson),
   }));
@@ -455,6 +470,9 @@ export async function executeAction(
     caseId: typeof r.caseId === "string" ? r.caseId : undefined,
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
     riskRatingReviewId: typeof r.riskRatingReviewId === "string" ? r.riskRatingReviewId : undefined,
+    productPackageId: typeof r.productPackageId === "string" ? r.productPackageId : undefined,
+    packageCreated: r.packageCreated === true,
+    involvementId: typeof r.involvementId === "string" ? r.involvementId : undefined,
     status: typeof r.status === "string" ? r.status : undefined,
     loanId: typeof r.loanId === "string" ? r.loanId : undefined,
     resumable: r.resumable === true,

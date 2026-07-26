@@ -14,21 +14,30 @@ import { buildPanelSchema } from "./schemas";
    ============================================================================= */
 
 const KEY = "LLC_BI__Loan__c.LLC_BI__Product__c";
-const PRODUCTS = ["Construction", "Equipment", "Line of Credit", "HELOC", "Purchase", "Deposit", "Term"];
+/** The COMMERCIAL record type's list. The field holds seven values; the Apex
+ *  validates against six, and `Term` is not one of them. */
+const PRODUCTS = ["Construction", "Equipment", "Line of Credit", "HELOC", "Purchase", "Deposit"];
 
 const bundle: BorrowerBundle = {
   snapshot: { accountId: "001X", name: "Testco", productPackageId: "a5Fbb000000HA1NEAW" },
 };
 
 describe("the product choice is wired from the cache to the panel", () => {
-  it("caches the seven active values the org describes", () => {
+  it("caches the six values the Commercial record type allows", () => {
     expect(OBSERVED_PICKLISTS[KEY].values).toEqual(PRODUCTS);
     expect(OBSERVED_PICKLISTS[KEY].complete).toBe(true);
   });
 
-  it("cites a live describe, not a relay", () => {
-    expect(OBSERVED_PICKLISTS[KEY].citation).toContain("live describe 2026-07-26");
+  it("cites the record-type scoping, not just the field describe", () => {
+    expect(OBSERVED_PICKLISTS[KEY].citation).toContain("record-type-scoped");
     expect(OBSERVED_PICKLISTS[KEY].citation).not.toContain("relayed");
+  });
+
+  it("never offers a value the tool would refuse", () => {
+    // `Term` is on the field and NOT on the Commercial record type. Offering it
+    // would send the banker into a VALIDATION_FAILED they could not have known
+    // about from the ticket.
+    expect(OBSERVED_PICKLISTS[KEY].values).not.toContain("Term");
   });
 
   it("exposes the cache under exactly the key the schema asks for", () => {

@@ -21,6 +21,7 @@ import { buildBriefing } from "../actions/briefing";
 import { DealTicket } from "./DealTicket";
 import type { ProvenanceKind, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
+import { bookedFacilities, facilityLabel } from "../data/facilityStage";
 import { ConfirmGate } from "./ConfirmGate";
 import { StepTracker } from "./StepTracker";
 import { isSimulationAllowed, simulateStagedOutput, type StagedOutput } from "../actions/stagedPlan";
@@ -509,6 +510,13 @@ export function ActionPanel({
       const n = typeof raw === "number" ? raw : Number(raw);
       return Number.isFinite(n) ? n : null;
     };
+    /** The booked facility the banker picked, resolved through the SAME label
+     *  the selector renders, so the choice and the id cannot drift apart. */
+    const selectedFacilityId = (): string | null => {
+      const picked = values.facility;
+      const match = bookedFacilities(bundle).find((f) => facilityLabel(f) === picked);
+      return match?.loanId ?? null;
+    };
     const citationOf = (key: string) => {
       const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
       return typeof c === "string" && c ? c : null;
@@ -556,13 +564,14 @@ export function ActionPanel({
     }
 
     if (actionId === "new-facility-request") {
-      // Anchored on the PACKAGE, not the account: that is what the org hangs a
-      // facility off, and it is the only id the observed request carries.
-      if (!packageId) return null;
+      // EXACTLY ONE ANCHOR, both variants observed: the package when the
+      // relationship has one, otherwise the account, which is the org's cue to
+      // create the package first. Sending both, or neither, is not a shape the
+      // tool has ever accepted.
       return {
         idempotencyKey,
         rationale,
-        productPackageId: packageId,
+        ...(packageId ? { productPackageId: packageId } : { accountId }),
         product: v("productType") as string | null,
         amount: nOf("amount"),
         termMonths: nOf("termMonths"),
@@ -605,7 +614,7 @@ export function ActionPanel({
     }
 
     if (actionId === "loan-modification") {
-      const loanId = citationOf("facility");
+      const loanId = selectedFacilityId();
       if (!loanId) return null;
       return {
         idempotencyKey,
@@ -619,7 +628,7 @@ export function ActionPanel({
     }
 
     if (actionId === "renewal") {
-      const loanId = citationOf("facility");
+      const loanId = selectedFacilityId();
       if (!loanId) return null;
       return {
         idempotencyKey,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
 import { buildPanelSchema } from "./schemas";
+import { ACTIONS_BY_ID } from "./registry";
 import sample from "../../../artifact/sample-data.json";
 
 /* =============================================================================
@@ -105,6 +106,59 @@ describe("Probe 5 — the new facility insert", () => {
       const s = JSON.stringify(schemaFor(actionId));
       expect(s, actionId).not.toContain("RootLoanId");
       expect(s, actionId).not.toContain("ChildLoanId");
+    }
+  });
+});
+
+
+describe("wave 2.1 — a package-less relationship is not a dead end", () => {
+  const withPackage: BorrowerBundle = {
+    snapshot: { accountId: "001X", name: "Testco", productPackageId: "a5Fbb000000HA1NEAW" },
+  };
+  const withoutPackage: BorrowerBundle = { snapshot: { accountId: "001X", name: "Testco" } };
+
+  const schemaFor = (bundle: BorrowerBundle) =>
+    buildPanelSchema("new-facility-request", { bundle, accountId: "001X", accountName: "Testco" })!;
+
+  it("blocks nothing when the relationship has no package", () => {
+    const s = schemaFor(withoutPackage);
+    expect(s.fields.filter((f) => f.gap?.blocksStaging)).toEqual([]);
+    const pkg = s.fields.find((f) => f.key === "package")!;
+    expect(pkg.value).toBe("A new package will be created first");
+    expect(pkg.editable).toBe(false);
+  });
+
+  it("says a package will be created first, the way the org's own wizard does", () => {
+    expect(schemaFor(withoutPackage).intro).toContain("No credit package exists yet");
+    expect(schemaFor(withoutPackage).intro).toContain("created first");
+  });
+
+  it("states the borrowing structure in BOTH cases: a facility insert creates none", () => {
+    for (const b of [withPackage, withoutPackage]) {
+      expect(schemaFor(b).intro).toContain("borrowing structure at 100 percent");
+    }
+  });
+
+  it("keeps the probe-backed naming fact in BOTH cases", () => {
+    for (const b of [withPackage, withoutPackage]) {
+      expect(schemaFor(b).intro).toContain("nCino names the loan itself on creation");
+    }
+  });
+
+  it("still points at the existing package when there is one", () => {
+    const pkg = schemaFor(withPackage).fields.find((f) => f.key === "package")!;
+    expect(pkg.prefill.citation).toBe("a5Fbb000000HA1NEAW");
+  });
+
+  it("offers the action with or without a package: it is relationship-level", () => {
+    const data = (bundle: BorrowerBundle) =>
+      ({
+        meta: { anchorAccountId: "001X", generatedAt: "2026-07-02T09:15:00Z" },
+        portfolio: { accounts: [{ accountId: "001X", name: "Testco", tce: 1 }] },
+        borrowers: { "001X": bundle },
+      }) as unknown as C360Data;
+    for (const b of [withPackage, withoutPackage]) {
+      expect(ACTIONS_BY_ID["new-facility-request"].availability(data(b), "001X").available).toBe(true);
     }
   });
 });

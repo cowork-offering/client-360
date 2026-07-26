@@ -90,6 +90,7 @@ export const PROVENANCE = {
   "borrower.exposure.facilities[].coverageRatio": { kind: "NCINO", source: "Customer360Exposure — org-computed per-facility coverage; nullable, renders '—'" },
   "borrower.exposure.facilities[].coverageShortfall": { kind: "NCINO", source: "Customer360Exposure — org-computed shortfall flag; drives the facility status chip" },
   "borrower.exposure.facilities[].status": { kind: "NCINO", source: "Customer360Exposure — lifecycle status; absent ⇒ treated active (F6)" },
+  "borrower.exposure.facilities[].stage": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Stage__c, the nCino loan stage. Gates modification and renewal, which the org accepts only against a Booked facility. Additive output; absent means not staged in this view and the action fails closed" },
   "borrower.exposure.facilities[].loanCovenants[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan_Covenant__c junction rows; an empty array is a fact, not a gap" },
   "borrower.exposure.facilities[].riskGrade": { kind: "NCINO", source: "Customer360Exposure — per-facility risk grade" },
   "borrower.exposure.facilities[].interestRate": { kind: "NCINO", source: "Customer360Exposure — note rate" },
@@ -319,6 +320,17 @@ export interface Facility {
   /** Lifecycle status. Absent or "Active" ⇒ active (F6). Explicitly closed /
    *  paid-off facilities are excluded from maturity derivation and display. */
   status?: string;
+  /**
+   * The nCino LOAN STAGE (`LLC_BI__Stage__c`): Qualification, Proposal, Final
+   * Review, Booked. DISTINCT from `status`, which is the lifecycle flag.
+   *
+   * A credit action accepts only a BOOKED facility (probe-proven), so this
+   * field decides whether modification and renewal are offered at all. It is
+   * additive on the Customer360Exposure read and may be ABSENT until that lands;
+   * absent means "not staged in this view", never "not booked", and the
+   * predicate fails closed rather than assuming either way.
+   */
+  stage?: string;
   name?: string;
   productType?: string;
   riskGrade?: string;

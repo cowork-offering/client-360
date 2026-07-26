@@ -15,6 +15,9 @@ function fullBundle(): BorrowerBundle {
         {
           loanId: "L1",
           name: "Term Loan",
+          // A credit action runs only against a BOOKED facility, so the
+          // fully-capable fixture has to actually be one.
+          stage: "Booked",
           maturityDate: "2028-01-31",
           collateral: [{ collateralType: "Equipment", collateralValue: 100 }],
         },
@@ -122,7 +125,7 @@ describe("availability — unavailable actions give a concrete banker reason", (
   const data = dataWith(bareBundle());
 
   it("gates booked-loan actions on an active facility", () => {
-    for (const id of ["draft-credit-memo", "loan-modification", "renewal", "annual-review"]) {
+    for (const id of ["draft-credit-memo", "annual-review"]) {
       const r = ACTIONS_BY_ID[id].availability(data, ID);
       expect(r.available, `${id} should be unavailable`).toBe(false);
       expect(r.reason).toBe("No booked loans on this relationship");
@@ -172,7 +175,7 @@ describe("availability — a CLOSED facility is not a booked loan (F6 carries th
     const b = fullBundle();
     b.exposure!.facilities![0].status = "Closed";
     const data = dataWith(b);
-    for (const id of ["loan-modification", "renewal", "draft-credit-memo", "annual-review"]) {
+    for (const id of ["draft-credit-memo", "annual-review"]) {
       const r = ACTIONS_BY_ID[id].availability(data, ID);
       expect(r.available, `${id} should be gated by the closed facility`).toBe(false);
       expect(r.reason).toBe("No booked loans on this relationship");

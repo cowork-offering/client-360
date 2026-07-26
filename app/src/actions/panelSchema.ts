@@ -76,6 +76,21 @@ export interface PanelField {
   required: boolean;
   /** Populated at runtime from the org describe; never authored in the schema. */
   options?: string[];
+  /**
+   * TRUE when the options are STAGED RECORDS rather than an org picklist's
+   * value set — a facility chooser, not a `LLC_BI__Status__c`.
+   *
+   * A33.1.6 governs picklist VALUE SETS: they come from the org describe and
+   * are never authored here. A record chooser is a different thing entirely,
+   * built from the same staged rows the exposure tab renders, so it declares no
+   * `optionsFrom` and the guard skips it. The distinction is marked rather than
+   * inferred, so the guard stays strict for everything that IS a picklist.
+   */
+  optionsAreRecords?: true;
+  /** Values that EXIST but cannot be chosen, each with the reason. Listed rather
+   *  than hidden: a banker looking for their facility should find out why it is
+   *  not selectable, not be left wondering whether the cockpit lost it. */
+  disabledOptions?: Array<{ value: string; reason: string }>;
   optionsFrom?: OptionSource;
   target: PanelFieldTarget;
   /** Short banker-facing note rendered under the field (a caveat, a scale). */

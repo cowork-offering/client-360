@@ -133,11 +133,35 @@ describe("editability is a property of the org (A33.1.6)", () => {
   it("picklists declare an org option source and hardcode NO value set", () => {
     for (const id of SHIPPING) {
       for (const f of buildPanelSchema(id, ctx)!.fields) {
-        if (f.type !== "picklist") continue;
+        // A33.1.6 governs picklist VALUE SETS. A record chooser built from
+        // staged rows is a different thing and marks itself as one.
+        if (f.type !== "picklist" || f.optionsAreRecords) continue;
         expect(f.optionsFrom, `${id}.${f.key}`).toBeTruthy();
         // Options only appear when the org supplied them.
         expect(f.options, `${id}.${f.key}`).toBeUndefined();
       }
+    }
+  });
+
+  it("a record chooser is built from staged rows, never from an invented set", () => {
+    const booked: BorrowerBundle = {
+      snapshot: { accountId: "001X", name: "Testco" },
+      exposure: {
+        facilities: [
+          { loanId: "L1", name: "Term Loan", stage: "Booked", status: "Active" },
+          { loanId: "L2", name: "Revolver", stage: "Final Review", status: "Active" },
+        ],
+      },
+    };
+    for (const id of ["loan-modification", "renewal"]) {
+      const f = buildPanelSchema(id, { bundle: booked, accountId: "001X", accountName: "Testco" })!.fields.find(
+        (x) => x.key === "facility",
+      )!;
+      expect(f.optionsAreRecords, id).toBe(true);
+      expect(f.optionsFrom, id).toBeUndefined();
+      // Only the booked one is choosable; the other is listed with its stage.
+      expect(f.options, id).toEqual(["Term Loan"]);
+      expect(f.disabledOptions, id).toEqual([{ value: "Revolver", reason: "at Final Review" }]);
     }
   });
 

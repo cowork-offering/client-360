@@ -3,7 +3,7 @@ import type { Snapshot } from "../data/contract";
 import type { StagedOutput } from "../actions/stagedPlan";
 import { actionTerminal, blockingPrecondition, STEP_TYPE_LABEL, type StepState, type TrackerState } from "../actions/tracker";
 import type { DecisionToken } from "../actions/decisionToken";
-import { OpenCreatedRecord, OpenInNcino } from "./DeepLink";
+import { OpenCreatedPackage, OpenCreatedRecord, OpenInNcino } from "./DeepLink";
 import type { ExecuteResult } from "../channel/writeTools";
 import { compilePace } from "../actions/compile";
 
@@ -200,6 +200,16 @@ export function StepTracker({
         })}
       </div>
 
+      {/* The package the plan created, when it created one. A second record was
+          filed and the banker should know its name and be able to open it. */}
+      {!revealing && outcome?.packageCreated && outcome.productPackageId && (
+        <div className="c360-row-land border-b border-divider px-5 py-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Credit package created</div>
+          <div className="mt-0.5 text-[12.5px] font-semibold text-ink">{outcome.anchorName ?? "New credit package"}</div>
+          <div className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{outcome.productPackageId}</div>
+        </div>
+      )}
+
       {/* The stamp. Sober by design: a record was filed, which is a fact, not a
           celebration. It appears only once every row has landed. */}
       {!revealing && filed && filed.nameConfirmed && terminal === "success" && (
@@ -263,7 +273,11 @@ export function StepTracker({
         {!revealing && filed ? (
           <>
             <OpenCreatedRecord actionId={actionId} recordId={filed.id} />
-            <OpenInNcino snapshot={snapshot} secondary />
+            {outcome?.packageCreated && outcome.productPackageId ? (
+              <OpenCreatedPackage packageId={outcome.productPackageId} />
+            ) : (
+              <OpenInNcino snapshot={snapshot} secondary />
+            )}
           </>
         ) : (
           <>

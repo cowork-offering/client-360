@@ -15,9 +15,9 @@
    ============================================================================= */
 
 import type { BorrowerBundle, Facility } from "../data/contract";
-import { fmtMoney } from "../data/format";
 import { fmtCovVal } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
+import { bookedFacilities, facilityLabel, unbookedFacilities } from "../data/facilityStage";
 import type { PanelField, PanelSchema } from "./panelSchema";
 import { PREFILL_PROVENANCE } from "./panelSchema";
 
@@ -386,8 +386,9 @@ function newFacilitySchema(ctx: SchemaContext): PanelSchema {
   return {
     writeObject: OBJ,
     writeObjectLabel: "facility request",
-    intro:
-      "Requests a new facility on this relationship's package. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later.",
+    intro: pkg
+      ? "Requests a new facility on this relationship's package, with the borrower added to its borrowing structure at 100 percent. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later."
+      : "Requests a new facility for this relationship. No credit package exists yet, so one is created first and the facility filed under it, with the borrower added to its borrowing structure at 100 percent. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later.",
     fields: [
       field({
         key: "account",
@@ -404,18 +405,16 @@ function newFacilitySchema(ctx: SchemaContext): PanelSchema {
         key: "package",
         label: "Package",
         type: "readonly",
-        value: pkg ? "This relationship's deal package" : null,
-        prefill: { source: "NCINO_RECORD", citation: pkg },
+        // A relationship with no package is not a dead end: the org's own wizard
+        // creates one first, and so does the plan. No blocking gap.
+        value: pkg ? "This relationship's deal package" : "A new package will be created first",
+        prefill: pkg
+          ? { source: "NCINO_RECORD", citation: pkg }
+          : { source: "COMPUTED", citation: "created by the plan, named the way nCino's wizard names it" },
         editable: false,
-        editableReason: "the facility hangs off the existing package",
-        required: true,
+        editableReason: pkg ? "the facility hangs off the existing package" : "the plan creates it before the facility",
+        required: false,
         target: { object: OBJ, field: "LLC_BI__Product_Package__c" },
-        gap: pkg
-          ? undefined
-          : {
-              reason: "No product package is staged for this relationship, so there is nothing to hang a new facility off.",
-              blocksStaging: true,
-            },
       }),
       field({
         key: "amount",
@@ -725,20 +724,31 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
   const fac = primaryFacility(ctx.bundle);
   const asked = requestedCommitment(ctx.bundle);
 
+  // Only BOOKED facilities can carry a credit action. The rest are listed with
+  // their stage rather than hidden, so a banker hunting for a facility learns
+  // why it is not on offer.
+  const booked = bookedFacilities(ctx.bundle);
+  const blocked = unbookedFacilities(ctx.bundle);
+  const chosen = booked.find((f) => f.loanId === fac?.loanId) ?? booked[0];
+
   const anchor = field({
     key: "facility",
     label: "Facility",
-    type: "readonly",
-    value: fac ? `${fac.name ?? "Facility"}${fac.committed != null ? ` at ${fmtMoney(fac.committed)}` : ""}` : null,
-    prefill: { source: "NCINO_RECORD", citation: fac?.loanId },
-    editable: false,
-    editableReason: "the change is anchored on this facility",
+    type: "picklist",
+    // One booked facility is the answer, not a question: preselect it.
+    value: chosen ? facilityLabel(chosen) : null,
+    prefill: chosen ? { source: "NCINO_RECORD", citation: chosen.loanId } : { source: "BANKER" },
+    editable: booked.length > 1,
+    editableReason: booked.length > 1 ? undefined : "the only booked facility on this relationship",
     required: true,
+    optionsAreRecords: true,
+    options: booked.map(facilityLabel),
+    disabledOptions: blocked.map((b) => ({ value: facilityLabel(b.facility), reason: b.reason })),
     target: { object: OBJ, field: "Id" },
-    gap: fac?.loanId
+    gap: chosen
       ? undefined
       : {
-          reason: "No active facility is staged on this relationship, so there is nothing to change.",
+          reason: "No booked facility is staged on this relationship, so there is nothing a credit action can run against.",
           blocksStaging: true,
         },
   });

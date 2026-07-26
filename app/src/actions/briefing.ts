@@ -19,6 +19,7 @@ import type { BorrowerBundle, ReasonCode } from "../data/contract";
 import type { PanelSchema } from "./panelSchema";
 import { money, type DraftFigure } from "./drafts";
 import { isActiveFacility } from "../data/worklist";
+import { bookedFacilities, facilityLabel } from "../data/facilityStage";
 
 export type BriefingSegment =
   | { kind: "text"; text: string }
@@ -158,11 +159,14 @@ function serviceRequest(b: BorrowerBundle | null, name: string): Briefing {
 
 function newFacility(b: BorrowerBundle | null, name: string): Briefing {
   const figures: DraftFigure[] = [];
+  const hasPackage = Boolean(b?.snapshot?.productPackageId);
   const committed = money(b?.exposure?.totalCommitted, "borrower.exposure.totalCommitted", figures);
   return {
     subject: {
       title: `New facility for ${name}`,
-      context: `${committed ? `${name} is carried at ${committed} committed today. ` : ""}nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`,
+      context: hasPackage
+        ? `${committed ? `${name} is carried at ${committed} committed today. ` : ""}${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership: a facility insert creates no such row on its own. nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
+        : `No credit package exists yet for this relationship. One will be created first, the way nCino's own wizard does, and the facility filed under it. ${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership, which a facility insert does not do on its own. The org names both records itself.`,
     },
     lead: [
       t("This requests a "),
@@ -217,12 +221,21 @@ function facilityChange(b: BorrowerBundle | null, name: string, kind: "modificat
   const figures: DraftFigure[] = [];
   const drawn = money(b?.exposure?.totalOutstanding, "borrower.exposure.totalOutstanding", figures);
   const held = "The plan is staged and preserved; filing it awaits nCino's own approval path.";
+  // The facility is a CHOICE only when more than one is booked. With exactly
+  // one there is nothing to choose, so the ticket names it instead of asking.
+  const booked = bookedFacilities(b);
+  const picks = booked.length > 1;
+  const only = booked[0] ? facilityLabel(booked[0]) : null;
 
   if (kind === "renewal") {
     return {
-      subject: { title: `Renewal for ${name}`, context: held },
+      subject: {
+        title: `Renewal for ${name}`,
+        context: only && !picks ? `${only} is the booked facility on this relationship. ${held}` : held,
+      },
       lead: [
-        t("This renews the facility to "),
+        ...(picks ? [t("This renews "), f("facility", "choose the facility")] : [t("This renews the facility")]),
+        t(" to "),
         f("newMaturityDate", "pick the new maturity"),
         t(" at "),
         f("requestedRate", "enter the rate"),
@@ -236,10 +249,10 @@ function facilityChange(b: BorrowerBundle | null, name: string, kind: "modificat
   return {
     subject: {
       title: `Modification for ${name}`,
-      context: `${drawn ? `${drawn} is drawn today. ` : ""}${held}`,
+      context: `${drawn ? `${drawn} is drawn today. ` : ""}${only && !picks ? `${only} is the booked facility on this relationship. ` : ""}${held}`,
     },
     lead: [
-      t("This moves the commitment to "),
+      ...(picks ? [t("This modifies "), f("facility", "choose the facility"), t(", moving the commitment to ")] : [t("This moves the commitment to ")]),
       f("newCommitment", "enter the new commitment"),
       t(" over "),
       f("requestedTermMonths", "enter the term"),

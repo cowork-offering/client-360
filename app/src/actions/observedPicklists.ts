@@ -49,12 +49,13 @@ export const OBSERVED_PICKLISTS: Record<string, ObservedPicklist> = {
     complete: true,
     citation: CONTRACT_A33_5_7,
   },
-  // Upgraded from a contract relay to a live describe on 2026-07-26: same seven
-  // values, now confirmed by this org rather than reported to us.
+  // RECORD-TYPE SCOPED. The field's full value set is seven, but the Apex
+  // validates against the COMMERCIAL record type's list, which excludes `Term`.
+  // Offering a value the tool will refuse is worse than offering six.
   "LLC_BI__Loan__c.LLC_BI__Product__c": {
-    values: ["Construction", "Equipment", "Line of Credit", "HELOC", "Purchase", "Deposit", "Term"],
+    values: ["Construction", "Equipment", "Line of Credit", "HELOC", "Purchase", "Deposit"],
     complete: true,
-    citation: LIVE_DESCRIBE_2026_07_26,
+    citation: "record-type-scoped values, PROBE-LEDGER wave 5 + live RT describe 2026-07-26",
   },
   // The org has already answered this one, so the panel must never block on it:
   // the tool creates a real LLC_BI__Review__c and the banker has to be able to

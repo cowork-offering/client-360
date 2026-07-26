@@ -98,6 +98,20 @@ describe("the wave-2 request bodies match what the org accepted", () => {
     expect(body.productType).toBeUndefined();
   });
 
+  it("OMITS the package id when the relationship has none (wave 2.1)", async () => {
+    const body = await sent("new-facility-request", {
+      idempotencyKey: "zz",
+      product: "Term",
+      amount: 750000,
+      primaryLoanPurpose: "business_expansion",
+    });
+    // The KEY IS ABSENT, not null: an omitted key asks the org to create the
+    // package first; a null would be a claim about a package that does not
+    // exist. The plan then opens with the org's own create_package step.
+    expect("productPackageId" in body).toBe(false);
+    expect(body.product).toBe("Term");
+  });
+
   it("sends the four named risk factor actuals, not a map", async () => {
     const body = await sent("risk-rating-review", {
       idempotencyKey: "zz",
@@ -367,5 +381,117 @@ describe("Codex review fixes, pinned against the envelopes", () => {
     expect(out.ok === false && out.error.message).toContain("founder-gated");
     // Not one call left the page.
     expect(callTool).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("package-first new facility (VERIFIED live 2026-07-26)", () => {
+  const sent = async (payload: unknown) => {
+    const callTool = installMcp(PLAN);
+    await stageAction("new-facility-request", payload as never);
+    return (callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> }).inputs[0];
+  };
+
+  it("sends the ACCOUNT as the anchor when there is no package, and no package key", async () => {
+    const body = await sent({
+      idempotencyKey: "fable-pkgfirst-20260726-001",
+      rationale: "r",
+      accountId: "001bb00001I7HKgAAN",
+      product: "Equipment",
+      amount: 500000,
+      termMonths: 36,
+      primaryLoanPurpose: "business_expansion",
+    });
+    expect(Object.keys(body).sort()).toEqual([
+      "accountId",
+      "amount",
+      "idempotencyKey",
+      "primaryLoanPurpose",
+      "product",
+      "rationale",
+      "termMonths",
+    ]);
+    expect("productPackageId" in body).toBe(false);
+  });
+
+  it("names the purpose field primaryLoanPurpose: omitting it is REQUIRED_FIELD_MISSING", async () => {
+    const body = await sent({ idempotencyKey: "k", accountId: "001X", primaryLoanPurpose: "business_expansion" });
+    expect(body.primaryLoanPurpose).toBe("business_expansion");
+    expect(body.purpose).toBeUndefined();
+  });
+
+  it("reads the planned package name and the createsPackage flag off the plan", async () => {
+    installMcp({
+      ok: true,
+      error: null,
+      result: {
+        ...PLAN.result,
+        createsPackage: true,
+        plannedPackageName: "ZZ-FABLE-VERIFY-20260726 DO NOT USE - 7/26/2026 - PP",
+        productPackageId: null,
+      },
+    });
+    const out = await stageAction("new-facility-request", { idempotencyKey: "k", accountId: "001X" });
+    expect(out.ok && out.result.createsPackage).toBe(true);
+    expect(out.ok && out.result.plannedPackageName).toContain("- PP");
+  });
+
+  it("reads the created package and the borrowing-structure row off the execute result", async () => {
+    installMcp({
+      ok: true,
+      error: null,
+      result: {
+        stagingId: "s",
+        terminalState: "partial",
+        resumable: true,
+        stage: "Qualification",
+        loanId: "a4Zbb0000027MaXEAU",
+        recordName: "ZZ - Equipment - $500,000.00",
+        anchorName: "ZZ-FABLE-VERIFY-20260726 DO NOT USE - 7/26/2026 - PP",
+        productPackageId: "a5Fbb000000IH1XEAW",
+        packageCreated: true,
+        involvementId: "a4Lbb000000NJ6nEAG",
+        steps: [
+          { id: "create_package", type: "write", label: "Create the package", state: "verified" },
+          { id: "write_involvement", type: "write", label: "Add the borrower", state: "verified" },
+          { id: "wait_loan_detail", type: "wait", label: "Wait", state: "waiting" },
+        ],
+      },
+    });
+    const out = await executeAction("new-facility-request", {
+      idempotencyKey: "k",
+      stagingId: "s",
+      planHash: "h",
+      decisionToken: "t",
+      approverUserId: "005bb00000ftouDAAQ",
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    // The observed field is productPackageId, not packageId.
+    expect(out.result.productPackageId).toBe("a5Fbb000000IH1XEAW");
+    expect(out.result.packageCreated).toBe(true);
+    expect(out.result.involvementId).toBe("a4Lbb000000NJ6nEAG");
+    expect(out.result.steps.map((s) => s.id)).toContain("write_involvement");
+  });
+
+  it("carries the nine-step plan shape the org returned", async () => {
+    const ids = [
+      "create_package",
+      "write_loan",
+      "write_involvement",
+      "verify_loan",
+      "wait_loan_detail",
+      "write_loan_purpose",
+      "hop_to_proposal",
+      "verify_hop",
+      "observe_loan_officer",
+    ];
+    installMcp({
+      ok: true,
+      error: null,
+      result: { ...PLAN.result, steps: ids.map((id) => ({ id, type: "write", label: id, state: "pending" })) },
+    });
+    const out = await stageAction("new-facility-request", { idempotencyKey: "k", accountId: "001X" });
+    expect(out.ok && out.result.steps.map((s) => s.id)).toEqual(ids);
   });
 });

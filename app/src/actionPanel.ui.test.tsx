@@ -30,8 +30,28 @@ afterEach(() => {
  *  must stage it. Without this the confirm gesture fails closed by design. */
 const APPROVER_ID = "005bb00000ftouDAAQ";
 
-function mount(meta?: Record<string, unknown>): HTMLDivElement {
-  const data = meta ? ({ ...DATA, meta: { ...DATA.meta, ...meta } } as C360Data) : DATA;
+/** The first two live facilities booked, the rest at Final Review.
+ *
+ *  Modification and renewal are only offered against a booked facility, so a
+ *  test ABOUT those tickets needs one. Two keeps the SELECTOR meaningful (with
+ *  a single booked facility there is nothing to choose and the ticket names it
+ *  instead), and Kingsley's third facility keeps the disabled list under test. */
+function withBookedFacilities(data: C360Data): C360Data {
+  const next = structuredClone(data) as C360Data;
+  for (const b of Object.values(next.borrowers ?? {})) {
+    let booked = 0;
+    for (const f of b.exposure?.facilities ?? []) {
+      if (f.status === "Paid Off") continue;
+      f.stage = booked < 2 ? "Booked" : "Final Review";
+      booked += 1;
+    }
+  }
+  return next;
+}
+
+function mount(meta?: Record<string, unknown>, booked = false): HTMLDivElement {
+  const base = booked ? withBookedFacilities(DATA) : DATA;
+  const data = meta ? ({ ...base, meta: { ...base.meta, ...meta } } as C360Data) : base;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -65,8 +85,13 @@ const expandAllFields = () => {
 };
 
 /** Open an account, its Client Actions sheet, then a panel-backed action row. */
-function openActionPanel(actionLabel: string, account = "Sterling Fabrication", meta?: Record<string, unknown>) {
-  mount(meta);
+function openActionPanel(
+  actionLabel: string,
+  account = "Sterling Fabrication",
+  meta?: Record<string, unknown>,
+  booked = false,
+) {
+  mount(meta, booked);
   click(openRow(account));
   click(byText(/Client Actions/)!);
   const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
@@ -515,16 +540,59 @@ describe("wave 2 — the five new tickets", () => {
 
   // One mount per case: the harness keeps a single root, so looping mounts
   // inside one test would leave four orphaned trees in the document.
-  it.each(["New Facility Request", "Risk Rating Review", "Covenant Review", "Loan Modification", "Renewal"])(
-    "opens a ticket for %s",
-    (label) => {
-      openActionPanel(label);
-      expect(panel(label)).toBeTruthy();
-    },
-  );
+  it.each(["New Facility Request", "Risk Rating Review", "Covenant Review"])("opens a ticket for %s", (label) => {
+    openActionPanel(label);
+    expect(panel(label)).toBeTruthy();
+  });
+
+  // These two need a BOOKED facility to be offered at all (Probe 9).
+  it.each(["Loan Modification", "Renewal"])("opens a ticket for %s against a booked facility", (label) => {
+    openActionPanel(label, "Sterling Fabrication", undefined, true);
+    expect(panel(label)).toBeTruthy();
+  });
+
+  it("offers only booked facilities in the selector, and says why the others are out", () => {
+    // Kingsley: two booked, one at Final Review, one paid off.
+    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+    const pill = [...panel("Loan Modification")!.querySelectorAll("button")].find((b) =>
+      /Facility/.test(b.textContent ?? ""),
+    )!;
+    click(pill);
+    const sheet = [...document.querySelectorAll('[role="dialog"]')].find((d) => d.getAttribute("aria-label") === "Facility")!;
+    expect([...sheet.querySelectorAll("[aria-pressed]")].map((b) => b.textContent?.trim())).toEqual([
+      "Kingsley Equipment Term Loan A",
+      "Kingsley Working Capital Revolver",
+    ]);
+    const off = [...sheet.querySelectorAll("[data-disabled-option]")].map((d) => ({
+      value: d.getAttribute("data-disabled-option"),
+      text: d.textContent,
+    }));
+    expect(off.find((o) => o.value === "Kingsley CapEx Facility II")!.text).toContain("at Final Review");
+    expect(off.find((o) => o.value === "Kingsley Original Equipment Term Loan")!.text).toContain("Paid Off");
+  });
+
+  it("preselects a booked facility so the ticket opens ready", () => {
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    const p = panel("Loan Modification")!;
+    const pill = [...p.querySelectorAll("button")].find((b) => /Facility/.test(b.textContent ?? ""))!;
+    // Not a prompt: a booked facility is already chosen.
+    expect(pill.textContent).toContain("Sterling");
+    expect(pill.textContent).not.toContain("choose the facility");
+  });
+
+  it.each(["Loan Modification", "Renewal"])("withholds %s when nothing is booked, with the reason", (label) => {
+    mount();
+    click(openRow("Sterling Fabrication"));
+    click(byText(/Client Actions/)!);
+    const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes(label),
+    )!;
+    expect(row.hasAttribute("disabled")).toBe(true);
+    expect(row.textContent).toContain("Facility stages are not staged in this view");
+  });
 
   it("prefills the modification from the client's own ask", () => {
-    openActionPanel("Loan Modification");
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
     const hero = panel("Loan Modification")!.querySelector("#hero-newCommitment") as HTMLInputElement;
     // Sterling asked to go from $10.0M to $13.0M; the banker retypes nothing.
     expect(hero.value).toBe("13000000");
@@ -532,7 +600,7 @@ describe("wave 2 — the five new tickets", () => {
   });
 
   it("shows the modification's coverage and leverage move as the ask changes", () => {
-    openActionPanel("Loan Modification");
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
     const p = panel("Loan Modification")!;
     expect(p.textContent).toContain("Commitment");
     expect(p.textContent).toContain("Collateral coverage");
@@ -542,7 +610,7 @@ describe("wave 2 — the five new tickets", () => {
 
   it("holds filing on a modification, and says exactly why", () => {
     installWriteMcp();
-    openActionPanel("Loan Modification");
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
     click(byText(/Review the plan/)!);
     return flush().then(() => {
       const p = panel("Loan Modification")!;
@@ -556,7 +624,7 @@ describe("wave 2 — the five new tickets", () => {
 
   it("still stages a real plan for a held action", async () => {
     const callTool = installWriteMcp();
-    openActionPanel("Loan Modification");
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
     click(byText(/Review the plan/)!);
     await flush();
     expect(callTool.mock.calls.filter((c) => String(c[1]) === "stage_loan_modification")).toHaveLength(1);
@@ -633,7 +701,7 @@ describe("wave 2 — the five new tickets", () => {
     expect(p.textContent).toContain("the org assigns this and overwrites what we send");
   });
 
-  it("offers the seven products the org describes, and nothing else", () => {
+  it("offers the six products the Commercial record type allows, and nothing else", () => {
     openActionPanel("New Facility Request");
     const pill = [...panel("New Facility Request")!.querySelectorAll("button")].find((b) => /Product/.test(b.textContent ?? ""))!;
     click(pill);
@@ -645,7 +713,6 @@ describe("wave 2 — the five new tickets", () => {
       "HELOC",
       "Purchase",
       "Deposit",
-      "Term",
     ]);
   });
 });

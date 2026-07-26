@@ -10,7 +10,7 @@ function bundle(): BorrowerBundle {
     snapshot: { accountId: ID, name: NAME, primaryRiskRating: "5" },
     exposure: {
       facilities: [
-        { loanId: "L1", maturityDate: "2027-03-15", collateral: [{ collateralType: "Equipment" }] },
+        { loanId: "L1", stage: "Booked", maturityDate: "2027-03-15", collateral: [{ collateralType: "Equipment" }] },
       ],
     },
     covenants: { covenants: [{ covenantType: "DSC" }] },

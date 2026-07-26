@@ -62,6 +62,10 @@ export interface StagedOutput {
   heldReason?: string;
   /** A33.2.4(c) — loan-level covenants that would carry to the clone. */
   covenantCarryoverCount?: number;
+  /** New facility: whether the plan creates the package first, and the name it
+   *  will carry. The org's own naming convention, computed server-side. */
+  createsPackage?: boolean;
+  plannedPackageName?: string;
   /** Hash over the ordered steps plus resolved field values. Immutable.
    *  `execute_*` refuses a mismatch. */
   planHash: string;

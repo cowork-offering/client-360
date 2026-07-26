@@ -102,6 +102,9 @@ function OptionSheet({
           </p>
         ) : (
           <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 pb-1">
+            {/* Rendered but not choosable, each with the org's reason. Hiding
+                them would leave a banker hunting for a facility that is right
+                there in the exposure tab. */}
             {options.map((o) => {
               const picked = value === o;
               return (
@@ -130,6 +133,19 @@ function OptionSheet({
                 </li>
               );
             })}
+            {(field.disabledOptions ?? []).map((o) => (
+              <li key={`off-${o.value}`}>
+                <div
+                  aria-disabled="true"
+                  data-disabled-option={o.value}
+                  className="flex w-full cursor-not-allowed items-center gap-2 rounded-[10px] border border-dashed px-3 py-2.5 text-left text-[12.5px]"
+                  style={{ borderColor: "var(--border)", color: "var(--ink-faint)" }}
+                >
+                  <span className="flex-1 whitespace-normal break-words">{o.value}</span>
+                  <span className="flex-none text-[10.5px]">{o.reason}</span>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </div>

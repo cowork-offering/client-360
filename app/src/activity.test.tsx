@@ -183,6 +183,9 @@ describe("A30.3 — detail popup", () => {
   });
 
   it("opens the ticket for a next-step action that has one (A33.1.1)", async () => {
+    // Collateral Valuation is the other staged next step and needs no booked
+    // facility; Loan Modification is gated on one (Probe 9) and has its own
+    // availability tests.
     // Loan Modification became panel-backed in wave 2, so the next step now
     // opens its ticket instead of narrating a prompt. The entry point is the
     // same modal the Client Actions row and the chat chip open.
@@ -191,10 +194,10 @@ describe("A30.3 — detail popup", () => {
     mount();
     click(openRow("Sterling Fabrication"));
     click(byText(/Headroom analysis concluded/)!);
-    const step = [...modal()!.querySelectorAll("button")].find((b) => b.textContent?.includes("Loan Modification"))!;
+    const step = [...modal()!.querySelectorAll("button")].find((b) => b.textContent?.includes("Collateral Valuation"))!;
     await clickAsync(step);
     expect(
-      [...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Loan Modification"),
+      [...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Collateral Valuation"),
     ).toBe(true);
     // A ticket is opened locally: nothing is narrated to the desk until the
     // banker confirms a plan.
@@ -366,18 +369,33 @@ describe("A30.4 — next steps are shared state", () => {
     expect(resolved[0].availability).toHaveProperty("available");
   });
 
+  /** Sterling's facilities carry no stage, so modification is correctly gated
+   *  out of the chips. This is the same data with one booked facility, which is
+   *  what the next-step-to-chip path is actually about. */
+  const bookedData = (() => {
+    const next = structuredClone(DATA) as C360Data;
+    const facs = next.borrowers?.[STERLING]?.exposure?.facilities ?? [];
+    if (facs[0]) facs[0].stage = "Booked";
+    return next;
+  })();
+
   it("the SAME next steps feed the chat suggestions, ranked first", () => {
-    const wl = deriveWorklist(DATA);
-    const chips = suggestActions(DATA, wl, STERLING, "Sterling Fabrication Co.");
+    const chips = suggestActions(bookedData, deriveWorklist(bookedData), STERLING, "Sterling Fabrication Co.");
     // Sterling's analysis recommends collateral valuation then modification —
     // those outrank anything derived from raw signals.
     expect(chips[0].id).toBe("collateral-valuation");
     expect(chips.map((c) => c.id)).toContain("loan-modification");
   });
 
+  it("drops a next step the relationship cannot actually take", () => {
+    // Availability is the gate, even for an agent-recommended next step: with
+    // no booked facility the modification is not offered, and not suggested.
+    const chips = suggestActions(DATA, deriveWorklist(DATA), STERLING, "Sterling Fabrication Co.");
+    expect(chips.map((c) => c.id)).not.toContain("loan-modification");
+  });
+
   it("chat suggests the modification from the analysis nextSteps", () => {
-    const wl = deriveWorklist(DATA);
-    const chips = suggestActions(DATA, wl, STERLING, "Sterling Fabrication Co.");
+    const chips = suggestActions(bookedData, deriveWorklist(bookedData), STERLING, "Sterling Fabrication Co.");
     const mod = chips.find((c) => c.id === "loan-modification")!;
     expect(mod).toBeTruthy();
     expect(mod.prompt).toContain("Sterling Fabrication Co.");

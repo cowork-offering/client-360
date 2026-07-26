@@ -22,6 +22,7 @@
       Do not wire apexAction without the approval gate.
    ============================================================================= */
 
+import { bookedFacilityAvailability } from "../data/facilityStage";
 import type { BorrowerBundle, C360Data, Id } from "../data/contract";
 import { isActiveFacility } from "../data/worklist";
 
@@ -170,7 +171,9 @@ export const ACTIONS: ClientAction[] = [
     icon: "modify",
     promptTemplate:
       "Start a loan modification for {account} ({accountId}) — summarise the booked facilities and the modification options.",
-    availability: (data, accountId) => withBundle(data, accountId, requireActivePackage),
+    // nCino accepts a credit action only against a BOOKED facility, so the
+    // action is withheld where none exists and the real reason is shown (A27.3).
+    availability: (data, accountId) => withBundle(data, accountId, (b) => bookedFacilityAvailability(b, "modifications")),
     apexAction: { tool: "ncino_create_modification", params: { accountId: "{accountId}" } },
      hasPanel: true,
   },
@@ -183,7 +186,7 @@ export const ACTIONS: ClientAction[] = [
     icon: "renew",
     promptTemplate:
       "Begin the renewal workflow for {account} ({accountId}) — start with the facility closest to maturity.",
-    availability: (data, accountId) => withBundle(data, accountId, requireActivePackage),
+    availability: (data, accountId) => withBundle(data, accountId, (b) => bookedFacilityAvailability(b, "renewals")),
     apexAction: { tool: "ncino_create_renewal", params: { accountId: "{accountId}" } },
      hasPanel: true,
   },

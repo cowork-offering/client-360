@@ -365,6 +365,91 @@ Twelve findings, all accepted. The ones that change what the cockpit will and wi
 - Service request `origin` is sent; execute `status` and plan `waitBudgetMs` are parsed; a failed
   resume renders through the full error doctrine, on the screen the banker is actually looking at.
 
+### Wave 2.1 — modification and renewal require a BOOKED facility
+
+nCino accepts a credit action only against a facility at stage `Booked` (Probe 9: every real renewal
+chain in the org has that shape; anything else is refused with "The request contains invalid
+facilities"). Both actions are now gated on it and render per A27.3 — visible, unavailable, with the
+real reason — and no ticket opens. Inside the ticket the facility selector offers only booked
+facilities; the others are LISTED with their stage rather than hidden, so a banker hunting for a
+facility learns why it is not on offer.
+
+**⚠️ THE STAGE FIELD IS NOT FLOWING YET, so both actions are unavailable on every relationship.**
+`Facility.stage` (`LLC_BI__Stage__c`) is new on the contract and additive on the `Customer360Exposure`
+read; until the Apex lane emits it, the predicate FAILS CLOSED with "Facility stages are not staged in
+this view, so a booked facility cannot be confirmed". That is deliberate: absent is not the same as
+not-booked, and neither may be read as permission. Three outcomes stay three distinct messages —
+cannot tell, can tell and the answer is no, and yes.
+
+The facility selector is a RECORD chooser, not an org picklist: it declares `optionsAreRecords` and is
+excluded from the A33.1.6 value-set rule, which stays strict for everything that is a picklist.
+
+### Wave 2.1 — package-first new facility (VERIFIED live, seams closed)
+
+`stage_new_facility` takes **exactly one anchor**, and both variants are observed: a relationship WITH
+a package sends `productPackageId`; one WITHOUT sends `accountId`, and the returned plan opens with a
+`create_package` step named to the org's own convention (`<Account> - <date> - PP`). Sending both, or
+neither, is not a shape the tool has accepted. The purpose field is `primaryLoanPurpose`; omitting it
+is `REQUIRED_FIELD_MISSING`.
+
+The plan is NINE steps: `create_package`, `write_loan`, `write_involvement`, `verify_loan`,
+`wait_loan_detail`, `write_loan_purpose`, `hop_to_proposal`, `verify_hop`, `observe_loan_officer`.
+
+**The borrowing structure is stated in the ticket, in both variants:** the relationship is added to
+the facility's borrowing structure as Borrower at 100 percent ownership, because a facility insert
+creates no such row on its own. Filed under `LLC_BI__Legal_Entities__c`.
+
+The terminal state surfaces the **created package** with its org-assigned name and id, and a secondary
+"Open the new package" link beside the facility's own. Two records were filed; the banker sees both.
+Execute results carry `productPackageId` (not `packageId`), `packageCreated` and `involvementId`.
+
+**Products are RECORD-TYPE SCOPED.** The field holds seven values; the Apex validates against the
+Commercial record type's six, which exclude `Term`. The panel offers exactly those six: offering a
+value the tool will refuse sends a banker into a `VALIDATION_FAILED` the ticket could have prevented.
+
+Nothing on new-facility is marked PROVISIONAL any more.
+
+### Wave 2.1 — a package-less relationship is not a dead end
+
+`stage_new_facility`'s `productPackageId` is OPTIONAL. The cockpit sends it when the relationship has
+a package and **omits the key entirely** when it does not — an omitted key asks the org to create the
+package first; a null would be a claim about a package that does not exist. The returned plan then
+opens with the org's own `create_package` step and the facility is filed under it, which is what
+nCino's own wizard does. The ticket says so, blocks nothing, and the action is offered at relationship
+level with or without a package.
+
+### Roadmap — dependent picklists (awaiting org-observed combination tables)
+
+Several of the org's picklists are DEPENDENT: a controlling value narrows the valid set of the field
+below it. The first case is the new facility's Product Line to Product Type to Product chain;
+involvement roles may gain one.
+
+**Nothing is built for this yet, deliberately.** The combination tables are org data, and this
+campaign has twice paid for guessing at org data. They will arrive observed and cited, cached the same
+way `observedPicklists` is, in their own combinations module, minimality-tested the same way — an
+entry no schema field asks for is dead weight.
+
+Two decisions already made, so the implementer does not have to re-derive them:
+
+- The dependent sheet is filtered to the org-valid subset for the controlling value currently
+  selected. An unfiltered sheet that accepts an invalid pair is worse than no filter, because the org
+  refuses it after the banker has committed to it.
+- When a controlling value changes and the selected dependent value becomes invalid, **clear it and
+  say so inline**. Never silently keep an invalid pair, and never silently drop a value the banker
+  chose without telling them it went.
+
+Until the tables land the sheets behave exactly as documented above: every value the org has given us,
+and an honest empty state where it has not.
+
+### Roadmap — limit and sub-limit structures (wave 3 research)
+
+nCino models facilities under a master limit, with loans hanging off it as sub-limits. **The cockpit
+does not model this anywhere:** exposure, the new-facility ticket, the modification and renewal
+tickets and the coverage math all treat facilities as a flat list. A relationship whose real structure
+is a master limit with sub-limits will render as separate facilities with no parent, and any total
+computed across them may double-count committed amounts. Named here as a wave-3 research item; it is
+deliberately absent from the UI, which claims nothing about limit structure either way.
+
 ### Wave 2 seam swap (observed 2026-07-26)
 
 Every wave-2 payload now carries field names copied verbatim from request bodies the org accepted.

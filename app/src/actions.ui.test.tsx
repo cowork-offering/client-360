@@ -234,12 +234,14 @@ describe("CopyPromptDialog explainer variant (founder bug 2026-07-25)", () => {
     mount();
     click(openRow("Sterling Fabrication"));
     click(byText(/Headroom analysis concluded/)!);
+    // Collateral Valuation: the other staged next step, and the one that is not
+    // gated on a booked facility (Probe 9).
     const step = [...document.querySelector('[aria-modal="true"]')!.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Loan Modification"),
+      b.textContent?.includes("Collateral Valuation"),
     )!;
     click(step);
     expect(
-      [...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Loan Modification"),
+      [...document.querySelectorAll('[role="dialog"]')].some((d) => d.getAttribute("aria-label") === "Collateral Valuation"),
     ).toBe(true);
     expect([...document.querySelectorAll('[role="dialog"]')].some((d) => /Copy prompt/.test(d.textContent ?? ""))).toBe(false);
   });
