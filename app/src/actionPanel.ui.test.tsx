@@ -186,22 +186,44 @@ describe("A33.1.2/A33.1.3 — schema-driven render and chips", () => {
   });
 
   it("offers no value set the org has not supplied, on either surface", () => {
-    openActionPanel("Annual Review");
-    // The ticket's hero opens a sheet, and the sheet says where the values come
-    // from rather than inventing any.
-    click(panel("Annual Review")!.querySelector("#hero-reviewType")!);
+    // Case.Type has no described values in this view, so both surfaces say so
+    // rather than inventing one (A33.1.6).
+    openActionPanel("Create Service Request");
+    const pill = [...panel("Create Service Request")!.querySelectorAll("button")].find((b) =>
+      /Request type/.test(b.textContent ?? ""),
+    )!;
+    click(pill);
     const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
-      (d) => d.getAttribute("aria-label") === "Review type",
+      (d) => d.getAttribute("aria-label") === "Request type",
     )!;
     expect(sheet.textContent).toContain("come from the org and have not loaded");
     expect(sheet.querySelectorAll("[aria-pressed]")).toHaveLength(0);
     press("Escape");
 
     expandAllFields();
-    const p = panel("Annual Review")!;
-    const rowSelect = [...p.querySelectorAll("select")].at(-1)!;
+    const p = panel("Create Service Request")!;
+    const rowSelect = p.querySelector<HTMLSelectElement>("#f-type")!;
     expect(rowSelect.hasAttribute("disabled")).toBe(true);
     expect(p.textContent).toContain("Options are read from the org");
+  });
+
+  it("never blocks on an options gap the org has already answered (live defect 2026-07-26)", () => {
+    openActionPanel("Annual Review");
+    click(panel("Annual Review")!.querySelector("#hero-reviewType")!);
+    const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
+      (d) => d.getAttribute("aria-label") === "Review type",
+    )!;
+    // The three active values, verbatim from the org describe.
+    expect([...sheet.querySelectorAll("[aria-pressed]")].map((b) => b.textContent?.trim())).toEqual([
+      "Annual",
+      "AdHoc",
+      "Problem Loan",
+    ]);
+    expect(sheet.textContent).not.toContain("have not loaded");
+
+    click([...sheet.querySelectorAll("[aria-pressed]")][0]);
+    expandAllFields();
+    expect(panel("Annual Review")!.querySelector<HTMLSelectElement>("#f-reviewType")!.value).toBe("Annual");
   });
 
   it("marks an edited agent narrative as edited, panel-side only", () => {
@@ -349,6 +371,32 @@ describe("WP8 — the deal ticket", () => {
     expandAllFields();
     const row = panel("Collateral Valuation")!.querySelector<HTMLSelectElement>("#f-source")!;
     expect(row.value).toBe("Appraisal");
+  });
+
+  it("shows all 16 valuation types without clipping, longest label included", () => {
+    openActionPanel("Collateral Valuation");
+    const pill = [...panel("Collateral Valuation")!.querySelectorAll("button")].find((b) =>
+      /Valuation type/.test(b.textContent ?? ""),
+    )!;
+    click(pill);
+    const sheet = [...document.querySelectorAll('[role="dialog"]')].find(
+      (d) => d.getAttribute("aria-label") === "Valuation type",
+    )!;
+
+    const cards = [...sheet.querySelectorAll("[aria-pressed]")];
+    expect(cards).toHaveLength(16);
+    expect(sheet.textContent).toContain("16 values");
+    // The longest real label is present in full, not truncated away.
+    const longest = cards.find((c) => /Fair Market Value - Equipment \/ Transportation/.test(c.textContent ?? ""));
+    expect(longest, "the longest label must render in full").toBeTruthy();
+    expect(longest!.querySelector("span")!.className).not.toContain("truncate");
+
+    // The list scrolls inside a bounded sheet: nothing is cut off, and the
+    // sheet is anchored to the PANEL, not to the ticket's scrolled content.
+    const list = sheet.querySelector("ul")!;
+    expect(list.className).toContain("overflow-y-auto");
+    expect(sheet.className).toContain("max-h-[70%]");
+    expect(sheet.parentElement!.parentElement).toBe(panel("Collateral Valuation"));
   });
 
   it("closes the sheet on Escape and leaves the panel open (A31.1)", () => {

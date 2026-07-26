@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useId } from "react";
-import { useApp } from "../state/appState";
+import { accountKey, useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
 import { ACTIONS_BY_ID } from "../actions/registry";
@@ -323,6 +323,9 @@ export function ActionPanel({
   const accountName =
     data.portfolio.accounts.find((a) => a.accountId === accountId)?.name ?? data.borrower?.snapshot?.name ?? "this relationship";
   const bundle = (data.borrowers ?? {})[accountId] ?? (data.borrower?.snapshot?.accountId === accountId ? data.borrower : null);
+  /** The key session-local activity is stored under. Resolved the same way the
+   *  Activity tab resolves it, so a written entry is always a readable one. */
+  const activityAccountId = accountKey(state.accountId, bundle?.snapshot?.accountId);
 
   /** Legal values the tool returned on a VALIDATION_FAILED. Authoritative:
    *  they supersede the partial observed cache for that field. */
@@ -361,6 +364,9 @@ export function ActionPanel({
    *  stop on the stepper: it is how the plan gets built. */
   const [phase, setPhase] = useState<Phase>("form");
   const [showAllFields, setShowAllFields] = useState(false);
+  /** The panel element, as STATE: a ref alone never re-renders, so the sheet's
+   *  portal host would stay null forever after the first pass. */
+  const [panelEl, setPanelEl] = useState<HTMLDivElement | null>(null);
   const [compileLines, setCompileLines] = useState<CompileLine[]>([]);
   /** The values the current plan was built from. Editing away from these means
    *  the plan on the next screen is stale and has to be rebuilt. */
@@ -631,7 +637,7 @@ export function ActionPanel({
         actor: data.meta?.user,
         instanceUrl: data.meta?.instanceUrl,
       });
-      if (entry) dispatch({ type: "LOG_ACTIVITY", accountId, entry });
+      if (entry) dispatch({ type: "LOG_ACTIVITY", accountId: activityAccountId, entry });
     }
 
     if (plan) {
@@ -685,13 +691,16 @@ export function ActionPanel({
         role="presentation"
       >
         <div
-          ref={panelRef}
+          ref={(el) => {
+            panelRef.current = el;
+            setPanelEl(el);
+          }}
           tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={action.label}
           onClick={(e) => e.stopPropagation()}
-          className="c360-panel-in flex max-h-[86vh] w-full max-w-[640px] flex-col overflow-hidden rounded-[18px] bg-raised"
+          className="c360-panel-in relative flex max-h-[86vh] w-full max-w-[640px] flex-col overflow-hidden rounded-[18px] bg-raised"
           style={{ boxShadow: "var(--shadow-panel)", border: "1px solid var(--border)", transformOrigin: "center" }}
         >
           {/* Header */}
@@ -771,6 +780,7 @@ export function ActionPanel({
                 editedFields={editedFields}
                 onChange={setField}
                 sheetCloserRef={sheetCloserRef}
+                sheetHost={panelEl}
                 renderChip={(f, edited) => {
                   const kind = chipFor(f);
                   return kind ? <ProvenanceChip kind={kind} citation={f.prefill.citation} edited={edited} /> : null;

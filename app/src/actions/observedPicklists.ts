@@ -37,7 +37,24 @@ export interface ObservedPicklist {
 const ACTIONS_API_2026_07_26 =
   "Actions API observation 2026-07-26: full legal list returned verbatim by the deployed stage tool's VALIDATION_FAILED response (bankinggpt)";
 
+const LIVE_DESCRIBE_2026_07_26 = "live describe 2026-07-26 (sf sobject describe, active values)";
+
 export const OBSERVED_PICKLISTS: Record<string, ObservedPicklist> = {
+  // The org has already answered this one, so the panel must never block on it:
+  // the tool creates a real LLC_BI__Review__c and the banker has to be able to
+  // say which kind of review it is.
+  "LLC_BI__Review__c.LLC_BI__Review_Type__c": {
+    values: ["Annual", "AdHoc", "Problem Loan"],
+    complete: true,
+    citation: LIVE_DESCRIBE_2026_07_26,
+  },
+  // Read and rendered, never written by this tool: the review is created at
+  // In Progress and the bank's own process owns every transition after that.
+  "LLC_BI__Review__c.LLC_BI__Status__c": {
+    values: ["In Progress", "Pending Approval", "Complete"],
+    complete: true,
+    citation: LIVE_DESCRIBE_2026_07_26,
+  },
   "LLC_BI__Collateral_Valuation__c.LLC_BI__Type__c": {
     // The COMPLETE 16-value legal list, observed verbatim in the tool's own
     // VALIDATION_FAILED message (idempotencyKey observe-wp5-20260726-001).

@@ -223,6 +223,20 @@ function sanitizeRestore(ui: PersistedUi, data: C360Data): Partial<PersistedUi> 
   };
 }
 
+/**
+ * THE account key for session-local state (A31.3 / A30).
+ *
+ * The panel that WRITES an entry and the tab that READS it must agree on the
+ * key, and they used to resolve it independently: the panel from
+ * `state.accountId` alone, the tab from `state.accountId` with a fallback to the
+ * bundle. Any path that opens an action without an account selected (a chat
+ * chip, a deep link mid-restore) writes under "" and the entry is then
+ * invisible in a tab reading the real id. One definition, used by both.
+ */
+export function accountKey(stateAccountId: string | null | undefined, snapshotAccountId?: string): string {
+  return stateAccountId || snapshotAccountId || "";
+}
+
 export function AppProvider({ data, children }: { data: C360Data; children: ReactNode }) {
   const anchor = data.meta.anchorAccountId;
   const worklist = useMemo(() => deriveWorklist(data), [data]);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { Briefing } from "../actions/briefing";
 import { buildTicket, promptFor, ticketDeltas, type TicketDelta } from "../actions/dealTicket";
 import type { PanelField, PanelSchema } from "../actions/panelSchema";
@@ -52,18 +53,27 @@ function OptionSheet({
         className="absolute inset-0 cursor-default"
         style={{ background: "var(--scrim)" }}
       />
+      {/* The sheet is a COLUMN with a bounded height: the header stays put and
+          the option list scrolls inside it. Sizing against the panel (not the
+          ticket's scrolled content) is what stops long value sets being cut off
+          (live defect 2026-07-26 — the 16-value Type list). */}
       <div
         ref={ref}
         role="dialog"
         aria-label={field.label}
-        className="c360-sheet-in relative max-h-[70%] overflow-auto rounded-t-[16px] border-t border-border bg-raised px-5 pb-4 pt-3"
+        className="c360-sheet-in relative flex max-h-[70%] min-h-0 flex-col rounded-t-[16px] border-t border-border bg-raised px-5 pb-4 pt-3"
         style={{ boxShadow: "var(--shadow-panel)" }}
       >
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex flex-none items-center gap-2">
           <span className="text-[12.5px] font-bold text-ink">{field.label}</span>
           {field.required && (
             <span className="text-[10px] font-semibold" style={{ color: "var(--critical)" }}>
               required
+            </span>
+          )}
+          {options.length > 0 && (
+            <span className="text-[10.5px] text-ink-faint">
+              {options.length} {options.length === 1 ? "value" : "values"}
             </span>
           )}
           <button
@@ -82,7 +92,7 @@ function OptionSheet({
             The values for this come from the org and have not loaded in this view. It cannot be set here yet.
           </p>
         ) : (
-          <ul className="flex flex-col gap-1.5">
+          <ul className="-mx-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 pb-1">
             {options.map((o) => {
               const picked = value === o;
               return (
@@ -101,7 +111,7 @@ function OptionSheet({
                       color: picked ? "var(--accent)" : "var(--ink)",
                     }}
                   >
-                    <span className="flex-1">{o}</span>
+                    <span className="flex-1 whitespace-normal break-words">{o}</span>
                     {picked && (
                       <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
                         <path d="M3.5 8.4l3 3 6-6.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -145,7 +155,9 @@ function Pill({
     <>
       <span className="min-w-0 flex-1">
         <span className="block text-[10px] font-bold uppercase tracking-wide text-ink-faint">{field.label}</span>
-        <span className="block truncate text-[12.5px] font-semibold">{empty ? prompt : display(field, value)}</span>
+        <span className="block truncate text-[12.5px] font-semibold" title={empty ? undefined : display(field, value)}>
+          {empty ? prompt : display(field, value)}
+        </span>
       </span>
       {chip}
     </>
@@ -292,6 +304,7 @@ export function DealTicket({
   onChange,
   renderChip,
   sheetCloserRef,
+  sheetHost,
 }: {
   actionId: string;
   briefing: Briefing;
@@ -303,6 +316,10 @@ export function DealTicket({
   renderChip: (field: PanelField, edited: boolean) => ReactNode;
   /** Esc must close an open sheet BEFORE the panel (A31.1 stacking). */
   sheetCloserRef: React.MutableRefObject<(() => void) | null>;
+  /** The panel element the sheet is anchored to. Anchoring to the ticket's own
+   *  box would place the sheet at the bottom of the SCROLLED CONTENT and size it
+   *  against that content, which clipped long value sets. */
+  sheetHost: HTMLElement | null;
 }) {
   const [sheetKey, setSheetKey] = useState<string | null>(null);
   const byKey = new Map(schema.fields.map((f) => [f.key, f]));
@@ -436,14 +453,17 @@ export function DealTicket({
         </div>
       )}
 
-      {sheetField && (
-        <OptionSheet
-          field={sheetField}
-          value={values[sheetField.key]}
-          onPick={(v) => onChange(sheetField, v)}
-          onClose={() => setSheetKey(null)}
-        />
-      )}
+      {sheetField &&
+        sheetHost &&
+        createPortal(
+          <OptionSheet
+            field={sheetField}
+            value={values[sheetField.key]}
+            onPick={(v) => onChange(sheetField, v)}
+            onClose={() => setSheetKey(null)}
+          />,
+          sheetHost,
+        )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ActivityEntry, ActivityKind, BorrowerBundle } from "../../data/contract";
 import { fmtDate, fmtRelative } from "../../data/format";
-import { useApp } from "../../state/appState";
+import { accountKey, useApp } from "../../state/appState";
 import { staggerDelay } from "../../data/motion";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { ActivityDetailModal } from "../ActivityDetailModal";
@@ -202,7 +202,7 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
   const { data, state } = useApp();
   const [openId, setOpenId] = useState<string | null>(null);
   const generatedAt = data.meta?.generatedAt ?? "";
-  const accountId = state.accountId ?? bundle.snapshot?.accountId ?? "";
+  const accountId = accountKey(state.accountId, bundle.snapshot?.accountId);
 
   // Baked events + this session's ACTION_TRIGGERED entries, newest first — the
   // narrative spine reads top-down from "what just happened" (A31.3).

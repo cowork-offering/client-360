@@ -208,6 +208,14 @@ press collapsed two layers at once. `stopPropagation` cannot fix this (it stops 
 other listeners on the same target). Layers now register in a modal stack and act only when topmost:
 Escape closes the option sheet, then the action panel, then the Client Actions sheet, one press each.
 
+### Picklists read from the org
+
+`LLC_BI__Review__c.LLC_BI__Review_Type__c` (Annual, AdHoc, Problem Loan) and `LLC_BI__Status__c`
+(In Progress, Pending Approval, Complete) come from a live describe on bankinggpt (2026-07-26, active
+values). Collateral valuation `Type` (16) and `Source` (14) come from the tools' own
+`VALIDATION_FAILED` replies. All four are `complete: true` and cited. Everything else still renders
+honestly disabled: the panel never invents a value set, and never blocks on one the org has answered.
+
 ### The compile sequence (WP7)
 
 "Review the plan" runs a four-line build sequence, and each line wraps a real operation: gathering the
