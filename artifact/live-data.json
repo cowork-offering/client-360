@@ -635,6 +635,7 @@
                 "collateralType": "UCC-Equipment",
                 "collateralName": "COL-000758",
                 "collateralId": "a35bb000000zOgXAAU",
+                "collateralDescription": "Blanket lien on all existing M&E at Greensboro NC: ~85 CNC machining centers (Mazak/DMG Mori/Haas), grinders, EDM, CMM, tooling, fixtures, material handling. Cross-collateralized to revolver and equipment term loan.",
                 "advanceRate": 80
               },
               {
@@ -647,6 +648,7 @@
                 "collateralType": "UCC-Equipment",
                 "collateralName": "COL-000757",
                 "collateralId": "a35bb000000zOevAAE",
+                "collateralDescription": "Three (3) new Mazak INTEGREX i-400S 5-axis CNC multi-tasking machining centers with tooling, MazaCheck probing, Smooth Ai controls, 80-tool ATCs, HP coolant. Delivery Q3 2026. First-priority PMSI lien per UCC-1 at funding.",
                 "advanceRate": 80
               }
             ],
@@ -673,6 +675,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000ND7pEAG",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 1.42
           },
           {
@@ -687,6 +690,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000ND9REAW",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 2.18
           },
           {
@@ -701,6 +705,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000NDB3EAO",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 8200000
           },
           {
@@ -715,6 +720,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000NDCfEAO",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 1250000
           }
         ],
@@ -1959,6 +1965,7 @@
                 "collateralType": "UCC-Accounts",
                 "collateralName": "COL-000762",
                 "collateralId": "a35bb0000013xz3AAA",
+                "collateralDescription": "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
                 "advanceRate": 80
               },
               {
@@ -1971,6 +1978,7 @@
                 "collateralType": "UCC-Inventory",
                 "collateralName": "COL-000763",
                 "collateralId": "a35bb0000013y0fAAA",
+                "collateralDescription": "All present and future inventory at the Fort Wayne and Kokomo plants: raw bar and plate stock, work in process and finished goods. Excludes consigned material and stock over 12 months old.",
                 "advanceRate": 50
               }
             ],
@@ -2002,6 +2010,7 @@
                 "collateralType": "Real Estate-Warehouse",
                 "collateralName": "COL-000765",
                 "collateralId": "a35bb0000013y3tAAA",
+                "collateralDescription": "First mortgage on the owner-occupied Fort Wayne manufacturing campus (218,000 sq ft on 22.4 acres) and the Kokomo plant (140,000 sq ft, under expansion).",
                 "advanceRate": 75
               }
             ],
@@ -2033,6 +2042,7 @@
                 "collateralType": "UCC-Equipment",
                 "collateralName": "COL-000764",
                 "collateralId": "a35bb0000013y2HAAQ",
+                "collateralDescription": "Blanket lien on all production machinery and equipment at the Fort Wayne and Kokomo plants, including CNC machining centres, robotic welding cells, heat-treat furnaces and CMM inspection equipment.",
                 "advanceRate": 75
               }
             ],
@@ -2064,6 +2074,7 @@
                 "collateralType": "Real Estate-Warehouse",
                 "collateralName": "COL-000765",
                 "collateralId": "a35bb0000013y3tAAA",
+                "collateralDescription": "First mortgage on the owner-occupied Fort Wayne manufacturing campus (218,000 sq ft on 22.4 acres) and the Kokomo plant (140,000 sq ft, under expansion).",
                 "advanceRate": 75
               }
             ],
@@ -2095,6 +2106,7 @@
                 "collateralType": "UCC-Equipment",
                 "collateralName": "COL-000764",
                 "collateralId": "a35bb0000013y2HAAQ",
+                "collateralDescription": "Blanket lien on all production machinery and equipment at the Fort Wayne and Kokomo plants, including CNC machining centres, robotic welding cells, heat-treat furnaces and CMM inspection equipment.",
                 "advanceRate": 75
               }
             ],
@@ -2126,6 +2138,7 @@
                 "collateralType": "UCC-Accounts",
                 "collateralName": "COL-000762",
                 "collateralId": "a35bb0000013xz3AAA",
+                "collateralDescription": "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
                 "advanceRate": 80
               }
             ],
@@ -2152,6 +2165,12 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000S0bNEAS",
             "breached": false,
+            "attachedLoans": [
+              {
+                "loanName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+                "loanId": "a4Zbb0000027MaYEAU"
+              }
+            ],
             "actualValue": 80
           },
           {
@@ -2166,6 +2185,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000S0UvEAK",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 1.38
           },
           {
@@ -2180,6 +2200,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000S0WXEA0",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 2.42
           },
           {
@@ -2194,6 +2215,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000S0Y9EAK",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 6800000
           },
           {
@@ -2208,6 +2230,7 @@
             "covenantStatus": "Compliant",
             "covenantId": "a3Bbb000000S0ZlEAK",
             "breached": false,
+            "attachedLoans": [],
             "actualValue": 1.22
           },
           {
@@ -2222,6 +2245,12 @@
             "covenantStatus": "In Progress",
             "covenantId": "a3Bbb000000S0czEAC",
             "breached": false,
+            "attachedLoans": [
+              {
+                "loanName": "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+                "loanId": "a4Zbb0000027Mp3EAE"
+              }
+            ],
             "actualValue": null
           }
         ],

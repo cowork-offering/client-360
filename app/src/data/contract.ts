@@ -282,6 +282,9 @@ export interface Covenant {
    *  definition. A covenant review is UPDATE-only, so absent means the action
    *  is blocked rather than silently anchored on the wrong record. */
   complianceId?: string;
+  /** The org's own latest-compliance anchor. Null is CORRECT where an account
+   *  carries no compliance rows by design; not every relationship has them. */
+  latestComplianceId?: string | null;
   covenantType?: string;
   thresholdValue?: number;
   actualValue?: number;

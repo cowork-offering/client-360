@@ -198,13 +198,22 @@ describe("collateral records for every borrower", () => {
 
 describe("covenant grouping is tolerant of a read that cannot say", () => {
   for (const [file, name, bundle] of everyBorrower) {
-    it(`${name} (${file}): renders one honest list while attachedLoans is absent`, () => {
-      const groups = groupCovenants(bundle.covenants?.covenants);
+    it(`${name} (${file}): groups when the read says, and lists when it cannot`, () => {
       const all = bundle.covenants?.covenants ?? [];
-      // No bundle carries the field yet, so nothing is grouped and nothing is lost.
-      expect(groups.grouped).toBe(false);
-      expect(groups.account).toHaveLength(all.length);
-      expect(groups.byFacility).toEqual([]);
+      const groups = groupCovenants(all);
+      const carries = all.some((c) => Array.isArray(c.attachedLoans));
+
+      // The read either tells us the scope or it does not. Both are handled;
+      // neither is guessed.
+      expect(groups.grouped).toBe(carries);
+      if (!carries) {
+        expect(groups.account).toHaveLength(all.length);
+        expect(groups.byFacility).toEqual([]);
+      }
+
+      // Whichever way, every covenant is rendered exactly once.
+      const rendered = groups.account.length + groups.byFacility.reduce((n, f) => n + f.covenants.length, 0);
+      expect(rendered, `${name}: covenants lost or duplicated by grouping`).toBe(all.length);
     });
   }
 
@@ -237,5 +246,41 @@ describe("covenant grouping is tolerant of a read that cannot say", () => {
     const groups = groupCovenants(rows);
     const rendered = groups.account.length + groups.byFacility.reduce((n, f) => n + f.covenants.length, 0);
     expect(rendered).toBe(rows.length);
+  });
+});
+
+
+describe("the refreshed reads, per relationship", () => {
+  const bundleOf = (id: string) => (live as unknown as C360Data).borrowers?.[id]!;
+
+  it("Hartwell splits 4 relationship-level and 2 facility-level, naming the loans", () => {
+    const groups = groupCovenants(bundleOf("001bb00001I7FPNAA3").covenants?.covenants);
+    expect(groups.grouped).toBe(true);
+    expect(groups.account).toHaveLength(4);
+    expect(groups.byFacility.map((f) => f.loanName.split(" - ")[1])).toEqual(["Line of Credit", "Construction"]);
+    expect(groups.byFacility.every((f) => f.covenants.length === 1)).toBe(true);
+  });
+
+  it("Piedmont is entirely relationship-level, and says so rather than guessing", () => {
+    const groups = groupCovenants(bundleOf("001bb00001DLtRMAA1").covenants?.covenants);
+    expect(groups.grouped).toBe(true);
+    expect(groups.account).toHaveLength(4);
+    expect(groups.byFacility).toEqual([]);
+  });
+
+  it("collateral now reads as its description, not its autonumber", () => {
+    for (const id of ["001bb00001I7FPNAA3", "001bb00001DLtRMAA1"]) {
+      for (const r of collateralRecords(bundleOf(id))) {
+        expect(r.displayName, `${id}: ${r.collateralId} still shows an autonumber`).not.toMatch(/^COL-\d+$/);
+        expect(r.displayName.length).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it("Hartwell's covenants carry no compliance anchor, which is correct here", () => {
+    // No compliance rows by design on this account; Piedmont is where that
+    // anchor populates. An absent anchor is not a defect to chase.
+    const rows = bundleOf("001bb00001I7FPNAA3").covenants?.covenants ?? [];
+    expect(rows.every((c) => !c.latestComplianceId)).toBe(true);
   });
 });

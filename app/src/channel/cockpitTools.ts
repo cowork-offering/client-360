@@ -196,20 +196,35 @@ export interface MailHit {
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
+/**
+ * Microsoft Graph returns `from` as `{emailAddress:{name,address}}`, not a
+ * string, so a string-only reader rendered every sender blank. Both shapes are
+ * real depending on which surface answered; parse both.
+ */
+export function readSender(v: unknown): string | undefined {
+  const direct = str(v);
+  if (direct) return direct;
+  const obj = v as { emailAddress?: { name?: unknown; address?: unknown }; name?: unknown; address?: unknown } | null;
+  const email = obj?.emailAddress ?? obj;
+  return str(email?.name) ?? str(email?.address);
+}
+
 /** Search the viewer's mailbox for messages naming this account.
  *  An empty array is an honest "nothing found", never an error. */
 export async function searchMailbox(accountName: string): Promise<{ hits: MailHit[]; storedAt?: number }> {
   const res = await callTool(
     SERVERS.m365,
     TOOLS.mailSearch,
-    { query: accountName },
+    // Ask for the DISTINCTIVE token, not the full legal name: nobody types
+    // "Hartwell Precision Manufacturing LLC" in a subject line.
+    { query: mailboxQuery(accountName) },
     { read: true, cache: { staleTime: 60_000 } },
   );
   const rows = unwrapMail(res.payload);
   const hits: MailHit[] = rows.slice(0, 25).map((m) => ({
     id: str(m.id) ?? str(m.messageId),
     subject: str(m.subject),
-    from: str(m.from) ?? str(m.sender) ?? str(m.fromAddress),
+    from: readSender(m.from) ?? readSender(m.sender) ?? str(m.fromAddress),
     receivedAt: str(m.receivedDateTime) ?? str(m.receivedAt) ?? str(m.date),
     preview: str(m.bodyPreview) ?? str(m.preview) ?? str(m.snippet),
     webLink: str(m.webLink) ?? str(m.link),
@@ -217,15 +232,70 @@ export async function searchMailbox(accountName: string): Promise<{ hits: MailHi
   return { hits, storedAt: res.cache?.storedAt };
 }
 
-/** Conservative entity resolution (mirrors the skill's intake rule): a message
- *  belongs to an account only when the account name clearly appears. */
-export function matchesAccount(hit: MailHit, accountName: string): boolean {
-  const needle = accountName
-    .toLowerCase()
-    .replace(/[.,]/g, "")
-    .replace(/\b(inc|llc|ltd|co|corp|group|company)\b/g, "")
-    .trim();
-  if (needle.length < 4) return false;
-  const hay = `${hit.subject ?? ""} ${hit.preview ?? ""}`.toLowerCase();
-  return hay.includes(needle);
+/**
+ * Words that name a KIND of business, not a business.
+ *
+ * "Precision", "Manufacturing", "Holdings" are shared by half a commercial book,
+ * so an email containing only these tells us nothing about which relationship it
+ * belongs to. Hartwell Precision Manufacturing and Piedmont Precision Components
+ * both answer to "precision"; attaching a mail to either on that basis would be
+ * a guess wearing a match's clothes.
+ */
+const GENERIC_NAME_WORDS = new Set([
+  "precision", "manufacturing", "industrial", "logistics", "components", "holdings",
+  "group", "services", "solutions", "systems", "partners", "associates", "enterprises",
+  "international", "national", "global", "capital", "financial", "investments",
+  "properties", "brands", "foods", "works", "supply", "trading", "consulting",
+  "technologies", "equipment", "materials", "products",
+]);
+
+/** Legal-form suffixes: they identify a company's wrapper, never the company. */
+const LEGAL_SUFFIXES = /\b(inc|llc|ltd|co|corp|corporation|company|plc|lp|llp|sa|nv|bv|gmbh|ag)\b/g;
+
+const cleanName = (accountName: string) =>
+  accountName.toLowerCase().replace(/[.,]/g, "").replace(LEGAL_SUFFIXES, "").replace(/\s+/g, " ").trim();
+
+/**
+ * The one word that actually identifies this relationship.
+ *
+ * The lead token of the cleaned name, as long as it is long enough to be
+ * distinctive and is not a word every other borrower shares. Returns null when
+ * the name yields nothing distinctive, and a null token NEVER matches: no token,
+ * no attachment.
+ */
+export function distinctiveToken(accountName: string): string | null {
+  for (const token of cleanName(accountName).split(" ")) {
+    if (token.length >= 5 && !GENERIC_NAME_WORDS.has(token)) return token;
+  }
+  return null;
 }
+
+/** What to ask the mailbox for. The full legal name matches almost nothing a
+ *  human would actually type in a subject line. */
+export function mailboxQuery(accountName: string): string {
+  return distinctiveToken(accountName) ?? cleanName(accountName) ?? accountName;
+}
+
+/**
+ * Does this message belong to this relationship?
+ *
+ * TWO TIERS, both conservative:
+ *   STRONG  the full cleaned name appears as a phrase;
+ *   TOKEN   the distinctive token appears in the subject, the preview or the
+ *           sender.
+ *
+ * A generic word alone can never attach a message to anything. "Test for
+ * Hartwell" belongs to Hartwell; "precision components" belongs to nobody.
+ */
+export function matchesAccount(hit: MailHit, accountName: string): boolean {
+  const full = cleanName(accountName);
+  const hay = `${hit.subject ?? ""} ${hit.preview ?? ""} ${hit.from ?? ""}`.toLowerCase();
+
+  if (full.length >= 4 && hay.includes(full)) return true;
+
+  const token = distinctiveToken(accountName);
+  if (!token) return false;
+  // Word-boundary, so "hartwellian" does not attach to Hartwell.
+  return new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(hay);
+}
+
