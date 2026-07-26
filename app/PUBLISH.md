@@ -241,10 +241,12 @@ Escape closes the option sheet, then the action panel, then the Client Actions s
 
 ### Picklists read from the org
 
-`LLC_BI__Review__c.LLC_BI__Review_Type__c` (Annual, AdHoc, Problem Loan) and `LLC_BI__Status__c`
-(In Progress, Pending Approval, Complete) come from a live describe on bankinggpt (2026-07-26, active
-values). Collateral valuation `Type` (16) and `Source` (14) come from the tools' own
-`VALIDATION_FAILED` replies. All four are `complete: true` and cited. Everything else still renders
+`LLC_BI__Review__c.LLC_BI__Review_Type__c` (Annual, AdHoc, Problem Loan) and
+`LLC_BI__Loan__c.LLC_BI__Product__c` (Construction, Equipment, Line of Credit, HELOC, Purchase,
+Deposit, Term) come from a live describe on bankinggpt (2026-07-26, active values). Collateral valuation `Type` (16) and `Source` (14) come from the tools' own
+`VALIDATION_FAILED` replies. All are `complete: true` and cited. The cache is MINIMAL and a test enforces it: an entry no schema
+field asks for is dead weight that outlives the reason it was added, so it is removed rather than kept
+"just in case". Everything else still renders
 honestly disabled: the panel never invents a value set, and never blocks on one the org has answered.
 
 ### The compile sequence (WP7)

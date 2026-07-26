@@ -49,23 +49,18 @@ export const OBSERVED_PICKLISTS: Record<string, ObservedPicklist> = {
     complete: true,
     citation: CONTRACT_A33_5_7,
   },
+  // Upgraded from a contract relay to a live describe on 2026-07-26: same seven
+  // values, now confirmed by this org rather than reported to us.
   "LLC_BI__Loan__c.LLC_BI__Product__c": {
     values: ["Construction", "Equipment", "Line of Credit", "HELOC", "Purchase", "Deposit", "Term"],
     complete: true,
-    citation: CONTRACT_A33_5_7,
+    citation: LIVE_DESCRIBE_2026_07_26,
   },
   // The org has already answered this one, so the panel must never block on it:
   // the tool creates a real LLC_BI__Review__c and the banker has to be able to
   // say which kind of review it is.
   "LLC_BI__Review__c.LLC_BI__Review_Type__c": {
     values: ["Annual", "AdHoc", "Problem Loan"],
-    complete: true,
-    citation: LIVE_DESCRIBE_2026_07_26,
-  },
-  // Read and rendered, never written by this tool: the review is created at
-  // In Progress and the bank's own process owns every transition after that.
-  "LLC_BI__Review__c.LLC_BI__Status__c": {
-    values: ["In Progress", "Pending Approval", "Complete"],
     complete: true,
     citation: LIVE_DESCRIBE_2026_07_26,
   },
