@@ -81,7 +81,6 @@ describe("tool registry", () => {
     expect(Object.values(WRITE_TOOLS).flatMap((t) => [t.stage, t.execute]).filter(Boolean).sort()).toEqual([
       "execute_annual_review",
       "execute_collateral_valuation",
-      "execute_covenant_review",
       "execute_new_facility",
       "execute_risk_rating_review",
       "execute_service_request",
@@ -103,8 +102,11 @@ describe("tool registry", () => {
     // be a lie the panel would eventually try to call.
     expect(WRITE_TOOLS["loan-modification"].execute).toBeNull();
     expect(WRITE_TOOLS.renewal.execute).toBeNull();
+    // Founder-gated rather than unbuilt, and held for its own reason.
+    expect(WRITE_TOOLS["covenant-review"].execute).toBeNull();
     expect(isExecutionHeld("loan-modification")).toBe(true);
     expect(isExecutionHeld("renewal")).toBe(true);
+    expect(isExecutionHeld("covenant-review")).toBe(true);
     expect(isExecutionHeld("collateral-valuation")).toBe(false);
   });
 

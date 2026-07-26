@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { stageAction, executeAction, isExecutionHeld, WRITE_TOOLS } from "../channel/writeTools";
+import { stageAction, executeAction, executionHeldReason, isExecutionHeld, WRITE_TOOLS } from "../channel/writeTools";
 
 /* =============================================================================
    OBSERVED ENVELOPES (wave 2, 2026-07-26)
@@ -64,7 +64,12 @@ describe("the held verdict comes from the ORG, verbatim", () => {
   it("agrees with the client tool map on which actions are held", () => {
     expect(isExecutionHeld("loan-modification")).toBe(true);
     expect(isExecutionHeld("renewal")).toBe(true);
-    for (const id of ["new-facility-request", "risk-rating-review", "covenant-review"]) {
+    // The covenant execute tool EXISTS, but the client refuses to be the thing
+    // that fires its unapproved first production write.
+    expect(isExecutionHeld("covenant-review")).toBe(true);
+    expect(executionHeldReason("covenant-review")).toContain("founder-gated");
+    expect(executionHeldReason("loan-modification")).toContain("LV06");
+    for (const id of ["new-facility-request", "risk-rating-review"]) {
       expect(isExecutionHeld(id), id).toBe(false);
       expect(WRITE_TOOLS[id as keyof typeof WRITE_TOOLS].execute, id).toBeTruthy();
     }
@@ -275,5 +280,92 @@ describe("the two-phase execute (new facility) — VERIFIED live 2026-07-26", ()
     const out = await executeAction("new-facility-request", RESUME_PAYLOAD);
     expect(out.ok && out.result.replayed).toBe(true);
     expect(out.ok && out.result.loanId).toBe("a4Zbb0000027KdZEAU");
+  });
+});
+
+describe("Codex review fixes, pinned against the envelopes", () => {
+  const sent = async (actionId: Parameters<typeof stageAction>[0], payload: unknown) => {
+    const callTool = installMcp(PLAN);
+    await stageAction(actionId, payload as never);
+    return (callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> }).inputs[0];
+  };
+
+  it("#1 never sends an override field whose wire name has not been observed", async () => {
+    const body = await sent("risk-rating-review", {
+      idempotencyKey: "k",
+      accountId: "001X",
+      rationale: "r",
+      comments: "why",
+    });
+    expect(body.overriddenRiskGradeValue).toBeUndefined();
+    expect(Object.keys(body).some((k) => /override/i.test(k))).toBe(false);
+  });
+
+  it("#7 never sends the covenant observed value: it is context, not an input", async () => {
+    const body = await sent("covenant-review", {
+      idempotencyKey: "k",
+      accountId: "001X",
+      covenantComplianceId: "a3C",
+      result: "Compliant",
+      rationale: "r",
+    });
+    expect(body.observedValue).toBeUndefined();
+  });
+
+  it("#8 sends the service request origin the schema advertises", async () => {
+    const body = await sent("create-service-request", {
+      idempotencyKey: "k",
+      accountId: "001X",
+      rationale: "r",
+      requestType: "Service Request",
+      origin: "Agent",
+      summary: "s",
+    });
+    expect(body.origin).toBe("Agent");
+  });
+
+  it("#9 parses the status the execute response returns", async () => {
+    installMcp({
+      ok: true,
+      error: null,
+      result: { stagingId: "a8a", terminalState: "success", status: "In Review", recordName: "RG-0000002", steps: [] },
+    });
+    const out = await executeAction("risk-rating-review", {
+      idempotencyKey: "k",
+      stagingId: "a8a",
+      planHash: "h",
+      decisionToken: "t",
+      approverUserId: "005bb00000ftouDAAQ",
+    });
+    expect(out.ok && out.result.status).toBe("In Review");
+  });
+
+  it("#12 parses the wait budget the plan returns", async () => {
+    installMcp({
+      ok: true,
+      error: null,
+      result: {
+        ...PLAN.result,
+        steps: [{ id: "wait_loan_detail", type: "wait", label: "Wait", state: "pending", waitBudgetMs: 30000 }],
+      },
+    });
+    const out = await stageAction("new-facility-request", { idempotencyKey: "k", productPackageId: "a5F" });
+    expect(out.ok && out.result.steps[0].waitBudgetMs).toBe(30000);
+  });
+
+  it("#2 refuses to execute the founder-gated covenant review, with its own reason", async () => {
+    const callTool = installMcp(PLAN);
+    const out = await executeAction("covenant-review", {
+      idempotencyKey: "k",
+      stagingId: "a8a",
+      planHash: "h",
+      decisionToken: "t",
+      approverUserId: "005bb00000ftouDAAQ",
+    });
+    expect(out.ok).toBe(false);
+    expect(out.ok === false && out.error.code).toBe("EXECUTION_HELD");
+    expect(out.ok === false && out.error.message).toContain("founder-gated");
+    // Not one call left the page.
+    expect(callTool).not.toHaveBeenCalled();
   });
 });

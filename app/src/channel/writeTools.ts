@@ -22,23 +22,47 @@ import type { PlanStep, StagedOutput, StepType } from "../actions/stagedPlan";
 
 /** The six deployed write tools. */
 export const WRITE_TOOLS = {
-  "collateral-valuation": { stage: "stage_collateral_valuation", execute: "execute_collateral_valuation" },
-  "create-service-request": { stage: "stage_service_request", execute: "execute_service_request" },
-  "annual-review": { stage: "stage_annual_review", execute: "execute_annual_review" },
-  "new-facility-request": { stage: "stage_new_facility", execute: "execute_new_facility" },
-  "risk-rating-review": { stage: "stage_risk_rating_review", execute: "execute_risk_rating_review" },
-  "covenant-review": { stage: "stage_covenant_review", execute: "execute_covenant_review" },
+  "collateral-valuation": { stage: "stage_collateral_valuation", execute: "execute_collateral_valuation", heldReason: null },
+  "create-service-request": { stage: "stage_service_request", execute: "execute_service_request", heldReason: null },
+  "annual-review": { stage: "stage_annual_review", execute: "execute_annual_review", heldReason: null },
+  "new-facility-request": { stage: "stage_new_facility", execute: "execute_new_facility", heldReason: null },
+  "risk-rating-review": { stage: "stage_risk_rating_review", execute: "execute_risk_rating_review", heldReason: null },
+  // FOUNDER GATE, enforced here rather than trusted to nobody pressing it. The
+  // execute tool EXISTS and is deployed, but it has never been run live and its
+  // first invocation updates existing org data. The cockpit must not be the
+  // thing that fires an unapproved first production write.
+  "covenant-review": {
+    stage: "stage_covenant_review",
+    execute: null,
+    heldReason:
+      "The first live execution of this action is founder-gated. Staging works and the plan is preserved; the record update ships once that gate is cleared.",
+  },
   // EXECUTE HELD. `execute` is null, not a name we hope exists: the tool was
   // never built, because nCino requires a facility to be Booked through its own
   // Submit for Approval before a credit action can run against it (LV06).
-  // Staging is real and the staged plan is preserved; the gate says so.
-  "loan-modification": { stage: "stage_loan_modification", execute: null },
-  renewal: { stage: "stage_renewal", execute: null },
+  "loan-modification": {
+    stage: "stage_loan_modification",
+    execute: null,
+    heldReason:
+      "Staging works; execution awaits an approved facility path: nCino requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.",
+  },
+  renewal: {
+    stage: "stage_renewal",
+    execute: null,
+    heldReason:
+      "Staging works; execution awaits an approved facility path: nCino requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.",
+  },
 } as const;
 
-/** Actions whose plan can be STAGED but not executed from here (LV06). */
+/** Actions whose plan can be STAGED but not executed from here. */
 export function isExecutionHeld(actionId: string): boolean {
   return isWriteAction(actionId) && WRITE_TOOLS[actionId].execute === null;
+}
+
+/** Why this action cannot be executed from here, in the words that fit ITS
+ *  reason. LV06 and a founder gate are different facts and read differently. */
+export function executionHeldReason(actionId: string): string | null {
+  return isWriteAction(actionId) ? (WRITE_TOOLS[actionId].heldReason ?? null) : null;
 }
 
 /** The banker-facing explanation of the held state. One sentence of cause, one
@@ -98,6 +122,8 @@ export interface ExecuteResult {
   anchorName?: string | null;
   riskRatingReviewId?: string;
   loanId?: string;
+  /** The record's status as the org holds it, e.g. "In Review". Observed. */
+  status?: string;
   /**
    * TWO-PHASE EXECUTE (new facility).
    *
@@ -143,6 +169,7 @@ function toPlanStep(raw: Record<string, unknown>): PlanStep {
     verification: typeof raw.verification === "string" ? raw.verification : undefined,
     state: typeof raw.state === "string" ? raw.state : undefined,
     detail: typeof raw.detail === "string" ? raw.detail : undefined,
+    waitBudgetMs: typeof raw.waitBudgetMs === "number" ? raw.waitBudgetMs : undefined,
   };
 }
 
@@ -222,6 +249,7 @@ export interface StagePayloads {
     accountId: string;
     rationale?: string;
     requestType?: string | null;
+    origin?: string | null;
     summary?: string | null;
     referenceKind?: string | null;
     referenceId?: string | null;
@@ -274,12 +302,12 @@ export interface StagePayloads {
     managementExperienceActual?: number | null;
     creditScoreActual?: number | null;
     comments?: string | null;
-    /** PROVISIONAL NAME. The staged plan writes
-     *  `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool accepts an
-     *  override, but the observed probe never sent one. This name follows the
-     *  convention of its observed sibling `computedRiskGradeValue`; it is
-     *  INFERRED, not observed, and is the one field in this block that is. */
-    overriddenRiskGradeValue?: number | null;
+    /* NO OVERRIDE FIELD. The staged plan writes
+       `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool almost certainly
+       accepts an override input, but no observed request has ever carried one
+       and its wire name would be a guess. Guessing a field name is exactly the
+       failure this campaign has already paid for twice, so the ticket blocks
+       staging with a named gap instead of sending an invented key. */
   };
   "covenant-review": {
     idempotencyKey: string;
@@ -403,7 +431,12 @@ export async function executeAction(
   const tool = WRITE_TOOLS[actionId].execute;
   // Defence in depth: the gate disables the gesture, and the call is refused
   // anyway rather than sending a tool name that does not exist.
-  if (!tool) return { ok: false, error: { code: "EXECUTION_HELD", message: EXECUTION_HELD_COPY, resumable: false } };
+  if (!tool) {
+    return {
+      ok: false,
+      error: { code: "EXECUTION_HELD", message: executionHeldReason(actionId) ?? EXECUTION_HELD_COPY, resumable: false },
+    };
+  }
   const res = await callTool(
     SERVERS.customer360,
     tool,
@@ -422,6 +455,7 @@ export async function executeAction(
     caseId: typeof r.caseId === "string" ? r.caseId : undefined,
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
     riskRatingReviewId: typeof r.riskRatingReviewId === "string" ? r.riskRatingReviewId : undefined,
+    status: typeof r.status === "string" ? r.status : undefined,
     loanId: typeof r.loanId === "string" ? r.loanId : undefined,
     resumable: r.resumable === true,
     resumeDescriptor: typeof r.resumeDescriptor === "string" ? r.resumeDescriptor : undefined,

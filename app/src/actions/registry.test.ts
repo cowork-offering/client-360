@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { ACTIONS, ACTIONS_BY_ID, CATEGORY_ORDER, renderPrompt } from "./registry";
+import { ACTIONS, ACTIONS_BY_ID, CATEGORY_ORDER, renderPrompt, stageRationale } from "./registry";
 
 const ID = "001TEST";
 const NAME = "Testco Industries, Inc.";
@@ -273,5 +273,35 @@ describe("availability — no account in scope", () => {
     const r = ACTIONS_BY_ID["covenant-review"].availability(data, "001NOTSTAGED");
     expect(r.available).toBe(false);
     expect(r.reason).toBe("Account not staged in this view");
+  });
+});
+
+
+describe("the staged rationale is never blank (Codex #3)", () => {
+  it("uses what the figures said when a finding is carrying the reason", () => {
+    expect(
+      stageRationale({ actionId: "annual-review", accountName: "Testco", accepted: "Coverage is below the floor." }),
+    ).toBe("Coverage is below the floor.");
+  });
+
+  it("leads with what the banker wrote, then the findings", () => {
+    expect(
+      stageRationale({ actionId: "loan-modification", accountName: "Testco", accepted: "Coverage is thin.", typed: "Client asked." }),
+    ).toBe("Client asked. Coverage is thin.");
+  });
+
+  it("states the action and the anchor when nothing else does", () => {
+    expect(stageRationale({ actionId: "risk-rating-review", accountName: "Testco" })).toBe(
+      "Banker-initiated risk rating review for Testco via the cockpit.",
+    );
+  });
+
+  it("is never blank, for any action, however empty the inputs", () => {
+    for (const a of ACTIONS) {
+      for (const inputs of [{}, { accepted: "   " }, { typed: "" }, { accepted: "", typed: "  " }]) {
+        const r = stageRationale({ actionId: a.id, accountName: "Testco", ...inputs });
+        expect(r.trim(), a.id).not.toBe("");
+      }
+    }
   });
 });

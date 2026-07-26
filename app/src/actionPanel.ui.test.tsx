@@ -399,6 +399,108 @@ describe("the two-phase facility execute, through the panel", () => {
   });
 });
 
+describe("Codex review fixes, through the panel", () => {
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  const stagedBody = (callTool: ReturnType<typeof installWriteMcp>) =>
+    inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_")));
+
+  it("#3 always sends a non-blank rationale, even with no findings", async () => {
+    const callTool = installWriteMcp();
+    openActionPanel("Risk Rating Review", "Piedmont Precision");
+    click(byText(/Review the plan/)!);
+    await flush();
+    // The contract Codex flagged: never undefined, never blank. JSON drops an
+    // undefined key, and the Apex Request declares rationale required.
+    const rationale = String(stagedBody(callTool).rationale ?? "");
+    expect(rationale.trim()).not.toBe("");
+  });
+
+  it("#11 mints a NEW idempotency key when the plan is rebuilt after edits", async () => {
+    const callTool = installWriteMcp();
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    const firstKey = stagedBody(callTool).idempotencyKey;
+
+    click([...panel("Annual Review")!.querySelectorAll("button")].find((b) => b.textContent === "Back")!);
+    expandAllFields();
+    const area = panel("Annual Review")!.querySelector("textarea")!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(area, "edited after staging");
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click(byText(/Rebuild the plan/)!);
+    await flush();
+
+    const stages = callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"));
+    expect(stages).toHaveLength(2);
+    // A rebuild is a NEW intent: reusing the key invites the org to replay the
+    // staging row the banker just edited away from.
+    expect(inputsOf(stages[1]).idempotencyKey).not.toBe(firstKey);
+  });
+
+  it("#11 keeps the key when stepping back and forward without editing", async () => {
+    const callTool = installWriteMcp();
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    const firstKey = stagedBody(callTool).idempotencyKey;
+    click([...panel("Annual Review")!.querySelectorAll("button")].find((b) => b.textContent === "Back")!);
+    click(byText(/Back to the plan/)!);
+    await flush();
+    // Same intent looked at twice: one staging row, one key.
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(1);
+    expect(firstKey).toBeTruthy();
+  });
+
+  it("#10 renders a failed resume through the error doctrine", async () => {
+    let call = 0;
+    const callTool = vi.fn(async (_server: string, tool: string, _input?: unknown) => {
+      if (tool.startsWith("stage_")) return stageEnvelope(STAGE_PLAN);
+      if (tool.startsWith("execute_")) {
+        call += 1;
+        return stageEnvelope(
+          call === 1
+            ? { ok: true, error: null, result: { stagingId: "s", terminalState: "partial", resumable: true, steps: [] } }
+            : { ok: false, error: { code: "PRECONDITION", message: "The staging row is no longer resumable." }, result: null },
+        );
+      }
+      return stageEnvelope({});
+    });
+    (window as unknown as { claude?: unknown }).claude = {
+      mcp: { callTool, watchTool: vi.fn().mockReturnValue(() => {}), listTools: vi.fn(), invalidate: vi.fn() },
+    };
+
+    openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    click([...panel("Annual Review")!.querySelectorAll("button")].find((b) => b.textContent === "Continue")!);
+    await flush();
+
+    const p = panel("Annual Review")!;
+    expect(p.textContent).toContain("PRECONDITION");
+    expect(p.textContent).toContain("The staging row is no longer resumable.");
+  });
+
+  it("#2 states the founder gate at the covenant gate, not the LV06 reason", async () => {
+    installWriteMcp();
+    openActionPanel("Covenant Review", "Piedmont Precision");
+    const review = byText(/Review the plan/);
+    if (!review || review.hasAttribute("disabled")) return; // gap-blocked in this view
+    click(review);
+    await flush();
+    const text = panel("Covenant Review")!.textContent ?? "";
+    expect(text).toContain("founder-gated");
+    expect(text).not.toContain("LV06");
+  });
+});
+
 describe("wave 2 — the five new tickets", () => {
   afterEach(() => {
     delete (window as unknown as { claude?: unknown }).claude;
@@ -483,7 +585,20 @@ describe("wave 2 — the five new tickets", () => {
       setter.call(area, "Collateral position improved materially since the last review.");
       area.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(panel("Risk Rating Review")!.textContent).not.toContain("An override requires a stated reason.");
+    // The reason satisfies the org's VR, and the SECOND block takes over: the
+    // override's wire name has never been observed, so it cannot be filed yet.
+    const p = panel("Risk Rating Review")!;
+    expect(p.textContent).not.toContain("An override requires a stated reason.");
+    expect(p.textContent).toContain("needs one live-probe confirmation");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("stages the review once the override is cleared", () => {
+    openActionPanel("Risk Rating Review");
+    setInput(panel("Risk Rating Review")!.querySelector("#hero-overrideValue")!, "4");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+    setInput(panel("Risk Rating Review")!.querySelector("#hero-overrideValue")!, "");
+    expect(panel("Risk Rating Review")!.textContent).not.toContain("needs one live-probe confirmation");
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
   });
 

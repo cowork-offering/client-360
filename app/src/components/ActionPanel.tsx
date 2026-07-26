@@ -2,8 +2,14 @@ import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { accountKey, useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
-import { ACTIONS_BY_ID } from "../actions/registry";
-import { buildPanelSchema, overrideNeedsComment, OVERRIDE_COMMENT_REQUIRED } from "../actions/schemas";
+import { ACTIONS_BY_ID, stageRationale } from "../actions/registry";
+import {
+  buildPanelSchema,
+  overrideIsSet,
+  overrideNeedsComment,
+  OVERRIDE_COMMENT_REQUIRED,
+  OVERRIDE_NOT_YET_FILEABLE,
+} from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
 import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
 import { runCompile, type CompileLine } from "../actions/compile";
@@ -386,6 +392,9 @@ export function ActionPanel({
   const [live, setLive] = useState(false);
   const [outcome, setOutcome] = useState<ExecuteResult | null>(null);
   const [continuing, setContinuing] = useState(false);
+  /** The Salesforce id of the banker who CONFIRMED this plan. Bound at confirm
+   *  and used for every resume, so a resume can never run as someone else. */
+  const approverRef = useRef<string | null>(null);
   /** Stable across a stage/execute pair and across resume (A33.3.5). Ours, not
    *  nCino's: the platform is known to duplicate on failed background Apex. */
   const idempotencyKeyRef = useRef<string>(newRequestId());
@@ -453,7 +462,16 @@ export function ActionPanel({
   const blockers = stagingBlockers(schema);
   /** The org's validation rule, enforced here so the banker learns it from the
    *  ticket rather than from a rejected write. */
-  const overrideGap = actionId === "risk-rating-review" && overrideNeedsComment(values) ? OVERRIDE_COMMENT_REQUIRED : null;
+  const overrideGap =
+    actionId === "risk-rating-review"
+      ? overrideNeedsComment(values)
+        ? OVERRIDE_COMMENT_REQUIRED
+        : // An override the wire cannot carry blocks the action rather than
+          // being dropped on the floor: the banker typed it deliberately.
+          overrideIsSet(values)
+          ? OVERRIDE_NOT_YET_FILEABLE
+          : null
+      : null;
 
   /** True once the banker has edited away from the values the plan was built
    *  from. The plan on the Plan step is then a description of something that is
@@ -465,6 +483,15 @@ export function ActionPanel({
     ? { provenance: "AGENT", editedBy: data.meta?.user, editedAt: new Date().toISOString(), editedFields }
     : null;
 
+  /** #11 — a REBUILD is a new intent: the values changed, so the plan and its
+   *  hash change, and reusing the key would invite the org to replay the old
+   *  staging row. Stepping back and forward without editing keeps the key,
+   *  because that is the same intent looked at twice. */
+  function keyForThisStage(): string {
+    if (planIsStale) idempotencyKeyRef.current = newRequestId();
+    return idempotencyKeyRef.current;
+  }
+
   /** Stage the plan.
    *
    *  FAIL-CLOSED (unchanged): the real `stage_*` tools do not exist yet, so in a
@@ -474,7 +501,7 @@ export function ActionPanel({
   /** Build the tool payload from the panel values. Field names come from the
    *  deployed Apex Request classes, read not guessed. */
   function stagePayload(): StagePayloads[keyof StagePayloads] | null {
-    const idempotencyKey = idempotencyKeyRef.current;
+    const idempotencyKey = keyForThisStage();
     const v = (k: string) => (values[k] === "" ? null : (values[k] ?? null));
     const nOf = (k: string) => {
       const raw = v(k);
@@ -486,7 +513,15 @@ export function ActionPanel({
       const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
       return typeof c === "string" && c ? c : null;
     };
-    const rationale = engine.suggestions.filter((s) => !declined[s.id]).map((s) => s.rationale).join(" ") || undefined;
+    // #3 — the Apex contract requires a non-blank rationale, and an undefined
+    // one is simply omitted by JSON. When no suggestion is carrying the reason,
+    // the action states its own, deterministically.
+    const accepted = engine.suggestions.filter((s) => !declined[s.id]).map((s) => s.rationale).join(" ").trim();
+    const typed = [values.modificationReason, values.renewalReason, values.purposeNote]
+      .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+      .join(" ")
+      .trim();
+    const rationale = stageRationale({ actionId, accountName, accepted, typed });
     const packageId = bundle?.snapshot?.productPackageId ?? null;
 
     if (actionId === "collateral-valuation") {
@@ -512,6 +547,7 @@ export function ActionPanel({
         accountId,
         rationale,
         requestType: v("type") as string | null,
+        origin: v("origin") as string | null,
         summary: (v("subject") ?? v("description")) as string | null,
         referenceKind: req?.reference?.kind ?? null,
         referenceId: req?.reference?.id ?? null,
@@ -546,24 +582,25 @@ export function ActionPanel({
         managementExperienceActual: nOf("managementExperience"),
         creditScoreActual: nOf("creditScore"),
         comments: v("overrideComment") as string | null,
-        overriddenRiskGradeValue: nOf("overrideValue"),
+        // NO override key. Its wire name has never been observed, and the
+        // ticket blocks staging when the banker sets one rather than dropping
+        // what they typed on the floor.
       };
     }
 
     if (actionId === "covenant-review") {
       const complianceId = citationOf("covenant");
       if (!complianceId) return null;
-      const observed = nOf("observedValue");
       return {
         idempotencyKey,
         accountId,
         rationale,
         covenantComplianceId: complianceId,
         result: v("assessmentResult") as string | null,
-        // Observed as a STRING on the wire.
-        observedValue: observed === null ? null : String(observed),
+        // The reported actual is CONTEXT, not an input: the schema renders it
+        // read-only and no write semantics for it were ever probed. The builder
+        // now agrees with the schema instead of quietly disagreeing.
         narrative: v("assessmentNarrative") as string | null,
-        comments: null,
       };
     }
 
@@ -726,6 +763,7 @@ export function ActionPanel({
 
   function onConfirmed(t: DecisionToken, executed?: ExecuteResult) {
     setToken(t);
+    if (!approverRef.current) approverRef.current = resolveApproverUserId(data.meta);
 
     // A30 — the trail records what the banker did, success or not. Rendered
     // immediately on the Activity tab; no Sync required, because this event
@@ -778,18 +816,47 @@ export function ActionPanel({
    */
   async function continueExecution() {
     if (!plan || !token || continuing) return;
-    const approverUserId = resolveApproverUserId(data.meta);
-    if (!approverUserId || !plan.decisionToken) return;
+
+    // #4 — the approver is the identity that CONFIRMED this plan, captured at
+    // confirm time and carried with it. Re-resolving it here would let a
+    // different signed-in user finish someone else's write, and the Apex resume
+    // branch dispatches on staging status without re-checking the token.
+    const bound = approverRef.current;
+    const current = resolveApproverUserId(data.meta);
+    if (!bound) return;
+    if (current !== bound) {
+      setToolError({
+        code: "IDENTITY_MISMATCH",
+        message:
+          "This plan was confirmed by a different user. Only the banker who confirmed it can continue it, so nothing was sent.",
+        resumable: false,
+      });
+      return;
+    }
+    if (!plan.decisionToken) return;
+
+    setToolError(null);
     setContinuing(true);
     try {
       const again = await executeAction(actionId as never, {
         idempotencyKey: idempotencyKeyRef.current,
         stagingId: plan.stagingId,
         planHash: plan.planHash,
+        // The wire requires the token's PRESENCE on a resume even though the
+        // Apex resume path never reads it; a null is refused by the platform.
         decisionToken: plan.decisionToken,
-        approverUserId,
+        approverUserId: bound,
       });
-      if (again.ok) onConfirmed(token, again.result);
+      // #10 — a failed resume goes through the same doctrine as a failed first
+      // execution: typed code, the org's own words, and no invented retry.
+      if (!again.ok) {
+        setToolError(again.error);
+        return;
+      }
+      onConfirmed(token, again.result);
+    } catch (e) {
+      const f = e as { code?: string; fix?: string; message?: string };
+      setToolError({ code: f.code ?? "TRANSPORT", message: f.message ?? f.fix ?? String(e) });
     } finally {
       setContinuing(false);
     }
@@ -868,6 +935,35 @@ export function ActionPanel({
                 onBack={stepBack}
                 onConfirmed={onConfirmed}
               />
+            )}
+
+            {/* #10 — a resume failure is rendered where the banker is standing.
+                The error block used to live only in the briefing phase, so a
+                failed Continue set state that nothing displayed. */}
+            {phase === "tracker" && toolError && (
+              <div className="border-b border-divider px-5 py-3">
+                <div className="rounded-[10px] px-3.5 py-2.5" style={{ background: "var(--critical-bg)" }}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--critical)" }}>
+                      This did not go through
+                    </span>
+                    <span
+                      className="rounded-[5px] px-1.5 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-wide"
+                      style={{ background: "var(--critical-bg)", color: "var(--critical)", border: "1px solid var(--critical)" }}
+                    >
+                      {toolError.code}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--critical)" }}>
+                    {toolError.message}
+                  </div>
+                  {toolError.orgError && (
+                    <div className="mt-1 font-mono text-[10.5px]" style={{ color: "var(--critical)" }}>
+                      {toolError.orgError}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
 
             {phase === "tracker" && plan && tracker && (

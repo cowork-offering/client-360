@@ -352,27 +352,6 @@ function annualReviewSchema(ctx: SchemaContext): PanelSchema {
   };
 }
 
-/* ------------------------------------------------------------- registry */
-
-export type SchemaBuilder = (ctx: SchemaContext) => PanelSchema;
-
-/** Only the three shipping actions. An action absent here has no panel. */
-export const PANEL_SCHEMAS: Record<string, SchemaBuilder> = {
-  "collateral-valuation": collateralValuationSchema,
-  "create-service-request": serviceRequestSchema,
-  "annual-review": annualReviewSchema,
-  "new-facility-request": newFacilitySchema,
-  "risk-rating-review": riskRatingSchema,
-  "covenant-review": covenantReviewSchema,
-  "loan-modification": (ctx) => facilityChangeSchema(ctx, "modification"),
-  renewal: (ctx) => facilityChangeSchema(ctx, "renewal"),
-};
-
-export function buildPanelSchema(actionId: string, ctx: SchemaContext): PanelSchema | null {
-  const builder = PANEL_SCHEMAS[actionId];
-  return builder ? builder(ctx) : null;
-}
-
 /* =============================================================================
    WAVE 2 (A33.5.7 frozen contracts)
 
@@ -637,13 +616,31 @@ function riskRatingSchema(ctx: SchemaContext): PanelSchema {
  * a rejected write.
  */
 export function overrideNeedsComment(values: Record<string, unknown>): boolean {
-  const v = values.overrideValue;
-  const set = typeof v === "number" ? v > 0 : typeof v === "string" && v.trim() !== "" && Number(v) > 0;
   const comment = typeof values.overrideComment === "string" ? values.overrideComment.trim() : "";
-  return set && comment === "";
+  return overrideIsSet(values) && comment === "";
 }
 
 export const OVERRIDE_COMMENT_REQUIRED = "An override requires a stated reason.";
+
+/**
+ * The override is typed but cannot yet be FILED.
+ *
+ * The staged plan writes `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool
+ * almost certainly accepts an override input, but no observed request has ever
+ * carried one and its wire name would be a guess. Guessing a field name is the
+ * failure this campaign has already paid for twice.
+ *
+ * So the input stays — the banker's judgement is worth capturing — and staging
+ * is BLOCKED with this said out loud. Silently dropping what somebody typed is
+ * the one option that is not available.
+ */
+export const OVERRIDE_NOT_YET_FILEABLE =
+  "Filing an override needs one live-probe confirmation of the org's field name, coming in the next wave. Clear the override to stage this review, or keep it and wait.";
+
+export function overrideIsSet(values: Record<string, unknown>): boolean {
+  const v = values.overrideValue;
+  return typeof v === "number" ? v > 0 : typeof v === "string" && v.trim() !== "" && Number(v) > 0;
+}
 
 function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
   const OBJ = "LLC_BI__Covenant_Compliance2__c";
@@ -716,8 +713,13 @@ function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
   };
 }
 
-/** Modification and renewal share their anchor and most of their shape: both
- *  act on an existing booked facility and both are staged, never executed. */
+/** Modification and renewal share their anchor: both act on an existing booked
+ *  facility, both are staged and neither is executed.
+ *
+ *  EVERY CONTROL BELOW MAPS ONE-FOR-ONE TO AN OBSERVED WIRE FIELD, with one
+ *  deliberate exception: the reason. It has no wire field of its own and folds
+ *  into `rationale`, so it targets staging rather than claiming an org field. A
+ *  control the wire cannot carry is a promise the panel cannot keep. */
 function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewal"): PanelSchema {
   const OBJ = "LLC_BI__Loan__c";
   const fac = primaryFacility(ctx.bundle);
@@ -741,6 +743,19 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
         },
   });
 
+  /** `requestedRate` on both observed envelopes. */
+  const rate = field({
+    key: "requestedRate",
+    label: "Rate",
+    type: "currency",
+    value: null,
+    prefill: { source: "BANKER" },
+    editable: true,
+    required: false,
+    target: { staging: true },
+    help: fac?.interestRate != null ? `Currently ${fac.interestRate} percent.` : undefined,
+  });
+
   const reason = field({
     key: kind === "renewal" ? "renewalReason" : "modificationReason",
     label: "Reason",
@@ -749,7 +764,10 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
     prefill: { source: "AGENT_NARRATIVE" },
     editable: true,
     required: false,
-    target: { object: OBJ, field: "LLC_BI__Change_Reason__c" },
+    // No wire field of its own: this text becomes the plan's rationale, which
+    // the org does record.
+    target: { staging: true },
+    help: "Carried on the plan as the stated reason for this change.",
   });
 
   if (kind === "renewal") {
@@ -770,19 +788,7 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
           target: { object: OBJ, field: "LLC_BI__Maturity_Date__c" },
           help: fac?.maturityDate ? `Currently matures ${fac.maturityDate}.` : undefined,
         }),
-        field({
-          key: "newCommitment",
-          label: "Commitment on renewal",
-          type: "currency",
-          value: fac?.committed ?? null,
-          prefill:
-            fac?.committed != null
-              ? { source: "NCINO_RECORD", citation: "current commitment on the facility" }
-              : { source: "BANKER" },
-          editable: true,
-          required: false,
-          target: { object: OBJ, field: "LLC_BI__Amount__c" },
-        }),
+        rate,
         reason,
       ],
     };
@@ -801,9 +807,6 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
         // The client's own ask when one is staged: the banker should not have to
         // retype a number the relationship already carries.
         value: asked ?? fac?.committed ?? null,
-        // The source is whatever ACTUALLY filled it. Claiming an nCino prefill
-        // on an empty field would say the org answered when it did not, and
-        // would hide real banker work behind a provenance chip.
         prefill: asked
           ? { source: "CLIENT_REQUEST", citation: (ctx.bundle?.requests ?? [])[0]?.reference?.id }
           : fac?.committed != null
@@ -814,16 +817,39 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
         target: { object: OBJ, field: "LLC_BI__Amount__c" },
       }),
       field({
-        key: "effectiveDate",
-        label: "Effective date",
-        type: "date",
+        key: "requestedTermMonths",
+        label: "Term (months)",
+        type: "text",
         value: null,
         prefill: { source: "BANKER" },
         editable: true,
         required: false,
-        target: { object: OBJ, field: "LLC_BI__Effective_Date__c" },
+        target: { staging: true },
       }),
+      rate,
       reason,
     ],
   };
+}
+
+
+/* ------------------------------------------------------------- registry */
+
+export type SchemaBuilder = (ctx: SchemaContext) => PanelSchema;
+
+/** Only the three shipping actions. An action absent here has no panel. */
+export const PANEL_SCHEMAS: Record<string, SchemaBuilder> = {
+  "collateral-valuation": collateralValuationSchema,
+  "create-service-request": serviceRequestSchema,
+  "annual-review": annualReviewSchema,
+  "new-facility-request": newFacilitySchema,
+  "risk-rating-review": riskRatingSchema,
+  "covenant-review": covenantReviewSchema,
+  "loan-modification": (ctx) => facilityChangeSchema(ctx, "modification"),
+  renewal: (ctx) => facilityChangeSchema(ctx, "renewal"),
+};
+
+export function buildPanelSchema(actionId: string, ctx: SchemaContext): PanelSchema | null {
+  const builder = PANEL_SCHEMAS[actionId];
+  return builder ? builder(ctx) : null;
 }

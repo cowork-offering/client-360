@@ -333,6 +333,36 @@ Read after the wave-2 build; each of these overturned something the panel had as
   `AsyncApexJob` row to poll.
 - **`LLC_BI__RootLoanId__c` does not exist here**; no chain-walking references any.
 
+### Cross-vendor review fixes (Codex, 2026-07-26)
+
+Twelve findings, all accepted. The ones that change what the cockpit will and will not do:
+
+- **A rating override cannot be filed yet, and the ticket says so.** The staged plan writes
+  `LLC_BI__Overridden_Risk_Grade_Value__c`, but no observed request has ever carried an override and
+  its wire name would be a guess. The input stays, staging is BLOCKED with a named reason, and nothing
+  invented goes on the wire. Silently dropping a number the banker typed was the one option not
+  available.
+- **`execute_covenant_review` is founder-gated in the client.** The tool exists and is deployed, but
+  its first live invocation updates existing org data. `execute: null` with its own reason at the gate:
+  the cockpit must not be the thing that fires an unapproved first production write. Staging is fully
+  functional. One line changes when the gate clears.
+- **Every stage payload carries a non-blank `rationale`.** The Apex Request declares it required and
+  JSON drops an undefined key; `stageRationale()` uses the accepted findings, else the banker's own
+  words, else a deterministic sentence naming the action and the anchor.
+- **A resume runs as the identity that CONFIRMED the plan**, captured at confirm and refused on
+  mismatch. The Apex resume branch dispatches on staging status without re-checking the token, so
+  without this a different signed-in user could finish someone else's write.
+- **A rebuild mints a new idempotency key.** Editing and rebuilding is a new intent with a new hash;
+  reusing the key invites the org to replay the staging row the banker just edited away from. Stepping
+  back and forward without editing keeps the key, because that is one intent looked at twice.
+- **Every control maps one-for-one to an observed wire field.** Modification and renewal lost the
+  controls the wire cannot carry (`effectiveDate`, renewal `newCommitment`) and gained the ones it
+  does (`requestedTermMonths`, `requestedRate`). The reason field targets staging rather than claiming
+  an org field, and folds into `rationale`.
+- **The covenant observed value is context, not an input** — the builder now agrees with the schema.
+- Service request `origin` is sent; execute `status` and plan `waitBudgetMs` are parsed; a failed
+  resume renders through the full error doctrine, on the screen the banker is actually looking at.
+
 ### Wave 2 seam swap (observed 2026-07-26)
 
 Every wave-2 payload now carries field names copied verbatim from request bodies the org accepted.

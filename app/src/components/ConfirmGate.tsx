@@ -8,6 +8,7 @@ import { mintDecisionToken, type DecisionToken } from "../actions/decisionToken"
 import {
   EXECUTION_HELD_COPY,
   executeAction,
+  executionHeldReason,
   isExecutionHeld,
   isWriteAction,
   resolveApproverUserId,
@@ -99,7 +100,9 @@ export function ConfirmGate({
   // come back on the observed stage response, and the reason is rendered
   // verbatim rather than restated from our own copy.
   const held = plan.executionHeld === true || isExecutionHeld(actionId);
-  const heldReason = plan.heldReason ?? EXECUTION_HELD_COPY;
+  // The ORG's reason when it gives one, else THIS action's own reason: LV06 and
+  // a founder gate are different facts and must not borrow each other's words.
+  const heldReason = plan.heldReason ?? executionHeldReason(actionId) ?? EXECUTION_HELD_COPY;
   const blocked = violations.length > 0 || idLeaks.length > 0 || held;
 
   async function confirm() {

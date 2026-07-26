@@ -287,3 +287,24 @@ export const ACTIONS_BY_ID: Record<string, ClientAction> = Object.fromEntries(
 export function renderPrompt(action: ClientAction, accountName: string, accountId: string): string {
   return action.promptTemplate.replaceAll("{account}", accountName).replaceAll("{accountId}", accountId);
 }
+
+
+/**
+ * The audit rationale that goes on every staged plan.
+ *
+ * The Apex Request declares `rationale` required, and an undefined one is
+ * simply dropped by JSON, so there is always a sentence: what the figures said
+ * when they said something, what the banker wrote when they wrote something,
+ * and otherwise a deterministic statement of who asked for what.
+ */
+export function stageRationale(input: {
+  actionId: string;
+  accountName: string;
+  accepted?: string;
+  typed?: string;
+}): string {
+  const parts = [input.typed?.trim(), input.accepted?.trim()].filter(Boolean);
+  if (parts.length) return parts.join(" ");
+  const label = ACTIONS_BY_ID[input.actionId]?.label.toLowerCase() ?? input.actionId;
+  return `Banker-initiated ${label} for ${input.accountName} via the cockpit.`;
+}
