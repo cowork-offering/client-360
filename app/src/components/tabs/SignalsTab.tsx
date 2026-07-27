@@ -71,7 +71,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
       ews.push({
         title: "Covenant at threshold · " + (c.covenantType ?? ""),
         severity: "Critical",
-        body: "Actual " + fmtCovVal(c.actualValue) + " vs " + fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue),
+        body: "Actual " + fmtCovVal(c.actualValue, c.covenantType) + " vs " + fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue),
         date: c.lastEvaluationDate ? fmtDate(c.lastEvaluationDate) : "",
       });
     }

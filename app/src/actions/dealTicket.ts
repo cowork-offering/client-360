@@ -296,7 +296,7 @@ export function reviewFacts(bundle: BorrowerBundle | null, reasons: ReasonCode[]
       label: "Covenants",
       value: `${holding} of ${measured.length} within threshold`,
       note: tightest
-        ? `tightest is ${tightest.type} at ${fmtCovVal(tightest.actual)} against ${fmtCovVal(tightest.threshold)}`
+        ? `tightest is ${tightest.type} at ${fmtCovVal(tightest.actual, tightest.type)} against ${fmtCovVal(tightest.threshold, tightest.type)}`
         : undefined,
     });
   }

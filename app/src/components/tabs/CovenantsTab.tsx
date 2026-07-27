@@ -19,25 +19,25 @@ const EXPLAIN =
 
 const COV_COLS = "1.6fr 0.9fr 1fr 0.9fr 1.3fr 1fr";
 
-function challengeView(ch: CovenantChallenge): { tone: Tone; label: string } {
+function challengeView(ch: CovenantChallenge, type?: string): { tone: Tone; label: string } {
   const bi = ch.boomImplied ?? null;
-  const val = bi && bi.value != null ? fmtCovVal(bi.value) : null;
+  const val = bi && bi.value != null ? fmtCovVal(bi.value, type) : null;
   if (ch.status === "not-computable" || !bi || val === null) {
     return { tone: "neutral", label: "not computable — " + (ch.note ? String(ch.note) : "inputs unavailable") };
   }
   if (ch.breachRiskFlag === true) {
-    return { tone: "red", label: `Boom-implied ${val} crosses threshold ${fmtCovVal(ch.threshold)}` };
+    return { tone: "red", label: `Boom-implied ${val} crosses threshold ${fmtCovVal(ch.threshold, type)}` };
   }
   if (ch.status === "diverges") {
-    return { tone: "amber", label: `Boom-implied ${val} · diverges from nCino ${fmtCovVal(ch.nCinoActual)}` };
+    return { tone: "amber", label: `Boom-implied ${val} · diverges from nCino ${fmtCovVal(ch.nCinoActual, type)}` };
   }
   return { tone: "green", label: `Boom-implied ${val} · corroborates` };
 }
 
-function EffectiveChallenge({ ch }: { ch?: CovenantChallenge }) {
+function EffectiveChallenge({ ch, type }: { ch?: CovenantChallenge; type?: string }) {
   const [open, setOpen] = useState(false);
   if (!ch) return null;
-  const { tone, label } = challengeView(ch);
+  const { tone, label } = challengeView(ch, type);
   const bi = ch.boomImplied ?? null;
   const detail = bi && (bi.formula || bi.inputs != null || bi.period);
   const dot = <span className="h-1.5 w-1.5 flex-none rounded-full" style={{ background: STATUS[tone].fg }} />;
@@ -72,6 +72,78 @@ function EffectiveChallenge({ ch }: { ch?: CovenantChallenge }) {
           {bi?.period && <div><span className="font-bold text-ink-body-strong">Period </span>{bi.period}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The column names, once. Both covenant sections render the SAME six columns
+ *  under the SAME header: a facility-scoped covenant is not a lesser covenant,
+ *  and values under nothing are values nobody can read (validation audit
+ *  2026-07-27, finding 2). */
+function CovenantHeader() {
+  return (
+    <div
+      data-cov-header
+      className="grid gap-3.5 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
+      style={{ gridTemplateColumns: COV_COLS }}
+    >
+      <span>Covenant</span><span>Actual</span><span>Threshold</span><span>Cushion</span><span>Headroom</span><span>Next test</span>
+    </div>
+  );
+}
+
+/** One covenant, in full. ONE definition, so the relationship table and the
+ *  facility groups cannot drift apart again. */
+function CovenantRow({
+  cov,
+  challenge,
+  entered,
+}: {
+  cov: Covenant;
+  challenge?: CovenantChallenge;
+  entered: boolean;
+}) {
+  const cush = covenantCushion(cov.covenantType, cov.actualValue, cov.thresholdValue);
+  const barColor = STATUS[covTone(cov)].fg;
+  const next = cov.nextEvaluationDate
+    ? fmtDate(cov.nextEvaluationDate)
+    : cov.daysUntilNextEvaluation != null
+      ? `${Math.round(cov.daysUntilNextEvaluation)} days`
+      : "—";
+
+  return (
+    <div
+      data-cov-row
+      className="c360-row-in grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
+      style={{ gridTemplateColumns: COV_COLS }}
+    >
+      <span className="font-semibold">{cov.covenantType ?? "Covenant"}</span>
+      <span className="font-bold">
+        <Pulse id={`covenant.${cov.covenantId}.actualValue`}>{fmtCovVal(cov.actualValue, cov.covenantType)}</Pulse>
+      </span>
+      <span className="text-ink-label">
+        <Pulse id={`covenant.${cov.covenantId}.thresholdValue`}>
+          {fmtCovThreshold(cov.covenantType, cov.actualValue, cov.thresholdValue)}
+        </Pulse>
+      </span>
+      <span className="font-bold" style={{ color: barColor }}>
+        {cush.cushion != null
+          ? `${cush.cushion < 0 ? "−" : ""}${fmtCovVal(Math.abs(cush.cushion), cov.covenantType)}`
+          : "—"}
+      </span>
+      <div className="h-1.5 overflow-hidden rounded-[6px]" style={{ background: "var(--border)" }}>
+        <div
+          className="c360-meter-x h-full w-full rounded-[6px]"
+          style={{ transform: `scaleX(${!entered || cush.safe === false ? 0 : cush.pct / 100})`, background: barColor }}
+        />
+      </div>
+      <span
+        className="justify-self-start whitespace-nowrap rounded-[6px] px-2.5 py-1 text-[11px] font-bold text-ink-body"
+        style={{ background: "var(--wash-2)" }}
+      >
+        {next}
+      </span>
+      <EffectiveChallenge ch={challenge} type={cov.covenantType} />
     </div>
   );
 }
@@ -127,68 +199,32 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
                 Absent means unknown, and one honest list beats a wrong guess. */}
             {groups.grouped ? "Account covenants" : "Financial covenants"}
           </div>
-          <div
-            className="grid gap-3.5 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
-            style={{ gridTemplateColumns: COV_COLS }}
-          >
-            <span>Covenant</span><span>Actual</span><span>Threshold</span><span>Cushion</span><span>Headroom</span><span>Next test</span>
-          </div>
-          {(groups.grouped ? groups.account : covs).map((c, i) => {
-            const cush = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
-            const tone = covTone(c);
-            const barColor = STATUS[tone].fg;
-            const next = c.nextEvaluationDate
-              ? fmtDate(c.nextEvaluationDate)
-              : c.daysUntilNextEvaluation != null
-                ? `${Math.round(c.daysUntilNextEvaluation)} days`
-                : "—";
-            return (
-              <div
-                key={c.covenantId ?? i}
-                className="c360-row-in grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
-                style={{ gridTemplateColumns: COV_COLS }}
-              >
-                <span className="font-semibold">{c.covenantType ?? "Covenant"}</span>
-                <span className="font-bold">
-                  <Pulse id={`covenant.${c.covenantId}.actualValue`}>{fmtCovVal(c.actualValue)}</Pulse>
-                </span>
-                <span className="text-ink-label">
-                  <Pulse id={`covenant.${c.covenantId}.thresholdValue`}>
-                    {fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)}
-                  </Pulse>
-                </span>
-                <span className="font-bold" style={{ color: barColor }}>
-                  {cush.cushion != null ? `${cush.cushion < 0 ? "−" : ""}${fmtCovVal(Math.abs(cush.cushion))}` : "—"}
-                </span>
-                <div className="h-1.5 overflow-hidden rounded-[6px]" style={{ background: "var(--border)" }}>
-                  <div
-                  className="c360-meter-x h-full w-full rounded-[6px]"
-                  style={{ transform: `scaleX(${!entered || cush.safe === false ? 0 : cush.pct / 100})`, background: barColor }}
-                />
-                </div>
-                <span className="justify-self-start whitespace-nowrap rounded-[6px] px-2.5 py-1 text-[11px] font-bold text-ink-body" style={{ background: "var(--wash-2)" }}>
-                  {next}
-                </span>
-                <EffectiveChallenge ch={c.covenantId ? challengeById.get(c.covenantId) : undefined} />
-              </div>
-            );
-          })}
+          <CovenantHeader />
+          {(groups.grouped ? groups.account : covs).map((c, i) => (
+            <CovenantRow
+              key={c.covenantId ?? i}
+              cov={c}
+              challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
+              entered={entered}
+            />
+          ))}
 
           {/* FACILITY COVENANTS, named by the loan they bind. Rendered only
-              when the read tells us which loans a covenant is attached to. */}
+              when the read tells us which loans a covenant is attached to.
+              Grouping by facility is the deal grammar and stays; the columns
+              are the relationship table's, because the covenant is the same
+              instrument wherever it is attached. */}
           {groups.byFacility.map((f) => (
             <div key={f.loanId ?? f.loanName} className="border-t border-divider">
               <div className="kicker px-6 pb-1.5 pt-4">Facility covenants · {f.loanName}</div>
+              <CovenantHeader />
               {f.covenants.map((c, i) => (
-                <div
+                <CovenantRow
                   key={c.covenantId ?? i}
-                  className="grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
-                  style={{ gridTemplateColumns: COV_COLS }}
-                >
-                  <span className="font-semibold">{c.covenantType ?? "Covenant"}</span>
-                  <span className="font-bold">{fmtCovVal(c.actualValue)}</span>
-                  <span className="text-ink-label">{fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)}</span>
-                </div>
+                  cov={c}
+                  challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
+                  entered={entered}
+                />
               ))}
             </div>
           ))}

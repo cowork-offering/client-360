@@ -14,11 +14,82 @@ export function fmtRate(n: number | null | undefined): string {
   return Number(n).toFixed(2) + "%";
 }
 
-/** Covenant value: money when large, ratio when small — inferred by magnitude. */
-export function fmtCovVal(n: number | null | undefined): string {
+/* -------------------------------------------------------- covenant units
+   A covenant's number means nothing without its unit, and the read carries NO
+   unit hint — only `LLC_BI__Covenant_Type__r.Name`. Magnitude alone was the old
+   rule and it is wrong for a whole class of covenant: an advance test at 80
+   percent rendered "80.00×", which is not a smaller version of the truth, it is
+   a different statement (validation audit 2026-07-27, finding 6).
+
+   So the TYPE decides, by the same named-hint method `covenantDirection` has
+   always used, and the hint lists are the covenant vocabulary rather than the
+   six names one relationship happens to carry. Magnitude survives only as the
+   last resort, where it answers the single question it can answer honestly: an
+   amount is not a multiple. It cannot tell a percent from a multiple, so the
+   ratio default stands exactly where it stood before. */
+
+export type CovenantUnit = "ratio" | "percent" | "currency";
+
+/** Multiples and coverage tests: rendered ×. */
+const RATIO_HINTS = [
+  "coverage", "dsc", "dscr", "ratio", "leverage", "debt to worth", "debt-to-worth", "debt/worth",
+  "times", "multiple", "turns",
+];
+/** Rate-shaped tests: an advance, a share, a limit expressed as a proportion. */
+const PERCENT_HINTS = [
+  "advance", "accounts receivable", "receivables", "inventory", "borrowing base", "loan to value",
+  "loan-to-value", "ltv", "concentration", "percent", "percentage", "utilisation", "utilization",
+  "margin", "rate",
+];
+/** Money tests: a floor, a cap or a budget stated in currency. */
+const CURRENCY_HINTS = [
+  "liquidity", "net worth", "tangible net worth", "working capital", "capital expenditure",
+  "capital expenditures", "capex", "purchases", "expenditures", "ebitda", "revenue", "cash",
+  "balance", "amount", "distributions", "spend",
+];
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Word-boundary matched, deliberately: a substring test reads "rate" out of
+ *  "corporate" and quietly relabels a covenant. */
+function typeHints(type: string | undefined, list: string[]): boolean {
+  const t = (type || "").toLowerCase();
+  if (!t) return false;
+  return list.some((h) => new RegExp(`\\b${escape(h)}\\b`).test(t));
+}
+
+/**
+ * The unit a covenant's numbers are in, decided by its TYPE.
+ *
+ * Correct for every relationship or it is correct for none: the rules live here
+ * and in the type vocabulary, never in a list of one borrower's covenant names.
+ */
+export function covenantUnit(type: string | undefined, value?: number | null): CovenantUnit {
+  if (typeHints(type, RATIO_HINTS)) return "ratio";
+  if (typeHints(type, PERCENT_HINTS)) return "percent";
+  if (typeHints(type, CURRENCY_HINTS)) return "currency";
+  return value != null && Number.isFinite(value) && Math.abs(value) >= 1000 ? "currency" : "ratio";
+}
+
+/** A percent, at the precision it actually carries: 80 is "80%", not "80.00%",
+ *  and 79.5 keeps its half. Matches how advance rates read on Exposure. */
+function fmtPercentLocal(n: number): string {
+  return `${Number(n.toFixed(2))}%`;
+}
+
+/** A covenant value in ITS OWN unit. Pass the covenant type wherever one is
+ *  known; without it the formatter falls back to magnitude, which is the same
+ *  answer it has always given and is right only for money. */
+export function fmtCovVal(n: number | null | undefined, type?: string): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
-  if (Math.abs(n) >= 1000) return fmtMoneyLocal(n);
-  return Number(n).toFixed(2) + "×";
+  switch (covenantUnit(type, n)) {
+    case "currency":
+      return fmtMoneyLocal(n);
+    case "percent":
+      return fmtPercentLocal(n);
+    default:
+      return Number(n).toFixed(2) + "×";
+  }
 }
 
 // Local money formatter matching the legacy template (kept here so finance.ts is
@@ -91,7 +162,7 @@ export function fmtCovThreshold(
   threshold: number | null | undefined,
 ): string {
   if (threshold == null) return "—";
-  return (covenantDirection(type, actual, threshold) === "cap" ? "≤ " : "≥ ") + fmtCovVal(threshold);
+  return (covenantDirection(type, actual, threshold) === "cap" ? "≤ " : "≥ ") + fmtCovVal(threshold, type);
 }
 
 export function covTone(cov: Covenant): Tone {

@@ -1,6 +1,86 @@
 import { describe, expect, it } from "vitest";
 import type { Covenant } from "./contract";
-import { covenantCushion, covenantDirection, covTone, gradeTone } from "./finance";
+import { covenantCushion, covenantDirection, covenantUnit, covTone, fmtCovThreshold, fmtCovVal, gradeTone } from "./finance";
+
+describe("covenantUnit — the TYPE decides, not the magnitude", () => {
+  it("reads coverage, leverage and multiples as ratios", () => {
+    for (const t of [
+      "Debt Service Coverage of Borrower",
+      "Debt Service Coverage with and without Distributions",
+      "Fixed Charge Coverage Ratio",
+      "Maximum Debt to Worth",
+      "Debt-to-Worth",
+      "Current Ratio",
+      "Senior Leverage",
+    ]) {
+      expect(covenantUnit(t), t).toBe("ratio");
+    }
+  });
+
+  it("reads advance and rate tests as percents", () => {
+    for (const t of [
+      "Accounts Receivable",
+      "Accounts Receivable Advance Rate",
+      "Inventory Advance",
+      "Loan-to-Value",
+      "LTV",
+      "Customer Concentration",
+    ]) {
+      expect(covenantUnit(t), t).toBe("percent");
+    }
+  });
+
+  it("reads money floors and caps as currency", () => {
+    for (const t of ["Minimum Liquidity", "Tangible Net Worth", "Fixed Asset Purchases", "Working Capital", "Capex"]) {
+      expect(covenantUnit(t), t).toBe("currency");
+    }
+  });
+
+  it("never reads a hint out of the middle of a word", () => {
+    // "corporate" contains "rate"; a substring test would relabel this covenant
+    // as a percent and print "1.20%" where the org means 1.20×.
+    expect(covenantUnit("Corporate Guarantee Coverage")).toBe("ratio");
+  });
+
+  it("falls back to magnitude only where the type says nothing", () => {
+    // An amount is not a multiple: that is the one thing magnitude can prove.
+    expect(covenantUnit("Mystery Covenant", 6_800_000)).toBe("currency");
+    // It cannot tell a percent from a multiple, so the old default stands.
+    expect(covenantUnit("Mystery Covenant", 1.25)).toBe("ratio");
+    expect(covenantUnit(undefined)).toBe("ratio");
+  });
+});
+
+describe("fmtCovVal renders a covenant in ITS OWN unit", () => {
+  it("prints the Hartwell advance test as a percent, not a multiple", () => {
+    // The literal defect from the validation audit: 80 rendered "80.00×".
+    expect(fmtCovVal(80, "Accounts Receivable")).toBe("80%");
+    expect(fmtCovThreshold("Accounts Receivable", 80, 80)).toBe("≥ 80%");
+    expect(fmtCovVal(79.5, "Accounts Receivable")).toBe("79.5%");
+  });
+
+  it("prints money covenants as money", () => {
+    expect(fmtCovVal(6_800_000, "Minimum Liquidity")).toBe("$6.80M");
+    expect(fmtCovVal(5_000_000, "Minimum Liquidity")).toBe("$5M");
+  });
+
+  it("prints coverage covenants as multiples", () => {
+    expect(fmtCovVal(1.38, "Debt Service Coverage of Borrower")).toBe("1.38×");
+    expect(fmtCovVal(2.42, "Maximum Debt to Worth")).toBe("2.42×");
+  });
+
+  it("says nothing at all when the org has no figure", () => {
+    expect(fmtCovVal(null, "Term Covenants")).toBe("—");
+    expect(fmtCovVal(undefined, "Term Covenants")).toBe("—");
+    expect(fmtCovThreshold("Term Covenants", null, null)).toBe("—");
+  });
+
+  it("keeps the magnitude behaviour for a caller with no type to give", () => {
+    expect(fmtCovVal(1.42)).toBe("1.42×");
+    expect(fmtCovVal(8_200_000)).toBe("$8.20M");
+  });
+});
+
 
 describe("covenantDirection", () => {
   it("treats coverage/liquidity as floors", () => {
