@@ -158,11 +158,13 @@ describe("the plan that comes back is read per facility", () => {
 
 describe("a refusal reaches the banker in the tool's own words", () => {
   /* The refusal ENVELOPE SHAPE is the deployed Apex contract (VALIDATION_FAILED
-     with message / idempotencyKey / resumable / orgError). No refusal response
-     was archived in the observation file, so the message below is a sentinel,
-     not a claim about the org's wording — which is precisely what this test
-     asserts: whatever the tool says arrives unedited. */
-  const SENTINEL = "SENTINEL: the tool's own sentence about why it refused.";
+     with message / idempotencyKey / resumable / orgError). The message below is
+     the VERBATIM live refusal observed on the wire 2026-07-27 (mixed-shapes case,
+     archived in observed-facilityIds-envelopes.json as
+     modification_refusal_mixed_shapes). The test still asserts pass-through:
+     whatever the tool says arrives unedited. */
+  const SENTINEL =
+    "Supply either the single loanId or facilityIds, but not both. Two shapes in one request is two intentions, and guessing which one wins would stage a modification against facilities the banker did not choose.";
 
   it("passes VALIDATION_FAILED through without paraphrase", async () => {
     installMcp({

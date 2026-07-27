@@ -505,5 +505,28 @@
       "sortOrder": 0,
       "version": 1
     }
+  ],
+  "modification_refusal_mixed_shapes": [
+    {
+      "actionName": "StageLoanModification",
+      "errors": null,
+      "expectedError": false,
+      "invocationId": null,
+      "isSuccess": true,
+      "outcome": null,
+      "outputValues": {
+        "error": {
+          "resumable": false,
+          "orgError": null,
+          "message": "Supply either the single loanId or facilityIds, but not both. Two shapes in one request is two intentions, and guessing which one wins would stage a modification against facilities the banker did not choose.",
+          "idempotencyKey": "wire-obs-mix-20260727a",
+          "code": "VALIDATION_FAILED"
+        },
+        "ok": false,
+        "result": null
+      },
+      "sortOrder": 0,
+      "version": 1
+    }
   ]
 }
