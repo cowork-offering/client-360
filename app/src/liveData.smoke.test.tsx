@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearOverlays } from "./state/syncOverlay";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -398,5 +398,81 @@ describe("a connection with no ownership percent still renders (founder rule)", 
     // The percent-bearing ones stay in the ownership tree where they belong.
     expect(text).toContain("Hartwell Industrial Holdings LLC");
     expect(text).toContain("Parent");
+  });
+});
+
+
+describe("a client email proposes its action (founder: when is the action coming out of there?)", () => {
+  const envelope = (outputValues: unknown) => ({
+    payload: { content: [{ actionName: "t", errors: null, isSuccess: true, outputValues, sortOrder: 0, version: 1 }] },
+  });
+
+  /** The observed single-object mail shape, synthetic values. */
+  const mail = {
+    id: "SYNTHETIC-1",
+    subject: "Test for Hartwell",
+    sender: "cfo@example.com",
+    receivedDateTime: "2026-07-27T09:00:00Z",
+    summary: "Could we increase the line of credit from 15Mio to 20Mio before quarter end?",
+    webLink: "https://example.com/mail/1",
+  };
+
+  const syncWithMail = async (payload: unknown) => {
+    const callTool = vi.fn(async (_s: string, tool: string) => {
+      if (tool === "outlook_email_search") return { payload };
+      if (tool === "Customer360ActionHistory") return envelope({ entries: [] });
+      return envelope({});
+    });
+    (window as unknown as { claude?: unknown }).claude = {
+      mcp: { callTool, watchTool: vi.fn().mockReturnValue(() => {}), listTools: vi.fn(), invalidate: vi.fn() },
+    };
+    mount(live as unknown as C360Data);
+    openAccount("Hartwell Precision Manufacturing LLC");
+    click([...container!.querySelectorAll("button")].find((b) => /^Sync$/.test(b.textContent ?? ""))!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+  };
+
+  afterEach(() => {
+    delete (window as unknown as { claude?: unknown }).claude;
+  });
+
+  it("renders the matched email with the action it proposes", async () => {
+    vi.useFakeTimers();
+    await syncWithMail(mail);
+    const text = container!.textContent ?? "";
+    expect(text).toContain("Test for Hartwell");
+    // The next-step mechanism already renders and opens the ticket.
+    expect(text).toContain("suggested next step");
+  });
+
+  it("prefills the modification ticket from the client's own ask", async () => {
+    vi.useFakeTimers();
+    await syncWithMail(mail);
+    vi.useRealTimers();
+
+    click([...container!.querySelectorAll("button")].find((b) => /Client Actions/.test(b.textContent ?? ""))!);
+    const row = [...document.querySelectorAll('[role="dialog"]')]
+      .flatMap((d) => [...d.querySelectorAll("button")])
+      .find((b) => b.textContent?.includes("Loan Modification"))!;
+    click(row);
+
+    const panel = [...document.querySelectorAll('[role="dialog"]')].find(
+      (d) => d.getAttribute("aria-label") === "Loan Modification",
+    )!;
+    const hero = panel.querySelector("#hero-newCommitment") as HTMLInputElement;
+    // The client asked for 20Mio, and that is what the field carries.
+    expect(hero.value).toBe("20000000");
+    // Marked as the CLIENT's number, not the org's and not the banker's.
+    expect(panel.textContent).toContain("Derived");
+  });
+
+  it("proposes nothing from a message that is not a request", async () => {
+    vi.useFakeTimers();
+    await syncWithMail({ ...mail, subject: "Hartwell — invoice attached", summary: "Copy of invoice 4471 for your records." });
+    const text = container!.textContent ?? "";
+    expect(text).toContain("Hartwell");
+    expect(text).not.toContain("suggested next step");
   });
 });

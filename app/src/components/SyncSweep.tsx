@@ -119,6 +119,7 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
         accountId,
         accountName,
         generatedAt: data.meta?.generatedAt ?? new Date().toISOString(),
+        bundle,
         slowTierFetchedAt: state.slowTierFetchedAt[accountId],
         onLines: setLines,
       });
@@ -127,14 +128,20 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
       deltas = diffBundles(before, { ...before, ...result.patch });
       requestCount = result.requests.length;
 
-      dispatch({ type: "PATCH_BUNDLE", accountId, patch: result.patch, storedAt: result.storedAt });
+      // The client's ask enters by the SAME door a staged request does, so the
+      // modification ticket prefills from it with CLIENT_REQUEST provenance and
+      // the message as its citation. No second prefill mechanism.
+      const patch = result.clientRequests?.length
+        ? { ...result.patch, requests: [...result.clientRequests, ...(bundle?.requests ?? [])] }
+        : result.patch;
+      dispatch({ type: "PATCH_BUNDLE", accountId, patch, storedAt: result.storedAt });
       if (result.history) dispatch({ type: "SET_ACTION_HISTORY", accountId, rows: result.history });
       if (result.fetchedAt) dispatch({ type: "SET_SLOW_TIER_FETCHED", accountId, fetchedAt: result.fetchedAt });
 
       // Persist the READ overlay so a reload does not lose the fetched email.
       // Nothing from staging or execution goes in here, ever.
       saveOverlay(dataVersionOf(data.meta), accountId, {
-        patch: { ...(state.livePatches[accountId] ?? {}), ...result.patch },
+        patch: { ...(state.livePatches[accountId] ?? {}), ...patch },
         activity: [...result.requests, ...(state.sessionActivity[accountId] ?? [])].slice(0, 25),
         history: result.history ?? state.actionHistory[accountId],
         storedAt: result.storedAt ?? state.liveStoredAt[accountId],

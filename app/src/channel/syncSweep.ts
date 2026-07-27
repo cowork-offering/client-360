@@ -15,7 +15,8 @@
    says so on its line. A failed sweep never blanks the workspace.
    ============================================================================= */
 
-import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, Id } from "../data/contract";
+import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, ClientRequest, Id } from "../data/contract";
+import { describeRequest, readMailRequest, suggestedActionFor, toClientRequest } from "../actions/mailIntake";
 import { callTool, DETAIL_TOOLS, SERVERS, TOOLS, unwrapInvocable, type McpFailure, type McpOk } from "./mcp";
 import { fetchActionHistory, matchesAccount, searchMailbox, type MailHit } from "./cockpitTools";
 
@@ -37,6 +38,9 @@ export interface SyncResult {
   storedAt?: number;
   /** Inbound mail that resolved to this account, as activity entries. */
   requests: ActivityEntry[];
+  /** What those messages actually ASK for, where the text says plainly enough
+   *  to prefill a ticket. Enters by the same door a staged request does. */
+  clientRequests?: ClientRequest[];
   /** The org's durable action trail. Undefined when the tool is not in this
    *  view at all, which is different from an empty trail. */
   history?: ActionHistoryRow[];
@@ -91,6 +95,8 @@ export interface SweepOptions {
   accountName: string;
   /** Render clock for the ingested mail timestamps; the staged generatedAt. */
   generatedAt: string;
+  /** The staged relationship, so a request can be matched to a REAL facility. */
+  bundle?: BorrowerBundle | null;
   /** Floor on how long a line is displayed before it may tick. */
   minPace?: number;
   onLines?: (lines: SyncLine[]) => void;
@@ -220,6 +226,7 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   let storedAt: number | undefined;
   let partial = false;
   let requests: ActivityEntry[] = [];
+  let clientRequests: ClientRequest[] = [];
   let historyRows: ActionHistoryRow[] | undefined;
 
   const KEPT = "This section did not come back. The previous value is still shown.";
@@ -302,7 +309,15 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
 
   await step("mail", mail, ({ hits }: { hits: MailHit[] }) => {
     const matched = hits.filter((h) => matchesAccount(h, accountName));
-    requests = matched.map((m) => ({
+    requests = matched.map((m) => {
+      // Read the message as a request, and hang the proposed action off the
+      // entry as a NEXT STEP. That mechanism already renders in the timeline and
+      // opens the ticket, so the suggestion needs no second surface.
+      const read = readMailRequest(m, opts.bundle ?? null);
+      const nextSteps = read
+        ? [{ actionId: suggestedActionFor(read), note: describeRequest(read) }]
+        : undefined;
+      return {
       id: `mail-${m.id ?? m.subject ?? Math.random().toString(36).slice(2)}`,
       // Clamp a skewed timestamp to the render clock rather than showing a
       // message that appears to arrive from the future.
@@ -313,9 +328,20 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
       actor: m.from,
       sessionLocal: true,
       reference: { kind: "m365-message", id: m.id, webLink: m.webLink },
-    }));
+      detail: nextSteps ? { nextSteps } : undefined,
+      };
+    });
+    // Read each matched message as a request. Nothing is invented: an
+    // unreadable message simply produces no ClientRequest.
+    clientRequests = matched
+      .map((m) => {
+        const req = readMailRequest(m, opts.bundle ?? null);
+        return req ? toClientRequest(m, req) : null;
+      })
+      .filter((r): r is ClientRequest => r !== null);
+
     return matched.length ? `${matched.length} matched` : "nothing new";
   });
 
-  return { lines, patch, storedAt, requests, history: historyRows, partial, fetchedAt };
+  return { lines, patch, storedAt, requests, clientRequests, history: historyRows, partial, fetchedAt };
 }

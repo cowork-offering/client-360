@@ -338,7 +338,12 @@ export function ActionPanel({
   const accountId = state.accountId ?? "";
   const accountName =
     data.portfolio.accounts.find((a) => a.accountId === accountId)?.name ?? data.borrower?.snapshot?.name ?? "this relationship";
-  const bundle = (data.borrowers ?? {})[accountId] ?? (data.borrower?.snapshot?.accountId === accountId ? data.borrower : null);
+  const staged = (data.borrowers ?? {})[accountId] ?? (data.borrower?.snapshot?.accountId === accountId ? data.borrower : null);
+  // Merge the live patch the SAME way the workspace does. Without this a ticket
+  // opened after a Sync still reads pre-sync exposure, and a client request the
+  // sync just ingested is invisible to the prefill that exists to use it.
+  const livePatch = state.livePatches[accountId];
+  const bundle = staged && livePatch ? { ...staged, ...livePatch } : staged;
   /** The key session-local activity is stored under. Resolved the same way the
    *  Activity tab resolves it, so a written entry is always a readable one. */
   const activityAccountId = accountKey(state.accountId, bundle?.snapshot?.accountId);
