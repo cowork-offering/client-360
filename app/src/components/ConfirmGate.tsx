@@ -104,6 +104,9 @@ export function ConfirmGate({
   // a founder gate are different facts and must not borrow each other's words.
   const heldReason = plan.heldReason ?? executionHeldReason(actionId) ?? EXECUTION_HELD_COPY;
   const blocked = violations.length > 0 || idLeaks.length > 0 || held;
+  /** A package-anchored plan over SEVERAL facilities. Drives the plural copy
+   *  below: "the new facility" is wrong when the plan clones four of them. */
+  const multi = (plan.facilities?.length ?? 0) > 1;
 
   async function confirm() {
     setError(null);
@@ -209,6 +212,40 @@ export function ConfirmGate({
         <p className="text-[13px] leading-relaxed text-ink">{plan.summary}</p>
       </div>
 
+      {/* PACKAGE-ANCHORED CREDIT ACTION. The org returned one plan over N
+          facilities, so the gate shows what each facility gets rather than
+          leaving the banker to count step ids. Rendered only for a real batch:
+          with one facility the summary already names it. */}
+      {multi && (
+        <div className="border-b border-divider px-5 py-4">
+          <div className="kicker mb-2">{plan.facilities!.length} facilities in this credit action</div>
+          <ul className="space-y-2.5">
+            {plan.facilities!.map((f) => (
+              <li key={f.facilityId}>
+                <div className="text-[12.5px] font-semibold text-ink">{f.facilityName ?? f.facilityId}</div>
+                {[f.creditActionStepId, f.verifyStepId, f.applyStepId].some(Boolean) && (
+                  <div className="mt-0.5 text-[11px] text-ink-muted">
+                    {[f.creditActionStepId, f.verifyStepId, f.applyStepId].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+                {typeof f.covenantCarryoverCount === "number" && (
+                  <div className="text-[11px] text-ink-muted">
+                    {f.covenantCarryoverCount === 0
+                      ? "No loan-level covenants would carry over."
+                      : `${f.covenantCarryoverCount} loan-level ${f.covenantCarryoverCount === 1 ? "covenant carries" : "covenants carry"} over.`}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {/* The whole point of the facilityIds shape, said plainly. */}
+          <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-muted">
+            One plan, one confirmation and one decision token cover all of them. Each facility carries its own
+            steps, so a failure on one is reported against that facility and does not discard the others.
+          </p>
+        </div>
+      )}
+
       {/* The plan, step by step, with types visually distinct. */}
       <div className="border-b border-divider px-5 py-4">
         <div className="kicker mb-2">The plan</div>
@@ -300,8 +337,8 @@ export function ConfirmGate({
       {typeof plan.covenantCarryoverCount === "number" && (
         <div className="border-b border-divider px-5 py-3 text-[11.5px] leading-relaxed text-ink-muted">
           {plan.covenantCarryoverCount === 0
-            ? "No loan-level covenants are attached to this facility, so nothing would carry over."
-            : `${plan.covenantCarryoverCount} loan-level ${plan.covenantCarryoverCount === 1 ? "covenant carries" : "covenants carry"} over to the new facility.`}
+            ? `No loan-level covenants are attached to ${multi ? "these facilities" : "this facility"}, so nothing would carry over.`
+            : `${plan.covenantCarryoverCount} loan-level ${plan.covenantCarryoverCount === 1 ? "covenant carries" : "covenants carry"} over to the new ${multi ? "facilities" : "facility"}.`}
         </div>
       )}
 

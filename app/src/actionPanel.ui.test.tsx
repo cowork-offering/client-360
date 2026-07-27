@@ -8,6 +8,7 @@ import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
 import { vi } from "vitest";
 import sample from "../../artifact/sample-data.json";
+import observedFacilityEnvelopes from "./actions/observed-facilityIds-envelopes.json";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -622,23 +623,91 @@ describe("wave 2 — the five new tickets", () => {
     expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(0);
   });
 
-  it("blocks staging when several facilities are selected, and names what is missing", () => {
-    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+  it("files SEVERAL facilities as one plan, on the facilityIds shape", async () => {
+    const callTool = installWriteMcp({ stage: MULTI_FACILITY_PLAN });
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
     const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
-    // Tick a second booked facility: the UI allows it, the wire does not.
+    // Tick the second booked facility. Both are in the same package, so this is
+    // one credit action over two facilities, which is how nCino frames it.
     click(boxes[1]);
-    const p = panel("Loan Modification")!;
-    expect(p.textContent).toContain("needs the package-level tool");
-    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+    click(byText(/Review the plan/)!);
+    await flush();
+
+    const stages = callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"));
+    // ONE call. Two plans dressed up as one is exactly what this shape avoids.
+    expect(stages).toHaveLength(1);
+    const body = inputsOf(stages[0]);
+    expect(body.facilityIds).toHaveLength(2);
+    // Never both keys: the tool refuses a mixed shape.
+    expect("loanId" in body).toBe(false);
   });
 
-  it("stages happily once the selection is back to one facility", () => {
-    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+  it("keeps the flat loanId shape when exactly one facility is selected", async () => {
+    const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    click(byText(/Review the plan/)!);
+    await flush();
+    const body = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_")));
+    expect(typeof body.loanId).toBe("string");
+    expect("facilityIds" in body).toBe(false);
+  });
+
+  it("blocks an EMPTY selection in the ticket, before anything is sent", async () => {
+    const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
     const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
-    click(boxes[1]);
+    // Untick the preselected facility: nothing is named, so there is no plan.
+    click(boxes.find((b) => b.checked)!);
+    const p = panel("Loan Modification")!;
+    expect(p.textContent).toContain("an empty selection is not a plan");
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+    await flush();
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(0);
+  });
+
+  it("renders the plan per facility, with the org's HELD reason and warnings", async () => {
+    installWriteMcp({ stage: MULTI_FACILITY_PLAN });
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
     click([...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')][1]);
-    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
+    click(byText(/Review the plan/)!);
+    await flush();
+
+    const text = panel("Loan Modification")!.textContent ?? "";
+    expect(text).toContain("2 facilities in this credit action");
+    // Each facility is named, with the steps that will report on it.
+    expect(text).toContain("Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00");
+    expect(text).toContain("Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00");
+    expect(text).toContain("credit_action_1");
+    expect(text).toContain("One plan, one confirmation and one decision token");
+    // HELD is stated, in the ORG's own sentence, and filing stays off.
+    expect(text).toContain("Staged, not filed");
+    expect(text).toContain("Loan_Validation_06");
+    expect(byText(/Filing is on hold/)!.hasAttribute("disabled")).toBe(true);
+    // The renewal's Opportunity warning has a sibling here: the covenant clone.
+    expect(text).toContain("2 loan-level covenant junction rows would clone onto the new facilities.");
+  });
+
+  it("renders a refusal in the tool's own words", async () => {
+    installWriteMcp({
+      stage: {
+        ok: false,
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "SENTINEL: the tool's own sentence about why it refused.",
+          idempotencyKey: "k",
+          resumable: false,
+        },
+        result: null,
+      },
+    });
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    click(byText(/Review the plan/)!);
+    await flush();
+    // Verbatim: a refusal from this tool is banker-readable by design, and
+    // paraphrasing it would throw away the only explanation there is.
+    expect(panel("Loan Modification")!.textContent).toContain(
+      "SENTINEL: the tool's own sentence about why it refused.",
+    );
   });
 
   it("stages a batch of valuations, no longer gated", async () => {
@@ -971,6 +1040,17 @@ const STAGE_PLAN = {
     ],
   },
 };
+
+/* The package-anchored credit-action plans, READ OUT OF the archived live
+   observation (Hartwell package a5Fbb000000IHFJEA4, 2026-07-27). Copied, never
+   composed: a hand-written plan would test the panel against a wire that does
+   not exist. */
+const OBSERVED_FACILITY_PLANS = observedFacilityEnvelopes as unknown as Record<
+  string,
+  Array<{ outputValues: unknown }>
+>;
+const MULTI_FACILITY_PLAN = OBSERVED_FACILITY_PLANS.package_anchored_modification_multi[0].outputValues;
+const FLAT_FACILITY_PLAN = OBSERVED_FACILITY_PLANS.modification_flat_backcompat[0].outputValues;
 
 const stageEnvelope = (outputValues: unknown) => ({
   payload: { content: [{ actionName: "stage_annual_review", errors: null, isSuccess: true, outputValues, sortOrder: 0, version: 1 }] },

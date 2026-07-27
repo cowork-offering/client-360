@@ -642,20 +642,17 @@ export function overrideNeedsComment(values: Record<string, unknown>): boolean {
 
 export const OVERRIDE_COMMENT_REQUIRED = "An override requires a stated reason.";
 
-/**
- * The override is typed but cannot yet be FILED.
- *
- * The staged plan writes `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool
- * almost certainly accepts an override input, but no observed request has ever
- * carried one and its wire name would be a guess. Guessing a field name is the
- * failure this campaign has already paid for twice.
- *
- * So the input stays — the banker's judgement is worth capturing — and staging
- * is BLOCKED with this said out loud. Silently dropping what somebody typed is
- * the one option that is not available.
- */
-export const BULK_FACILITIES_PENDING =
-  "A credit action covering several facilities at once needs the package-level tool, which is not deployed yet. Choose one facility to stage this action, or wait for multi-facility filing.";
+/** A credit action is staged against the facilities the banker NAMES. An empty
+ *  selection is not "all of them" and it is not a plan, so the ticket asks
+ *  before anything reaches the wire. */
+export const NO_FACILITY_SELECTED =
+  "Choose at least one facility. A credit action is staged against the facilities you name, and an empty selection is not a plan.";
+
+/** ONE credit action runs on ONE package. Facilities drawn from two packages
+ *  are two deals, and filing them as one plan would aim a write at the wrong
+ *  one — the same fail-closed rule the single-facility path already applies. */
+export const FACILITIES_SPAN_PACKAGES =
+  "These facilities belong to different product packages. A credit action runs on one package, so stage each package's facilities separately.";
 
 /** Credit Review and Risk Rating Review are DIFFERENT INSTRUMENTS on different
  *  objects. The banker must know which one they are raising. */
@@ -697,7 +694,7 @@ function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
         key: "covenant",
         label: "Covenant",
         type: "readonly",
-        value: cov ? `${cov.covenantType ?? "Covenant"}${cov.thresholdValue != null ? ` against ${fmtCovVal(cov.thresholdValue)}` : ""}` : null,
+        value: cov ? `${cov.covenantType ?? "Covenant"}${cov.thresholdValue != null ? ` against ${fmtCovVal(cov.thresholdValue, cov.covenantType)}` : ""}` : null,
         prefill: { source: "NCINO_RECORD", citation: complianceId },
         editable: false,
         editableReason: "the assessment updates this compliance record",
@@ -780,8 +777,8 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
     label: "Facilities in this credit action",
     // PACKAGE-CENTRIC: a credit action runs on the PACKAGE and covers the
     // facilities selected within it, which is how nCino frames it. The wire
-    // still takes one loanId, so selecting several is blocked until the
-    // facilityIds envelope lands — see BULK_FACILITIES_PENDING.
+    // now carries that shape too — `facilityIds` for several, the flat `loanId`
+    // for one — so the selection is filed as ONE plan over N facilities.
     type: "multiselect",
     // One booked facility is the answer, not a question: preselect it.
     value: chosen?.loanId ? [chosen.loanId] : [],

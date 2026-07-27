@@ -18,7 +18,7 @@
    ============================================================================= */
 
 import { callTool, SERVERS, unwrapInvocableOne, type McpFailure } from "./mcp";
-import type { PlanStep, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
+import type { PlanStep, StagedFacility, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
 
 /** The six deployed write tools. */
 export const WRITE_TOOLS = {
@@ -197,6 +197,21 @@ function toPlanStep(raw: Record<string, unknown>): PlanStep {
     state: typeof raw.state === "string" ? raw.state : undefined,
     detail: typeof raw.detail === "string" ? raw.detail : undefined,
     waitBudgetMs: typeof raw.waitBudgetMs === "number" ? raw.waitBudgetMs : undefined,
+  };
+}
+
+/** One facility inside a package-anchored plan. A row without a facilityId
+ *  cannot be reported against anything, so it is dropped rather than rendered
+ *  as an anonymous facility the banker cannot place. */
+function toStagedFacility(raw: Record<string, unknown>): StagedFacility {
+  return {
+    facilityId: String(raw.facilityId ?? ""),
+    facilityName: typeof raw.facilityName === "string" ? raw.facilityName : undefined,
+    creditActionStepId: typeof raw.creditActionStepId === "string" ? raw.creditActionStepId : undefined,
+    verifyStepId: typeof raw.verifyStepId === "string" ? raw.verifyStepId : undefined,
+    applyStepId: typeof raw.applyStepId === "string" ? raw.applyStepId : undefined,
+    covenantCarryoverCount:
+      typeof raw.covenantCarryoverCount === "number" ? raw.covenantCarryoverCount : undefined,
   };
 }
 
@@ -379,24 +394,38 @@ export interface StagePayloads {
     narrative?: string | null;
     comments?: string | null;
   };
-  "loan-modification": {
+  "loan-modification": FacilityAnchor & {
     idempotencyKey: string;
     rationale?: string;
-    loanId: string;
     productPackageId?: string | null;
     requestedAmount?: number | null;
     requestedTermMonths?: number | null;
     requestedRate?: number | null;
   };
-  renewal: {
+  renewal: FacilityAnchor & {
     idempotencyKey: string;
     rationale?: string;
-    loanId: string;
     productPackageId?: string | null;
     newMaturityDate?: string | null;
     requestedRate?: number | null;
   };
 }
+
+/**
+ * How a credit action names the facilities it covers — XOR, observed live
+ * 2026-07-27 against the Hartwell package.
+ *
+ * `facilityIds` is the package-anchored shape: ONE plan, ONE planHash, ONE
+ * decision token, N per-facility step triples. The flat `loanId` is the
+ * back-compat shape and is byte-identical to what shipped before it.
+ *
+ * MIXING THE TWO IS REFUSED BY THE TOOL, and so is an empty list, a duplicate
+ * id, and a facility from another package. The union below makes sending both
+ * a compile error rather than a runtime refusal a banker has to read.
+ */
+export type FacilityAnchor =
+  | { loanId: string; facilityIds?: never }
+  | { facilityIds: string[]; loanId?: never };
 
 /** Call `stage_*`. USER GESTURE ONLY — never on mount, never polled. */
 export async function stageAction<K extends WriteActionId>(
@@ -428,6 +457,10 @@ export async function stageAction<K extends WriteActionId>(
     heldReason: typeof r.heldReason === "string" ? r.heldReason : undefined,
     items: Array.isArray(r.items) ? (r.items as Array<Record<string, unknown>>).map(toStagedItem) : undefined,
     itemCount: typeof r.itemCount === "number" ? r.itemCount : undefined,
+    facilities: Array.isArray(r.facilities)
+      ? (r.facilities as Array<Record<string, unknown>>).map(toStagedFacility).filter((f) => f.facilityId !== "")
+      : undefined,
+    facilityCount: typeof r.facilityCount === "number" ? r.facilityCount : undefined,
     createsPackage: r.createsPackage === true,
     plannedPackageName: typeof r.plannedPackageName === "string" ? r.plannedPackageName : undefined,
     covenantCarryoverCount: typeof r.covenantCarryoverCount === "number" ? r.covenantCarryoverCount : undefined,

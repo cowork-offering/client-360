@@ -9,7 +9,8 @@ import {
   overrideNeedsComment,
   OVERRIDE_COMMENT_REQUIRED,
   OVERRIDE_NOT_YET_FILEABLE,
-  BULK_FACILITIES_PENDING,
+  NO_FACILITY_SELECTED,
+  FACILITIES_SPAN_PACKAGES,
 } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
 import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
@@ -20,7 +21,7 @@ import { assertNoRecordIds } from "../actions/stagedPlan";
 import { withDrafts } from "../actions/drafts";
 import { buildBriefing } from "../actions/briefing";
 import { DealTicket } from "./DealTicket";
-import type { ProvenanceKind, ReasonCode } from "../data/contract";
+import type { Facility, ProvenanceKind, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
 import { bookedFacilities } from "../data/facilityStage";
 import { ConfirmGate } from "./ConfirmGate";
@@ -32,6 +33,7 @@ import {
   resolveApproverUserId,
   stageAction,
   type ExecuteResult,
+  type FacilityAnchor,
   type StagePayloads,
   type ToolError,
 } from "../channel/writeTools";
@@ -467,20 +469,20 @@ export function ActionPanel({
   // Honest-gap discipline: a missing write anchor blocks staging outright. We
   // never substitute a different record's id to get past it.
   const blockers = stagingBlockers(schema);
-  /** The org's validation rule, enforced here so the banker learns it from the
-   *  ticket rather than from a rejected write. */
-  /** Selections the wire cannot carry yet. The UI is real; the block is honest
-   *  and names what is missing rather than filing N plans as if they were one. */
-  const bulkGap = (() => {
-    // Collateral valuation files a BATCH now: the items[] envelope is observed
-    // and its gate is gone. Modification and renewal still take one facility.
-    if (actionId === "loan-modification" || actionId === "renewal") {
-      const n = Array.isArray(values.facility) ? (values.facility as string[]).length : 0;
-      return n > 1 ? BULK_FACILITIES_PENDING : null;
-    }
-    return null;
+  /** What is wrong with the FACILITY SELECTION itself, before any payload is
+   *  built. Several facilities are now a supported shape (`facilityIds`), so the
+   *  only two answers left are "you named none" and "you named two deals". */
+  const facilityGap = (() => {
+    if (actionId !== "loan-modification" && actionId !== "renewal") return null;
+    const picked = [...new Set(Array.isArray(values.facility) ? (values.facility as string[]) : [])];
+    if (!picked.length) return NO_FACILITY_SELECTED;
+    const booked = bookedFacilities(bundle);
+    const packages = new Set(picked.map((id) => booked.find((f) => f.loanId === id)?.productPackageId));
+    return packages.size > 1 ? FACILITIES_SPAN_PACKAGES : null;
   })();
 
+  /** The org's validation rule, enforced here so the banker learns it from the
+   *  ticket rather than from a rejected write. */
   const overrideGap =
     actionId === "risk-rating-review"
       ? overrideNeedsComment(values)
@@ -528,15 +530,21 @@ export function ActionPanel({
       const n = typeof raw === "number" ? raw : Number(raw);
       return Number.isFinite(n) ? n : null;
     };
-    /** The booked facility the banker picked, resolved BY ID. Two facilities can
-     *  share a name, so a label lookup would silently pick whichever came
-     *  first. */
-    const selectedFacility = () => {
-      const picked = Array.isArray(values.facility) ? (values.facility as string[]) : [];
-      // ONE facility on the wire today. Several is blocked upstream, not
-      // quietly narrowed to whichever came first.
-      if (picked.length !== 1) return null;
-      return bookedFacilities(bundle).find((f) => f.loanId && f.loanId === picked[0]) ?? null;
+    /** The booked facilities the banker picked, resolved BY ID. Two facilities
+     *  can share a name, so a label lookup would silently pick whichever came
+     *  first.
+     *
+     *  ALL OR NOTHING: a selected id that does not resolve to a booked facility
+     *  carrying its OWN package is not quietly dropped. Filing three of four
+     *  facilities under a plan the banker read as covering four is the failure
+     *  this returns empty to avoid. */
+    const selectedFacilities = (): Facility[] => {
+      const picked = [...new Set(Array.isArray(values.facility) ? (values.facility as string[]) : [])];
+      const booked = bookedFacilities(bundle);
+      const rows = picked
+        .map((id) => booked.find((f) => f.loanId === id))
+        .filter((f): f is Facility => !!f?.loanId && !!f.productPackageId);
+      return rows.length === picked.length ? rows : [];
     };
     const citationOf = (key: string) => {
       const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
@@ -652,14 +660,25 @@ export function ActionPanel({
     }
 
     if (actionId === "loan-modification" || actionId === "renewal") {
-      const facility = selectedFacility();
+      const picked = selectedFacilities();
+      if (!picked.length) return null;
       // FAIL CLOSED on the package. The anchor must be the package the CHOSEN
-      // facility hangs off, not whichever one the relationship snapshot names:
+      // facilities hang off, not whichever one the relationship snapshot names:
       // a facility from another package staged against this one is a write
-      // aimed at the wrong deal. When the exposure row does not carry its own
+      // aimed at the wrong deal. When the exposure rows do not agree on one
       // package, the correspondence cannot be proven and nothing is sent.
-      if (!facility?.loanId || !facility.productPackageId) return null;
-      const common = { idempotencyKey, rationale, loanId: facility.loanId, productPackageId: facility.productPackageId };
+      const packages = new Set(picked.map((f) => f.productPackageId));
+      if (packages.size !== 1) return null;
+      const productPackageId = picked[0].productPackageId!;
+      // XOR, and the tool refuses anything else: SEVERAL facilities travel as
+      // `facilityIds` and come back as one plan with one hash and one token;
+      // ONE travels as the flat `loanId`, byte-identical to what shipped
+      // before the package-anchored shape landed.
+      const anchor: FacilityAnchor =
+        picked.length > 1
+          ? { facilityIds: picked.map((f) => f.loanId!) }
+          : { loanId: picked[0].loanId! };
+      const common = { idempotencyKey, rationale, ...anchor, productPackageId };
       return actionId === "loan-modification"
         ? {
             ...common,
@@ -713,7 +732,7 @@ export function ActionPanel({
               throw { code: "NOT_STAGEABLE", message: blockers.map((b) => b.gap!.reason).join(" ") };
             }
             if (overrideGap) throw { code: "VALIDATION_FAILED", message: overrideGap };
-            if (bulkGap) throw { code: "NOT_STAGEABLE", message: bulkGap };
+            if (facilityGap) throw { code: "NOT_STAGEABLE", message: facilityGap };
             payload = stagePayload();
             if (!payload && mcpAvailable() && isWriteAction(actionId)) {
               throw { code: "PRECONDITION", message: "This relationship has no pledged collateral to value." };
@@ -1141,8 +1160,8 @@ export function ActionPanel({
             <div className="flex-1 text-[11px] text-ink-muted">
               {blockers.length > 0
                 ? blockers.map((b) => b.gap!.reason).join(" ")
-                : (overrideGap ?? bulkGap)
-                  ? (overrideGap ?? bulkGap)
+                : (overrideGap ?? facilityGap)
+                  ? (overrideGap ?? facilityGap)
                   : missing.length > 0
                   ? `${missing.length} required ${missing.length === 1 ? "field" : "fields"} still to complete.`
                   : `Creates a ${schema.writeObjectLabel}.`}
@@ -1158,7 +1177,7 @@ export function ActionPanel({
             {(mcpAvailable() && isWriteAction(actionId)) || isSimulationAllowed() ? (
               <button
                 type="button"
-                disabled={missing.length > 0 || blockers.length > 0 || overrideGap !== null || bulkGap !== null}
+                disabled={missing.length > 0 || blockers.length > 0 || overrideGap !== null || facilityGap !== null}
                 onClick={() => (plan && !planIsStale ? setPhase("confirm") : void stage())}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { buildPanelSchema, BULK_FACILITIES_PENDING, REVIEW_FORK } from "./schemas";
+import { buildPanelSchema, REVIEW_FORK } from "./schemas";
 import { collateralDetail, collateralRecords, valuableRecords } from "../data/collateralRecords";
 import live from "../../../artifact/live-data.json";
 
@@ -95,14 +95,6 @@ describe("collateral records: one row per piece of security, not per pledge", ()
     };
     expect(schemaFor("collateral-valuation", one).fields.find((x) => x.key === "records")!.value).toEqual(["C"]);
     expect(schemaFor("collateral-valuation", shared).fields.find((x) => x.key === "records")!.value).toEqual([]);
-  });
-});
-
-describe("valuations file as a batch; facilities still file one at a time", () => {
-  it("no longer gates a multi-record valuation: the items[] envelope is observed", () => {
-    // The gate and its tests were deleted together, per the commit directive.
-    expect(BULK_FACILITIES_PENDING).toContain("not deployed yet");
-    expect(BULK_FACILITIES_PENDING).toContain("Choose one facility");
   });
 });
 

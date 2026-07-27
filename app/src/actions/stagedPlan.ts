@@ -55,6 +55,20 @@ export interface StagedItem {
   rollupStepId?: string;
 }
 
+/** One facility inside a package-anchored credit action, with the step ids that
+ *  will report on it. Observed on stage_loan_modification / stage_renewal
+ *  2026-07-27: N facilities, one plan, one hash, one token. A failure on one is
+ *  reported against THAT facility and does not silently discard the others. */
+export interface StagedFacility {
+  facilityId: string;
+  facilityName?: string;
+  creditActionStepId?: string;
+  verifyStepId?: string;
+  applyStepId?: string;
+  /** Loan-level covenant junctions that would clone onto THIS facility. */
+  covenantCarryoverCount?: number;
+}
+
 export interface StagedOutput {
   stagingId: string;
   /** Minted server-side and bound to stagingId + planHash + user. Null on an
@@ -80,6 +94,9 @@ export interface StagedOutput {
   /** Bulk valuation: what the plan will file, per collateral record. */
   items?: StagedItem[];
   itemCount?: number;
+  /** Package-anchored credit action: what the plan covers, per facility. */
+  facilities?: StagedFacility[];
+  facilityCount?: number;
   /** Hash over the ordered steps plus resolved field values. Immutable.
    *  `execute_*` refuses a mismatch. */
   planHash: string;
@@ -118,8 +135,13 @@ export const WRITE_TARGET_ID_PREFIXES: Record<string, string> = {
   a5n: "credit review",
 };
 
-/** Fields that legitimately carry an org record id (A33.5.3 common output). */
-const ID_CARRYING_KEYS = new Set(["accountId", "productPackageId", "stagingId", "decisionToken"]);
+/** Fields that legitimately carry an org record id (A33.5.3 common output).
+ *
+ *  `facilityId` belongs here for the same reason `productPackageId` does: a
+ *  package-anchored plan names the BOOKED facilities it would act on, and those
+ *  loans existed long before this plan was staged. Finding one proves nothing
+ *  was written — it is the plan saying what it is aimed at. */
+const ID_CARRYING_KEYS = new Set(["accountId", "productPackageId", "stagingId", "decisionToken", "facilityId"]);
 
 const RECORD_ID = /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/;
 
