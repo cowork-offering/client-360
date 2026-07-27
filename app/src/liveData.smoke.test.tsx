@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
+import { clearOverlays } from "./state/syncOverlay";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
@@ -38,6 +39,9 @@ afterEach(() => {
   resetModalStack();
   try {
     sessionStorage.clear();
+    // The sync overlay persists to localStorage by design; one test's sync must
+    // not restore itself into the next test's mount.
+    clearOverlays();
   } catch {
     /* ignore */
   }

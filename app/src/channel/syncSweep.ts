@@ -42,7 +42,23 @@ export interface SyncResult {
   history?: ActionHistoryRow[];
   /** True when a read failed and its section kept the previous value. */
   partial: boolean;
+  /** Slow-tier reads that actually ran, so the caller can remember when. */
+  fetchedAt?: Record<string, number>;
 }
+
+/**
+ * SLOW-MOVING READS. The relationship graph and the covenant set change on
+ * deal-time scales: a holding structure or a covenant package is not edited
+ * between two syncs on the same afternoon.
+ *
+ * The graph is also the heaviest and most id-dense call in the sweep, and the
+ * one the founder saw fail most often. Serving it from cache inside a five
+ * minute window means the flakiest call mostly stops happening, and the sweep
+ * costs two fewer calls against the platform budget, at no staleness risk a
+ * banker could notice.
+ */
+const SLOW_TIER_KEYS = new Set(["graph", "covenants"]);
+export const SLOW_TIER_STALE_MS = 5 * 60 * 1000;
 
 /** Bundle keys the six detail tools map onto, in DETAIL_TOOLS order. */
 const DETAIL_KEYS = ["snapshot", "graph", "exposure", "covenants", "opportunities", "signals"] as const;
@@ -78,6 +94,11 @@ export interface SweepOptions {
   /** Floor on how long a line is displayed before it may tick. */
   minPace?: number;
   onLines?: (lines: SyncLine[]) => void;
+  /** When each slow-tier read last succeeded, by bundle key. Inside the window
+   *  the sweep serves cache and does not call the tool at all. */
+  slowTierFetchedAt?: Record<string, number>;
+  /** Injected for tests; never used for data-derived reasoning (A10). */
+  now?: () => number;
   /** Launch pacing, overridable for tests. */
   launchGapMs?: number;
   maxInFlight?: number;
@@ -163,11 +184,27 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   );
   // SCOPE: only the OPEN account's detail is read. The sweep has never fanned
   // out across the book, and this is where that would show up if it ever did.
-  const details = DETAIL_TOOLS.map((tool) =>
-    settled(
+  const now = opts.now ?? (() => Date.now());
+  const fetchedBefore = opts.slowTierFetchedAt ?? {};
+  const startedAt = now();
+
+  /** Is this slow-tier read still fresh enough to skip entirely? */
+  const servedFromCache = (key: string) =>
+    SLOW_TIER_KEYS.has(key) &&
+    typeof fetchedBefore[key] === "number" &&
+    startedAt - fetchedBefore[key] < SLOW_TIER_STALE_MS;
+
+  const fetchedAt: Record<string, number> = {};
+
+  const details = DETAIL_TOOLS.map((tool, i) => {
+    const key = DETAIL_KEYS[i];
+    // NOT CALLED AT ALL inside the window. This is the budget relief and the
+    // flake relief both: a call that does not happen cannot fail.
+    if (servedFromCache(key)) return null;
+    return settled(
       pace(() => callTool(SERVERS.customer360, tool, { inputs: [{ accountId }] }, { read: true, cache: { staleTime: 15_000 } })),
-    ),
-  );
+    );
+  });
   const mail = settled(pace(() => searchMailbox(accountName)));
   const history = settled(pace(() => fetchActionHistory(accountId)));
 
@@ -232,11 +269,27 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
 
   for (let i = 0; i < details.length; i++) {
     const key = DETAIL_KEYS[i];
-    await step(key, details[i], (ok: McpOk<unknown>) => {
+    const call = details[i];
+
+    if (!call) {
+      // The line still ticks, and says why it was quick. Silent to the banker
+      // in the sense that nothing is wrong; not silent about what happened.
+      const line = lines.find((l) => l.id === key)!;
+      line.state = "running";
+      emit();
+      await sleep(minPace);
+      line.state = "done";
+      line.detail = "unchanged since the last sync";
+      emit();
+      continue;
+    }
+
+    await step(key, call, (ok: McpOk<unknown>) => {
       if (ok.cache?.storedAt && (storedAt === undefined || ok.cache.storedAt > storedAt)) storedAt = ok.cache.storedAt;
       const slot = unwrapInvocable(ok.payload, 1)[0];
       if (!slot.ok) return { failed: KEPT };
       (patch as Record<string, unknown>)[key] = slot.data;
+      if (SLOW_TIER_KEYS.has(key)) fetchedAt[key] = startedAt;
     });
   }
 
@@ -264,5 +317,5 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
     return matched.length ? `${matched.length} matched` : "nothing new";
   });
 
-  return { lines, patch, storedAt, requests, history: historyRows, partial };
+  return { lines, patch, storedAt, requests, history: historyRows, partial, fetchedAt };
 }

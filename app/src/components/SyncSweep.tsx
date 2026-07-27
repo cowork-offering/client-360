@@ -3,6 +3,7 @@ import { useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { mcpAvailable } from "../channel/mcp";
 import { runSyncSweep, type SyncLine } from "../channel/syncSweep";
+import { dataVersionOf, saveOverlay } from "../state/syncOverlay";
 import { diffBundles, deltaReport, type DeltaField } from "../data/delta";
 import type { BorrowerBundle } from "../data/contract";
 import { fmtRelative } from "../data/format";
@@ -118,6 +119,7 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
         accountId,
         accountName,
         generatedAt: data.meta?.generatedAt ?? new Date().toISOString(),
+        slowTierFetchedAt: state.slowTierFetchedAt[accountId],
         onLines: setLines,
       });
       // The delta is measured on what the banker was actually reading, against
@@ -127,6 +129,17 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
 
       dispatch({ type: "PATCH_BUNDLE", accountId, patch: result.patch, storedAt: result.storedAt });
       if (result.history) dispatch({ type: "SET_ACTION_HISTORY", accountId, rows: result.history });
+      if (result.fetchedAt) dispatch({ type: "SET_SLOW_TIER_FETCHED", accountId, fetchedAt: result.fetchedAt });
+
+      // Persist the READ overlay so a reload does not lose the fetched email.
+      // Nothing from staging or execution goes in here, ever.
+      saveOverlay(dataVersionOf(data.meta), accountId, {
+        patch: { ...(state.livePatches[accountId] ?? {}), ...result.patch },
+        activity: [...result.requests, ...(state.sessionActivity[accountId] ?? [])].slice(0, 25),
+        history: result.history ?? state.actionHistory[accountId],
+        storedAt: result.storedAt ?? state.liveStoredAt[accountId],
+        fetchedAt: { ...(state.slowTierFetchedAt[accountId] ?? {}), ...result.fetchedAt },
+      });
       if (result.requests.length) dispatch({ type: "INGEST_REQUESTS", accountId, entries: result.requests });
     } catch {
       // A sweep that falls over keeps the workspace exactly as it was. The

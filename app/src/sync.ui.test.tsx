@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearOverlays } from "./state/syncOverlay";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
@@ -28,6 +29,9 @@ afterEach(() => {
   vi.restoreAllMocks();
   try {
     sessionStorage.clear();
+    // The sync overlay persists to localStorage by design; one test's sync must
+    // not restore itself into the next test's mount.
+    clearOverlays();
   } catch {
     /* ignore */
   }

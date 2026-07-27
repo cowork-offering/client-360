@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearOverlays } from "./state/syncOverlay";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { BorrowerBundle, C360Data } from "./data/contract";
@@ -41,6 +42,9 @@ afterEach(() => {
   delete (window as unknown as { sendPrompt?: unknown }).sendPrompt;
   try {
     sessionStorage.clear();
+    // The sync overlay persists to localStorage by design; one test's sync must
+    // not restore itself into the next test's mount.
+    clearOverlays();
   } catch {
     /* ignore */
   }

@@ -11,6 +11,7 @@ import { createChannel, formatProbe, probeChannels } from "../channel/adapter";
 import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, C360Data, Worklist } from "../data/contract";
 import { deriveWorklist } from "../data/worklist";
 import { loadUi, saveUi, type PersistedUi } from "./persist";
+import { dataVersionOf, loadOverlays, type AccountOverlay } from "./syncOverlay";
 
 export const ACCOUNT_TABS = [
   // A30.1 — Activity is FIRST: the account's narrative spine (what happened,
@@ -58,6 +59,9 @@ export interface ViewState {
   /** The org's durable action trail per account, from the last sync. Absent
    *  means never fetched; empty means the org says nothing was filed. */
   actionHistory: Record<string, ActionHistoryRow[]>;
+  /** When each slow-tier read last ran, per account then bundle key. Inside the
+   *  window the sweep serves cache and does not call the tool at all. */
+  slowTierFetchedAt: Record<string, Record<string, number>>;
   /** Display ids a sync just changed. The value pulses where it already sits,
    *  then this clears — it is a notification, not a data state. */
   pulse: string[];
@@ -74,6 +78,8 @@ type Action =
   | { type: "PATCH_BUNDLE"; accountId: string; patch: Partial<BorrowerBundle>; storedAt?: number }
   | { type: "INGEST_REQUESTS"; accountId: string; entries: ActivityEntry[] }
   | { type: "SET_ACTION_HISTORY"; accountId: string; rows: ActionHistoryRow[] }
+  | { type: "SET_SLOW_TIER_FETCHED"; accountId: string; fetchedAt: Record<string, number> }
+  | { type: "RESTORE_OVERLAY"; overlays: Record<string, AccountOverlay> }
   | { type: "PULSE"; ids: string[] }
   | { type: "CLEAR_PULSE" }
   | { type: "SET_DRAFT"; draft: string }
@@ -92,6 +98,7 @@ const initial: ViewState = {
   livePatches: {},
   liveStoredAt: {},
   actionHistory: {},
+  slowTierFetchedAt: {},
   pulse: [],
 };
 
@@ -145,6 +152,37 @@ function reducer(state: ViewState, action: Action): ViewState {
           [action.accountId]: [action.entry, ...prev].slice(0, 25),
         },
       };
+    }
+    case "SET_SLOW_TIER_FETCHED": {
+      const prev = state.slowTierFetchedAt[action.accountId] ?? {};
+      return {
+        ...state,
+        slowTierFetchedAt: { ...state.slowTierFetchedAt, [action.accountId]: { ...prev, ...action.fetchedAt } },
+      };
+    }
+    case "RESTORE_OVERLAY": {
+      // Re-apply a persisted READ overlay over the baked bundle. The stored
+      // storedAt is carried through unchanged: restored is not fresh.
+      const livePatches = { ...state.livePatches };
+      const liveStoredAt = { ...state.liveStoredAt };
+      const actionHistory = { ...state.actionHistory };
+      const sessionActivity = { ...state.sessionActivity };
+      const slowTierFetchedAt = { ...state.slowTierFetchedAt };
+
+      for (const [accountId, overlay] of Object.entries(action.overlays)) {
+        if (overlay.patch) livePatches[accountId] = { ...(livePatches[accountId] ?? {}), ...overlay.patch };
+        if (typeof overlay.storedAt === "number") liveStoredAt[accountId] = overlay.storedAt;
+        if (overlay.history) actionHistory[accountId] = overlay.history;
+        if (overlay.activity?.length) {
+          const seen = new Set((sessionActivity[accountId] ?? []).map((e) => e.id));
+          sessionActivity[accountId] = [
+            ...(sessionActivity[accountId] ?? []),
+            ...overlay.activity.filter((e) => !seen.has(e.id)),
+          ].slice(0, 25);
+        }
+        if (overlay.fetchedAt) slowTierFetchedAt[accountId] = overlay.fetchedAt;
+      }
+      return { ...state, livePatches, liveStoredAt, actionHistory, sessionActivity, slowTierFetchedAt };
     }
     case "SET_ACTION_HISTORY":
       // Replaces wholesale: the org's answer is the whole trail as of that read,
@@ -268,6 +306,12 @@ export function AppProvider({ data, children }: { data: C360Data; children: Reac
     const restored = loadUi(anchor);
     return restored ? reducer(base, { type: "RESTORE", ui: sanitizeRestore(restored, data) }) : base;
   });
+
+  // A reload re-applies whatever the last sync fetched, at its true age.
+  useEffect(() => {
+    const overlays = loadOverlays(dataVersionOf(data.meta));
+    if (Object.keys(overlays).length) dispatch({ type: "RESTORE_OVERLAY", overlays });
+  }, [data.meta]);
 
   useEffect(() => {
     saveUi(anchor, {
