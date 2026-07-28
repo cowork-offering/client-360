@@ -4,6 +4,7 @@ import { runSyncSweep } from "./syncSweep";
 import { DETAIL_TOOLS, SERVERS, TOOLS } from "./mcp";
 import { diffBundles, deltaReport } from "../data/delta";
 import type { BorrowerBundle } from "../data/contract";
+import envelopes from "../data/observed-exposure-envelopes.json";
 
 type W = { claude?: { mcp?: unknown } };
 const w = window as unknown as W;
@@ -221,5 +222,34 @@ describe("budget discipline", () => {
       expect([SERVERS.customer360, SERVERS.m365]).toContain(String(call[0]));
       expect([TOOLS.mailSearch, TOOLS.portfolio, TOOLS.actionHistory, ...DETAIL_TOOLS]).toContain(String(call[1]));
     }
+  });
+});
+
+describe("the overlay carries the coverage members the org added", () => {
+  /* The sweep patches the exposure slice VERBATIM, so additive members need no
+     mapping — which is exactly why it needs a test. A future "tidy" that maps
+     the slice field by field would silently drop coverageNote and put the blank
+     coverage state back on a live sync. */
+  const OBSERVED = envelopes.exposure_read_piedmont_v2[0].outputValues;
+
+  it("passes the observed exposure envelope through untouched", async () => {
+    installMcp((_s, tool) => {
+      if (tool === TOOLS.mailSearch) return { payload: { value: [] } };
+      if (tool === TOOLS.exposure) return ok(OBSERVED);
+      return ok({ ok: true });
+    });
+
+    const result = await runSyncSweep({ ...SWEEP, accountId: "001bb00001DLtRMAA1" });
+    expect(result.patch.exposure).toEqual(OBSERVED);
+
+    const exp = result.patch.exposure!;
+    expect(exp.coverageRatio).toBe(1.65);
+    expect(exp.totalUniqueCollateralLendableValue).toBe(14_000_000);
+    expect(exp.uniqueCollateralCount).toBe(2);
+    const drawnNoCover = exp.facilities!.filter((f) => f.coverageShortfall);
+    expect(drawnNoCover).toHaveLength(2);
+    expect(drawnNoCover[0].coverageNote).toContain("no collateral is pledged");
+    expect(exp.facilities![2].collateral![0].amountPledged).toBe(5_000_000);
+    expect(exp.facilities![2].collateral![0].advanceRateSource).toBe("Collateral type default");
   });
 });

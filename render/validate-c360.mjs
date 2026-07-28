@@ -235,11 +235,14 @@ function buildDataQuality(data) {
         });
       }
     }
-    // coverage-null (info): secured facility with no coverage ratio computed.
+    // coverage-null (info): secured facility with no coverage ratio computed
+    // AND no reason given. A facility carrying `coverageNote` has already been
+    // explained by the org — an undrawn facility has nothing to cover, and that
+    // is a fact, not a finding to chase.
     for (const f of (exp.facilities || [])) {
       const collat = f && f.collateral;
       const hasCollateral = Array.isArray(collat) ? collat.length > 0 : Number(collat) > 0;
-      if (hasCollateral && (f.coverageRatio == null)) {
+      if (hasCollateral && (f.coverageRatio == null) && !f.coverageNote) {
         findings.push({
           severity: "info", code: "coverage-null", ...acct,
           message: `Facility "${f.name || f.loanId}" has pledged collateral but coverageRatio is null.`,

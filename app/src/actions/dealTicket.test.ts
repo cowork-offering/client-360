@@ -341,3 +341,59 @@ describe("the valuation readout never claims the rollup will fire (Probe 6)", ()
     expect(deltaHeading("new-facility-request").caveat).toBeUndefined();
   });
 });
+
+describe("the delta readout on the distinct-collateral basis", () => {
+  /* A revaluation moves the DISTINCT collateral base, not a sum of facility
+     shares. Piedmont is the case that separates them: 9.25MM of pledged share
+     against a 14.0MM distinct lendable base. The what-if reads the org's own
+     figure where the read carries it. */
+  const bundle: BorrowerBundle = {
+    snapshot: { accountId: "001bb00001DLtRMAA1" },
+    exposure: {
+      totalCommitted: 17_500_000,
+      totalOutstanding: 8_500_000,
+      coverageRatio: 1.65,
+      totalUniqueCollateralLendableValue: 14_000_000,
+      uniqueCollateralCount: 2,
+      facilities: [
+        {
+          loanId: "a4Zbb000001vaxREAQ",
+          totalPledgedValue: 9_250_000,
+          totalLendableValue: 9_250_000,
+          collateral: [
+            { collateralId: "a35bb000000zOgXAAU", advanceRate: 80, currentLendableValue: 10_000_000, collateralValue: 12_500_000, amountPledged: 5_000_000 },
+          ],
+        },
+      ],
+    },
+  };
+
+  it("takes the org's distinct-collateral base, not the sum of facility shares", () => {
+    const deltas = ticketDeltas("collateral-valuation", bundle, { value: 15_000_000 });
+    // 14.0M base, less the 10.0M record being revalued, plus 15.0M at 80 percent.
+    expect(deltas[0]).toMatchObject({ label: "Lendable value", before: "$14M", after: "$16M", direction: "up" });
+    expect(deltas[1]).toMatchObject({ label: "Collateral coverage", before: "1.65×", after: "1.88×" });
+  });
+
+  it("falls back to the sum of PLEDGED SHARES on a bundle without the org figure", () => {
+    const older = structuredClone(bundle);
+    delete older.exposure!.totalUniqueCollateralLendableValue;
+    const deltas = ticketDeltas("collateral-valuation", older, { value: 15_000_000 });
+    // 9.25M of share, less the 10.0M record, plus 12.0M lendable.
+    expect(deltas[0]).toMatchObject({ label: "Lendable value", before: "$9.25M" });
+  });
+
+  it("withholds the whole readout when a facility's pledged share is missing", () => {
+    const partial = structuredClone(bundle);
+    delete partial.exposure!.totalUniqueCollateralLendableValue;
+    delete partial.exposure!.facilities![0].totalPledgedValue;
+    delete partial.exposure!.facilities![0].totalLendableValue;
+    expect(ticketDeltas("collateral-valuation", partial, { value: 15_000_000 })).toEqual([]);
+  });
+
+  it("prices a modification against the same distinct-collateral base", () => {
+    const deltas = ticketDeltas("loan-modification", bundle, { newCommitment: 20_000_000 });
+    const coverage = deltas.find((d) => d.label === "Collateral coverage")!;
+    expect(coverage.note).toContain("$14M lendable");
+  });
+});

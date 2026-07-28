@@ -80,6 +80,69 @@ describe("a new publish invalidates cleanly", () => {
     expect(dataVersionOf(DATA.meta)).toBe(dataVersionOf(DATA.meta));
     expect(dataVersionOf(undefined)).toBe("none@none");
   });
+
+  /* The coverage-correctness release changed what `totalLendableValue` MEANS
+     without changing its name. A v1 overlay merged over a v2 bundle would put
+     the old double-counted figure back on the facility rows, and nothing on
+     screen would look wrong. So a stale-schema overlay is discarded, not
+     migrated — even when the data version still matches. */
+  it("discards an overlay written under the previous schema version", () => {
+    const stale = {
+      v: 1,
+      dataVersion: VERSION,
+      savedAt: Date.now(),
+      accounts: {
+        "001bb00001I7FPNAA3": {
+          patch: { exposure: { facilities: [{ loanId: "a4Zbb0000027MaYEAU", totalLendableValue: 13_600_000 }] } },
+          activity: [],
+        },
+      },
+    };
+    localStorage.setItem("c360:sync-overlay", JSON.stringify(stale));
+    expect(loadOverlays(VERSION)).toEqual({});
+  });
+
+  it("keeps what the CURRENT schema wrote", () => {
+    saveOverlay(VERSION, "001bb00001I7FPNAA3", overlay());
+    const raw = JSON.parse(localStorage.getItem("c360:sync-overlay") ?? "{}");
+    expect(raw.v).toBe(2);
+    expect(Object.keys(loadOverlays(VERSION))).toEqual(["001bb00001I7FPNAA3"]);
+  });
+
+  it("carries the new coverage members through a round trip", () => {
+    // Additive members must survive persistence: the sweep patches the whole
+    // exposure slice verbatim, and a restored overlay that quietly dropped
+    // coverageNote would put the blank state back.
+    saveOverlay(
+      VERSION,
+      "001bb00001DLtRMAA1",
+      overlay({
+        patch: {
+          exposure: {
+            coverageRatio: 1.65,
+            coverageShortfall: false,
+            totalUniqueCollateralLendableValue: 14_000_000,
+            uniqueCollateralCount: 2,
+            facilities: [
+              {
+                loanId: "a4Zbb000001vavpEAA",
+                totalPledgedValue: 0,
+                coverageRatio: null,
+                coverageShortfall: true,
+                coverageNote: "No coverage ratio: all 3 collateral pledges on this facility are flagged Excluded or Abundance-of-Caution, which puts them out of the coverage math.",
+                collateral: [],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const restored = loadOverlays(VERSION)["001bb00001DLtRMAA1"].patch.exposure!;
+    expect(restored.coverageRatio).toBe(1.65);
+    expect(restored.uniqueCollateralCount).toBe(2);
+    expect(restored.facilities![0].coverageNote).toContain("Abundance-of-Caution");
+    expect(restored.facilities![0].totalPledgedValue).toBe(0);
+  });
 });
 
 describe("storage that refuses degrades silently", () => {

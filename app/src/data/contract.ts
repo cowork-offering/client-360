@@ -53,7 +53,11 @@ export const PROVENANCE = {
   "borrower.exposure.facilities[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan__c" },
   "borrower.exposure.facilities[].collateral[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan_Collateral2__c" },
   "borrower.exposure.facilities[].collateral[].collateralId": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Collateral__c record id from the pledge junction. The only valid anchor for a valuation write; absent means the id was not staged and the action is blocked" },
-  "borrower.exposure.facilities[].totalLendableValue": { kind: "NCINO", source: "Customer360Exposure — org-computed Current_Lendable_Value" },
+  "borrower.exposure.facilities[].totalLendableValue": { kind: "NCINO", source: "Customer360Exposure — the facility's PLEDGED SHARE, Σ LLC_BI__Amount_Pledged__c over the included pledges. NOT the summed whole-collateral lendable, which double-counts a cross-pledged asset. Null when no pledged share is recorded" },
+  "borrower.exposure.facilities[].totalPledgedValue": { kind: "NCINO", source: "Customer360Exposure — unambiguous alias of totalLendableValue under its current meaning" },
+  "borrower.exposure.facilities[].coverageNote": { kind: "NCINO", source: "Customer360Exposure — the org's own reason a coverage ratio is null. Rendered VERBATIM; this is what replaced a blank coverage state" },
+  "borrower.exposure.facilities[].collateral[].amountPledged": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Amount_Pledged__c, this facility's share of the collateral" },
+  "borrower.exposure.facilities[].collateral[].advanceRateSource": { kind: "NCINO", source: "Customer360Exposure — which source set the advance rate: pledge override, auto-applied, or collateral type default" },
   "borrower.covenants.covenants[]": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant2__c" },
   "borrower.exposure.facilities[].collateral[].collateralName": { kind: "NCINO", source: "Customer360Exposure — the collateral's autonumber name" },
   "borrower.exposure.facilities[].collateral[].collateralDescription": { kind: "NCINO", source: "Customer360Exposure — friendly description, additive; absent falls back to the autonumber name" },
@@ -90,6 +94,10 @@ export const PROVENANCE = {
   "borrower.exposure.totalCommitted": { kind: "NCINO", source: "Customer360Exposure — Σ facility commitments" },
   "borrower.exposure.totalOutstanding": { kind: "NCINO", source: "Customer360Exposure — Σ drawn" },
   "borrower.exposure.totalAvailable": { kind: "NCINO", source: "Customer360Exposure — Σ available" },
+  "borrower.exposure.coverageRatio": { kind: "NCINO", source: "Customer360Exposure — RELATIONSHIP coverage over the distinct collateral, deduped by collateral id. Nullable; absent renders 'not computed', never a client-side substitute" },
+  "borrower.exposure.coverageShortfall": { kind: "NCINO", source: "Customer360Exposure — org-computed relationship shortfall flag" },
+  "borrower.exposure.totalUniqueCollateralLendableValue": { kind: "NCINO", source: "Customer360Exposure — lendable value of the DISTINCT collateral, the relationship coverage numerator" },
+  "borrower.exposure.uniqueCollateralCount": { kind: "NCINO", source: "Customer360Exposure — how many distinct collateral records that numerator spans" },
   "borrower.exposure.facilities[].coverageRatio": { kind: "NCINO", source: "Customer360Exposure — org-computed per-facility coverage; nullable, renders '—'" },
   "borrower.exposure.facilities[].coverageShortfall": { kind: "NCINO", source: "Customer360Exposure — org-computed shortfall flag; drives the facility status chip" },
   "borrower.exposure.facilities[].status": { kind: "NCINO", source: "Customer360Exposure — lifecycle status; absent ⇒ treated active (F6)" },
@@ -129,14 +137,15 @@ export const PROVENANCE = {
   "display.gradeTone": { kind: "DERIVED", source: "data/finance.ts — grade <=4 green, <=6 amber, else red" },
   "display.covenantDirection": { kind: "DERIVED", source: "data/finance.ts — cap/floor keyword heuristic, else compliant-sign fallback" },
   "display.covenantTone": { kind: "DERIVED", source: "data/finance.ts — breached/status string -> red|amber|green" },
-  "display.aggregateCoverageStatus": { kind: "DERIVED", source: "coverage < 1.0 -> Under-covered, else Covered; null -> Not computable" },
+  "display.aggregateCoverageStatus": { kind: "DERIVED", source: "exposure.coverageShortfall when the read carries it, else coverage < 1.0 -> Under-covered; null -> Not computed by the source" },
+  "display.facilityShortfallCount": { kind: "DERIVED", source: "count of active facilities with coverageShortfall true — a relationship can clear its floor while individual facilities do not" },
   "display.drawnPct": { kind: "DERIVED", source: "exposure.totalOutstanding ÷ totalCommitted" },
-  "display.totalLendable": { kind: "DERIVED", source: "Σ facilities.totalLendableValue" },
+  "display.totalLendable": { kind: "NCINO", source: "exposure.totalUniqueCollateralLendableValue — read, not summed. Σ over pledges or facilities is the double count and is no longer computed anywhere" },
   "display.ewsTimeline": { kind: "DERIVED", source: "SignalsTab — modifications + guarantorSignals + renewals + breached covenants, severity-ranked" },
   "display.renewalClockPct": { kind: "DERIVED", source: "1 − daysUntilMaturity ÷ 270 (watch window)" },
   "display.bookConcentration": { kind: "DERIVED", source: "Σ tce grouped by portfolio.accounts[].industry" },
   "display.covenantCushion": { kind: "DERIVED", source: "data/finance.ts — floor: actual−threshold; cap: threshold−actual" },
-  "display.coverageRatio": { kind: "DERIVED", source: "Σ facilities.totalLendableValue ÷ exposure.totalOutstanding" },
+  "display.coverageRatio": { kind: "NCINO", source: "exposure.coverageRatio — org-computed over the distinct collateral. The cockpit no longer derives a relationship ratio of its own" },
   "display.utilizationPct": { kind: "DERIVED", source: "bookTotals.totalOutstanding ÷ bookTotals.totalCommitted" },
   "display.incomeStatementChange": { kind: "DERIVED", source: "(lineItem.ltm − lineItem.priorFy) ÷ |priorFy|" },
   "display.nextTestDays": { kind: "DERIVED", source: "earliest covenant nextEvaluationDate − meta.generatedAt (UTC days)" },
@@ -316,7 +325,22 @@ export interface Collateral {
   collateralType?: string;
   collateralValue?: number;
   advanceRate?: number;
+  /**
+   * WHICH source set `advanceRate`: the pledge's own override, the auto-applied
+   * value, or the collateral type default. A banker reading 75 percent wants to
+   * know whether someone chose it or the org defaulted it.
+   */
+  advanceRateSource?: string;
+  /** The COLLATERAL's whole lendable value, repeated on every pledge of a
+   *  cross-pledged asset. Never summed across pledges — that is the double
+   *  count (NCINO-FUNCTIONAL-VALIDATION §2.6). */
   currentLendableValue?: number;
+  /**
+   * THIS FACILITY'S SHARE of the collateral (`LLC_BI__Amount_Pledged__c`). The
+   * figure that makes a cross-pledged asset add up: COL-000762 carries 9.6MM of
+   * lendable value and is pledged 8.0MM to one facility and 1.6MM to another.
+   */
+  amountPledged?: number;
   lienPosition?: string;
   pledgedStatus?: string;
   isPrimary?: boolean;
@@ -360,9 +384,30 @@ export interface Facility {
   available?: number;
   maturityDate?: string;
   interestRate?: number;
-  totalLendableValue?: number;
+  /**
+   * The facility's PLEDGED SHARE of its collateral (Σ `amountPledged` over the
+   * included pledges) — NOT the summed whole-collateral lendable, which every
+   * pledge of a cross-pledged asset repeats.
+   *
+   * NULL, not zero, when the org records no pledged share. The two are
+   * different facts and the coverage math must not read them the same way.
+   */
+  totalLendableValue?: number | null;
+  /** Unambiguous alias of `totalLendableValue` under its current meaning. Same
+   *  figure, named so the semantics cannot be misread by a later reader. */
+  totalPledgedValue?: number | null;
   coverageRatio?: number | null;
   coverageShortfall?: boolean;
+  /**
+   * WHY `coverageRatio` is null, in the org's own words — "all 3 collateral
+   * pledges on this facility are flagged Excluded or Abundance-of-Caution", "no
+   * collateral is pledged to this facility", "this facility carries no
+   * outstanding balance to cover".
+   *
+   * Rendered VERBATIM. This is the field that replaced a guessed or blank
+   * coverage state with a reason a credit officer can act on.
+   */
+  coverageNote?: string | null;
   collateral?: Collateral[];
   /** Loan-level covenant junctions. An EMPTY array is a legitimate fact (all of
    *  Piedmont's covenants are Account-level), not missing data. */
@@ -635,9 +680,25 @@ export interface BorrowerBundle {
   snapshot: Snapshot;
   graph?: RelationshipGraph;
   exposure?: {
+    accountId?: Id;
     totalCommitted?: number;
     totalOutstanding?: number;
     totalAvailable?: number;
+    /**
+     * RELATIONSHIP coverage, org-computed over the DISTINCT collateral (deduped
+     * by collateral id). Never derivable from the facility rows: Piedmont's
+     * facilities pledge 9.25MM of a 14.0MM distinct lendable base, so a sum of
+     * facility shares would understate it by a third.
+     *
+     * Absent means the read does not carry it. The cockpit renders that as an
+     * honest "not computed" rather than substituting a derivation of its own.
+     */
+    coverageRatio?: number | null;
+    coverageShortfall?: boolean;
+    /** Lendable value of the DISTINCT collateral — the coverage numerator. */
+    totalUniqueCollateralLendableValue?: number;
+    /** How many distinct collateral records that numerator spans. */
+    uniqueCollateralCount?: number;
     facilities?: Facility[];
     note?: string;
   };

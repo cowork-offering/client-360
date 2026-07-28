@@ -78,6 +78,26 @@ function sentences(parts: Array<string | null>): string {
 
 const activeFacilities = (b: BorrowerBundle) => (b.exposure?.facilities ?? []).filter(isActiveFacility);
 
+/**
+ * The relationship's lendable value AND the path it came from, so the drafted
+ * sentence cites the field it actually read.
+ *
+ * The org's distinct-collateral figure first. Older bundles fall back to the
+ * sum of facility PLEDGED SHARES; nothing here ever sums pledge lendable
+ * values, which repeat the whole asset once per pledge.
+ */
+function lendableBasis(b: BorrowerBundle): { value: number; path: string } | null {
+  const unique = b.exposure?.totalUniqueCollateralLendableValue;
+  if (unique != null) return { value: unique, path: "borrower.exposure.totalUniqueCollateralLendableValue" };
+
+  let total: number | null = null;
+  for (const x of activeFacilities(b)) {
+    const v = x.totalPledgedValue ?? x.totalLendableValue;
+    if (v != null) total = (total ?? 0) + v;
+  }
+  return total === null ? null : { value: total, path: "borrower.exposure.facilities[].totalLendableValue" };
+}
+
 function tightestCovenant(covs: Covenant[]): { cov: Covenant; pct: number } | null {
   let best: { cov: Covenant; pct: number } | null = null;
   for (const c of covs) {
@@ -148,12 +168,9 @@ export function draftStrengths(b: BorrowerBundle): Draft {
     }
   }
 
-  const lendable = activeFacilities(b).reduce<number | null>((acc, x) => {
-    if (x.totalLendableValue == null) return acc;
-    return (acc ?? 0) + x.totalLendableValue;
-  }, null);
-  if (lendable != null && exp.totalOutstanding != null && exp.totalOutstanding > 0 && lendable >= exp.totalOutstanding) {
-    const lv = money(lendable, "borrower.exposure.facilities[].totalLendableValue", f);
+  const basis = lendableBasis(b);
+  if (basis && exp.totalOutstanding != null && exp.totalOutstanding > 0 && basis.value >= exp.totalOutstanding) {
+    const lv = money(basis.value, basis.path, f);
     if (lv) parts.push(`Pledged collateral carries ${lv} of lendable value against the drawn balance.`);
   }
 
@@ -226,15 +243,22 @@ export function draftCollateralAnalysis(b: BorrowerBundle): Draft {
   }
 
   const types = [...new Set(pledges.map((p) => p.collateralType).filter(Boolean))] as string[];
-  let lendable: number | null = null;
-  for (const x of facs) if (x.totalLendableValue != null) lendable = (lendable ?? 0) + x.totalLendableValue;
+  const basis = lendableBasis(b);
 
   const parts: Array<string | null> = [
     `Security comprises ${pledges.length} ${pledges.length === 1 ? "pledge" : "pledges"}${types.length ? ` across ${types.join(", ")}` : ""}.`,
   ];
-  const lv = money(lendable, "borrower.exposure.facilities[].totalLendableValue", f);
+  const lv = basis ? money(basis.value, basis.path, f) : null;
   const drawn = money(b.exposure?.totalOutstanding, "borrower.exposure.totalOutstanding", f);
   if (lv) parts.push(`Total lendable value is ${lv}${drawn ? ` against ${drawn} drawn` : ""}.`);
+
+  // A DRAWN facility the org cannot rate carries its own reason. That is the
+  // material fact in a collateral analysis, and it is repeated verbatim rather
+  // than left as the silence it used to be. Undrawn facilities are not listed:
+  // "nothing to cover" is not a finding.
+  for (const x of facs) {
+    if (x.coverageNote && (x.outstanding ?? 0) > 0) parts.push(`${x.name ?? "One facility"}: ${x.coverageNote}`);
+  }
 
   return { text: sentences(parts), figures: f };
 }

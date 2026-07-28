@@ -20,7 +20,7 @@
    worse than no number.
    ============================================================================= */
 
-import type { BorrowerBundle } from "../data/contract";
+import type { BorrowerBundle, Facility } from "../data/contract";
 import type { PanelSchema } from "./panelSchema";
 import type { Briefing } from "./briefing";
 import { fmtMoney } from "../data/format";
@@ -145,12 +145,8 @@ export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, va
   const targetLendable = num(target.currentLendableValue);
   if (advanceRate === null || targetLendable === null) return [];
 
-  let totalLendable = 0;
-  for (const f of facs) {
-    const v = num(f.totalLendableValue);
-    if (v === null) return []; // a missing lendable value is not a zero
-    totalLendable += v;
-  }
+  const totalLendable = relationshipLendable(bundle, facs);
+  if (totalLendable === null) return [];
 
   const proposedLendable = proposed * (advanceRate / 100);
   const lendableAfter = totalLendable - targetLendable + proposedLendable;
@@ -181,6 +177,28 @@ export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, va
   return deltas;
 }
 
+
+/**
+ * The relationship's lendable base for a what-if.
+ *
+ * The org's DISTINCT-collateral figure when the read carries it — that is the
+ * quantity a revaluation actually moves. Older bundles fall back to the sum of
+ * facility PLEDGED SHARES, which is second best but never the double count:
+ * a share is this facility's slice, not the whole asset repeated per pledge.
+ * A missing share is not a zero, so the whole delta is withheld instead.
+ */
+function relationshipLendable(bundle: BorrowerBundle, facs: Facility[]): number | null {
+  const unique = num(bundle.exposure?.totalUniqueCollateralLendableValue);
+  if (unique !== null) return unique;
+
+  let total = 0;
+  for (const f of facs) {
+    const v = num(f.totalPledgedValue ?? f.totalLendableValue);
+    if (v === null) return null;
+    total += v;
+  }
+  return total;
+}
 
 /** A new facility adds to the book: what the relationship carries afterwards. */
 function newFacilityDeltas(bundle: BorrowerBundle, values: Record<string, unknown>): TicketDelta[] {
@@ -222,14 +240,8 @@ function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null): Tick
     },
   ];
 
-  let lendable = 0;
-  let haveLendable = true;
-  for (const f of (bundle.exposure?.facilities ?? []).filter(isActiveFacility)) {
-    const v = num(f.totalLendableValue);
-    if (v === null) haveLendable = false;
-    else lendable += v;
-  }
-  if (haveLendable && lendable > 0) {
+  const lendable = relationshipLendable(bundle, (bundle.exposure?.facilities ?? []).filter(isActiveFacility));
+  if (lendable !== null && lendable > 0) {
     const before = lendable / committed;
     const after = lendable / proposed;
     out.push({

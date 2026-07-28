@@ -21,9 +21,17 @@
 
 import type { ActionHistoryRow, ActivityEntry, BorrowerBundle } from "../data/contract";
 
-/** Bump to invalidate every stored overlay. A publish that changes the bundle
- *  shape must not have last week's overlay re-applied on top of it. */
-const SCHEMA_VERSION = 1;
+/**
+ * Bump to invalidate every stored overlay. A publish that changes the bundle
+ * shape must not have last week's overlay re-applied on top of it.
+ *
+ * v2 (coverage-correctness release): `totalLendableValue` changed MEANING while
+ * keeping its name — it now carries the facility's pledged share, not the
+ * summed whole-collateral lendable. A v1 overlay merged over a v2 bundle would
+ * put the old, double-counted figure back on the facility rows and nothing
+ * would look wrong. So v1 overlays are discarded rather than migrated.
+ */
+const SCHEMA_VERSION = 2;
 
 /** Overlays older than this are dropped rather than shown as history. */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;

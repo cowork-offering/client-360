@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 import type { C360Data } from "./contract";
 import { buildGroundedPrompt, CONTEXT_BUDGET, MAX_PROMPT, sanitize } from "./grounding";
 import sample from "../../../artifact/sample-data.json";
+import live from "../../../artifact/live-data.json";
 
 const DATA = sample as unknown as C360Data;
+const LIVE = live as unknown as C360Data;
 const ANCHOR = "001bb00001DLtRMAA1";
 const STERLING = "001SAMPLE0000STRL";
 const bundle = (DATA.borrowers ?? {})[ANCHOR];
@@ -133,12 +135,24 @@ describe("tab-aware context (round 2)", () => {
     expect((p.match(/against a/g) ?? []).length).toBe(2);
   });
 
-  it("Exposure tab carries the facility list and collateral coverage", () => {
+  it("Exposure tab carries the facility list, and no coverage the read did not compute", () => {
     const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Exposure & Collateral", question: "q" });
     expect(p).toMatch(/\d+ active facilities/);
     expect(p).toMatch(/drawn/);
-    expect(p).toMatch(/Lendable collateral \$[\d.]+M, coverage \d+\.\d+x/);
+    // This bundle predates the relationship coverage members. Nothing is put in
+    // their place: a sum over the facility rows would ground the model in the
+    // double count, stated as fact.
+    expect(p).not.toMatch(/coverage \d+\.\d+x/);
     expect(p).not.toMatch(/against a .* floor/); // covenant sentence replaced
+  });
+
+  it("Exposure tab grounds on the ORG's coverage where the read carries it", () => {
+    const hartwell = (LIVE.borrowers ?? {})["001bb00001I7FPNAA3"];
+    const p = buildGroundedPrompt({ data: LIVE, bundle: hartwell, accountName: "Hartwell", tab: "Exposure & Collateral", question: "q" });
+    expect(p).toContain("Collateral: lendable $31.60M");
+    expect(p).toContain("coverage 1.02x");
+    // The facility-level truth the relationship ratio hides.
+    expect(p).toContain("2 facilities under-covered");
   });
 
   it("Financials tab carries EBITDA, leverage and interest coverage", () => {

@@ -281,3 +281,54 @@ describe("engine hygiene", () => {
     expect(a).toBe(b);
   });
 });
+
+describe("the coverage rule on the new exposure contract", () => {
+  /* `totalLendableValue` kept its name and changed its meaning: it now carries
+     the facility's PLEDGED SHARE. Summing shares is correct by construction —
+     a cross-pledged asset contributes once in total, not once per pledge — so
+     the rule's arithmetic is unchanged. What IS new is that the share can be
+     null, and that the org now says why. */
+
+  it("reads totalPledgedValue, the unambiguous alias, in preference", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].totalPledgedValue = 5_000_000;
+    b.exposure!.facilities![0].totalLendableValue = 9_200_000;
+    const s = run(b).suggestions.find((x) => x.id === "coverage-shortfall")!;
+    // 5.0MM / 10.0MM, the alias, not 9.2MM / 10.0MM.
+    expect(s.trigger.value).toBe(0.5);
+  });
+
+  it("sums the SHARES across facilities, so a cross-pledged asset counts once", () => {
+    const b = shortBundle();
+    b.exposure!.facilities = [
+      { loanId: "L1", name: "Revolver", totalPledgedValue: 8_000_000 },
+      { loanId: "L2", name: "Term", totalPledgedValue: 1_600_000 },
+    ];
+    const s = run(b).suggestions.find((x) => x.id === "coverage-shortfall")!;
+    expect(s.trigger.value).toBe(0.96);
+    expect(s.trigger.formula).toBe("sum(active facility pledged share) / proposed commitment");
+  });
+
+  it("puts the org's OWN reason on the gap card when the share is null", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].totalLendableValue = null;
+    b.exposure!.facilities![0].coverageNote =
+      "No coverage ratio: all 3 collateral pledges on this facility are flagged Excluded or Abundance-of-Caution, which puts them out of the coverage math.";
+    const gap = run(b).gaps.find((g) => g.path.includes("totalLendableValue"))!;
+    expect(gap.reason).toBe("null");
+    // Actionable: a banker can chase an Abundance-of-Caution flag. Nobody can
+    // chase "present but null".
+    expect(gap.detail).toContain("Abundance-of-Caution");
+    expect(gap.detail).toContain("Revolver");
+  });
+
+  it("still says plainly 'present but null' when the org offers no reason", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].totalLendableValue = null;
+    const gap = run(b).gaps.find((g) => g.path.includes("totalLendableValue"))!;
+    expect(gap.detail).toContain("present but null");
+    // No reason on file means no reason invented, and no facility named as if
+    // one had been given.
+    expect(gap.detail).not.toContain("Revolver");
+  });
+});

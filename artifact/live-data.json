@@ -1,5 +1,5 @@
 {
-  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note \u2014 field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names. UPDATED 2026-07-23 (Sonnet data/assembler agent, Cockpit v3 rebuild, SPEC.md \u00a75): added the full `borrowers` map (4 bundles \u2014 anchor Piedmont duplicated from `borrower` verbatim, plus 3 invented-but-realistic C&I bundles: Brightwater Foods Group [COVENANT_BREACH \u2014 DSCR 1.05x vs 1.20x floor, both facilities under-collateralized], Sterling Fabrication Co. [MATURITY_NEAR \u2014 $8.0M term loan matures in 75 days], Kingsley Precision Works [MODIFICATION_CLUSTER/RECENTLY_MODIFIED \u2014 2 facility mods in 45 days funding expansion]) and the `worklist` block (accountIds + reason codes). portfolio.signals.breachedCount and maturitiesSoon updated to reflect the new bundles. All three new bundles are SAMPLE-ONLY fictitious data, consistent with their pre-existing portfolio.accounts row figures (TCE/TBE/TOE/outstanding/rating/industry unchanged from the original sample rows). UPDATED 2026-07-23 (v1.1 amendments A9/A10): Brightwater's covenant retest date set to 2026-08-16 \u2014 an exact 45-day boundary case vs meta.generatedAt (2026-07-02T09:15:00Z) for the COVENANT_DUE \u226445d threshold; its worklist reasons now list both COVENANT_BREACH and COVENANT_DUE. Kingsley gained a 3rd modification (2026-04-08) so MODIFICATION_CLUSTER's \u22653-in-180d threshold is genuinely satisfied (previously only 2 were on file); RECENTLY_MODIFIED (\u226430d) remains satisfied by the existing 2026-06-10 entry (22 days before generatedAt). UPDATED 2026-07-23 (Codex round 2 finding 7): every facility now carries an explicit `status` field (\"Active\" for all pre-existing ones). Kingsley gained a 4th, CLOSED facility \u2014 \"Kingsley Original Equipment Term Loan\", status \"Paid Off\", matured 2026-01-15 (in the past vs meta.generatedAt) \u2014 to prove the client-side active-facility filter (absent/\"Active\" = active; closed + past-maturity never fires MATURITY_NEAR). Excluded from exposure totals and from signals.maturityWatch. UPDATED 2026-07-25 (SPEC A30 + A29 seam): added optional `activity[]` (Sterling: REQUEST_RECEIVED + ANALYSIS_CONCLUDED; Piedmont: COVENANT_EVALUATED + ANALYSIS_CONCLUDED, both reusing figures already on file) and optional `requests[]` (Sterling only \u2014 ONE clearly-synthetic client request, revolver $10.0M -> $13.0M, reference.id prefixed SAMPLE- with no webLink per A29's honest-gap rule). Amounts sized against Sterling's REAL facility data (committed/outstanding/lendable-value), not the coordinator's placeholder figure, so validate-c360's data-quality sweep stays silent.",
+  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note — field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names. UPDATED 2026-07-23 (Sonnet data/assembler agent, Cockpit v3 rebuild, SPEC.md §5): added the full `borrowers` map (4 bundles — anchor Piedmont duplicated from `borrower` verbatim, plus 3 invented-but-realistic C&I bundles: Brightwater Foods Group [COVENANT_BREACH — DSCR 1.05x vs 1.20x floor, both facilities under-collateralized], Sterling Fabrication Co. [MATURITY_NEAR — $8.0M term loan matures in 75 days], Kingsley Precision Works [MODIFICATION_CLUSTER/RECENTLY_MODIFIED — 2 facility mods in 45 days funding expansion]) and the `worklist` block (accountIds + reason codes). portfolio.signals.breachedCount and maturitiesSoon updated to reflect the new bundles. All three new bundles are SAMPLE-ONLY fictitious data, consistent with their pre-existing portfolio.accounts row figures (TCE/TBE/TOE/outstanding/rating/industry unchanged from the original sample rows). UPDATED 2026-07-23 (v1.1 amendments A9/A10): Brightwater's covenant retest date set to 2026-08-16 — an exact 45-day boundary case vs meta.generatedAt (2026-07-02T09:15:00Z) for the COVENANT_DUE ≤45d threshold; its worklist reasons now list both COVENANT_BREACH and COVENANT_DUE. Kingsley gained a 3rd modification (2026-04-08) so MODIFICATION_CLUSTER's ≥3-in-180d threshold is genuinely satisfied (previously only 2 were on file); RECENTLY_MODIFIED (≤30d) remains satisfied by the existing 2026-06-10 entry (22 days before generatedAt). UPDATED 2026-07-23 (Codex round 2 finding 7): every facility now carries an explicit `status` field (\"Active\" for all pre-existing ones). Kingsley gained a 4th, CLOSED facility — \"Kingsley Original Equipment Term Loan\", status \"Paid Off\", matured 2026-01-15 (in the past vs meta.generatedAt) — to prove the client-side active-facility filter (absent/\"Active\" = active; closed + past-maturity never fires MATURITY_NEAR). Excluded from exposure totals and from signals.maturityWatch. UPDATED 2026-07-25 (SPEC A30 + A29 seam): added optional `activity[]` (Sterling: REQUEST_RECEIVED + ANALYSIS_CONCLUDED; Piedmont: COVENANT_EVALUATED + ANALYSIS_CONCLUDED, both reusing figures already on file) and optional `requests[]` (Sterling only — ONE clearly-synthetic client request, revolver $10.0M -> $13.0M, reference.id prefixed SAMPLE- with no webLink per A29's honest-gap rule). Amounts sized against Sterling's REAL facility data (committed/outstanding/lendable-value), not the coordinator's placeholder figure, so validate-c360's data-quality sweep stays silent. UPDATED 2026-07-28 (coverage-correctness release): the Hartwell and Piedmont exposure blocks — and the legacy `borrower` anchor, which is the same Piedmont relationship — are now the VERBATIM observed Customer360Exposure responses from the bankinggpt org (accounts 001bb00001I7FPNAA3 / 001bb00001DLtRMAA1). `outstanding` is real (Principal_Balance-based); facility `totalLendableValue` now carries the facility's PLEDGED SHARE rather than the summed whole-collateral lendable, which double-counted every cross-pledged asset; new members totalPledgedValue, coverageNote, collateral[].amountPledged, collateral[].advanceRateSource and relationship-level coverageRatio / coverageShortfall / totalUniqueCollateralLendableValue / uniqueCollateralCount are carried through. The three SAMPLE-ONLY bundles (Brightwater/Sterling/Kingsley) are reshaped onto the same contract from their OWN existing figures — every ratio recomputed, nothing invented beyond the new members — and remain fictitious.",
   "meta": {
     "user": "Fabian Goetzens",
     "dateISO": "2026-07-25T11:49:49",
@@ -131,7 +131,7 @@
         }
       ]
     },
-    "note": "Rollups are package-level (\u03a3 TCE/TBE/TOE/Outstanding \u2014 never a loan sum); risk rating + stage are from each account's highest-TCE package. Book totals span all 4 packaged accounts; the account list is truncated to the highest-TCE 4. Signals are bounded by a 90-day window and capped at 25 rows each; overdue covenants (past due, still active) are included and flagged. Financial / behavioral / risk-migration EWS lives elsewhere in the fleet."
+    "note": "Rollups are package-level (Σ TCE/TBE/TOE/Outstanding — never a loan sum); risk rating + stage are from each account's highest-TCE package. Book totals span all 4 packaged accounts; the account list is truncated to the highest-TCE 4. Signals are bounded by a 90-day window and capped at 25 rows each; overdue covenants (past due, still active) are included and flagged. Financial / behavioral / risk-migration EWS lives elsewhere in the fleet."
   },
   "borrower": {
     "snapshot": {
@@ -185,119 +185,111 @@
           "packageId": "a5Fbb000000HA1NEAW"
         }
       ],
-      "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
+      "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
     },
     "exposure": {
       "accountId": "001bb00001DLtRMAA1",
-      "totalCommitted": 12500000,
-      "totalOutstanding": 4250000,
-      "totalAvailable": 8250000,
+      "coverageRatio": 1.65,
+      "coverageShortfall": false,
       "facilities": [
         {
-          "loanId": "a1Xbb000000PLD1",
-          "name": "Piedmont Equipment Term Loan",
-          "productType": "Term Loan",
-          "riskGrade": "5",
-          "committed": 5000000,
-          "outstanding": 2500000,
-          "available": 2500000,
-          "maturityDate": "2029-04-07T11:49:49",
-          "interestRate": 6.75,
-          "totalLendableValue": 4800000,
-          "coverageRatio": 1.92,
-          "coverageShortfall": false,
-          "collateral": [
-            {
-              "loanId": "a1Xbb000000PLD1",
-              "collateralType": "Equipment",
-              "collateralValue": 6000000,
-              "advanceRate": 80,
-              "currentLendableValue": 4800000,
-              "lienPosition": "1st",
-              "pledgedStatus": "Active",
-              "isPrimary": true,
-              "collateralId": "a35bb000000zOgXAAU",
-              "collateralName": "COL-000758"
-            }
-          ],
+          "totalPledgedValue": 0,
+          "totalLendableValue": 0,
           "status": "Open",
           "stage": "Final Review",
-          "productPackageId": "a5Fbb000000HA1NEAW"
+          "riskGrade": "5",
+          "productType": "Non-Real Estate",
+          "productPackageId": "a5Fbb000000HA1NEAW",
+          "outstanding": 4250000,
+          "name": "Piedmont Precision Components, Inc. - Line of Credit - $7,500,000.00",
+          "maturityDate": "2027-07-15",
+          "loanId": "a4Zbb000001zEQTEA2",
+          "interestRate": null,
+          "coverageShortfall": true,
+          "coverageRatio": null,
+          "coverageNote": "No coverage ratio: no collateral is pledged to this facility.",
+          "committed": 7500000,
+          "collateral": [],
+          "available": 3250000
         },
         {
-          "loanId": "a1Xbb000000PLD2",
-          "name": "Piedmont Working Capital Revolver",
-          "productType": "Revolving Line of Credit",
+          "totalPledgedValue": 0,
+          "totalLendableValue": 0,
+          "status": "Open",
+          "stage": "Final Review",
           "riskGrade": "5",
+          "productType": "Non-Real Estate",
+          "productPackageId": "a5Fbb000000HA1NEAW",
+          "outstanding": 4250000,
+          "name": "Piedmont Precision Components, Inc. - Line of Credit - $5,000,000.00",
+          "maturityDate": "2027-07-15",
+          "loanId": "a4Zbb000001vavpEAA",
+          "interestRate": null,
+          "coverageShortfall": true,
+          "coverageRatio": null,
+          "coverageNote": "No coverage ratio: all 3 collateral pledges on this facility are flagged Excluded or Abundance-of-Caution, which puts them out of the coverage math.",
           "committed": 5000000,
-          "outstanding": 1750000,
-          "available": 3250000,
-          "maturityDate": "2027-04-07T11:49:49",
-          "interestRate": 7.25,
-          "totalLendableValue": 3600000,
-          "coverageRatio": 2.06,
+          "collateral": [],
+          "available": 750000
+        },
+        {
+          "totalPledgedValue": 9250000,
+          "totalLendableValue": 9250000,
+          "status": "Open",
+          "stage": "Final Review",
+          "riskGrade": "5",
+          "productType": "Non-Real Estate",
+          "productPackageId": "a5Fbb000000HA1NEAW",
+          "outstanding": 0,
+          "name": "Piedmont Precision Components, Inc. - Equipment - $5,000,000.00",
+          "maturityDate": "2031-07-15",
+          "loanId": "a4Zbb000001vaxREAQ",
+          "interestRate": null,
           "coverageShortfall": false,
+          "coverageRatio": null,
+          "coverageNote": "No coverage ratio: this facility carries no outstanding balance to cover.",
+          "committed": 5000000,
           "collateral": [
             {
-              "loanId": "a1Xbb000000PLD2",
-              "collateralType": "Accounts Receivable",
-              "collateralValue": 3000000,
-              "advanceRate": 80,
-              "currentLendableValue": 2400000,
-              "lienPosition": "1st",
               "pledgedStatus": "Active",
-              "isPrimary": true,
-              "collateralId": "a35bb000000zObhAAE",
-              "collateralName": "COL-000755"
+              "loanId": "a4Zbb000001vaxREAQ",
+              "lienPosition": "1st",
+              "isPrimary": false,
+              "currentLendableValue": 10000000,
+              "collateralValue": 12500000,
+              "collateralType": "UCC-Equipment",
+              "collateralName": "COL-000758",
+              "collateralId": "a35bb000000zOgXAAU",
+              "collateralDescription": "Blanket lien on all existing M&E at Greensboro NC: ~85 CNC machining centers (Mazak/DMG Mori/Haas), grinders, EDM, CMM, tooling, fixtures, material handling. Cross-collateralized to revolver and equipment term loan.",
+              "amountPledged": 5000000,
+              "advanceRateSource": "Collateral type default",
+              "advanceRate": 80
             },
             {
-              "loanId": "a1Xbb000000PLD2",
-              "collateralType": "Inventory",
-              "collateralValue": 1500000,
-              "advanceRate": 80,
-              "currentLendableValue": 1200000,
-              "lienPosition": "1st",
-              "pledgedStatus": "Active",
-              "isPrimary": false,
-              "collateralId": "a35bb000000zObhAAE",
-              "collateralName": "COL-000755"
-            }
-          ],
-          "status": "Open",
-          "stage": "Final Review",
-          "productPackageId": "a5Fbb000000HA1NEAW"
-        },
-        {
-          "loanId": "a1Xbb000000PLD3",
-          "name": "Piedmont CapEx Facility",
-          "productType": "Term Loan",
-          "riskGrade": "5",
-          "committed": 2500000,
-          "outstanding": 0,
-          "available": 2500000,
-          "maturityDate": "2028-10-23T11:49:49",
-          "interestRate": 6.9,
-          "totalLendableValue": 1600000,
-          "coverageRatio": null,
-          "coverageShortfall": false,
-          "collateral": [
-            {
-              "loanId": "a1Xbb000000PLD3",
-              "collateralType": "Real Estate",
-              "collateralValue": 2000000,
-              "advanceRate": 80,
-              "currentLendableValue": 1600000,
-              "lienPosition": "1st",
               "pledgedStatus": "Pending",
-              "isPrimary": true
+              "loanId": "a4Zbb000001vaxREAQ",
+              "lienPosition": "1st",
+              "isPrimary": true,
+              "currentLendableValue": 4000000,
+              "collateralValue": 5000000,
+              "collateralType": "UCC-Equipment",
+              "collateralName": "COL-000757",
+              "collateralId": "a35bb000000zOevAAE",
+              "collateralDescription": "Three (3) new Mazak INTEGREX i-400S 5-axis CNC multi-tasking machining centers with tooling, MazaCheck probing, Smooth Ai controls, 80-tool ATCs, HP coolant. Delivery Q3 2026. First-priority PMSI lien per UCC-1 at funding.",
+              "amountPledged": 4250000,
+              "advanceRateSource": "Collateral type default",
+              "advanceRate": 80
             }
           ],
-          "status": "Open",
-          "stage": "Final Review",
-          "productPackageId": "a5Fbb000000HA1NEAW"
+          "available": 5000000
         }
       ],
-      "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+      "note": "Outstanding reads LLC_BI__Principal_Balance__c, the balance field this org populates (LLC_BI__AmountOutstanding__c is a fallback only). Available = committed - outstanding, floored at zero. Facility coverage divides the facility's PLEDGED SHARE (LLC_BI__Amount_Pledged__c), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Advance rate comes from one source, the pledge's LLC_BI__Advance_Rate__c (override, then auto-applied, then collateral type). Pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
+      "totalAvailable": 9000000,
+      "totalCommitted": 17500000,
+      "totalOutstanding": 8500000,
+      "totalUniqueCollateralLendableValue": 14000000,
+      "uniqueCollateralCount": 2
     },
     "covenants": {
       "accountId": "001bb00001DLtRMAA1",
@@ -387,7 +379,7 @@
         }
       ],
       "guarantorSignals": [],
-      "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+      "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
     },
     "boom": {
       "ratios": {
@@ -452,9 +444,9 @@
           }
         ]
       },
-      "note": "Source: Boom spreading \u2014 Piedmont_Precision_FY2025_LTM.xlsx"
+      "note": "Source: Boom spreading — Piedmont_Precision_FY2025_LTM.xlsx"
     },
-    "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+    "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
     "anchors": [
       {
         "label": "Rating",
@@ -470,13 +462,13 @@
       },
       {
         "label": "DSC",
-        "value": "1.42\u00d7",
-        "sub": "Floor 1.25\u00d7",
+        "value": "1.42×",
+        "sub": "Floor 1.25×",
         "dir": null
       },
       {
         "label": "Leverage",
-        "value": "3.85\u00d7",
+        "value": "3.85×",
         "sub": "Debt/EBITDA",
         "dir": "down"
       }
@@ -487,13 +479,13 @@
         "ts": "2026-04-24T04:09:49Z",
         "kind": "COVENANT_EVALUATED",
         "title": "Debt Service Coverage Ratio tested",
-        "summary": "Quarterly DSCR test completed \u2014 1.42x against a 1.25x floor, compliant.",
+        "summary": "Quarterly DSCR test completed — 1.42x against a 1.25x floor, compliant.",
         "reference": {
           "kind": "covenant",
           "id": "a2Cbb000000CV01"
         },
         "detail": {
-          "body": "DSCR tested at 1.42x against a 1.25x floor \u2014 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
+          "body": "DSCR tested at 1.42x against a 1.25x floor — 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
         }
       },
       {
@@ -501,13 +493,13 @@
         "ts": "2026-07-25T20:39:49Z",
         "kind": "ANALYSIS_CONCLUDED",
         "title": "Relationship review concluded",
-        "summary": "Grade 5, fully collateralised, covenants compliant \u2014 EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
+        "summary": "Grade 5, fully collateralised, covenants compliant — EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
         "detail": {
-          "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+          "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
           "nextSteps": [
             {
               "actionId": "covenant-review",
-              "note": "Re-run the covenant review ahead of the next scheduled test \u2014 the DSCR test date (2026-06-30) has already passed."
+              "note": "Re-run the covenant review ahead of the next scheduled test — the DSCR test date (2026-06-30) has already passed."
             }
           ]
         }
@@ -568,49 +560,56 @@
             "packageId": "a5Fbb000000HA1NEAW"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001bb00001DLtRMAA1",
+        "coverageRatio": 1.65,
+        "coverageShortfall": false,
         "facilities": [
           {
+            "totalPledgedValue": 0,
             "totalLendableValue": 0,
             "status": "Open",
             "stage": "Final Review",
             "riskGrade": "5",
             "productType": "Non-Real Estate",
             "productPackageId": "a5Fbb000000HA1NEAW",
-            "outstanding": 0,
+            "outstanding": 4250000,
             "name": "Piedmont Precision Components, Inc. - Line of Credit - $7,500,000.00",
             "maturityDate": "2027-07-15",
             "loanId": "a4Zbb000001zEQTEA2",
             "interestRate": null,
-            "coverageShortfall": false,
+            "coverageShortfall": true,
             "coverageRatio": null,
+            "coverageNote": "No coverage ratio: no collateral is pledged to this facility.",
             "committed": 7500000,
             "collateral": [],
-            "available": 0
+            "available": 3250000
           },
           {
+            "totalPledgedValue": 0,
             "totalLendableValue": 0,
             "status": "Open",
             "stage": "Final Review",
             "riskGrade": "5",
             "productType": "Non-Real Estate",
             "productPackageId": "a5Fbb000000HA1NEAW",
-            "outstanding": 0,
+            "outstanding": 4250000,
             "name": "Piedmont Precision Components, Inc. - Line of Credit - $5,000,000.00",
             "maturityDate": "2027-07-15",
             "loanId": "a4Zbb000001vavpEAA",
             "interestRate": null,
-            "coverageShortfall": false,
+            "coverageShortfall": true,
             "coverageRatio": null,
+            "coverageNote": "No coverage ratio: all 3 collateral pledges on this facility are flagged Excluded or Abundance-of-Caution, which puts them out of the coverage math.",
             "committed": 5000000,
             "collateral": [],
-            "available": 0
+            "available": 750000
           },
           {
-            "totalLendableValue": 14000000,
+            "totalPledgedValue": 9250000,
+            "totalLendableValue": 9250000,
             "status": "Open",
             "stage": "Final Review",
             "riskGrade": "5",
@@ -623,6 +622,7 @@
             "interestRate": null,
             "coverageShortfall": false,
             "coverageRatio": null,
+            "coverageNote": "No coverage ratio: this facility carries no outstanding balance to cover.",
             "committed": 5000000,
             "collateral": [
               {
@@ -636,6 +636,8 @@
                 "collateralName": "COL-000758",
                 "collateralId": "a35bb000000zOgXAAU",
                 "collateralDescription": "Blanket lien on all existing M&E at Greensboro NC: ~85 CNC machining centers (Mazak/DMG Mori/Haas), grinders, EDM, CMM, tooling, fixtures, material handling. Cross-collateralized to revolver and equipment term loan.",
+                "amountPledged": 5000000,
+                "advanceRateSource": "Collateral type default",
                 "advanceRate": 80
               },
               {
@@ -649,16 +651,20 @@
                 "collateralName": "COL-000757",
                 "collateralId": "a35bb000000zOevAAE",
                 "collateralDescription": "Three (3) new Mazak INTEGREX i-400S 5-axis CNC multi-tasking machining centers with tooling, MazaCheck probing, Smooth Ai controls, 80-tool ATCs, HP coolant. Delivery Q3 2026. First-priority PMSI lien per UCC-1 at funding.",
+                "amountPledged": 4250000,
+                "advanceRateSource": "Collateral type default",
                 "advanceRate": 80
               }
             ],
-            "available": 0
+            "available": 5000000
           }
         ],
-        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
-        "totalAvailable": 0,
+        "note": "Outstanding reads LLC_BI__Principal_Balance__c, the balance field this org populates (LLC_BI__AmountOutstanding__c is a fallback only). Available = committed - outstanding, floored at zero. Facility coverage divides the facility's PLEDGED SHARE (LLC_BI__Amount_Pledged__c), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Advance rate comes from one source, the pledge's LLC_BI__Advance_Rate__c (override, then auto-applied, then collateral type). Pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
+        "totalAvailable": 9000000,
         "totalCommitted": 17500000,
-        "totalOutstanding": 0
+        "totalOutstanding": 8500000,
+        "totalUniqueCollateralLendableValue": 14000000,
+        "uniqueCollateralCount": 2
       },
       "covenants": {
         "accountId": "001bb00001DLtRMAA1",
@@ -756,7 +762,7 @@
           }
         ],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -821,9 +827,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading \u2014 Piedmont_Precision_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading — Piedmont_Precision_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+      "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
       "anchors": [
         {
           "label": "Rating",
@@ -839,13 +845,13 @@
         },
         {
           "label": "DSC",
-          "value": "1.42\u00d7",
-          "sub": "Floor 1.25\u00d7",
+          "value": "1.42×",
+          "sub": "Floor 1.25×",
           "dir": null
         },
         {
           "label": "Leverage",
-          "value": "3.85\u00d7",
+          "value": "3.85×",
           "sub": "Debt/EBITDA",
           "dir": "down"
         }
@@ -856,13 +862,13 @@
           "ts": "2026-04-24T04:09:49Z",
           "kind": "COVENANT_EVALUATED",
           "title": "Debt Service Coverage Ratio tested",
-          "summary": "Quarterly DSCR test completed \u2014 1.42x against a 1.25x floor, compliant.",
+          "summary": "Quarterly DSCR test completed — 1.42x against a 1.25x floor, compliant.",
           "reference": {
             "kind": "covenant",
             "id": "a2Cbb000000CV01"
           },
           "detail": {
-            "body": "DSCR tested at 1.42x against a 1.25x floor \u2014 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
+            "body": "DSCR tested at 1.42x against a 1.25x floor — 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
           }
         },
         {
@@ -870,13 +876,13 @@
           "ts": "2026-07-25T20:39:49Z",
           "kind": "ANALYSIS_CONCLUDED",
           "title": "Relationship review concluded",
-          "summary": "Grade 5, fully collateralised, covenants compliant \u2014 EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
+          "summary": "Grade 5, fully collateralised, covenants compliant — EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
           "detail": {
-            "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+            "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
             "nextSteps": [
               {
                 "actionId": "covenant-review",
-                "note": "Re-run the covenant review ahead of the next scheduled test \u2014 the DSCR test date (2026-06-30) has already passed."
+                "note": "Re-run the covenant review ahead of the next scheduled test — the DSCR test date (2026-06-30) has already passed."
               }
             ]
           }
@@ -935,7 +941,7 @@
             "packageId": "a5FSAMPLE000BRWT1"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001SAMPLE0000BRWT",
@@ -965,7 +971,9 @@
                 "currentLendableValue": 11200000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 11200000,
+                "advanceRateSource": "Pledge override"
               },
               {
                 "loanId": "a1XSAMPLEBRWT001",
@@ -975,12 +983,16 @@
                 "currentLendableValue": 6300000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": false
+                "isPrimary": false,
+                "amountPledged": 6300000,
+                "advanceRateSource": "Pledge override"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000BRWT"
+            "productPackageId": "a5FSAMPLE00000BRWT",
+            "totalPledgedValue": 17500000,
+            "coverageNote": null
           },
           {
             "loanId": "a1XSAMPLEBRWT002",
@@ -1004,7 +1016,9 @@
                 "currentLendableValue": 7200000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 7200000,
+                "advanceRateSource": "Collateral type default"
               },
               {
                 "loanId": "a1XSAMPLEBRWT002",
@@ -1014,15 +1028,23 @@
                 "currentLendableValue": 2800000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": false
+                "isPrimary": false,
+                "amountPledged": 2800000,
+                "advanceRateSource": "Pledge override"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000BRWT"
+            "productPackageId": "a5FSAMPLE00000BRWT",
+            "totalPledgedValue": 10000000,
+            "coverageNote": null
           }
         ],
-        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+        "note": "Facility coverage divides the facility's PLEDGED SHARE (Amount_Pledged), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Pledges flagged Excluded or Abundance-of-Caution are dropped from the math. SAMPLE-ONLY fictitious relationship: figures are consistent with this borrower's existing sample data, not an org read.",
+        "coverageRatio": 0.96,
+        "coverageShortfall": true,
+        "totalUniqueCollateralLendableValue": 27500000,
+        "uniqueCollateralCount": 4
       },
       "covenants": {
         "accountId": "001SAMPLE0000BRWT",
@@ -1072,7 +1094,7 @@
       "opportunities": {
         "accountId": "001SAMPLE0000BRWT",
         "opportunities": [],
-        "note": "No open opportunities \u2014 account flagged for covenant follow-up ahead of relationship expansion conversations."
+        "note": "No open opportunities — account flagged for covenant follow-up ahead of relationship expansion conversations."
       },
       "signals": {
         "accountId": "001SAMPLE0000BRWT",
@@ -1081,7 +1103,7 @@
         "renewals": [],
         "maturityWatch": [],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -1146,9 +1168,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading \u2014 Brightwater_Foods_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading — Brightwater_Foods_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 6 and fully drawn at $28.5M, Brightwater Foods tripped its Debt Service Coverage covenant at last test (1.05x vs 1.20x floor) with both facilities running below full collateral coverage \u2014 flag for immediate covenant follow-up ahead of the August retest.",
+      "verdict": "Grade 6 and fully drawn at $28.5M, Brightwater Foods tripped its Debt Service Coverage covenant at last test (1.05x vs 1.20x floor) with both facilities running below full collateral coverage — flag for immediate covenant follow-up ahead of the August retest.",
       "anchors": [
         {
           "label": "Rating",
@@ -1164,13 +1186,13 @@
         },
         {
           "label": "DSC",
-          "value": "1.05\u00d7",
-          "sub": "Floor 1.20\u00d7 \u2014 breached",
+          "value": "1.05×",
+          "sub": "Floor 1.20× — breached",
           "dir": "down"
         },
         {
           "label": "Coverage",
-          "value": "0.97\u00d7",
+          "value": "0.97×",
           "sub": "Blended collateral",
           "dir": "down"
         }
@@ -1229,7 +1251,7 @@
             "packageId": "a5FSAMPLE000STRL1"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001SAMPLE0000STRL",
@@ -1259,12 +1281,16 @@
                 "currentLendableValue": 8000000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 8000000,
+                "advanceRateSource": "Collateral type default"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000STRL"
+            "productPackageId": "a5FSAMPLE00000STRL",
+            "totalPledgedValue": 8000000,
+            "coverageNote": null
           },
           {
             "loanId": "a1XSAMPLESTRL002",
@@ -1278,7 +1304,7 @@
             "interestRate": 7.65,
             "totalLendableValue": 9200000,
             "coverageRatio": 0.95,
-            "coverageShortfall": false,
+            "coverageShortfall": true,
             "collateral": [
               {
                 "loanId": "a1XSAMPLESTRL002",
@@ -1288,7 +1314,9 @@
                 "currentLendableValue": 6400000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 6400000,
+                "advanceRateSource": "Collateral type default"
               },
               {
                 "loanId": "a1XSAMPLESTRL002",
@@ -1298,15 +1326,23 @@
                 "currentLendableValue": 2800000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": false
+                "isPrimary": false,
+                "amountPledged": 2800000,
+                "advanceRateSource": "Pledge override"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000STRL"
+            "productPackageId": "a5FSAMPLE00000STRL",
+            "totalPledgedValue": 9200000,
+            "coverageNote": null
           }
         ],
-        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math."
+        "note": "Facility coverage divides the facility's PLEDGED SHARE (Amount_Pledged), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Pledges flagged Excluded or Abundance-of-Caution are dropped from the math. SAMPLE-ONLY fictitious relationship: figures are consistent with this borrower's existing sample data, not an org read.",
+        "coverageRatio": 1.02,
+        "coverageShortfall": false,
+        "totalUniqueCollateralLendableValue": 17200000,
+        "uniqueCollateralCount": 3
       },
       "covenants": {
         "accountId": "001SAMPLE0000STRL",
@@ -1389,7 +1425,7 @@
           }
         ],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -1454,9 +1490,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading \u2014 Sterling_Fabrication_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading — Sterling_Fabrication_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 5 and 94% drawn at $16.9M of $18.0M, Sterling remains covenant-compliant across all three tests, but the $8.0M equipment term loan matures in 75 days (Sep 15) \u2014 get the renewal decision in front of committee now to avoid a maturity gap.",
+      "verdict": "Grade 5 and 94% drawn at $16.9M of $18.0M, Sterling remains covenant-compliant across all three tests, but the $8.0M equipment term loan matures in 75 days (Sep 15) — get the renewal decision in front of committee now to avoid a maturity gap.",
       "anchors": [
         {
           "label": "Rating",
@@ -1472,8 +1508,8 @@
         },
         {
           "label": "DSC",
-          "value": "1.38\u00d7",
-          "sub": "Floor 1.30\u00d7",
+          "value": "1.38×",
+          "sub": "Floor 1.30×",
           "dir": null
         },
         {
@@ -1521,11 +1557,11 @@
           "title": "Headroom analysis concluded",
           "summary": "Prepped brief on the revolver increase ask: borrowing base is already tight, collateral re-valuation recommended before sizing the modification.",
           "detail": {
-            "verdict": "Sterling is drawn to $9.7M against a $10.0M revolver (97% utilized, $0.3M available) and the borrowing base is already tight \u2014 pledged AR and inventory support $9.2M in lendable value against $9.7M outstanding (0.95x coverage). Covenants remain compliant (DSC 1.38x vs 1.30x floor) but the requested $13.0M limit would need incremental collateral before it clears \u2014 recommend a collateral re-valuation alongside the modification, not a standalone limit increase.",
+            "verdict": "Sterling is drawn to $9.7M against a $10.0M revolver (97% utilized, $0.3M available) and the borrowing base is already tight — pledged AR and inventory support $9.2M in lendable value against $9.7M outstanding (0.95x coverage). Covenants remain compliant (DSC 1.38x vs 1.30x floor) but the requested $13.0M limit would need incremental collateral before it clears — recommend a collateral re-valuation alongside the modification, not a standalone limit increase.",
             "nextSteps": [
               {
                 "actionId": "collateral-valuation",
-                "note": "Re-value pledged AR and inventory \u2014 current lendable value doesn't fully cover today's $9.7M outstanding, let alone a $13.0M limit."
+                "note": "Re-value pledged AR and inventory — current lendable value doesn't fully cover today's $9.7M outstanding, let alone a $13.0M limit."
               },
               {
                 "actionId": "loan-modification",
@@ -1608,7 +1644,7 @@
             "packageId": "a5FSAMPLE000KGSL1"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001SAMPLE0000KGSL",
@@ -1638,12 +1674,16 @@
                 "currentLendableValue": 6800000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 6800000,
+                "advanceRateSource": "Collateral type default"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000KGSL"
+            "productPackageId": "a5FSAMPLE00000KGSL",
+            "totalPledgedValue": 6800000,
+            "coverageNote": null
           },
           {
             "loanId": "a1XSAMPLEKGSL002",
@@ -1667,7 +1707,9 @@
                 "currentLendableValue": 4000000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 4000000,
+                "advanceRateSource": "Collateral type default"
               },
               {
                 "loanId": "a1XSAMPLEKGSL002",
@@ -1677,12 +1719,16 @@
                 "currentLendableValue": 1400000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Active",
-                "isPrimary": false
+                "isPrimary": false,
+                "amountPledged": 1400000,
+                "advanceRateSource": "Pledge override"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000KGSL"
+            "productPackageId": "a5FSAMPLE00000KGSL",
+            "totalPledgedValue": 5400000,
+            "coverageNote": null
           },
           {
             "loanId": "a1XSAMPLEKGSL003",
@@ -1706,12 +1752,16 @@
                 "currentLendableValue": 2400000,
                 "lienPosition": "1st",
                 "pledgedStatus": "Pending",
-                "isPrimary": true
+                "isPrimary": true,
+                "amountPledged": 2400000,
+                "advanceRateSource": "Collateral type default"
               }
             ],
             "status": "Open",
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000KGSL"
+            "productPackageId": "a5FSAMPLE00000KGSL",
+            "totalPledgedValue": 2400000,
+            "coverageNote": "No coverage ratio: this facility carries no outstanding balance to cover."
           },
           {
             "loanId": "a1XSAMPLEKGSL000",
@@ -1729,10 +1779,16 @@
             "status": "Open",
             "collateral": [],
             "stage": "Booked",
-            "productPackageId": "a5FSAMPLE00000KGSL"
+            "productPackageId": "a5FSAMPLE00000KGSL",
+            "totalPledgedValue": null,
+            "coverageNote": "No coverage ratio: no collateral is pledged to this facility."
           }
         ],
-        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math. Totals (totalCommitted/totalOutstanding/totalAvailable) reflect ACTIVE facilities only \u2014 the Kingsley Original Equipment Term Loan (status Paid Off, matured 2026-01-15) is excluded."
+        "note": "Facility coverage divides the facility's PLEDGED SHARE (Amount_Pledged), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Pledges flagged Excluded or Abundance-of-Caution are dropped from the math. SAMPLE-ONLY fictitious relationship: figures are consistent with this borrower's existing sample data, not an org read. Totals (totalCommitted/totalOutstanding/totalAvailable) reflect ACTIVE facilities only.",
+        "coverageRatio": 1.55,
+        "coverageShortfall": false,
+        "totalUniqueCollateralLendableValue": 14600000,
+        "uniqueCollateralCount": 4
       },
       "covenants": {
         "accountId": "001SAMPLE0000KGSL",
@@ -1784,7 +1840,7 @@
         "opportunities": [
           {
             "opportunityId": "006SAMPLEKGSL0P1",
-            "name": "Kingsley Precision Works \u2014 Equipment Expansion Line",
+            "name": "Kingsley Precision Works — Equipment Expansion Line",
             "stage": "Qualification",
             "amount": 5000000,
             "closeDate": "2026-12-08T11:49:49",
@@ -1824,7 +1880,7 @@
         "renewals": [],
         "maturityWatch": [],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -1889,9 +1945,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading \u2014 Kingsley_Precision_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading — Kingsley_Precision_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 4 and only 43% drawn at $9.4M of $22.0M, Kingsley just added a $4.0M CapEx facility and increased its revolver by $2.0M inside six weeks \u2014 two modifications close together worth a relationship check-in, though covenants remain comfortably compliant (DSC 1.85x vs 1.25x floor) and EBITDA continues to grow.",
+      "verdict": "Grade 4 and only 43% drawn at $9.4M of $22.0M, Kingsley just added a $4.0M CapEx facility and increased its revolver by $2.0M inside six weeks — two modifications close together worth a relationship check-in, though covenants remain comfortably compliant (DSC 1.85x vs 1.25x floor) and EBITDA continues to grow.",
       "anchors": [
         {
           "label": "Rating",
@@ -1907,8 +1963,8 @@
         },
         {
           "label": "DSC",
-          "value": "1.85\u00d7",
-          "sub": "Floor 1.25\u00d7",
+          "value": "1.85×",
+          "sub": "Floor 1.25×",
           "dir": "up"
         },
         {
@@ -1938,21 +1994,25 @@
       },
       "exposure": {
         "accountId": "001bb00001I7FPNAA3",
+        "coverageRatio": 1.02,
+        "coverageShortfall": false,
         "facilities": [
           {
-            "totalLendableValue": 13600000,
+            "totalPledgedValue": 12000000,
+            "totalLendableValue": 12000000,
             "status": "Open",
             "stage": "Booked",
             "riskGrade": "4",
             "productType": "Non-Real Estate",
             "productPackageId": "a5Fbb000000IHFJEA4",
-            "outstanding": 0,
+            "outstanding": 9200000,
             "name": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
             "maturityDate": "2027-03-15",
             "loanId": "a4Zbb0000027MaYEAU",
             "interestRate": null,
             "coverageShortfall": false,
-            "coverageRatio": null,
+            "coverageRatio": 1.3,
+            "coverageNote": null,
             "committed": 15000000,
             "collateral": [
               {
@@ -1966,6 +2026,8 @@
                 "collateralName": "COL-000762",
                 "collateralId": "a35bb0000013xz3AAA",
                 "collateralDescription": "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
+                "amountPledged": 8000000,
+                "advanceRateSource": "Collateral type default",
                 "advanceRate": 80
               },
               {
@@ -1979,25 +2041,29 @@
                 "collateralName": "COL-000763",
                 "collateralId": "a35bb0000013y0fAAA",
                 "collateralDescription": "All present and future inventory at the Fort Wayne and Kokomo plants: raw bar and plate stock, work in process and finished goods. Excludes consigned material and stock over 12 months old.",
+                "amountPledged": 4000000,
+                "advanceRateSource": "Pledge override",
                 "advanceRate": 50
               }
             ],
-            "available": 0
+            "available": 5800000
           },
           {
-            "totalLendableValue": 10500000,
+            "totalPledgedValue": 5500000,
+            "totalLendableValue": 5500000,
             "status": "Open",
             "stage": "Booked",
             "riskGrade": "5",
             "productType": "Real Estate",
             "productPackageId": "a5Fbb000000IHFJEA4",
-            "outstanding": 0,
+            "outstanding": 7350000,
             "name": "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
             "maturityDate": "2026-11-01",
             "loanId": "a4Zbb0000027Mp3EAE",
             "interestRate": null,
-            "coverageShortfall": false,
-            "coverageRatio": null,
+            "coverageShortfall": true,
+            "coverageRatio": 0.75,
+            "coverageNote": null,
             "committed": 12000000,
             "collateral": [
               {
@@ -2011,25 +2077,29 @@
                 "collateralName": "COL-000765",
                 "collateralId": "a35bb0000013y3tAAA",
                 "collateralDescription": "First mortgage on the owner-occupied Fort Wayne manufacturing campus (218,000 sq ft on 22.4 acres) and the Kokomo plant (140,000 sq ft, under expansion).",
+                "amountPledged": 5500000,
+                "advanceRateSource": "Pledge override",
                 "advanceRate": 75
               }
             ],
-            "available": 0
+            "available": 4650000
           },
           {
-            "totalLendableValue": 7500000,
+            "totalPledgedValue": 5900000,
+            "totalLendableValue": 5900000,
             "status": "Open",
             "stage": "Booked",
             "riskGrade": "4",
             "productType": "Non-Real Estate",
             "productPackageId": "a5Fbb000000IHFJEA4",
-            "outstanding": 0,
+            "outstanding": 5900000,
             "name": "Hartwell Precision Manufacturing LLC - Equipment - $8,000,000.00",
             "maturityDate": "2030-09-20",
             "loanId": "a4Zbb0000027MnREAU",
             "interestRate": null,
             "coverageShortfall": false,
-            "coverageRatio": null,
+            "coverageRatio": 1,
+            "coverageNote": null,
             "committed": 8000000,
             "collateral": [
               {
@@ -2043,25 +2113,29 @@
                 "collateralName": "COL-000764",
                 "collateralId": "a35bb0000013y2HAAQ",
                 "collateralDescription": "Blanket lien on all production machinery and equipment at the Fort Wayne and Kokomo plants, including CNC machining centres, robotic welding cells, heat-treat furnaces and CMM inspection equipment.",
+                "amountPledged": 5900000,
+                "advanceRateSource": "Pledge override",
                 "advanceRate": 75
               }
             ],
-            "available": 0
+            "available": 2100000
           },
           {
-            "totalLendableValue": 10500000,
+            "totalPledgedValue": 5000000,
+            "totalLendableValue": 5000000,
             "status": "Open",
             "stage": "Booked",
             "riskGrade": "4",
             "productType": "Real Estate",
             "productPackageId": "a5Fbb000000IHFJEA4",
-            "outstanding": 0,
+            "outstanding": 4420000,
             "name": "Hartwell Precision Manufacturing LLC - Purchase - $5,000,000.00",
             "maturityDate": "2028-05-10",
             "loanId": "a4Zbb0000027MqfEAE",
             "interestRate": null,
             "coverageShortfall": false,
-            "coverageRatio": null,
+            "coverageRatio": 1.13,
+            "coverageNote": null,
             "committed": 5000000,
             "collateral": [
               {
@@ -2075,25 +2149,29 @@
                 "collateralName": "COL-000765",
                 "collateralId": "a35bb0000013y3tAAA",
                 "collateralDescription": "First mortgage on the owner-occupied Fort Wayne manufacturing campus (218,000 sq ft on 22.4 acres) and the Kokomo plant (140,000 sq ft, under expansion).",
+                "amountPledged": 5000000,
+                "advanceRateSource": "Pledge override",
                 "advanceRate": 75
               }
             ],
-            "available": 0
+            "available": 580000
           },
           {
-            "totalLendableValue": 7500000,
+            "totalPledgedValue": 1600000,
+            "totalLendableValue": 1600000,
             "status": "Open",
             "stage": "Booked",
             "riskGrade": "4",
             "productType": "Non-Real Estate",
             "productPackageId": "a5Fbb000000IHFJEA4",
-            "outstanding": 0,
+            "outstanding": 3010000,
             "name": "Hartwell Precision Manufacturing LLC - Equipment - $3,500,000.00",
             "maturityDate": "2030-02-18",
             "loanId": "a4Zbb0000027MsHEAU",
             "interestRate": null,
-            "coverageShortfall": false,
-            "coverageRatio": null,
+            "coverageShortfall": true,
+            "coverageRatio": 0.53,
+            "coverageNote": null,
             "committed": 3500000,
             "collateral": [
               {
@@ -2107,25 +2185,29 @@
                 "collateralName": "COL-000764",
                 "collateralId": "a35bb0000013y2HAAQ",
                 "collateralDescription": "Blanket lien on all production machinery and equipment at the Fort Wayne and Kokomo plants, including CNC machining centres, robotic welding cells, heat-treat furnaces and CMM inspection equipment.",
+                "amountPledged": 1600000,
+                "advanceRateSource": "Pledge override",
                 "advanceRate": 75
               }
             ],
-            "available": 0
+            "available": 490000
           },
           {
-            "totalLendableValue": 9600000,
+            "totalPledgedValue": 1600000,
+            "totalLendableValue": 1600000,
             "status": "Open",
             "stage": "Booked",
             "riskGrade": "5",
             "productType": "Non-Real Estate",
             "productPackageId": "a5Fbb000000IHFJEA4",
-            "outstanding": 0,
+            "outstanding": 1150000,
             "name": "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00",
             "maturityDate": "2026-06-30",
             "loanId": "a4Zbb0000027MttEAE",
             "interestRate": null,
             "coverageShortfall": false,
-            "coverageRatio": null,
+            "coverageRatio": 1.39,
+            "coverageNote": null,
             "committed": 2500000,
             "collateral": [
               {
@@ -2139,16 +2221,20 @@
                 "collateralName": "COL-000762",
                 "collateralId": "a35bb0000013xz3AAA",
                 "collateralDescription": "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
+                "amountPledged": 1600000,
+                "advanceRateSource": "Collateral type default",
                 "advanceRate": 80
               }
             ],
-            "available": 0
+            "available": 1350000
           }
         ],
-        "note": "Coverage uses Current_Lendable_Value (value x advance rate, org-computed); pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
-        "totalAvailable": 0,
+        "note": "Outstanding reads LLC_BI__Principal_Balance__c, the balance field this org populates (LLC_BI__AmountOutstanding__c is a fallback only). Available = committed - outstanding, floored at zero. Facility coverage divides the facility's PLEDGED SHARE (LLC_BI__Amount_Pledged__c), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Advance rate comes from one source, the pledge's LLC_BI__Advance_Rate__c (override, then auto-applied, then collateral type). Pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
+        "totalAvailable": 14970000,
         "totalCommitted": 46000000,
-        "totalOutstanding": 0
+        "totalOutstanding": 31030000,
+        "totalUniqueCollateralLendableValue": 31600000,
+        "uniqueCollateralCount": 4
       },
       "covenants": {
         "accountId": "001bb00001I7FPNAA3",
@@ -2402,7 +2488,7 @@
             "accountName": "Hartwell Precision Manufacturing LLC"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
       },
       "opportunities": {
         "accountId": "001bb00001I7FPNAA3",
@@ -2524,7 +2610,7 @@
         ],
         "modificationClusterFlag": false,
         "modifications": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer.",
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer.",
         "renewals": []
       },
       "activity": [],
@@ -2543,14 +2629,14 @@
         },
         {
           "label": "DSC",
-          "value": "1.38\u00d7",
-          "sub": "Floor 1.25\u00d7",
+          "value": "1.38×",
+          "sub": "Floor 1.25×",
           "dir": null
         },
         {
           "label": "FCC",
-          "value": "1.22\u00d7",
-          "sub": "Floor 1.15\u00d7 tight",
+          "value": "1.22×",
+          "sub": "Floor 1.15× tight",
           "dir": "down"
         }
       ]

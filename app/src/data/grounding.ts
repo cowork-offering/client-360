@@ -153,11 +153,17 @@ function tabSentence(bundle: BorrowerBundle, tab: string | null): string | null 
       })
       .join("; ");
     const more = facs.length > 3 ? ` and ${facs.length - 3} more` : "";
-    let lendable = 0;
-    let has = false;
-    for (const f of facs) if (f.totalLendableValue != null) { lendable += f.totalLendableValue; has = true; }
-    const drawn = exp.totalOutstanding;
-    const coverage = has && drawn ? ` Lendable collateral ${fmtMoney(lendable)}, coverage ${(lendable / drawn).toFixed(2)}x.` : "";
+    // Coverage is the org's own figures, not a sum over the facility rows: a
+    // cross-pledged asset repeats its lendable value on every pledge, so a sum
+    // here would ground the model in a number nothing else on screen shows.
+    const bits: string[] = [];
+    if (exp.totalUniqueCollateralLendableValue != null) {
+      bits.push(`lendable ${fmtMoney(exp.totalUniqueCollateralLendableValue)}`);
+    }
+    if (exp.coverageRatio != null) bits.push(`coverage ${exp.coverageRatio.toFixed(2)}x`);
+    const under = facs.filter((f) => f.coverageShortfall === true).length;
+    if (under) bits.push(`${under} ${under === 1 ? "facility" : "facilities"} under-covered`);
+    const coverage = bits.length ? ` Collateral: ${bits.join(", ")}.` : "";
     return `${facs.length} active ${facs.length === 1 ? "facility" : "facilities"}: ${list}${more}.${coverage}`;
   }
 

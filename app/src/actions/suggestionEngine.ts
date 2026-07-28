@@ -158,13 +158,23 @@ function ruleCoverageShortfall(
     };
   }
 
-  // Lendable value is org-computed; a MISSING one is not a zero.
+  // The facility PLEDGED SHARE, org-computed. Summing these is correct by
+  // construction — a share is this facility's slice of the collateral, so a
+  // cross-pledged asset contributes once in total rather than once per pledge.
+  // A MISSING share is still not a zero, and the org now usually says why.
   let lendable = 0;
   for (const f of facs) {
-    const present = Object.hasOwn(f, "totalLendableValue");
-    const g = requireNumber(f.totalLendableValue, "lendable value", "borrower.exposure.facilities[].totalLendableValue", NCINO_EXPOSURE, present);
+    const present = Object.hasOwn(f, "totalPledgedValue") || Object.hasOwn(f, "totalLendableValue");
+    const raw = f.totalPledgedValue ?? f.totalLendableValue;
+    const g = requireNumber(raw, "pledged share", "borrower.exposure.facilities[].totalLendableValue", NCINO_EXPOSURE, present);
     if (!g.ok) {
-      gaps.push({ ruleId: RULE, ...g.gap });
+      // The gap card carries the ORG'S OWN reason where the read supplies one.
+      // "all 3 pledges are Abundance-of-Caution" is actionable; "present but
+      // null" sends a banker to look for a defect that is not there.
+      const detail = f.coverageNote
+        ? `${g.gap.detail} — ${f.name ?? "the facility"}: ${f.coverageNote}`
+        : g.gap.detail;
+      gaps.push({ ruleId: RULE, ...g.gap, detail });
       return { suggestions: [], gaps };
     }
     lendable += g.value;
@@ -199,7 +209,7 @@ function ruleCoverageShortfall(
           figure: "pro-forma collateral coverage",
           value: coverage,
           threshold: th.value,
-          formula: "sum(active facility lendable value) / proposed commitment",
+          formula: "sum(active facility pledged share) / proposed commitment",
         },
         inputs: [
           { path: "borrower.exposure.facilities[].totalLendableValue", value: lendable, provenance: "NCINO" },
