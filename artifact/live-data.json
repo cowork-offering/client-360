@@ -1776,7 +1776,7 @@
             "totalLendableValue": null,
             "coverageRatio": null,
             "coverageShortfall": false,
-            "status": "Open",
+            "status": "Paid Off",
             "collateral": [],
             "stage": "Booked",
             "productPackageId": "a5FSAMPLE00000KGSL",
