@@ -150,6 +150,14 @@ function isProvenanceCitation(path: string): boolean {
   return /^provenance\b/.test(path) && /\bcitation$/.test(path);
 }
 
+/** A transition's `from` and `to` are PICKLIST VALUES, never record ids. Some
+ *  org picklists are long enough to trip the id shape on their own —
+ *  `CustomerEngagement` is eighteen characters — and flagging one as evidence
+ *  that a record already exists is simply wrong. */
+function isTransitionState(path: string): boolean {
+  return /\.transition\.(?:from|to)$/.test(path);
+}
+
 export function assertNoRecordIds(plan: StagedOutput): string[] {
   const violations: string[] = [];
 
@@ -167,7 +175,7 @@ export function assertNoRecordIds(plan: StagedOutput): string[] {
       }
 
       // 2. Otherwise only flag ids outside the known carriers.
-      if (ID_CARRYING_KEYS.has(key) || isProvenanceCitation(path)) return;
+      if (ID_CARRYING_KEYS.has(key) || isProvenanceCitation(path) || isTransitionState(path)) return;
       violations.push(`${path} looks like an org record id (${value})`);
       return;
     }

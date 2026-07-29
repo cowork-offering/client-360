@@ -13,7 +13,7 @@ import { STATUS } from "../data/finance";
 import { PageContainer } from "./ui";
 import { AccentureCaretWatermark, AmbientWash } from "./brand";
 import { OnboardingTabContent } from "./tabs/onboarding";
-import { OnboardingGateCard } from "./OnboardingGate";
+import { OnboardingTicket } from "./OnboardingTicket";
 import { ONBOARDING_ACTIONS, type OnboardingAction } from "../actions/onboardingActions";
 import { screeningTone } from "./tabs/onboarding/shared";
 
@@ -57,7 +57,7 @@ function StageChip({ kase }: { kase: OnboardingCase }) {
 export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
   const { data, state, dispatch } = useApp();
   const generatedAt = data.meta?.generatedAt ?? "";
-  const [gate, setGate] = useState<OnboardingAction | null>(null);
+  const [ticket, setTicket] = useState<OnboardingAction | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
 
   const days = daysInStage(kase, generatedAt);
@@ -165,7 +165,8 @@ export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
           <div className="mb-4 rounded-[14px] bg-raised px-6 py-5" style={{ boxShadow: "var(--shadow-card)" }}>
             <div className="kicker mb-1">Onboarding actions</div>
             <div className="mb-3.5 max-w-[700px] text-[12.5px] leading-relaxed text-ink-body" style={{ textWrap: "pretty" as never }}>
-              Every action below is the real write this case needs, named by the object it lands on. None of them files today.
+              Every action below is the real write this case needs, named by the object it lands on. Each opens the full
+              ticket — briefing, plan, confirmation — and stops at the honest boundary, because none of them files today.
             </div>
             <div className="flex flex-col gap-2.5">
               {ONBOARDING_ACTIONS.map((a) => (
@@ -178,7 +179,7 @@ export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setGate(a)}
+                    onClick={() => setTicket(a)}
                     className="c360-press mt-0.5 flex-none rounded-[8px] border border-border-strong bg-raised px-3 py-1.5 text-[11.5px] font-semibold text-ink-body hover:border-accent hover:text-accent"
                   >
                     Run
@@ -186,13 +187,10 @@ export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
                 </div>
               ))}
             </div>
-            {gate && (
-              <div className="mt-4">
-                <OnboardingGateCard action={gate} onDismiss={() => setGate(null)} />
-              </div>
-            )}
           </div>
         )}
+
+        {ticket && <OnboardingTicket action={ticket} kase={kase} onClose={() => setTicket(null)} />}
 
         <div key={state.onboardingTab} className="c360-tab-in">
           <OnboardingTabContent tab={state.onboardingTab} kase={kase} />

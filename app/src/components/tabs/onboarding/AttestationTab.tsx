@@ -9,7 +9,7 @@ import {
 } from "../../../data/onboarding";
 import { ONBOARDING_ACTIONS, type OnboardingAction } from "../../../actions/onboardingActions";
 import { Card, SectionHead, NoteCaption } from "../../ui";
-import { OnboardingGateCard } from "../../OnboardingGate";
+import { OnboardingTicket } from "../../OnboardingTicket";
 import { SampleNote, StatusText } from "./shared";
 
 const EXPLAIN = "What is the clearance state on this case, and what does attesting unlock?";
@@ -20,7 +20,7 @@ const ATTEST_ACTION: OnboardingAction =
 export function AttestationTab({ kase }: { kase: OnboardingCase }) {
   const { data } = useApp();
   const generatedAt = data.meta?.generatedAt ?? "";
-  const [gate, setGate] = useState(false);
+  const [ticket, setTicket] = useState(false);
 
   const clearance = kase.clearance ?? { present: false, clearedBy: null, clearedOn: null, basis: null };
   // Everything except the clearance itself. A case with an empty list here is
@@ -110,21 +110,17 @@ export function AttestationTab({ kase }: { kase: OnboardingCase }) {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => setGate(true)}
+            onClick={() => setTicket(true)}
             disabled={clearance.present}
             className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3.5 py-2 text-[12px] font-semibold disabled:opacity-45"
           >
             Attest KYC clearance
           </button>
           <span className="text-[11.5px] text-ink-faint">
-            {clearance.present ? "Already attested on this case." : "Opens the filing path. Nothing is written today."}
+            {clearance.present ? "Already attested on this case." : "Opens the full attestation ticket. Nothing is written today."}
           </span>
         </div>
-        {gate && (
-          <div className="mt-3.5">
-            <OnboardingGateCard action={ATTEST_ACTION} onDismiss={() => setGate(false)} />
-          </div>
-        )}
+        {ticket && <OnboardingTicket action={ATTEST_ACTION} kase={kase} onClose={() => setTicket(false)} />}
       </Card>
 
       <NoteCaption note={kase.note} />

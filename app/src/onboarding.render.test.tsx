@@ -57,6 +57,20 @@ function click(el: Element | null | undefined) {
   act(() => el?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
+/** Open a narrative card by its label and type into its textarea. The ticket
+ *  keeps drafted prose collapsed exactly as the credit actions do. */
+function typeRationale(label: string, text = "Reviewed the evidence on file and recorded the basis.") {
+  const card = [...document.body.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
+  if (card) click(card);
+  const area = [...document.body.querySelectorAll("textarea")].find((t) => t.getAttribute("aria-label") === label);
+  if (!area) throw new Error(`no textarea for ${label}`);
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+  act(() => {
+    setter.call(area, text);
+    area.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 function buttonByText(re: RegExp): HTMLButtonElement | undefined {
   return [...document.body.querySelectorAll("button")].find((b) => re.test(b.textContent ?? "")) as
     | HTMLButtonElement
@@ -233,9 +247,13 @@ describe("the attestation gate", () => {
     expect(buttonByText(/Attest KYC clearance/)?.disabled).toBe(true);
   });
 
-  it("pressing Attest returns the honest gate, never a success", () => {
+  it("pressing Attest opens the ticket and walks to the honest gate, never a success", () => {
     mount(data, <OnboardingTabContent tab="attestation" kase={byName("Atlas Packaging Corp")} />);
     click(buttonByText(/Attest KYC clearance/));
+    // The entry point opens the TICKET now, not the flat card.
+    expect(document.body.querySelector(`[data-gate="${ONBOARDING_TOOLS_PENDING_CODE}"]`)).toBeNull();
+    typeRationale("What you are attesting, and on what basis");
+    click(buttonByText(/^Review the plan$/));
     const gate = document.body.querySelector(`[data-gate="${ONBOARDING_TOOLS_PENDING_CODE}"]`);
     expect(gate, "gate card").toBeTruthy();
     const text = gate!.textContent ?? "";
@@ -264,7 +282,9 @@ describe("the write seam is visible and closed", () => {
     const runs = [...document.body.querySelectorAll("button")].filter((b) => b.textContent === "Run");
     expect(runs.length).toBe(4);
     click(runs[0]);
-    expect(document.body.querySelector(`[data-gate="${ONBOARDING_TOOLS_PENDING_CODE}"]`)).toBeTruthy();
-    expect(document.body.textContent).toContain("LLC_BI__Onboarding__c.LLC_BI__Stage__c");
+    // Run opens the ticket. The gate is where FILING would be, not where the
+    // banker starts.
+    expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
+    expect(document.body.textContent).toContain("Advance");
   });
 });

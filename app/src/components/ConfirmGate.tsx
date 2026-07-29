@@ -18,6 +18,9 @@ import {
 import { mcpAvailable } from "../channel/mcp";
 import { STEP_TYPE_LABEL } from "../actions/tracker";
 import { resolveBundle } from "../actions/registry";
+import { PENDING_DEPLOYMENT, PLAN_PREVIEW_BANNER } from "../actions/onboardingTicket";
+import { OnboardingGateCard } from "./OnboardingGate";
+import type { OnboardingAction } from "../actions/onboardingActions";
 
 /* =============================================================================
    THE CONFIRM GATE (A33.3.1)
@@ -70,6 +73,8 @@ export function ConfirmGate({
   actionId,
   simulated,
   idempotencyKey,
+  pendingGate,
+  onGateDismiss,
   onConfirmed,
   onBack,
 }: {
@@ -79,6 +84,13 @@ export function ConfirmGate({
   simulated: boolean;
   /** Stable across the stage/execute pair and across resume. */
   idempotencyKey?: string;
+  /** ONBOARDING ONLY. The action whose staging tool is not deployed yet. When
+   *  present the ceremony is identical up to the point of filing, and where the
+   *  decision token would be redeemed the banker meets the honest gate instead
+   *  of a confirm gesture. Nothing is minted, nothing is sent. */
+  pendingGate?: OnboardingAction;
+  /** Closes the whole ticket from the terminal gate card. */
+  onGateDismiss?: () => void;
   onConfirmed: (token: DecisionToken, executed?: ExecuteResult) => void;
   onBack: () => void;
 }) {
@@ -91,7 +103,14 @@ export function ConfirmGate({
   const bundle = resolveBundle(data, state.accountId);
 
   // A33.3.1 — the plan must be allowlisted before a gesture is offered at all.
-  const violations = useMemo(() => validatePlan(plan.steps), [plan.steps]);
+  //
+  // ONBOARDING EXCEPTION, and it is narrow: the allowlist is a mirror of what
+  // each DEPLOYED tool may do, and the onboarding objects have no deployed tool
+  // and therefore no declared policy. Running the mirror against them would
+  // report "not on the allowlist" — true, and the wrong sentence: it reads as a
+  // malformed plan when the fact is that no tool exists. The gate below says
+  // that fact plainly, and no gesture is offered either way.
+  const violations = useMemo(() => (pendingGate ? [] : validatePlan(plan.steps)), [plan.steps, pendingGate]);
   // A33.5.3 — a staged plan carrying a record id means something already wrote.
   const idLeaks = useMemo(() => assertNoRecordIds(plan), [plan]);
 
@@ -201,9 +220,9 @@ export function ConfirmGate({
 
   return (
     <div className="flex flex-col">
-      {simulated && (
+      {(simulated || pendingGate) && (
         <div className="border-b border-divider px-5 py-2 text-[11px] font-semibold" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>
-          {SIMULATION_BANNER}
+          {pendingGate ? PLAN_PREVIEW_BANNER : SIMULATION_BANNER}
         </div>
       )}
 
@@ -385,9 +404,37 @@ export function ConfirmGate({
         </div>
       )}
 
+      {/* Where the org's staging identity would render. There is no tool to mint
+          one, so each line says so rather than carrying a value that looks real. */}
+      {pendingGate && (
+        <div className="border-b border-divider px-5 py-3">
+          <div className="kicker mb-1.5">Staging identity</div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11.5px]">
+            {[
+              ["Staging id", plan.stagingId],
+              ["Plan hash", plan.planHash],
+              ["Decision token", PENDING_DEPLOYMENT],
+            ].map(([k, v]) => (
+              <span key={k} className="contents">
+                <dt className="text-ink-muted">{k}</dt>
+                <dd className="font-medium text-ink-faint">{v}</dd>
+              </span>
+            ))}
+          </dl>
+        </div>
+      )}
+
       <div className="px-5 py-4">
         <p className="text-[11.5px] leading-relaxed text-ink-muted">{CLOSING_LINE}</p>
       </div>
+
+      {/* THE HONEST BOUNDARY, at the exact point where filing would happen. The
+          banker has walked the whole ceremony; this is where it stops. */}
+      {pendingGate && (
+        <div className="border-t border-divider px-5 py-4">
+          <OnboardingGateCard action={pendingGate} onDismiss={onGateDismiss ?? onBack} />
+        </div>
+      )}
 
       <div className="flex items-center gap-2 border-t border-divider px-5 py-3">
         <button
@@ -398,6 +445,7 @@ export function ConfirmGate({
           Back
         </button>
         <div className="flex-1" />
+        {pendingGate ? null : (
         <button
           type="button"
           disabled={blocked || executing}
@@ -407,6 +455,7 @@ export function ConfirmGate({
         >
           {held ? "Filing is on hold" : executing ? "Working…" : drift ? "Confirm the new figures" : simulated ? "Confirm" : "Confirm and file"}
         </button>
+        )}
       </div>
     </div>
   );

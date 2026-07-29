@@ -269,7 +269,7 @@ function GapNote({ gap }: { gap: NamedGap }) {
   );
 }
 
-type Phase = "form" | "compile" | "confirm" | "tracker";
+export type Phase = "form" | "compile" | "confirm" | "tracker";
 
 /** Briefing -> Plan -> Execution. Compile is the bridge between the first two,
  *  so it shows as the Plan step already being worked on. */
@@ -279,8 +279,18 @@ const STEPS: Array<{ id: Phase; label: string }> = [
   { id: "tracker", label: "Execution" },
 ];
 
-function Stepper({ phase, onBack }: { phase: Phase; onBack: () => void }) {
-  const index = phase === "compile" ? 1 : STEPS.findIndex((s) => s.id === phase);
+/** The same stepper the onboarding ticket walks. Exported rather than copied:
+ *  one ceremony, one chrome, whatever the write seam behind it. */
+export function Stepper({
+  phase,
+  steps = STEPS,
+  onBack,
+}: {
+  phase: Phase;
+  steps?: Array<{ id: Phase; label: string }>;
+  onBack: () => void;
+}) {
+  const index = phase === "compile" ? 1 : steps.findIndex((s) => s.id === phase);
   // Only the Plan step may walk back. Once a plan has been filed there is no
   // stepping back to edit it: the record exists, and pretending otherwise would
   // be the one dishonest thing on this screen.
@@ -288,7 +298,7 @@ function Stepper({ phase, onBack }: { phase: Phase; onBack: () => void }) {
 
   return (
     <div className="flex items-center gap-1.5 border-b border-divider px-5 py-2">
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const here = i === index;
         return (
           <span key={s.id} className="flex items-center gap-1.5">
