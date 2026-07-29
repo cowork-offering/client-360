@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
-import { AppProvider, ONBOARDING_TABS } from "./state/appState";
+import { AppProvider, ONBOARDING_TABS, ZONE_NAME } from "./state/appState";
 import { AppShell } from "./components/AppShell";
 import { OnboardingWorkspace } from "./components/OnboardingWorkspace";
 import { OnboardingList, ZoneToggle } from "./components/OnboardingList";
@@ -87,7 +87,8 @@ describe("L1 — the pipeline zone", () => {
     it(`${file}: lists every onboarding case with stage, days and screening`, () => {
       const text = mount(data, <OnboardingList />);
       for (const c of onboardingCases(data)) expect(text, c.name).toContain(c.name);
-      expect(text).toContain("In onboarding");
+      expect(text).toContain(ZONE_NAME.onboarding);
+      expect(text).not.toContain("In onboarding");
       expect(text).toContain("Validation");
       expect(text).toContain("Due diligence");
       expect(text).toContain("Customer engagement");
@@ -99,12 +100,31 @@ describe("L1 — the pipeline zone", () => {
 
   it("the zone toggle carries a live count on both zones", () => {
     const text = mount(live as unknown as C360Data, <ZoneToggle bookCount={5} />);
-    expect(text).toContain("My book");
-    expect(text).toContain("In onboarding");
+    expect(text).toContain(ZONE_NAME.book);
+    expect(text).toContain(ZONE_NAME.onboarding);
     expect(text).toContain("3");
     // The count reads as a quantity of something, not a bare number.
     expect(text).toContain("relationships");
     expect(text).toContain("cases");
+  });
+
+  it("the zone names are set caps, and the old names are gone everywhere", () => {
+    const text = mount(live as unknown as C360Data, <AppShell />);
+    expect(ZONE_NAME.book).toBe("CLIENT OVERVIEW");
+    expect(ZONE_NAME.onboarding).toBe("KYC & ONBOARDING");
+    expect(text).not.toContain("My book");
+    expect(text).not.toContain("In onboarding");
+
+    // The name carries the tracked-caps treatment, not a shouted body size.
+    const labels = [...document.body.querySelectorAll(".zone-name")];
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+
+    // The secondary count line stays sentence case.
+    const radio = document.body.querySelector('[role="radio"]')!;
+    expect(radio.textContent).toContain("5 relationships");
+    expect(radio.textContent).not.toContain("RELATIONSHIPS");
+    // Announced as words, never spelled out letter by letter.
+    expect(radio.getAttribute("aria-label")).toBe("Client overview, 5 relationships");
   });
 
   it("the zone switcher is a radiogroup with a roving tab stop", () => {
@@ -133,7 +153,9 @@ describe("L1 — the pipeline zone", () => {
       group.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     });
     expect(document.body.textContent).toContain("Caldwell Systems LLC");
-    expect(document.body.querySelector('[role="radio"][aria-checked="true"]')!.textContent).toContain("In onboarding");
+    expect(document.body.querySelector('[role="radio"][aria-checked="true"]')!.textContent).toContain(
+      ZONE_NAME.onboarding,
+    );
   });
 
   it("the incoming zone mounts under the transition class", () => {
@@ -141,7 +163,7 @@ describe("L1 — the pipeline zone", () => {
     const zone = () => document.body.querySelector(".c360-zone-in");
     expect(zone(), "zone wrapper").toBeTruthy();
     const before = zone();
-    click(buttonByText(/In onboarding/));
+    click(buttonByText(/KYC & ONBOARDING/));
     // A NEW element, which is what replays the entrance and the row stagger.
     expect(zone()).not.toBe(before);
     expect(zone()!.textContent).toContain("Caldwell Systems LLC");
@@ -151,17 +173,17 @@ describe("L1 — the pipeline zone", () => {
     mount(live as unknown as C360Data, <AppShell />);
     expect(document.body.textContent).toContain("Needs action");
 
-    click(buttonByText(/In onboarding/));
+    click(buttonByText(/KYC & ONBOARDING/));
     expect(document.body.textContent).toContain("Caldwell Systems LLC");
     expect(document.body.textContent).not.toContain("Needs action");
 
-    click(buttonByText(/My book/));
+    click(buttonByText(/CLIENT OVERVIEW/));
     expect(document.body.textContent).toContain("Needs action");
   });
 
   it("opening a pipeline row mounts the onboarding shell, not the booked one", () => {
     mount(live as unknown as C360Data, <AppShell />);
-    click(buttonByText(/In onboarding/));
+    click(buttonByText(/KYC & ONBOARDING/));
     const row = [...document.body.querySelectorAll('[role="button"]')].find((el) =>
       /Atlas Packaging Corp/.test(el.textContent ?? ""),
     );

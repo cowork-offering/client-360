@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ONBOARDING_TABS, useApp, type OnboardingTab } from "../state/appState";
+import { ONBOARDING_TABS, useApp, ZONE_NAME, ZONE_SPOKEN, type OnboardingTab } from "../state/appState";
 import {
   STAGE_LABEL,
   TYPE_LABEL,
@@ -85,13 +85,14 @@ export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
               <button
                 type="button"
                 onClick={() => dispatch({ type: "GO_HOME" })}
-                className="inline-flex items-center gap-1.5 font-bold"
+                aria-label={`Back to ${ZONE_SPOKEN.onboarding}`}
+                className="zone-name inline-flex items-center gap-1.5 text-[11px]"
                 style={{ color: "var(--accent)" }}
               >
                 <svg width="14" height="14" viewBox="0 0 14 14">
                   <path d="M9 3L5 7l4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                In onboarding
+                {ZONE_NAME.onboarding}
               </button>
               <span style={{ color: "var(--crumb-sep)" }}>/</span>
               <span>{[kase.industry, kase.jurisdiction].filter(Boolean).join(" · ") || "—"}</span>

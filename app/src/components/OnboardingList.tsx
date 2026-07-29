@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useApp } from "../state/appState";
+import { useApp, ZONE_NAME, ZONE_SPOKEN } from "../state/appState";
 import { buildOnboardingRows, STAGE_LABEL, TYPE_LABEL, RESULT_LABEL } from "../data/onboarding";
 import { STATUS } from "../data/finance";
 import { Card, EmptyState } from "./ui";
@@ -29,7 +29,7 @@ export function OnboardingList() {
       <div className="flex flex-wrap items-center gap-3 border-b border-divider px-6 py-4">
         <div>
           <div className="kicker">Pipeline</div>
-          <div className="mt-0.5 text-[17px] font-bold text-ink">In onboarding</div>
+          <div className="zone-name mt-0.5 text-[15px] text-ink">{ZONE_NAME.onboarding}</div>
         </div>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-[12px] text-ink-muted">
@@ -64,8 +64,8 @@ export function OnboardingList() {
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="Nothing in onboarding"
-          body="No relationship is being onboarded right now. A case leaves this zone the moment its stage reaches Complete."
+          title="Nothing in the pipeline"
+          body={`No relationship is being onboarded right now. A case leaves ${ZONE_NAME.onboarding} the moment its stage reaches Complete.`}
         />
       ) : (
         filtered.map((r, i) => (
@@ -135,9 +135,21 @@ export function ZoneToggle({ bookCount }: { bookCount: number }) {
   const { data, state, dispatch } = useApp();
   const onboardingCount = useMemo(() => buildOnboardingRows(data).length, [data]);
 
-  const zones: Array<{ id: "book" | "onboarding"; label: string; count: number; unit: string }> = [
-    { id: "book", label: "My book", count: bookCount, unit: bookCount === 1 ? "relationship" : "relationships" },
-    { id: "onboarding", label: "In onboarding", count: onboardingCount, unit: onboardingCount === 1 ? "case" : "cases" },
+  const zones: Array<{ id: "book" | "onboarding"; label: string; spoken: string; count: number; unit: string }> = [
+    {
+      id: "book",
+      label: ZONE_NAME.book,
+      spoken: ZONE_SPOKEN.book,
+      count: bookCount,
+      unit: bookCount === 1 ? "relationship" : "relationships",
+    },
+    {
+      id: "onboarding",
+      label: ZONE_NAME.onboarding,
+      spoken: ZONE_SPOKEN.onboarding,
+      count: onboardingCount,
+      unit: onboardingCount === 1 ? "case" : "cases",
+    },
   ];
   const index = Math.max(0, zones.findIndex((z) => z.id === state.zone));
 
@@ -192,6 +204,9 @@ export function ZoneToggle({ bookCount }: { bookCount: number }) {
             type="button"
             role="radio"
             aria-checked={active}
+            /* The visible name is set caps; this is the same name as words, so
+               a screen reader says it rather than spelling it. */
+            aria-label={`${z.spoken}, ${z.count} ${z.unit}`}
             tabIndex={active ? 0 : -1}
             onClick={() => dispatch({ type: "SET_ZONE", zone: z.id })}
             /* `relative` alone stacks it over the thumb: both are positioned,
@@ -200,8 +215,8 @@ export function ZoneToggle({ bookCount }: { bookCount: number }) {
             style={{ background: "transparent" }}
           >
             <span
-              className="c360-zone-label block text-[12.5px] leading-tight"
-              style={{ color: active ? "var(--accent)" : "var(--ink-muted)", fontWeight: active ? 700 : 600 }}
+              className="c360-zone-label zone-name block text-[11.5px] leading-tight"
+              style={{ color: active ? "var(--accent)" : "var(--ink-muted)", fontWeight: active ? 800 : 700 }}
             >
               {z.label}
             </span>

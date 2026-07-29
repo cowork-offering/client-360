@@ -46,6 +46,28 @@ export type OnboardingTab = (typeof ONBOARDING_TABS)[number]["id"];
  *  derived from its stage every render (§6.3). */
 export type Zone = "book" | "onboarding";
 
+/**
+ * What each zone is CALLED, once.
+ *
+ * The switcher, the list header, the breadcrumb and the empty states all read
+ * from here, so a rename lands everywhere or nowhere. The set caps are the name
+ * (founder, 2026-07-29), and `.zone-name` supplies only the tracking and weight
+ * that keep caps from shouting.
+ *
+ * `ZONE_SPOKEN` is the same name as words. Some screen readers spell a
+ * capitalised string letter by letter, so anything that ANNOUNCES a zone reads
+ * from here while everything that DRAWS one reads from ZONE_NAME.
+ */
+export const ZONE_NAME: Record<Zone, string> = {
+  book: "CLIENT OVERVIEW",
+  onboarding: "KYC & ONBOARDING",
+};
+
+export const ZONE_SPOKEN: Record<Zone, string> = {
+  book: "Client overview",
+  onboarding: "KYC and onboarding",
+};
+
 /** Session-local echo of a message. Mirrors AiMessage's A12 vocabulary so the
  *  merge in ChatPanel is type-identical (F7). */
 export interface LocalMessage {

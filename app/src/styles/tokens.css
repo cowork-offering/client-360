@@ -166,6 +166,18 @@ body {
   color: var(--ink-faint);
 }
 
+/* ZONE NAME — the kicker's tracked caps carried up to title weight.
+   A zone is a PLACE, and a place reads as a set-caps sign rather than a
+   sentence. Size is left to the caller (a switcher segment and a list header
+   are not the same size); the tracking and the caps are the constant, which is
+   what stops all-caps from reading as shouting. Colour is untouched, so every
+   contrast pair stays exactly the one already verified. */
+.zone-name {
+  text-transform: uppercase;
+  letter-spacing: 0.085em;
+  font-weight: 800;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

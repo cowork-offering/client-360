@@ -299,7 +299,7 @@ export interface OnboardingRow {
   fromIntake: boolean;
 }
 
-/** Pipeline rows for the "In onboarding" zone, ordered the way a banker triages:
+/** Pipeline rows for the KYC & ONBOARDING zone, ordered the way a banker triages:
  *  furthest along first, then longest waiting. */
 export function buildOnboardingRows(data: C360Data | null | undefined): OnboardingRow[] {
   const generatedAt = data?.meta?.generatedAt ?? "";
