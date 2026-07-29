@@ -5,6 +5,7 @@ import { STATUS } from "../data/finance";
 import { Card, EmptyState } from "./ui";
 import { staggerDelay } from "../data/motion";
 import { screeningTone } from "./tabs/onboarding/shared";
+import { NewOnboardingWizard } from "./NewOnboardingWizard";
 
 /* L1, second zone. Same table grammar as the book worklist: same grid, same
    uppercase column head, same row hover, same stagger. Status is coloured text
@@ -17,6 +18,7 @@ export function OnboardingList() {
   const { data, dispatch } = useApp();
   const rows = useMemo(() => buildOnboardingRows(data), [data]);
   const [search, setSearch] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -47,8 +49,23 @@ export function OnboardingList() {
               className="w-44 bg-transparent text-[12.5px] text-ink placeholder:text-ink-faint focus:outline-none"
             />
           </div>
+          {/* The one thing a banker STARTS here. Right of the zone header, in the
+              same restrained accent control the workspace uses for its actions:
+              a new relationship is ordinary work, not an event. */}
+          <button
+            type="button"
+            onClick={() => setWizardOpen(true)}
+            className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11.5px] font-semibold"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 3.4v9.2M3.4 8h9.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+            New onboarding
+          </button>
         </div>
       </div>
+
+      {wizardOpen && <NewOnboardingWizard onClose={() => setWizardOpen(false)} />}
 
       <div
         className="grid items-center gap-4 border-b border-divider px-6 py-2.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
@@ -65,7 +82,7 @@ export function OnboardingList() {
       {filtered.length === 0 ? (
         <EmptyState
           title="Nothing in the pipeline"
-          body={`No relationship is being onboarded right now. A case leaves ${ZONE_NAME.onboarding} the moment its stage reaches Complete.`}
+          body={`No relationship is being onboarded right now. Start one with New onboarding, and a case leaves ${ZONE_NAME.onboarding} the moment its stage reaches Complete.`}
         />
       ) : (
         filtered.map((r, i) => (

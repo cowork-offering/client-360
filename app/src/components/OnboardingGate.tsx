@@ -39,6 +39,11 @@ export function OnboardingGateCard({ action, onDismiss }: { action: OnboardingAc
           <div className="mt-1 text-[13px] leading-relaxed" style={{ color: "var(--warning-prose)", textWrap: "pretty" as never }}>
             {ONBOARDING_TOOLS_PENDING}
           </div>
+          {action.note && (
+            <div className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "var(--warning-prose)", textWrap: "pretty" as never }}>
+              {action.note}
+            </div>
+          )}
           {action.humanOnly && (
             <div className="mt-2 text-[12.5px] leading-relaxed" style={{ color: "var(--warning-prose)", textWrap: "pretty" as never }}>
               {ATTESTATION_HUMAN_ONLY}

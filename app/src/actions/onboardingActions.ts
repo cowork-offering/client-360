@@ -32,6 +32,10 @@ export interface OnboardingAction {
   target: string;
   /** True for the one action a human must always perform themselves. */
   humanOnly?: boolean;
+  /** What the banker would otherwise assume happened anyway. Rendered on the
+   *  gate, because "not filed" leaves an obvious next question — did anything
+   *  change on screen? — and the answer belongs next to the refusal. */
+  note?: string;
 }
 
 export const ONBOARDING_ACTIONS: OnboardingAction[] = [

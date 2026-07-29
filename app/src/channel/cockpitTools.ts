@@ -213,15 +213,21 @@ export function readSender(v: unknown): string | undefined {
   return str(email?.name) ?? str(email?.address);
 }
 
-/** Search the viewer's mailbox for messages naming this account.
- *  An empty array is an honest "nothing found", never an error. */
-export async function searchMailbox(accountName: string): Promise<{ hits: MailHit[]; storedAt?: number }> {
+/**
+ * Search the viewer's mailbox for a query the CALLER owns.
+ *
+ * Scoping to a borrower is a decision about the QUERY, not about the search, so
+ * it lives one layer up in {@link searchMailbox}. A prospect does not exist in
+ * the book yet and has no account name to derive a token from, so the intake
+ * wizard passes what the banker typed straight through. The call, the envelope
+ * unwrapping and the hit mapping are identical either way — there is one mail
+ * reader in this cockpit, not two.
+ */
+export async function searchMailboxRaw(query: string): Promise<{ hits: MailHit[]; storedAt?: number }> {
   const res = await callTool(
     SERVERS.m365,
     TOOLS.mailSearch,
-    // Ask for the DISTINCTIVE token, not the full legal name: nobody types
-    // "Hartwell Precision Manufacturing LLC" in a subject line.
-    { query: mailboxQuery(accountName) },
+    { query },
     { read: true, cache: { staleTime: 60_000 } },
   );
   const rows = unwrapMail(res.payload);
@@ -240,6 +246,14 @@ export async function searchMailbox(accountName: string): Promise<{ hits: MailHi
     webLink: str(m.webLink) ?? str(m.link),
   }));
   return { hits, storedAt: res.cache?.storedAt };
+}
+
+/** Search the viewer's mailbox for messages naming this account.
+ *  An empty array is an honest "nothing found", never an error. */
+export async function searchMailbox(accountName: string): Promise<{ hits: MailHit[]; storedAt?: number }> {
+  // Ask for the DISTINCTIVE token, not the full legal name: nobody types
+  // "Hartwell Precision Manufacturing LLC" in a subject line.
+  return searchMailboxRaw(mailboxQuery(accountName));
 }
 
 /**
