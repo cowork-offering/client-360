@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { mcpAvailable } from "../channel/mcp";
@@ -94,11 +94,17 @@ function SweepConsole({ lines, report }: { lines: SyncLine[]; report: string | n
   );
 }
 
+/** Cooldown between sweeps for the SAME account view. UI pacing only — never
+ *  used for data-derived reasoning (A10). */
+const SYNC_COOLDOWN_MS = 5_000;
+
 export function SyncButton({ accountId, accountName, bundle }: { accountId: string; accountName: string; bundle: BorrowerBundle }) {
   const { data, state, dispatch } = useApp();
   const [lines, setLines] = useState<SyncLine[] | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [fresh, setFresh] = useState(false);
+  const lastSweepStartedAt = useRef(0);
 
   if (!mcpAvailable()) return null;
 
@@ -106,6 +112,16 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
 
   async function sync() {
     if (running) return; // one gesture, one sweep
+    // Rapid re-syncs are the platform-budget burn pattern: a second sweep
+    // seconds after the first can only return what the first just fetched,
+    // while still spending connector budget. Acknowledge instead of firing.
+    const sinceLast = Date.now() - lastSweepStartedAt.current;
+    if (sinceLast < SYNC_COOLDOWN_MS) {
+      setFresh(true);
+      setTimeout(() => setFresh(false), 1600);
+      return;
+    }
+    lastSweepStartedAt.current = Date.now();
     setRunning(true);
     setReport(null);
     dispatch({ type: "CLEAR_PULSE" });
@@ -190,7 +206,7 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
             strokeLinejoin="round"
           />
         </svg>
-        {running ? "Syncing…" : "Sync"}
+        {running ? "Syncing…" : fresh ? "Already fresh" : "Sync"}
       </button>
       {lines && <SweepConsole lines={lines} report={report} />}
     </>

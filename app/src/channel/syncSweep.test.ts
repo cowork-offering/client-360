@@ -215,6 +215,33 @@ describe("budget discipline", () => {
     expect(callTool.mock.calls.length).toBeLessThanOrEqual(9);
   });
 
+  it("snapshot joins the slow tier: inside its 90s window the tool is not called at all", async () => {
+    const { SNAPSHOT_STALE_MS, SLOW_TIER_STALE_MS } = await import("./syncSweep");
+    expect(SNAPSHOT_STALE_MS).toBeLessThan(SLOW_TIER_STALE_MS); // headline figures may move sooner than the graph
+    const callTool = installMcp((_s, tool) => (tool === TOOLS.mailSearch ? { payload: { value: [] } } : ok({ ok: true })));
+    const t0 = 1_000_000;
+    await runSyncSweep({
+      ...SWEEP,
+      now: () => t0,
+      slowTierFetchedAt: { snapshot: t0 - (SNAPSHOT_STALE_MS - 1) },
+    });
+    const toolsCalled = callTool.mock.calls.map((c) => String(c[1]));
+    expect(toolsCalled).not.toContain(DETAIL_TOOLS[0]); // snapshot served from cache
+    expect(toolsCalled).toContain(DETAIL_TOOLS[2]); // exposure still fetched every sync
+  });
+
+  it("snapshot outside its window is fetched again", async () => {
+    const { SNAPSHOT_STALE_MS } = await import("./syncSweep");
+    const callTool = installMcp((_s, tool) => (tool === TOOLS.mailSearch ? { payload: { value: [] } } : ok({ ok: true })));
+    const t0 = 1_000_000;
+    await runSyncSweep({
+      ...SWEEP,
+      now: () => t0,
+      slowTierFetchedAt: { snapshot: t0 - (SNAPSHOT_STALE_MS + 1) },
+    });
+    expect(callTool.mock.calls.map((c) => String(c[1]))).toContain(DETAIL_TOOLS[0]);
+  });
+
   it("reads only: every call is marked read on the connector", async () => {
     const callTool = installMcp((_s, tool) => (tool === TOOLS.mailSearch ? { payload: { value: [] } } : ok({ ok: true })));
     await runSyncSweep(SWEEP);

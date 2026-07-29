@@ -61,8 +61,15 @@ export interface SyncResult {
  * costs two fewer calls against the platform budget, at no staleness risk a
  * banker could notice.
  */
-const SLOW_TIER_KEYS = new Set(["graph", "covenants"]);
+const SLOW_TIER_KEYS = new Set(["graph", "covenants", "snapshot"]);
 export const SLOW_TIER_STALE_MS = 5 * 60 * 1000;
+/** The snapshot is headline figures on deal-time scales too, but a banker
+ *  refreshing after a real change (a booked modification) expects it to move
+ *  sooner than the graph. Ninety seconds cuts the every-sync call volume —
+ *  the budget burn the founder hit on rapid repeated syncs — without
+ *  noticeable staleness. */
+export const SNAPSHOT_STALE_MS = 90 * 1000;
+const slowTierWindowMs = (key: string) => (key === "snapshot" ? SNAPSHOT_STALE_MS : SLOW_TIER_STALE_MS);
 
 /** Bundle keys the six detail tools map onto, in DETAIL_TOOLS order. */
 const DETAIL_KEYS = ["snapshot", "graph", "exposure", "covenants", "opportunities", "signals"] as const;
@@ -198,7 +205,7 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   const servedFromCache = (key: string) =>
     SLOW_TIER_KEYS.has(key) &&
     typeof fetchedBefore[key] === "number" &&
-    startedAt - fetchedBefore[key] < SLOW_TIER_STALE_MS;
+    startedAt - fetchedBefore[key] < slowTierWindowMs(key);
 
   const fetchedAt: Record<string, number> = {};
 
