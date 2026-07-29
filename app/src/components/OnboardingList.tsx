@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useApp } from "../state/appState";
 import { buildOnboardingRows, STAGE_LABEL, TYPE_LABEL, RESULT_LABEL } from "../data/onboarding";
 import { STATUS } from "../data/finance";
-import { Card } from "./ui";
+import { Card, EmptyState } from "./ui";
 import { staggerDelay } from "../data/motion";
 import { screeningTone } from "./tabs/onboarding/shared";
 
@@ -57,18 +57,16 @@ export function OnboardingList() {
         <span>Prospect</span>
         <span>Type</span>
         <span>Stage</span>
-        <span>In stage</span>
+        <span className="text-right">In stage</span>
         <span>Screening</span>
         <span>Blocking</span>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <div className="text-[14px] font-bold text-ink">Nothing in onboarding</div>
-          <div className="max-w-xs text-[12px] text-ink-muted">
-            No relationship is being onboarded right now. A case leaves this zone the moment its stage reaches Complete.
-          </div>
-        </div>
+        <EmptyState
+          title="Nothing in onboarding"
+          body="No relationship is being onboarded right now. A case leaves this zone the moment its stage reaches Complete."
+        />
       ) : (
         filtered.map((r, i) => (
           <div
@@ -101,7 +99,7 @@ export function OnboardingList() {
             <span className="text-[12.5px] font-bold" style={{ color: "var(--accent)" }}>
               {STAGE_LABEL[r.stage]}
             </span>
-            <span className="tnum text-[12.5px] font-semibold text-ink">
+            <span className="tnum text-right text-[12.5px] font-semibold text-ink">
               {r.daysInStage == null ? "—" : `${r.daysInStage}d`}
             </span>
             <span className="text-[12.5px] font-bold" style={{ color: STATUS[screeningTone(r.screening)].fg }}>

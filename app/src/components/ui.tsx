@@ -155,16 +155,14 @@ export function StatCell({
   value,
   sub,
   color,
-  className = "",
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   color?: string;
-  className?: string;
 }) {
   return (
-    <div className={`flex flex-col justify-start text-left ${className}`}>
+    <div className="flex flex-col justify-start text-left">
       <div className="text-[11px] font-semibold leading-tight text-ink-label">{label}</div>
       <div className="tnum mt-1 text-[23px] font-extrabold leading-none tracking-tight" style={color ? { color } : undefined}>
         {value}

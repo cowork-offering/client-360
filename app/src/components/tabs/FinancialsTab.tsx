@@ -2,7 +2,7 @@ import type { BorrowerBundle, Covenant } from "../../data/contract";
 import { fmtMoney, fmtPct } from "../../data/format";
 import { fmtRatio, STATUS } from "../../data/finance";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
-import { useEnterTransition } from "../../data/motion";
+import { staggerDelay, useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
   "Explain these financials: the EBITDA trend, leverage, and interest coverage.";
@@ -144,18 +144,18 @@ export function FinancialsTab({ bundle }: { bundle: BorrowerBundle }) {
         <Card className="py-1">
           <div className="kicker px-6 pb-1.5 pt-4">Income statement · LTM vs prior year</div>
           <div className="grid gap-3 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint" style={{ gridTemplateColumns: IS_COLS }}>
-            <span>Line</span><span>LTM</span><span>Prior FY</span><span>Change</span>
+            <span>Line</span><span className="text-right">LTM</span><span className="text-right">Prior FY</span><span className="text-right">Change</span>
           </div>
           {items.map((r, i) => {
             const chg = r.ltm != null && r.priorFy != null && r.priorFy !== 0 ? ((r.ltm - r.priorFy) / Math.abs(r.priorFy)) * 100 : null;
             const chgColor = chg == null ? "var(--ink-body)" : chg < 0 ? STATUS.amber.fg : STATUS.green.fg;
             const chgTxt = chg == null ? "—" : (chg >= 0 ? "+" : "−") + Math.abs(chg).toFixed(1) + "%";
             return (
-              <div key={i} className="c360-row-in grid items-center gap-3 border-t border-divider px-6 py-3 text-[13px]" style={{ gridTemplateColumns: IS_COLS }}>
+              <div key={i} className="c360-row-in grid items-center gap-3 border-t border-divider px-6 py-3 text-[13px]" style={{ gridTemplateColumns: IS_COLS, animationDelay: staggerDelay(i) }}>
                 <span className="font-semibold">{r.line ?? ""}</span>
-                <span className="font-bold">{fmtMoney(r.ltm)}</span>
-                <span className="text-ink-body">{fmtMoney(r.priorFy)}</span>
-                <span className="font-bold" style={{ color: chgColor }}>{chgTxt}</span>
+                <span className="tnum text-right font-bold">{fmtMoney(r.ltm)}</span>
+                <span className="tnum text-right text-ink-body">{fmtMoney(r.priorFy)}</span>
+                <span className="tnum text-right font-bold" style={{ color: chgColor }}>{chgTxt}</span>
               </div>
             );
           })}
