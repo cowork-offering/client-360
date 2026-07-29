@@ -9,7 +9,12 @@ import { OnboardingWorkspace } from "./components/OnboardingWorkspace";
 import { OnboardingList, ZoneToggle } from "./components/OnboardingList";
 import { OnboardingTabContent } from "./components/tabs/onboarding";
 import { onboardingCases, type OnboardingCase } from "./data/onboarding";
-import { ONBOARDING_TOOLS_PENDING, ONBOARDING_TOOLS_PENDING_CODE } from "./actions/onboardingActions";
+import {
+  ONBOARDING_ACTIONS,
+  ONBOARDING_TOOLS_PENDING,
+  ONBOARDING_TOOLS_PENDING_CODE,
+  onboardingAvailability,
+} from "./actions/onboardingActions";
 import { clearOverlays } from "./state/syncOverlay";
 import { resetModalStack } from "./components/modalStack";
 import live from "../../artifact/live-data.json";
@@ -334,22 +339,86 @@ describe("the attestation gate", () => {
 describe("the write seam is visible and closed", () => {
   const data = live as unknown as C360Data;
 
-  it("every onboarding action offers a Run that lands on the gate", () => {
-    const kase = onboardingCases(data)[0];
-    mount(data, <OnboardingWorkspace kase={kase} />);
+  /** Reach a case's actions the way the product now does it: open the case from
+   *  the pipeline, then its header trigger — the SAME two gestures the booked
+   *  side takes to Client Actions. */
+  function openCaseActions(name: string) {
+    mount(data, <AppShell />);
+    click(buttonByText(/KYC & ONBOARDING/));
+    click([...document.body.querySelectorAll('[role="button"]')].find((el) => el.textContent?.includes(name)));
     click(buttonByText(/Onboarding Actions/));
-    const text = document.body.textContent ?? "";
+    return document.body.querySelector('[role="dialog"]')!;
+  }
+
+  it("the case's actions live in the floating panel, in the panel's row grammar", () => {
+    const panel = openCaseActions("Caldwell Systems LLC");
+    expect(panel, "actions panel").toBeTruthy();
+    const text = panel.textContent ?? "";
+    expect(text).toContain("Onboarding Actions");
+    for (const c of ["Process", "Diligence", "Clearance"]) expect(text, c).toContain(c);
     expect(text).toContain("Advance stage");
     expect(text).toContain("Record screening result");
     expect(text).toContain("Attach identity document");
     expect(text).toContain("Attest KYC clearance");
 
-    const runs = [...document.body.querySelectorAll("button")].filter((b) => b.textContent === "Run");
-    expect(runs.length).toBe(4);
-    click(runs[0]);
-    // Run opens the ticket. The gate is where FILING would be, not where the
-    // banker starts.
+    // The one row grammar, not a bespoke list: the same class the booked rows use.
+    const rows = [...panel.querySelectorAll("button")].filter((b) => b.className.includes("c360-action-row"));
+    expect(rows).toHaveLength(4);
+    // No credit action bleeds into a relationship that has no exposure.
+    expect(text).not.toContain("Draft Credit Memo");
+    expect(text).not.toContain("Generate Spreading");
+  });
+
+  it("a row opens the onboarding ticket and walks to the honest gate", () => {
+    const panel = openCaseActions("Caldwell Systems LLC");
+    const rows = [...panel.querySelectorAll("button")].filter((b) => b.className.includes("c360-action-row"));
+    click(rows[0]);
+    const ticket = [...document.body.querySelectorAll('[role="dialog"]')].find(
+      (d) => d.getAttribute("aria-label") === "Advance stage",
+    );
+    expect(ticket, "onboarding ticket").toBeTruthy();
+    click(buttonByText(/^Review the plan$/));
+    const gate = document.body.querySelector(`[data-gate="${ONBOARDING_TOOLS_PENDING_CODE}"]`);
+    expect(gate, "gate card").toBeTruthy();
+    expect(gate!.textContent).toContain(ONBOARDING_TOOLS_PENDING);
+  });
+
+  it("an attested case disables its attestation row with the reason, never hides it", () => {
+    const panel = openCaseActions("Caldwell Systems LLC");
+    const attest = [...panel.querySelectorAll("button")].find((b) => b.textContent?.includes("Attest KYC clearance"))!;
+    expect(attest.hasAttribute("disabled")).toBe(false);
+
+    const attested: OnboardingCase = {
+      ...onboardingCases(data).find((c) => c.name === "Caldwell Systems LLC")!,
+      clearance: {
+        present: true,
+        clearedBy: "Noland Smith",
+        clearedOn: "2026-07-24T10:00:00Z",
+        basis: "Reviewed every document on the case.",
+        clientAttestationReceived: true,
+        clientAttestationOn: "2026-07-20T09:00:00Z",
+      },
+    };
+    expect(onboardingAvailability(ONBOARDING_ACTIONS.find((a) => a.id === "attest-clearance")!, attested)).toEqual({
+      available: false,
+      reason: "Already attested on this case.",
+    });
+  });
+
+  it("the bespoke header dropdown is gone — no inline card, no Run buttons", () => {
+    const kase = onboardingCases(data)[0];
+    mount(data, <OnboardingWorkspace kase={kase} />);
+    click(buttonByText(/Onboarding Actions/));
+    const text = document.body.textContent ?? "";
+    // The workspace alone renders no action list: the panel is a shell sibling.
+    expect(text).not.toContain("Every action below is the real write this case needs");
+    expect([...document.body.querySelectorAll("button")].filter((b) => b.textContent === "Run")).toHaveLength(0);
+    expect(text).not.toContain("Advance stage");
+  });
+
+  it("the tab's contextual entry point still opens the attestation ticket", () => {
+    mount(data, <OnboardingTabContent tab="attestation" kase={onboardingCases(data)[0]} />);
+    click(buttonByText(/Attest KYC clearance/));
     expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
-    expect(document.body.textContent).toContain("Advance");
   });
 });

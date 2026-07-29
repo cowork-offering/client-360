@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ONBOARDING_TABS, useApp, ZONE_NAME, ZONE_SPOKEN, type OnboardingTab } from "../state/appState";
 import {
   STAGE_LABEL,
@@ -13,8 +12,7 @@ import { STATUS } from "../data/finance";
 import { PageContainer } from "./ui";
 import { AccentureCaretWatermark, AmbientWash } from "./brand";
 import { OnboardingTabContent } from "./tabs/onboarding";
-import { OnboardingTicket } from "./OnboardingTicket";
-import { ONBOARDING_ACTIONS, type OnboardingAction } from "../actions/onboardingActions";
+import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { screeningTone } from "./tabs/onboarding/shared";
 
 /* The L2 shell for a case that is not booked yet.
@@ -57,8 +55,6 @@ function StageChip({ kase }: { kase: OnboardingCase }) {
 export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
   const { data, state, dispatch } = useApp();
   const generatedAt = data.meta?.generatedAt ?? "";
-  const [ticket, setTicket] = useState<OnboardingAction | null>(null);
-  const [actionsOpen, setActionsOpen] = useState(false);
 
   const days = daysInStage(kase, generatedAt);
   const docs = documentCounts(kase);
@@ -120,11 +116,16 @@ export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
               />
               <StatCell label="Screening" value={RESULT_LABEL[worst]} valueColor={STATUS[screeningTone(worst)].fg} />
               <StatCell label="Documents" value={`${docs.verified}/${docs.total}`} sub="verified" />
+              {/* The SAME trigger the booked side carries, opening the SAME
+                  floating panel. What differs is which lifecycle's actions the
+                  panel lists — not the surface they live on (founder feedback
+                  2026-07-29). */}
               <span className="ml-auto flex items-center gap-2 self-center">
                 <button
+                  id={ACTIONS_TRIGGER_ID}
                   type="button"
-                  onClick={() => setActionsOpen((v) => !v)}
-                  aria-expanded={actionsOpen}
+                  onClick={() => dispatch({ type: "SET_PANEL", panel: state.panel === "actions" ? "none" : "actions" })}
+                  aria-expanded={state.panel === "actions"}
                   className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
                 >
                   <svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true">
@@ -162,37 +163,6 @@ export function OnboardingWorkspace({ kase }: { kase: OnboardingCase }) {
       </div>
 
       <PageContainer className="py-6">
-        {actionsOpen && (
-          <div className="mb-4 rounded-[14px] bg-raised px-6 py-5" style={{ boxShadow: "var(--shadow-card)" }}>
-            <div className="kicker mb-1">Onboarding actions</div>
-            <div className="mb-3.5 max-w-[700px] text-[12.5px] leading-relaxed text-ink-body" style={{ textWrap: "pretty" as never }}>
-              Every action below is the real write this case needs, named by the object it lands on. Each opens the full
-              ticket — briefing, plan, confirmation — and stops at the honest boundary, because none of them files today.
-            </div>
-            <div className="flex flex-col gap-2.5">
-              {ONBOARDING_ACTIONS.map((a) => (
-                <div key={a.id} className="flex flex-wrap items-start gap-3 border-t border-divider pt-2.5">
-                  <div className="min-w-[240px] flex-1">
-                    <div className="text-[13px] font-bold text-ink">{a.label}</div>
-                    <div className="mt-0.5 text-[12px] leading-relaxed text-ink-muted" style={{ textWrap: "pretty" as never }}>
-                      {a.description}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTicket(a)}
-                    className="c360-press mt-0.5 flex-none rounded-[8px] border border-border-strong bg-raised px-3 py-1.5 text-[11.5px] font-semibold text-ink-body hover:border-accent hover:text-accent"
-                  >
-                    Run
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {ticket && <OnboardingTicket action={ticket} kase={kase} onClose={() => setTicket(null)} />}
-
         <div key={state.onboardingTab} className="c360-tab-in">
           <OnboardingTabContent tab={state.onboardingTab} kase={kase} />
         </div>

@@ -41,6 +41,10 @@ import { fmtMoney } from "../data/format";
 export const CREATE_PROSPECT_ACTION: OnboardingAction = {
   id: "create-prospect",
   label: "Open a new onboarding case",
+  // Not listed in the actions panel: it opens a case rather than acting on one,
+  // so its entry point is the pipeline, not a case workspace.
+  category: "Process",
+  icon: "facility",
   description:
     "Creates the prospect account and the onboarding case that tracks its KYC, with the intake provenance linked to whichever door it came through.",
   target: "Account + LLC_BI__Onboarding__c",

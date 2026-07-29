@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useApp } from "../state/appState";
-import { ACTIONS, CATEGORY_ORDER, renderPrompt, type ClientAction } from "../actions/registry";
+import { ACTIONS, CATEGORY_ORDER, renderPrompt, type ActionIcon, type ClientAction } from "../actions/registry";
 import { newRequestId } from "../channel/adapter";
 import { mcpAvailable, type McpFailure } from "../channel/mcp";
 import { executeAction } from "../actions/execute";
@@ -8,6 +8,121 @@ import { resolveBundle } from "../actions/registry";
 import { ActionGlyph } from "./ActionIcon";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 import { ActionPanel } from "./ActionPanel";
+import { findOnboardingCase, type OnboardingCase } from "../data/onboarding";
+import {
+  ONBOARDING_ACTIONS,
+  ONBOARDING_CATEGORY_ORDER,
+  onboardingAvailability,
+  type OnboardingAction,
+} from "../actions/onboardingActions";
+import { OnboardingTicket } from "./OnboardingTicket";
+
+/** The case behind the open workspace, or null when the open relationship is
+ *  booked. DERIVED every render, on the same rule AppShell mounts the shell
+ *  with (BUILD-SPEC-V1 §6.3), so the panel and the workspace can never disagree
+ *  about which lifecycle the banker is in. */
+export function useOpenOnboardingCase(): OnboardingCase | null {
+  const { data, state } = useApp();
+  const kase = state.view === "account" && state.accountId ? findOnboardingCase(data, state.accountId) : null;
+  return kase && kase.stage !== "Complete" ? kase : null;
+}
+
+/** One row of the actions panel — the product's single action grammar: glyph,
+ *  label, description, and either a run or an open. Both lifecycles render
+ *  through this, which is the point: a banker cannot tell the surfaces apart. */
+function ActionRow({
+  icon,
+  label,
+  description,
+  available,
+  reason,
+  onClick,
+  status,
+  detail,
+}: {
+  icon: ActionIcon;
+  label: string;
+  description: string;
+  available: boolean;
+  reason?: string;
+  onClick: () => void;
+  status?: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!available}
+      aria-disabled={!available}
+      onClick={onClick}
+      className="c360-action-row flex w-full items-start gap-3 border-b border-divider px-4 py-3 text-left disabled:cursor-not-allowed"
+    >
+      <span
+        className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-[9px]"
+        style={{
+          background: available ? "var(--accent-wash)" : "var(--wash-2)",
+          color: available ? "var(--accent)" : "var(--ink-faint)",
+        }}
+      >
+        <ActionGlyph name={icon} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="text-[13px] font-bold" style={{ color: available ? "var(--ink)" : "var(--ink-muted)" }}>
+            {label}
+          </span>
+          {status}
+        </span>
+        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-muted">{description}</span>
+        {detail}
+        {!available && reason && (
+          <span className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
+            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M8 4.8v.1M8 7v3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            {reason}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** The onboarding half of the panel. Same rows, same categories, same "opens
+ *  the ticket" affordance — every onboarding action has a panel, so nothing
+ *  here fires directly and the ticket owns the confirm gesture. */
+function OnboardingRows({ kase }: { kase: OnboardingCase }) {
+  const [ticket, setTicket] = useState<OnboardingAction | null>(null);
+  return (
+    <>
+      {ONBOARDING_CATEGORY_ORDER.map((category) => {
+        const rows = ONBOARDING_ACTIONS.filter((a) => a.category === category);
+        if (!rows.length) return null;
+        return (
+          <section key={category}>
+            <div className="kicker px-4 pb-1 pt-3">{category}</div>
+            {rows.map((action) => {
+              const { available, reason } = onboardingAvailability(action, kase);
+              return (
+                <ActionRow
+                  key={action.id}
+                  icon={action.icon}
+                  label={action.label}
+                  description={action.description}
+                  available={available}
+                  reason={reason}
+                  onClick={() => setTicket(action)}
+                />
+              );
+            })}
+          </section>
+        );
+      })}
+      {ticket && <OnboardingTicket action={ticket} kase={kase} onClose={() => setTicket(null)} />}
+    </>
+  );
+}
 
 /** Client Actions control center (A27.4). Every registry action is listed,
  *  grouped by category. Unavailable actions stay visible and disabled with the
@@ -21,6 +136,7 @@ export function ActionsPanelBody() {
   const [fallback, setFallback] = useState<{ prompt: string } | null>(null);
   // A33.1.1 entry point 1 of 3.
   const [panelActionId, setPanelActionId] = useState<string | null>(null);
+  const kase = useOpenOnboardingCase();
 
   const accountId = state.view === "account" ? state.accountId : null;
   const account = accountId ? data.portfolio.accounts.find((a) => a.accountId === accountId) : null;
@@ -79,11 +195,22 @@ export function ActionsPanelBody() {
     }
   }
 
+  // A case that is not booked yet has its OWN actions, in this same panel. The
+  // credit registry is not merely unavailable here — none of it applies to a
+  // relationship with no rating, no exposure and no facilities.
+  if (kase) {
+    return (
+      <div className="py-1">
+        <OnboardingRows kase={kase} />
+      </div>
+    );
+  }
+
   return (
     <div className="py-1">
       {!accountId && (
         <div className="mx-3 my-2 rounded-md border border-dashed border-border bg-surface px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-muted">
-          Open a relationship from the worklist to run actions against it.
+          Open a relationship or an onboarding case from the worklist to run actions against it.
         </div>
       )}
 
@@ -97,31 +224,16 @@ export function ActionsPanelBody() {
               const { available, reason } = action.availability(data, accountId);
               const sent = sentId === action.id;
               return (
-                <button
+                <ActionRow
                   key={action.id}
-                  type="button"
-                  disabled={!available}
-                  aria-disabled={!available}
+                  icon={action.icon}
+                  label={action.label}
+                  description={action.description}
+                  available={available}
+                  reason={reason}
                   onClick={() => run(action)}
-                  className="c360-action-row flex w-full items-start gap-3 border-b border-divider px-4 py-3 text-left disabled:cursor-not-allowed"
-                >
-                  <span
-                    className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-[9px]"
-                    style={{
-                      background: available ? "var(--accent-wash)" : "var(--wash-2)",
-                      color: available ? "var(--accent)" : "var(--ink-faint)",
-                    }}
-                  >
-                    <ActionGlyph name={action.icon} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="text-[13px] font-bold"
-                        style={{ color: available ? "var(--ink)" : "var(--ink-muted)" }}
-                      >
-                        {action.label}
-                      </span>
+                  status={
+                    <>
                       {runningId === action.id && (
                         <span className="text-[9.5px] font-bold uppercase tracking-wide text-ink-faint">Running…</span>
                       )}
@@ -133,31 +245,23 @@ export function ActionsPanelBody() {
                           {mcpAvailable() ? "Done" : "Sent to desk"}
                         </span>
                       )}
-                    </span>
-                    <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-muted">
-                      {action.description}
-                    </span>
-                    {answer?.id === action.id && (
-                      <span className="mt-2 block whitespace-pre-wrap rounded-md border border-border bg-surface px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-body">
-                        {answer.text}
-                      </span>
-                    )}
-                    {failure?.id === action.id && (
-                      <span className="mt-1.5 block text-[11px] font-semibold" style={{ color: "var(--critical)" }}>
-                        {failure.failure.fix}
-                      </span>
-                    )}
-                    {!available && reason && (
-                      <span className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
-                        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
-                          <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
-                          <path d="M8 4.8v.1M8 7v3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                        {reason}
-                      </span>
-                    )}
-                  </span>
-                </button>
+                    </>
+                  }
+                  detail={
+                    <>
+                      {answer?.id === action.id && (
+                        <span className="mt-2 block whitespace-pre-wrap rounded-md border border-border bg-surface px-2.5 py-2 text-[11.5px] leading-relaxed text-ink-body">
+                          {answer.text}
+                        </span>
+                      )}
+                      {failure?.id === action.id && (
+                        <span className="mt-1.5 block text-[11px] font-semibold" style={{ color: "var(--critical)" }}>
+                          {failure.failure.fix}
+                        </span>
+                      )}
+                    </>
+                  }
+                />
               );
             })}
           </section>
