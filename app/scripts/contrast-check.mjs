@@ -56,6 +56,13 @@ const checks = [
   // A31.4 — Client Actions trigger: accent ink on an 8% accent wash.
   ["actions trigger ink on wash", accent, over(accent, 0.08, WHITE), 4.5],
   ["actions trigger hover wash", accent, over(accent, 0.14, WHITE), 4.5],
+  // The zone switcher. The active segment sits on the thumb (card white); the
+  // inactive one sits on the frosted glass, which is the page tinted 72% by
+  // #f4f3f8 — the same colour, so it composites back to the page surface.
+  ["zone label active / thumb", accent, WHITE, 4.5],
+  ["zone count active / thumb", hex("#56535f"), WHITE, 4.5],
+  ["zone label inactive / frost", hex("#6e6b7b"), PAGE, 4.5],
+  ["zone count inactive / frost", hex("#8a8794"), PAGE, 3.0],
   // A31.3 — user-driven activity (violet) on the card and on its 4% row wash.
   ["user tone / card", hex("#6038ea"), WHITE, 4.5],
   ["user tone on activity row wash", hex("#6038ea"), over(hex("#6038ea"), 0.04, WHITE), 4.5],

@@ -120,38 +120,98 @@ export function OnboardingList() {
   );
 }
 
-/** The zone switch. Two zones, one book, counts on both so the banker never has
- *  to click to find out whether anything is waiting on the other side. */
+/**
+ * The zone switch.
+ *
+ * Two zones, one book, counts on both so the banker never has to click to find
+ * out whether anything is waiting on the other side. It is the app's primary
+ * navigation instrument, so it carries the frosted treatment the sticky bars
+ * use and sits slightly proud of the table beneath it.
+ *
+ * The active state is ONE sliding thumb rather than a per-segment background:
+ * the eye follows a moving object, and a control where the highlight travels
+ * reads as one instrument instead of two buttons that happen to be adjacent.
+ * Every segment holds its box, so nothing reflows while it moves.
+ */
 export function ZoneToggle({ bookCount }: { bookCount: number }) {
   const { data, state, dispatch } = useApp();
   const onboardingCount = useMemo(() => buildOnboardingRows(data).length, [data]);
 
-  const zones: Array<{ id: "book" | "onboarding"; label: string; count: number }> = [
-    { id: "book", label: "My book", count: bookCount },
-    { id: "onboarding", label: "In onboarding", count: onboardingCount },
+  const zones: Array<{ id: "book" | "onboarding"; label: string; count: number; unit: string }> = [
+    { id: "book", label: "My book", count: bookCount, unit: bookCount === 1 ? "relationship" : "relationships" },
+    { id: "onboarding", label: "In onboarding", count: onboardingCount, unit: onboardingCount === 1 ? "case" : "cases" },
   ];
+  const index = Math.max(0, zones.findIndex((z) => z.id === state.zone));
+
+  /** Arrow keys move the selection, which is what a radiogroup owes its user.
+   *  Roving tabindex keeps the group one Tab stop. */
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const next = zones[(index + step + zones.length) % zones.length];
+    dispatch({ type: "SET_ZONE", zone: next.id });
+    // Focus follows selection, per the radiogroup pattern.
+    (e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[zones.indexOf(next)])?.focus();
+  }
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-[10px] p-1" style={{ background: "var(--wash-2)" }}>
+    <div
+      role="radiogroup"
+      aria-label="Portfolio zone"
+      onKeyDown={onKeyDown}
+      className="relative inline-grid grid-cols-2 rounded-[13px] p-1"
+      style={{
+        background: "var(--frost-nav)",
+        backdropFilter: "blur(18px) saturate(1.5)",
+        WebkitBackdropFilter: "blur(18px) saturate(1.5)",
+        border: "1px solid var(--border)",
+        boxShadow: "var(--frost-shadow)",
+      }}
+    >
+      {/* The thumb. One element, absolutely placed over the left column and
+          translated by a full column width — so the travel is exact whatever
+          the labels say. */}
+      <span
+        aria-hidden="true"
+        className="c360-zone-thumb pointer-events-none absolute rounded-[10px]"
+        style={{
+          top: 4,
+          bottom: 4,
+          left: 4,
+          width: "calc(50% - 4px)",
+          background: "var(--surface-raised)",
+          boxShadow: "var(--shadow-card)",
+          transform: `translate3d(${index * 100}%, 0, 0)`,
+        }}
+      />
+
       {zones.map((z) => {
         const active = state.zone === z.id;
         return (
           <button
             key={z.id}
             type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => dispatch({ type: "SET_ZONE", zone: z.id })}
-            aria-pressed={active}
-            className="c360-press rounded-[8px] px-3.5 py-1.5 text-[12.5px]"
-            style={{
-              background: active ? "var(--surface-raised)" : "transparent",
-              color: active ? "var(--accent)" : "var(--ink-muted)",
-              fontWeight: active ? 700 : 600,
-              boxShadow: active ? "var(--shadow-card)" : undefined,
-            }}
+            /* `relative` alone stacks it over the thumb: both are positioned,
+               and the button is later in the DOM. No z-index needed. */
+            className="c360-press relative rounded-[10px] px-4 py-2 text-left"
+            style={{ background: "transparent" }}
           >
-            {z.label}
-            <span className="tnum ml-1.5 text-[11.5px] font-bold" style={{ color: active ? "var(--accent)" : "var(--ink-faint)" }}>
-              {z.count}
+            <span
+              className="c360-zone-label block text-[12.5px] leading-tight"
+              style={{ color: active ? "var(--accent)" : "var(--ink-muted)", fontWeight: active ? 700 : 600 }}
+            >
+              {z.label}
+            </span>
+            <span
+              className="c360-zone-label mt-0.5 block text-[10.5px] leading-tight"
+              style={{ color: active ? "var(--ink-body)" : "var(--ink-label)" }}
+            >
+              <span className="tnum font-bold">{z.count}</span> {z.unit}
             </span>
           </button>
         );

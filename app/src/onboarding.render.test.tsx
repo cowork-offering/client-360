@@ -102,6 +102,49 @@ describe("L1 — the pipeline zone", () => {
     expect(text).toContain("My book");
     expect(text).toContain("In onboarding");
     expect(text).toContain("3");
+    // The count reads as a quantity of something, not a bare number.
+    expect(text).toContain("relationships");
+    expect(text).toContain("cases");
+  });
+
+  it("the zone switcher is a radiogroup with a roving tab stop", () => {
+    mount(live as unknown as C360Data, <ZoneToggle bookCount={5} />);
+    const group = document.body.querySelector('[role="radiogroup"]');
+    expect(group, "radiogroup").toBeTruthy();
+    expect(group!.getAttribute("aria-label")).toBe("Portfolio zone");
+
+    const radios = [...group!.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.length).toBe(2);
+    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+    // Exactly one tab stop for the whole group.
+    expect(radios.filter((r) => r.tabIndex === 0).length).toBe(1);
+
+    // The thumb is decorative and never announced.
+    const thumb = group!.querySelector(".c360-zone-thumb");
+    expect(thumb, "sliding thumb").toBeTruthy();
+    expect(thumb!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("an arrow key moves the zone selection", () => {
+    mount(live as unknown as C360Data, <AppShell />);
+    expect(document.body.textContent).toContain("Needs action");
+    const group = document.body.querySelector('[role="radiogroup"]')!;
+    act(() => {
+      group.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(document.body.textContent).toContain("Caldwell Systems LLC");
+    expect(document.body.querySelector('[role="radio"][aria-checked="true"]')!.textContent).toContain("In onboarding");
+  });
+
+  it("the incoming zone mounts under the transition class", () => {
+    mount(live as unknown as C360Data, <AppShell />);
+    const zone = () => document.body.querySelector(".c360-zone-in");
+    expect(zone(), "zone wrapper").toBeTruthy();
+    const before = zone();
+    click(buttonByText(/In onboarding/));
+    // A NEW element, which is what replays the entrance and the row stagger.
+    expect(zone()).not.toBe(before);
+    expect(zone()!.textContent).toContain("Caldwell Systems LLC");
   });
 
   it("switching zones swaps the worklist for the pipeline and back", () => {

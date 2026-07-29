@@ -39,14 +39,18 @@ export function AppShell() {
               <PageContainer className="flex flex-col py-6" >
                 <div className="flex flex-col" style={{ gap: "var(--stack)" }}>
                   <ZoneToggle bookCount={worklist.accountIds.length} />
-                  {state.zone === "onboarding" ? (
-                    <OnboardingList />
-                  ) : (
-                    <>
-                      <KpiBand />
-                      <Worklist />
-                    </>
-                  )}
+                  {/* Keyed on the zone so the incoming list mounts fresh: it
+                      rises as it fades, and its rows replay their stagger. */}
+                  <div key={state.zone} className="c360-zone-in flex flex-col" style={{ gap: "var(--stack)" }}>
+                    {state.zone === "onboarding" ? (
+                      <OnboardingList />
+                    ) : (
+                      <>
+                        <KpiBand />
+                        <Worklist />
+                      </>
+                    )}
+                  </div>
                 </div>
               </PageContainer>
             </div>
