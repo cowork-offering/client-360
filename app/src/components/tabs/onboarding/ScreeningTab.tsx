@@ -1,7 +1,7 @@
 import { useApp } from "../../../state/appState";
 import { fmtRelative } from "../../../data/format";
-import { SCREENING_LABEL, worstScreening, type OnboardingCase } from "../../../data/onboarding";
-import { Card, SectionHead, EmptyState, NoteCaption } from "../../ui";
+import { RESULT_LABEL, SCREENING_LABEL, worstScreening, type OnboardingCase } from "../../../data/onboarding";
+import { Card, SectionHead, EmptyState, NoteCaption, StatCell, StatDivider, StatStrip } from "../../ui";
 import { ColumnHead, ResultText, Row, SampleNote, SimulatedBadge, StatusText, screeningTone } from "./shared";
 import { STATUS } from "../../../data/finance";
 
@@ -21,23 +21,18 @@ export function ScreeningTab({ kase }: { kase: OnboardingCase }) {
       <SectionHead kicker="Onboarding · screening" subtitle="Sanctions, PEP, adverse media and KYB" explain={EXPLAIN} />
       <SampleNote kase={kase} />
 
-      <Card className="flex flex-wrap items-center gap-8 px-6 py-4">
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Worst result on the case</div>
-          <div className="mt-0.5 text-[23px] font-extrabold" style={{ color: STATUS[screeningTone(worst)].fg }}>
-            <ResultText result={worst} />
-          </div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Screens run</div>
-          <div className="tnum mt-0.5 text-[23px] font-extrabold">{rows.length}</div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div className="min-w-[260px] flex-1 text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
+      <StatStrip>
+        {/* The worst result is a FIGURE on this strip, so it is set at figure
+            size. It used to inherit StatusText's 12.5px caption size inside a
+            23px shell and read a level below its neighbour. */}
+        <StatCell label="Worst result on the case" value={RESULT_LABEL[worst]} color={STATUS[screeningTone(worst)].fg} />
+        <StatDivider />
+        <StatCell label="Screens run" value={String(rows.length)} sub={rows.length === 1 ? "screen" : "screens"} />
+        <StatDivider />
+        <div className="min-w-[260px] flex-1 self-center text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
           Every row below was generated for this prototype and is labelled Simulated (demo). No screening provider was called, and a simulated result never loses its label on the way to this screen.
         </div>
-      </Card>
+      </StatStrip>
 
       {rows.length ? (
         <Card className="py-1">

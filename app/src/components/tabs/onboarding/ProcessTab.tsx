@@ -10,7 +10,7 @@ import {
   type OnboardingCase,
 } from "../../../data/onboarding";
 import { STATUS } from "../../../data/finance";
-import { Card, SectionHead, EmptyState, NoteCaption } from "../../ui";
+import { Card, SectionHead, EmptyState, NoteCaption, StatCell, StatDivider, StatStrip } from "../../ui";
 import { Row, ColumnHead, SampleNote, StatusText, severityTone } from "./shared";
 
 const EXPLAIN = "Where does this onboarding case stand, and what is holding it out of the next stage?";
@@ -27,8 +27,13 @@ function StageTrack({ kase, generatedAt }: { kase: OnboardingCase; generatedAt: 
 
   return (
     <Card className="px-6 py-5">
-      <div className="kicker mb-3.5">Stage</div>
-      <div className="flex flex-col gap-0">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <div className="kicker">Stage</div>
+        <div className="text-[11.5px] text-ink-faint">
+          Step {current + 1} of {ONBOARDING_STAGES.length}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-col gap-0">
         {ONBOARDING_STAGES.map((stage, i) => {
           const event = (kase.stageHistory ?? []).find((e) => e.stage === stage);
           const done = i < current;
@@ -41,19 +46,36 @@ function StageTrack({ kase, generatedAt }: { kase: OnboardingCase; generatedAt: 
               : done
                 ? "var(--positive)"
                 : "var(--ink-faint)";
+          const last = i === ONBOARDING_STAGES.length - 1;
 
           return (
             <div key={stage} className="flex gap-3.5">
-              {/* rail */}
+              {/* Rail. The connector BELOW a cleared stage is drawn in the
+                  cleared tone, so the lifecycle reads as travelled distance
+                  rather than four dots on a hairline. */}
               <div className="flex w-4 flex-none flex-col items-center">
                 <span
-                  className="mt-1.5 h-2.5 w-2.5 flex-none rounded-full"
-                  style={{ background: done || active ? color : "transparent", border: `1.5px solid ${color}` }}
-                />
-                {i < ONBOARDING_STAGES.length - 1 && <span className="w-px flex-1" style={{ background: "var(--border)" }} />}
+                  className="mt-[3px] flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full"
+                  style={{
+                    background: done || active ? color : "transparent",
+                    border: `1.5px solid ${color}`,
+                    // The current step wears a soft accent halo — the one piece
+                    // of emphasis that says "you are here" without a badge.
+                    boxShadow: active ? "0 0 0 3.5px var(--accent-wash)" : undefined,
+                  }}
+                >
+                  {done && (
+                    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
+                      <path d="M1.4 4.2l1.7 1.7L6.6 2.4" fill="none" stroke="var(--ink-inverse)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </span>
+                {!last && (
+                  <span className="w-px flex-1" style={{ background: done ? "var(--positive)" : "var(--border)", opacity: done ? 0.45 : 1 }} />
+                )}
               </div>
-              <div className="min-w-0 flex-1 pb-4">
-                <div className="flex flex-wrap items-baseline gap-2">
+              <div className={`min-w-0 flex-1 ${last ? "" : "pb-4"}`}>
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                   <span className="text-[13.5px]" style={{ color, fontWeight: active || terminalLocked ? 700 : 600 }}>
                     {STAGE_LABEL[stage]}
                   </span>
@@ -63,12 +85,12 @@ function StageTrack({ kase, generatedAt }: { kase: OnboardingCase; generatedAt: 
                     </span>
                   )}
                   {terminalLocked && (
-                    <span className="text-[11.5px] font-semibold" style={{ color: "var(--critical)" }}>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--critical)" }}>
                       locked
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 text-[11.5px] text-ink-faint">
+                <div className="mt-1 text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
                   {event?.enteredAt
                     ? `${fmtDate(event.enteredAt)} · ${fmtRelative(event.enteredAt, generatedAt)}${event.advancedBy ? ` · ${event.advancedBy}` : ""}`
                     : terminalLocked
@@ -76,7 +98,7 @@ function StageTrack({ kase, generatedAt }: { kase: OnboardingCase; generatedAt: 
                       : "not reached"}
                 </div>
                 {event?.note && (
-                  <div className="mt-1 text-[12px] leading-relaxed text-ink-body" style={{ textWrap: "pretty" as never }}>
+                  <div className="mt-1.5 text-[12px] leading-relaxed text-ink-body" style={{ textWrap: "pretty" as never }}>
                     {event.note}
                   </div>
                 )}
@@ -179,33 +201,33 @@ export function ProcessTab({ kase }: { kase: OnboardingCase }) {
       </Card>
 
       {kase.targetDeal && (
-        <Card className="flex flex-wrap items-center gap-8 px-6 py-4">
-          <div>
-            <div className="text-[11px] font-semibold text-ink-label">The deal this becomes</div>
-            <div className="mt-0.5 text-[19px] font-extrabold text-ink">{kase.targetDeal.headline}</div>
-            <div className="mt-px text-[12px] text-ink-muted">{kase.targetDeal.product}</div>
-          </div>
-          <div className="self-stretch w-px bg-border" />
-          <div>
-            <div className="text-[11px] font-semibold text-ink-label">Indicative amount</div>
-            <div className="tnum mt-0.5 text-[23px] font-extrabold">{fmtMoney(kase.targetDeal.amount)}</div>
-          </div>
-          <div className="min-w-[240px] flex-1 text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
+        <StatStrip>
+          <StatCell
+            label="The deal this becomes"
+            value={<span className="text-[19px]">{kase.targetDeal.headline}</span>}
+            sub={kase.targetDeal.product}
+          />
+          <StatDivider />
+          <StatCell label="Indicative amount" value={fmtMoney(kase.targetDeal.amount)} sub="Not yet originated" />
+          <StatDivider />
+          <div className="min-w-[240px] flex-1 self-center text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
             Indicative only. No product package, facility or credit action exists on this relationship until the case completes and the deal is originated.
           </div>
-        </Card>
+        </StatStrip>
       )}
 
+      {/* Terminal gate. Same banner grammar as the covenant Watch callout —
+          tone wash, hairline in the tone, icon on the label's baseline. */}
       <div
         className="flex items-start gap-3.5 rounded-[14px] px-5 py-4"
-        style={{ background: STATUS.red.bg }}
+        style={{ background: STATUS.red.bg, border: "1px solid color-mix(in srgb, var(--critical) 16%, transparent)" }}
       >
         <svg width="20" height="20" viewBox="0 0 20 20" className="mt-px flex-none" style={{ color: "var(--critical)" }}>
           <rect x="4.5" y="8.5" width="11" height="8" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
           <path d="M7 8.5V6.4a3 3 0 016 0v2.1" fill="none" stroke="currentColor" strokeWidth="1.6" />
         </svg>
         <div>
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--critical)" }}>
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--critical)" }}>
             Terminal gate
           </div>
           <div className="text-[14px] font-medium leading-relaxed" style={{ color: "var(--critical)", textWrap: "pretty" as never }}>

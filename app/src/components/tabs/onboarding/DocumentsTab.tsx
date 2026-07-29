@@ -1,7 +1,7 @@
 import { useApp } from "../../../state/appState";
 import { fmtDate, fmtRelative } from "../../../data/format";
 import { documentCounts, type OnboardingCase } from "../../../data/onboarding";
-import { Card, SectionHead, EmptyState, NoteCaption } from "../../ui";
+import { Card, SectionHead, EmptyState, NoteCaption, StatCell, StatDivider, StatStrip } from "../../ui";
 import { ColumnHead, Row, SampleNote, StatusText } from "./shared";
 
 const EXPLAIN = "Which identity documents are on file for this prospect, and who verified them?";
@@ -32,25 +32,20 @@ export function DocumentsTab({ kase }: { kase: OnboardingCase }) {
       <SectionHead kicker="Onboarding · documents" subtitle="Identity evidence" explain={EXPLAIN} />
       <SampleNote kase={kase} />
 
-      <Card className="flex flex-wrap items-center gap-8 px-6 py-4">
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Verified</div>
-          <div className="tnum mt-0.5 text-[23px] font-extrabold" style={{ color: "var(--positive)" }}>
-            {counts.verified}
-          </div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Awaiting verification</div>
-          <div className="tnum mt-0.5 text-[23px] font-extrabold" style={{ color: counts.pending ? "var(--warning)" : "var(--ink)" }}>
-            {counts.pending}
-          </div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div className="min-w-[240px] flex-1 text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
+      <StatStrip>
+        <StatCell label="Verified" value={String(counts.verified)} color="var(--positive)" sub="documents" />
+        <StatDivider />
+        <StatCell
+          label="Awaiting verification"
+          value={String(counts.pending)}
+          color={counts.pending ? "var(--warning)" : "var(--ink)"}
+          sub="documents"
+        />
+        <StatDivider />
+        <div className="min-w-[240px] flex-1 self-center text-[11.5px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
           Verification is a named human and a timestamp, recorded on the document itself. A document with no verifier is not verified, whoever uploaded it.
         </div>
-      </Card>
+      </StatStrip>
 
       {docs.length ? (
         <Card className="py-1">
