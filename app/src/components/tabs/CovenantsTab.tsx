@@ -9,10 +9,10 @@ import {
   STATUS,
   type Tone,
 } from "../../data/finance";
-import { Card, SectionHead, GapChip, EmptyState, NoteCaption } from "../ui";
+import { Card, SectionHead, GapChip, EmptyState, NoteCaption, StatCell, StatDivider, StatStrip } from "../ui";
 import { Pulse } from "../Pulse";
 import { groupCovenants } from "../../data/collateralRecords";
-import { useEnterTransition } from "../../data/motion";
+import { staggerDelay, useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
   "Explain these covenants: which is tightest, and how much cushion is left.";
@@ -87,7 +87,7 @@ function CovenantHeader() {
       className="grid gap-3.5 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
       style={{ gridTemplateColumns: COV_COLS }}
     >
-      <span>Covenant</span><span>Actual</span><span>Threshold</span><span>Cushion</span><span>Headroom</span><span>Next test</span>
+      <span>Covenant</span><span className="text-right">Actual</span><span className="text-right">Threshold</span><span className="text-right">Cushion</span><span>Headroom</span><span>Next test</span>
     </div>
   );
 }
@@ -98,10 +98,12 @@ function CovenantRow({
   cov,
   challenge,
   entered,
+  index,
 }: {
   cov: Covenant;
   challenge?: CovenantChallenge;
   entered: boolean;
+  index: number;
 }) {
   const cush = covenantCushion(cov.covenantType, cov.actualValue, cov.thresholdValue);
   const barColor = STATUS[covTone(cov)].fg;
@@ -115,18 +117,18 @@ function CovenantRow({
     <div
       data-cov-row
       className="c360-row-in grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
-      style={{ gridTemplateColumns: COV_COLS }}
+      style={{ gridTemplateColumns: COV_COLS, animationDelay: staggerDelay(index) }}
     >
       <span className="font-semibold">{cov.covenantType ?? "Covenant"}</span>
-      <span className="font-bold">
+      <span className="tnum text-right font-bold">
         <Pulse id={`covenant.${cov.covenantId}.actualValue`}>{fmtCovVal(cov.actualValue, cov.covenantType)}</Pulse>
       </span>
-      <span className="text-ink-label">
+      <span className="tnum text-right text-ink-label">
         <Pulse id={`covenant.${cov.covenantId}.thresholdValue`}>
           {fmtCovThreshold(cov.covenantType, cov.actualValue, cov.thresholdValue)}
         </Pulse>
       </span>
-      <span className="font-bold" style={{ color: barColor }}>
+      <span className="tnum text-right font-bold" style={{ color: barColor }}>
         {cush.cushion != null
           ? `${cush.cushion < 0 ? "−" : ""}${fmtCovVal(Math.abs(cush.cushion), cov.covenantType)}`
           : "—"}
@@ -181,16 +183,13 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
       <SectionHead kicker="Risk & Covenants" explain={EXPLAIN} />
 
       {/* stat strip: rating live, PD/migration = gap chip */}
-      <Card className="flex flex-wrap items-center gap-8 px-6 py-4">
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Risk rating</div>
-          <div className="tnum mt-0.5 text-[23px] font-extrabold">{grade != null ? `Grade ${grade}` : "—"}</div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div className="min-w-[200px] flex-1">
+      <StatStrip className="items-center">
+        <StatCell label="Risk rating" value={grade != null ? `Grade ${grade}` : "—"} sub="nCino primary" />
+        <StatDivider />
+        <div className="min-w-[220px] flex-1">
           <GapChip title="PD · Last rated · Migration not wired v1" provenance="Lives in Snowflake, not this artifact" />
         </div>
-      </Card>
+      </StatStrip>
 
       {covs.length ? (
         <Card className="py-1">
@@ -206,6 +205,7 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
               cov={c}
               challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
               entered={entered}
+              index={i}
             />
           ))}
 
@@ -224,6 +224,7 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
                   cov={c}
                   challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
                   entered={entered}
+                  index={i}
                 />
               ))}
             </div>

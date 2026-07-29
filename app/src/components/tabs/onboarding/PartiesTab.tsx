@@ -1,6 +1,6 @@
 import type { OnboardingCase, OnboardingParty } from "../../../data/onboarding";
 import { fmtPct } from "../../../data/format";
-import { Card, SectionHead, EmptyState, GapChip, NoteCaption } from "../../ui";
+import { Card, SectionHead, EmptyState, GapChip, NoteCaption, StatCell, StatDivider, StatStrip } from "../../ui";
 import { ColumnHead, Row, SampleNote, StatusText } from "./shared";
 
 const EXPLAIN = "Who owns this prospect, how much of it, and which of those edges are confirmed?";
@@ -73,26 +73,22 @@ export function PartiesTab({ kase }: { kase: OnboardingCase }) {
       <SectionHead kicker="Onboarding · parties" subtitle="Ownership and control" explain={EXPLAIN} />
       <SampleNote kase={kase} />
 
-      <Card className="flex flex-wrap items-center gap-8 px-6 py-4">
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Ownership accounted for</div>
-          <div className="tnum mt-0.5 text-[23px] font-extrabold" style={{ color: walked ? "var(--positive)" : "var(--warning)" }}>
-            {ownershipTotal == null ? "—" : fmtPct(ownershipTotal)}
-          </div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div>
-          <div className="text-[11px] font-semibold text-ink-label">Parties on file</div>
-          <div className="tnum mt-0.5 text-[23px] font-extrabold">{parties.length}</div>
-        </div>
-        <div className="self-stretch w-px bg-border" />
-        <div className="min-w-[240px] flex-1">
+      <StatStrip>
+        <StatCell
+          label="Ownership accounted for"
+          value={ownershipTotal == null ? "—" : fmtPct(ownershipTotal)}
+          color={walked ? "var(--positive)" : "var(--warning)"}
+        />
+        <StatDivider />
+        <StatCell label="Parties on file" value={String(parties.length)} sub={parties.length === 1 ? "party" : "parties"} />
+        <StatDivider />
+        <div className="min-w-[240px] flex-1 self-center">
           <GapChip
             title="Beneficial ownership is read, never written here"
             provenance="Edges are pre-seeded with typed roles and confirmed by a human. Nothing in this cockpit creates or edits one."
           />
         </div>
-      </Card>
+      </StatStrip>
 
       {seeded.length ? (
         <Card className="py-1">

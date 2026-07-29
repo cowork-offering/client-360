@@ -37,11 +37,11 @@ function KpiCell({ kpi, index }: { kpi: Kpi; index: number }) {
         animationDelay: staggerDelay(index, 28),
       }}
     >
-      <div className="text-[11.5px] font-semibold text-ink-label">{kpi.label}</div>
-      <div className="tnum my-1 text-[26px] font-extrabold tracking-tight" style={{ color: toneColor[kpi.tone ?? "neutral"] }}>
+      <div className="text-[11px] font-semibold leading-tight text-ink-label">{kpi.label}</div>
+      <div className="tnum mt-1 text-[26px] font-extrabold leading-none tracking-tight" style={{ color: toneColor[kpi.tone ?? "neutral"] }}>
         {kpi.raw == null ? "—" : kpi.format(animated)}
       </div>
-      <div className="text-[12px] text-ink-muted">{kpi.sub}</div>
+      <div className="mt-1.5 text-[11.5px] leading-tight text-ink-muted">{kpi.sub}</div>
     </div>
   );
 }
@@ -104,7 +104,7 @@ export function KpiBand() {
   ];
 
   return (
-    <div className="overflow-hidden rounded-[16px] bg-raised" style={{ boxShadow: "var(--shadow-card)" }}>
+    <div className="overflow-hidden rounded-[14px] bg-raised" style={{ boxShadow: "var(--shadow-card)" }}>
       <div className="flex flex-wrap">
         {kpis.map((k, i) => (
           <KpiCell key={k.label} kpi={k} index={i} />

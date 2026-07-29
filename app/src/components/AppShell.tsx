@@ -36,7 +36,7 @@ export function AppShell() {
         <main className="flex min-h-0 flex-1 flex-col">
           {state.view === "home" ? (
             <div className="min-h-0 flex-1 overflow-auto">
-              <PageContainer className="flex flex-col py-6" >
+              <PageContainer className="flex flex-col py-6">
                 <div className="flex flex-col" style={{ gap: "var(--stack)" }}>
                   <ZoneToggle bookCount={worklist.accountIds.length} />
                   {/* Keyed on the zone so the incoming list mounts fresh: it

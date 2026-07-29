@@ -3,7 +3,7 @@ import { aggregateGuarantorSignals } from "../../data/graphAggregate";
 import { fmtDate } from "../../data/format";
 import { arc, covenantCushion, fmtCovThreshold, fmtCovVal, STATUS, type Tone } from "../../data/finance";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
-import { useEnterTransition } from "../../data/motion";
+import { staggerDelay, useEnterTransition } from "../../data/motion";
 
 const EXPLAIN =
   "Explain the early-warning signals here and the nearest maturity.";
@@ -95,20 +95,30 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
               const tone = sevTone(e.severity);
               const dot = e.severity === "Critical" ? STATUS.red.fg : e.severity === "Watch" ? STATUS.amber.fg : "var(--ink-label)";
               return (
-                <div key={i} className="flex gap-3">
-                  <div className="flex flex-none flex-col items-center">
-                    <div className="mt-0.5 h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
-                    {i < ews.length - 1 && <div className="my-1 w-0.5 flex-1" style={{ background: "var(--border)" }} />}
+                <div key={i} className="c360-row-in flex gap-3.5" style={{ animationDelay: staggerDelay(i) }}>
+                  {/* rail — dot on the title's optical centre, connector below */}
+                  <div className="flex w-2.5 flex-none flex-col items-center">
+                    <span
+                      className="mt-[5px] h-2.5 w-2.5 flex-none rounded-full"
+                      style={{ background: dot, boxShadow: `0 0 0 3px ${STATUS[tone].bg}` }}
+                    />
+                    {i < ews.length - 1 && <span className="my-1 w-px flex-1" style={{ background: "var(--border)" }} />}
                   </div>
-                  <div className="pb-4">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-0 flex-1 pb-4 last:pb-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                       <span className="text-[13px] font-bold">{e.title}</span>
-                      <span className="rounded-[5px] px-2 py-0.5 text-[10px] font-bold" style={{ background: STATUS[tone].bg, color: STATUS[tone].fg }}>
+                      {/* Severity is a status fact: coloured text, not a pill. */}
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-[0.08em]"
+                        style={{ color: STATUS[tone].fg }}
+                      >
                         {e.severity}
                       </span>
                     </div>
-                    <div className="my-1 text-[12.5px] text-ink-body-strong" style={{ textWrap: "pretty" as never }}>{e.body}</div>
-                    {e.date && <div className="text-[11px] text-ink-faint">{e.date}</div>}
+                    <div className="mt-1 text-[12.5px] leading-relaxed text-ink-body-strong" style={{ textWrap: "pretty" as never }}>
+                      {e.body}
+                    </div>
+                    {e.date && <div className="mt-1 text-[11px] text-ink-faint">{e.date}</div>}
                   </div>
                 </div>
               );
@@ -118,8 +128,12 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
           )}
         </Card>
 
-        <Card className="flex flex-col items-center px-6 py-5 text-center">
-          <div className="kicker mb-4 self-start">Renewal clock</div>
+        {/* Renewal clock. The dial is the one thing on this surface that earns
+            being centred — it is radial. Everything around it (kicker, verdict
+            line, window caption) is left-aligned on the card's own margin, so
+            the panel no longer reads as a ragged centred column. */}
+        <Card className="px-6 py-5">
+          <div className="kicker">Renewal clock</div>
           {nearest && nearest.daysUntilMaturity != null ? (
             (() => {
               const days = nearest.daysUntilMaturity!;
@@ -128,24 +142,49 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
               const tone: Tone = days < 45 ? "red" : days < 120 ? "amber" : "green";
               return (
                 <>
-                  <div className="relative h-[130px] w-[130px]">
-                    <svg width="130" height="130" viewBox="0 0 130 130" style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }}>
-                      <circle cx="65" cy="65" r="52" fill="none" stroke="var(--border)" strokeWidth="9" />
-                      <circle className="c360-dial" cx="65" cy="65" r="52" fill="none" stroke={STATUS[tone].fg} strokeWidth="9" strokeLinecap="round" strokeDasharray={a.c} strokeDashoffset={entered ? a.off : a.c} />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-[24px] font-extrabold" style={{ color: STATUS[tone].fg }}>{days}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">days</span>
+                  <div className="flex flex-1 items-center justify-center py-5">
+                    <div className="relative h-[142px] w-[142px]">
+                      <svg
+                        width="142"
+                        height="142"
+                        viewBox="0 0 130 130"
+                        style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }}
+                      >
+                        <circle cx="65" cy="65" r="52" fill="none" stroke="var(--border)" strokeWidth="9" />
+                        <circle
+                          className="c360-dial"
+                          cx="65"
+                          cy="65"
+                          r="52"
+                          fill="none"
+                          stroke={STATUS[tone].fg}
+                          strokeWidth="9"
+                          strokeLinecap="round"
+                          strokeDasharray={a.c}
+                          strokeDashoffset={entered ? a.off : a.c}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="tnum text-[30px] font-extrabold leading-none tracking-tight" style={{ color: STATUS[tone].fg }}>
+                          {days}
+                        </span>
+                        <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint">days</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-4 text-[13px] leading-relaxed text-ink-body-strong" style={{ textWrap: "pretty" as never }}>
+                  <div className="text-[13px] leading-relaxed text-ink-body-strong" style={{ textWrap: "pretty" as never }}>
                     {nearest.name ?? "Facility"} matures {fmtDate(nearest.maturityDate)}.
+                  </div>
+                  <div className="mt-2 border-t border-divider pt-2.5 text-[11px] text-ink-faint">
+                    Against a {MATURITY_WINDOW_DAYS}-day watch window.
                   </div>
                 </>
               );
             })()
           ) : (
-            <EmptyState title="No maturities in window" body="No facilities maturing within the watch window (270 days)." />
+            <div className="flex flex-1 items-center justify-center">
+              <EmptyState title="No maturities in window" body="No facilities maturing within the watch window (270 days)." />
+            </div>
           )}
         </Card>
       </div>

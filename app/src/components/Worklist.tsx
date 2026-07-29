@@ -15,7 +15,7 @@ import { REASON_META } from "./reasons";
 import { ReasonChips } from "./ReasonChip";
 import { GradeBadge } from "./GradeBadge";
 import { CopyPromptDialog } from "./CopyPromptDialog";
-import { Card } from "./ui";
+import { Card, EmptyState } from "./ui";
 import { staggerDelay } from "../data/motion";
 
 const ALL_REASONS = Object.keys(REASON_META) as ReasonCode[];
@@ -80,7 +80,8 @@ export function Worklist() {
       col.accessor("riskRating", { header: "Rating", sortUndefined: "last", cell: (c) => <GradeBadge grade={c.getValue()} /> }),
       col.accessor("tce", {
         header: "TCE",
-        cell: (c) => <span className="tnum text-[13.5px] font-bold text-ink">{fmtMoney(c.getValue())}</span>,
+        meta: { align: "right" as const },
+        cell: (c) => <span className="tnum block text-right text-[13.5px] font-bold text-ink">{fmtMoney(c.getValue())}</span>,
       }),
       col.accessor("nextTestDays", {
         header: "Next test",
@@ -184,7 +185,7 @@ export function Worklist() {
               type="button"
               disabled={!sortable}
               onClick={h.column.getToggleSortingHandler()}
-              className={`flex items-center gap-1 ${sortable ? "c360-press cursor-pointer hover:text-ink-muted" : "cursor-default"}`}
+              className={`flex items-center gap-1 ${(h.column.columnDef.meta as { align?: string } | undefined)?.align === "right" ? "justify-end" : ""} ${sortable ? "c360-press cursor-pointer hover:text-ink-muted" : "cursor-default"}`}
             >
               {flexRender(h.column.columnDef.header, h.getContext())}
               {sortable && <SortGlyph dir={dir} />}
@@ -195,12 +196,10 @@ export function Worklist() {
 
       {/* Body — plain render (A21: no virtualization; ~30 rows) */}
       {tableRows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <div className="text-[14px] font-bold text-ink">Queue clear</div>
-          <div className="max-w-xs text-[12px] text-ink-muted">
-            No relationship matches the current filter. Every staged account is within tolerance.
-          </div>
-        </div>
+        <EmptyState
+          title="Queue clear"
+          body="No relationship matches the current filter. Every staged account is within tolerance."
+        />
       ) : (
         tableRows.map((row, i) => {
           const r = row.original;

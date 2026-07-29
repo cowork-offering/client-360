@@ -9,7 +9,13 @@ export function PageContainer({ children, className = "" }: { children: ReactNod
 }
 
 /** Card. `h-full` + column flex so siblings in a grid row share exact top and
- *  bottom edges (A25.3); hover lift is opt-out for non-interactive panels. */
+ *  bottom edges (A25.3); hover lift is opt-out for non-interactive panels.
+ *
+ *  `className` lands on the SHELL, and the shell is a column. Anything that
+ *  needs a row (a stat strip, a figure beside a divider) must own its own
+ *  wrapper inside the card — see StatStrip. Passing `flex-wrap items-center`
+ *  to Card instead centred a shrink-wrapped column and read as a broken strip
+ *  (founder, 2026-07-29). */
 export function Card({
   children,
   watermark = false,
@@ -80,8 +86,8 @@ export function SectionHead({ kicker, subtitle, explain }: { kicker: string; sub
 
 export function GapChip({ title, provenance }: { title: string; provenance?: string }) {
   return (
-    <div className="inline-flex items-center gap-2.5 rounded-[10px] border border-dashed border-border-strong bg-wash px-3 py-2.5">
-      <svg width="15" height="15" viewBox="0 0 16 16" className="flex-none text-ink-faint">
+    <div className="inline-flex items-start gap-2.5 rounded-[10px] border border-dashed border-border-strong bg-wash px-3 py-2.5">
+      <svg width="15" height="15" viewBox="0 0 16 16" className="mt-px flex-none text-ink-faint">
         <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
         <path d="M8 5.2v.1M8 7.4v3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
@@ -117,13 +123,51 @@ export function NoteCaption({ note }: { note?: string | null }) {
   );
 }
 
-export function StatCell({ label, value, color }: { label: string; value: ReactNode; color?: string }) {
+/* -------------------------------------------------------------- stat strip
+   The row of headline figures that opens a tab. ONE definition, so Exposure,
+   Covenants and the four onboarding tabs cannot drift apart, and so the row is
+   a row: the strip lives INSIDE the card body, never as classes on the shell.
+
+   Cells are top-aligned and stretch to the tallest, which puts every label on
+   one baseline and every figure on the next, and lets a divider run the full
+   height of the strip without being told how tall it is. */
+
+export function StatStrip({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div>
-      <div className="text-[11px] font-semibold text-ink-label">{label}</div>
-      <div className="tnum mt-0.5 text-[23px] font-extrabold" style={color ? { color } : undefined}>
+    <Card className="px-6 py-4">
+      {/* No `items-*` in the base: stretch is already the flex default, and a
+          base alignment here would collide with one a caller passes in. */}
+      <div className={`flex flex-wrap gap-x-9 gap-y-4 ${className}`}>{children}</div>
+    </Card>
+  );
+}
+
+/** Hairline between two stat cells. Full-height by stretch, never a fixed px. */
+export function StatDivider() {
+  return <div aria-hidden="true" className="w-px flex-none self-stretch bg-border" />;
+}
+
+/** One figure in a stat strip: label above, figure below, both left-aligned on
+ *  the strip's shared baselines. Figures are tabular so columns of them line
+ *  up digit for digit. */
+export function StatCell({
+  label,
+  value,
+  sub,
+  color,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  color?: string;
+}) {
+  return (
+    <div className="flex flex-col justify-start text-left">
+      <div className="text-[11px] font-semibold leading-tight text-ink-label">{label}</div>
+      <div className="tnum mt-1 text-[23px] font-extrabold leading-none tracking-tight" style={color ? { color } : undefined}>
         {value}
       </div>
+      {sub && <div className="mt-1.5 text-[11.5px] leading-tight text-ink-muted">{sub}</div>}
     </div>
   );
 }
