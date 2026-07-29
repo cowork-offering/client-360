@@ -4,7 +4,7 @@
    caller (appState) additionally validates the restored account/tab is still
    valid for the freshly injected data before applying it. */
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface PersistedUi {
@@ -21,6 +21,13 @@ export interface PersistedUi {
    *  server total and silently swallow the next real reply. Schema bumped to 3
    *  because the field's meaning changed, not just its name. */
   seenServerCount: number;
+  /** Which L1 zone the worklist was showing (BUILD-SPEC-V1 §6.2). Schema
+   *  bumped to 4 because the blob gained fields; a v3 blob is dropped, not
+   *  half-read. */
+  zone: "book" | "onboarding";
+  /** The onboarding tab, held separately from `tab` — the two tab sets are
+   *  disjoint and must not overwrite each other. */
+  onboardingTab: string;
 }
 
 interface Envelope {

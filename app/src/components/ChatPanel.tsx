@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useApp, ACCOUNT_TABS } from "../state/appState";
+import { useApp, ACCOUNT_TABS, ONBOARDING_TABS } from "../state/appState";
+import { findOnboardingCase } from "../data/onboarding";
 import type { AiMessage } from "../data/contract";
 import { formatProbe, newRequestId, probeChannels } from "../channel/adapter";
 import { mcpAvailable, type McpFailure } from "../channel/mcp";
@@ -90,12 +91,20 @@ export function ChatPanelBody() {
   const { data, worklist, channel, state, dispatch } = useApp();
   const [sendState, setSendState] = useState<SendState>("idle");
 
+  // An onboarding case is a relationship the book does not hold yet: it has no
+  // portfolio row and no bundle, so chat grounds itself in the case instead.
+  const kase = state.view === "account" ? findOnboardingCase(data, state.accountId) : null;
+  const onboarding = kase !== null && kase.stage !== "Complete";
   const account =
-    state.view === "account" && state.accountId
+    state.view === "account" && state.accountId && !onboarding
       ? data.portfolio.accounts.find((a) => a.accountId === state.accountId)
       : null;
   const tabLabel =
-    state.view === "account" ? (ACCOUNT_TABS.find((t) => t.id === state.tab)?.label ?? null) : "Worklist";
+    state.view !== "account"
+      ? "Worklist"
+      : onboarding
+        ? (ONBOARDING_TABS.find((t) => t.id === state.onboardingTab)?.label ?? null)
+        : (ACCOUNT_TABS.find((t) => t.id === state.tab)?.label ?? null);
 
   const historyMessages = useMemo<AiMessage[]>(() => {
     const out: AiMessage[] = [];
@@ -170,9 +179,10 @@ export function ChatPanelBody() {
         const answer = await askCopilot({
           data,
           bundle: resolveBundle(data, account?.accountId ?? null),
-          accountName: account?.name ?? null,
+          accountName: account?.name ?? kase?.name ?? null,
           tab: tabLabel,
           question: prompt,
+          kase: onboarding ? kase : null,
         });
         dispatch({
           type: "PUSH_MESSAGE",

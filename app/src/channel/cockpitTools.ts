@@ -9,6 +9,7 @@
 
 import type { ActionHistoryRow, BorrowerBundle, C360Data, Id } from "../data/contract";
 import { buildGroundedPrompt } from "../data/grounding";
+import type { OnboardingCase } from "../data/onboarding";
 import {
   callTool,
   DETAIL_TOOLS,
@@ -31,6 +32,9 @@ export async function askCopilot(args: {
   accountName: string | null;
   tab: string | null;
   question: string;
+  /** Set when the view is an onboarding case; grounds the ask in the case
+   *  instead of a bundle the relationship does not have yet. */
+  kase?: OnboardingCase | null;
   signal?: AbortSignal;
 }): Promise<LlmAnswer> {
   const prompt = buildGroundedPrompt(args);

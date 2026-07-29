@@ -25,6 +25,16 @@
    ============================================================================= */
 
 import type { BorrowerBundle, C360Data, Covenant } from "./contract";
+import {
+  RESULT_LABEL,
+  SCREENING_LABEL,
+  STAGE_LABEL,
+  TYPE_LABEL,
+  daysInStage,
+  documentCounts,
+  worstScreening,
+  type OnboardingCase,
+} from "./onboarding";
 import { fmtDate, fmtMoney } from "./format";
 import { covenantCushion } from "./finance";
 import { isActiveFacility } from "./worklist";
@@ -301,6 +311,58 @@ function bookProse(data: C360Data): string {
 }
 
 /**
+ * Onboarding prose.
+ *
+ * Same shape contract as the credit prose — no ids, no lists, no braces — and
+ * the same refusal to overstate. Two things are always said: that the screening
+ * figures are simulated, and that only a human attestation completes the case.
+ * A model grounded in this can answer "where does Meridian stand" without ever
+ * being in a position to claim the case is cleared.
+ */
+function onboardingProse(kase: OnboardingCase, generatedAt: string, tab: string | null): string {
+  const parts: string[] = [];
+  const days = daysInStage(kase, generatedAt);
+  const docs = documentCounts(kase);
+  const worst = worstScreening(kase);
+
+  parts.push(
+    `${kase.name} is an onboarding case, type ${TYPE_LABEL[kase.type]}, at stage ${STAGE_LABEL[kase.stage]}` +
+      (days != null ? ` for ${days} days` : "") +
+      ".",
+  );
+
+  if (kase.intake) parts.push("It arrived through the client intake service, so its stated details are claimed by the applicant and unverified.");
+
+  const owners = (kase.parties ?? []).filter((p) => p.ownershipPercent != null);
+  if (owners.length) {
+    parts.push(
+      "Ownership: " +
+        owners.map((p) => `${p.name} ${p.ownershipPercent} percent as ${p.role}`).join(", ") +
+        ".",
+    );
+  }
+
+  parts.push(
+    `Documents: ${docs.verified} of ${docs.total} verified. Screening worst result ${RESULT_LABEL[worst]}, all results simulated for this prototype.`,
+  );
+
+  const hit = (kase.screenings ?? []).find((x) => x.result === "Hit" || x.result === "PotentialMatch");
+  if (hit) parts.push(`The ${SCREENING_LABEL[hit.screeningType]} screen on ${hit.partyName} returned ${RESULT_LABEL[hit.result]} and is unresolved.`);
+
+  const blocking = kase.blockingItems ?? [];
+  if (blocking.length) parts.push(`Blocking: ${blocking.map((b) => b.title).join(", ")}.`);
+
+  parts.push(
+    kase.clearance?.present
+      ? "KYC clearance has been attested by a named human."
+      : "No KYC clearance record exists, so the case cannot complete. Only a human attestation moves it.",
+  );
+
+  if (tab) parts.push(`Viewing the ${tab} tab.`);
+  return sanitize(parts.join(" "));
+}
+
+/**
  * Assemble the prompt. Shape contract, enforced here and by the tests:
  * prose only, no ids, context ≤ CONTEXT_BUDGET, whole prompt ≤ MAX_PROMPT.
  */
@@ -310,14 +372,20 @@ export function buildGroundedPrompt(args: {
   accountName: string | null;
   tab: string | null;
   question: string;
+  /** Set when the view is an onboarding case, which has no bundle by design. */
+  kase?: OnboardingCase | null;
 }): string {
-  const { data, bundle, accountName, tab, question } = args;
+  const { data, bundle, accountName, tab, question, kase } = args;
 
   // The question is sanitized too: a pasted JSON fragment would otherwise trip
   // the same guard and quarantine the page for every later call.
   const q = clip(sanitize(question), 200);
 
-  const raw = accountName ? accountProse(bundle, accountName, tab) : bookProse(data);
+  const raw = kase
+    ? onboardingProse(kase, data.meta?.generatedAt ?? "", tab)
+    : accountName
+      ? accountProse(bundle, accountName, tab)
+      : bookProse(data);
   const room = Math.max(0, Math.min(CONTEXT_BUDGET, MAX_PROMPT - q.length - INSTRUCTION.length - 2));
   const context = clip(raw, room);
 

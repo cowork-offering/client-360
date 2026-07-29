@@ -9,6 +9,8 @@
    guard there.
    ============================================================================= */
 
+import type { OnboardingBook } from "./onboarding";
+
 export type Id = string;
 
 /* =============================================================================
@@ -157,6 +159,22 @@ export const PROVENANCE = {
   "borrower.deposits": { kind: "GAP", source: "No Deposit records in the source org — never size a wallet" },
   "borrower.kycScreening": { kind: "GAP", source: "KYC/OFAC/PEP not modelled in the org — never assert clearance" },
   "worklist.lastModified": { kind: "GAP", source: "Not in the contract — renders '—' until Apex provides it (A11)" },
+
+  // --- KYC + onboarding (BUILD-SPEC-V1 §6) ---------------------------------
+  // Every row below is BAKED sample data in this build. The `source` names the
+  // org field each one is shaped for, so wiring is a read, not a redesign.
+  "onboarding.cases[]": { kind: "PENDING", source: "LLC_BI__Onboarding__c via the planned Customer360Onboarding read. Baked and _sample_only in this build" },
+  "onboarding.cases[].stage": { kind: "PENDING", source: "LLC_BI__Stage__c — CustomerEngagement, DueDiligence, Validation, Complete" },
+  "onboarding.cases[].type": { kind: "PENDING", source: "LLC_BI__Type__c" },
+  "onboarding.cases[].status": { kind: "PENDING", source: "LLC_BI__Status__c" },
+  "onboarding.cases[].lookupKey": { kind: "PENDING", source: "LLC_BI__lookupKey__c — unique external id, the write-idempotency anchor" },
+  "onboarding.cases[].intake": { kind: "PENDING", source: "Client intake service — what the PROSPECT claimed, never what the bank verified (§4.5)" },
+  "onboarding.cases[].parties[]": { kind: "PENDING", source: "FinServ__AccountAccountRelation__c with typed FinServ__ReciprocalRole__c pairs — pre-seeded, human-confirmed, never agent-written (§2.8.3)" },
+  "onboarding.cases[].documents[]": { kind: "PENDING", source: "FinServ__IdentificationDocument__c incl. FinServ__VerifiedBy__c / FinServ__VerifiedOn__c (§2.8.1)" },
+  "onboarding.cases[].screenings[]": { kind: "PENDING", source: "KYC_Screening__c — immutable evidence. Every row in this artifact is Simulated (demo) and says so (§3.4)" },
+  "onboarding.cases[].clearance": { kind: "PENDING", source: "KYC_Clearance__c — absent means no human attested. The cockpit never mints one" },
+  "display.onboardingLifecycle": { kind: "DERIVED", source: "§6.3 — tab set keyed on stage !== Complete, read from the case each render. Never stored in UI state" },
+  "display.onboardingBlockers": { kind: "DERIVED", source: "completionBlockers() — the case's blocking items plus the standing attestation gate" },
 } as const satisfies Record<string, ProvenanceEntry>;
 
 export type ProvenanceKey = keyof typeof PROVENANCE;
@@ -773,4 +791,8 @@ export interface C360Data {
   borrowers?: Record<Id, BorrowerBundle>;
   worklist?: Worklist;
   aiPanel?: AiPanel | null;
+  /** Pre-booking relationships (BUILD-SPEC-V1 §6). A case here is NOT in the
+   *  book: it has no facilities, no covenants and no rating, and the shell must
+   *  never ask it for any. Absent means this snapshot staged no onboarding. */
+  onboarding?: OnboardingBook;
 }
