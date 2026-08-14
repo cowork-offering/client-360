@@ -1,4 +1,4 @@
-# Customer 360 — Status & Charter (2026-08-14)
+# Customer 360 — Status & Charter (2026-08-14, post-migration)
 
 **Read this first.** This repo is the single source for Customer 360: code, plugin packaging,
 and the full knowledge tree (`knowledge/`). New sessions start here, then
@@ -33,9 +33,14 @@ with a product-grade cockpit on top. Deliverable quality bar: spot-on.
 - **Sibling product:** Commercial Credit Memo (plugin `credit-memo-reinvented`, Experience MCP at
   `experience-mcp.vercel.app`). Shared doctrine: skills carry methodology, servers carry facts and
   writes, plugins ship the parts.
-- **Dev seats:** Archy box (original) + **Banksy** (`ubuntu@98.87.86.133`, this repo cloned at
-  `/home/ubuntu/projects/customer-360`, knowledge ingested into `/opt/brain/knowledge/projects/customer-360/`).
-  Banksy rule: everything ubuntu-owned, never sudo git.
+- **Dev seats:** Archy box (original) + **Banksy** (`ubuntu@98.87.86.133`) — migration COMPLETE and
+  verified 2026-08-14: repo cloned at `/home/ubuntu/projects/customer-360` with working GitHub push
+  auth (Credit Brain Dev app token), all 39 knowledge docs indexed in hybrid recall (probes 0.99-1.00),
+  ontology nodes linked (repo -> project -> product, server -> project). Banksy rule: everything
+  ubuntu-owned, never sudo git.
+- **Functionality status: COMPLETE and live.** Everything in the "What exists" table works today on
+  the published artifact URLs against the real org. The outstanding list below is packaging, sign-off
+  and gated-by-design items — not missing functionality.
 
 ## Outstanding (priority order)
 
