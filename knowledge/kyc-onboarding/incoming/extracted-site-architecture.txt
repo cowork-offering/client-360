@@ -1,0 +1,110 @@
+Your advisors are your greatest asset — Accenture × Salesforce × Anthropic
+Business Case
+Under the Hood
+Get Started
+The Architecture
+More AI. More Salesforce.
+No trade-off.
+Every agentic action writes back to Salesforce. Every audit trail lives there. The more powerful the AI layer, the more valuable your Salesforce investment becomes.
+CDO
+CTO
+Head of Technology
+Five-layer architecture
+One security-enforced stack
+Engagement
+Where advisors and clients meet the system, on any surface they already use
+Agency
+Reasoning and governed action, never ungoverned
+Work
+Pre-built regulated workflows, nothing custom to maintain
+Context
+Unified data, zero-copy, no shadow environments
+Record
+Salesforce as the anchor. Every action lands here.
+Engagement
+Claude Desktop · MCP · Voice · Slack · Teams · Web · Mobile
+↓
+Agency
+Claude models + Agentforce governance
+↓
+Work
+Salesforce FSC · Wealth data model · Trust Layer · OmniStudio
+↓
+Context
+Data Cloud · Zero-Copy · MuleSoft
+↓
+Record
+Core Banking · Custodians · Portfolio Management
+↑ Writes back to Salesforce
+Defense in depth
+Built so compliance isn't a conversation you have to have.
+Claude applies four guardrails before any action reaches Salesforce. The Einstein Trust Layer enforces controls at the platform level. Every layer governed. Nothing left to individual behavior.
+Claude — before any action
+Content Filtering
+PII Protection
+Topic Denial
+Prompt Injection Defence
+Einstein Trust Layer — at the platform
+PII masking
+Data access controls
+Toxicity detection
+Full audit trail
+Build vs. buy
+The comparison speaks for itself.
+Every dimension — initial build, ongoing maintenance, compliance, time to value — lands in the same place. Partner with the platforms that absorb the cost of innovation, so you don't have to.
+Build it yourself
+Salesforce + Anthropic
+Initial build
+Build it yourself
+FSC data model, compliance logic, and audit infrastructure — all custom.
+Salesforce + Anthropic
+Configured on a pre-built, regulated platform.
+Ongoing
+Build it yourself
+The firm absorbs every model update, security patch, and innovation lag.
+Salesforce + Anthropic
+Updates and patches absorbed by Salesforce, Anthropic, and Accenture.
+Compliance
+Build it yourself
+Custom PII masking and access control, built and maintained in-house.
+Salesforce + Anthropic
+Einstein Trust Layer — pre-built and battle-tested.
+Time to value
+Build it yourself
+Months to years.
+Salesforce + Anthropic
+Weeks for a configured deployment.
+The combination is what makes it irreplaceable.
+The most trusted platform in wealth management. Still tethered to a screen.
+The compliance infrastructure, the data model, the audit trail — 25 years of regulated-industry trust, built in. But pre-headless, the work lived in the platform. The advisor had to go to it.
+The platform
+The intelligence
+Frontier reasoning across any channel. Nowhere governed to land.
+Claude synthesizes documents, emails, advisor notes, and client records simultaneously. But without a system of record, an audit trail, or a compliance workflow engine, intelligence without infrastructure isn't a trade-off any regulated firm can make.
+The combination is what's new.
+Regulated, auditable, AI-native — across every channel the advisor and client already use. Fintech speed on top of incumbent-grade trust. Neither company could deliver this independently.
+The combined platform
+Built for what comes next
+Future-proof by design.
+Every model improvement. Yours without lifting a finger.
+Anthropic's model roadmap is the customer's without any R&D investment. As Claude improves, the same architecture handles increasingly complex wealth workflows — without re-architecture.
+Every platform update. Absorbed by your partners.
+New Salesforce FSC capabilities, Data Cloud features, MuleSoft connectors — absorbed automatically. A DIY builder replaces every one of those investments themselves, indefinitely.
+Every regulatory change. Maintained by partners whose business depends on it.
+Wealth management regulation is only getting more complex. The compliance posture here is platform-enforced and maintained by Salesforce and Anthropic — not owned entirely by your firm.
+Get Started
+Satisfied it's safe. Now see how to begin.
+Three decisions, three contained first use cases, no rip-and-replace.
+See the path forward
+→
+The next step
+Bring this to the room where the decision gets made.
+See the working demo, or start a scoped conversation with the Accenture team.
+See the demo
+↗
+Contact Us
+Home
+Business Case
+Under the Hood
+Get Started
+Accenture × Salesforce × Anthropic · Strategic asset · 2026

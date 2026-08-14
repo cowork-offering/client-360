@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>cm_Idempotency_Key__c</fullName>
+    <description>Client-generated, stable across resume (A33.5.2). Enforced by us, never assumed from the platform (A33.3.5).</description>
+    <externalId>true</externalId>
+    <label>Idempotency Key</label>
+    <length>128</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

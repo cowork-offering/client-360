@@ -1,0 +1,532 @@
+{
+  "package_anchored_modification_multi": [
+    {
+      "actionName": "StageLoanModification",
+      "errors": null,
+      "expectedError": false,
+      "invocationId": null,
+      "isSuccess": true,
+      "outcome": null,
+      "outputValues": {
+        "error": null,
+        "ok": true,
+        "result": {
+          "warnings": [
+            "EXECUTION IS HELD. These facilities are booked and open, which is what a credit action requires, but no execute tool ships in this wave.",
+            "Booked cannot be reached through the API. Loan_Validation_06 requires nCino's Submit for Approval button and carries no permission bypass.",
+            "The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Any future execution verifies by re-query only.",
+            "The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.",
+            "2 loan-level covenant junction rows would clone onto the new facilities. nCino clones the junction, not the covenant, and its own guidance says a business process must decide what happens to each one.",
+            "This is one plan over 2 facilities on the same package, under a single confirmation and a single decision token. Each facility carries its own credit action, verification and apply step, so a failure on one is reported against that facility and does not silently discard the others.",
+            "The requested changes apply to every selected facility. Stage them separately if they need different terms."
+          ],
+          "summary": "Plans a modification of 2 facilities on the package: Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00, Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00. nCino would clone each facility, create the chain junction row and apply the requested changes. NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "steps": [
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Invoke the modification credit action on the package for Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "credit_action_0",
+              "fields": [
+                "clone created by nCino"
+              ],
+              "automationWoken": [
+                "nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row"
+              ]
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "verification",
+              "state": "pending",
+              "objectName": "LLC_BI__LoanRenewal__c",
+              "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 and its junction row",
+              "id": "verify_clone_0",
+              "fields": [
+                "LLC_BI__ParentLoanId__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "apply_changes_0",
+              "fields": [
+                "LLC_BI__Amount__c",
+                "LLC_BI__Maturity_Date__c",
+                "LLC_BI__Interest_Rate__c",
+                "LLC_BI__Term_Months__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Invoke the modification credit action on the package for Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+              "id": "credit_action_1",
+              "fields": [
+                "clone created by nCino"
+              ],
+              "automationWoken": [
+                "nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row"
+              ]
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "verification",
+              "state": "pending",
+              "objectName": "LLC_BI__LoanRenewal__c",
+              "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00 and its junction row",
+              "id": "verify_clone_1",
+              "fields": [
+                "LLC_BI__ParentLoanId__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+              "id": "apply_changes_1",
+              "fields": [
+                "LLC_BI__Amount__c",
+                "LLC_BI__Maturity_Date__c",
+                "LLC_BI__Interest_Rate__c",
+                "LLC_BI__Term_Months__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": null,
+              "type": "observed_side_effect",
+              "state": "pending",
+              "objectName": null,
+              "label": "Stage-driven email alerts and memo status changes the org may run",
+              "id": "observe_side_effects",
+              "fields": [],
+              "automationWoken": [
+                "nCino Commercial - Loan After Save"
+              ]
+            },
+            {
+              "verification": null,
+              "type": "handoff",
+              "state": "pending",
+              "objectName": null,
+              "label": "HELD: execution needs an approved facility",
+              "id": "held_execution",
+              "fields": [],
+              "automationWoken": [
+                "nCino Submit for Approval, driven by a human"
+              ]
+            }
+          ],
+          "stagingId": "a8abb00001KyVHvAAN",
+          "replayed": false,
+          "provenanceJson": "{\"productPackageId\":{\"citation\":\"a5Fbb000000IHFJEA4\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"facilityIds\":{\"citation\":\"a4Zbb0000027MaYEAU, a4Zbb0000027Mp3EAE\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+          "productPackageId": "a5Fbb000000IHFJEA4",
+          "planHash": "e7c56fb8e9dc46127cd7ded443ebac2b34502a486c63e5701cd64d5a37edf52d",
+          "heldReason": "A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "facilityCount": 2,
+          "facilities": [
+            {
+              "verifyStepId": "verify_clone_0",
+              "facilityName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "facilityId": "a4Zbb0000027MaYEAU",
+              "creditActionStepId": "credit_action_0",
+              "covenantCarryoverCount": 1,
+              "applyStepId": "apply_changes_0"
+            },
+            {
+              "verifyStepId": "verify_clone_1",
+              "facilityName": "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+              "facilityId": "a4Zbb0000027Mp3EAE",
+              "creditActionStepId": "credit_action_1",
+              "covenantCarryoverCount": 1,
+              "applyStepId": "apply_changes_1"
+            }
+          ],
+          "executionHeld": true,
+          "decisionToken": "4ff2bdc34b855bc059ee32aea036ab362e72a86b9e0edf5d55cd986d837bcfdb",
+          "covenantCarryoverCount": 2,
+          "accountId": "001bb00001I7FPNAA3"
+        }
+      },
+      "sortOrder": 0,
+      "version": 1
+    }
+  ],
+  "package_anchored_renewal": [
+    {
+      "actionName": "StageRenewal",
+      "errors": null,
+      "expectedError": false,
+      "invocationId": null,
+      "isSuccess": true,
+      "outcome": null,
+      "outputValues": {
+        "error": null,
+        "ok": true,
+        "result": {
+          "warnings": [
+            "EXECUTION IS HELD. This facility is booked and open, which is what a credit action requires, but no execute tool ships in this wave.",
+            "Booked cannot be reached through the API. Loan_Validation_06 requires nCino's Submit for Approval button and carries no permission bypass.",
+            "The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Any future execution verifies by re-query only.",
+            "The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.",
+            "1 loan-level covenant junction rows would clone onto the new facility. nCino clones the junction, not the covenant, and its own guidance says a business process must decide what happens to each one.",
+            "A renewal auto-creates a new Opportunity and is effectively irreversible once run.",
+            "LLC_BI__Renewal_Number__c must be set explicitly or left to the invocable. A blank number yields a facility named _Rnull and breaks core sync."
+          ],
+          "summary": "Plans a renewal of Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 on the package. nCino would clone the facility, create the chain junction row and apply the requested changes. NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "steps": [
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Invoke the renewal credit action on the package for Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "credit_action_0",
+              "fields": [
+                "clone created by nCino"
+              ],
+              "automationWoken": [
+                "nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row"
+              ]
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "verification",
+              "state": "pending",
+              "objectName": "LLC_BI__LoanRenewal__c",
+              "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 and its junction row",
+              "id": "verify_clone_0",
+              "fields": [
+                "LLC_BI__ParentLoanId__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "apply_changes_0",
+              "fields": [
+                "LLC_BI__Maturity_Date__c",
+                "LLC_BI__Interest_Rate__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": null,
+              "type": "observed_side_effect",
+              "state": "pending",
+              "objectName": null,
+              "label": "A new Opportunity is auto-created on every renewal",
+              "id": "observe_side_effects",
+              "fields": [],
+              "automationWoken": [
+                "nCino renewal automation"
+              ]
+            },
+            {
+              "verification": null,
+              "type": "handoff",
+              "state": "pending",
+              "objectName": null,
+              "label": "HELD: execution needs an approved facility",
+              "id": "held_execution",
+              "fields": [],
+              "automationWoken": [
+                "nCino Submit for Approval, driven by a human"
+              ]
+            }
+          ],
+          "stagingId": "a8abb00001KxMvaAAF",
+          "replayed": false,
+          "provenanceJson": "{\"productPackageId\":{\"citation\":\"a5Fbb000000IHFJEA4\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"facilityIds\":{\"citation\":\"a4Zbb0000027MaYEAU\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+          "productPackageId": "a5Fbb000000IHFJEA4",
+          "planHash": "2e741b2b042f2939853b6e91c819a0e44d87b7d962d8e609bc4efc2d26d4fd65",
+          "heldReason": "A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "facilityCount": 1,
+          "facilities": [
+            {
+              "verifyStepId": "verify_clone_0",
+              "facilityName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "facilityId": "a4Zbb0000027MaYEAU",
+              "creditActionStepId": "credit_action_0",
+              "covenantCarryoverCount": 1,
+              "applyStepId": "apply_changes_0"
+            }
+          ],
+          "executionHeld": true,
+          "decisionToken": "9cf61a0bd3d967a692b4790e0a253ed0559bfcc97c4edd2859d59270bf36597f",
+          "covenantCarryoverCount": 1,
+          "accountId": "001bb00001I7FPNAA3"
+        }
+      },
+      "sortOrder": 0,
+      "version": 1
+    }
+  ],
+  "modification_flat_backcompat": [
+    {
+      "actionName": "StageLoanModification",
+      "errors": null,
+      "expectedError": false,
+      "invocationId": null,
+      "isSuccess": true,
+      "outcome": null,
+      "outputValues": {
+        "error": null,
+        "ok": true,
+        "result": {
+          "warnings": [
+            "EXECUTION IS HELD. This facility is booked and open, which is what a credit action requires, but no execute tool ships in this wave.",
+            "Booked cannot be reached through the API. Loan_Validation_06 requires nCino's Submit for Approval button and carries no permission bypass.",
+            "The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Any future execution verifies by re-query only.",
+            "The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.",
+            "1 loan-level covenant junction rows would clone onto the new facility. nCino clones the junction, not the covenant, and its own guidance says a business process must decide what happens to each one."
+          ],
+          "summary": "Plans a modification of Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 on the package. nCino would clone the facility, create the chain junction row and apply the requested changes. NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "steps": [
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Invoke the modification credit action on the package for Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "credit_action_0",
+              "fields": [
+                "clone created by nCino"
+              ],
+              "automationWoken": [
+                "nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row"
+              ]
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "verification",
+              "state": "pending",
+              "objectName": "LLC_BI__LoanRenewal__c",
+              "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 and its junction row",
+              "id": "verify_clone_0",
+              "fields": [
+                "LLC_BI__ParentLoanId__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "apply_changes_0",
+              "fields": [
+                "LLC_BI__Amount__c",
+                "LLC_BI__Maturity_Date__c",
+                "LLC_BI__Interest_Rate__c",
+                "LLC_BI__Term_Months__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": null,
+              "type": "observed_side_effect",
+              "state": "pending",
+              "objectName": null,
+              "label": "Stage-driven email alerts and memo status changes the org may run",
+              "id": "observe_side_effects",
+              "fields": [],
+              "automationWoken": [
+                "nCino Commercial - Loan After Save"
+              ]
+            },
+            {
+              "verification": null,
+              "type": "handoff",
+              "state": "pending",
+              "objectName": null,
+              "label": "HELD: execution needs an approved facility",
+              "id": "held_execution",
+              "fields": [],
+              "automationWoken": [
+                "nCino Submit for Approval, driven by a human"
+              ]
+            }
+          ],
+          "stagingId": "a8abb00001Kxr1eAAB",
+          "replayed": false,
+          "provenanceJson": "{\"productPackageId\":{\"citation\":\"a5Fbb000000IHFJEA4\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"facilityIds\":{\"citation\":\"a4Zbb0000027MaYEAU\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+          "productPackageId": "a5Fbb000000IHFJEA4",
+          "planHash": "4f8ae3aa842b9c331a2aaee8140265913017efb4c5fbcfa75e6a6c0b77d086ae",
+          "heldReason": "A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "facilityCount": 1,
+          "facilities": [
+            {
+              "verifyStepId": "verify_clone_0",
+              "facilityName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "facilityId": "a4Zbb0000027MaYEAU",
+              "creditActionStepId": "credit_action_0",
+              "covenantCarryoverCount": 1,
+              "applyStepId": "apply_changes_0"
+            }
+          ],
+          "executionHeld": true,
+          "decisionToken": "535da37a912603ef39681dc7660266afa1e3f0638885e991fd3b3eb20a38b5d6",
+          "covenantCarryoverCount": 1,
+          "accountId": "001bb00001I7FPNAA3"
+        }
+      },
+      "sortOrder": 0,
+      "version": 1
+    }
+  ],
+  "modification_flat_with_empty_list": [
+    {
+      "actionName": "StageLoanModification",
+      "errors": null,
+      "expectedError": false,
+      "invocationId": null,
+      "isSuccess": true,
+      "outcome": null,
+      "outputValues": {
+        "error": null,
+        "ok": true,
+        "result": {
+          "warnings": [
+            "EXECUTION IS HELD. This facility is booked and open, which is what a credit action requires, but no execute tool ships in this wave.",
+            "Booked cannot be reached through the API. Loan_Validation_06 requires nCino's Submit for Approval button and carries no permission bypass.",
+            "The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Any future execution verifies by re-query only.",
+            "The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.",
+            "1 loan-level covenant junction rows would clone onto the new facility. nCino clones the junction, not the covenant, and its own guidance says a business process must decide what happens to each one."
+          ],
+          "summary": "Plans a modification of Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 on the package. nCino would clone the facility, create the chain junction row and apply the requested changes. NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "steps": [
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Invoke the modification credit action on the package for Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "credit_action_0",
+              "fields": [
+                "clone created by nCino"
+              ],
+              "automationWoken": [
+                "nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row"
+              ]
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+              "type": "verification",
+              "state": "pending",
+              "objectName": "LLC_BI__LoanRenewal__c",
+              "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 and its junction row",
+              "id": "verify_clone_0",
+              "fields": [
+                "LLC_BI__ParentLoanId__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": "SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId",
+              "type": "write",
+              "state": "pending",
+              "objectName": "LLC_BI__Loan__c",
+              "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "id": "apply_changes_0",
+              "fields": [
+                "LLC_BI__Amount__c",
+                "LLC_BI__Maturity_Date__c",
+                "LLC_BI__Interest_Rate__c",
+                "LLC_BI__Term_Months__c"
+              ],
+              "automationWoken": []
+            },
+            {
+              "verification": null,
+              "type": "observed_side_effect",
+              "state": "pending",
+              "objectName": null,
+              "label": "Stage-driven email alerts and memo status changes the org may run",
+              "id": "observe_side_effects",
+              "fields": [],
+              "automationWoken": [
+                "nCino Commercial - Loan After Save"
+              ]
+            },
+            {
+              "verification": null,
+              "type": "handoff",
+              "state": "pending",
+              "objectName": null,
+              "label": "HELD: execution needs an approved facility",
+              "id": "held_execution",
+              "fields": [],
+              "automationWoken": [
+                "nCino Submit for Approval, driven by a human"
+              ]
+            }
+          ],
+          "stagingId": "a8abb00001Ky01TAAR",
+          "replayed": false,
+          "provenanceJson": "{\"productPackageId\":{\"citation\":\"a5Fbb000000IHFJEA4\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"facilityIds\":{\"citation\":\"a4Zbb0000027MaYEAU\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+          "productPackageId": "a5Fbb000000IHFJEA4",
+          "planHash": "4f8ae3aa842b9c331a2aaee8140265913017efb4c5fbcfa75e6a6c0b77d086ae",
+          "heldReason": "A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. Reaching it needs nCino's Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.",
+          "facilityCount": 1,
+          "facilities": [
+            {
+              "verifyStepId": "verify_clone_0",
+              "facilityName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+              "facilityId": "a4Zbb0000027MaYEAU",
+              "creditActionStepId": "credit_action_0",
+              "covenantCarryoverCount": 1,
+              "applyStepId": "apply_changes_0"
+            }
+          ],
+          "executionHeld": true,
+          "decisionToken": "17eae9aed37ee7756b0a18828d154e05edebdfa2946cad9cf0acf77ef2495cec",
+          "covenantCarryoverCount": 1,
+          "accountId": "001bb00001I7FPNAA3"
+        }
+      },
+      "sortOrder": 0,
+      "version": 1
+    }
+  ],
+  "modification_refusal_mixed_shapes": [
+    {
+      "actionName": "StageLoanModification",
+      "errors": null,
+      "expectedError": false,
+      "invocationId": null,
+      "isSuccess": true,
+      "outcome": null,
+      "outputValues": {
+        "error": {
+          "resumable": false,
+          "orgError": null,
+          "message": "Supply either the single loanId or facilityIds, but not both. Two shapes in one request is two intentions, and guessing which one wins would stage a modification against facilities the banker did not choose.",
+          "idempotencyKey": "wire-obs-mix-20260727a",
+          "code": "VALIDATION_FAILED"
+        },
+        "ok": false,
+        "result": null
+      },
+      "sortOrder": 0,
+      "version": 1
+    }
+  ]
+}

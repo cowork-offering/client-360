@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>cm_Actor_User__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The identity that ran stage_*. Recorded for actorStamp() ledger attribution (A33.5.8).</description>
+    <label>Staged By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Staged Actions</relationshipLabel>
+    <relationshipName>C360_Staged_Actions</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

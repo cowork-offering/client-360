@@ -1,0 +1,105 @@
+{"pages":{"Headless 360 System Topology.dc":"
+\n\n
+AETHON WEALTH ADVISOR DEMO — REFERENCE ARCHITECTURE
+As-built system topology  ·  React / Next.js  ·  LiveKit Cloud  ·  AWS Bedrock  ·  Salesforce Financial Services Cloud
+\n\n
+Next.js : HTTPS/SSE -->\n
+Salesforce : Hosted MCP (emphasis) -->\n
+Bedrock : Bedrock API -->\n
+LiveKit : WebRTC -->\n
+Next.js : voice-actions bridge -->\n
+Bedrock : voice inference -->\n
+\n\n
+HTTPS / SSE
+Hosted MCP
+Bedrock API
+WebRTC media
+voice-actions bridge
+Bedrock API · voice
+\n\n
+Browser — Client
+React 19 Advisor Portal
+App Router
+Voice Tab
+livekit-client SDK
+\n\n
+Real-time — LiveKit Cloud
+WebRTC Room
+Python voice agent
+livekit-agents 1.5
+ElevenLabs TTS · Simli Avatar
+\n\n
+Application Tier
+Next.js · Vercel / Lightsail
+/api/chat
+actions.ts
+salesforce-mcp-client.ts
+/api/voice-session
+/api/voice-actions
+/api/analysis/book
+/api/documents/evaluate
+Chat API · Server Actions · MCP Client · Voice + Doc pipelines
+\n\n
+AI — AWS Bedrock Mantle
+Claude Opus 4.6
+Chat + cross-domain analysis
+Claude Sonnet 4.6
+Doc evaluation + voice
+\n\n
+Salesforce — Financial Services Cloud
+System of Record · Backbone
+Hosted MCP servers expose a governed slice of the org  ·  the full FSC platform sits behind it.
+\n\n
+Hosted MCP Servers
+IN USE
+sobject-reads
+sobject-mutations
+custom / invokeflows
+\n\n
+FSC Data Model
+IN USE
+Person Accounts
+Households
+Financial Accounts
+Holdings
+Insurance Policies
+Assets & Liabilities
+Financial Goals
+\n\n
+Automation & Logic
+IN USE
+Flows
+Approval Processes
+Apex Services
+Platform Events
+\n\n
+Engagement
+Action Plans
+Interaction Summaries
+Record Actions
+Referrals & Leads
+\n\n
+Agentforce & Intelligence
+Available
+Agentforce Agents
+Atlas Reasoning Engine
+Einstein Trust Layer
+Data Cloud 360
+\n\n
+Trust & Compliance
+IN USE
+Sharing & FLS
+Shield Encryption
+Audit Trail
+Compliant Data Sharing
+\n\n
+CONNECTIONS
+HTTPS / SSE — chat + UI
+WebRTC + voice bridge — LiveKit
+Bedrock API — Claude inference
+Hosted MCP — Salesforce
+Actively wired in the demo
+\n\n
+\nclass Component extends DCLogic {\n  renderVals() {\n    return {\n      showVoicePlane: this.props.showVoicePlane ?? true,\n      showLegend: this.props.showLegend ?? true,\n    };\n  }\n}\n
+\n\n\n
+"},"entry":"Headless 360 System Topology.dc"}

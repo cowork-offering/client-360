@@ -1,0 +1,69 @@
+Your advisors are your greatest asset — Accenture × Salesforce × Anthropic
+Business Case
+Under the Hood
+Get Started
+The Accelerator
+Where freedom for your
+advisors begins.
+The path is defined. The reference architecture is in production. Accenture brings the wealth management depth to make your first use case the one that builds momentum.
+Project sponsors
+Implementation leads
+How to start
+Three decisions, then you're moving.
+No rip-and-replace. Pick who feels the value first, the surface they live on, and a new capability to lead with.
+Decision 01
+Who feels the value first?
+Start with the group where the pain is most visible and the win is most measurable. Advisors feel the productivity gain immediately. CSAs feel the process relief. Clients feel the speed. Pick one group, prove the value, then expand. Accenture has mapped 40 core CSA processes across FA, CSA, and client personas — we help you pick the starting point with the clearest path to a measurable win.
+Image
+Decision 02
+Where do they already live?
+The engagement layer is the surface your users already work on — web, mobile, Slack, Teams, or Claude Desktop. The right answer isn't the most sophisticated one, it's the one with the lowest adoption barrier. If your advisors live in Teams, start there. We've built the custodian integrations and compliance requirements across every major engagement surface — the choice of channel doesn't change what's possible, just where you start.
+Decision 03
+Start with what doesn't exist yet.
+Don't migrate existing workflows first. New capabilities — meeting prep, onboarding compression, compliance triage — have no legacy to compete with. They land as additions, not replacements. That's the lowest-risk, fastest-value entry point. Accenture's NeuraFlash and SFBG practice have taken this from concept to deployed solution — we know which first use cases build momentum and which ones stall.
+Image
+In production
+This isn't a proposal. It's already built.
+The reference architecture is in production. The wealth management depth is documented. The delivery team is ready.
+Reference architecture in production
+Headless 360 + Claude, wired through the MCP protocol. Every workflow traverses a security-enforced stack — never bypassing Salesforce's trust infrastructure, with a full audit trail in Salesforce for every agent action.
+40 core CSA processes mapped
+Accenture has documented the end-to-end process library for wealth management — FA personas, CSA workflows, compliance requirements, and custodian integrations. This is the institutional knowledge that turns a reference architecture into a working solution.
+A delivery team built for this
+NeuraFlash and Accenture's SFBG practice cut the time from concept to deployed solution. We bring the wealth management depth that neither Salesforce nor Anthropic has natively.
+First use cases
+Three contained starting points.
+Each is self-contained, measurable, and expandable — choose by the case you most need to make.
+Option 01
+Onboarding compression
+The highest-ROI starting point. Every day between signed client and funded account is fee revenue on hold. This use case compresses onboarding from weeks to hours for low-risk cases — straight-through processing, automated KYC routing, and parallel document workflows. The metrics are immediate and easy to defend in any executive conversation.
+20d → <24h · 25%+ → <5% NIGO
+Option 02
+Advisor meeting prep
+The fastest path to advisor adoption. Every meeting arrives with a full AI-generated brief — portfolio summary, recent life events, outstanding tasks, next-best-action suggestions. No login required, no manual prep. Advisors feel the value on day one, which builds the internal momentum that makes everything else easier to roll out.
+30% of workday returned · immediate day-one value
+Option 03
+Compliance queue triage
+The strongest case for the CDO and compliance officer. Automated KYC/AML screening, proactive flag surfacing, and a full audit trail in Salesforce for every agent action. Lowest disruption to existing workflows — it runs alongside what's already there. The compliance team signs off first, which clears the path for everything that follows.
+$10M–$100M+ fine exposure reduced · full audit trail
+Business Case
+Need to build the business case first?
+The $606M argument, four value levers, modelled against a real book.
+Learn more
+→
+Under the Hood
+Need to answer the technical questions first?
+The five-layer stack, the compliance posture, the build-vs-buy answer.
+Learn more
+→
+The next step
+Ready to define your first use case?
+Start a scoped conversation with the Accenture team.
+Start the conversation
+↗
+Contact us
+Home
+Business Case
+Under the Hood
+Get Started
+Accenture × Salesforce × Anthropic · Strategic asset · 2026

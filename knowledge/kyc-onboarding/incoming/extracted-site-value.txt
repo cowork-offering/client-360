@@ -1,0 +1,81 @@
+Your advisors are your greatest asset — Accenture × Salesforce × Anthropic
+Business Case
+Under the Hood
+Get Started
+The Value Case
+Presence is the product.
+Here's what it's worth.
+$84 trillion is changing hands. The advisors who keep it will be the ones who were fully present for their clients. Right now, their systems won't let them be. The three-year profit opportunity for a firm that acts is $606M.
+CFO
+CEO
+Head of Strategy
+Four value levers
+Where the $606M comes from.
+Each lever is modelled independently and measured against a real book. Together they compound.
+Onboarding Compression
+Funded accounts arrive faster. Revenue doesn't wait.
+Every day between signed client and funded account is fee revenue on hold. At 500 new HNW accounts a year, compressing onboarding from 20 days to under 24 hours moves weeks of revenue per account from delayed to earned. That compounds fast.
+20d → <24h
+time to onboard a low-risk client
+25%+ → <5%
+submissions returned not-in-good-order
+Advisor Productivity
+Same team. Larger book. No new headcount.
+When 30% of the workday shifts from admin back to relationships, advisors don't just feel better — they carry more. More households per advisor means the same headcount manages a larger book. That's operating leverage without a hiring plan.
+30%
+of the workday returned to clients
++25%
+advisor productivity on integrated platforms
+Compliance & Risk Reduction
+Platform-enforced compliance. The fine that never happens.
+FINRA and SEC fines aren't theoretical. They're public, they're large, and they follow firms that rely on individuals to enforce compliance manually. Platform-enforced compliance — every action logged, every check automated — removes that dependency entirely.
+$10M–$100M+
+typical regulatory fine exposure for large firms
+Contact Center Deflection
+Fewer calls. Lower cost. Clients who never had to ask.
+At $16 per inbound call, volume is a cost center. Proactive AI notifications answer the question before the client asks it. Fewer calls, lower cost, and clients who feel attended to without picking up the phone.
+$16
+cost per high-touch service call
+20–30%
+reduction in inbound call volume
+Build vs. buy
+DIY vs. Salesforce + Anthropic
+The fastest way to erase the uplift above is to rebuild the platform from scratch. Here is the trade, dimension by dimension.
+Build it yourself
+Salesforce + Anthropic
+Initial build
+Build it yourself
+FSC data model, compliance logic, and audit infrastructure — all custom.
+Salesforce + Anthropic
+Configured on a pre-built, regulated platform.
+Ongoing
+Build it yourself
+The firm absorbs every model update, security patch, and innovation lag.
+Salesforce + Anthropic
+Updates and patches absorbed by Salesforce, Anthropic, and Accenture.
+Compliance
+Build it yourself
+Custom PII masking and access control, built and maintained in-house.
+Salesforce + Anthropic
+Einstein Trust Layer — pre-built and battle-tested.
+Time to value
+Build it yourself
+Months to years.
+Salesforce + Anthropic
+Weeks for a configured deployment.
+Under the Hood
+Convinced by the numbers? Now see how it's built.
+The five-layer stack, the compliance posture, the build-vs-buy answer.
+Explore the architecture
+→
+The next step
+Bring this to the room where the decision gets made.
+See the working demo, or start a scoped conversation with the Accenture team.
+See the demo
+↗
+Contact Us
+Home
+Business Case
+Under the Hood
+Get Started
+Accenture × Salesforce × Anthropic · Strategic asset · 2026

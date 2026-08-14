@@ -1,0 +1,111 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --violet:#5b3fd4; --ink:#1a1a24; --muted:#6b6772; --faint:#8a8a9a;
+    --green:#1f9d6b; --rule:#e8e6ee; --surface:#ffffff; --wash:#f7f6fc;
+    --mono:ui-monospace,'IBM Plex Mono',SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,'IBM Plex Sans',Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--ink);background:#54525c;padding:14mm}
+  .page{width:297mm;min-height:210mm;background:#fff;margin:0 auto;padding:16mm 18mm;position:relative}
+  .eyebrow{font-family:var(--mono);font-size:8.5pt;letter-spacing:.16em;text-transform:uppercase;color:var(--violet)}
+  h1{font-size:21pt;font-weight:800;letter-spacing:-.01em;margin:2mm 0 1.5mm}
+  .lead{font-size:10pt;color:var(--muted);max-width:230mm;line-height:1.45}
+  .flow{margin-top:8mm;position:relative}
+  /* the spine line behind the step numbers */
+  .flow:before{content:"";position:absolute;left:6.0mm;top:6mm;bottom:30mm;width:2px;background:linear-gradient(#cfc7f2,#cfc7f2);z-index:0}
+  .step{display:grid;grid-template-columns:12mm 1fr;gap:6mm;align-items:start;padding:0 0 7mm 0;position:relative;z-index:1}
+  .num{width:12mm;height:12mm;border-radius:50%;background:var(--violet);color:#fff;font-weight:800;font-size:13pt;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px #fff}
+  .body{padding-top:1mm}
+  .ttl{font-size:11.5pt;font-weight:700;letter-spacing:-.01em}
+  .ttl .who{font-family:var(--mono);font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-left:3mm}
+  .desc{font-size:9.7pt;color:var(--muted);line-height:1.5;margin-top:1.5mm;max-width:210mm}
+  .desc code{font-family:var(--mono);font-size:8.6pt;background:var(--wash);color:var(--violet);padding:.5mm 1.4mm;border-radius:2px}
+  /* parallel fan-out cards */
+  .fan{display:flex;gap:5mm;margin-top:3mm}
+  .fan .card{flex:1;border:1px solid var(--rule);border-left:3px solid var(--green);border-radius:5px;padding:3mm 4mm;background:#fbfdfc}
+  .fan .card .cn{font-weight:700;font-size:9.5pt}
+  .fan .card .cd{font-size:8.4pt;color:var(--muted);margin-top:.8mm}
+  .fan .card .ct{font-family:var(--mono);font-size:7.4pt;color:var(--green);margin-top:1.5mm;letter-spacing:.02em}
+  /* SR 11-7 wall divider */
+  .wall{display:flex;align-items:center;gap:5mm;margin:1mm 0 7mm 18mm;}
+  .wall .ln{flex:1;border-top:1.5px dashed var(--green)}
+  .wall .lb{font-family:var(--mono);font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--green);white-space:nowrap}
+  .gated .num{background:#fff;color:var(--muted);border:2px dashed #c4c0cf;box-shadow:0 0 0 4px #fff}
+  .gated .ttl{color:var(--muted)}
+  .tag{display:inline-block;font-family:var(--mono);font-size:7pt;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);border:1px solid var(--rule);border-radius:3px;padding:.4mm 1.6mm;margin-left:3mm;vertical-align:middle}
+  .foot{margin-top:4mm;font-size:8.6pt;color:var(--faint);font-family:var(--mono);letter-spacing:.02em;border-top:1px solid var(--rule);padding-top:3mm}
+</style></head><body>
+<div class="page">
+  <div class="eyebrow">Data flow &middot; sequence</div>
+  <h1>How a tool call resolves</h1>
+  <div class="lead">One banker question becomes one tool call. The fleet composes the answer in code, and the regulated number is computed before the model ever sees it. Read top to bottom.</div>
+
+  <div class="flow">
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <div class="ttl">The banker asks <span class="who">Reasoning client &middot; Claude / Agentforce</span></div>
+        <div class="desc">A single tool call goes to the Customer&nbsp;360 MCP: <code>tools/call customer360_show_ews { accountId }</code>. The model orchestrates; it does not fetch or compute.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <div class="ttl">Read, as the banker <span class="who">Customer 360 MCP &middot; nCino + FSC</span></div>
+        <div class="desc">The server authenticates <b>run-as-user</b> (OAuth, <code>WITH USER_MODE</code>) and reads the relationship, exposures and covenant thresholds. Native Salesforce sharing and FLS decide what this banker may see.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <div class="ttl">Fan out, in parallel <span class="who">Aggregation tier, acting as an MCP client</span></div>
+        <div class="desc">It calls the system MCPs at the same time over streamable-HTTP (<code>tools/call</code>, 8s timeout, graceful-null so one slow source never blocks the view):</div>
+        <div class="fan">
+          <div class="card"><div class="cn">Boom</div><div class="cd">spread &amp; ratios</div><div class="ct">boom_get_ratios</div></div>
+          <div class="card"><div class="cn">AFS</div><div class="cd">servicing behaviour</div><div class="ct">revolver_utilization</div></div>
+          <div class="card"><div class="cn">Snowflake</div><div class="cd">risk migration</div><div class="ct">iris_get_signal</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div class="body">
+        <div class="ttl">Join and compute, in code <span class="who">Aggregation tier &middot; Product Package + Account spine</span></div>
+        <div class="desc">Results are joined on the one spine and the regulated number is formed here: <code>ratio &times; threshold &rarr; pass / watch / breach</code>. <b>The number is born in code, not in the model.</b></div>
+      </div>
+    </div>
+
+    <div class="wall"><div class="lb">SR 11-7 wall</div><div class="ln"></div><div class="lb">above: code computes &nbsp;&middot;&nbsp; below: model only narrates</div></div>
+
+    <div class="step">
+      <div class="num">5</div>
+      <div class="body">
+        <div class="ttl">Return a small result <span class="who">Back to the reasoning client</span></div>
+        <div class="desc">Only the computed grades and KPIs travel back, not the raw spread. The payload is small and already final.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">6</div>
+      <div class="body">
+        <div class="ttl">Rank and narrate <span class="who">Reasoning client</span></div>
+        <div class="desc">The model ranks the fired signals and explains them in plain language. <b>It never recomputes the number</b> it was handed.</div>
+      </div>
+    </div>
+
+    <div class="step gated">
+      <div class="num">7</div>
+      <div class="body">
+        <div class="ttl">Commit, gated <span class="tag">later phase</span></div>
+        <div class="desc">If a human commits a decision, a write goes back to nCino and an audit record to the Snowflake ledger. Reads are v1; writes come later, behind the gate.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Verified in experience-mcp/src/boomFinancials.js &mdash; the aggregation MCP is itself a client to the system MCPs (JSON-RPC tools/call over streamable-HTTP).</div>
+</div>
+</body></html>

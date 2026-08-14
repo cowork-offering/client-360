@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>High Level Solution Intent · Customer 360 · Commercial Credit Brain · Stage 0</title>
+<style>
+/*FONTS_PLACEHOLDER*/
+:root{
+  --ink:#1c1c22;
+  --body:#33333d;
+  --muted:#6b6772;
+  --faint:#8a8a9a;
+  --paper:#ffffff;
+  --rule:#dcdae2;
+  --rule-soft:#e8e6ee;
+  --zebra:#f4f3f8;
+
+  --violet:#5b3fd4;
+  --violet-deep:#4b32b8;
+  --dark:#1d1830;
+
+  --aws:#C26A00;
+  --aws-deep:#9a5400;
+  --aws-bright:#F6A53A;
+  --aws-tag:#232F3E;
+  --snow:#1488b8;
+
+  --now:#1f7a3a;
+  --future:#b45309;
+  --backlog:#8A8694;
+  --next:#9a5400;
+
+  --green-bg:#eef7f0; --green-line:#bcdcc6; --green-head:#2c6e43;
+  --amber-bg:#fdf6ea; --amber-line:#ecd8a8; --amber-head:#9a6b16;
+
+  --font-sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono','SFMono-Regular',Menlo,Consolas,monospace;
+
+  /* heatmap intensity scale */
+  --hm0:#f4f3f8; --hm1:#e6e0fa; --hm2:#c3b3f2; --hm3:#8a6fe0;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font-sans);
+  color:var(--body);
+  background:#54525c;
+  font-size:9.6pt;
+  line-height:1.46;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+
+/* ============================================================
+   FIXED-PAGE MODEL — A4 landscape, one chapter per .page
+   ============================================================ */
+@page{ size:A4 landscape; margin:0; }
+
+.page{
+  width:297mm; height:210mm; box-sizing:border-box;
+  background:#fff; padding:16mm 16mm 14mm;
+  position:relative; overflow:hidden;
+}
+
+@media screen{
+  body{padding:14mm 0;}
+  .page{ margin:0 auto 13mm; box-shadow:0 3px 22px rgba(0,0,0,.40); }
+}
+@media print{
+  body{background:#fff;padding:0;}
+  .page{ margin:0; box-shadow:none; break-after:page; }
+  .page:last-child{break-after:auto;}
+}
+
+/* ---- per-page running header + footer (in-page furniture) ---- */
+.ph{
+  position:absolute; top:9mm; left:16mm; right:16mm;
+  display:flex; align-items:center; justify-content:space-between;
+  font-family:var(--font-mono); font-size:7pt; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--faint);
+  padding-bottom:3px; border-bottom:0.75px solid var(--rule-soft);
+}
+.ph .ph-l .tg{color:var(--rule);}
+.ph .ph-r{display:flex;align-items:center;}
+.ph .ph-logo{height:4mm;width:auto;display:block;}
+.pf{
+  position:absolute; bottom:8mm; left:16mm; right:16mm;
+  display:flex; align-items:center; justify-content:space-between;
+  font-family:var(--font-mono); font-size:6.6pt; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--faint);
+  padding-top:3px; border-top:0.75px solid var(--rule-soft);
+}
+.pf .pf-mid{color:var(--muted);}
+
+/* the working content band between header and footer */
+.pc{ margin-top:7mm; }
+
+/* ---- prose width on landscape ---- */
+.pc p, .pc ul.tw, .pc .gi, .uc-pdesc, .pc h3.sub{max-width:262mm;}
+.pc .lead, p.lead{max-width:262mm;}
+.pc .callout{max-width:265mm;}
+
+h2,h3{break-after:avoid;}
+p{margin:0 0 7px;}
+p.lead{font-size:10.6pt;color:var(--ink);margin-bottom:10px;line-height:1.5;}
+strong{color:var(--ink);font-weight:600;}
+.vio{color:var(--violet);font-weight:600;}
+.amb{color:var(--aws-deep);font-weight:600;}
+code,.mono{font-family:var(--font-mono);font-size:8.2pt;color:var(--violet-deep);}
+.callout code{color:inherit;background:rgba(91,63,212,.07);padding:0 3px;border-radius:3px;}
+
+/* ---- section header ---- */
+.sec{
+  display:flex;align-items:baseline;gap:14px;
+  border-bottom:1.5px solid var(--ink);
+  padding-bottom:7px;margin:0 0 13px;
+}
+.sec .num{
+  font-family:var(--font-mono);font-size:13pt;font-weight:600;
+  color:var(--violet);letter-spacing:.02em;line-height:1;min-width:30px;
+}
+.sec h2{
+  font-size:15pt;font-weight:600;color:var(--ink);
+  margin:0;letter-spacing:-.01em;line-height:1.08;flex:1;
+}
+.sec .stag{
+  font-family:var(--font-mono);font-size:7pt;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--faint);white-space:nowrap;
+}
+.sec .cont{
+  font-family:var(--font-mono);font-size:7pt;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--violet);white-space:nowrap;
+}
+h3.sub{
+  font-size:10.8pt;font-weight:600;color:var(--ink);
+  margin:13px 0 6px;letter-spacing:-.005em;
+}
+h3.sub .n{font-family:var(--font-mono);color:var(--violet);font-weight:600;margin-right:7px;}
+
+/* ---- callouts ---- */
+.callout{
+  border-radius:7px;padding:11px 14px;margin:10px 0;
+  border:1px solid var(--rule);background:var(--zebra);
+}
+.callout .clab{
+  font-family:var(--font-mono);font-size:7pt;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;margin-bottom:5px;display:block;
+}
+.callout p{margin:0;font-size:9.2pt;line-height:1.46;}
+.callout p + p{margin-top:7px;}
+.callout.green{background:var(--green-bg);border-color:var(--green-line);}
+.callout.green .clab{color:var(--green-head);}
+.callout.amber{background:var(--amber-bg);border-color:var(--amber-line);}
+.callout.amber .clab{color:var(--amber-head);}
+.callout.dark{ background:var(--dark);border:0;color:#e8e4f4;padding:14px 17px; }
+.callout.dark .clab{color:#a99ce8;}
+.callout.dark p{color:#e9e6f5;font-size:9.6pt;line-height:1.52;}
+.callout.dark strong{color:#fff;}
+.callout.dark .vio{color:#b9aef0;}
+.callout.dark .amb{color:var(--aws-bright);}
+.callout.dark code{color:#cdbef7;background:rgba(255,255,255,.08);}
+
+/* illustrative example box */
+.example{
+  border:1px solid #cabfe8;border-left:4px solid var(--violet);
+  border-radius:6px;background:rgba(91,63,212,.04);
+  padding:10px 14px;margin:10px 0;
+}
+.example .exlab{
+  font-family:var(--font-mono);font-size:6.6pt;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--violet);
+  display:inline-block;border:1px solid #cabfe8;border-radius:4px;
+  padding:2px 8px;background:#fff;margin-bottom:7px;
+}
+.example p{margin:0;font-size:9pt;line-height:1.46;}
+.example p + p{margin-top:6px;}
+.example .ename{font-weight:600;color:var(--ink);}
+.tag-illus{
+  font-family:var(--font-mono);font-size:6.2pt;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--violet);
+  border:1px solid #cabfe8;border-radius:3px;padding:1px 5px;
+  background:rgba(91,63,212,.05);white-space:nowrap;
+}
+
+/* ---- tables ---- */
+table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:9pt;}
+thead th{
+  font-family:var(--font-mono);font-size:7pt;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:0 9px 6px;border-bottom:1.5px solid var(--ink);
+  vertical-align:bottom;
+}
+tbody td{
+  padding:7px 9px;border-bottom:1px solid var(--rule-soft);
+  vertical-align:top;line-height:1.4;
+}
+tbody tr:nth-child(even){background:var(--zebra);}
+td .em{font-weight:600;color:var(--ink);}
+td .sm{display:block;font-size:8pt;color:var(--muted);margin-top:2px;}
+.col-n{width:26px;font-family:var(--font-mono);color:var(--violet);font-weight:600;text-align:center;}
+table.tight tbody td{padding:5px 9px;font-size:8.6pt;line-height:1.34;}
+
+/* ---- pills ---- */
+.pill{
+  display:inline-block;font-family:var(--font-mono);font-size:6.6pt;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:4px;
+  border:1px solid var(--rule);color:var(--muted);background:#fff;white-space:nowrap;
+}
+.pill.built{color:var(--now);border-color:var(--green-line);background:#eef7f0;}
+.pill.next{color:var(--next);border-color:var(--amber-line);background:#fdf6ea;}
+.pill.gate{color:var(--amber-head);border-color:var(--amber-line);background:#fdf6ea;}
+.pill.vio{color:var(--violet);border-color:#cfc4f4;background:#efecfb;}
+
+/* effort pill (chapter 09) */
+.epill{
+  display:inline-block;font-family:var(--font-mono);font-size:6.8pt;font-weight:700;
+  letter-spacing:.04em;width:22px;text-align:center;padding:2px 0;border-radius:4px;
+  border:1px solid var(--rule);background:#fff;color:var(--muted);
+}
+.epill.s{color:#1f7a3a;border-color:var(--green-line);background:#eef7f0;}
+.epill.m{color:#9a6b16;border-color:var(--amber-line);background:#fdf6ea;}
+.epill.l{color:#9a5400;border-color:#f0d7a8;background:#fbeede;}
+.epill.xl{color:#fff;border-color:var(--violet-deep);background:var(--violet);}
+
+/* ---- figures ---- */
+figure{margin:11px 0 5px;}
+figcaption{
+  font-family:var(--font-mono);font-size:7pt;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--faint);margin-top:8px;line-height:1.45;
+}
+
+/* ---- assembly diagram (nCino vs FSC) ---- */
+.assemble{ display:grid;grid-template-columns:1fr 1fr;gap:13px;margin:12px 0 4px; }
+.lens{
+  border:1.4px solid var(--rule);border-radius:9px;background:#fff;
+  padding:12px 13px 13px;display:flex;flex-direction:column;gap:7px;
+}
+.lens.ncino{border-top:3px solid var(--violet);}
+.lens.fsc{border-top:3px solid var(--snow);}
+.lens .lh{
+  font-family:var(--font-mono);font-size:7.2pt;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding-bottom:6px;border-bottom:1px solid var(--rule-soft);
+}
+.lens.ncino .lh{color:var(--violet);}
+.lens.fsc .lh{color:var(--snow);}
+.lens .lh small{display:block;font-family:var(--font-sans);font-size:7.8pt;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted);margin-top:3px;}
+.lrow{display:flex;flex-direction:column;gap:1px;}
+.lrow b{font-size:8.6pt;color:var(--ink);font-weight:600;line-height:1.2;}
+.lrow .obj{font-family:var(--font-mono);font-size:7.2pt;color:var(--violet-deep);line-height:1.3;}
+.lrow .desc{font-size:8.2pt;color:var(--muted);line-height:1.32;}
+.assemble-foot{
+  grid-column:1 / -1;
+  border:1.5px solid var(--violet);border-radius:8px;
+  background:rgba(91,63,212,.05);padding:10px 14px;margin-top:2px;
+}
+.assemble-foot .af-h{
+  font-family:var(--font-mono);font-size:6.8pt;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--violet);margin-bottom:4px;display:block;
+}
+.assemble-foot p{margin:0;font-size:9pt;line-height:1.44;}
+
+/* ---- role catalog chips ---- */
+.rolewrap{margin:10px 0 5px;}
+.rolegroup{margin-bottom:8px;}
+.rolegroup .rg-h{
+  font-family:var(--font-mono);font-size:6.8pt;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px;display:block;
+}
+.chips{display:flex;flex-wrap:wrap;gap:5px;}
+.chips .chip{
+  font-size:8pt;font-weight:500;border-radius:5px;padding:3px 9px;
+  border:1px solid var(--rule);background:#fff;color:var(--ink);
+}
+.chips .chip.own{color:var(--violet-deep);border-color:#d3c9f4;background:#f4f1fc;}
+.chips .chip.hh{color:var(--snow);border-color:#bfe3f0;background:#eef8fc;}
+.chips .chip.mgmt{color:var(--aws-deep);border-color:#f0d7a8;background:#fdf6ea;}
+.chips .chip.more{color:var(--faint);border-style:dashed;background:var(--zebra);}
+
+/* ---- cards / surfaces grid ---- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin:12px 0 6px;}
+.card{
+  border:1.3px solid var(--rule);border-radius:9px;background:#fff;
+  padding:12px 13px;display:flex;flex-direction:column;gap:6px;
+}
+.card .ch{font-size:9.4pt;font-weight:600;color:var(--ink);line-height:1.15;}
+.card .ck{font-family:var(--font-mono);font-size:6.6pt;letter-spacing:.08em;text-transform:uppercase;color:var(--violet);}
+.card .cb{font-size:8.4pt;color:var(--muted);line-height:1.38;}
+
+/* ---- spine (three surfaces flow) ---- */
+.spine{margin:12px 0 5px;display:flex;flex-direction:column;align-items:center;gap:0;}
+.spine .snode{
+  border:1.4px solid var(--rule);border-radius:9px;background:#fff;
+  padding:9px 16px;text-align:center;width:70%;
+}
+.spine .snode b{display:block;font-size:9.6pt;color:var(--ink);font-weight:600;}
+.spine .snode .sm{font-size:7.8pt;color:var(--muted);margin-top:2px;}
+.spine .snode.center{border-color:var(--violet);border-width:2px;background:rgba(91,63,212,.04);}
+.spine .snode.center b{color:var(--violet-deep);}
+.spine .sarrow{ height:15px;border-left:1.6px solid var(--violet);opacity:.6;margin:1px 0; }
+.spine .slbl{font-family:var(--font-mono);font-size:6.4pt;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);margin:3px 0;}
+
+/* governance / through-line cards */
+.gi{
+  border:1px solid var(--rule);border-left:3px solid var(--violet);
+  border-radius:6px;background:var(--zebra);padding:9px 13px;margin:8px 0;
+  font-size:9.1pt;line-height:1.42;
+}
+.gi b{color:var(--ink);}
+
+ul.tw{margin:7px 0 9px;padding-left:0;list-style:none;}
+ul.tw li{position:relative;padding-left:17px;margin-bottom:6px;font-size:9.2pt;line-height:1.42;}
+ul.tw li::before{content:"";position:absolute;left:2px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--violet);}
+
+/* ---- use-case marquee table ---- */
+table.uctab{width:100%;border-collapse:collapse;margin:5px 0 6px;font-size:7.1pt;}
+table.uctab th{font-family:var(--font-mono);font-size:6pt;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:0 6px 4px;border-bottom:1.3px solid var(--ink);vertical-align:bottom;}
+table.uctab td{padding:2.1px 6px;border-bottom:1px solid var(--rule-soft);vertical-align:top;line-height:1.22;}
+table.uctab tbody tr:nth-child(even){background:var(--zebra);}
+table.uctab .uct-n{width:3%;font-family:var(--font-mono);color:var(--violet);font-weight:600;}
+table.uctab .uct-t{width:16%;font-weight:600;color:var(--ink);}
+table.uctab .uct-tr{width:16%;color:var(--muted);}
+table.uctab .uct-c{width:34%;}
+table.uctab .uct-a{width:18%;}
+table.uctab .uct-s{width:6%;}
+table.uctab .uct-cd{width:7%;font-size:6.4pt;color:var(--muted);}
+table.uctab tr.uct-grp td{background:#efecfb;color:var(--violet-deep);font-weight:600;font-size:7.6pt;padding:4px 6px;border-bottom:1.3px solid #cfc4f4;}
+ol.top10{margin:5px 0 8px;padding-left:17px;max-width:262mm;columns:2;column-gap:16px;}
+ol.top10 li{font-size:7.8pt;line-height:1.36;margin-bottom:4px;color:var(--body);break-inside:avoid;}
+ol.top10 li b{color:var(--ink);}
+
+/* ---- components table (chapter 09) ---- */
+table.comp{font-size:8pt;margin:8px 0 4px;}
+table.comp th{font-size:6.4pt;padding:0 7px 5px;}
+table.comp td{padding:2.6px 7px;line-height:1.24;}
+table.comp .c-name{width:15%;font-weight:600;color:var(--ink);}
+table.comp .c-what{width:53%;color:var(--body);}
+table.comp .c-eff{width:6%;text-align:center;}
+table.comp .c-st{width:11%;}
+table.comp .c-ph{width:5%;text-align:center;font-family:var(--font-mono);color:var(--violet);font-weight:600;}
+table.comp tr.cat td{background:#efecfb;color:var(--violet-deep);font-weight:600;font-size:7.4pt;letter-spacing:.04em;text-transform:uppercase;padding:4px 7px;border-bottom:1.3px solid #cfc4f4;}
+.stchip{font-family:var(--font-mono);font-size:6.4pt;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);}
+.stchip.new{color:var(--violet-deep);}
+.stchip.reuse{color:var(--now);}
+.stchip.ext{color:var(--aws-deep);}
+
+/* ---- heatmap (chapter 10) ---- */
+table.heat{font-size:7pt;margin:8px 0 4px;table-layout:fixed;}
+table.heat th{font-size:5.6pt;padding:0 2px 5px;letter-spacing:.02em;vertical-align:bottom;text-align:center;line-height:1.15;}
+table.heat th.h-comp{width:24%;text-align:left;}
+table.heat td{padding:0;border-bottom:1px solid #fff;}
+table.heat td.h-comp{padding:2px 6px;font-size:6.7pt;line-height:1.15;color:var(--ink);border-bottom:1px solid var(--rule-soft);vertical-align:middle;}
+table.heat td.cell{text-align:center;font-family:var(--font-mono);font-size:6.4pt;font-weight:600;color:#3a3550;height:13px;border:1px solid #fff;}
+table.heat td.cell.i0{background:var(--hm0);color:#c9c5d6;}
+table.heat td.cell.i1{background:var(--hm1);}
+table.heat td.cell.i2{background:var(--hm2);}
+table.heat td.cell.i3{background:var(--hm3);color:#fff;}
+.hm-legend{display:flex;align-items:center;gap:10px;margin-top:7px;font-family:var(--font-mono);font-size:6.4pt;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+.hm-legend .lg{display:inline-flex;align-items:center;gap:4px;}
+.hm-legend .sw{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--rule-soft);}
+
+/* ---- per-page fit tighteners (scoped; close small overflows without restyling globally) ---- */
+.page.fit-02 .pc p{margin-bottom:6px;}
+.page.fit-02 .assemble{gap:11px;margin:10px 0 4px;}
+.page.fit-02 .lens{padding:10px 12px 11px;gap:6px;}
+.page.fit-02 .assemble-foot{padding:9px 13px;}
+.page.fit-02 .callout{margin:8px 0;padding:10px 14px;}
+.page.fit-02 figure{margin:9px 0 5px;}
+
+.page.fit-05 .pc p{margin-bottom:6px;}
+.page.fit-05 table.tight tbody td{padding:4px 9px;line-height:1.3;}
+.page.fit-05 .spine{margin:10px 0 5px;}
+.page.fit-05 figure{margin:9px 0 5px;}
+
+.page.fit-08d table.uctab td{padding:1.7px 6px;line-height:1.18;}
+
+/* 12a — recover ~11mm: tighten lead, taxonomy rows, and the fence callout */
+.page.fit-12a .pc p.lead{margin-bottom:6px;line-height:1.4;}
+.page.fit-12a h3.sub{margin:9px 0 5px;}
+.page.fit-12a table.tight tbody td{padding:3.2px 9px;line-height:1.28;}
+.page.fit-12a .pc p{margin-bottom:6px;}
+.page.fit-12a .callout{margin:7px 0 0;padding:9px 14px;}
+.page.fit-12a .callout p{line-height:1.42;}
+
+/* 13c — data-map table + BHI callout: recover ~9mm for comfortable footer clearance */
+.page.fit-13c h3.sub{margin:6px 0 5px;}
+.page.fit-13c table.tight tbody td{padding:3.4px 9px;line-height:1.3;}
+.page.fit-13c .callout{margin:8px 0 0;padding:10px 14px;}
+.page.fit-13c .callout p{line-height:1.44;}
+.page.fit-13c .callout p + p{margin-top:6px;}
+
+/* ---- inline fleet-topology figure (chapter 11 continuation) ---- */
+.fleetfig{margin:8px 0 5px;text-align:center;}
+.fleetfig svg{display:block;width:auto;max-width:100%;height:auto;max-height:126mm;margin:0 auto;}
+.fleetnote{font-family:var(--font-mono);font-size:7pt;letter-spacing:.04em;color:var(--muted);line-height:1.45;text-align:center;max-width:248mm;margin:3px auto 0;}
+/* sequence companion (chapter 11) — 1020x724 SVG, height-bound so it never clips */
+.fleetfig.seqfig{margin:9px 0 5px;}
+.fleetfig.seqfig svg{max-height:140mm;}
+
+/* ---- EWS severity rubric (chapter 12) ---- */
+.sevwrap{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:9px 0 5px;}
+.sevcard{border:1px solid var(--rule);border-radius:7px;background:#fff;padding:9px 11px;border-top:3px solid var(--rule);}
+.sevcard .sh{font-family:var(--font-mono);font-size:7.4pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;}
+.sevcard .sh .sc{font-size:6.4pt;font-weight:500;letter-spacing:.04em;color:var(--muted);}
+.sevcard p{margin:0;font-size:8.1pt;line-height:1.36;color:var(--body);}
+.sevcard.lo{border-top-color:#1f7a3a;}.sevcard.lo .sh{color:#1f7a3a;}
+.sevcard.me{border-top-color:#9a6b16;}.sevcard.me .sh{color:#9a6b16;}
+.sevcard.hi{border-top-color:#9a5400;}.sevcard.hi .sh{color:#9a5400;}
+.sevcard.cr{border-top-color:#a32219;}.sevcard.cr .sh{color:#a32219;}
+
+/* ---- EWS escalation ladder (chapter 12) ---- */
+.ladder{display:flex;flex-direction:column;gap:0;margin:8px 0 5px;}
+.lstep{display:grid;grid-template-columns:20px 1fr;gap:9px;align-items:start;padding:4.5px 0;border-bottom:1px solid var(--rule-soft);}
+.lstep:last-child{border-bottom:0;}
+.lstep .ln{font-family:var(--font-mono);font-size:8pt;font-weight:600;color:#fff;background:var(--violet);border-radius:50%;width:17px;height:17px;line-height:17px;text-align:center;}
+.lstep .lt b{font-size:8.8pt;color:var(--ink);font-weight:600;}
+.lstep .lt .lo{font-family:var(--font-mono);font-size:6.6pt;letter-spacing:.06em;text-transform:uppercase;color:var(--violet);margin-left:7px;}
+.lstep .lt span.ld{display:block;font-size:8.2pt;color:var(--muted);line-height:1.34;margin-top:1px;}
+
+/* ---- cover ---- */
+.cover-pc{display:flex;flex-direction:column;}
+.cover .cover-rule{ border-top:1.5px solid var(--ink);margin-bottom:5mm; }
+.cover .eyebrow{
+  font-family:var(--font-mono);font-size:8.5pt;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--violet);margin:18mm 0 10px;
+}
+.cover h1{
+  font-size:34pt;font-weight:600;color:var(--ink);
+  letter-spacing:-.02em;line-height:1.04;margin:0 0 14px;max-width:200mm;
+}
+.cover .subtitle{
+  font-size:13pt;color:var(--body);line-height:1.45;margin:0 0 7mm;max-width:200mm;
+}
+.cover .subtitle .vio{color:var(--violet);font-weight:600;}
+.cover .intent{
+  font-size:10.5pt;color:var(--muted);line-height:1.55;max-width:215mm;
+  border-left:3px solid var(--violet);padding-left:14px;
+}
+.cover-meta{
+  display:flex;gap:0;margin-top:12mm;padding-top:6mm;
+  border-top:1px solid var(--rule);
+}
+.cover-meta > div{flex:1;padding-right:16px;}
+.cover-meta .mlab{
+  font-family:var(--font-mono);font-size:6.8pt;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:5px;
+}
+.cover-meta .mval{font-size:9.4pt;color:var(--body);line-height:1.42;}
+/* ============================================================
+   SCOPED DIAGRAM CSS — embedded standalone diagrams.
+   Each diagram's classes (.num/.eyebrow/h1/.lead/.foot/.row…) collide
+   with the HLSI, so every rule is scoped under a unique wrapper.
+   Outer .page padding dropped; content fills the card (~178mm tall).
+   ============================================================ */
+
+/* The chapter .sec (num + h2) already titles each diagram page, so the
+   diagram's own eyebrow + h1 are hidden to reclaim vertical space; the
+   lead survives as the page intro. All mm spacing tightened to fit ~178mm. */
+
+/* ---- three layers: agents, tools, use cases ---- */
+.dgm-tl{ --dvio:#5b3fd4; --dvio-wash:#f1eefc; --dink:#1a1a24; --dmuted:#6b6772; --dfaint:#8a8a9a; --dgreen:#1f9d6b; --drule:#e8e6ee; }
+.dgm-tl{color:var(--dink);}
+.dgm-tl .eyebrow,.dgm-tl h1{display:none;}
+.dgm-tl .lead{font-size:9.6pt;color:var(--dmuted);max-width:255mm;line-height:1.45;margin:0;}
+.dgm-tl .stack{margin-top:5mm;}
+.dgm-tl .band{display:grid;grid-template-columns:38mm 1fr;gap:7mm;align-items:center;padding:3.4mm 6mm;position:relative;}
+.dgm-tl .blabel{text-align:right;}
+.dgm-tl .blabel .bk{font-family:var(--font-mono);font-size:8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--dfaint);}
+.dgm-tl .blabel .bn{font-size:13pt;font-weight:800;letter-spacing:-.01em;margin-top:.8mm;color:var(--dink);}
+.dgm-tl .blabel .bd{font-size:8.2pt;color:var(--dmuted);margin-top:1mm;line-height:1.36;}
+.dgm-tl .row{display:flex;gap:6mm;}
+.dgm-tl .row .grp{flex:1;border:1px solid var(--drule);border-radius:7px;padding:3.6mm 4.5mm;background:#fff;}
+.dgm-tl .grp .gh{font-size:10.2pt;font-weight:700;color:var(--dink);}
+.dgm-tl .grp .gh .pin{font-family:var(--font-mono);font-size:7pt;letter-spacing:.06em;text-transform:uppercase;padding:.6mm 1.8mm;border-radius:3px;margin-left:2mm;vertical-align:middle;}
+.dgm-tl .pin.rel{background:var(--dvio-wash);color:var(--dvio);}
+.dgm-tl .pin.deal{background:#eef4f1;color:var(--dgreen);}
+.dgm-tl .grp .gd{font-size:8.6pt;color:var(--dmuted);margin-top:1.4mm;line-height:1.4;}
+.dgm-tl .grp .gd b{color:var(--dink);}
+.dgm-tl .tools{display:flex;flex-wrap:wrap;gap:4mm;}
+.dgm-tl .tool{border:1px solid var(--drule);border-radius:6px;padding:3mm 4.5mm;background:#fbfbfe;font-size:9pt;font-weight:600;min-width:40mm;color:var(--dink);}
+.dgm-tl .tool .tt{font-family:var(--font-mono);font-size:7pt;color:var(--dfaint);font-weight:500;letter-spacing:.02em;margin-top:.7mm;}
+.dgm-tl .tool.future{border-style:dashed;color:var(--dmuted);background:#fff;}
+.dgm-tl .arrow{grid-column:2;justify-self:start;margin-left:60mm;color:#c4c0cf;font-size:12pt;line-height:.6;padding:.4mm 0;}
+.dgm-tl .bandA{background:#faf9ff;border-radius:9px;}
+.dgm-tl .bandB{background:#fbfdfc;border-radius:9px;}
+.dgm-tl .key{margin-top:5mm;border-top:1px solid var(--drule);padding-top:3mm;display:flex;gap:11mm;font-size:8.6pt;color:var(--dmuted);}
+.dgm-tl .key b{color:var(--dink);}
+.dgm-tl .foot{margin-top:3mm;font-size:8.5pt;color:var(--dfaint);font-family:var(--font-mono);letter-spacing:.02em;}
+
+/* ---- how a tool call resolves ---- */
+.dgm-htc{ --dvio:#5b3fd4; --dink:#1a1a24; --dmuted:#6b6772; --dfaint:#8a8a9a; --dgreen:#1f9d6b; --drule:#e8e6ee; --dwash:#f7f6fc; }
+.dgm-htc{color:var(--dink);}
+.dgm-htc .eyebrow,.dgm-htc h1{display:none;}
+.dgm-htc .lead{font-size:9.6pt;color:var(--dmuted);max-width:250mm;line-height:1.45;margin:0;}
+.dgm-htc .flow{margin-top:4mm;position:relative;}
+.dgm-htc .flow:before{content:"";position:absolute;left:5.0mm;top:4mm;bottom:14mm;width:2px;background:#cfc7f2;z-index:0;}
+.dgm-htc .step{display:grid;grid-template-columns:10mm 1fr;gap:5.5mm;align-items:start;padding:0 0 2.2mm 0;position:relative;z-index:1;}
+.dgm-htc .step .num{width:10mm;height:10mm;border-radius:50%;background:var(--dvio);color:#fff;font-weight:800;font-size:11.5pt;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px #fff;letter-spacing:0;min-width:0;}
+.dgm-htc .body{padding-top:.4mm;}
+.dgm-htc .ttl{font-size:10.6pt;font-weight:700;letter-spacing:-.01em;color:var(--dink);}
+.dgm-htc .ttl .who{font-family:var(--font-mono);font-size:7.8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--dfaint);font-weight:600;margin-left:3mm;}
+.dgm-htc .desc{font-size:9.2pt;color:var(--dmuted);line-height:1.38;margin-top:.7mm;max-width:235mm;}
+.dgm-htc .desc code{font-family:var(--font-mono);font-size:8.4pt;background:var(--dwash);color:var(--dvio);padding:.5mm 1.4mm;border-radius:2px;}
+.dgm-htc .fan{display:flex;gap:5mm;margin-top:2mm;}
+.dgm-htc .fan .card{flex:1;border:1px solid var(--drule);border-left:3px solid var(--dgreen);border-radius:5px;padding:2mm 4mm;background:#fbfdfc;}
+.dgm-htc .fan .card .cn{font-weight:700;font-size:9.3pt;color:var(--dink);}
+.dgm-htc .fan .card .cd{font-size:8.3pt;color:var(--dmuted);margin-top:.6mm;}
+.dgm-htc .fan .card .ct{font-family:var(--font-mono);font-size:7.4pt;color:var(--dgreen);margin-top:1mm;letter-spacing:.02em;}
+.dgm-htc .wall{display:flex;align-items:center;gap:5mm;margin:.4mm 0 2.4mm 16mm;}
+.dgm-htc .wall .ln{flex:1;border-top:1.5px dashed var(--dgreen);}
+.dgm-htc .wall .lb{font-family:var(--font-mono);font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--dgreen);white-space:nowrap;}
+.dgm-htc .gated .num{background:#fff;color:var(--dmuted);border:2px dashed #c4c0cf;box-shadow:0 0 0 4px #fff;}
+.dgm-htc .gated .ttl{color:var(--dmuted);}
+.dgm-htc .tag{display:inline-block;font-family:var(--font-mono);font-size:7pt;letter-spacing:.08em;text-transform:uppercase;color:var(--dfaint);border:1px solid var(--drule);border-radius:3px;padding:.4mm 1.6mm;margin-left:3mm;vertical-align:middle;}
+.dgm-htc .foot{margin-top:3mm;font-size:8.5pt;color:var(--dfaint);font-family:var(--font-mono);letter-spacing:.02em;border-top:1px solid var(--drule);padding-top:2.4mm;}
+
+/* 12 (how-a-tool-call) — recover ~5mm so the foot clears the page footer with margin */
+.page.fit-htc .dgm-htc .flow{margin-top:3mm;}
+.page.fit-htc .dgm-htc .step{padding-bottom:1.4mm;}
+.page.fit-htc .dgm-htc .wall{margin-top:.2mm;margin-bottom:1.8mm;}
+.page.fit-htc .dgm-htc .foot{margin-top:2.4mm;padding-top:2mm;}
+
+</style>
+</head>
+<body>
+
+
+<!-- ============================================================ COVER (page 1) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc cover-pc">
+    <div class="cover-rule"></div>
+    <div class="eyebrow">High Level Solution Intent</div>
+    <h1>Customer&nbsp;360</h1>
+    <p class="subtitle">The <span class="vio">customer relationship cockpit</span> · Commercial Credit Brain</p>
+    <p class="intent">
+      A commercial credit cockpit whose subject is the customer, and the customer is the relationship
+      group: the operating entity together with its owners, guarantors, affiliates, subsidiaries, and
+      household. Exposure, wallet, risk, KYC, and profitability roll up at the group grain. A single
+      deal is one facet of the customer, a drill-in, never the center. Decision-support under
+      Federal Reserve SR 11-7: every regulated figure is deterministic server-side code; the model
+      ranks and narrates, it never computes a regulated number.
+    </p>
+    <div class="cover-meta">
+      <div><div class="mlab">Surface</div><div class="mval">Live Portfolio Dashboard, Customer 360 cockpit, deal-level Credit Memo, on one Product Package spine.</div></div>
+      <div><div class="mlab">Data model</div><div class="mval">nCino obligor lens + FSC household lens, reconciled by a groupingKey config. Boom shared spread SoR.</div></div>
+      <div><div class="mlab">Stage</div><div class="mval">Stage 0 reference build against a verified nCino + FSC banking sandbox. Honest gates stated, not hidden.</div></div>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 01 (page 2) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">01</span><h2>Solution intent: the customer is the group, not the deal</h2><span class="stag">Scope</span></div>
+    <p class="lead">This is a commercial credit cockpit, and the customer it opens is the relationship group, not a deal and not a single legal entity.</p>
+    <p>The customer is the whole connected obligor group: the operating company, its owners and principals, the guarantors, the affiliated companies and subsidiaries, and the household. Exposure, wallet, risk, KYC, and profitability all roll up at the <strong>group / obligor grain</strong>. A single deal, one nCino Product Package, is <strong>one facet of that customer</strong>, a drill-in, never the center. A relationship can carry several packages over time; the customer outlives any one of them.</p>
+    <div class="callout dark">
+      <span class="clab">The verdict, at the group grain</span>
+      <p>The cockpit is a verdict, not a viewer. It opens a relationship group and says, in one banker sentence, whether the <strong>customer</strong> is healthy, how large the whole exposure is across the group, what the single thing to worry about is, and the one best move to make right now. It does not hand the banker a grid of exposure, rating, and wallet fields and leave them to do the reading.</p>
+      <p>The governing rule for every element on screen: if you would render a table, render the <strong>conclusion the table implies</strong> plus the <strong>drill to the detail</strong> for anyone who wants to audit it. The table is the thing you drill <em>to</em>, never the thing you are handed and asked to interpret.</p>
+    </div>
+    <p>Commercial credit is the spine. KYC, collateral monitoring, and covenant monitoring are first-class through-lines that run the length of the relationship. Deposits and treasury wallet, portfolio context, and profitability are supporting relationship context at the group grain, not the organizing axis.</p>
+    <h3 class="sub">What it is not</h3>
+    <ul class="tw">
+      <li>Not an autonomous decider. It concludes, drafts, and routes; a human commits every credit action.</li>
+      <li>Not a place where regulated numbers are guessed. Exposure roll-ups, covenant grades, collateral coverage, and routing verdicts are deterministic server-side code reading verified fields.</li>
+      <li>Not a sharing bypass. It runs as the authenticated user, so Salesforce sharing and FLS are the floor on every query.</li>
+      <li>Not a generic dashboard reskinned at the group level. The entity-and-ownership graph and the group roll-up are the center of the surface, not an afterthought.</li>
+    </ul>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 02 (page 3) -->
+<div class="page fit-02">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">02</span><h2>The customer construct: how the cockpit assembles the group</h2><span class="stag">Centerpiece</span></div>
+    <p class="lead">"Who is the customer" has two co-resident answers in a modern commercial bank. The cockpit reconciles both into one group, anchored on the subject account and resolved by a per-tenant <code>groupingKey</code> config.</p>
+    <p>This assembly is the heart of the solution: it is what makes the cockpit a <em>relationship</em> cockpit rather than an account viewer. nCino assembles the group as a relationship graph plus a per-facility involvement set plus an obligor roll-up. FSC assembles the same notion differently: a Group / Household <em>is</em> an Account, with members and financial accounts rolling up to it.</p>
+    <figure>
+    <div class="assemble">
+      <div class="lens ncino">
+        <div class="lh">nCino lens · obligor view<small>Primary for C&amp;I. The populated, authoritative ownership model.</small></div>
+        <div class="lrow"><b>Relationship graph</b><span class="obj">LLC_BI__Connection__c</span><span class="desc">Account-to-account edges with ownership % (Ownership_Percent__c, Total_Direct_Indirect) and a role from the 35-role catalog.</span></div>
+        <div class="lrow"><b>Per-facility involvement</b><span class="obj">LLC_BI__Legal_Entities__c</span><span class="desc">Borrower vs Guarantor per loan / package, with Guaranty_Amount__c, Contingent_Amount__c, exclusion flags.</span></div>
+        <div class="lrow"><b>Obligor exposure rollup</b><span class="obj">TBE · TOE · TCE</span><span class="desc">Total Borrower / Obligor / Credit Exposure across the connected group. The group, not the facility, is the exposure unit.</span></div>
+      </div>
+      <div class="lens fsc">
+        <div class="lh">FSC lens · household view<small>Enriches the group with people, household, and wallet.</small></div>
+        <div class="lrow"><b>Household is an Account</b><span class="obj">record type Household / IndustriesHousehold</span><span class="desc">The household IS a record, not a field.</span></div>
+        <div class="lrow"><b>Members attach</b><span class="obj">AccountContactRelation</span><span class="desc">FinServ__Primary__c, FinServ__PrimaryGroup__c, FinServ__Rollups__c for what rolls up.</span></div>
+        <div class="lrow"><b>Related accounts</b><span class="obj">FinServ__AccountAccountRelation__c</span><span class="desc">Reciprocal roles (Household / Household Member, Business / Owner). Financial accounts roll up: FinServ__TotalBankDeposits__c.</span></div>
+      </div>
+      <div class="assemble-foot">
+        <span class="af-h">The synthesis, in fixed order</span>
+        <p>Anchor on the subject Account. Walk Connection (ownership / role) and Legal Entities (borrower / guarantor) to build the obligor group, honoring exclusion flags, rolling exposure at the TBE / TOE grain. Overlay the FSC Household (ACR + AAR + financial-account roll-ups) for people, household, and wallet. The <strong>groupingKey</strong> config selects the authoritative grouping per tenant; the Connection graph is the default because it is the populated, authoritative ownership model.</p>
+      </div>
+    </div>
+    <figcaption>Assembly: one customer = obligor group (nCino primary) enriched by the FSC household overlay, reconciled by groupingKey. Every downstream conclusion is computed once, server-side, at the group grain.</figcaption>
+    </figure>
+    <div class="callout">
+      <span class="clab">KYC is a customer / group property</span>
+      <p>Because the group is assembled once, KYC is a property of the customer, not the borrower: beneficial ownership across the group (Connection: Beneficial Owner / Owner %), CDD on the principals, and sanctions screening on <strong>every party in the group</strong>, not just the named borrower.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 03 (page 4) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">03</span><h2>Connections and household: the relationship taxonomy</h2><span class="stag">Group grain</span></div>
+    <p class="lead">The 35-role catalog (<code>LLC_BI__Connection_Role__c</code>) is what turns a set of accounts into a connected obligor group. It is the taxonomy the cockpit is built to consume.</p>
+    <div class="rolewrap">
+      <div class="rolegroup">
+        <span class="rg-h">Ownership &amp; structure</span>
+        <div class="chips">
+          <span class="chip own">Beneficial Owner</span><span class="chip own">Owner</span><span class="chip own">Co-Owner</span>
+          <span class="chip own">Parent</span><span class="chip own">Subsidiary</span><span class="chip own">Affiliated Company</span><span class="chip own">Company</span>
+        </div>
+      </div>
+      <div class="rolegroup">
+        <span class="rg-h">Household &amp; personal</span>
+        <div class="chips">
+          <span class="chip hh">Household</span><span class="chip hh">Household Member</span><span class="chip hh">Spouse</span>
+          <span class="chip hh">Life Partner</span><span class="chip hh">Child</span><span class="chip hh">Sibling</span>
+        </div>
+      </div>
+      <div class="rolegroup">
+        <span class="rg-h">Management &amp; other</span>
+        <div class="chips">
+          <span class="chip mgmt">Officer</span><span class="chip mgmt">Manager</span><span class="chip mgmt">Employee</span><span class="chip mgmt">Employer</span>
+          <span class="chip">Business Partner</span><span class="chip">Service Provider</span><span class="chip">Client</span>
+          <span class="chip more">+ more, 35 roles total</span>
+        </div>
+      </div>
+    </div>
+    <h3 class="sub">The household, two ways</h3>
+    <p>The household / connections construct is central, and it is expressed differently in each model. In <strong>nCino</strong> the household is a set of <em>edges</em> in the Connection graph (Household, Household Member, Spouse roles) tying the operating company to its principals and their family. In <strong>FSC</strong> the household is a <em>record</em>: a Household Account that groups members via AccountContactRelation and related accounts via AccountAccountRelation, with financial accounts and assets / liabilities rolling up to it. The cockpit reconciles the two so a household expressed either way resolves to one group.</p>
+    <div class="callout green">
+      <span class="clab">Why everything rolls up at group grain</span>
+      <p>Exposure (TBE / TOE), wallet (deposits + treasury unioned across nCino and FSC), risk (the binding covenant across facilities), KYC (every party screened), and profitability all aggregate at the obligor / household grain. The banker decides about the <strong>customer</strong>; the deal is the drill target underneath. This is why the obligor rollup, not the naive sum of facility limits, is the one true exposure number.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 04 (page 5) — illustrative examples -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">04</span><h2>Illustrative examples (references, not the running subject)</h2><span class="stag">Illustrative</span></div>
+    <p class="lead">The cockpit is generic. It assembles and concludes for any relationship group, of any node count, in either or both data models. The two examples below are clearly labeled illustrations of the construct at two ends of the spectrum.</p>
+    <div class="example">
+      <span class="exlab">Illustrative example · single-entity C&amp;I obligor</span>
+      <p><span class="ename">Piedmont Precision</span> <span class="tag-illus">illustrative</span>. A C&amp;I operating company. The simplest legitimate group: an operating-company borrower plus <strong>one 100% individual owner who is also the full-note guarantor</strong>. Two nodes.</p>
+      <p>The Customer 360 concludes <strong>concentration</strong>: the entire credit rests on one principal; owner equals guarantor equals a single point of both control and recourse, a credit positive (the owner is fully on the hook) and a concentration negative (key-person risk is total). The group has credit but no deposit or treasury relationship, so the headline move is the wallet gap: a credit-rich group with a hollow operating wallet is the largest unclaimed wallet on a performing name. Illustrates ownership + guaranty + obligor exposure with no deposit / household depth.</p>
+    </div>
+    <div class="example">
+      <span class="exlab">Illustrative example · FSC household</span>
+      <p><span class="ename">Timothy Norton Household</span> <span class="tag-illus">illustrative</span>. An FSC Household Account, $910,800. A Household Account grouping a primary member, a member, and a related operating business, with financial accounts rolling up to the group.</p>
+      <p>The Customer 360 concludes the inverse of the single-entity case: <strong>distribution</strong>, relationship value split across a person and a company under one household roof. Illustrates the people, the household, and the share-of-wallet roll-up at the group grain that a credit-only group structurally cannot show. The verdict lives on the wallet side: a relationship the bank holds, deposit-led, thin on treasury and lending, retain-then-deepen with the related business as the cross-sell.</p>
+    </div>
+    <div class="callout">
+      <span class="clab">The point of pairing them</span>
+      <p>The same generic cockpit, on the same group construct, concludes <strong>concentration</strong> for one customer and <strong>distribution</strong> for another, and leads with the credit verdict for one and the wallet verdict for the other, by reading the group, not by being coded for either. Wherever an example conclusion appears later in this document it carries the <span class="tag-illus">illustrative</span> tag.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 05 (page 6) — three surfaces -->
+<div class="page fit-05">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">05</span><h2>Three surfaces on one Product Package spine</h2><span class="stag">Architecture</span></div>
+    <p class="lead">The brain is three surfaces co-existing on one nCino Product Package plus Account spine, with Boom as the shared spreading system of record and the same Boom to IRIS to nCino lineage running underneath all three.</p>
+    <p>The surfaces are not a stack where one sits beneath another. The Live Portfolio Dashboard is the book-level entry; the Customer 360 (the relationship cockpit) and the Credit Memo (the deal-level underwriting workspace) co-exist as co-equal working surfaces over the same Product Package plus Account spine, and they cross-reference each other. The 360 zooms out to the whole group; the memo zooms into one deal's underwriting; neither contains the other. The deal workspace is a peer surface a banker works in directly, not only a drill-in.</p>
+    <table class="tight">
+      <thead><tr><th>Surface</th><th>Unit of view</th><th>What it concludes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">Live Portfolio Dashboard</span></td><td>The book of customers (relationship groups)</td><td>Of all my customers, which group needs me today, where is the aggregate risk and the unclaimed wallet, and which cohort is moving. Ranks the book by attention, whitespace, renewal-due, and grade migration; rolls concentration and deterioration up across groups. The book-level entry into either working surface.</td></tr>
+        <tr><td><span class="em">Customer 360</span> <span class="pill vio">relationship cockpit</span></td><td>One relationship group (the obligor / household)</td><td>Is this customer healthy, how big is the whole exposure across the group, what is the one watch item, and what is the single best move. The group entity-and-ownership graph and the group roll-up are the center. Reads the memo's verdict as the relationship's credit history.</td></tr>
+        <tr><td><span class="em">Credit Memo</span> <span class="pill built">built</span></td><td>One deal (a single Product Package)</td><td>The deep dive on Credit Analysis and Approval for one facility package: spread, collateral, covenants, risk, memo. A co-equal workspace alongside the 360 on the same spine, and a source that feeds it: rating, covenant grades, underwriting narratives, decisions.</td></tr>
+      </tbody>
+    </table>
+    <p>The credit memo is also a <strong>source feeding the 360</strong>, hand in hand: it produces the rating and rationale, the covenant analysis and grades, the underwriting narratives, and the decision plus attestation, and the 360 surfaces those as the relationship's credit history and verdict. The 360 hands group context back. Neither is a tier beneath the other.</p>
+    <figure>
+    <div class="spine">
+      <div class="snode"><b>Live Portfolio Dashboard</b><span class="sm">book of relationship groups · the book-level entry</span></div>
+      <span class="slbl">enter either working surface</span>
+      <div class="sarrow"></div>
+      <div class="snode center"><b>Customer 360 &nbsp;&harr;&nbsp; Credit Memo</b><span class="sm">CO-EQUAL surfaces on one Product Package + Account spine.<br>360 = the whole relationship group (exposure, wallet, risk, KYC, profitability roll up here); Memo = one deal's underwriting workspace.<br>they cross-reference and feed each other, hand in hand</span></div>
+    </div>
+    <figcaption>One spine, two co-equal working surfaces under a book-level entry. The dashboard opens into either; the Customer 360 and the Credit Memo co-exist over the same package and Account and feed each other. No re-spreading or recomputation across the boundary.</figcaption>
+    </figure>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 06 (1 of 2) — personas & use cases: framing + coverage matrix -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">06</span><h2>Personas and use cases: what each persona does inside the cockpit</h2><span class="cont">Use cases · 1 of 2</span></div>
+    <p class="lead">The persona is the lens, and every persona works inside the same two surfaces introduced above: the <strong>Live Portfolio Dashboard</strong> and the <strong>Customer 360</strong>. Each one walks in with a <strong>question</strong>, the cockpit <strong>concludes</strong> a customer-group verdict, and that unlocks an <strong>action</strong>. Nine personas, eighty-one use cases, one schema: trigger, question, conclusion, action, stage, cadence. The cockpit concludes and routes; a human commits.</p>
+    <p>This is not a separate tool. It is the same Live Dashboard plus Customer 360 read through nine pairs of eyes. The dashboard ranks the book so a persona finds the name that needs them; the 360 concludes on that one relationship group so they know what to do. The full catalog of all eighty-one use cases, each with its trigger, question, conclusion, action, data anchors, stage, and cadence, plus the per-persona marquee and the ten highest-value cases, is maintained in <code>USE-CASE-CATALOG.md</code>.</p>
+    <h3 class="sub">Coverage: nine personas, eighty-one use cases, across the six stages</h3>
+    <table class="tight">
+      <thead><tr><th>Persona</th><th>Prospecting</th><th>Sales</th><th>Credit Analysis</th><th>Approval</th><th>Offering &amp; Set-up</th><th>Servicing &amp; Monitoring</th><th>Row total</th></tr></thead><tbody>
+      <tr><td><strong>RM / Loan Officer</strong></td><td>1</td><td>2</td><td>&middot;</td><td>1</td><td>&middot;</td><td>5</td><td>9</td></tr>
+      <tr><td><strong>Portfolio Manager</strong></td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>1</td><td>&middot;</td><td>9</td><td>10</td></tr>
+      <tr><td><strong>Credit Analyst / Underwriter</strong></td><td>&middot;</td><td>1</td><td>3</td><td>2</td><td>&middot;</td><td>2</td><td>8</td></tr>
+      <tr><td><strong>Credit Officer / Approver</strong></td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>7</td><td>&middot;</td><td>4</td><td>11</td></tr>
+      <tr><td><strong>Loan Ops / Servicing</strong></td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>3</td><td>7</td><td>10</td></tr>
+      <tr><td><strong>Treasury / Cash-Mgmt</strong></td><td>1</td><td>2</td><td>&middot;</td><td>&middot;</td><td>1</td><td>5</td><td>9</td></tr>
+      <tr><td><strong>Compliance / BSA-AML</strong></td><td>&middot;</td><td>3</td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>4</td><td>7</td></tr>
+      <tr><td><strong>Special Assets / Workout</strong></td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>2</td><td>&middot;</td><td>6</td><td>8</td></tr>
+      <tr><td><strong>Portfolio / Credit-Risk Executive</strong></td><td>&middot;</td><td>&middot;</td><td>&middot;</td><td>1</td><td>&middot;</td><td>8</td><td>9</td></tr>
+      <tr><td><strong>Stage totals</strong></td><td>2</td><td>8</td><td>3</td><td>14</td><td>4</td><td>50</td><td><strong>81</strong></td></tr>
+      </tbody></table>
+    <p>The center of gravity is <strong>Servicing &amp; Monitoring</strong> (the book runs here daily, inside the Live Dashboard) and <strong>Approval</strong> (where the commit happens, inside the 360). Prospecting and Offering &amp; Set-up are the thinnest by design: they are event-windows, not continuous surfaces. The eighty-one are the original fifty-seven plus fourteen servicing-lifecycle cases and ten Early Warning cases (chapter 09), which deepen the Servicing &amp; Monitoring and Approval columns. All eighty-one, and the full per-persona marquee, live in <code>USE-CASE-CATALOG.md</code>.</p>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+<!-- ============================================================ 06 (2 of 2) — the shape every use case shares + representative cases -->
+<div class="page fit-08d">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">06</span><h2>The shape every use case shares</h2><span class="cont">Use cases · 2 of 2</span></div>
+    <p class="lead">Every one of the eighty-one use cases has the same four-beat shape. It is what makes them one cockpit and not nine tools: a concrete event brings the persona in, they carry one banker sentence in their head, the cockpit returns one group-level verdict, and that verdict unlocks one action.</p>
+    <div class="callout">
+      <span class="clab">The shape</span>
+      <p><strong>Trigger</strong> (the concrete event that brings the persona in) &middot; <strong>Question</strong> (the banker sentence in their head) &middot; <strong>Conclusion</strong> (one group-level verdict, never a table) &middot; <strong>Action</strong> (drill, capture a decision, flag a watch, route, stage). Two invariants throughout (SR 11-7): the cockpit concludes and routes, a human commits; every regulated number is deterministic server-side, never LLM-computed. The Piedmont and household figures are labeled illustration, never the subject.</p>
+    </div>
+    <h3 class="sub">Representative use cases (a taste; the full eighty-one live in <code>USE-CASE-CATALOG.md</code>)</h3>
+    <table class="uctab">
+      <thead><tr><th>Persona</th><th>Trigger</th><th>What the cockpit concludes</th><th>Action</th><th>Stage</th></tr></thead><tbody>
+      <tr><td class="uct-t">RM / Loan Officer</td><td class="uct-tr">Annual review due in 30 days; meeting the principal next week</td><td class="uct-c">Hold and grow, but the play is wallet, not credit. Pass/Watch (Grade 5), $12.5M committed / $4.25M drawn, secured to ~$10M lendable; the margin is the watch, but the $12.5M-credit / $0-wallet gap is the biggest opportunity. Empty profitability = unmeasured, not zero <span class="tag-illus">illustrative</span></td><td class="uct-a">Drill each evidence anchor; capture-decision on the verdict; seed the memo summary; stage the renewal package-prep</td><td class="uct-s">Servicing</td></tr>
+      <tr><td class="uct-t">Portfolio Manager</td><td class="uct-tr">Overnight: new spreads on 3 names + one utilization spike</td><td class="uct-c">Piedmont rises to the top: nothing breached, but its thinnest cushion (DSC 1.42x vs 1.25x) is thinning toward a not-yet-due test, and it outranks two mildly-overdue reviews because the deterministic urgency score weights a thinning regulated cushion ahead of a calendar slip <span class="tag-illus">illustrative</span></td><td class="uct-a">Drill the ranked Work Queue into the single-customer 360; open covenant-proximity drill; schedule an interim look or set a DSC watch-trigger</td><td class="uct-s">Servicing</td></tr>
+      <tr><td class="uct-t">Credit Officer / Approver</td><td class="uct-tr">Approvable group package, $12.5M / Grade 5, acting officer's limit below the required level</td><td class="uct-c">The cockpit applies the bank's configured authority policy, it does not decide authority: this package needs $12.5M / Grade 5 authority, the acting officer holds $10M, so the approve control is unavailable and the package must be sponsored up. For a $25M-limit officer the same matrix makes it approvable</td><td class="uct-a">Sponsor-up when above authority, or approve-within-authority when clean; the approve write is withheld at the service tier, enforced server-side, never a cockpit judgment</td><td class="uct-s">Approval</td></tr>
+      <tr><td class="uct-t">Compliance / BSA-AML</td><td class="uct-tr">Borrower crosses Sales &rarr; Credit Analysis; the CIP/sanctions file for borrower, guarantor, principal was never confirmed</td><td class="uct-c">Beneficial ownership is known and clean (one natural person, 100%, full-note guarantor), but the CIP/CDD + OFAC screen for all three parties is unverified, and unverified is not clear: it blocks credit decisioning until evidence is confirmed on file for every party</td><td class="uct-a">Route the screening gap to the BSA queue (never auto-clears); stage a task to confirm the missing evidence; hold the deterministic server-side block</td><td class="uct-s">Sales</td></tr>
+      <tr><td class="uct-t">Treasury / Cash-Mgmt</td><td class="uct-tr">Relationship lands on the credit-rich/deposit-poor queue: $12.5M committed, zero deposits, zero treasury</td><td class="uct-c">The wallet is a measured $0, not an unread one: rolled FLS-before-aggregation across the op-co, its owner-guarantor, and any affiliate, the deposit + treasury total is genuinely zero. For a $64.5M-revenue manufacturer the entire operating wallet sits at a competitor <span class="tag-illus">illustrative</span></td><td class="uct-a">Stage a draft share-of-wallet opportunity for human confirmation (never auto-create); capture a decision to pursue the TM suite at renewal; drill the credit-vs-wallet gap bar</td><td class="uct-s">Prospect</td></tr>
+      <tr><td class="uct-t">Special Assets / Workout</td><td class="uct-tr">Q3 spread lands on a watch-list name; the DSC cushion compressed a second consecutive quarter; next test inside 45 days</td><td class="uct-c">Sliding, not wobbling: the binding DSC covenant has thinned twice on margin compression, not a one-off, and on the current trajectory it trips at the next scheduled test rather than recovering. A pre-breach intervention, not a post-breach cleanup</td><td class="uct-a">Capture a workout decision (proposed-not-committed) recommending a downgrade + a pre-breach conversation; set a DSC watch-trigger; route the proposed action to committee</td><td class="uct-s">Servicing</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+<!-- ============================================================ 06 (page 7) — 6-stage blueprint -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">07</span><h2>The functional spine: the 6-stage commercial-lending blueprint</h2><span class="cont">Lifecycle · 1 of 2</span></div>
+    <p class="lead">The cockpit's spine is the recognized lifecycle of commercial lending, from first lead to a live, monitored facility, and it concludes at the customer / group level at each stage. A commercial banker does not think in sections; they think in where the customer sits between a first lead and a live, monitored facility, and what their job is at that point. Origination is the left half (01 to 04, win and underwrite the customer); maintenance and monitoring is the right half (05 to 06, board and watch the customer).</p>
+    <table class="tight">
+      <thead><tr><th class="col-n">#</th><th>Stage (system)</th><th>Customer / group-level conclusion the cockpit owes</th></tr></thead>
+      <tbody>
+        <tr><td class="col-n">01</td><td><span class="em">Prospecting</span><span class="sm">Salesforce</span></td><td>"Of the relationship groups in front of me, which customer is worth a call today, and why." Ranks the book by attention, whitespace, renewal-due.</td></tr>
+        <tr><td class="col-n">02</td><td><span class="em">Sales</span><span class="sm">nCino · pre-scoring &amp; KYC</span></td><td>"Who is the whole group I am really lending to, is the structure clean, is every party cleared to bank." Opens the entity-and-ownership graph and the group KYC posture.</td></tr>
+        <tr><td class="col-n">03</td><td><span class="em">Credit Analysis</span><span class="sm">Boom · Credit Memo</span> <span class="pill built">built</span></td><td>"Do the financials hold the grade, is the group covered if it goes wrong, is the relationship safe." The densest stage; the watch item is born here. All three through-lines live.</td></tr>
+        <tr><td class="col-n">04</td><td><span class="em">Approval</span><span class="sm">covenant finalization</span></td><td>"Does the rating call defend itself, is this within my authority or does it route, what is the group committing to." Risk verdict for effective challenge; authority state against the acting user.</td></tr>
+        <tr><td class="col-n">05</td><td><span class="em">Offering &amp; Set-up</span><span class="sm">core banking</span></td><td>"Do the booked terms match the approved package for this customer, is everything perfected before we fund." A boarding-readiness verdict, diffing approved vs booked.</td></tr>
+        <tr><td class="col-n">06</td><td><span class="em">Servicing &amp; Monitoring</span><span class="sm">Early Warning</span></td><td>"Is this customer holding or sliding, what is due or overdue across the group, what is about to go wrong." Ranks the downside (EWS) against the upside (whitespace) for the whole group.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout amber">
+      <span class="clab">Build priority</span>
+      <p>Prove on <strong>Credit Analysis (03)</strong> and <strong>Servicing &amp; Monitoring (06)</strong> first, because that is where the relationship value and the real structured data both concentrate. 03 is already built as the deal memo; 06 is where the monitoring value lives (the watch item, the covenant ticklers, the wallet gap, the deterioration feed). Do not build a stage that has no real data to conclude from; an empty stage rendered as a grid is the table the bar forbids.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 06b — the three through-lines -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">07</span><h2>The three through-lines (group-grain monitoring)</h2><span class="cont">Lifecycle · 2 of 2</span></div>
+    <p class="lead">Three concerns run the full length of the relationship rather than living in any one stage: KYC, collateral, and covenant. Each is a first-class through-line the cockpit carries from origination into monitoring, concluding at the group grain at every step.</p>
+    <div class="gi"><b>KYC.</b> Pre-scoring &amp; KYC (02), KYC &amp; DD (03), clearance on every party in the group; carried in the package and clears before funding (04 / 05); periodic refresh and sanctions re-screen across the group (06). Source: <code>KYC__c</code> / <code>Compliance_Check__c</code>, beneficial ownership from <code>LLC_BI__Connection__c</code>, OFAC / adverse media.</div>
+    <div class="gi"><b>Collateral.</b> Estimation (03); valuation (05, <code>LLC_BI__Collateral_Valuation__c</code>); monitoring (06): revaluation-due, advance / lendable drift, insurance / UCC / flood expiry, coverage erosion. Source: <code>LLC_BI__Loan_Collateral2__c</code> + <code>LLC_BI__Collateral_Valuation__c</code>.</div>
+    <div class="gi"><b>Covenant.</b> Tested against the spread (03); finalization (04), tracking starts (05); monitoring (06): next-test ticklers, cushion, breach-trending before the test date. Source: <code>LLC_BI__Covenant2__c</code> + <code>LLC_BI__Covenant_Compliance2__c</code>, deterministic <code>deal_covenant_grade</code>.</div>
+    <div class="callout">
+      <span class="clab">Why these three are through-lines, not stages</span>
+      <p>A stage is a place the customer passes through once; a through-line is a concern the bank carries for the life of the relationship. KYC, collateral, and covenant each originate early and are then <strong>monitored continuously</strong> at the group grain, which is why each appears in section 8.2 as its own cockpit section and again in stage 06 as a live monitoring beat. The cockpit concludes on each at every open; a human commits any classification or call.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 07 — the Customer 360 surface -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">08</span><h2>The Customer 360 surface: one relationship group</h2><span class="cont">Cockpit · 1 of 3</span></div>
+    <p class="lead">The Customer 360 centers on the group entity-and-ownership graph and the group roll-up, not the deal. Everything below the header aggregates at the group / obligor grain. The deal is a drill-in.</p>
+    <h3 class="sub"><span class="n">7.1</span>The group header and verdict</h3>
+    <p>One banker-grade sentence with the watch item and the next-best-action baked in, asserted about the customer / group: the group rating, the <strong>whole obligor exposure</strong> (trust the group rollup, not the sum of facility tiles), the single watch item, and the headline move. The numbers inside the sentence are deterministic and locked; the prose lens is editable. Beneath it sits a thin evidence rail where each claim is a door that drills one provenance level down toward the system of record. Profitability is honest about absence: <strong>empty is not zero, it is "unmeasured."</strong> A group with credit exposure but no deposit, treasury, or fee relationship is "we earn spread on the drawn credit and capture none of the operating economics," and that absence is itself the conclusion that points at the wallet lever.</p>
+    <h3 class="sub"><span class="n">7.2</span>Group sections (the depth under the stages)</h3>
+    <p>Each section is one contract (Question / Conclusion / Evidence and drill path / Actions / Per-persona variation / Data anchors) and concludes at the group grain:</p>
+    <ul class="tw">
+      <li><strong>Entity and ownership graph</strong> (02). Who carries the risk across the group, who backs it, where the concentration sits, what changed. The diagram renders only when the group exceeds two nodes; below that, the sentence is the graph.</li>
+      <li><strong>Exposure across the group plus collateral coverage</strong> (03 / 05 / 06). The one true group exposure number (committed / outstanding / available at the obligor rollup, never the naive sum of facility limits), where risk concentrates, whether lendable collateral covers it.</li>
+      <li><strong>KYC and compliance</strong> (02 / 03 / 06). Beneficial ownership and clearance posture across every party in the group, concluding "cleared" or "unverified, blocks decisioning," never a fabricated clearance.</li>
+      <li><strong>Financial spread, Boom snapshot</strong> (03). Whether the financials hold the grade and what is moving. The watch item is born here. Deterministic Boom engines compute every ratio; the model narrates.</li>
+      <li><strong>Risk plus covenant compliance</strong> (03 / 04 / 06). Whether the credit is holding or sliding, room before a covenant trips, whether the grade defends itself. Thinnest cushion on normalized headroom; the rest collapse to one line.</li>
+      <li><strong>Deposits / treasury plus share-of-wallet</strong> (supporting, all stages). Whether the bank owns the customer's money or just their risk, rolled up across the group; for a credit-rich group with a hollow wallet, the largest unmonetized opportunity in the relationship.</li>
+      <li><strong>Whitespace and next-best-action plus alerts / EWS</strong> (01 / 06). The upside and the downside ranked together for the whole group, because a banker does not separate protect-this from grow-this.</li>
+    </ul>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 07b — cockpit, continued -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">08</span><h2>The Customer 360 surface, continued</h2><span class="cont">Cockpit · 2 of 3</span></div>
+    <p class="lead">The same generic header concludes opposite verdicts on opposite groups, and the cockpit carries the relationship's in-flight work alongside its booked exposure.</p>
+    <div class="example">
+      <span class="exlab">Illustrative · header verdicts at two ends</span>
+      <p><span class="ename">Single-entity C&amp;I</span> <span class="tag-illus">illustrative</span>: "Pass/Watch (Grade 5), $12.5M committed / $4.25M drawn across the obligor group; holding, but margin is the story and the DSC cushion is thinnest at 1.42x vs 1.25x; biggest move: a $12.5M credit with a $0 operating wallet, win the deposits."</p>
+      <p><span class="ename">FSC household</span> <span class="tag-illus">illustrative</span>: "$910,800 in deposits across the household, deposit-led relationship; the verdict and the next move live on the wallet side." Same header, opposite conclusion, because the group data differs.</p>
+    </div>
+    <h3 class="sub"><span class="n">7.3</span>Active deals, modifications and maintenance: the in-flight relationship</h3>
+    <p>The cockpit shows the relationship as a <strong>moving book</strong>, not just booked exposure. Alongside the live facilities sit the in-flight work, all rolled up at the group grain: <strong>pipeline deals</strong> (<code>LLC_BI__Product_Package__c</code> by <code>LLC_BI__Stage__c</code>, Piedmont at "Credit Decisioning") as the live origination / expansion on the relationship; <strong>modifications mid-approval</strong> (<code>LLC_BI__Loan_Modification__c</code>: rate reductions, payment deferrals, amount increase / decrease, amortization extensions, owned by Credit / Servicing / Loan Ops, New &rarr; Under Review &rarr; Approved); <strong>renewals</strong> (<code>LLC_BI__LoanRenewal__c</code>, 43 live, <code>HasActiveRenewalLoan</code>, child <code>LLC_BI__Credit_Memo_Modifcation__c</code> tying the renewal to a memo); and <strong>servicing maintenance</strong> (AFS revolver / payment plus nCino covenant ticklers). This is where the RM, PM and Servicing personas live: what is renewing this quarter, which modifications are mid-approval, which packages are stuck in stage.</p>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 07c — cockpit, the mutating verbs + contract -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">08</span><h2>The Customer 360 surface, continued</h2><span class="cont">Cockpit · 3 of 3</span></div>
+    <p class="lead">Two genuinely mutating credit verbs stay off the surface as buttons, and every section honors one contract that concludes at the group grain.</p>
+    <h3 class="sub"><span class="n">7.4</span>The two genuinely mutating credit verbs</h3>
+    <p>Advancing the nCino stage and approving the package are <strong>not cockpit buttons</strong>. They fire only on an explicit human committee action, gated server-side against the acting user's delegated authority and the routing verdict. DRAFT-until-committee holds on everything that touches the decision. Decision capture, narrative drafting, and opportunity staging are all proposed-not-committed, logged with a server-set actor and timestamp the agent cannot override.</p>
+    <div class="callout dark">
+      <span class="clab">The contract every section honors</span>
+      <p>Each of the seven sections above is one contract (Question, Conclusion, Evidence and drill path, Actions, Per-persona variation, Data anchors) and every one concludes at the <strong>group grain</strong>, never the deal. The deal is a co-equal workspace reached alongside it. The header verdict is the sum the banker reads first; the sections are where they drill to audit it; the two mutating verbs are the only places the surface ever asks a human to commit.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 12a — Early Warning: fence, taxonomy -->
+<div class="page fit-12a">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">09</span><h2>Early Warning: triggers and how they are handled</h2><span class="cont">EWS · 1 of 3</span></div>
+    <p class="lead">The Early Warning System is the cockpit's protect-the-book reflex. It <strong>detects, grades, ranks, and routes; a human classifies and decides.</strong> Every trigger is a deterministic server-side computation over verified data, a Boom ratio, a <code>deal_covenant_grade</code>, an AFS utilization read, an IRIS PD; the number never passes through the LLM. The model ranks the fired signals and narrates the watch story. Crossing a threshold raises a flag; it never moves a grade. Severity is a decision-support score, captured proposed-not-committed; the regulatory classification (Pass / Watch / Special Mention / Substandard / Doubtful / Loss) is the credit officer's act.</p>
+    <h3 class="sub">Trigger taxonomy: seven signal classes, each from its fleet source</h3>
+    <table class="tight">
+      <thead><tr><th>Signal class</th><th>Fleet source (deterministic read)</th><th>Example trigger</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">Financial deterioration</span></td><td>Boom: <code>boom_get_ratios</code> / <code>boom_get_spread</code> over the latest spread</td><td>Leverage up, DSCR/ICR down, margin compression, or a sustained multi-period decline (the slide, not the wobble)</td></tr>
+        <tr><td><span class="em">Covenant</span></td><td>nCino: <code>deal_covenant_grade</code> over <code>LLC_BI__Covenant2__c</code></td><td>Hard breach, thin headroom below the watch band, cushion trending toward breach, or a stale compliance certificate</td></tr>
+        <tr><td><span class="em">Behavioral / servicing</span></td><td>AFS: <code>revolver_utilization</code>, <code>payment_history</code></td><td>Utilization spike past the high-water band, no clean-down (evergreening), past-dues, or payment slippage</td></tr>
+        <tr><td><span class="em">Risk migration</span></td><td>IRIS on Snowflake (zero-copy): <code>rating</code>, <code>PD</code>, sensitivity</td><td>Rating downgrade (any notch), a PD jump across a band, or a stress/sensitivity flag</td></tr>
+        <tr><td><span class="em">Deposit / wallet</span></td><td>FSC (<code>FinServ__*</code>, run-as-user) household + deposit balances</td><td>Deposit runoff, balance volatility, or wallet shrinking while credit exposure holds (the relationship thinning)</td></tr>
+        <tr><td><span class="em">External</span></td><td>CapIQ / IBIS: peer medians, sector outlook</td><td>The borrower deteriorating <em>and</em> its NAICS cohort deteriorating; raises the severity of a co-firing internal signal</td></tr>
+        <tr><td><span class="em">Structural</span></td><td>nCino: <code>LLC_BI__Loan_Collateral2__c</code>, <code>LLC_BI__Loan_Modification__c</code>, <code>LLC_BI__LoanRenewal__c</code>, Connection graph</td><td>Guarantor distress, collateral shortfall (coverage &lt; 100%), a cluster of modifications, or maturity stress</td></tr>
+      </tbody>
+    </table>
+    <p>Every signal keys on the one Product Package + Account spine, so a fired trigger rolls up to the obligor / relationship group, never an isolated loan tile. An external trigger rarely fires alone; it raises the severity of a co-firing internal signal (idiosyncratic stress inside a stressed sector is worse than either). A single soft spread is noise; the trigger demands a sustained trend or a band crossing.</p>
+    <div class="callout">
+      <span class="clab">The EWS fence (SR 11-7, restated)</span>
+      <p>No EWS output writes a grade, a classification, or a regulated number. The cockpit fires triggers from deterministic compute, scores severity, proposes watch-list placement, raises the cadence, and drafts the watch narrative. The human confirms the signal is real, sets the watch grade, makes the regulatory classification, and owns the action plan. Every severity score and placement recommendation is captured proposed-not-committed, logged via <code>log_audit_event</code>, and becomes real only when the authorized human commits it via <code>record_decision</code> (classification authority enforced server-side against the acting user).</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 12b — Early Warning: ladder, severity -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">09</span><h2>Early Warning, continued: the escalation ladder</h2><span class="cont">EWS · 2 of 3</span></div>
+    <p class="lead">The lifecycle of a fired signal, from detection to workout. Each step names the owning persona and holds the SR 11-7 line: every step the cockpit performs is detect / grade / rank / route / draft; every step a human performs is the decision.</p>
+    <h3 class="sub">Escalation ladder: detect to workout</h3>
+    <div class="ladder">
+      <div class="lstep"><span class="ln">1</span><div class="lt"><b>Detect</b><span class="lo">automatic</span><span class="ld">A trigger crosses threshold; deterministic compute fires the signal. Machine detection only, no decision.</span></div></div>
+      <div class="lstep"><span class="ln">2</span><div class="lt"><b>Grade severity</b><span class="lo">Portfolio Manager</span><span class="ld">EWS scores the firing set on the severity rubric (proposed-not-committed); the PM confirms or overrides.</span></div></div>
+      <div class="lstep"><span class="ln">3</span><div class="lt"><b>Watch-list placement</b><span class="lo">PM &rarr; Credit Officer</span><span class="ld">Name proposed for the watch list with firing rationale; the human places it (Credit Officer for grade-moving cases).</span></div></div>
+      <div class="lstep"><span class="ln">4</span><div class="lt"><b>Heightened monitoring</b><span class="lo">PM / RM</span><span class="ld">Cadence raised; watch-triggers set on the firing signals. The human confirms the cadence and subscribes.</span></div></div>
+      <div class="lstep"><span class="ln">5</span><div class="lt"><b>Action plan</b><span class="lo">RM / Loan Officer, PM</span><span class="ld">Cockpit drafts the plan skeleton (refresh spread, confirm clean-down, borrower call, re-test covenants); the human authors and commits the actions.</span></div></div>
+      <div class="lstep"><span class="ln">6</span><div class="lt"><b>Credit-officer review</b><span class="lo">Credit Officer / Approver</span><span class="ld">Package routed for effective challenge once a signal is grade-moving; lineage attached. The officer challenges and sets conditions.</span></div></div>
+      <div class="lstep"><span class="ln">7</span><div class="lt"><b>Classification</b><span class="lo">Credit Officer / Approver</span><span class="ld">Regulatory grade migration recorded if warranted. The cockpit proposes as decision-support only; the human commits Pass / Watch / Special Mention / Substandard / Doubtful / Loss.</span></div></div>
+      <div class="lstep"><span class="ln">8</span><div class="lt"><b>Workout handoff</b><span class="lo">Special Assets / Workout</span><span class="ld">If classified adverse, route to Special Assets with mod / renewal / collateral history assembled. The human owns recovery strategy and loss-content judgment.</span></div></div>
+    </div>
+    <p>Servicing signals (utilization, delinquency, overdraft) enter at step 1 owned by Loan Ops / Servicing; deposit-runoff signals route to Treasury / Cash-Mgmt in parallel; external / industry signals are read by the Portfolio / Credit-Risk Executive at the book level and drilled to the contributing name.</p>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 12c — Early Warning: severity rubric, config seams -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">09</span><h2>Early Warning, continued: severity and config seams</h2><span class="cont">EWS · 3 of 3</span></div>
+    <p class="lead">A fired signal is graded on a decision-support severity scale, never the regulatory grade. The rubric below names a default for each band; every threshold, SLA, and weight is a bank-tunable configuration seam.</p>
+    <h3 class="sub">Severity rubric (decision-support grade, never the regulatory grade)</h3>
+    <div class="sevwrap">
+      <div class="sevcard lo"><div class="sh">Low<span class="sc">Monitor</span></div><p>One soft signal, single-period or shallow, covenants compliant, no servicing corroboration. Keep standard cadence; note in the file. Owner: PM glance.</p></div>
+      <div class="sevcard me"><div class="sh">Medium<span class="sc">Watch candidate</span></div><p>A sustained financial trend, or thinning covenant headroom, or a single servicing tell, no breach. Raise to monthly; set watch-triggers. Owner: PM proposes Watch.</p></div>
+      <div class="sevcard hi"><div class="sh">High<span class="sc">Spec. Mention cand.</span></div><p>Multiple co-firing signals, or a covenant breach, or a rating downgrade with corroboration. Heightened cadence, action plan required. Owner: Credit Officer review.</p></div>
+      <div class="sevcard cr"><div class="sh">Critical<span class="sc">Adverse cand.</span></div><p>Hard breach + delinquency, or collateral shortfall + guarantor distress, or a PD jump confirmed by servicing and external stress. Immediate review, workout pre-positioning. Owner: Credit Officer &rarr; Special Assets.</p></div>
+    </div>
+    <p>Severity escalates when an external / industry signal co-fires, when modifications cluster, or when independent sources corroborate (Boom margin + AFS utilization + IRIS PD pointing the same way is worth more than three of the same source).</p>
+    <div class="callout amber">
+      <span class="clab">Config seams (incoming)</span>
+      <p>Bank-specific <strong>trigger thresholds</strong> (the &ldquo;fires when&rdquo; cutoffs), <strong>escalation SLAs</strong> (the clock on each ladder step, e.g. High &rarr; credit-officer review within N business days), and the <strong>EWS scorecard weights</strong> that turn the firing set into Low / Medium / High / Critical (plus the EWS-severity &rarr; bank-watch-grade mapping) are deliberate configuration seams. Every threshold above is a named, replaceable default; the framework absorbs the bank's values by config, not rework.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 10 — diagram: three layers (agents, tools, use cases) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">10</span><h2>The three layers: agents, tools, use cases</h2><span class="cont">Architecture · orientation</span></div>
+    <div class="dgm-tl">
+      <div class="eyebrow">Architecture &middot; orientation</div>
+      <h1>Three layers: agents, tools, and use cases</h1>
+      <div class="lead">These are three different axes, not one. Use cases belong to a domain. Agents are the reasoning shells, one per domain. Tools are the MCP servers, shared across domains. Read top down: a persona's need is met by a surface, which calls the shared fleet.</div>
+      <div class="stack">
+        <div class="band bandA">
+          <div class="blabel">
+            <div class="bk">Layer 1</div>
+            <div class="bn">Use cases</div>
+            <div class="bd">what a persona needs, grouped by domain</div>
+          </div>
+          <div class="row">
+            <div class="grp">
+              <div class="gh">Relationship <span class="pin rel">81 use cases &middot; 9 personas</span></div>
+              <div class="gd">RM, portfolio manager, analyst, credit officer, loan ops, treasury, compliance, workout, executive. Surfaced by the <b>Live Dashboard</b> and the <b>Customer 360 cockpit</b>.</div>
+            </div>
+            <div class="grp">
+              <div class="gh">Deal <span class="pin deal">underwriting</span></div>
+              <div class="gd">Draft the memo, covenant write-up, risk rating, finalize and write back. Surfaced by the <b>Credit Memo</b>.</div>
+            </div>
+          </div>
+        </div>
+        <div class="arrow">&darr;&nbsp;&nbsp;&nbsp;&nbsp;&darr;</div>
+        <div class="band bandB">
+          <div class="blabel">
+            <div class="bk">Layer 2</div>
+            <div class="bn">Agents &amp; surfaces</div>
+            <div class="bd">the reasoning shells, one per domain</div>
+          </div>
+          <div class="row">
+            <div class="grp">
+              <div class="gh">Customer 360 agent <span class="pin rel">relationship</span></div>
+              <div class="gd">Drives the Live Dashboard + the cockpit. The relationship twin (in build).</div>
+            </div>
+            <div class="grp">
+              <div class="gh">Credit Memo agent <span class="pin deal">deal</span></div>
+              <div class="gd">Drives the memo + underwriting workflow (shipped plugin).</div>
+            </div>
+            <div class="grp" style="border-style:dashed">
+              <div class="gh">Commercial Credit Brain</div>
+              <div class="gd">Unifies the domains; cross-domain memory + learning. Capstone, later.</div>
+            </div>
+          </div>
+        </div>
+        <div class="arrow">&darr;&nbsp;&nbsp;both call the same shared fleet&nbsp;&nbsp;&darr;</div>
+        <div class="band">
+          <div class="blabel">
+            <div class="bk">Layer 3</div>
+            <div class="bn">Tools</div>
+            <div class="bd">MCP servers + data, shared across every domain</div>
+          </div>
+          <div class="tools">
+            <div class="tool">Customer 360 MCP<div class="tt">nCino + FSC, run-as-user</div></div>
+            <div class="tool">experience-mcp<div class="tt">compose + join + ledger</div></div>
+            <div class="tool">Boom<div class="tt">spread + ratios</div></div>
+            <div class="tool">AFS<div class="tt">servicing</div></div>
+            <div class="tool future">IRIS<div class="tt">risk / PD &middot; later</div></div>
+            <div class="tool future">CapIQ / IBIS<div class="tt">peers &middot; later</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="key">
+        <div><b>Use cases</b> belong to a domain (relationship vs deal).</div>
+        <div><b>Agents</b> are per-domain shells; the Brain unifies them last.</div>
+        <div><b>Tools</b> are shared: one server serves many use cases across domains.</div>
+      </div>
+      <div class="foot">The 81 use cases are Customer 360. They live inside the Live Dashboard and the cockpit, not as a tool of their own.</div>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+<!-- ============================================================ 11 (fleet topology) — the MCP fleet diagram -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">11</span><h2>The MCP fleet topology</h2><span class="cont">Architecture · diagram</span></div>
+    <p class="lead">How the Salesforce-native Customer 360 MCP works hand in hand with the fleet: run-as-user OAuth through one Salesforce auth boundary, deterministic server-side compute across the off-Salesforce sources, and the SR 11-7 wall that keeps every regulated figure in code and the LLM to ranking and narration. Edges are JSON-RPC <code>tools/call</code> over streamable-HTTP; <code>experience-mcp</code> is a client to the system MCPs, joining their results in code before the cockpit ever sees a figure.</p>
+    <div class="fleetfig">
+<svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans',system-ui,sans-serif">
+<defs><marker id="arr_oauthidentity" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#5b3fd4"/></marker><marker id="arr_deterministic" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1f9d6b"/></marker><marker id="arr_narrate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8f99"/></marker><marker id="arr_render" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3a6ea5"/></marker><marker id="arr_audit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c08a2d"/></marker><marker id="arr_godmode" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c0392b"/></marker><marker id="arr_future" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa0aa"/></marker></defs>
+<rect x="0" y="0" width="1000" height="620" fill="#ffffff"/>
+<text x="14" y="24" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="17" font-weight="700" fill="#1a1d24">Customer 360 · MCP Fleet Topology</text>
+<text x="986" y="24" text-anchor="end" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10.5" fill="#7a808a">run-as-user OAuth · SR 11-7 deterministic wall · Product Package + Account spine</text>
+<line x1="204.8" y1="52" x2="204.8" y2="476" stroke="#1f9d6b" stroke-width="1.4" stroke-dasharray="3 4" opacity="0.65"/>
+<text x="204.8" y="490" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#178a5d">SR 11-7 wall</text>
+<text x="204.8" y="501" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8" fill="#6b8f7f">code computes · LLM only ranks/narrates</text>
+<text x="106.4" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Reasoning</text>
+<text x="106.4" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">clients</text>
+<text x="303.20000000000005" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Salesforce org</text>
+<text x="303.20000000000005" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">(one auth boundary)</text>
+<text x="500" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Aggregation +</text>
+<text x="500" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">governance</text>
+<text x="696.8000000000001" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Off-Salesforce</text>
+<text x="696.8000000000001" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">sources</text>
+<text x="893.6" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Surfaces</text>
+<rect x="204.8" y="78" width="196.8" height="396" rx="12" fill="#5b3fd4" fill-opacity="0.04" stroke="#5b3fd4" stroke-width="1.4" stroke-dasharray="6 4"/>
+<g transform="translate(212.8,65)">
+  <rect x="0" y="5" width="11" height="8" rx="1.6" fill="#5b3fd4"/>
+  <path d="M2 5 V3.2 A3.5 3.5 0 0 1 9 3.2 V5" fill="none" stroke="#5b3fd4" stroke-width="1.4"/>
+  <circle cx="5.5" cy="9" r="1.2" fill="#fff"/>
+</g>
+<text x="228.8" y="76" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" font-weight="600" fill="#5b3fd4">run-as-user OAuth boundary</text>
+<rect x="206.8" y="507" width="586.4000000000001" height="18" rx="9" fill="#2D2D2D"/>
+<text x="500" y="520" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9.5" font-weight="700" fill="#ffffff" letter-spacing="0.3">Product Package + Account spine</text>
+<line x1="303.20000000000005" y1="143" x2="303.20000000000005" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="303.20000000000005" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="500" y1="303" x2="500" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="500" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="893.6" y1="431" x2="893.6" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="893.6" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="696.8000000000001" y1="255" x2="696.8000000000001" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="696.8000000000001" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="696.8000000000001" y1="351" x2="696.8000000000001" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="696.8000000000001" cy="507" r="2.6" fill="#2D2D2D"/>
+<g id="edges"><path d="M 189.8 182 H 200.8 V 118 H 219.80000000000004" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 189.8 182 H 303.20000000000005 V 278 H 416.6" fill="none" stroke="#8a8f99" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr_narrate)" opacity="0.92"/><path d="M 386.6 118 H 412.6 V 182 H 386.6" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 386.6 118 H 412.6 V 246 H 386.6" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 386.6 118 H 598.4000000000001 V 406 H 810.2" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 583.4000000000001 278 H 594.8000000000001 V 134 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 583.4000000000001 278 H 597.2 V 230 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 583.4000000000001 278 H 599.6000000000001 V 326 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 583.4000000000001 278 H 602.0000000000001 V 422 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 416.6 278 H 401.6 V 118 H 386.6" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 583.4000000000001 278 H 644.6000000000001 V 150 H 810.2" fill="none" stroke="#3a6ea5" stroke-width="1.6" marker-end="url(#arr_render)" opacity="0.92"/><path d="M 583.4000000000001 278 H 696.8000000000001 V 278 H 810.2" fill="none" stroke="#3a6ea5" stroke-width="1.6" marker-end="url(#arr_render)" opacity="0.92"/><path d="M 583.4000000000001 278 H 749 V 406 H 810.2" fill="none" stroke="#3a6ea5" stroke-width="1.6" marker-end="url(#arr_render)" opacity="0.92"/><path d="M 189.8 374 H 202.8 V 118 H 219.80000000000004" fill="none" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="8 5" marker-end="url(#arr_godmode)" opacity="0.92"/><path d="M 189.8 182 H 204.8 V 310 H 219.80000000000004" fill="none" stroke="#9aa0aa" stroke-width="1.6" stroke-dasharray="2 5" marker-end="url(#arr_future)" opacity="0.92"/><path d="M 189.8 182 H 206.8 V 374 H 219.80000000000004" fill="none" stroke="#9aa0aa" stroke-width="1.6" stroke-dasharray="2 5" marker-end="url(#arr_future)" opacity="0.92"/><path d="M 189.8 182 H 208.8 V 438 H 219.80000000000004" fill="none" stroke="#9aa0aa" stroke-width="1.6" stroke-dasharray="2 5" marker-end="url(#arr_future)" opacity="0.92"/><g><rect x="185.05" y="137" width="31.5" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="200.8" y="146" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#5b3fd4" font-weight="600">OAuth</text></g><g><rect x="282.75000000000006" y="217" width="40.9" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="303.20000000000005" y="226" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#8a8f99" font-weight="600">narrate</text></g><g><rect x="562.6" y="193" width="64.4" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="594.8000000000001" y="202" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#1f9d6b" font-weight="600">fetch (code)</text></g><g><rect x="626.5000000000001" y="201" width="36.2" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="644.6000000000001" y="210" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#3a6ea5" font-weight="600">render</text></g><g><rect x="180" y="233" width="45.6" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="202.8" y="242" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#c0392b" font-weight="600">god-mode</text></g><g><rect x="186.70000000000002" y="233" width="36.2" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="204.8" y="242" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#9aa0aa" font-weight="600">future</text></g></g>
+<g id="selfloops"><path d="M 467 253 V 237 H 489 V 253" fill="none" stroke="#1f9d6b" stroke-width="1.4" marker-end="url(#arr_deterministic)" opacity="0.92"/><text x="478" y="234" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.2" font-weight="600" fill="#1f9d6b">join in code</text><path d="M 511 253 V 223 H 533 V 253" fill="none" stroke="#c08a2d" stroke-width="1.4" stroke-dasharray="2 4" marker-end="url(#arr_audit)" opacity="0.92"/><text x="522" y="220" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.2" font-weight="600" fill="#c08a2d">audit→ledger</text></g>
+<g id="cards"><rect x="23" y="157" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="106.4" y="180.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Claude / Agentforce (MCP</text><text x="106.4" y="190.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">client)</text><rect x="23" y="349" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="106.4" y="377.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Admin (god-mode)</text><rect x="23" y="349" width="4" height="50" rx="2" fill="#c0392b"/><rect x="219.80000000000004" y="93" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="303.20000000000005" y="121.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Customer 360 SF-native MCP</text><rect x="219.80000000000004" y="157" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="303.20000000000005" y="185.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">nCino (LLC_BI__* managed pkg)</text><rect x="219.80000000000004" y="221" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="303.20000000000005" y="249.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">FSC (FinServ__*)</text><rect x="219.80000000000004" y="285" width="166.8" height="50" rx="9" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="5 4"/><text x="303.20000000000005" y="308.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#7a808a">Apex-invoke MCP</text><text x="303.20000000000005" y="318.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#7a808a">(@InvocableMethod)</text><rect x="352.6" y="289" width="30" height="11" rx="5.5" fill="#e7e9ee"/><text x="367.6" y="297.4" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7" font-weight="700" fill="#7a808a">future</text><rect x="219.80000000000004" y="349" width="166.8" height="50" rx="9" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="5 4"/><text x="303.20000000000005" y="377.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#7a808a">Flow-invoke MCP</text><rect x="352.6" y="353" width="30" height="11" rx="5.5" fill="#e7e9ee"/><text x="367.6" y="361.4" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7" font-weight="700" fill="#7a808a">future</text><rect x="219.80000000000004" y="413" width="166.8" height="50" rx="9" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="5 4"/><text x="303.20000000000005" y="436.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#7a808a">nCino-published MCP (not</text><text x="303.20000000000005" y="446.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#7a808a">announced)</text><rect x="352.6" y="417" width="30" height="11" rx="5.5" fill="#e7e9ee"/><text x="367.6" y="425.4" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7" font-weight="700" fill="#7a808a">future</text><rect x="416.6" y="253" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1f9d6b" stroke-width="2.1"/><text x="500" y="276.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">experience-mcp (server-side</text><text x="500" y="286.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">join + ledger/audit)</text><rect x="613.4000000000001" y="109" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="137.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Boom (financial spreading)</text><rect x="613.4000000000001" y="205" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="233.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">AFS (servicing)</text><rect x="613.4000000000001" y="301" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="324.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">IRIS on Snowflake</text><text x="696.8000000000001" y="334.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">(rating/PD/covenant)</text><rect x="613.4000000000001" y="397" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="425.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">CapIQ / IBIS (peer medians)</text><rect x="810.2" y="125" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="893.6" y="153.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Live Portfolio Dashboard</text><rect x="810.2" y="253" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="893.6" y="281.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Customer 360 cockpit</text><rect x="810.2" y="381" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="893.6" y="404.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Credit Memo (cm_* /</text><text x="893.6" y="414.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">LLC_BI__Credit_Memo__c)</text></g>
+<g id="legend"><rect x="14" y="542" width="972" height="58" rx="8" fill="#fafbfc" stroke="#e3e6ea" stroke-width="1"/><text x="24" y="558" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9.5" font-weight="700" fill="#3a3f4a">Legend</text><rect x="78" y="548" width="16" height="11" rx="3" fill="#fff" stroke="#1a1d24" stroke-width="1.4"/><text x="100" y="557" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.5" fill="#3a3f4a">SHIPPED (solid)</text><rect x="196" y="548" width="16" height="11" rx="3" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="4 3"/><text x="218" y="557" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.5" fill="#3a3f4a">FUTURE (dashed grey)</text><line x1="24" y1="574" x2="50" y2="574" stroke="#5b3fd4" stroke-width="2" marker-end="url(#arr_oauthidentity)"/><text x="57" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">OAuth identity (run-as-user)</text><line x1="266" y1="574" x2="292" y2="574" stroke="#1f9d6b" stroke-width="2" marker-end="url(#arr_deterministic)"/><text x="299" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">deterministic (code compute)</text><line x1="508" y1="574" x2="534" y2="574" stroke="#3a6ea5" stroke-width="2" marker-end="url(#arr_render)"/><text x="541" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">render (drives surface)</text><line x1="750" y1="574" x2="776" y2="574" stroke="#8a8f99" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr_narrate)"/><text x="783" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">narrate (LLM ranks)</text><line x1="24" y1="592" x2="50" y2="592" stroke="#c08a2d" stroke-width="2" stroke-dasharray="2 4" marker-end="url(#arr_audit)"/><text x="57" y="595" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">audit (decision ledger)</text><line x1="266" y1="592" x2="292" y2="592" stroke="#c0392b" stroke-width="2" stroke-dasharray="8 5" marker-end="url(#arr_godmode)"/><text x="299" y="595" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">god-mode (admin, logged)</text><line x1="508" y1="592" x2="534" y2="592" stroke="#9aa0aa" stroke-width="2" stroke-dasharray="2 5" marker-end="url(#arr_future)"/><text x="541" y="595" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">future (speculative)</text></g>
+</svg>
+    </div>
+    <p class="fleetnote">Shipped solid; future dashed. nCino has not published an MCP server (its Analyst Digital Partner is an Agentforce-OS agent); nCino + FSC data is reachable today through the Salesforce-native surface.</p>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 12 — diagram: how a tool call resolves -->
+<div class="page fit-htc">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">12</span><h2>How a tool call resolves</h2><span class="cont">Data flow · sequence</span></div>
+    <div class="dgm-htc">
+      <div class="eyebrow">Data flow &middot; sequence</div>
+      <h1>How a tool call resolves</h1>
+      <div class="lead">One banker question becomes one tool call. The fleet composes the answer in code, and the regulated number is computed before the model ever sees it. Read top to bottom.</div>
+      <div class="flow">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="body">
+            <div class="ttl">The banker asks <span class="who">Reasoning client &middot; Claude / Agentforce</span></div>
+            <div class="desc">A single tool call goes to the Customer&nbsp;360 MCP: <code>tools/call customer360_show_ews { accountId }</code>. The model orchestrates; it does not fetch or compute.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div class="body">
+            <div class="ttl">Read, as the banker <span class="who">Customer 360 MCP &middot; nCino + FSC</span></div>
+            <div class="desc">The server authenticates <b>run-as-user</b> (OAuth, <code>WITH USER_MODE</code>) and reads the relationship, exposures and covenant thresholds. Native Salesforce sharing and FLS decide what this banker may see.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div class="body">
+            <div class="ttl">Fan out, in parallel <span class="who">Aggregation tier, acting as an MCP client</span></div>
+            <div class="desc">It calls the system MCPs at the same time over streamable-HTTP (<code>tools/call</code>, 8s timeout, graceful-null so one slow source never blocks the view):</div>
+            <div class="fan">
+              <div class="card"><div class="cn">Boom</div><div class="cd">spread &amp; ratios</div><div class="ct">boom_get_ratios</div></div>
+              <div class="card"><div class="cn">AFS</div><div class="cd">servicing behaviour</div><div class="ct">revolver_utilization</div></div>
+              <div class="card"><div class="cn">IRIS</div><div class="cd">risk migration</div><div class="ct">iris_get_signal</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">4</div>
+          <div class="body">
+            <div class="ttl">Join and compute, in code <span class="who">Aggregation tier &middot; Product Package + Account spine</span></div>
+            <div class="desc">Results are joined on the one spine and the regulated number is formed here: <code>ratio &times; threshold &rarr; pass / watch / breach</code>. <b>The number is born in code, not in the model.</b></div>
+          </div>
+        </div>
+        <div class="wall"><div class="lb">SR 11-7 wall</div><div class="ln"></div><div class="lb">above: code computes &nbsp;&middot;&nbsp; below: model only narrates</div></div>
+        <div class="step">
+          <div class="num">5</div>
+          <div class="body">
+            <div class="ttl">Return a small result <span class="who">Back to the reasoning client</span></div>
+            <div class="desc">Only the computed grades and KPIs travel back, not the raw spread. The payload is small and already final.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">6</div>
+          <div class="body">
+            <div class="ttl">Rank and narrate <span class="who">Reasoning client</span></div>
+            <div class="desc">The model ranks the fired signals and explains them in plain language. <b>It never recomputes the number</b> it was handed.</div>
+          </div>
+        </div>
+        <div class="step gated">
+          <div class="num">7</div>
+          <div class="body">
+            <div class="ttl">Commit, gated <span class="tag">later phase</span></div>
+            <div class="desc">If a human commits a decision, a write goes back to nCino and an audit record to the Snowflake ledger. Reads are v1; writes come later, behind the gate.</div>
+          </div>
+        </div>
+      </div>
+      <div class="foot">Verified in experience-mcp/src/boomFinancials.js: the aggregation MCP is itself a client to the system MCPs (JSON-RPC tools/call over streamable-HTTP).</div>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+<!-- ============================================================ 11a (page 15) — hand in hand, part 1 -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">13</span><h2>Hand in hand: where the information flows from</h2><span class="cont">Data flow · 1 of 3</span></div>
+    <p class="lead">The Customer 360 is not a database with a chat box on top. It is the reading end of a fleet of MCP servers, each already the system of record for one slice of the customer, wired together so the cockpit can conclude across all of them without ever asking the model to do arithmetic. The principle that holds the fleet together governs everything else here: every regulated figure is produced by deterministic server-side code reading a verified field, and the model only ranks and narrates what that code returns. The fleet is how the cockpit earns the word "360"; the orchestration below is how it stays inside SR 11-7.</p>
+    <p>There are two kinds of source, and the difference is the whole orchestration story. <strong>nCino and FSC are inside Salesforce</strong>, one org, one identity. The SF-native Customer 360 MCP reads them directly, run-as-user, so the platform's record sharing and FLS are the floor on every query. <strong>Boom, AFS, IRIS, and the peer libraries are outside Salesforce.</strong> Those are reached through <code>experience-mcp</code>, the aggregation and governance tier that joins them server-side, keeps the numbers off the LLM path exactly as <code>experience-mcp/boomFinancials.js</code> already does for the built credit memo, and writes the decision ledger and audit trail. The cockpit never holds a connection string to Boom or IRIS; it asks <code>experience-mcp</code> for a conclusion and gets back a figure plus its lineage.</p>
+    <h3 class="sub">The two readers, and why they are different</h3>
+    <p>The SF-native Customer 360 MCP reads nCino and FSC <strong>as the authenticated user</strong>, a deliberate upgrade over the credit memo, whose <code>sfClient.js</code> runs on a single service account and threads <code>actingUser</code> only as an audit stamp on writes. That is correct for one deal but wrong for a relationship cockpit reading far more of the customer, so the Customer 360 takes per-user OAuth (the <code>sobject-sf</code> shape) and the platform enforces sharing and FLS natively on every read. The single exception is the gated, audited admin god-mode, which widens visibility only, never write authority. The off-Salesforce sources go through <code>experience-mcp</code> because the join must happen where a regulated number is computed deterministically and never round-trips through the model: that tier pulls the Boom spread, AFS record, and IRIS rating, reconciles them server-side, attaches the lineage badge, and hands the cockpit a locked, sourced conclusion to narrate.</p>
+    <h3 class="sub">The spine every source keys on</h3>
+    <p>All of it lands on one anchor: the <strong>nCino Product Package</strong> (<code>LLC_BI__Product_Package__c</code>) joined to its <strong>Account</strong>. The package carries the deterministic exposure rollups the cockpit trusts over any naive loan sum (<code>TCE__c</code>, <code>TBE__c</code>, <code>TOE__c</code>, <code>Outstanding__c</code>), netted across the limit/sublimit structure and honoring the exposure-exclusion flags. The relationship group is assembled off the same Account spine through the Connection graph and the FSC household overlay. The deal-level credit memo is not a separate system and not a layer beneath the 360; it is a <strong>co-resident peer surface and a source</strong> on that same package (nCino <code>cm_*</code> fields, <code>LLC_BI__Credit_Memo__c</code>), co-existing with the 360 and feeding it the rating, grades, narratives and decisions. One package, one Account, surfaces that feed each other.</p>
+    <div class="callout">
+      <span class="clab">The Boom &rarr; IRIS &rarr; nCino lineage</span>
+      <p>The regulated grade has a fixed lineage, and the cockpit walks it forward as navigation, not a footnote. <strong>Boom</strong> spreads the raw statement and computes the ratios; <strong>IRIS</strong> on Snowflake consumes the spread to produce the PD and the risk rating; <strong>nCino</strong> carries the rating of record (<code>LLC_BI__Risk_Rating__c</code>) and the covenant grade (<code>deal_covenant_grade</code>). Drilling the grade descends that exact chain: nCino rating, to the IRIS PD, to the Boom line items underneath. The drill path is the audit trail walked forward by a banker.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 11b (page 16) — hand in hand, source-by-source -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">13</span><h2>Hand in hand: source by source</h2><span class="cont">Data flow · 2 of 3</span></div>
+    <p class="lead">The in-Salesforce lenses and the co-resident credit memo, plus the off-Salesforce financial and servicing sources, each a system of record for one slice of the customer and feeding the cockpit through the governed path.</p>
+    <table class="tight">
+      <thead><tr><th>Source (MCP)</th><th>Provides</th><th>Consumed by (cockpit capability)</th><th>Direction</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">nCino + FSC</span><span class="sm">one Salesforce org, SF-native MCP, run-as-user</span></td><td>Both lenses of one org: package exposure rollups (<code>LLC_BI__TCE__c</code> / <code>TBE__c</code> / <code>TOE__c</code> / <code>Outstanding__c</code>), the ownership and guaranty graph (<code>Connection__c</code>, <code>Legal_Entities__c</code>), covenants and collateral (<code>Covenant2__c</code>, <code>Loan_Collateral2__c</code>), the FSC household and wallet (<code>FinServ__AccountAccountRelation__c</code>, <code>FinancialAccount__c</code>, <code>TotalBankDeposits__c</code>), and KYC scaffolding (<code>KYC__c</code> / <code>Compliance_Check__c</code>).</td><td>Header + verdict (7.1), entity &amp; ownership graph, exposure + collateral coverage, KYC &amp; compliance, deposits/treasury share-of-wallet (7.2).</td><td>Read direct, run-as-user. Sharing + FLS enforced by the platform on every query.</td></tr>
+        <tr><td><span class="em">Credit memo</span><span class="sm">nCino <code>cm_*</code>, <code>LLC_BI__Credit_Memo__c</code> · co-resident peer source</span></td><td>The deal-level underwriting it produces on the shared spine: the rating recommendation and rationale, covenant analysis and grades, the underwriting narratives (background, financials, collateral, risk), and the decision plus attestation (logged to the Snowflake ledger via <code>experience-mcp</code>). Lives in the same nCino place the 360 reads.</td><td>Customer 360 risk panel (7.2), header verdict (7.1), and the relationship's credit history. The 360 surfaces "last underwrite concluded N Pass/Watch because…".</td><td>Co-resident peer, same spine. The memo feeds the 360 (rating, grades, narratives, decisions); the 360 hands group context back. Hand in hand, not a layer.</td></tr>
+        <tr><td><span class="em">Boom</span><span class="sm">financial spreading; statement SoR</span></td><td>The raw IS / BS / CF line items by accountCode and period, and the ratios computed on read (revenue, EBITDA margin, leverage). The system of record for every statement figure. Piedmont (illustrative): $64.5M revenue, 8.1% margin from ~11%, 3.85x leverage.</td><td>Financial spread / Boom snapshot (7.2); the margin trend that is the watch item under the DSC cushion (7.1).</td><td>Off-SF &rarr; <code>experience-mcp</code> &rarr; cockpit. Numbers computed server-side, narrated never recomputed.</td></tr>
+        <tr><td><span class="em">AFS</span><span class="sm">servicing</span></td><td>Revolver utilization, payment history, and the loan / servicing summary (<code>revolver_utilization</code>, <code>payment_history</code>, <code>loan_summary</code>), plus the servicing workpackage handoff (<code>create_workpackage</code>, <code>reserve_obligation_number</code>).</td><td>Whitespace / EWS and the watch read (7.2); the boarding and servicing-handoff path at stage 05/06. Corroborates or contradicts the Boom trend.</td><td>Off-SF &rarr; <code>experience-mcp</code> &rarr; cockpit (read); workpackage staged as a write back to servicing.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 11c (page 17) — hand in hand, source-by-source continued -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">13</span><h2>Hand in hand: source by source, continued</h2><span class="cont">Data flow · 3 of 3</span></div>
+    <p class="lead">The off-Salesforce risk and peer sources, and the aggregation tier that joins the fleet server-side and holds the memory layer, plus the co-equal deal surface on the same package.</p>
+    <table class="tight">
+      <thead><tr><th>Source (MCP)</th><th>Provides</th><th>Consumed by (cockpit capability)</th><th>Direction</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">IRIS on Snowflake</span><span class="sm">risk engine; zero-copy</span></td><td>Risk rating, PD, covenant grades, and sensitivity, computed on the Snowflake side (zero-copy). The middle link in the regulated lineage between the Boom spread and the nCino rating of record.</td><td>Risk + covenant compliance (7.2); the rating anchor and PD lineage on the header (7.1).</td><td>Off-SF &rarr; <code>experience-mcp</code> &rarr; cockpit. Deterministic; the PD/grade is never an LLM output.</td></tr>
+        <tr><td><span class="em">CapIQ / IBIS</span><span class="sm">peer + industry</span></td><td>Peer medians and the industry outlook for the borrower's NAICS, the baseline the margin read is judged against.</td><td>The peer/margin baseline under the financial spread (7.2).</td><td>Off-SF &rarr; <code>experience-mcp</code> &rarr; cockpit. Stage 0: illustrative, labeled (NAICS 332710 resolves to one account in the sandbox; no fabricated median).</td></tr>
+        <tr><td><span class="em">experience-mcp</span><span class="sm">aggregation + governance tier</span></td><td>The server-side join of Boom / AFS / IRIS / peers (per <code>boomFinancials.js</code>, numbers never through the LLM), the lineage badge on every figure, and the memory layer: the editable decision ledger (<code>record_decision</code>), the append-only audit trail (<code>log_audit_event</code> / <code>get_audit_trail</code>), and recall (<code>recall_decisions</code>).</td><td>Every section that crosses the SF boundary; the exam / QC provenance pack; the conclude-not-compute boundary itself.</td><td>Joins off-SF sources server-side; returns locked figures + lineage. Decisions and audit written back here, server-set actor + timestamp.</td></tr>
+        <tr><td><span class="em">credit-memo</span><span class="sm">deal-level surface &middot; BUILT</span></td><td>The deal-level deep dive on one Product Package (spread, collateral, covenants, risk, the memo itself). The same Boom &rarr; IRIS &rarr; nCino lineage and the same package spine. A co-equal working surface alongside the 360, not a tier beneath it.</td><td>A peer surface a banker works in directly, and the source above feeding the 360's credit history and verdict. Cross-references the 360 for group context.</td><td>Customer 360 &harr; credit-memo, co-resident on the same package. No re-spreading or recomputation across the seam.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 09a (page 12) — components & LOE part 1 -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">14</span><h2>Components &amp; information, with level of effort</h2><span class="cont">Build map · 1 of 3</span></div>
+    <p class="lead">Every buildable component, grouped by category, with what it is, an effort sizing (S / M / L / XL), its build status (new, extend, or reuse existing), and its target phase. Effort and phase are Stage-0 planning estimates. This page carries the surfaces and the cockpit sections; the next two carry monitoring, cross-cutting, integrations, and platform.</p>
+    <table class="comp">
+      <thead><tr><th class="c-name">Component</th><th class="c-what">What it is</th><th class="c-eff">Effort</th><th class="c-st">Status</th><th class="c-ph">Phase</th></tr></thead>
+      <tbody>
+      <tr class="cat"><td colspan="5">Surfaces</td></tr>
+      <tr><td class="c-name">Live Portfolio Dashboard</td><td class="c-what">The book-of-customers surface ranking relationship groups by attention, whitespace, renewal-due, and grade migration; rolls concentration and deterioration up across groups.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">Customer 360 cockpit</td><td class="c-what">The center surface: one relationship group (obligor + owners + guarantors + affiliates + household), with the entity-and-ownership graph and group roll-up at the core; concludes health, exposure, the watch item, and the next move.</td><td class="c-eff"><span class="epill xl">XL</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Credit Memo (deal-level)</td><td class="c-what">The deal-level deep dive on Credit Analysis/Approval for one Product Package; the drill-target facet of the customer, reached via deal_show_summary on the same package id.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip reuse">Reuse existing</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Product Package spine + cross-surface drill</td><td class="c-what">The single LLC_BI__Product_Package__c spine that ties all three surfaces together customer-down, with no re-spreading or recomputation across the boundary.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      <tr class="cat"><td colspan="5">Cockpit tools / sections</td></tr>
+      <tr><td class="c-name">Relationship header + verdict (incl. profitability)</td><td class="c-what">One banker-grade sentence (rating, whole-group exposure, single watch item, headline NBA) over a thin evidence rail; profitability honest as "unmeasured" when empty. Reads customer_360.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Entity &amp; ownership graph</td><td class="c-what">Who carries the risk vs who backs it across the group, concentration and what changed; diagram only above 2 nodes, else the sentence is the graph. Reads relationship_entities over LLC_BI__Connection__c + LLC_BI__Legal_Entities__c.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">2</td></tr>
+      <tr><td class="c-name">Exposure + collateral coverage</td><td class="c-what">The one true group exposure number (package TCE/TBE/TOE rollup, never the naive facility sum) plus lendable-collateral coverage. Reads relationship_exposure over LLC_BI__Product_Package__c, LLC_BI__Loan_Collateral2__c.Current_Lendable_Value__c.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Financial spread (Boom snapshot)</td><td class="c-what">Whether the financials hold the grade and what is moving; the watch item is born here (margin compression). Reads boom_get_spread / boom_get_ratios / boom_show_spread, mirrored to Boom_*__c.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Risk + covenant compliance</td><td class="c-what">Holding-or-sliding verdict, thinnest cushion on normalized headroom (binding covenant on the face, the rest one line). Reads relationship_risk over LLC_BI__Covenant2__c + LLC_BI__Covenant_Compliance2__c, grade via deal_covenant_grade.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">KYC &amp; compliance clearance</td><td class="c-what">Beneficial ownership + clearance posture across every party; empty-not-pass ("unverified, blocks decisioning"), origination vs ongoing-CDD-refresh lens. New relationship_kyc tool over KYC__c + Compliance_Check__c.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Deposits/treasury + share-of-wallet</td><td class="c-what">Do we own the customer's money or just their risk; credit-vs-wallet gap bar, the opinionated 3-of-8 treasury-service gap. Reads deposits_and_treasury over LLC_BI__Deposit__c, LLC_BI__Treasury_Service__c, FinServ__FinancialAccount__c.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">2</td></tr>
+      <tr><td class="c-name">Whitespace/NBA + alerts/EWS</td><td class="c-what">Upside (whitespace) and downside (EWS) ranked together for the whole group, each a sentence + drill + stage-a-draft action. Reads relationship_opportunities plus Opportunity, covenant cushion, Boom trend, AFS servicing signals.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Active deals, modifications &amp; maintenance view</td><td class="c-what">The in-flight relationship at group grain: pipeline deals (LLC_BI__Product_Package__c by LLC_BI__Stage__c), modifications (LLC_BI__Loan_Modification__c), renewals (LLC_BI__LoanRenewal__c, HasActiveRenewalLoan), and servicing ticklers (AFS revolver/payment + covenant tests). The moving book, not just booked exposure.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">2</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 09b — components & LOE part 2 (monitoring + cross-cutting) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">14</span><h2>Components &amp; information, continued</h2><span class="cont">Build map · 2 of 3</span></div>
+    <table class="comp">
+      <thead><tr><th class="c-name">Component</th><th class="c-what">What it is</th><th class="c-eff">Effort</th><th class="c-st">Status</th><th class="c-ph">Phase</th></tr></thead>
+      <tbody>
+      <tr class="cat"><td colspan="5">Maintenance &amp; monitoring surfaces</td></tr>
+      <tr><td class="c-name">Work Queue / Tickler</td><td class="c-what">The cross-book "what is due or overdue" home for PM/Ops; deterministic normalized urgency ranks a thin-cushion not-yet-due test over a mildly-overdue review. Classes: covenant next-test, reviews, collateral revals, UCC/insurance/flood, KYC refresh.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Collateral &amp; covenant monitoring</td><td class="c-what">The stage-06 beats: collateral revaluation-due / lendable drift / coverage erosion / perfection expiry (LLC_BI__Collateral_Valuation__c), and covenant next-test tickler + cushion trend as a watch card, never a projected grade.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">2</td></tr>
+      <tr><td class="c-name">Boarding Reconcile</td><td class="c-what">Approved-package-vs-booked-to-core diff, mismatch-flagged, the Loan Ops funding gate; the limit/sublimit anti-double-count ("board to $12.5M, not $17.5M"). Gates create_workpackage / reserve_obligation_number on conditions satisfied.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">Portfolio Roll-up tier</td><td class="c-what">The book-level tier above the single-customer 360: concentration vs limit, grade migration, aggregated deterioration; drills up to cohort and down to a name. Counts from the same deterministic deal_covenant_grade, gated by sharingModelGrantsHierarchyRollup.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">Exam / QC Provenance Pack</td><td class="c-what">Exportable examiner-ready audit: Boom-to-IRIS-to-nCino lineage on every regulated figure, AI-proposed-vs-human-attested split, append-only identity-bound trail. Substrate via log_audit_event / get_audit_trail.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr class="cat"><td colspan="5">Cross-cutting capabilities</td></tr>
+      <tr><td class="c-name">Authority / routing model</td><td class="c-what">Server-computed routing verdict requiredLevel(package) &le; actingLimit(user): within-authority vs route-to-committee, the approve write withheld at the service tier (not greyed) when above authority. Config: lendingAuthorityModel, approverFields.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">Persona-scoped FLS + partial-view marker</td><td class="c-what">The visibility pillar: FLS-before-aggregation (a denied field excluded before any total) plus "partial view, N entities not visible to you" re-checked at draw and every drill level. A named primitive every section consumes.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Drill-as-provenance navigation</td><td class="c-what">Every headline is a door that descends one provenance level to the system of record, sharing-checked at each level, bottoming on a provenance card (vendor, field API name, as-of, click-through). The audit trail walked forward.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Editable layers + locked floor</td><td class="c-what">Three editable layers (lens, judgment, narrative) over one server-enforced locked floor of sourced figures; analyst add-backs are first-class adjustment records ({value,basis,rationale,by,asOf}), never in-place edits.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Decision ledger + audit trail + recall</td><td class="c-what">The memory layer: record_decision (the editable WHY), log_audit_event/get_audit_trail (the immutable WHAT), recall_decisions to warm the next session; numbers re-derived live, never read back from the ledger.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Self-learning (ranks, never computes)</td><td class="c-what">Observe-append-aggregate-inform-close loop that tunes which conclusions surface, in what order, framed how; no learned signal is ever an input to a regulated figure or the routing/KYC state.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">Peer / segment baseline (governed)</td><td class="c-what">Same-NAICS cohort context (e.g. 332710) computed deterministically server-side over entitled records, rendered with a "derived context statistic, not a sourced figure" label and its own lineage chip; never feeds deal_covenant_grade.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">SR 11-7 governance fences (DRAFT-until-committee)</td><td class="c-what">Decision-support, never autonomous: the two mutating verbs (ncino_advance_stage, ncino_approve_package) fire only on explicit human committee action; effective-challenge affordances and the deterministic-number boundary wired into the surface.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 09c — components & LOE part 3 (integrations + platform) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">14</span><h2>Components &amp; information, continued</h2><span class="cont">Build map · 3 of 3</span></div>
+    <table class="comp">
+      <thead><tr><th class="c-name">Component</th><th class="c-what">What it is</th><th class="c-eff">Effort</th><th class="c-st">Status</th><th class="c-ph">Phase</th></tr></thead>
+      <tbody>
+      <tr class="cat"><td colspan="5">Integrations / data sources / MCP fleet</td></tr>
+      <tr><td class="c-name">nCino + FSC (one Salesforce org)</td><td class="c-what">The SF-native Customer 360 MCP reads both lenses in one org: nCino LLC_BI__* (relationship/obligor group + credit core) and FSC FinServ__* (people, household, wallet), reconciled by groupingKey config.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Boom MCP (financial spreading SoR)</td><td class="c-what">System of record for statement figures: raw IS/BS/CF line items by accountCode/period, ratios on read. Tools boom_get_spread, boom_get_ratios, boom_show_spread, boom_find_company.</td><td class="c-eff"><span class="epill s">S</span></td><td class="c-st"><span class="stchip reuse">Reuse existing</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">AFS MCP (servicing)</td><td class="c-what">Servicing source: revolver_utilization, payment_history, loan_summary, plus the post-approval handoff writes create_workpackage and reserve_obligation_number. Corroborates or contradicts the Boom trend.</td><td class="c-eff"><span class="epill s">S</span></td><td class="c-st"><span class="stchip reuse">Reuse existing</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">IRIS on Snowflake (risk)</td><td class="c-what">Risk rating, PD, covenant grades, and sensitivity via Snowflake zero-copy; the derived-ratio tier between Boom (raw) and nCino (thresholds) in the Boom-to-IRIS-to-nCino lineage.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">2</td></tr>
+      <tr><td class="c-name">CapIQ / IBIS (peer + industry)</td><td class="c-what">Peer medians and industry outlook for the margin/peer baseline; labeled as an illustrative capability where the sandbox NAICS cohort is absent, never a fabricated median.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">3</td></tr>
+      <tr><td class="c-name">experience-mcp (aggregation + governance tier)</td><td class="c-what">The cross-source server tier that joins Boom/AFS/IRIS deterministically (numbers never through the LLM, per boomFinancials.js), runs deal_covenant_grade, and holds the decision ledger + audit trail.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">credit-memo MCP (deal surface drill-target)</td><td class="c-what">The BUILT deal-level surface on the same Product Package spine: deal_show_summary, ncino_deal_prep, ncino_approve_package, ncino_advance_stage, record_decision, recall_decisions, get_audit_trail.</td><td class="c-eff"><span class="epill s">S</span></td><td class="c-st"><span class="stchip reuse">Reuse existing</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Credit memo feed (cm_*, Credit_Memo objects)</td><td class="c-what">The deal-level rating, covenant grades, underwriting narratives, and decisions the co-resident memo produces in nCino (cm_* Product-Package fields, LLC_BI__Credit_Memo__c / LLC_BI__Credit_Memo_Modifcation__c), consumed by the 360 as the relationship's credit history and verdict. A peer source, hand in hand.</td><td class="c-eff"><span class="epill s">S</span></td><td class="c-st"><span class="stchip reuse">Reuse existing</span></td><td class="c-ph">1</td></tr>
+      <tr class="cat"><td colspan="5">Foundation / platform</td></tr>
+      <tr><td class="c-name">Run-as-user OAuth identity (sobject-sf) + god-mode</td><td class="c-what">Per-user OAuth so Salesforce sharing and FLS are the platform-enforced floor on every query at the group grain; the single exception is a gated, audited admin god-mode that widens visibility only, never write authority. Blocking precondition.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Per-tenant config map (bank-agnostic)</td><td class="c-what">Managed-package namespace anchoring plus a config map (groupingKey, walletSource, recordTypeDevNames, approverFields, lendingAuthorityModel, watchThresholdPct, cockpitSectionVisibilityMap, screeningScopeRule) that ports the cockpit to any nCino+FSC bank with no code change.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Deterministic server-side compute tier</td><td class="c-what">All regulated figures (exposure roll-ups, deal_covenant_grade, lendable math, routing verdict, clearance state) computed server-side from verified fields; the LLM ranks and narrates, never computes a regulated number.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Customer/group assembly engine (groupingKey)</td><td class="c-what">Anchors on the subject Account, walks Connection (ownership/role) + Legal Entities (borrower/guarantor) honoring exclusion flags, overlays the FSC Household (ACR/AAR + roll-ups); the Connection graph is the authoritative default.</td><td class="c-eff"><span class="epill l">L</span></td><td class="c-st"><span class="stchip new">New</span></td><td class="c-ph">1</td></tr>
+      <tr><td class="c-name">Widget surface (experience-mcp ui://)</td><td class="c-what">The rendering surface for the cockpit sections, served as experience-mcp ui:// today (AXL on the roadmap); the same lock+lineage chip, DRAFT watermark, elevated-context banner, and routing chip as shared chrome.</td><td class="c-eff"><span class="epill m">M</span></td><td class="c-st"><span class="stchip ext">Extend</span></td><td class="c-ph">1</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 10 (page 14) — components x personas heatmap -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">15</span><h2>The components &times; personas heatmap</h2><span class="stag">Demand map</span></div>
+    <p class="lead">How heavily each component serves each persona, on a 0 to 3 intensity scale. The darker the cell, the more central that component is to that persona's daily work. It reads the build map against the persona catalog: where the violet concentrates is where to build first.</p>
+    <table class="heat">
+      <thead><tr>
+        <th class="h-comp">Component</th>
+        <th>RM / Loan Officer</th><th>Portfolio Manager</th><th>Credit Analyst / UW</th><th>Credit Officer / Approver</th><th>Loan Ops / Servicing</th><th>Treasury / Cash-Mgmt</th><th>Compliance / BSA-AML</th><th>Special Assets / Workout</th><th>Portfolio / Risk Exec</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="h-comp">Customer 360 verdict (header + NBA)</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i3">3</td></tr>
+        <tr><td class="h-comp">Entity &amp; ownership graph</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Exposure + collateral coverage</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i3">3</td><td class="cell i2">2</td></tr>
+        <tr><td class="h-comp">Deposits / treasury wallet (share-of-wallet)</td><td class="cell i2">2</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i3">3</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Financial spread (Boom, system of record)</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i2">2</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Risk + covenant compliance (deal_covenant_grade)</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i3">3</td><td class="cell i2">2</td></tr>
+        <tr><td class="h-comp">KYC / compliance gate (relationship_kyc)</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Whitespace / next-best-action + EWS</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i3">3</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Work Queue / Tickler (maintenance home)</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Portfolio roll-up tier (concentration vs limit)</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i0">0</td><td class="cell i2">2</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i3">3</td></tr>
+        <tr><td class="h-comp">Exam / QC provenance pack</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i3">3</td></tr>
+        <tr><td class="h-comp">Authority / routing model (&sect;5.6)</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i3">3</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Boarding reconcile (approved vs booked)</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i0">0</td></tr>
+        <tr><td class="h-comp">Memory: decision ledger + recall</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i2">2</td></tr>
+        <tr><td class="h-comp">Self-learning (ranks surfacing, never computes)</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">FLS / partial-view scope primitive (&sect;5.7)</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i2">2</td></tr>
+        <tr><td class="h-comp">IRIS risk (PD / risk rating, Snowflake)</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i2">2</td><td class="cell i2">2</td></tr>
+        <tr><td class="h-comp">AFS servicing (revolver_utilization / payment_history)</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i3">3</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Peer / IBIS / CapIQ industry medians</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i2">2</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i2">2</td></tr>
+        <tr><td class="h-comp">Active deals / modifications / renewals</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i2">2</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i1">1</td></tr>
+        <tr><td class="h-comp">Credit memo (narratives + rating + decisions)</td><td class="cell i2">2</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i3">3</td><td class="cell i1">1</td><td class="cell i0">0</td><td class="cell i1">1</td><td class="cell i2">2</td><td class="cell i2">2</td></tr>
+      </tbody>
+    </table>
+    <div class="hm-legend">
+      <span>Intensity</span>
+      <span class="lg"><span class="sw" style="background:var(--hm0)"></span>0 none</span>
+      <span class="lg"><span class="sw" style="background:var(--hm1)"></span>1 light</span>
+      <span class="lg"><span class="sw" style="background:var(--hm2)"></span>2 moderate</span>
+      <span class="lg"><span class="sw" style="background:var(--hm3)"></span>3 central</span>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 13a — Functional requirements: scope & phased roadmap -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">16</span><h2>Functional requirements &amp; prioritization: the phased roadmap</h2><span class="cont">Requirements · 1 of 4</span></div>
+    <p class="lead">v1 is the floor, not the whole house. The first thing that ships is a <strong>read-only Early Warning portfolio dashboard</strong> (the four KPI tiles, the borrower-health alerts rail, recent clients ranked by risk-velocity) that <strong>drills into a read-only single-customer 360</strong> (header verdict, entity / ownership graph, exposure, risk, deals / mods / renewals, credit history). No writes in v1. The cockpit concludes and routes; a human commits, on every later phase.</p>
+    <table class="tight">
+      <thead><tr><th>Phase</th><th>What ships</th><th>What it unlocks</th><th>Dependency</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">v1: Read-only cockpit + EWS</span> <span class="pill vio">now</span></td><td>EWS portfolio dashboard &rarr; drill into read-only single-customer 360. Live sources: nCino + FSC reads, Boom ratios / spread, AFS servicing, <code>deal_covenant_grade</code>, Snowflake decision ledger. IRIS + peers stubbed.</td><td>Protect-the-book oversight today: see the deteriorating names, drill to the why, all run-as-user.</td><td>The proven fetch-ready fleet (no new source build); the chosen render surface.</td></tr>
+        <tr><td><span class="em">v2: Write actions (gated)</span></td><td><code>record_decision</code>, watch-list placement, task creation, stage a modification / renewal, via the proven credit-memo write path, gated.</td><td>The cockpit stops being read-only oversight and starts committing the human's decision into the system of record.</td><td>v1 data spine + per-call PII audit verified; <code>EXPERIENCE_ALLOW_WRITES</code> gating.</td></tr>
+        <tr><td><span class="em">v3: Live IRIS + peers + scorecard</span></td><td>IRIS rating / PD live (Snowflake), CapIQ / IBIS peers live; the EWS scorecard weights + bank thresholds wired in.</td><td>All 7 EWS signal classes live (not 5 / 7); severity + BHI tuned to the bank's own risk appetite.</td><td>IRIS / Snowflake + CapIQ / IBIS wiring; the incoming EWS weights / thresholds from the bank.</td></tr>
+        <tr><td><span class="em">v4: Scale surfaces</span></td><td>Hosted Next.js web dashboard (Lightning Out 2.0), M365 / Copilot, ChatGPT Apps, same data layer.</td><td>The cockpit reaches bankers where they already work, at production fidelity.</td><td>The shared per-user-OAuth data layer hardened once; the Entra &rarr; SF bridge for M365.</td></tr>
+      </tbody>
+    </table>
+    <p>Each phase stands on the one verified before it. v1 ships against the fetch-ready fleet with no new source build; everything after is additive, gated, and ordered so the read spine and the audit floor are proven before a single write verb or a stubbed source goes live.</p>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 13b — Functional requirements: HAVE vs NEED + data mapping -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">16</span><h2>Functional requirements, continued: have vs need, and the data map</h2><span class="cont">Requirements · 2 of 4</span></div>
+    <p class="lead">The HAVE column is fetch-ready now, no new build; the NEED column is what reaches full v1+. Coverage today: HAVE already covers identity / scoping, the KPI tiles, the alerts rail, the single-customer 360, and <strong>5 of 7 EWS signal classes</strong>. Only IRIS risk-migration and CapIQ / IBIS external / industry are stubbed.</p>
+    <table class="tight">
+      <thead><tr><th>HAVE: fetch-ready now, no new build</th><th>NEED: to reach full v1+</th></tr></thead>
+      <tbody>
+        <tr><td><code>sobject-sf</code> nCino + FSC reads (the read spine, proxied today)</td><td>The <strong>native Customer 360 MCP</strong> as the run-as-user read spine (we proxy via <code>sobject-sf</code> today)</td></tr>
+        <tr><td>Boom ratios + spread (<code>boom_get_ratios</code> / <code>boom_get_spread</code>, server-side via <code>boomFinancials.js</code>)</td><td>Live <strong>IRIS</strong> rating / PD / sensitivity on Snowflake (2 of 7 EWS signal classes still stubbed)</td></tr>
+        <tr><td>AFS servicing (<code>revolver_utilization</code>, <code>payment_history</code>, <code>loan_summary</code>)</td><td>Live <strong>CapIQ / IBIS</strong> peer medians + sector outlook (the other stubbed signal class)</td></tr>
+        <tr><td><code>deal_covenant_grade</code> over <code>LLC_BI__Covenant2__c</code> (threshold vs actual)</td><td>The <strong>EWS scorecard weights + bank-specific thresholds</strong> (incoming from the bank, drop in by config)</td></tr>
+        <tr><td>The Snowflake <strong>decision ledger</strong> (<code>recall_decisions</code> / <code>record_decision</code> / <code>log_audit_event</code>)</td><td><strong>Deeper seed depth</strong>, the sandbox is Piedmont-only; demo the book with synthetic siblings</td></tr>
+        <tr><td>The proven <strong>credit-memo write path</strong> + the <strong>experience-mcp compose pattern</strong> (MCP-as-client, server-side join)</td><td>The <strong>chosen render surface(s)</strong>, Claude MCP App widget + Agentforce-in-FSC twin first</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <span class="clab">Data mapping: every row is a deterministic read</span>
+      <p>Two invariants hold on all of them: the cockpit <strong>concludes and routes, a human commits</strong>; every regulated figure is <strong>deterministic server-side, never LLM-computed</strong>. The full element-by-element mapping (every field and status legend) lives in <code>DATA-MAPPING.md</code>; the next page carries the condensed map.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 13c — Functional requirements: condensed data mapping + BHI -->
+<div class="page fit-13c">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">16</span><h2>Functional requirements, continued: data map &amp; Borrower Health Index</h2><span class="cont">Requirements · 3 of 4</span></div>
+    <h3 class="sub">Data mapping (condensed)</h3>
+    <table class="tight">
+      <thead><tr><th>Dashboard element</th><th>Source field / tool</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Acting user / &ldquo;Good morning, {name}&rdquo;</td><td><code>getUserInfo</code> (run-as-user OAuth)</td><td>Verified-live</td></tr>
+        <tr><td>Portfolio scope (the RM's book)</td><td><code>OwnerId = me</code> OR named-officer lookups (<code>Account.Primary_Officer__c</code>, package / loan officer); graceful fallback to ownership + obligor group when nulls</td><td>Verified-live field / Shallow-seed depth</td></tr>
+        <tr><td>Managed Exposure (KPI tile)</td><td><code>SUM(LLC_BI__Product_Package__c.LLC_BI__TCE__c)</code>, TCE rollup, never naive loan sum</td><td>Verified-live / Shallow depth</td></tr>
+        <tr><td>Active Clients / Open Tasks</td><td><code>COUNT(DISTINCT Account)</code> · <code>COUNT(Task WHERE OwnerId=me AND IsClosed=false)</code></td><td>Verified-live</td></tr>
+        <tr><td>Exposure (per borrower / 360)</td><td><code>Package.LLC_BI__TCE__c / TBE__c / TOE__c</code> + collateral lendable value</td><td>Verified-live / Shallow depth</td></tr>
+        <tr><td>Risk grade (the regulatory anchor)</td><td><code>Package.LLC_BI__Risk_Rating__c</code> (Piedmont = 5) · loan <code>LLC_BI__Risk_Grade__c</code></td><td>Verified-live</td></tr>
+        <tr><td>EWS state (Pass / Watch / Alert)</td><td>Banded from the fired-trigger set + severity rubric</td><td>Computed</td></tr>
+        <tr><td>EWS signal classes</td><td>5 of 7 live (financial, covenant, servicing, deposit, structural); IRIS migration + CapIQ / IBIS peers stubbed</td><td>Verified-live / Stubbed</td></tr>
+        <tr><td>Borrower Health Index (0-100)</td><td>Composite of the 7 signal classes, normalized server-side</td><td>Computed</td></tr>
+        <tr><td>BHI weights · thresholds · grouping key</td><td>Per-tenant scorecard weights + bank thresholds</td><td>Config</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <span class="clab">Borrower Health Index (BHI): two numbers, by design</span>
+      <p>The <strong>nCino risk grade</strong> (<code>LLC_BI__Risk_Rating__c</code>) stays the regulatory anchor, the official classification a human owns. Alongside it, a deterministic <strong>0-100 Borrower Health Index</strong> is the early-warning lens: higher = healthier (the inverse of severity), computed server-side in code, never through the LLM (SR 11-7). Inputs are the <strong>seven EWS signal classes</strong>, each scored 0-3 (financial / covenant / servicing / risk-migration / deposit / external / structural). Banded (illustrative defaults, config): 80-100 Healthy · 60-79 Watch · 40-59 Elevated · &lt;40 Critical.</p>
+      <p>It is <strong>decision-support, not a grade</strong>: a band change raises a flag, it never moves the grade, and it never overrides the regulatory classification. <strong>No black box</strong>, every BHI shows its contributing signals and the source field behind each (drill to the Boom ratio, the covenant cushion, the AFS utilization). Default weights ship today; the bank's incoming EWS scorecard weights replace them by config, no rework.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 13d — Functional requirements: must-haves + surface recommendation -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">16</span><h2>Functional requirements, continued: the must-haves &amp; surface choice</h2><span class="cont">Requirements · 4 of 4</span></div>
+    <h3 class="sub">Functional requirements (the must-haves)</h3>
+    <table class="tight">
+      <thead><tr><th class="col-n">#</th><th>Requirement</th></tr></thead>
+      <tbody>
+        <tr><td class="col-n">1</td><td><span class="em">Run-as-user OAuth.</span> External Client App, OAuth 2.1 + PKCE, <code>mcp_api</code> scope; <strong><code>WITH USER_MODE</code></strong> enforcing FLS + sharing on every read; admin god-mode gated and audited, never default.</td></tr>
+        <tr><td class="col-n">2</td><td><span class="em">Per-user token isolation, verified before any borrower-PII pilot.</span> Confirm the OAuth token is issued and stored per user, not per org. A shared token would mean every user sees every book. Verified in test, not assumed.</td></tr>
+        <tr><td class="col-n">3</td><td><span class="em">Async from day one / governor-limit-safe.</span> <span class="pill vio">Clawdy</span> EWS detection runs as a <strong>Queueable / Batch</strong> job that writes results to Salesforce; the dashboard reads pre-computed values, never detects inline.</td></tr>
+        <tr><td class="col-n">4</td><td><span class="em">Per-call PII audit logging.</span> <span class="pill vio">Clawdy</span> Every MCP tool call touching borrower PII writes a logged audit record (<code>log_audit_event</code> + Snowflake ledger), not just writes. Reads are audited too.</td></tr>
+        <tr><td class="col-n">5</td><td><span class="em">SR 11-7 deterministic compute.</span> Every regulated number is computed in code; the LLM only ranks the fired signals and narrates. The cockpit concludes and routes; a human commits (<code>record_decision</code>).</td></tr>
+        <tr><td class="col-n">6</td><td><span class="em">Graceful degradation on sparse data.</span> Never error on a thin book or a null lookup, fall back to ownership + obligor group, render what exists, mark what is stubbed.</td></tr>
+        <tr><td class="col-n">7</td><td><span class="em">Bank-agnostic per-tenant config.</span> Grouping key, covenant / collateral generation, trigger thresholds, escalation SLAs, and BHI weights are all per-tenant config, replaceable defaults, absorbed without rework.</td></tr>
+      </tbody>
+    </table>
+    <h3 class="sub">Surface recommendation: one server, one data layer, swappable surfaces</h3>
+    <p>Surface choice is a <em>distribution</em> decision, not an auth-feasibility one: every viable surface satisfies run-as-user, and the FLS / sharing enforcement lives in the one server, reviewed once. <span class="vio">Primary now:</span> the <strong>Claude chat MCP App widget</strong> (self-hosted <code>ui://</code> widget, fullscreen FSC-styled cockpit, per-user OAuth straight into our ECA, the cleanest match to the Truist mock we can stand up today) and the <strong>Agentforce-in-FSC native LWC twin</strong> (real SLDS / FSC styling, native run-as-user, the lowest security-review burden, the most credible &ldquo;inside Salesforce&rdquo; story). <span class="amb">Later (scale):</span> hosted Next.js dashboard (Lightning Out 2.0, GA Winter '26, same per-user-OAuth data layer), M365 / Copilot (budget the Entra &rarr; SF on-behalf-of bridge), ChatGPT Apps (same strict-subset widget).</p>
+    <div class="callout amber">
+      <span class="clab">Honest note: fresh-on-view, not always-on</span>
+      <p>Server-side EWS detection is a <strong>Salesforce-side Apex / Queueable job</strong>. Render surfaces (Cowork included) refresh <strong>fresh-on-view, not always-on</strong>, they read the pre-computed detection, they do not run background monitoring. Do not promise always-on alerting from a render surface.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 14 — self-learning, memory, governance -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">17</span><h2>Self-learning, memory, and governance</h2><span class="stag">Brain layer</span></div>
+    <p class="lead">These behaviors are wired into the surface, not bolted on, and they all respect the conclude-not-compute boundary.</p>
+    <div class="gi"><b>Self-learning that ranks, never computes.</b> The cockpit gets sharper per customer and across the book by tuning <em>which</em> conclusions surface, in what order, framed how. No learned signal is ever an input to a regulated figure. The brain learns which watch items mattered, not what the DSC cushion is.</div>
+    <div class="gi"><b>Memory: decision ledger plus audit plus recall.</b> The cockpit remembers <em>why</em> the bank did what it did (the editable decision ledger, <code>record_decision</code>), <em>what</em> was done (the append-only audit trail, <code>log_audit_event</code> / <code>get_audit_trail</code>), and warms the next analyst who walks into the customer (<code>recall_decisions</code>). Memory informs judgment; the regulated numbers are re-derived live on every open and never read back from the ledger.</div>
+    <div class="gi"><b>SR 11-7 decision-support.</b> The whole pipeline, drafting and review alike, is decision-support, never an autonomous credit decision. Effective challenge, full data lineage (Boom to IRIS to nCino), human-in-the-loop attestation, DRAFT-until-committee, an auditable decision ledger, and separation of development (the drafting agent) from validation (the reviewer agent) are concrete behaviors.</div>
+    <div class="gi"><b>Run-as-user security.</b> Per-user OAuth so Salesforce sharing and FLS are the platform-enforced floor on every query at the group grain, including FLS-before-aggregation and the partial-view marker ("N related entities in this group not visible to you"). The single intentional exception is a gated, audited admin god-mode that widens visibility only, never write authority or a delegated limit, with a persistent elevated-context banner.</div>
+    <h3 class="sub">The decision ledger and audit, on Snowflake</h3>
+    <p>What the bank concluded and why does not live in the model's context; it lives in <code>experience-mcp</code>'s memory layer, backed on Snowflake alongside the IRIS data. The editable <strong>decision ledger</strong> (<code>record_decision</code>) holds the <em>why</em>. The append-only <strong>audit trail</strong> (<code>log_audit_event</code> / <code>get_audit_trail</code>) holds the <em>what</em>, with a server-set actor and timestamp the agent cannot override, and with AI-proposed cleanly separated from human-attested. <strong>Recall</strong> (<code>recall_decisions</code>) warms the next analyst who opens the customer with what prior cycles concluded. Memory informs judgment; it is never the source of a regulated figure. Every regulated number is re-derived live on every open, off the deterministic sources, and never read back from the ledger. That, together with the Boom &rarr; IRIS &rarr; nCino lineage, is the artifact that survives an examiner.</p>
+    <div class="callout">
+      <span class="clab">The editable boundary</span>
+      <p>A banker may change how a number is framed, record what they conclude about it, and write the story around it. They may never change the number. The boundary is enforced server-side, not by hiding a button.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 15 — honest Stage-0 gates -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">18</span><h2>Honest Stage-0 gates (stated, not hidden)</h2><span class="stag">Risk register</span></div>
+    <p class="lead">This is a Stage-0 reference build against a sandbox. The following are real constraints, surfaced as conditions, not papered over. Regulated numbers remain deterministic server-side throughout (SR 11-7), so these gates limit coverage and enforcement, never the integrity of a rendered figure.</p>
+    <table class="tight">
+      <thead><tr><th>Gate</th><th>The honest state</th><th>What the cockpit does about it</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">Sharing / least-privilege</span> <span class="pill gate">gate</span></td><td>Sandbox OWD is permissive (ReadWrite Public on the core objects). Run-as-user does not narrow visibility here; every internal user sees every group.</td><td>Persona book-narrowing is <strong>UX, not a security boundary</strong> in this org. The cockpit presents persona views but must not claim least-privilege enforcement until production Private OWD + Grant Access Using Hierarchies (or server-side acting-user scope filters) are in place.</td></tr>
+        <tr><td><span class="em">KYC / compliance</span> <span class="pill gate">gate</span></td><td><code>KYC__c</code> is unpopulated and <code>Compliance_Check__c</code> is effectively empty for the credit groups. Formal KYC / CDD / OFAC records are not on file.</td><td>KYC concludes on what exists: beneficial ownership established across the group via Connection + Legal Entities, with formal clearance "not on file, <strong>blocks decisioning</strong> until cleared." Never a fabricated green-light. Production clearance from the bank's KYC / AML system.</td></tr>
+        <tr><td><span class="em">Peer cohort</span> <span class="pill gate">gate</span></td><td>NAICS peer cohort is absent in the sandbox (the relevant NAICS code resolves to a single account).</td><td>The margin / peer baseline is an <strong>illustrative CapIQ / IBIS capability, labeled as such</strong>, never a fabricated sandbox median.</td></tr>
+        <tr><td><span class="em">Connection data depth</span> <span class="pill gate">gate</span></td><td>The Connection graph is shallow: the seeded edges (208 edges, max ~2 per account) use the generic "Connection" role, not the 35-role taxonomy.</td><td>The rich relationship taxonomy is presented as a <strong>model capability to demonstrate</strong>, with the live signal being ownership % (for example, a 100% owner / guarantor). The cockpit honestly renders the shallow graph it has while showing the taxonomy it is built to consume.</td></tr>
+        <tr><td><span class="em">Mutating credit actions</span> <span class="pill gate">gate</span></td><td>Advance-stage and approve-package are live write verbs against the package.</td><td>Both are <strong>human-committee-only</strong>, gated server-side against the acting user and the routing verdict; DRAFT-until-committee holds on everything decision-touching.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout dark">
+      <span class="clab">The constant under every gate</span>
+      <p>Every regulated number is deterministic server-side code reading verified fields (SR 11-7). The model ranks, narrates, and drafts; it never produces an exposure roll-up, a covenant grade, a collateral coverage figure, a routing verdict, or a clearance state. Absence is a first-class conclusion (<strong>"unmeasured," "unverified," "blocks decisioning"</strong>), never silently rendered as zero or green.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+<!-- ============================================================ 16 — status and sources -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Functional HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">19</span><h2>Status and sources</h2><span class="stag">Status</span></div>
+    <p class="lead">Stage 0 reference build, anchored to a verified nCino + FSC banking sandbox. The deal-level Credit Memo (Stage 03) is built; the Customer 360 cockpit and Live Portfolio Dashboard are the surfaces this intent defines.</p>
+    <div class="cards">
+      <div class="card"><span class="ck">Built</span><span class="ch">Credit Memo</span><span class="cb">Deal-level deep dive on Credit Analysis / Approval (credit-memo-reinvented). The drill-target facet of the customer.</span></div>
+      <div class="card"><span class="ck">This intent</span><span class="ch">Customer 360</span><span class="cb">The relationship-group cockpit. Entity-and-ownership graph + group roll-up at the center.</span></div>
+      <div class="card"><span class="ck">This intent</span><span class="ch">Portfolio Dashboard</span><span class="cb">The book of customers. Ranks groups by attention, whitespace, deterioration, grade migration.</span></div>
+    </div>
+    <h3 class="sub">Authoritative sources</h3>
+    <ul class="tw">
+      <li><code>customer-360-mcp/CUSTOMER-AND-HOUSEHOLD-MODEL.md</code>: the customer / group construct (nCino + FSC), authoritative for chapters 02 and 03.</li>
+      <li><code>customer-360-mcp/EXPERIENCE-SPEC.md</code>: the surface contracts and the conclude-not-display bar.</li>
+      <li><code>customer-360-mcp/CAPABILITY-MAP.md</code>: the capability-to-stage mapping and through-lines.</li>
+      <li><code>customer-360-mcp/USE-CASE-CATALOG.md</code>: all eighty-one persona use cases (chapter 06), including the ten Early Warning cases (chapter 09).</li>
+      <li><code>customer-360-mcp/EARLY-WARNING.md</code>: the Early Warning trigger taxonomy, severity rubric, and escalation playbook (chapter 09).</li>
+      <li><code>customer-360-mcp/DATA-MAPPING.md</code>: the element-by-element data map (every field, tool, and status legend), authoritative for the functional requirements (chapter 16).</li>
+      <li><code>customer-360-mcp/VALIDATION-AND-DECISIONS.md</code>: the honest Stage-0 gates, the run-as-user vs service-account distinction, and the deterministic-server-side discipline.</li>
+    </ul>
+    <div class="callout green">
+      <span class="clab">The bar this document is held to</span>
+      <p>Customer-first throughout; conclude not display; concrete (real verified fields and the deterministic-server-side SR 11-7 discipline); illustrative examples tagged, never the running subject; honest Stage-0 gates stated, not hidden. The customer is the group; the deal is one facet.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Solution Intent</span></div>
+</div>
+
+
+</body>
+</html>

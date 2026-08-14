@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>cm_Decision_Token_Hash__c</fullName>
+    <description>SHA-256 of token + planHash + approver user id. The raw token is never stored (A33.5.4).</description>
+    <externalId>false</externalId>
+    <label>Decision Token Hash</label>
+    <length>64</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

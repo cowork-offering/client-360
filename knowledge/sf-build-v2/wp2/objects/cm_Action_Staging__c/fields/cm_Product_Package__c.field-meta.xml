@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>cm_Product_Package__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The deal anchor and the A33.3.6 deep-link target.</description>
+    <label>Product Package</label>
+    <referenceTo>LLC_BI__Product_Package__c</referenceTo>
+    <relationshipLabel>Action Staging</relationshipLabel>
+    <relationshipName>C360_Action_Staging</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

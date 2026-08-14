@@ -1,0 +1,83 @@
+"
+\n\n
+\n    .ra-band{position:relative;border-radius:16px;overflow:hidden;}\n    .ra-band::before{content:\"\";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px;}\n    .ra-chip{transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;}\n    .ra-chip:hover{transform:translateY(-2px);}\n    .ra-card{transition:transform .15s ease, box-shadow .15s ease;}\n    .ra-card:hover{transform:translateY(-2px);}\n
+\n\n
+SALESFORCE-CENTRIC REFERENCE ARCHITECTURE
+Probabilistic intent over deterministic execution  ·  Salesforce as the hub  ·  Regrello orchestration in-platform  ·  Model-agnostic interfaces
+\n\n
+Experience Layer
+Meet users where they are — interface- & model-agnostic · headless
+OPTIONAL / FLEXIBLE
+Claude Desktop
+React Web App
+Voice
+Slack
+Teams
+Mobile
+\n\n
+↓
+natural-language intent · probabilistic
+↑
+\n\n
+Headless Orchestrator — AI Reasoning & Intent
+Captures intent, reasons, summarizes & evaluates — then delegates. Never defines workflow logic.
+Model-agnostic · Probabilistic
+Claude Opus 4.6
+chat + cross-domain analysis
+Claude Sonnet 4.6
+doc evaluation + voice
+AWS Bedrock
+or any LLM · interoperable
+\n\n
+⟶  intent crosses into deterministic, audited execution inside Salesforce  ⟵
+\n\n
+↓
+Salesforce MCP · hosted, multi-domain · no middleware
+↑
+\n\n
+Salesforce Platform
+System of Record · Security · Workflow
+Salesforce MCP
+reads · mutations · invokeflows
+Domain Agents
+discovery · doc eval · rollover
+Deterministic Workflows
+flows · approvals · apex
+Industry Data Model
+FSC · households · holdings
+Agentforce
+topics · actions · Atlas
+Intelligence
+Data Cloud · analytics
+Agentforce Operations — Regrello
+IN-PLATFORM ORCHESTRATION
+Process Orchestration
+graphs · SLAs · long-running state
+Cross-System Coordination
+orchestrates back-office systems
+Human-in-the-Loop
+approvals · exceptions
+Trust, Governance & Lineage
+Sharing & FLS · Shield · Audit trail · persona-based security context
+\n\n
+↓
+orchestrated by Regrello · API / events · status written back
+↑
+\n\n
+Back-Office & Third-Party Systems
+Off-platform systems of execution — reached via Regrello
+Custodians
+Banking Core
+Portfolio Accounting
+e-Sign / Docs
+Market Data
+General Ledger
+\n\n
+KEY
+Salesforce — system of record & trust boundary
+Regrello orchestration (in-platform)
+⟶ ⟵
+Probabilistic intent → deterministic execution
+\n\n
+\n\n\n
+"

@@ -1,0 +1,96 @@
+Your advisors are your greatest asset — Accenture × Salesforce × Anthropic
+Business Case
+Under the Hood
+Get Started
+01 Hero
+02 The bind
+Stewardship
+03 The proof
+04 The capabilities
+05 Under the hood
+Go deeper
+06 Freedom
+Your best advisors, buried in their workflows.
+Fintechs are onboarding the same clients in minutes. Your advisors are still chasing documents.
+01
+02 — Before
+The old way is slow, manual, and unforgiving.
+Every onboarding is a backlog of documents, approvals, and re-keying — work that's slow, fragmented, and pulls your advisors away from the clients they're trying to keep.
+0+ days
+to onboard a client — industry average
+0%+
+of submissions come back not-in-good-order (NIGO)
+0%
+of heirs plan to leave their advisor
+0%
+of the CSA workday spent on process, not clients
+02
+This is the next level of client stewardship.
+03 — After
+Your advisors' day, rebuilt.
+Every client signal, every pending task, every next step — surfaced from your Salesforce data and driven to done by AI. Before you even start your day.
+Aethon · home
+$0M
+Illustrative three-year profit uplift
+<0 hrs
+to onboard a client today
+<0%
+NIGO rate
++0%
+Advisor productivity
+04 — The capabilities
+Where your advisors get their time back.
+Compliance, research, and client conversations — the process work that used to eat the day, now handled in the background.
+Research
+Background agents monitor the whole book
+Drift, funding, and estate events flagged early
+Insight surfaced before the client asks
+Conversations
+Compliance
+Research
+05 — Under the hood
+Headless opens
+endless possibilities.
+No rip and replace
+Your Salesforce FSC, Data 360, and Agentforce stack stays exactly where it is — headless opens endless possibilities.
+Any surface
+The engagement layer isn't a slide; it's the advisor's day — web, mobile, wherever they work.
+Built-in trust
+Every action audited, every check logged. Compliance is part of the architecture, not bolted on.
+The platform is Salesforce. The orchestration is Anthropic. The glue is Accenture.
+Accenture has led wealth management transformation for decades. We're the ones who bring this collaboration together — the industry expertise, experience design, and delivery that turn a platform and a model into advisor outcomes.
+The platform
+Financial Services Cloud · Data 360 · Agentforce · Trust layer built in
+The core
+Wealth management expertise · Experience design · Implementation · Ongoing delivery
+The orchestration
+Claude Models · Multi-step reasoning · Compliance guardrails
+$84 trillion is moving.
+The firms that keep it will have made a decision.
+Business Case
+What's the return, and when?
+Four value levers, modelled against a real book.
+Learn more
+→
+Under the Hood
+Can we trust it at the platform level?
+The five-layer stack, the compliance posture, the build-vs-buy answer.
+Learn more
+→
+Get Started
+Where do we actually start?
+Three decisions, three contained first use cases, no rip-and-replace.
+Learn more
+→
+06 — The point
+Freedom to be fully present.
+Same-day onboarding. Process work handled invisibly. The judgment your clients pay for — back where it belongs, with them. That's what grows a book, and keeps it.
+See the demo
+↗
+Learn more
+Contact Us
+06
+Business Case
+Under the Hood
+Get Started
+Accenture × Salesforce × Anthropic · Strategic asset · 2026

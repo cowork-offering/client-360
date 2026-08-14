@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  cm_Action_Staging__c - the staging store required by A33.5.3 and A33.3.3.
+
+  NOT a domain object in the bank's credit model. A33.0.1 permits stage_* to write
+  exactly two things: this staging record and the decision-ledger entry. The
+  zero-DML acceptance test (BUILD-BRIEF-V2 WP2 criterion 1) scopes to the domain
+  write targets (Case, LLC_BI__Collateral_Valuation__c, LLC_BI__Review__c), not here.
+
+  This object is the AUTHORITY on tracker state. The client's sessionStorage copy
+  is a cache (A33.3.3 persistence rule).
+
+  CUSTOM OBJECT CREATION IN bankinggpt IS GATED. This metadata is designed and
+  validated, and awaits founder approval before deploy.
+-->
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <allowInChatterGroups>false</allowInChatterGroups>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Action Panel staging record: the immutable execution plan a banker confirmed, its hash, the single-use decision token digest, and the live tracker state. Written by stage_* and execute_*; never a credit-model object.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>false</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <label>Action Staging</label>
+    <nameField>
+        <displayFormat>STG-{0000000000}</displayFormat>
+        <label>Staging Number</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Action Staging</pluralLabel>
+    <!--
+      Private, deliberately. These records carry staged narrative prose about a named borrower.
+      A33.5.4 already binds execution to the running identity, so nothing in the tool flow needs
+      cross-user read, and an org-wide default of ReadWrite would expose every borrower's staged
+      narrative to anyone with object access. Ledger export and supervisory review are granted
+      through an explicit sharing rule or View All, not by leaving the default open.
+    -->
+    <sharingModel>Private</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

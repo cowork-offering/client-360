@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Grants the Customer 360 action tools access to their own staging store.
+
+  WHY THIS EXISTS. Deploying custom fields through the Metadata API grants field-level
+  security to NO profile, System Administrator included. The object deployed with full CRUD
+  for the admin profile but zero FieldPermissions rows, so under WITH USER_MODE and
+  insert as user the 14 custom fields are invisible and every stage_* call fails with
+  "No such column 'cm_Plan_Hash__c'". The fields are present and healthy in metadata; only
+  the permission grant is missing.
+
+  This is the failure A33.4.10 rule 5 and PROBE-LEDGER outstanding item 3 both predicted:
+  createable and updateable are FLS-scoped to the running user, and the tools must be
+  granted explicitly rather than assumed to inherit an administrator's reach.
+
+  Assign to every identity that runs the stage_* / execute_* tools, and to the identity that
+  runs the Apex tests.
+-->
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Read and write access to cm_Action_Staging__c, the Customer 360 Action Panel staging store. Required by the stage_* and execute_* tools; they run in user mode and cannot see the staging fields without it.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>C360 Action Staging Access</label>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Account__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Action_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Actor_User__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Approver_User__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Decision_Token_Hash__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Executed_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Idempotency_Key__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Plan_Hash__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Plan_JSON__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Product_Package__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Result_Record_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Status__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Token_Consumed_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>cm_Action_Staging__c.cm_Tracker_JSON__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <objectPermissions>
+        <allowCreate>true</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>true</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <object>cm_Action_Staging__c</object>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
+</PermissionSet>

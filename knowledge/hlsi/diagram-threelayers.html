@@ -1,0 +1,116 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{
+    --violet:#5b3fd4; --violet-wash:#f1eefc; --ink:#1a1a24; --muted:#6b6772; --faint:#8a8a9a;
+    --green:#1f9d6b; --rule:#e8e6ee; --amber:#c08a2d;
+    --mono:ui-monospace,'IBM Plex Mono',SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,'IBM Plex Sans',Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--ink);background:#54525c;padding:14mm}
+  .page{width:297mm;min-height:210mm;background:#fff;margin:0 auto;padding:16mm 18mm;position:relative}
+  .eyebrow{font-family:var(--mono);font-size:8.5pt;letter-spacing:.16em;text-transform:uppercase;color:var(--violet)}
+  h1{font-size:21pt;font-weight:800;letter-spacing:-.01em;margin:2mm 0 1.5mm}
+  .lead{font-size:10pt;color:var(--muted);max-width:235mm;line-height:1.45}
+  .stack{margin-top:7mm}
+  .band{display:grid;grid-template-columns:34mm 1fr;gap:6mm;align-items:center;padding:5mm 0;position:relative}
+  .blabel{text-align:right}
+  .blabel .bk{font-family:var(--mono);font-size:8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .blabel .bn{font-size:13pt;font-weight:800;letter-spacing:-.01em;margin-top:1mm}
+  .blabel .bd{font-size:8.3pt;color:var(--muted);margin-top:1.5mm;line-height:1.4}
+  .row{display:flex;gap:5mm}
+  .row .grp{flex:1;border:1px solid var(--rule);border-radius:6px;padding:4mm 4.5mm;background:#fff}
+  .grp .gh{font-size:10pt;font-weight:700}
+  .grp .gh .pin{font-family:var(--mono);font-size:7pt;letter-spacing:.06em;text-transform:uppercase;padding:.5mm 1.6mm;border-radius:3px;margin-left:2mm;vertical-align:middle}
+  .pin.rel{background:var(--violet-wash);color:var(--violet)}
+  .pin.deal{background:#eef4f1;color:var(--green)}
+  .grp .gd{font-size:8.6pt;color:var(--muted);margin-top:1.5mm;line-height:1.45}
+  /* tools band: pills */
+  .tools{display:flex;flex-wrap:wrap;gap:3mm}
+  .tool{border:1px solid var(--rule);border-radius:5px;padding:2.6mm 3.5mm;background:#fbfbfe;font-size:8.8pt;font-weight:600;min-width:34mm}
+  .tool .tt{font-family:var(--mono);font-size:7pt;color:var(--faint);font-weight:500;letter-spacing:.02em;margin-top:.6mm}
+  .tool.future{border-style:dashed;color:var(--muted);background:#fff}
+  /* connectors */
+  .arrow{grid-column:2;justify-self:start;margin-left:54mm;color:#c4c0cf;font-size:13pt;line-height:.6;padding:0}
+  .bandA{background:linear-gradient(#faf9ff,#faf9ff);border-radius:8px}
+  .bandB{background:linear-gradient(#fbfdfc,#fbfdfc);border-radius:8px}
+  .key{margin-top:6mm;border-top:1px solid var(--rule);padding-top:3.5mm;display:flex;gap:9mm;font-size:8.7pt;color:var(--muted)}
+  .key b{color:var(--ink)}
+  .foot{margin-top:3mm;font-size:8.6pt;color:var(--faint);font-family:var(--mono);letter-spacing:.02em}
+</style></head><body>
+<div class="page">
+  <div class="eyebrow">Architecture &middot; orientation</div>
+  <h1>Three layers: agents, tools, and use cases</h1>
+  <div class="lead">These are three different axes, not one. Use cases belong to a domain. Agents are the reasoning shells, one per domain. Tools are the MCP servers, shared across domains. Read top down: a persona's need is met by a surface, which calls the shared fleet.</div>
+
+  <div class="stack">
+
+    <div class="band bandA">
+      <div class="blabel">
+        <div class="bk">Layer 1</div>
+        <div class="bn">Use cases</div>
+        <div class="bd">what a persona needs &mdash; grouped by domain</div>
+      </div>
+      <div class="row">
+        <div class="grp">
+          <div class="gh">Relationship <span class="pin rel">81 use cases &middot; 9 personas</span></div>
+          <div class="gd">RM, portfolio manager, analyst, credit officer, loan ops, treasury, compliance, workout, executive. Surfaced by the <b>Live Dashboard</b> and the <b>Customer 360 cockpit</b>.</div>
+        </div>
+        <div class="grp">
+          <div class="gh">Deal <span class="pin deal">underwriting</span></div>
+          <div class="gd">Draft the memo, covenant write-up, risk rating, finalize and write back. Surfaced by the <b>Credit Memo</b>.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">&darr;&nbsp;&nbsp;&nbsp;&nbsp;&darr;</div>
+
+    <div class="band bandB">
+      <div class="blabel">
+        <div class="bk">Layer 2</div>
+        <div class="bn">Agents &amp; surfaces</div>
+        <div class="bd">the reasoning shells &mdash; one per domain</div>
+      </div>
+      <div class="row">
+        <div class="grp">
+          <div class="gh">Customer 360 agent <span class="pin rel">relationship</span></div>
+          <div class="gd">Drives the Live Dashboard + the cockpit. The relationship twin (in build).</div>
+        </div>
+        <div class="grp">
+          <div class="gh">Credit Memo agent <span class="pin deal">deal</span></div>
+          <div class="gd">Drives the memo + underwriting workflow (shipped plugin).</div>
+        </div>
+        <div class="grp" style="border-style:dashed">
+          <div class="gh">Commercial Credit Brain</div>
+          <div class="gd">Unifies the domains; cross-domain memory + learning. Capstone, later.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow">&darr;&nbsp;&nbsp;both call the same shared fleet&nbsp;&nbsp;&darr;</div>
+
+    <div class="band">
+      <div class="blabel">
+        <div class="bk">Layer 3</div>
+        <div class="bn">Tools</div>
+        <div class="bd">MCP servers + data &mdash; shared across every domain</div>
+      </div>
+      <div class="tools">
+        <div class="tool">Customer 360 MCP<div class="tt">nCino + FSC, run-as-user</div></div>
+        <div class="tool">experience-mcp<div class="tt">compose + join + ledger</div></div>
+        <div class="tool">Boom<div class="tt">spread + ratios</div></div>
+        <div class="tool">AFS<div class="tt">servicing</div></div>
+        <div class="tool future">Snowflake<div class="tt">risk / PD &middot; later</div></div>
+        <div class="tool future">CapIQ / IBIS<div class="tt">peers &middot; later</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="key">
+    <div><b>Use cases</b> belong to a domain (relationship vs deal).</div>
+    <div><b>Agents</b> are per-domain shells; the Brain unifies them last.</div>
+    <div><b>Tools</b> are shared: one server serves many use cases across domains.</div>
+  </div>
+  <div class="foot">The 81 use cases are Customer 360. They live inside the Live Dashboard and the cockpit, not as a tool of their own.</div>
+</div>
+</body></html>

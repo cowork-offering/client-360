@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>cm_Token_Consumed_At__c</fullName>
+    <description>Set the moment the decision token is redeemed. Non-null means the token is spent; a second execute_* is refused (A33.5.4 single use).</description>
+    <label>Token Consumed At</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

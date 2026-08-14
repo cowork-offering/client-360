@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commercial Credit 360 — Accenture Reinvention</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #F4F3F8;
+  --sur:      #FFFFFF;
+  --sur2:     #F8F7FC;
+  --bdr:      rgba(0,0,0,.07);
+  --bdr2:     rgba(0,0,0,.12);
+  --acc:      #6B1CC4;
+  --acc-lt:   #F2EBF9;
+  --acc-rule: #D4C4EC;
+  --ink:      #0F0A1A;
+  --body:     #2E2645;
+  --muted:    #6B6082;
+  --faint:    #A8A0BF;
+  --g: #047857; --g-lt:#ECFDF5; --g-b:#6EE7B7;
+  --a: #92400E; --a-lt:#FFFBEB; --a-b:#FCD34D;
+  --r: #991B1B; --r-lt:#FEF2F2; --r-b:#FCA5A5;
+  --sh: 0 0 0 1px rgba(0,0,0,.055), 0 2px 8px rgba(0,0,0,.055);
+  --f: 'Inter', system-ui, sans-serif;
+  --rr: 12px; --rr-sm: 8px;
+}
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+html, body { height:100%; overflow:hidden; }
+body { font-family:var(--f); background:var(--bg); color:var(--ink); font-size:13.5px; line-height:1.5; -webkit-font-smoothing:antialiased; letter-spacing:-.01em; }
+#app { position:relative; height:100vh; overflow:hidden; }
+.view { position:absolute; inset:0; overflow-y:auto; transition:transform .4s cubic-bezier(.22,1,.36,1), opacity .35s ease; }
+.view.off { transform:translateX(100%); opacity:0; pointer-events:none; }
+
+/* Nav */
+.nav { position:sticky; top:0; z-index:100; background:rgba(255,255,255,.92); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border-bottom:1px solid var(--bdr); display:flex; align-items:center; padding:0 28px; height:56px; gap:14px; }
+.nav-logo { height:19px; width:auto; display:block; }
+.nav-sep { width:1px; height:16px; background:var(--bdr2); flex-shrink:0; }
+.nav-pill { font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--acc); background:var(--acc-lt); border:1px solid var(--acc-rule); border-radius:4px; padding:2.5px 7px; }
+.nav-product { font-size:14px; font-weight:600; color:var(--ink); letter-spacing:-.02em; }
+.nav-sp { flex:1; }
+.nav-ctx { font-size:12px; color:var(--muted); }
+.nav-avatar { width:30px; height:30px; border-radius:50%; background:var(--acc-lt); border:1.5px solid var(--acc-rule); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--acc); }
+.back-btn { display:flex; align-items:center; gap:5px; background:none; border:1px solid var(--bdr2); border-radius:20px; padding:5px 14px; font-family:var(--f); font-size:12px; font-weight:500; color:var(--muted); cursor:pointer; transition:all .15s; }
+.back-btn:hover { color:var(--acc); border-color:var(--acc-rule); background:var(--acc-lt); }
+
+/* Shell */
+.shell { max-width:1320px; margin:0 auto; padding:26px 28px 56px; }
+.sl { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); margin:26px 0 12px; }
+
+/* KPIs */
+.kpi-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:22px; }
+.kpi { background:var(--sur); border-radius:var(--rr); box-shadow:var(--sh); padding:20px 22px; display:flex; flex-direction:column; gap:5px; }
+.kpi-tag { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); }
+.kpi-num { font-size:36px; font-weight:800; line-height:1; color:var(--ink); letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
+.kpi-num.warn { color:var(--a); }
+.kpi-detail { font-size:11.5px; color:var(--muted); }
+
+/* Alerts */
+.alerts { display:flex; gap:10px; margin-top:14px; }
+.alert { flex:1; background:var(--sur); border-radius:var(--rr-sm); box-shadow:var(--sh); padding:13px 15px; display:flex; gap:10px; align-items:flex-start; border-top:2.5px solid var(--a-b); }
+.alert.crit { border-top-color:var(--r-b); }
+.alert-sig { width:6px; height:6px; border-radius:50%; background:var(--a); flex-shrink:0; margin-top:5px; }
+.alert.crit .alert-sig { background:var(--r); }
+.alert-co { font-weight:600; font-size:12.5px; color:var(--ink); }
+.alert-txt { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.45; }
+.alert-age { font-size:10.5px; color:var(--faint); margin-left:auto; white-space:nowrap; padding-top:2px; }
+
+/* Grid */
+.grid { display:grid; grid-template-columns:1fr 356px; gap:16px; margin-top:16px; }
+
+/* Panel */
+.panel { background:var(--sur); border-radius:var(--rr); box-shadow:var(--sh); overflow:hidden; }
+.ph { display:flex; align-items:center; justify-content:space-between; padding:14px 20px 13px; border-bottom:1px solid var(--bdr); }
+.ph-t { font-size:12.5px; font-weight:700; color:var(--ink); }
+.ph-m { font-size:11px; color:var(--muted); }
+
+/* Badges */
+.badge { display:inline-flex; align-items:center; padding:2.5px 9px; border-radius:20px; font-size:10px; font-weight:700; }
+.b-g { background:var(--g-lt); color:var(--g); }
+.b-a { background:var(--a-lt); color:var(--a); }
+.b-r { background:var(--r-lt); color:var(--r); }
+.b-p { background:var(--acc-lt); color:var(--acc); }
+.b-n { background:var(--sur2); color:var(--muted); border:1px solid var(--bdr2); }
+
+/* Work Queue */
+.wq-row { display:grid; grid-template-columns:26px 1fr 50px 16px; align-items:center; gap:14px; padding:13px 20px; border-bottom:1px solid var(--bdr); cursor:pointer; transition:background .12s; }
+.wq-row:last-child { border-bottom:none; }
+.wq-row:hover { background:var(--sur2); }
+.wq-row:hover .wq-arr { opacity:1; transform:translateX(3px); }
+.wq-rank { font-size:10px; font-weight:700; color:var(--faint); text-align:center; }
+.wq-name { font-size:13px; font-weight:600; color:var(--ink); margin-bottom:2px; }
+.wq-why { font-size:11.5px; color:var(--muted); line-height:1.4; }
+.wq-arr { color:var(--faint); font-size:14px; opacity:.35; transition:all .15s; }
+
+/* BHI Rail */
+.bhi-row { display:flex; align-items:center; gap:12px; padding:11px 20px; border-bottom:1px solid var(--bdr); cursor:pointer; transition:background .12s; }
+.bhi-row:last-child { border-bottom:none; }
+.bhi-row:hover { background:var(--sur2); }
+.bhi-co { font-size:12.5px; font-weight:600; color:var(--ink); margin-bottom:2px; }
+.bhi-sig { font-size:11px; color:var(--muted); }
+.bhi-info { flex:1; }
+.bhi-tr { font-size:11.5px; font-weight:700; white-space:nowrap; }
+.tu { color:var(--g); } .td { color:var(--r); } .tf { color:var(--faint); }
+
+/* SVG Arc */
+.arc { position:relative; width:46px; height:46px; flex-shrink:0; }
+.arc svg { position:absolute; inset:0; }
+.arc-lbl { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.arc-n { font-size:12px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+
+/* Concentration */
+.conc { padding:14px 20px 16px; display:flex; flex-direction:column; gap:11px; }
+.conc-top { display:flex; justify-content:space-between; margin-bottom:5px; }
+.conc-nm { font-size:11.5px; color:var(--body); }
+.conc-pct { font-size:11.5px; font-weight:600; color:var(--ink); }
+.bar-t { height:3px; background:rgba(0,0,0,.07); border-radius:2px; overflow:hidden; }
+.bar-f { height:100%; border-radius:2px; background:var(--acc); }
+
+/* Level 2 */
+.vbar { background:var(--sur); border-bottom:1px solid var(--bdr); padding:22px 28px 20px; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
+.vb-crumb { font-size:10.5px; color:var(--faint); letter-spacing:.04em; text-transform:uppercase; margin-bottom:7px; }
+.vb-name { font-size:24px; font-weight:800; color:var(--ink); letter-spacing:-.03em; line-height:1.1; margin-bottom:9px; }
+.vb-verdict { font-size:12.5px; color:var(--muted); line-height:1.6; max-width:740px; }
+.anchors { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+.anch { display:flex; flex-direction:column; background:var(--sur2); border:1px solid var(--bdr); border-radius:var(--rr-sm); padding:10px 14px; min-width:120px; }
+.anch-l { font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+.anch-v { font-size:18px; font-weight:800; color:var(--ink); line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.anch-s { font-size:10.5px; color:var(--muted); margin-top:3px; }
+.vb-right { display:flex; flex-direction:column; align-items:flex-end; gap:12px; flex-shrink:0; }
+.bhi-hero { text-align:center; }
+.bhi-big { font-size:44px; font-weight:800; letter-spacing:-.04em; line-height:1; font-variant-numeric:tabular-nums; }
+.bhi-big.g { color:var(--g); } .bhi-big.a { color:var(--a); } .bhi-big.r { color:var(--r); }
+.bhi-hl { font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; margin-top:2px; }
+.bhi-ht { font-size:11px; font-weight:600; margin-top:2px; }
+.draft-btn { background:var(--acc); color:#fff; border:none; border-radius:var(--rr-sm); padding:10px 20px; font-family:var(--f); font-size:12.5px; font-weight:700; cursor:pointer; letter-spacing:-.01em; transition:all .15s; }
+.draft-btn:hover { background:#5A14A8; box-shadow:0 4px 14px rgba(107,28,196,.3); transform:translateY(-1px); }
+
+/* Tabs */
+.tabs { background:var(--sur); border-bottom:1px solid var(--bdr); padding:0 28px; display:flex; overflow-x:auto; scrollbar-width:none; }
+.tabs::-webkit-scrollbar { display:none; }
+.tab { font-size:12px; font-weight:600; color:var(--muted); padding:13px 16px 11px; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; transition:all .15s; letter-spacing:-.01em; }
+.tab:hover { color:var(--ink); }
+.tab.on { color:var(--acc); border-bottom-color:var(--acc); }
+.tp { display:none; padding:26px 28px 48px; }
+.tp.on { display:block; }
+
+/* Overview */
+.ov { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:18px; }
+.ov-card { background:var(--sur); border-radius:var(--rr); box-shadow:var(--sh); padding:18px 20px; }
+.ov-tag { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); margin-bottom:8px; }
+.ov-val { font-size:24px; font-weight:800; color:var(--ink); line-height:1; letter-spacing:-.03em; margin-bottom:5px; font-variant-numeric:tabular-nums; }
+.ov-sub { font-size:11.5px; color:var(--muted); line-height:1.45; }
+.ov-badge { margin-top:10px; }
+
+.callout { border-radius:var(--rr-sm); padding:16px 18px; margin-bottom:14px; }
+.callout.warn { background:var(--a-lt); border:1px solid var(--a-b); }
+.callout.acc { background:var(--acc-lt); border:1px solid var(--acc-rule); }
+.callout-hd { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; margin-bottom:7px; }
+.callout.warn .callout-hd { color:var(--a); }
+.callout.acc .callout-hd { color:var(--acc); }
+.callout-tx { font-size:12.5px; color:var(--body); line-height:1.65; }
+.callout-num { font-size:28px; font-weight:800; letter-spacing:-.03em; margin:8px 0 4px; font-variant-numeric:tabular-nums; }
+.callout.acc .callout-num { color:var(--acc); }
+
+/* Covenants */
+.cov-t { width:100%; border-collapse:collapse; }
+.cov-t th { font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); text-align:left; padding:11px 16px; border-bottom:1px solid var(--bdr); background:var(--sur2); }
+.cov-t td { padding:13px 16px; border-bottom:1px solid var(--bdr); vertical-align:middle; }
+.cov-t tr:last-child td { border-bottom:none; }
+.cov-t tr:hover td { background:var(--sur2); }
+.cov-n { font-size:12.5px; font-weight:600; color:var(--ink); }
+.cov-d { font-size:11px; color:var(--muted); margin-top:2px; }
+.cush-num { font-size:12.5px; color:var(--body); font-variant-numeric:tabular-nums; margin-bottom:4px; }
+.cush-bar { height:3px; background:rgba(0,0,0,.07); border-radius:2px; overflow:hidden; width:72px; }
+.cush-fill { height:100%; border-radius:2px; }
+.cf-g { background:var(--g); } .cf-a { background:var(--a); }
+.trend-dn { font-size:11.5px; font-weight:700; color:var(--r); }
+.trend-st { font-size:11.5px; color:var(--faint); }
+.trend-up { font-size:11.5px; font-weight:700; color:var(--g); }
+.chip { font-size:10px; font-weight:600; background:var(--sur2); border:1px solid var(--bdr2); border-radius:20px; padding:2px 9px; white-space:nowrap; color:var(--muted); }
+
+/* Ledger */
+.l-row { display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--bdr); }
+.l-row:last-child { border-bottom:none; }
+.l-dot { width:7px; height:7px; border-radius:50%; background:var(--acc-rule); flex-shrink:0; margin-top:5px; }
+.l-date { font-size:11px; color:var(--faint); flex-shrink:0; min-width:68px; }
+.l-body { flex:1; }
+.l-text { font-size:12px; color:var(--body); line-height:1.55; }
+.l-who { font-size:11px; color:var(--faint); margin-top:4px; }
+
+.stub { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 20px; gap:10px; }
+.stub-t { font-size:15px; font-weight:700; color:var(--ink); letter-spacing:-.02em; }
+.stub-s { font-size:12.5px; color:var(--muted); text-align:center; line-height:1.55; }
+
+.toast { position:fixed; bottom:28px; right:28px; z-index:999; background:var(--ink); color:#fff; border-radius:var(--rr-sm); padding:12px 20px; font-size:12.5px; font-weight:600; letter-spacing:-.01em; box-shadow:0 8px 28px rgba(0,0,0,.25); transform:translateY(16px); opacity:0; transition:all .3s; pointer-events:none; display:flex; align-items:center; gap:10px; }
+.toast-dot { width:7px; height:7px; border-radius:50%; background:#6EE7B7; flex-shrink:0; }
+.toast.show { transform:translateY(0); opacity:1; }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- LEVEL 1 -->
+<div class="view" id="v1">
+<nav class="nav">
+  <img class="nav-logo" src="accenture-logo.png" alt="Accenture">
+  <div class="nav-sep"></div>
+  <span class="nav-pill">Reinvention</span>
+  <div class="nav-sep"></div>
+  <span class="nav-product">Commercial Credit 360</span>
+  <div class="nav-sp"></div>
+  <span class="nav-ctx">Sarah Chen &nbsp;&middot;&nbsp; Jun 30, 2026</span>
+  <div class="nav-avatar">SC</div>
+</nav>
+<div class="shell">
+  <div class="kpi-strip">
+    <div class="kpi"><div class="kpi-tag">Managed Exposure</div><div class="kpi-num">$387.5M</div><div class="kpi-detail">Committed &middot; 47 relationships</div></div>
+    <div class="kpi"><div class="kpi-tag">Drawn Balance</div><div class="kpi-num">$214.8M</div><div class="kpi-detail">55.4% utilisation</div></div>
+    <div class="kpi"><div class="kpi-tag">EWS Active</div><div class="kpi-num warn">3</div><div class="kpi-detail">2 Watch &middot; 1 Critical</div></div>
+    <div class="kpi"><div class="kpi-tag">Reviews Due (30d)</div><div class="kpi-num warn">8</div><div class="kpi-detail">3 overdue &middot; 5 upcoming</div></div>
+  </div>
+
+  <div class="sl">Early Warning Signals</div>
+  <div class="alerts">
+    <div class="alert crit"><div class="alert-sig"></div><div style="flex:1"><div class="alert-co">Meridian Logistics Group</div><div class="alert-txt">DSCR at 1.28&times;, 3bps above the 1.25&times; floor. Covenant test in <strong>8 days</strong>. Waiver memo required.</div></div><div class="alert-age">2h ago</div></div>
+    <div class="alert"><div class="alert-sig"></div><div style="flex:1"><div class="alert-co">Piedmont Precision Industries</div><div class="alert-txt">EBITDA margin compressed 340bps YoY. DSC cushion thinning toward the floor.</div></div><div class="alert-age">Yesterday</div></div>
+    <div class="alert"><div class="alert-sig"></div><div style="flex:1"><div class="alert-co">Norton Group Holdings</div><div class="alert-txt">Annual review overdue by <strong>14 days</strong>. No extension filed. $28.5M fully drawn.</div></div><div class="alert-age">3d ago</div></div>
+  </div>
+
+  <div class="sl">Work Queue</div>
+  <div class="grid">
+    <div class="panel">
+      <div class="ph"><div class="ph-t">Ranked by urgency</div><div class="ph-m">Updated now</div></div>
+      <div class="wq-row" onclick="openC360('meridian')">
+        <div class="wq-rank">01</div>
+        <div><div class="wq-name">Meridian Logistics Group</div><div class="wq-why">DSCR 3bps above floor &mdash; covenant test Thursday. Waiver memo needed.</div></div>
+        <div class="arc" data-arc="34,r"></div>
+        <div class="wq-arr">&#8250;</div>
+      </div>
+      <div class="wq-row" onclick="openC360('norton')">
+        <div class="wq-rank">02</div>
+        <div><div class="wq-name">Norton Group Holdings</div><div class="wq-why">Annual review 14 days overdue. No extension filed. Fully drawn.</div></div>
+        <div class="arc" data-arc="51,a"></div>
+        <div class="wq-arr">&#8250;</div>
+      </div>
+      <div class="wq-row" onclick="openC360('piedmont')">
+        <div class="wq-rank">03</div>
+        <div><div class="wq-name">Piedmont Precision Industries</div><div class="wq-why">EBITDA margin compressed 340bps. DSC cushion thinning. $0 wallet.</div></div>
+        <div class="arc" data-arc="58,a"></div>
+        <div class="wq-arr">&#8250;</div>
+      </div>
+      <div class="wq-row">
+        <div class="wq-rank">04</div>
+        <div><div class="wq-name">Cascade Industrial Supply</div><div class="wq-why">Revolver at 94% utilisation for 60+ consecutive days.</div></div>
+        <div class="arc" data-arc="63,a"></div>
+        <div class="wq-arr">&#8250;</div>
+      </div>
+      <div class="wq-row">
+        <div class="wq-rank">05</div>
+        <div><div class="wq-name">Hargrove Manufacturing LLC</div><div class="wq-why">Modification expires in 45 days. Extension terms not agreed.</div></div>
+        <div class="arc" data-arc="72,g"></div>
+        <div class="wq-arr">&#8250;</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="panel">
+        <div class="ph"><div class="ph-t">Borrower Health Index</div><span class="badge b-p">Live</span></div>
+        <div class="bhi-row" onclick="openC360('apex')"><div class="arc" data-arc="81,g"></div><div class="bhi-info"><div class="bhi-co">Apex Renewables</div><div class="bhi-sig">All covenants clear &middot; $42M</div></div><div class="bhi-tr tu">&#8593; +4</div></div>
+        <div class="bhi-row"><div class="arc" data-arc="76,g"></div><div class="bhi-info"><div class="bhi-co">Hargrove Manufacturing</div><div class="bhi-sig">Stable &middot; modification due</div></div><div class="bhi-tr tf">&#8212; 0</div></div>
+        <div class="bhi-row"><div class="arc" data-arc="63,a"></div><div class="bhi-info"><div class="bhi-co">Cascade Industrial</div><div class="bhi-sig">Revolver stress</div></div><div class="bhi-tr td">&#8595; &minus;7</div></div>
+        <div class="bhi-row" onclick="openC360('piedmont')"><div class="arc" data-arc="58,a"></div><div class="bhi-info"><div class="bhi-co">Piedmont Precision</div><div class="bhi-sig">EBITDA compression</div></div><div class="bhi-tr td">&#8595; &minus;13</div></div>
+        <div class="bhi-row" onclick="openC360('norton')"><div class="arc" data-arc="51,a"></div><div class="bhi-info"><div class="bhi-co">Norton Group</div><div class="bhi-sig">Review overdue</div></div><div class="bhi-tr td">&#8595; &minus;9</div></div>
+        <div class="bhi-row" onclick="openC360('meridian')"><div class="arc" data-arc="34,r"></div><div class="bhi-info"><div class="bhi-co">Meridian Logistics</div><div class="bhi-sig">Covenant breach imminent</div></div><div class="bhi-tr td">&#8595; &minus;23</div></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><div class="ph-t">Book Concentration</div><div class="ph-m">By sector</div></div>
+        <div class="conc">
+          <div><div class="conc-top"><span class="conc-nm">Manufacturing</span><span class="conc-pct">31%</span></div><div class="bar-t"><div class="bar-f" style="width:31%"></div></div></div>
+          <div><div class="conc-top"><span class="conc-nm">Logistics &amp; Transport</span><span class="conc-pct">24%</span></div><div class="bar-t"><div class="bar-f" style="width:24%;opacity:.75"></div></div></div>
+          <div><div class="conc-top"><span class="conc-nm">Energy &amp; Renewables</span><span class="conc-pct">18%</span></div><div class="bar-t"><div class="bar-f" style="width:18%;opacity:.55"></div></div></div>
+          <div><div class="conc-top"><span class="conc-nm">Industrial Supply</span><span class="conc-pct">14%</span></div><div class="bar-t"><div class="bar-f" style="width:14%;opacity:.4"></div></div></div>
+          <div><div class="conc-top"><span class="conc-nm">Other</span><span class="conc-pct">13%</span></div><div class="bar-t"><div class="bar-f" style="width:13%;background:rgba(0,0,0,.1)"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /v1 -->
+
+
+<!-- LEVEL 2 -->
+<div class="view off" id="v2">
+<nav class="nav">
+  <img class="nav-logo" src="accenture-logo.png" alt="Accenture">
+  <div class="nav-sep"></div>
+  <span class="nav-pill">Reinvention</span>
+  <div class="nav-sep"></div>
+  <span class="nav-product">Commercial Credit 360</span>
+  <div class="nav-sp"></div>
+  <button class="back-btn" onclick="goBack()">&#8592; Portfolio</button>
+  <div class="nav-avatar">SC</div>
+</nav>
+
+<div class="vbar">
+  <div style="flex:1">
+    <div class="vb-crumb">Portfolio &rsaquo; <span id="v2-bc"></span></div>
+    <div class="vb-name" id="v2-name"></div>
+    <div class="vb-verdict" id="v2-verdict"></div>
+    <div class="anchors" id="v2-anchors"></div>
+  </div>
+  <div class="vb-right">
+    <div class="bhi-hero">
+      <div class="bhi-big a" id="v2-bhi">58</div>
+      <div class="bhi-hl" id="v2-bhi-l" style="color:var(--a)">Health Index</div>
+      <div class="bhi-ht td" id="v2-bhi-t">&#8595; &minus;13 this week</div>
+    </div>
+    <button class="draft-btn" onclick="draftMemo()">Draft Credit Memo &#8594;</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab on" onclick="showTab('overview',this)">Overview</div>
+  <div class="tab" onclick="showTab('relationships',this)">Relationships</div>
+  <div class="tab" onclick="showTab('exposure',this)">Exposure &amp; Collateral</div>
+  <div class="tab" onclick="showTab('deposits',this)">Deposits &amp; Treasury</div>
+  <div class="tab" onclick="showTab('financials',this)">Financials</div>
+  <div class="tab" onclick="showTab('risk',this)">Risk &amp; Covenants</div>
+  <div class="tab" onclick="showTab('kyc',this)">KYC &amp; Compliance</div>
+  <div class="tab" onclick="showTab('opportunities',this)">Opportunities &amp; EWS</div>
+</div>
+
+<div class="tp on" id="tp-overview">
+  <div style="max-width:1100px">
+    <div class="ov">
+      <div class="ov-card"><div class="ov-tag">Risk Rating</div><div class="ov-val">Grade 5</div><div class="ov-sub">Pass / Watch &middot; Last reviewed Mar 2026</div><div class="ov-badge"><span class="badge b-a">Unchanged 12mo</span></div></div>
+      <div class="ov-card"><div class="ov-tag">Total Committed</div><div class="ov-val">$12.5M</div><div class="ov-sub">$4.25M drawn &middot; $8.25M available</div><div class="ov-badge"><span class="badge b-g">Fully collateralised</span></div></div>
+      <div class="ov-card"><div class="ov-tag">Debt Service Coverage</div><div class="ov-val">1.61&times;</div><div class="ov-sub">Floor 1.25&times; &middot; Cushion 0.36&times;</div><div class="ov-badge"><span class="badge b-a">&#8595; Compressing &middot; test in 60d</span></div></div>
+      <div class="ov-card"><div class="ov-tag">Revenue (LTM)</div><div class="ov-val">$64.5M</div><div class="ov-sub">+3.2% YoY &middot; EBITDA $5.2M</div><div class="ov-badge"><span class="badge b-n">Margin 8.1% &#8595; 340bps</span></div></div>
+      <div class="ov-card"><div class="ov-tag">Total Leverage</div><div class="ov-val">3.85&times;</div><div class="ov-sub">Debt / EBITDA &middot; Covenant max 4.5&times;</div><div class="ov-badge"><span class="badge b-g">Headroom 0.65&times;</span></div></div>
+      <div class="ov-card"><div class="ov-tag">Operating Wallet</div><div class="ov-val" style="color:var(--r)">$0</div><div class="ov-sub">$0 deposits with us &middot; Est. $4.2M wallet</div><div class="ov-badge"><span class="badge b-p">Cross-sell opportunity</span></div></div>
+    </div>
+    <div class="callout warn">
+      <div class="callout-hd">&#9888; Key Watch Item</div>
+      <div class="callout-tx">EBITDA margin has compressed from 11.5% (FY2024) to 8.1% (LTM), driven by input cost inflation and delayed price pass-through. At current trajectory, DSCR reaches the 1.25&times; covenant floor within two testing cycles. Johnson flagged this in the March review; the compression has continued since.</div>
+    </div>
+    <div class="callout acc">
+      <div class="callout-hd">&#8594; Next Best Action</div>
+      <div class="callout-tx">Piedmont holds zero operating balances with this bank against $12.5M in committed credit. Estimated addressable wallet:</div>
+      <div class="callout-num">$4.2M</div>
+      <div class="callout-tx">A treasury conversation is overdue. Pair the next credit review with a deposits introduction &mdash; single highest-value move for this relationship.</div>
+    </div>
+  </div>
+</div>
+
+<div class="tp" id="tp-relationships">
+  <div style="max-width:900px">
+    <div class="panel" style="margin-bottom:16px">
+      <div class="ph"><div class="ph-t">Decision Ledger</div><span class="badge b-p">Institutional memory</span></div>
+      <div style="padding:4px 20px 8px">
+        <div class="l-row"><div class="l-dot"></div><div class="l-date">Mar 2026</div><div class="l-body"><div class="l-text">Rating held at Grade 5 Pass/Watch. Primary watch: EBITDA margin compression (11.5% &#8594; 9.4% at review). DSC cushion adequate but directional risk flagged. No waiver proposed.</div><div class="l-who">Johnson, M. &middot; Annual Review</div></div></div>
+        <div class="l-row"><div class="l-dot"></div><div class="l-date">Sep 2025</div><div class="l-body"><div class="l-text">Revolver limit increased $8M &#8594; $12.5M on expanded contract pipeline. Input cost pressure noted but viewed as transitory. No rating change.</div><div class="l-who">Chen, S. &middot; Credit Committee</div></div></div>
+        <div class="l-row"><div class="l-dot"></div><div class="l-date">Mar 2025</div><div class="l-body"><div class="l-text">Annual review &mdash; Grade 5 confirmed. Margin 11.5%, leverage 3.4&times;, DSC 2.1&times;. Clean year. Treasury introduction discussed but not progressed.</div><div class="l-who">Johnson, M. &middot; Annual Review</div></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><div class="ph-t">Ownership &amp; Group Structure</div><div class="ph-m">Verified</div></div>
+      <div style="padding:18px 20px;font-size:12px;color:var(--body);line-height:1.6">
+        <div style="margin-bottom:12px"><strong style="color:var(--ink);font-size:13px">Piedmont Precision Industries LLC</strong> &nbsp;&middot;&nbsp; Borrower &nbsp;&middot;&nbsp; NAICS 3320</div>
+        <div style="padding-left:18px;border-left:2px solid var(--bdr2)">
+          <div style="margin-bottom:7px">&#8627; <strong>Piedmont Holdings Group</strong> &mdash; 100% owner &nbsp;<span class="badge b-n">Guarantor</span></div>
+          <div style="padding-left:20px;margin-bottom:6px">&#8627; <strong>R. Piedmont Jr.</strong> &mdash; 72% beneficial &nbsp;<span class="badge b-n">Key person</span></div>
+          <div style="padding-left:20px">&#8627; <strong>Piedmont Family Trust</strong> &mdash; 28% beneficial</div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:var(--sur2);border-radius:var(--rr-sm);font-size:11px;color:var(--muted)">No cross-default clauses with affiliates. No other credit facilities identified at this bank.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tp" id="tp-risk">
+  <div style="max-width:1100px">
+    <div style="display:flex;gap:12px;margin-bottom:20px">
+      <div class="anch"><div class="anch-l">Risk Rating</div><div class="anch-v">Grade 5</div><div class="anch-s">Pass / Watch</div></div>
+      <div class="anch"><div class="anch-l">PD (Snowflake)</div><div class="anch-v">2.14%</div><div class="anch-s">12-month horizon</div></div>
+      <div class="anch"><div class="anch-l">Last Rated</div><div class="anch-v">Mar 2026</div><div class="anch-s">Annual review</div></div>
+      <div class="anch"><div class="anch-l">Migration</div><div class="anch-v">Stable</div><div class="anch-s">3 quarters</div></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><div class="ph-t">Covenant Compliance</div><span class="badge b-a">1 Watch</span></div>
+      <table class="cov-t">
+        <thead><tr><th>Covenant</th><th>Actual</th><th>Threshold</th><th>Cushion</th><th>Trend</th><th>Next Test</th></tr></thead>
+        <tbody>
+          <tr><td><div class="cov-n">Debt Service Coverage</div><div class="cov-d">Min 1.25&times; rolling LTM</div></td><td><span class="badge b-a">1.61&times;</span></td><td>&#8805; 1.25&times;</td><td><div class="cush-num">0.36&times;</div><div class="cush-bar"><div class="cush-fill cf-a" style="width:29%"></div></div></td><td><div class="trend-dn">&#8595; Compressing</div></td><td><span class="chip">60 days</span></td></tr>
+          <tr><td><div class="cov-n">Total Leverage</div><div class="cov-d">Max 4.5&times; Debt/EBITDA</div></td><td><span class="badge b-g">3.85&times;</span></td><td>&#8804; 4.50&times;</td><td><div class="cush-num">0.65&times;</div><div class="cush-bar"><div class="cush-fill cf-g" style="width:58%"></div></div></td><td><div class="trend-st">&#8594; Stable</div></td><td><span class="chip">60 days</span></td></tr>
+          <tr><td><div class="cov-n">Minimum Liquidity</div><div class="cov-d">&#8805; $1.5M unrestricted cash</div></td><td><span class="badge b-g">$3.2M</span></td><td>&#8805; $1.5M</td><td><div class="cush-num">$1.7M</div><div class="cush-bar"><div class="cush-fill cf-g" style="width:75%"></div></div></td><td><div class="trend-up">&#8593; Improving</div></td><td><span class="chip">Quarterly</span></td></tr>
+          <tr><td><div class="cov-n">Capex Limit</div><div class="cov-d">Max $2.0M annually</div></td><td><span class="badge b-g">$1.1M</span></td><td>&#8804; $2.0M</td><td><div class="cush-num">$0.9M</div><div class="cush-bar"><div class="cush-fill cf-g" style="width:62%"></div></div></td><td><div class="trend-st">&#8594; On track</div></td><td><span class="chip">Annual</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="tp" id="tp-deposits">
+  <div style="max-width:900px">
+    <div class="callout acc" style="margin-bottom:20px">
+      <div class="callout-hd">&#8594; Wallet Opportunity</div>
+      <div class="callout-tx">Piedmont holds zero operating, payroll, or treasury balances with this bank against $12.5M in committed credit. Estimated addressable wallet:</div>
+      <div class="callout-num">$4.2M</div>
+      <div class="callout-tx">Primary: operating account + payroll. Secondary: basic treasury management. Noted in Mar 2025 review &mdash; not progressed.</div>
+    </div>
+    <div class="panel">
+      <div class="ph"><div class="ph-t">Banking Relationship</div></div>
+      <div style="padding:18px 20px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <div class="anch"><div class="anch-l">Operating Account</div><div class="anch-v" style="color:var(--r)">$0</div><div class="anch-s">Not with this bank</div></div>
+        <div class="anch"><div class="anch-l">Treasury Services</div><div class="anch-v" style="color:var(--r)">None</div><div class="anch-s">0 products active</div></div>
+        <div class="anch"><div class="anch-l">Credit Utilisation</div><div class="anch-v">34%</div><div class="anch-s">$4.25M of $12.5M</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tp" id="tp-exposure"><div class="stub"><div class="stub-t">$12.5M committed &middot; $4.25M drawn</div><div class="stub-s">1 revolver &middot; Lendable collateral $6.0M &middot; Coverage 1.42&times;<br><br><span class="badge b-g">Fully collateralised</span></div></div></div>
+<div class="tp" id="tp-financials"><div class="stub"><div class="stub-t">Revenue $64.5M &middot; EBITDA $5.2M &middot; Leverage 3.85&times;</div><div class="stub-s">Full spread via Boom MCP &middot; EBITDA margin 8.1% &#8595; 340bps YoY<br><br><span class="badge b-a">Margin compression &mdash; watch</span></div></div></div>
+<div class="tp" id="tp-kyc"><div class="stub"><div class="stub-t">KYC &amp; Compliance</div><div class="stub-s">Beneficial ownership verified &middot; Screening: Clear &middot; Last refresh Jan 2026<br><br><span class="badge b-g">Cleared to bank</span></div></div></div>
+<div class="tp" id="tp-opportunities"><div class="stub"><div class="stub-t">Opportunities &amp; Early Warning</div><div class="stub-s">#1 NBA: Capture $4.2M operating wallet &middot; EWS: EBITDA compression (Watch)<br>Renewal due Mar 2027 &mdash; begin 9 months prior<br><br><span class="badge b-a">1 active EWS signal</span></div></div></div>
+</div><!-- /v2 -->
+
+<div class="toast" id="toast"><div class="toast-dot"></div><span id="toast-msg"></span></div>
+
+<script>
+/* Arc: R=16, CX=CY=23, C≈100.53 */
+const ARC_COLORS = { g:'#047857', a:'#92400E', r:'#991B1B' };
+const ARC_TRK = '#E2DCF0';
+const ARC_C = 100.53;
+
+function buildArc(score, tier) {
+  const clr = ARC_COLORS[tier];
+  const off = (ARC_C * (1 - score / 100)).toFixed(2);
+  return '<svg width="46" height="46" viewBox="0 0 46 46" fill="none" style="position:absolute;inset:0">'
+    + '<circle cx="23" cy="23" r="16" stroke="' + ARC_TRK + '" stroke-width="3.5"/>'
+    + '<circle cx="23" cy="23" r="16" stroke="' + clr + '" stroke-width="3.5"'
+    + ' stroke-dasharray="' + ARC_C + '" stroke-dashoffset="' + off + '"'
+    + ' stroke-linecap="round" transform="rotate(-90 23 23)">'
+    + '<animate attributeName="stroke-dashoffset" from="' + ARC_C + '" to="' + off + '"'
+    + ' dur="0.7s" fill="freeze" calcMode="spline" keySplines=".22 1 .36 1"/>'
+    + '</circle></svg>'
+    + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">'
+    + '<span style="font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;color:' + clr + '">' + score + '</span>'
+    + '</div>';
+}
+
+document.querySelectorAll('.arc[data-arc]').forEach(function(el) {
+  var parts = el.dataset.arc.split(',');
+  el.innerHTML = buildArc(parseInt(parts[0], 10), parts[1]);
+});
+
+/* Borrower data */
+var B = {
+  piedmont:{ name:'Piedmont Precision Industries', verdict:'Grade 5 Pass/Watch &nbsp;&middot;&nbsp; $12.5M committed / $4.25M drawn, fully covered &nbsp;&middot;&nbsp; Watch: margin-led DSC cushion compressing toward the 1.25&times; floor &nbsp;&middot;&nbsp; Next move: capture the $0 operating wallet.', bhi:'58', tier:'a', trend:'&#8595; &minus;13 this week', anchors:[['Rating','Grade 5','Pass / Watch'],['Committed','$12.5M','$4.25M drawn'],['DSC','1.61&times;','Floor 1.25&times; &#8595;'],['Coverage','1.42&times;','Collateral']] },
+  meridian:{ name:'Meridian Logistics Group', verdict:'Grade 6 Special Mention &nbsp;&middot;&nbsp; $22M committed / $21.8M drawn &nbsp;&middot;&nbsp; Critical: DSCR at 1.28&times;, 3bps above the 1.25&times; floor &mdash; test in 8 days &nbsp;&middot;&nbsp; Waiver memo required immediately.', bhi:'34', tier:'r', trend:'&#8595; &minus;23 this week', anchors:[['Rating','Grade 6','Special Mention'],['Committed','$22.0M','$21.8M drawn'],['DSC','1.28&times;','Floor 1.25&times; &#9888;'],['Test','8 days','Covenant date']] },
+  norton:{ name:'Norton Group Holdings', verdict:'Grade 5 Pass/Watch &nbsp;&middot;&nbsp; $28.5M committed / fully drawn &nbsp;&middot;&nbsp; Annual review 14 days overdue, no extension filed &nbsp;&middot;&nbsp; Obtain current financials immediately.', bhi:'51', tier:'a', trend:'&#8595; &minus;9 this week', anchors:[['Rating','Grade 5','Pass / Watch'],['Committed','$28.5M','Fully drawn'],['Review','Overdue','14 days'],['Extension','None','Filed']] },
+  apex:{ name:'Apex Renewables LLC', verdict:'Grade 3 Pass &nbsp;&middot;&nbsp; $42M committed / $18M drawn, fully collateralised &nbsp;&middot;&nbsp; All covenants clear with substantial headroom &nbsp;&middot;&nbsp; Next review Sep 2026 &mdash; consider limit increase.', bhi:'81', tier:'g', trend:'&#8593; +4 this week', anchors:[['Rating','Grade 3','Pass'],['Committed','$42.0M','$18M drawn'],['DSC','2.84&times;','Floor 1.25&times;'],['Coverage','2.1&times;','Collateral']] }
+};
+var TC = { g:'var(--g)', a:'var(--a)', r:'var(--r)' };
+
+function openC360(key) {
+  var b = B[key] || B.piedmont;
+  document.getElementById('v2-name').textContent = b.name;
+  document.getElementById('v2-bc').textContent = b.name;
+  document.getElementById('v2-verdict').innerHTML = b.verdict;
+  var bhi = document.getElementById('v2-bhi');
+  bhi.textContent = b.bhi; bhi.className = 'bhi-big ' + b.tier;
+  document.getElementById('v2-bhi-l').style.color = TC[b.tier];
+  var trEl = document.getElementById('v2-bhi-t');
+  trEl.innerHTML = b.trend;
+  trEl.className = 'bhi-ht ' + (b.tier === 'g' ? 'tu' : 'td');
+  document.getElementById('v2-anchors').innerHTML = b.anchors.map(function(a) {
+    return '<div class="anch"><div class="anch-l">'+a[0]+'</div><div class="anch-v">'+a[1]+'</div><div class="anch-s">'+a[2]+'</div></div>';
+  }).join('');
+  document.getElementById('v1').classList.add('off');
+  document.getElementById('v2').classList.remove('off');
+  document.getElementById('v2').scrollTop = 0;
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('on'); });
+  document.querySelectorAll('.tp').forEach(function(t){ t.classList.remove('on'); });
+  document.querySelector('.tab').classList.add('on');
+  document.getElementById('tp-overview').classList.add('on');
+}
+function goBack() {
+  document.getElementById('v2').classList.add('off');
+  document.getElementById('v1').classList.remove('off');
+}
+function showTab(id, el) {
+  document.querySelectorAll('.tp').forEach(function(t){ t.classList.remove('on'); });
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('on'); });
+  document.getElementById('tp-'+id).classList.add('on');
+  el.classList.add('on');
+}
+function draftMemo() {
+  var n = document.getElementById('v2-name').textContent;
+  document.getElementById('toast-msg').textContent = 'Invoking Credit Memo Agent for ' + n + ' — assembling from Boom, AFS, nCino…';
+  var t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 4000);
+}
+</script>
+</body>
+</html>

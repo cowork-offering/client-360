@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Technical High Level Solution Intent · Customer 360 · Commercial Credit Brain · Stage 0</title>
+<style>
+/*FONTS_PLACEHOLDER*/
+:root{
+  --ink:#1c1c22;
+  --body:#33333d;
+  --muted:#6b6772;
+  --faint:#8a8a9a;
+  --paper:#ffffff;
+  --rule:#dcdae2;
+  --rule-soft:#e8e6ee;
+  --zebra:#f4f3f8;
+
+  --violet:#5b3fd4;
+  --violet-deep:#4b32b8;
+  --dark:#1d1830;
+
+  --aws:#C26A00;
+  --aws-deep:#9a5400;
+  --aws-bright:#F6A53A;
+  --aws-tag:#232F3E;
+  --snow:#1488b8;
+
+  --now:#1f7a3a;
+  --future:#b45309;
+  --backlog:#8A8694;
+  --next:#9a5400;
+
+  --green-bg:#eef7f0; --green-line:#bcdcc6; --green-head:#2c6e43;
+  --amber-bg:#fdf6ea; --amber-line:#ecd8a8; --amber-head:#9a6b16;
+
+  --font-sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono','SFMono-Regular',Menlo,Consolas,monospace;
+
+  /* heatmap intensity scale */
+  --hm0:#f4f3f8; --hm1:#e6e0fa; --hm2:#c3b3f2; --hm3:#8a6fe0;
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font-sans);
+  color:var(--body);
+  background:#54525c;
+  font-size:9.6pt;
+  line-height:1.46;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+
+/* ============================================================
+   FIXED-PAGE MODEL — A4 landscape, one chapter per .page
+   ============================================================ */
+@page{ size:A4 landscape; margin:0; }
+
+.page{
+  width:297mm; height:210mm; box-sizing:border-box;
+  background:#fff; padding:16mm 16mm 14mm;
+  position:relative; overflow:hidden;
+}
+
+@media screen{
+  body{padding:14mm 0;}
+  .page{ margin:0 auto 13mm; box-shadow:0 3px 22px rgba(0,0,0,.40); }
+}
+@media print{
+  body{background:#fff;padding:0;}
+  .page{ margin:0; box-shadow:none; break-after:page; }
+  .page:last-child{break-after:auto;}
+}
+
+/* ---- per-page running header + footer (in-page furniture) ---- */
+.ph{
+  position:absolute; top:9mm; left:16mm; right:16mm;
+  display:flex; align-items:center; justify-content:space-between;
+  font-family:var(--font-mono); font-size:7pt; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--faint);
+  padding-bottom:3px; border-bottom:0.75px solid var(--rule-soft);
+}
+.ph .ph-l .tg{color:var(--rule);}
+.ph .ph-r{display:flex;align-items:center;}
+.ph .ph-logo{height:4mm;width:auto;display:block;}
+.pf{
+  position:absolute; bottom:8mm; left:16mm; right:16mm;
+  display:flex; align-items:center; justify-content:space-between;
+  font-family:var(--font-mono); font-size:6.6pt; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--faint);
+  padding-top:3px; border-top:0.75px solid var(--rule-soft);
+}
+.pf .pf-mid{color:var(--muted);}
+
+/* the working content band between header and footer */
+.pc{ margin-top:7mm; }
+
+/* ---- prose width on landscape ---- */
+.pc p, .pc ul.tw, .pc .gi, .uc-pdesc, .pc h3.sub{max-width:262mm;}
+.pc .lead, p.lead{max-width:262mm;}
+.pc .callout{max-width:265mm;}
+
+h2,h3{break-after:avoid;}
+p{margin:0 0 7px;}
+p.lead{font-size:10.6pt;color:var(--ink);margin-bottom:10px;line-height:1.5;}
+strong{color:var(--ink);font-weight:600;}
+.vio{color:var(--violet);font-weight:600;}
+.amb{color:var(--aws-deep);font-weight:600;}
+code,.mono{font-family:var(--font-mono);font-size:8.2pt;color:var(--violet-deep);}
+.callout code{color:inherit;background:rgba(91,63,212,.07);padding:0 3px;border-radius:3px;}
+
+/* ---- section header ---- */
+.sec{
+  display:flex;align-items:baseline;gap:14px;
+  border-bottom:1.5px solid var(--ink);
+  padding-bottom:7px;margin:0 0 13px;
+}
+.sec .num{
+  font-family:var(--font-mono);font-size:13pt;font-weight:600;
+  color:var(--violet);letter-spacing:.02em;line-height:1;min-width:30px;
+}
+.sec h2{
+  font-size:15pt;font-weight:600;color:var(--ink);
+  margin:0;letter-spacing:-.01em;line-height:1.08;flex:1;
+}
+.sec .stag{
+  font-family:var(--font-mono);font-size:7pt;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--faint);white-space:nowrap;
+}
+.sec .cont{
+  font-family:var(--font-mono);font-size:7pt;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--violet);white-space:nowrap;
+}
+h3.sub{
+  font-size:10.8pt;font-weight:600;color:var(--ink);
+  margin:13px 0 6px;letter-spacing:-.005em;
+}
+h3.sub .n{font-family:var(--font-mono);color:var(--violet);font-weight:600;margin-right:7px;}
+
+/* ---- callouts ---- */
+.callout{
+  border-radius:7px;padding:11px 14px;margin:10px 0;
+  border:1px solid var(--rule);background:var(--zebra);
+}
+.callout .clab{
+  font-family:var(--font-mono);font-size:7pt;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;margin-bottom:5px;display:block;
+}
+.callout p{margin:0;font-size:9.2pt;line-height:1.46;}
+.callout p + p{margin-top:7px;}
+.callout.green{background:var(--green-bg);border-color:var(--green-line);}
+.callout.green .clab{color:var(--green-head);}
+.callout.amber{background:var(--amber-bg);border-color:var(--amber-line);}
+.callout.amber .clab{color:var(--amber-head);}
+.callout.dark{ background:var(--dark);border:0;color:#e8e4f4;padding:14px 17px; }
+.callout.dark .clab{color:#a99ce8;}
+.callout.dark p{color:#e9e6f5;font-size:9.6pt;line-height:1.52;}
+.callout.dark strong{color:#fff;}
+.callout.dark .vio{color:#b9aef0;}
+.callout.dark .amb{color:var(--aws-bright);}
+.callout.dark code{color:#cdbef7;background:rgba(255,255,255,.08);}
+
+/* illustrative example box */
+.example{
+  border:1px solid #cabfe8;border-left:4px solid var(--violet);
+  border-radius:6px;background:rgba(91,63,212,.04);
+  padding:10px 14px;margin:10px 0;
+}
+.example .exlab{
+  font-family:var(--font-mono);font-size:6.6pt;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--violet);
+  display:inline-block;border:1px solid #cabfe8;border-radius:4px;
+  padding:2px 8px;background:#fff;margin-bottom:7px;
+}
+.example p{margin:0;font-size:9pt;line-height:1.46;}
+.example p + p{margin-top:6px;}
+.example .ename{font-weight:600;color:var(--ink);}
+.tag-illus{
+  font-family:var(--font-mono);font-size:6.2pt;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--violet);
+  border:1px solid #cabfe8;border-radius:3px;padding:1px 5px;
+  background:rgba(91,63,212,.05);white-space:nowrap;
+}
+
+/* ---- tables ---- */
+table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:9pt;}
+thead th{
+  font-family:var(--font-mono);font-size:7pt;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:0 9px 6px;border-bottom:1.5px solid var(--ink);
+  vertical-align:bottom;
+}
+tbody td{
+  padding:7px 9px;border-bottom:1px solid var(--rule-soft);
+  vertical-align:top;line-height:1.4;
+}
+tbody tr:nth-child(even){background:var(--zebra);}
+td .em{font-weight:600;color:var(--ink);}
+td .sm{display:block;font-size:8pt;color:var(--muted);margin-top:2px;}
+.col-n{width:26px;font-family:var(--font-mono);color:var(--violet);font-weight:600;text-align:center;}
+table.tight tbody td{padding:5px 9px;font-size:8.6pt;line-height:1.34;}
+
+/* ---- pills ---- */
+.pill{
+  display:inline-block;font-family:var(--font-mono);font-size:6.6pt;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:4px;
+  border:1px solid var(--rule);color:var(--muted);background:#fff;white-space:nowrap;
+}
+.pill.built{color:var(--now);border-color:var(--green-line);background:#eef7f0;}
+.pill.next{color:var(--next);border-color:var(--amber-line);background:#fdf6ea;}
+.pill.gate{color:var(--amber-head);border-color:var(--amber-line);background:#fdf6ea;}
+.pill.vio{color:var(--violet);border-color:#cfc4f4;background:#efecfb;}
+
+/* effort pill */
+.epill{
+  display:inline-block;font-family:var(--font-mono);font-size:6.8pt;font-weight:700;
+  letter-spacing:.04em;width:22px;text-align:center;padding:2px 0;border-radius:4px;
+  border:1px solid var(--rule);background:#fff;color:var(--muted);
+}
+.epill.s{color:#1f7a3a;border-color:var(--green-line);background:#eef7f0;}
+.epill.m{color:#9a6b16;border-color:var(--amber-line);background:#fdf6ea;}
+.epill.l{color:#9a5400;border-color:#f0d7a8;background:#fbeede;}
+.epill.xl{color:#fff;border-color:var(--violet-deep);background:var(--violet);}
+
+/* ---- figures ---- */
+figure{margin:11px 0 5px;}
+figcaption{
+  font-family:var(--font-mono);font-size:7pt;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--faint);margin-top:8px;line-height:1.45;
+}
+
+/* governance / through-line cards */
+.gi{
+  border:1px solid var(--rule);border-left:3px solid var(--violet);
+  border-radius:6px;background:var(--zebra);padding:9px 13px;margin:8px 0;
+  font-size:9.1pt;line-height:1.42;
+}
+.gi b{color:var(--ink);}
+
+ul.tw{margin:7px 0 9px;padding-left:0;list-style:none;}
+ul.tw li{position:relative;padding-left:17px;margin-bottom:6px;font-size:9.2pt;line-height:1.42;}
+ul.tw li::before{content:"";position:absolute;left:2px;top:7px;width:6px;height:6px;border-radius:50%;background:var(--violet);}
+
+/* ---- cards grid ---- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin:12px 0 6px;}
+.cards.two{grid-template-columns:repeat(2,1fr);}
+.cards.four{grid-template-columns:repeat(4,1fr);gap:9px;}
+.card{
+  border:1.3px solid var(--rule);border-radius:9px;background:#fff;
+  padding:12px 13px;display:flex;flex-direction:column;gap:6px;
+}
+.card.vio{border-top:3px solid var(--violet);}
+.card.snow{border-top:3px solid var(--snow);}
+.card.aws{border-top:3px solid var(--aws);}
+.card .ch{font-size:9.4pt;font-weight:600;color:var(--ink);line-height:1.15;}
+.card .ck{font-family:var(--font-mono);font-size:6.6pt;letter-spacing:.08em;text-transform:uppercase;color:var(--violet);}
+.card .cb{font-size:8.4pt;color:var(--muted);line-height:1.38;}
+.card .cb b{color:var(--ink);}
+
+/* ---- code block (the literal seam) ---- */
+pre.codeblock{
+  font-family:var(--font-mono);font-size:7.6pt;line-height:1.5;
+  color:#cdbef7;background:var(--dark);border-radius:8px;
+  padding:12px 15px;margin:9px 0 5px;overflow:hidden;white-space:pre;
+  border:0;max-width:265mm;
+}
+pre.codeblock .cmt{color:#8d83b8;}
+pre.codeblock .kw{color:#b9aef0;}
+pre.codeblock .str{color:#9fd6b4;}
+.codecap{font-family:var(--font-mono);font-size:6.8pt;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:3px 0 0;}
+
+/* ---- tier / topology rail ---- */
+.tiers{display:flex;flex-direction:column;gap:0;margin:10px 0 5px;}
+.tier{
+  display:grid;grid-template-columns:84px 1fr;gap:13px;align-items:start;
+  border:1.3px solid var(--rule);border-radius:8px;background:#fff;
+  padding:9px 13px;margin-bottom:7px;border-left:3px solid var(--violet);
+}
+.tier .tn{font-family:var(--font-mono);font-size:7.2pt;font-weight:700;letter-spacing:.04em;color:var(--violet);text-transform:uppercase;line-height:1.3;}
+.tier .tbody b{font-size:9pt;color:var(--ink);font-weight:600;}
+.tier .tbody span{display:block;font-size:8.4pt;color:var(--muted);line-height:1.36;margin-top:2px;}
+.tier.surf{border-left-color:var(--snow);}
+.tier.surf .tn{color:var(--snow);}
+
+/* ---- step ladder (resolution sequence) ---- */
+.ladder{display:flex;flex-direction:column;gap:0;margin:8px 0 5px;}
+.lstep{display:grid;grid-template-columns:20px 1fr;gap:9px;align-items:start;padding:4.5px 0;border-bottom:1px solid var(--rule-soft);}
+.lstep:last-child{border-bottom:0;}
+.lstep .ln{font-family:var(--font-mono);font-size:8pt;font-weight:600;color:#fff;background:var(--violet);border-radius:50%;width:17px;height:17px;line-height:17px;text-align:center;}
+.lstep .lt b{font-size:8.8pt;color:var(--ink);font-weight:600;}
+.lstep .lt span.ld{display:block;font-size:8.2pt;color:var(--muted);line-height:1.34;margin-top:1px;}
+.lstep .lt code{font-size:7.6pt;}
+
+/* ---- inline fleet figure ---- */
+.fleetfig{margin:8px 0 5px;text-align:center;}
+.fleetfig svg{display:block;width:auto;max-width:100%;height:auto;max-height:138mm;margin:0 auto;}
+.fleetnote{font-family:var(--font-mono);font-size:7pt;letter-spacing:.04em;color:var(--muted);line-height:1.45;text-align:center;max-width:248mm;margin:3px auto 0;}
+
+/* ---- review posture rows (Q -> control) ---- */
+table.rev{font-size:8.6pt;margin:9px 0 4px;}
+table.rev th{font-size:6.6pt;padding:0 8px 5px;}
+table.rev td{padding:5px 8px;line-height:1.34;}
+table.rev .r-c{width:22%;font-weight:600;color:var(--ink);}
+table.rev .r-m{width:50%;color:var(--body);}
+table.rev .r-q{width:28%;color:var(--muted);font-style:italic;}
+
+/* ---- status two-col ---- */
+.statuswrap{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0 5px;}
+.statuscol .scol-h{
+  font-family:var(--font-mono);font-size:7.4pt;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding-bottom:5px;margin-bottom:7px;border-bottom:1.3px solid var(--ink);
+}
+.statuscol.shipped .scol-h{color:var(--now);}
+.statuscol.needed .scol-h{color:var(--next);}
+.srow{display:grid;grid-template-columns:1fr;gap:1px;padding:4px 0;border-bottom:1px solid var(--rule-soft);}
+.srow:last-child{border-bottom:0;}
+.srow b{font-size:8.5pt;color:var(--ink);font-weight:600;line-height:1.2;}
+.srow span{font-size:7.8pt;color:var(--muted);line-height:1.32;}
+.srow .st{font-family:var(--font-mono);font-size:6.2pt;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);float:right;}
+
+/* ---- cover ---- */
+.cover-pc{display:flex;flex-direction:column;}
+.cover .cover-rule{ border-top:1.5px solid var(--ink);margin-bottom:5mm; }
+.cover .eyebrow{
+  font-family:var(--font-mono);font-size:8.5pt;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--violet);margin:18mm 0 10px;
+}
+.cover h1{
+  font-size:34pt;font-weight:600;color:var(--ink);
+  letter-spacing:-.02em;line-height:1.04;margin:0 0 14px;max-width:200mm;
+}
+.cover .subtitle{
+  font-size:13pt;color:var(--body);line-height:1.45;margin:0 0 7mm;max-width:200mm;
+}
+.cover .subtitle .vio{color:var(--violet);font-weight:600;}
+.cover .intent{
+  font-size:10.5pt;color:var(--muted);line-height:1.55;max-width:215mm;
+  border-left:3px solid var(--violet);padding-left:14px;
+}
+.cover-meta{
+  display:flex;gap:0;margin-top:12mm;padding-top:6mm;
+  border-top:1px solid var(--rule);
+}
+.cover-meta > div{flex:1;padding-right:16px;}
+.cover-meta .mlab{
+  font-family:var(--font-mono);font-size:6.8pt;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:5px;
+}
+.cover-meta .mval{font-size:9.4pt;color:var(--body);line-height:1.42;}
+
+/* ---- per-page fit tighteners (scoped) ---- */
+.page.fit-02 .pc p.lead{margin-bottom:7px;}
+.page.fit-02 table.tight tbody td{padding:3.4px 9px;line-height:1.28;}
+.page.fit-02 h3.sub{margin:9px 0 5px;}
+.page.fit-02 ul.tw{margin:5px 0 7px;}
+.page.fit-02 ul.tw li{margin-bottom:5px;}
+.page.fit-14 .srow{padding:3.4px 0;}
+/* topology page (ch 04): shrink the SVG band so the lead + figcaption clear the footer */
+.page.fit-topo .pc p.lead{margin-bottom:6px;}
+.page.fit-topo figure{margin:7px 0 4px;}
+.page.fit-topo .fleetfig svg{max-height:118mm;}
+.page.fit-topo figcaption{margin-top:6px;line-height:1.4;}
+
+/* ============================================================
+   EMBEDDED DIAGRAM — three layers (scoped under .dgm-tl)
+   ============================================================ */
+.dgm-tl{position:relative;}
+.dgm-tl .eyebrow{display:none;}
+.dgm-tl h1{display:none;}
+.dgm-tl .lead{font-size:10pt;color:var(--muted);max-width:262mm;line-height:1.45;margin:0 0 1mm;}
+.dgm-tl .stack{margin-top:5mm;}
+.dgm-tl .band{display:grid;grid-template-columns:36mm 1fr;gap:6mm;align-items:center;padding:4mm 0;position:relative;}
+.dgm-tl .blabel{text-align:right;}
+.dgm-tl .blabel .bk{font-family:var(--font-mono);font-size:8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);}
+.dgm-tl .blabel .bn{font-size:13pt;font-weight:700;letter-spacing:-.01em;margin-top:1mm;color:var(--ink);}
+.dgm-tl .blabel .bd{font-size:8.3pt;color:var(--muted);margin-top:1.5mm;line-height:1.4;}
+.dgm-tl .row{display:flex;gap:5mm;}
+.dgm-tl .row .grp{flex:1;border:1px solid var(--rule);border-radius:6px;padding:4mm 4.5mm;background:#fff;}
+.dgm-tl .grp .gh{font-size:10pt;font-weight:700;color:var(--ink);}
+.dgm-tl .grp .gh .pin{font-family:var(--font-mono);font-size:7pt;letter-spacing:.06em;text-transform:uppercase;padding:.5mm 1.6mm;border-radius:3px;margin-left:2mm;vertical-align:middle;}
+.dgm-tl .pin.rel{background:#f1eefc;color:var(--violet);}
+.dgm-tl .pin.deal{background:#eef4f1;color:#1f9d6b;}
+.dgm-tl .grp .gd{font-size:8.6pt;color:var(--muted);margin-top:1.5mm;line-height:1.45;}
+.dgm-tl .grp .gd b{color:var(--ink);}
+.dgm-tl .tools{display:flex;flex-wrap:wrap;gap:3mm;}
+.dgm-tl .tool{border:1px solid var(--rule);border-radius:5px;padding:2.6mm 3.5mm;background:#fbfbfe;font-size:8.8pt;font-weight:600;min-width:34mm;color:var(--ink);}
+.dgm-tl .tool .tt{font-family:var(--font-mono);font-size:7pt;color:var(--faint);font-weight:500;letter-spacing:.02em;margin-top:.6mm;}
+.dgm-tl .tool.future{border-style:dashed;color:var(--muted);background:#fff;}
+.dgm-tl .arrow{grid-column:2;justify-self:start;margin-left:54mm;color:#c4c0cf;font-size:13pt;line-height:.6;padding:0;}
+.dgm-tl .bandA{background:#faf9ff;border-radius:8px;}
+.dgm-tl .bandB{background:#fbfdfc;border-radius:8px;}
+.dgm-tl .key{margin-top:5mm;border-top:1px solid var(--rule);padding-top:3.5mm;display:flex;gap:9mm;font-size:8.7pt;color:var(--muted);}
+.dgm-tl .key b{color:var(--ink);}
+.dgm-tl .foot{margin-top:3mm;font-size:8.6pt;color:var(--faint);font-family:var(--font-mono);letter-spacing:.02em;}
+
+/* ============================================================
+   EMBEDDED DIAGRAM — how a tool call resolves (scoped under .dgm-htc)
+   ============================================================ */
+.dgm-htc{position:relative;}
+.dgm-htc .eyebrow{display:none;}
+.dgm-htc h1{display:none;}
+.dgm-htc .lead{font-size:10pt;color:var(--muted);max-width:262mm;line-height:1.45;margin:0 0 1mm;}
+.dgm-htc .flow{margin-top:5mm;position:relative;}
+.dgm-htc .flow:before{content:"";position:absolute;left:6.0mm;top:6mm;bottom:24mm;width:2px;background:#cfc7f2;z-index:0;}
+.dgm-htc .step{display:grid;grid-template-columns:12mm 1fr;gap:6mm;align-items:start;padding:0 0 4.6mm 0;position:relative;z-index:1;}
+.dgm-htc .num{width:12mm;height:12mm;border-radius:50%;background:var(--violet);color:#fff;font-weight:700;font-size:13pt;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px #fff;font-family:var(--font-sans);}
+.dgm-htc .body{padding-top:1mm;}
+.dgm-htc .ttl{font-size:11.5pt;font-weight:700;letter-spacing:-.01em;color:var(--ink);}
+.dgm-htc .ttl .who{font-family:var(--font-mono);font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-left:3mm;}
+.dgm-htc .desc{font-size:9.7pt;color:var(--muted);line-height:1.5;margin-top:1.5mm;max-width:240mm;}
+.dgm-htc .desc b{color:var(--ink);}
+.dgm-htc .desc code{font-family:var(--font-mono);font-size:8.6pt;background:var(--zebra);color:var(--violet);padding:.5mm 1.4mm;border-radius:2px;}
+.dgm-htc .fan{display:flex;gap:5mm;margin-top:3mm;}
+.dgm-htc .fan .card{flex:1;border:1px solid var(--rule);border-left:3px solid #1f9d6b;border-radius:5px;padding:3mm 4mm;background:#fbfdfc;}
+.dgm-htc .fan .card .cn{font-weight:700;font-size:9.5pt;color:var(--ink);}
+.dgm-htc .fan .card .cd{font-size:8.4pt;color:var(--muted);margin-top:.8mm;}
+.dgm-htc .fan .card .ct{font-family:var(--font-mono);font-size:7.4pt;color:#1f9d6b;margin-top:1.5mm;letter-spacing:.02em;}
+.dgm-htc .wall{display:flex;align-items:center;gap:5mm;margin:.5mm 0 4.6mm 18mm;}
+.dgm-htc .wall .ln{flex:1;border-top:1.5px dashed #1f9d6b;}
+.dgm-htc .wall .lb{font-family:var(--font-mono);font-size:8pt;letter-spacing:.08em;text-transform:uppercase;color:#1f9d6b;white-space:nowrap;}
+.dgm-htc .gated .num{background:#fff;color:var(--muted);border:2px dashed #c4c0cf;box-shadow:0 0 0 4px #fff;}
+.dgm-htc .gated .ttl{color:var(--muted);}
+.dgm-htc .tag{display:inline-block;font-family:var(--font-mono);font-size:7pt;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);border:1px solid var(--rule);border-radius:3px;padding:.4mm 1.6mm;margin-left:3mm;vertical-align:middle;}
+.dgm-htc .foot{margin-top:3mm;font-size:8.6pt;color:var(--faint);font-family:var(--font-mono);letter-spacing:.02em;border-top:1px solid var(--rule);padding-top:3mm;}
+
+/* chapter 05 (how-a-tool-call): seven steps + fan + wall must clear the footer */
+.page.fit-htc .pc{margin-top:5mm;}
+.page.fit-htc .dgm-htc .flow{margin-top:1.6mm;}
+.page.fit-htc .dgm-htc .flow:before{bottom:11mm;left:5mm;}
+.page.fit-htc .dgm-htc .step{padding-bottom:1.6mm;grid-template-columns:10mm 1fr;gap:5mm;}
+.page.fit-htc .dgm-htc .num{width:10mm;height:10mm;font-size:11.5pt;}
+.page.fit-htc .dgm-htc .ttl{font-size:10.6pt;}
+.page.fit-htc .dgm-htc .desc{margin-top:.7mm;line-height:1.36;}
+.page.fit-htc .dgm-htc .fan{margin-top:1.4mm;}
+.page.fit-htc .dgm-htc .fan .card{padding:1.6mm 4mm;}
+.page.fit-htc .dgm-htc .wall{margin:0 0 1.8mm 16mm;}
+.page.fit-htc .dgm-htc .foot{margin-top:1.6mm;padding-top:1.6mm;}
+.page.fit-htc .pc p.lead{margin-bottom:4px;}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ COVER (page 1) -->
+<div class="page cover">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc cover-pc">
+    <div class="cover-rule"></div>
+    <div class="eyebrow">Technical Solution Intent</div>
+    <h1>Customer&nbsp;360</h1>
+    <p class="subtitle">MCP fleet architecture for the <span class="vio">Commercial Credit Brain</span></p>
+    <p class="intent">
+      The Commercial Credit Brain is the orchestrating intelligence; the MCP fleet is the tool layer it
+      navigates, built one server at a time rather than big-bang. The shipped credit-memo tools (Boom, AFS,
+      experience-mcp) were the first set, deal-level underwriting. This Customer 360 / Early-Warning fleet is the
+      next, relationship-level monitoring. Each server that comes online widens what the brain can reach, so the
+      brain gets smarter every time a tool ships. Policy and governance are designed in from day one, not bolted
+      on: the SR 11-7 deterministic wall, run-as-user identity, per-call audit, DRAFT-until-attested. And the
+      fleet is enterprise-bank scalable on AWS, remote-hosted in org-controlled infrastructure so untrusted,
+      high-churn MCP code never touches an analyst's machine.
+    </p>
+    <div class="cover-meta">
+      <div><div class="mlab">Surface</div><div class="mval">One MCP server, many swappable surfaces: Claude MCP App widget, Agentforce-in-FSC twin, hosted Next.js, M365 / Copilot, ChatGPT Apps. Built to the strict MCP Apps subset, portable across hosts.</div></div>
+      <div><div class="mlab">Scale</div><div class="mval">Remote-host the fleet in org-controlled AWS infra (Bedrock AgentCore Runtime or ECS / Fargate in a private VPC). The governance unit becomes the environment plus a promotion gate.</div></div>
+      <div><div class="mlab">Stage</div><div class="mval">Stage 0 reference build. Inter-MCP fleet pattern shipped and proven in code; Customer 360 read spine in build. Honest gates stated, not hidden.</div></div>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 01 (page 2) — through-line + 4-tier model -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">01</span><h2>The through-line, and the 4-tier fleet model</h2><span class="stag">Spine</span></div>
+    <p class="lead">The Commercial Credit Brain is the orchestrating intelligence. The MCP fleet is the tool layer it navigates, and we build that layer one server at a time, so the brain's reach widens with every server that ships.</p>
+    <p>The hard-won architectural principle, proven on the shipped credit-memo fleet: <strong>reasoning and methodology live in the plugin; tools and data live in the connectors.</strong> No duplication across the seam. The brain does not change when a tool is added, it just discovers more tools. Reasoning stays in the plugin; capability arrives as data and tools.</p>
+    <table class="tight">
+      <thead><tr><th class="col-n">T</th><th>Component</th><th>Holds</th><th>Identity / trust</th></tr></thead>
+      <tbody>
+        <tr><td class="col-n">1</td><td><span class="em">Reasoning / brain</span><span class="sm">Agents · Agentforce · Cowork (MCP client)</span></td><td>Methodology, orchestration, ranking, narration. Never computes a regulated number.</td><td>The model is downstream of the math.</td></tr>
+        <tr><td class="col-n">2</td><td><span class="em">SF-native Customer 360 MCP</span><span class="sm">nCino <code>LLC_BI__*</code> + FSC <code>FinServ__*</code>, one org</td><td>The relationship read surface.</td><td>Run-as-user OAuth (PKCE, <code>mcp_api</code> + <code>refresh_token</code>) &rarr; <code>WITH USER_MODE</code> so native FLS / sharing apply. Gated admin god-mode is the one audited bypass.</td></tr>
+        <tr><td class="col-n">3</td><td><span class="em">Aggregation / experience MCP</span><span class="sm">experience-mcp</span></td><td>Cross-source fetch + join-in-code, plus the decision ledger / audit (Snowflake).</td><td>Itself an MCP client to the system MCPs; write path = client-credentials integration user, <code>actorStamp()</code> audit, <code>EXPERIENCE_ALLOW_WRITES</code> gate.</td></tr>
+        <tr><td class="col-n">4</td><td><span class="em">System MCPs</span><span class="sm">Boom · AFS · IRIS · CapIQ / IBIS</span></td><td>Raw financial / market data plus deterministic compute (spread, ratios, PD, peer medians).</td><td>Each a standalone connector behind the aggregation tier.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout dark">
+      <span class="clab">The SR 11-7 wall, stated as a call graph</span>
+      <p>The <strong>deterministic</strong> edges into experience-mcp and the system MCPs are the only edges that <em>produce</em> a regulated number: <code>covenant.js</code> computes <code>grade = Boom ratio (actual) &times; nCino threshold (definition)</code> as a pure function; <code>boomFinancials.js</code> retrieves a Boom-computed ratio and the number never passes through the LLM. Every edge into the reasoning client is <strong>narrate</strong>: the LLM ranks and explains values that were already computed in code. "Agents reason, tools compute" is not a slogan here, it is the literal call graph.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 02 (page 3) — incremental roadmap -->
+<div class="page fit-02">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">02</span><h2>The incremental build: deal-level to relationship-level to beyond</h2><span class="stag">Roadmap</span></div>
+    <p class="lead">We build the fleet one server at a time. The brain's reach widens with every wave, and each new server inherits the policy fence rather than inventing its own.</p>
+    <table class="tight">
+      <thead><tr><th>Wave</th><th>Fleet added</th><th>What the brain can now do</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">1 · Deal-level underwriting</span></td><td>Boom (spreading) · AFS (servicing) · experience-mcp (compose + nCino write)</td><td>Draft and write back a covenant-graded commercial credit memo on one deal.</td><td><span class="pill built">shipped</span></td></tr>
+        <tr><td><span class="em">2 · Relationship-level monitoring</span></td><td>Customer 360 SF-native MCP (run-as-user nCino + FSC) · IRIS · CapIQ / IBIS · Early Warning</td><td>Move from one deal to the whole obligor / household: live portfolio, share-of-wallet, early-warning signals.</td><td><span class="pill next">in build</span></td></tr>
+        <tr><td><span class="em">3+ · Beyond</span></td><td>Next source servers (peers, market, treasury, …)</td><td>Each new server is a new sense for the same brain.</td><td><span class="pill">roadmap</span></td></tr>
+      </tbody>
+    </table>
+    <h3 class="sub">Why incremental is also safe</h3>
+    <ul class="tw">
+      <li>Each MCP server is an <strong>independent unit</strong> (own repo, own deploy, own scope). Adding one cannot regress the others.</li>
+      <li>The brain does not change when a tool is added; it just discovers more tools. Reasoning stays in the plugin, capability arrives as data.</li>
+      <li><strong>Policy and governance are designed in from day one:</strong> SR 11-7 deterministic wall, run-as-user identity, per-call audit, DRAFT-until-attested. A new server inherits the fence; it does not get to invent its own.</li>
+    </ul>
+    <table class="tight">
+      <thead><tr><th>Version</th><th>Capability added</th><th>Governance posture</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">v1 · Read-only</span></td><td>Customer 360 run-as-user reads (nCino + FSC); cross-source compose; covenant-grade join.</td><td>Run-as-user OAuth + <code>USER_MODE</code>; SR 11-7 wall; DRAFT-until-attested.</td><td>Spine <span class="pill built">shipped</span>, reads in build</td></tr>
+        <tr><td><span class="em">v2 · Write path</span></td><td>nCino nFORMS publish + section sync; AFS workpackage staging.</td><td>Client-credentials integration user, <code>actorStamp()</code>, <code>EXPERIENCE_ALLOW_WRITES</code> gate, Snowflake ledger.</td><td>Memo write <span class="pill built">shipped</span>; C360 next</td></tr>
+        <tr><td><span class="em">v3 · Live sources</span></td><td>IRIS / Snowflake (rating, PD, covenant grade) + CapIQ / IBIS peers wired live; Early Warning thresholds.</td><td>Swap-later grade reads the published IRIS grade; deterministic EWS triggers.</td><td><span class="pill">roadmap</span></td></tr>
+        <tr><td><span class="em">v4 · Scale</span></td><td>Remote-host the fleet in org-controlled AWS infra; promotion-gated environments.</td><td>The environment becomes the governance unit; owned egress + IAM.</td><td><span class="pill">roadmap</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 03 (page 4) — THREE LAYERS (embedded diagram, scoped .dgm-tl) -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">03</span><h2>The three layers: agents, tools, use cases</h2><span class="stag">Orientation</span></div>
+    <div class="dgm-tl">
+      <div class="eyebrow">Architecture &middot; orientation</div>
+      <h1>Three layers: agents, tools, and use cases</h1>
+      <div class="lead">These are three different axes, not one. Use cases belong to a domain. Agents are the reasoning shells, one per domain. Tools are the MCP servers, shared across domains. Read top down: a persona's need is met by a surface, which calls the shared fleet.</div>
+
+      <div class="stack">
+
+        <div class="band bandA">
+          <div class="blabel">
+            <div class="bk">Layer 1</div>
+            <div class="bn">Use cases</div>
+            <div class="bd">what a persona needs, grouped by domain</div>
+          </div>
+          <div class="row">
+            <div class="grp">
+              <div class="gh">Relationship <span class="pin rel">81 use cases &middot; 9 personas</span></div>
+              <div class="gd">RM, portfolio manager, analyst, credit officer, loan ops, treasury, compliance, workout, executive. Surfaced by the <b>Live Dashboard</b> and the <b>Customer 360 cockpit</b>.</div>
+            </div>
+            <div class="grp">
+              <div class="gh">Deal <span class="pin deal">underwriting</span></div>
+              <div class="gd">Draft the memo, covenant write-up, risk rating, finalize and write back. Surfaced by the <b>Credit Memo</b>.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow">&darr;&nbsp;&nbsp;&nbsp;&nbsp;&darr;</div>
+
+        <div class="band bandB">
+          <div class="blabel">
+            <div class="bk">Layer 2</div>
+            <div class="bn">Agents &amp; surfaces</div>
+            <div class="bd">the reasoning shells, one per domain</div>
+          </div>
+          <div class="row">
+            <div class="grp">
+              <div class="gh">Customer 360 agent <span class="pin rel">relationship</span></div>
+              <div class="gd">Drives the Live Dashboard + the cockpit. The relationship twin (in build).</div>
+            </div>
+            <div class="grp">
+              <div class="gh">Credit Memo agent <span class="pin deal">deal</span></div>
+              <div class="gd">Drives the memo + underwriting workflow (shipped plugin).</div>
+            </div>
+            <div class="grp" style="border-style:dashed">
+              <div class="gh">Commercial Credit Brain</div>
+              <div class="gd">Unifies the domains; cross-domain memory + learning. Capstone, later.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow">&darr;&nbsp;&nbsp;both call the same shared fleet&nbsp;&nbsp;&darr;</div>
+
+        <div class="band">
+          <div class="blabel">
+            <div class="bk">Layer 3</div>
+            <div class="bn">Tools</div>
+            <div class="bd">MCP servers + data, shared across every domain</div>
+          </div>
+          <div class="tools">
+            <div class="tool">Customer 360 MCP<div class="tt">nCino + FSC, run-as-user</div></div>
+            <div class="tool">experience-mcp<div class="tt">compose + join + ledger</div></div>
+            <div class="tool">Boom<div class="tt">spread + ratios</div></div>
+            <div class="tool">AFS<div class="tt">servicing</div></div>
+            <div class="tool future">IRIS<div class="tt">risk / PD &middot; later</div></div>
+            <div class="tool future">CapIQ / IBIS<div class="tt">peers &middot; later</div></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="key">
+        <div><b>Use cases</b> belong to a domain (relationship vs deal).</div>
+        <div><b>Agents</b> are per-domain shells; the Brain unifies them last.</div>
+        <div><b>Tools</b> are shared: one server serves many use cases across domains.</div>
+      </div>
+      <div class="foot">The 81 use cases are Customer 360. They live inside the Live Dashboard and the cockpit, not as a tool of their own.</div>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 04 (page 5) — TOPOLOGY diagram -->
+<div class="page fit-topo">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">04</span><h2>The MCP fleet topology</h2><span class="stag">Architecture</span></div>
+    <p class="lead">Five bands on one spine: reasoning clients &rarr; a single Salesforce org auth boundary &rarr; the aggregation / governance tier &rarr; off-Salesforce sources &rarr; the surfaces that render off the joined, governed result. The Product Package + Account pair is the rail every node keys on.</p>
+    <figure>
+      <div class="fleetfig">
+<svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans',system-ui,sans-serif">
+<defs><marker id="arr_oauthidentity" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#5b3fd4"/></marker><marker id="arr_deterministic" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1f9d6b"/></marker><marker id="arr_narrate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8f99"/></marker><marker id="arr_render" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3a6ea5"/></marker><marker id="arr_audit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c08a2d"/></marker><marker id="arr_godmode" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#c0392b"/></marker><marker id="arr_future" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa0aa"/></marker></defs>
+<rect x="0" y="0" width="1000" height="620" fill="#ffffff"/>
+<text x="14" y="24" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="17" font-weight="700" fill="#1a1d24">Customer 360 · MCP Fleet Topology</text>
+<text x="986" y="24" text-anchor="end" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10.5" fill="#7a808a">run-as-user OAuth · SR 11-7 deterministic wall · Product Package + Account spine</text>
+<line x1="204.8" y1="52" x2="204.8" y2="476" stroke="#1f9d6b" stroke-width="1.4" stroke-dasharray="3 4" opacity="0.65"/>
+<text x="204.8" y="490" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#178a5d">SR 11-7 wall</text>
+<text x="204.8" y="501" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8" fill="#6b8f7f">code computes · LLM only ranks/narrates</text>
+<text x="106.4" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Reasoning</text>
+<text x="106.4" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">clients</text>
+<text x="303.20000000000005" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Salesforce org</text>
+<text x="303.20000000000005" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">(one auth boundary)</text>
+<text x="500" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Aggregation +</text>
+<text x="500" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">governance</text>
+<text x="696.8000000000001" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Off-Salesforce</text>
+<text x="696.8000000000001" y="53" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">sources</text>
+<text x="893.6" y="42" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="10" font-weight="700" fill="#3a3f4a" letter-spacing="0.2">Surfaces</text>
+<rect x="204.8" y="78" width="196.8" height="396" rx="12" fill="#5b3fd4" fill-opacity="0.04" stroke="#5b3fd4" stroke-width="1.4" stroke-dasharray="6 4"/>
+<g transform="translate(212.8,65)">
+  <rect x="0" y="5" width="11" height="8" rx="1.6" fill="#5b3fd4"/>
+  <path d="M2 5 V3.2 A3.5 3.5 0 0 1 9 3.2 V5" fill="none" stroke="#5b3fd4" stroke-width="1.4"/>
+  <circle cx="5.5" cy="9" r="1.2" fill="#fff"/>
+</g>
+<text x="228.8" y="76" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" font-weight="600" fill="#5b3fd4">run-as-user OAuth boundary</text>
+<rect x="206.8" y="507" width="586.4000000000001" height="18" rx="9" fill="#2D2D2D"/>
+<text x="500" y="520" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9.5" font-weight="700" fill="#ffffff" letter-spacing="0.3">Product Package + Account spine</text>
+<line x1="303.20000000000005" y1="143" x2="303.20000000000005" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="303.20000000000005" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="500" y1="303" x2="500" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="500" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="893.6" y1="431" x2="893.6" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="893.6" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="696.8000000000001" y1="255" x2="696.8000000000001" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="696.8000000000001" cy="507" r="2.6" fill="#2D2D2D"/>
+<line x1="696.8000000000001" y1="351" x2="696.8000000000001" y2="507" stroke="#2D2D2D" stroke-width="1.3" stroke-dasharray="2 3" opacity="0.7"/>
+<circle cx="696.8000000000001" cy="507" r="2.6" fill="#2D2D2D"/>
+<g id="edges"><path d="M 189.8 182 H 200.8 V 118 H 219.80000000000004" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 189.8 182 H 303.20000000000005 V 278 H 416.6" fill="none" stroke="#8a8f99" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arr_narrate)" opacity="0.92"/><path d="M 386.6 118 H 412.6 V 182 H 386.6" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 386.6 118 H 412.6 V 246 H 386.6" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 386.6 118 H 598.4000000000001 V 406 H 810.2" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 583.4000000000001 278 H 594.8000000000001 V 134 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 583.4000000000001 278 H 597.2 V 230 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 583.4000000000001 278 H 599.6000000000001 V 326 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 583.4000000000001 278 H 602.0000000000001 V 422 H 613.4000000000001" fill="none" stroke="#1f9d6b" stroke-width="1.6" marker-end="url(#arr_deterministic)" opacity="0.92"/><path d="M 416.6 278 H 401.6 V 118 H 386.6" fill="none" stroke="#5b3fd4" stroke-width="1.6" marker-end="url(#arr_oauthidentity)" opacity="0.92"/><path d="M 583.4000000000001 278 H 644.6000000000001 V 150 H 810.2" fill="none" stroke="#3a6ea5" stroke-width="1.6" marker-end="url(#arr_render)" opacity="0.92"/><path d="M 583.4000000000001 278 H 696.8000000000001 V 278 H 810.2" fill="none" stroke="#3a6ea5" stroke-width="1.6" marker-end="url(#arr_render)" opacity="0.92"/><path d="M 583.4000000000001 278 H 749 V 406 H 810.2" fill="none" stroke="#3a6ea5" stroke-width="1.6" marker-end="url(#arr_render)" opacity="0.92"/><path d="M 189.8 374 H 202.8 V 118 H 219.80000000000004" fill="none" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="8 5" marker-end="url(#arr_godmode)" opacity="0.92"/><path d="M 189.8 182 H 204.8 V 310 H 219.80000000000004" fill="none" stroke="#9aa0aa" stroke-width="1.6" stroke-dasharray="2 5" marker-end="url(#arr_future)" opacity="0.92"/><path d="M 189.8 182 H 206.8 V 374 H 219.80000000000004" fill="none" stroke="#9aa0aa" stroke-width="1.6" stroke-dasharray="2 5" marker-end="url(#arr_future)" opacity="0.92"/><path d="M 189.8 182 H 208.8 V 438 H 219.80000000000004" fill="none" stroke="#9aa0aa" stroke-width="1.6" stroke-dasharray="2 5" marker-end="url(#arr_future)" opacity="0.92"/><g><rect x="185.05" y="137" width="31.5" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="200.8" y="146" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#5b3fd4" font-weight="600">OAuth</text></g><g><rect x="282.75000000000006" y="217" width="40.9" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="303.20000000000005" y="226" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#8a8f99" font-weight="600">narrate</text></g><g><rect x="562.6" y="193" width="64.4" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="594.8000000000001" y="202" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#1f9d6b" font-weight="600">fetch (code)</text></g><g><rect x="626.5000000000001" y="201" width="36.2" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="644.6000000000001" y="210" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#3a6ea5" font-weight="600">render</text></g><g><rect x="180" y="233" width="45.6" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="202.8" y="242" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#c0392b" font-weight="600">god-mode</text></g><g><rect x="186.70000000000002" y="233" width="36.2" height="12" rx="3" fill="#ffffff" opacity="0.9"/><text x="204.8" y="242" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.6" fill="#9aa0aa" font-weight="600">future</text></g></g>
+<g id="selfloops"><path d="M 467 253 V 237 H 489 V 253" fill="none" stroke="#1f9d6b" stroke-width="1.4" marker-end="url(#arr_deterministic)" opacity="0.92"/><text x="478" y="234" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.2" font-weight="600" fill="#1f9d6b">join in code</text><path d="M 511 253 V 223 H 533 V 253" fill="none" stroke="#c08a2d" stroke-width="1.4" stroke-dasharray="2 4" marker-end="url(#arr_audit)" opacity="0.92"/><text x="522" y="220" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7.2" font-weight="600" fill="#c08a2d">audit→ledger</text></g>
+<g id="cards"><rect x="23" y="157" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="106.4" y="180.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Claude / Agentforce (MCP</text><text x="106.4" y="190.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">client)</text><rect x="23" y="349" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="106.4" y="377.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Admin (god-mode)</text><rect x="23" y="349" width="4" height="50" rx="2" fill="#c0392b"/><rect x="219.80000000000004" y="93" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="303.20000000000005" y="121.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Customer 360 SF-native MCP</text><rect x="219.80000000000004" y="157" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="303.20000000000005" y="185.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">nCino (LLC_BI__* managed pkg)</text><rect x="219.80000000000004" y="221" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="303.20000000000005" y="249.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">FSC (FinServ__*)</text><rect x="219.80000000000004" y="285" width="166.8" height="50" rx="9" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="5 4"/><text x="303.20000000000005" y="308.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#7a808a">Apex-invoke MCP</text><text x="303.20000000000005" y="318.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#7a808a">(@InvocableMethod)</text><rect x="352.6" y="289" width="30" height="11" rx="5.5" fill="#e7e9ee"/><text x="367.6" y="297.4" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7" font-weight="700" fill="#7a808a">future</text><rect x="219.80000000000004" y="349" width="166.8" height="50" rx="9" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="5 4"/><text x="303.20000000000005" y="377.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#7a808a">Flow-invoke MCP</text><rect x="352.6" y="353" width="30" height="11" rx="5.5" fill="#e7e9ee"/><text x="367.6" y="361.4" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7" font-weight="700" fill="#7a808a">future</text><rect x="219.80000000000004" y="413" width="166.8" height="50" rx="9" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="5 4"/><text x="303.20000000000005" y="436.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#7a808a">nCino-published MCP (not</text><text x="303.20000000000005" y="446.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#7a808a">announced)</text><rect x="352.6" y="417" width="30" height="11" rx="5.5" fill="#e7e9ee"/><text x="367.6" y="425.4" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="7" font-weight="700" fill="#7a808a">future</text><rect x="416.6" y="253" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1f9d6b" stroke-width="2.1"/><text x="500" y="276.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">experience-mcp (server-side</text><text x="500" y="286.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">join + ledger/audit)</text><rect x="613.4000000000001" y="109" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="137.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Boom (financial spreading)</text><rect x="613.4000000000001" y="205" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="233.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">AFS (servicing)</text><rect x="613.4000000000001" y="301" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="324.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">IRIS on Snowflake</text><text x="696.8000000000001" y="334.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">(rating/PD/covenant)</text><rect x="613.4000000000001" y="397" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="696.8000000000001" y="425.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">CapIQ / IBIS (peer medians)</text><rect x="810.2" y="125" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="893.6" y="153.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Live Portfolio Dashboard</text><rect x="810.2" y="253" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="893.6" y="281.5" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Customer 360 cockpit</text><rect x="810.2" y="381" width="166.8" height="50" rx="9" fill="#ffffff" stroke="#1a1d24" stroke-width="1.6"/><text x="893.6" y="404.25" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="600" fill="#1a1d24">Credit Memo (cm_* /</text><text x="893.6" y="414.75" text-anchor="middle" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9" font-weight="400" fill="#1a1d24">LLC_BI__Credit_Memo__c)</text></g>
+<g id="legend"><rect x="14" y="542" width="972" height="58" rx="8" fill="#fafbfc" stroke="#e3e6ea" stroke-width="1"/><text x="24" y="558" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="9.5" font-weight="700" fill="#3a3f4a">Legend</text><rect x="78" y="548" width="16" height="11" rx="3" fill="#fff" stroke="#1a1d24" stroke-width="1.4"/><text x="100" y="557" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.5" fill="#3a3f4a">SHIPPED (solid)</text><rect x="196" y="548" width="16" height="11" rx="3" fill="#f6f7f9" stroke="#9aa0aa" stroke-width="1.3" stroke-dasharray="4 3"/><text x="218" y="557" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.5" fill="#3a3f4a">FUTURE (dashed grey)</text><line x1="24" y1="574" x2="50" y2="574" stroke="#5b3fd4" stroke-width="2" marker-end="url(#arr_oauthidentity)"/><text x="57" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">OAuth identity (run-as-user)</text><line x1="266" y1="574" x2="292" y2="574" stroke="#1f9d6b" stroke-width="2" marker-end="url(#arr_deterministic)"/><text x="299" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">deterministic (code compute)</text><line x1="508" y1="574" x2="534" y2="574" stroke="#3a6ea5" stroke-width="2" marker-end="url(#arr_render)"/><text x="541" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">render (drives surface)</text><line x1="750" y1="574" x2="776" y2="574" stroke="#8a8f99" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr_narrate)"/><text x="783" y="577" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">narrate (LLM ranks)</text><line x1="24" y1="592" x2="50" y2="592" stroke="#c08a2d" stroke-width="2" stroke-dasharray="2 4" marker-end="url(#arr_audit)"/><text x="57" y="595" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">audit (decision ledger)</text><line x1="266" y1="592" x2="292" y2="592" stroke="#c0392b" stroke-width="2" stroke-dasharray="8 5" marker-end="url(#arr_godmode)"/><text x="299" y="595" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">god-mode (admin, logged)</text><line x1="508" y1="592" x2="534" y2="592" stroke="#9aa0aa" stroke-width="2" stroke-dasharray="2 5" marker-end="url(#arr_future)"/><text x="541" y="595" font-family="'IBM Plex Sans',system-ui,sans-serif" font-size="8.3" fill="#3a3f4a">future (speculative)</text></g>
+</svg>
+      </div>
+      <figcaption>Fleet topology. Reasoning clients call the Customer 360 MCP (run-as-user OAuth reading nCino <code>LLC_BI__*</code> + FSC <code>FinServ__*</code> in one org); experience-mcp is the join + governance tier and is itself an MCP client to the off-Salesforce sources (Boom, AFS, IRIS / Snowflake, CapIQ); three surfaces (Live Portfolio Dashboard, Customer 360 cockpit, Credit Memo) render off the result. Dotted nodes (<code>apex_mcp</code>, <code>flow_mcp</code>, <code>ncino_mcp</code>) are honestly marked future; nCino publishes an AOS agent, not an MCP server.</figcaption>
+    </figure>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 05 (page 6) — HOW A TOOL CALL RESOLVES (embedded diagram, scoped .dgm-htc) -->
+<div class="page fit-htc">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">05</span><h2>How a tool call actually resolves</h2><span class="cont">Mechanics · 1 of 2</span></div>
+    <p class="lead">One banker question becomes one tool call. The fleet composes the answer in code, and the regulated number is computed before the model ever sees it. The aggregation MCP is itself a client to the system MCPs.</p>
+    <div class="dgm-htc">
+      <div class="eyebrow">Data flow &middot; sequence</div>
+      <h1>How a tool call resolves</h1>
+
+      <div class="flow">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="body">
+            <div class="ttl">The banker asks <span class="who">Reasoning client &middot; Claude / Agentforce</span></div>
+            <div class="desc">A single tool call goes to the Customer&nbsp;360 MCP: <code>tools/call customer360_show_ews { accountId }</code>. The model orchestrates; it does not fetch or compute.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">2</div>
+          <div class="body">
+            <div class="ttl">Read, as the banker <span class="who">Customer 360 MCP &middot; nCino + FSC</span></div>
+            <div class="desc">The server authenticates <b>run-as-user</b> (OAuth, <code>WITH USER_MODE</code>) and reads the relationship, exposures and covenant thresholds. Native Salesforce sharing and FLS decide what this banker may see.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">3</div>
+          <div class="body">
+            <div class="ttl">Fan out, in parallel <span class="who">Aggregation tier, acting as an MCP client</span></div>
+            <div class="desc">It calls the system MCPs at the same time over streamable-HTTP (<code>tools/call</code>, 8s timeout, graceful-null so one slow source never blocks the view):</div>
+            <div class="fan">
+              <div class="card"><div class="cn">Boom</div><div class="cd">spread &amp; ratios</div><div class="ct">boom_get_ratios</div></div>
+              <div class="card"><div class="cn">AFS</div><div class="cd">servicing behaviour</div><div class="ct">revolver_utilization</div></div>
+              <div class="card"><div class="cn">IRIS</div><div class="cd">risk migration</div><div class="ct">iris_get_signal</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">4</div>
+          <div class="body">
+            <div class="ttl">Join and compute, in code <span class="who">Aggregation tier &middot; Product Package + Account spine</span></div>
+            <div class="desc">Results are joined on the one spine and the regulated number is formed here: <code>ratio &times; threshold &rarr; pass / watch / breach</code>. <b>The number is born in code, not in the model.</b></div>
+          </div>
+        </div>
+
+        <div class="wall"><div class="lb">SR 11-7 wall</div><div class="ln"></div><div class="lb">above: code computes &nbsp;&middot;&nbsp; below: model only narrates</div></div>
+
+        <div class="step">
+          <div class="num">5</div>
+          <div class="body">
+            <div class="ttl">Return a small result <span class="who">Back to the reasoning client</span></div>
+            <div class="desc">Only the computed grades and KPIs travel back, not the raw spread. The payload is small and already final.</div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">6</div>
+          <div class="body">
+            <div class="ttl">Rank and narrate <span class="who">Reasoning client</span></div>
+            <div class="desc">The model ranks the fired signals and explains them in plain language. <b>It never recomputes the number</b> it was handed.</div>
+          </div>
+        </div>
+
+        <div class="step gated">
+          <div class="num">7</div>
+          <div class="body">
+            <div class="ttl">Commit, gated <span class="tag">later phase</span></div>
+            <div class="desc">If a human commits a decision, a write goes back to nCino and an audit record to the Snowflake ledger. Reads are v1; writes come later, behind the gate.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">Pattern verified in experience-mcp/src/boomFinancials.js, the aggregation MCP is itself a client to the system MCPs (JSON-RPC tools/call over streamable-HTTP).</div>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+
+<!-- ============================================================ 06 (page 7) — inter-MCP mechanics prose + the seam -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">06</span><h2>The inter-MCP mechanics, in shipped code</h2><span class="cont">Mechanics · 2 of 2</span></div>
+    <p class="lead">This is real, shipped code, not a slideware diagram. The cross-source call lives in <code>experience-mcp/src/boomFinancials.js</code>.</p>
+    <div class="ladder">
+      <div class="lstep"><span class="ln">1</span><div class="lt"><b>Client &rarr; experience / C360 tool.</b><span class="ld">Claude / Agentforce calls a <code>tools/call</code>.</span></div></div>
+      <div class="lstep"><span class="ln">2</span><div class="lt"><b>Fan-out, server-to-server.</b><span class="ld">experience-mcp <code>fetch()</code>s each system MCP over streamable-HTTP with a JSON-RPC envelope, in parallel (<code>Promise.all</code>), an 8s timeout (<code>AbortSignal.timeout(8000)</code>), graceful-null on any failure. It parses the SSE <code>data:</code> frames to pull <code>result.content[0].text</code>.</span></div></div>
+      <div class="lstep"><span class="ln">3</span><div class="lt"><b>Join + compute in code</b><span class="ld">on the Product Package + Account keys. The regulated number is formed here (<code>covenant.js</code> <code>gradeCovenant()</code> &rarr; <code>pass | watch | breach</code>, 10% watch band), in code, before the LLM ever sees it.</span></div></div>
+      <div class="lstep"><span class="ln">4</span><div class="lt"><b>Return a small, already-computed result.</b><span class="ld">The LLM only ranks and narrates.</span></div></div>
+      <div class="lstep"><span class="ln">5</span><div class="lt"><b>Write-back (optional, gated).</b><span class="ld"><code>ncino_publish_credit_memo</code> / <code>ncino_sync_memo_sections</code> &rarr; nCino nFORMS HTML-native memo, behind <code>EXPERIENCE_ALLOW_WRITES</code>, run as the right identity, audited to the Snowflake ledger.</span></div></div>
+    </div>
+    <pre class="codeblock"><span class="cmt">// experience-mcp/src/boomFinancials.js — the aggregation MCP acting as a CLIENT</span>
+<span class="kw">const</span> res = <span class="kw">await</span> fetch(BOOM_MCP, {
+  method: <span class="str">"POST"</span>,
+  headers: { <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>, Accept: <span class="str">"application/json, text/event-stream"</span> },
+  body: JSON.stringify({ jsonrpc: <span class="str">"2.0"</span>, id: 1, method: <span class="str">"tools/call"</span>,
+                         params: { name, arguments: args } }),
+  signal: AbortSignal.timeout(8000),   <span class="cmt">// parallel fan-out, graceful-null</span>
+});
+<span class="cmt">// "The number is computed in the Boom MCP, retrieved here server-side,</span>
+<span class="cmt">//  and never passes through the LLM."</span></pre>
+    <p class="codecap">The literal seam, load-bearing: this is the SR 11-7 wall as code.</p>
+    <div class="callout">
+      <span class="clab">Swap-later, designed in</span>
+      <p><code>covenant.js</code> computes the grade deterministically today; the moment IRIS-in-Snowflake publishes its own covenant grade, the same tool <strong>reads the published grade instead of recomputing</strong>, a config / env flip, not a rewrite. The fence stays; the source upgrades.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 07 (page 8) — transport + hosting + async/governor -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">07</span><h2>Transport, hosting, and why detection is a job</h2><span class="stag">Runtime</span></div>
+    <p class="lead">All three shipped connectors are Next.js + <code>mcp-handler</code>, dual-transport stdio + streamable-HTTP. Stdio for local / embedded use; streamable-HTTP for the remote governed connector URL that Cowork / Claude / Agentforce attach to.</p>
+    <ul class="tw">
+      <li><strong>Stateless connectors, stable resource URIs.</strong> Widgets are served at a content-hash-free <code>ui://&lt;bank&gt;/&lt;name&gt;.html</code> URI so the host caches the widget at the connector level. Cross-source widgets live with whoever owns the join (experience-mcp), because external iframes are blocked by the host, so the fleet renders its own bank-branded UI.</li>
+      <li><strong>Public-but-governed URLs.</strong> Today: SSO / deployment-protection off so the connector URL is reachable, writes gated behind <code>EXPERIENCE_ALLOW_WRITES</code>, run as a real Salesforce user (client-credentials External Client App). The connector is bank-neutral: the bank name is a <code>BANK</code> config block, env-swappable per tenant.</li>
+    </ul>
+    <div class="callout amber">
+      <span class="clab">Async + governor limits: detection is a job, the screen just reads</span>
+      <p>Computing an EWS read live (AFS servicing + nCino covenants + FSC deposits + Boom ratios) inside a single realtime Salesforce response would blow <strong>SOQL and CPU governor limits</strong> the moment you fan it across a portfolio. So the architecture splits compute from render: <strong>EWS detection runs as a Queueable / Batch Apex job</strong>, server-side, on the deterministic reads, and writes pre-computed results (fired signals, cushion %, severity score) back to records. The dashboard <strong>reads those pre-computed fields</strong>; no heavy join at view time, so the portfolio view scales to the whole book.</p>
+      <p><strong>CDC repaints hands-free.</strong> Change Data Capture (the shipped <code>CreditMemoCDC__chn</code> channel over <code>LLC_BI__Product_Package__ChangeEvent</code> + <code>LLC_BI__Loan__ChangeEvent</code>) drives an <code>lightning/empApi</code> LWC that calls <code>getRecordNotifyChange</code> + <code>RefreshEvent</code>: the screen moves on a write without a manual refresh (verified live). One pre-demo ritual: warm the CDC channel (~1-3s warm vs ~15-30s cold).</p>
+    </div>
+    <div class="gi"><b>The fence holds in async too.</b> A fired trigger raises a flag; it never moves a grade. EWS detects, grades, ranks, and routes; a human classifies and decides (Pass / Watch / Special Mention / Substandard / Doubtful / Loss). Severity (Low / Med / High / Critical) is decision-support, captured proposed-not-committed; it becomes real only when the authorized human commits via <code>record_decision</code>, with classification authority enforced server-side against the acting user.</div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 08 (page 9) — data spine + ledger + PII audit -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">08</span><h2>The data spine, the Snowflake ledger, and per-call PII audit</h2><span class="stag">Data</span></div>
+    <p class="lead">What makes the joins valid and the decisions defensible: one spine every node keys on, end-to-end lineage, and a decision ledger that records why every number was committed.</p>
+    <div class="gi"><b>One spine: Product Package + Account.</b> Every node keys on this pair. The Account is the relationship anchor (FSC <code>FinServ__*</code> + nCino <code>LLC_BI__Account</code>); the Product Package is the deal anchor that nCino, the credit memo (<code>LLC_BI__Credit_Memo__c</code> / the <code>cm_*</code> rich-text fields), AFS servicing, and IRIS grades all hang off. experience-mcp's joins are valid <strong>only because both sides resolve to the same keys.</strong> A fired EWS signal rolls up to the obligor / relationship group, never an isolated loan tile.</div>
+    <div class="gi"><b>Lineage you can trace end to end: Boom &rarr; IRIS &rarr; nCino.</b> The raw spread is computed in Boom; the rating / PD / covenant grade is published by IRIS on Snowflake (zero-copy); the governed result is written back to nCino as structured <code>cm_*</code> narrative fields plus the nFORMS HTML memo, DRAFT until finalized and attested, then one deliberate end-sync commit, never per-edit write-through.</div>
+    <div class="gi"><b>The Snowflake decision ledger + per-call PII audit.</b> experience-mcp owns the system-of-record for <em>why</em> a decision was made. Every tool call that touches borrower data writes an audit row: the run-as integration user EXECUTES, the human RM is STAMPED (<code>actingUserName</code> / <code>actingUserId</code>), with agent-provenance (model + version) as the future third leg of the audit triple. <code>record_decision</code> / <code>log_audit_event</code> / <code>recall_decisions</code> are the ledger surface.</div>
+    <div class="callout dark">
+      <span class="clab">The whole posture, in one line</span>
+      <p>Inside the org, queries run <code>WITH USER_MODE</code> so CRUD / FLS / record-sharing auto-apply to the caller; no anonymous service account, the caller lands in the audit trail. The single admin god-mode path (cross-user read) is explicitly enabled and fully logged. That is the whole posture: <strong>the regulated number is computed in code, the LLM never computes it, and every borrower-data touch is attributable.</strong></p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 09 (page 10) — identity + auth -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">09</span><h2>Identity and auth: two legs of provenance, run-as-user on reads</h2><span class="stag">Identity</span></div>
+    <p class="lead">The read path is an upgrade over the memo, not a copy of it. The shipped credit memo (experience-mcp / <code>sfClient.js</code>) runs as a single client-credentials service account, where <code>actingUser</code> is an audit stamp on writes only, never a sharing identity. Customer 360 deliberately upgrades this: it runs as the user.</p>
+    <ul class="tw">
+      <li><strong>Reads, run-as-user OAuth.</strong> External Client App, OAuth 2.1 + PKCE, <code>mcp_api</code> + <code>refresh_token</code> scopes; every SOQL / Apex path runs <code>WITH USER_MODE</code> so CRUD / FLS / record-sharing auto-apply to the caller. No anonymous service account; the calling user lands in the audit trail. Correct for a relationship cockpit that reads far more of the customer than a single deal does.</li>
+      <li><strong>Writes, the SR 11-7 two-leg provenance.</strong> The gated write path uses a client-credentials run-as integration user that EXECUTES, with the acting user STAMPED (<code>actingUserId</code> / <code>actingUserName</code>, threaded on every write per the plugin&harr;MCP contract). The agent model + version is the third leg. Two legs of identity plus one of model = full provenance on every committed number.</li>
+      <li><strong>Admin god-mode</strong> is a separate, explicitly-enabled, fully-logged cross-user read path, the one place the run-as-user boundary is intentionally bypassed. Permissioned plus audited.</li>
+      <li><strong>Per-user token isolation must be verified before any borrower-PII pilot.</strong> On custom / Team connectors, confirm the OAuth token is issued per user, not shared per org; a shared token would mean every user sees every book.</li>
+    </ul>
+    <div class="callout amber">
+      <span class="clab">Honest caveat, live-verified 2026-06-28</span>
+      <p>In the bankinggpt sandbox the internal OWD is <strong>permissive</strong> (ReadWrite Public on most objects), so run-as-user does <strong>not</strong> narrow visibility in this org; persona book-narrowing is UX, not a security boundary here. Real least-privilege enforcement comes from the bank's production OWD (Private + Grant Access Using Hierarchies). We present persona views; we do not claim we enforce least privilege in the sandbox.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 10 (page 11) — enterprise scale + AWS -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">10</span><h2>Enterprise scale on AWS: the environment is the governance unit</h2><span class="stag">Scale</span></div>
+    <p class="lead">Threat model, stated plainly: an MCP server is arbitrary code running as the user. It must never run on an analyst's machine. Remote-host the fleet in org-controlled infrastructure.</p>
+    <div class="cards two">
+      <div class="card aws"><div class="ck">Landing pattern A</div><div class="ch">Bedrock AgentCore Runtime</div><div class="cb">Per-session microVM, isolated then terminated after use. Accenture Track 2 is already standing up an AgentCore AWS environment, so the v4 target has a concrete home.</div></div>
+      <div class="card aws"><div class="ck">Landing pattern B</div><div class="ch">ECS / Fargate in a private VPC</div><div class="cb">The fleet runs behind owned egress and IAM. Source MCPs (Boom, AFS, IRIS, CapIQ) hold no session state, so they scale out flat behind the per-session microVMs.</div></div>
+    </div>
+    <ul class="tw">
+      <li><strong>The governance shift.</strong> The unit of control becomes the <strong>environment + a promotion gate</strong>, not per-connector approval. You don't vet each connector by hand; you vet the environment it's promoted into. This is what makes untrusted, high-churn MCP code safe at bank scale.</li>
+      <li><strong>Residual risk relocates to ownable surfaces:</strong> VPC egress + IAM, both owned by the bank, both auditable.</li>
+      <li><strong>The SR 11-7 wall holds across all of it.</strong> Every regulated number is computed deterministically in code (<code>covenant.js</code> grade = actual &times; threshold; <code>boomFinancials.js</code> server-to-server fetch, the ratio never round-trips through the LLM). The decision ledger and audit trail live in Snowflake (<code>record_decision</code> / <code>log_audit_event</code>). DRAFT-until-attested; the cockpit concludes and routes, a human commits.</li>
+    </ul>
+    <div class="callout">
+      <span class="clab">The v4 argument, in one frame</span>
+      <p>Remote-host the fleet in org-controlled infrastructure so untrusted, high-churn MCP code never touches an analyst's machine. The governance unit becomes the environment plus a promotion gate; egress and IAM are owned by the bank, not the tool author. This is not hypothetical: Accenture Track 2 is already standing up an AgentCore AWS environment.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 11 (page 12) — bank-agnostic config -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">11</span><h2>Bank-agnostic by construction</h2><span class="stag">Config</span></div>
+    <p class="lead">One build, every bank, via config, not rework. A managed-package namespace plus a per-tenant config map, no code fork per institution.</p>
+    <table class="tight">
+      <thead><tr><th>Config seam</th><th>What it selects</th><th>Named default</th></tr></thead>
+      <tbody>
+        <tr><td><code>groupingKey</code></td><td>Relationship / household grouping.</td><td>The nCino Connection graph (208 edges, the populated authoritative ownership model).</td></tr>
+        <tr><td><span class="em">Covenant / collateral generation</span></td><td>Legacy-vs-modern object selection.</td><td><code>Covenant2</code> / <code>Loan_Collateral2</code> vs the empty legacy <code>Covenant__c</code> / <code>Loan_Collateral__c</code>.</td></tr>
+        <tr><td><code>walletSource</code></td><td>Wallet priority.</td><td>nCino-commercial-first, then FSC, unioned for full share-of-wallet.</td></tr>
+        <tr><td><span class="em">EWS thresholds + SLAs + scorecard weights</span></td><td>The "tomorrow" detail.</td><td>Every threshold in EARLY-WARNING.md is a labeled default the bank overrides by config.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout green">
+      <span class="clab">The payoff</span>
+      <p>A bank with seeded nCino treasury gets the commercial wallet automatically, <strong>no code change, just config priority.</strong> The covenant / collateral seam, the wallet union, and every EWS threshold ship as named, replaceable defaults; a new institution drops in by config, not by rework.</p>
+    </div>
+    <p>This is what makes the incremental fleet portable: each new server inherits the same per-tenant config map and the same managed-package namespace, so widening the brain's reach never means re-forking the build for the next bank.</p>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 12 (page 13) — surfaces -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">12</span><h2>One server, many swappable surfaces</h2><span class="stag">Surfaces</span></div>
+    <p class="lead">The render layer is a distribution choice, not an auth-feasibility one. There is exactly one thing to build and harden: the Customer 360 MCP server. Every surface bolts onto it; the data plane, per-user authorization, and FLS / sharing enforcement are identical across all of them.</p>
+    <table class="tight">
+      <thead><tr><th>Surface</th><th>As-user auth</th><th>Live refresh</th><th>Sec burden</th><th>Demo-ready now</th></tr></thead>
+      <tbody>
+        <tr><td><span class="em">Claude chat / desktop</span><span class="sm">MCP App widget</span></td><td>OAuth 2.1 + PKCE, user-scoped token &rarr; SF ECA; <code>USER_MODE</code></td><td>Yes (<code>callServerTool</code> re-call, true live)</td><td>Med</td><td>Yes, we self-host the <code>ui://</code> widget</td></tr>
+        <tr><td><span class="em">Agentforce in FSC</span><span class="sm">CLT / LWC twin</span></td><td>Native run-as-user; identity IS the SF session, no bridge</td><td>Yes (tool re-call, native session)</td><td>Lowest</td><td>Yes, CLT-in-Lightning shipping</td></tr>
+        <tr><td><span class="em">M365 / Copilot</span><span class="sm">MCP App widget</span></td><td>Entra OAuth 2.1 / SSO + Entra&rarr;SF on-behalf-of exchange</td><td>Yes (same MCP Apps bridge)</td><td>Med + the bridge</td><td>GA Apr 7 2026</td></tr>
+        <tr><td><span class="em">Hosted Next.js</span><span class="sm">per-user SF OAuth</span></td><td>Per-user SF OAuth auth-code + PKCE; all SOQL / Apex as that user</td><td>Yes (SSR / streaming)</td><td>High</td><td>Yes, but "another tab"</td></tr>
+        <tr><td><span class="em">ChatGPT Apps</span><span class="sm">Apps SDK / MCP</span></td><td>OAuth 2.1 auth-code + PKCE &rarr; SF ECA; <code>USER_MODE</code></td><td>Yes (same bridge)</td><td>Med + submission</td><td>Yes (Business / Enterprise beta)</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <span class="clab">Portability, and the honest dead ends</span>
+      <p>Build the widget to the strict MCP Apps subset and one <code>ui://</code> widget is portable across Claude, ChatGPT, and Copilot; surfaces become a menu we light up in sequence, not parallel rebuilds. Honest caveats: server-side EWS detection is a Salesforce Apex / Queueable job the dashboard <strong>reads</strong>, so no chat surface does background monitoring, all render fresh-on-view; "share one link, everyone sees it live" is not how any surface works, and a bank does not want it to, each viewer authorizes their own identity; Claude Code artifacts are a dead end (static, no network, cannot reach the server).</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 13 (page 14) — security-review + policy posture -->
+<div class="page">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">13</span><h2>Policy and governance designed in from day one</h2><span class="stag">Posture</span></div>
+    <p class="lead">What a bank infosec / AppExchange review will check, and the control that answers it. The single most important line: SR 11-7 deterministic compute happens in experience-mcp / source servers; the LLM only ranks and narrates. No regulated number is produced by the model.</p>
+    <table class="rev">
+      <thead><tr><th>Control</th><th>Mechanism</th><th>Review question</th></tr></thead>
+      <tbody>
+        <tr><td class="r-c">Run-as-user identity</td><td class="r-m">Customer 360 runs as the caller via per-user OAuth (ECA, PKCE, <code>mcp_api</code> + <code>refresh_token</code>). No anonymous service account on the read spine.</td><td class="r-q">Whose data can this identity see, and is sharing platform-enforced?</td></tr>
+        <tr><td class="r-c"><code>WITH USER_MODE</code></td><td class="r-m">Every Apex / SOQL read runs <code>WITH USER_MODE</code> so CRUD / FLS / record-sharing auto-apply to the caller, platform-enforced, not re-coded.</td><td class="r-q">Is FLS / record-sharing enforced on every query, including aggregations?</td></tr>
+        <tr><td class="r-c">Per-user token isolation</td><td class="r-m">Tokens issued per user, not shared per org. Sharp edge flagged honestly: on custom / Team connectors this must be verified before any borrower-PII pilot.</td><td class="r-q">Is the OAuth token issued per user or shared per org?</td></tr>
+        <tr><td class="r-c">Per-call PII audit + ledger</td><td class="r-m">experience-mcp owns the Snowflake decision ledger + audit trail: <code>log_audit_event</code> on every fired signal, <code>record_decision</code> when a human commits.</td><td class="r-q">Can every read and decision be traced to a user and a timestamp?</td></tr>
+        <tr><td class="r-c">SR 11-7 deterministic wall</td><td class="r-m">The regulated number (Boom ratio, <code>deal_covenant_grade</code>, AFS utilization, IRIS PD) is computed in code server-side and never round-trips through the LLM.</td><td class="r-q">Does the model produce any regulated figure or make any credit decision?</td></tr>
+        <tr><td class="r-c">DRAFT-until-attested</td><td class="r-m">EWS detects, grades, ranks, routes; a human classifies and decides. The Borrower Health Index (0-100) is decision-support and maps to but never overrides <code>LLC_BI__Risk_Rating__c</code>.</td><td class="r-q">Can the system commit a grade, classification, or write autonomously?</td></tr>
+        <tr><td class="r-c">Admin god-mode seam</td><td class="r-m">A separate, explicitly-enabled, fully-logged cross-user read path (kind "god-mode") for internal + demo, behind an explicit switch + permission.</td><td class="r-q">Is there any path that bypasses run-as-user, and is it gated + logged?</td></tr>
+      </tbody>
+    </table>
+    <div class="callout amber">
+      <span class="clab">Honest sharp edge</span>
+      <p>In the bankinggpt sandbox the internal sharing model is permissive (ReadWrite Public on most objects), so run-as-user does <strong>not</strong> narrow visibility there; persona book-narrowing is UX, not a security boundary in that org. Real least-privilege enforcement needs the bank's production OWD (Private + Grant Access Using Hierarchies) or server-side acting-user scope filters. The cockpit presents persona views but must not claim it enforces least privilege in this org. OWD verification per object is an open item.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+<!-- ============================================================ 14 (page 15) — status: built vs needed -->
+<div class="page fit-14">
+  <div class="ph"><div class="ph-l">Customer 360 <span class="tg">·</span> Technical HLSI</div><div class="ph-r"><img class="ph-logo" src="data:image/png;base64,/*LOGO_PLACEHOLDER*/" alt="Accenture"></div></div>
+  <div class="pc">
+    <div class="sec"><span class="num">14</span><h2>Status: what is built vs what is needed</h2><span class="stag">Status</span></div>
+    <p class="lead">Grounded strictly in shipped code and the verified sandbox. Shipped solid, future dashed, no aspirational architecture.</p>
+    <div class="statuswrap">
+      <div class="statuscol shipped">
+        <div class="scol-h">Shipped</div>
+        <div class="srow"><b>Inter-MCP fleet pattern (the proof)</b><span>experience-mcp is itself a client to the system MCPs: <code>boomFinancials.js</code> JSON-RPC <code>tools/call</code> over streamable-HTTP, SSE-parsed, 8s timeout, graceful-null; <code>covenant.js</code> deterministic ratio &times; threshold join; <code>route.js</code> dual-transport <code>mcp-handler</code> with bank-branded <code>ui://</code> widgets.</span></div>
+        <div class="srow"><b>Shipped source MCPs</b><span>Boom (spreading + ratios), AFS (<code>revolver_utilization</code>, <code>payment_history</code>, <code>loan_summary</code>, <code>create_workpackage</code>), IRIS on Snowflake (node shipped, live wiring stubbed), experience-mcp (join + Snowflake ledger + audit).</span></div>
+        <div class="srow"><b>Verified nCino + FSC schema</b><span>Piedmont real C&amp;I shape: Operating Company + 100%-owner individual full-note guaranty, 4 <code>Covenant2</code> (all Compliant), 5 <code>Loan_Collateral2</code> (~$10M lendable), Product Package TCE $12.5M grade 5, Connection graph 208 edges.</span></div>
+        <div class="srow"><b>Fetch-ready now (no new build)</b><span>nCino + FSC reads, Boom ratios / spread, AFS servicing, <code>deal_covenant_grade</code>, the Snowflake ledger (<code>recall_decisions</code>): covers identity / scoping, the KPI tiles, the borrower-health rail, single-customer 360, and 5 of 7 EWS signal classes.</span></div>
+      </div>
+      <div class="statuscol needed">
+        <div class="scol-h">Needed</div>
+        <div class="srow"><b>Native Customer 360 MCP read spine<span class="st">to build</span></b><span>The run-as-user nCino + FSC read spine itself (we proxy via sobject-sf today). NEXT-STEPS Task A.</span></div>
+        <div class="srow"><b>Live IRIS / Snowflake + CapIQ / IBIS<span class="st">stubbed</span></b><span>2 of 7 EWS signal classes (risk migration; external / industry peers) are placeholder-seeded until the rating / PD and peer-median wiring is live.</span></div>
+        <div class="srow"><b>The EWS async detection job<span class="st">to build</span></b><span>Server-side overnight detection is a Salesforce Apex / Queueable job the dashboard reads. Triggers + config seams framed in EARLY-WARNING.md; the job is unbuilt.</span></div>
+        <div class="srow"><b>Bank-specific EWS config<span class="st">incoming</span></b><span>Thresholds, escalation SLAs, scorecard weights, and the EWS-severity &rarr; bank-watch-grade mapping. Every threshold ships as a named, replaceable default; drops in by config.</span></div>
+        <div class="srow"><b>Token isolation + production OWD<span class="st">verify</span></b><span>Confirm per-user tokens (not shared per org) before any borrower-PII pilot; confirm the bank's production OWD actually narrows manager vs leaf books.</span></div>
+        <div class="srow"><b>AWS environment + promotion gate<span class="st">in progress</span></b><span>Stand up / formalize the remote-host environment (AgentCore Runtime or ECS / Fargate in a private VPC) as the governance unit. Accenture Track 2 is already standing one up.</span></div>
+      </div>
+    </div>
+    <div class="callout green">
+      <span class="clab">The close, on the through-line</span>
+      <p>Every MCP server we bring online is one more sense for the same brain: deal-level underwriting &rarr; relationship-level monitoring &rarr; beyond, built step by step, with the policy fence designed in before the first tool call, and a path to enterprise-bank scale on the bank's own AWS.</p>
+    </div>
+  </div>
+  <div class="pf"><span>Accenture</span><span class="pf-mid">Commercial Credit Brain · Stage 0</span><span>Customer 360 · Technical Intent</span></div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>cm_Approver_User__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The named human bound to the decision token. Not a credit approver: the token proves confirmation of a plan, never a credit decision (A33.5.4).</description>
+    <label>Confirmed By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Confirmed Actions</relationshipLabel>
+    <relationshipName>C360_Confirmed_Actions</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>
