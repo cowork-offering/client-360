@@ -29,7 +29,38 @@ The §4 verification campaign in HANDOVER-2026-08-20 (steps 0-5; step 6 = Fabian
 Evidence table or it didn't happen. Nothing below builds on unverified ground.
 **G0 pass = org intact, suite green, reads live, mod + bulk staging observed.**
 
-### WS1 — KYC full stage/approve loop (Aug 22-27) · Archy · GATE G1
+### WS0 RESULT (2026-08-20): **G0 PASSED** — receipts in EVIDENCE-SEPT4.md. Highlights: suite
+138/138 after fixing org-wide CDC-trigger drift; modification credit action EXECUTED LIVE for the
+first time (acnpex_CreditActionRequest → clone + junction observed on Hartwell, rolled back clean);
+nCino process research done (NCINO-PROCESS-ALIGNMENT-DRAFT.md, 39-entry danger register).
+Fence change by Fabian 2026-08-20: sandbox approval emails are acceptable, incl. the covenant
+outlook address. Step 6 (artifact golden path in Fabian's browser) still pending.
+
+### WS0.5 — Apex action wave (Aug 21-24) · Archy · feeds G1/G3
+Scope fixed by the G0 findings + process research. All changes wire-probed, suite-covered
+(armCalloutMock), envelopes archived:
+1. **execute_loan_modification** — token-gated wrapper over the PROVEN mechanics: consume staged
+   plan → acnpex_CreditActionRequest (sync) → verify clone + junction by re-query → apply staged
+   changes to the CLONE (Qualification) → report. Never touches the parent.
+2. **Covenant review rebuild (package-scoped bulk)** — per nCino lifecycle: N compliance
+   assessments under ONE plan/token; traversal unions loan AND account junctions (dedupe);
+   status precondition (only Pending → terminal advances the schedule); add `Waived` to the
+   allowlist; write the value to `LLC_BI__Historic_Financial_Indicator__c` (double, org-verified)
+   alongside our cm_ audit field; STRUCTURAL guard against the auto-next-row trap (never assume
+   no frequency template — check, warn in plan, and never touch Effective Date in a status
+   transaction: PDI-00023403 is OPEN).
+3. **Collateral valuation hardening** — explicit `productPackageId` anchor; items[] cap 20
+   (CDC-trigger queueable math: 24 triggers × per-record enqueue vs limit 50); `valuationDate`
+   required (nCino names it as the latest-valuation determinant).
+4. **Precondition checks for demo identities** — UserRole + Credit Actions Delete permset probe
+   for ANY user who will drive the demo (Noland at the booth).
+5. **Exception display correction** (cockpit): Exception ≠ breached; render administrative vs
+   financial exception honestly (org data: 101/140 Exception rows carry no measured value).
+6. Re-verify `Stages_Renewal_Allowed` post-Aug-14 upgrade before any renewal work.
+Wave gate: suite green, envelopes for every new shape, danger-register items 1-6 closed or
+explicitly deferred with reason.
+
+### WS1 — KYC full stage/approve loop (Aug 23-27) · Archy · GATE G1
 The cockpit KYC & Onboarding zone goes from display to workable. The IDB gateway staging tools
 already exist as connector tools (get_customer360, stage/approve address + name change, sanctions,
 adverse media, service requests, change audit). Work: wire the zone to live calls on BOTH surfaces,
