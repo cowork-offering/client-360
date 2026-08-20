@@ -1,7 +1,7 @@
 {
   "name": "client-360",
   "displayName": "Client 360",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Customer 360 Reinvented \u2014 an Accenture accelerator: a worklist-first commercial-credit relationship cockpit for C&I bankers, as a full React application. Reads the book live from Salesforce (nCino + FSC) via the org-hosted Customer360 MCP server (8 read tools, per-user OAuth) plus Boom-spread financials, renders an interactive Cowork artifact: needs-action worklist with reason codes, per-account Activity audit trail (client requests, concluded analyses, next steps), exposure & collateral, covenants with effective-challenge validation, relationship graph, whitespace, structural early-warning signals, a page-agnostic AI chat, and a data-gated Client Actions control center. Use when a banker asks to open the Customer 360, pull up the relationship view, work the needs-action queue, or act on a client request.",
   "author": {
     "name": "Fabian Goetzens",
@@ -19,5 +19,7 @@
     "covenants",
     "early-warning",
     "c-and-i"
-  ]
+  ],
+  "homepage": "https://github.com/cowork-offering/customer-360",
+  "repository": "https://github.com/cowork-offering/customer-360"
 }
