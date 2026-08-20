@@ -38,3 +38,22 @@ annual review, new facility). These are the action-history story; campaign probe
 own rows.
 
 **G0: PASSED** (step 6 pending Fabian). Ground is solid; WS1/WS2 may build.
+
+## Mod-execute probe (2026-08-20, greenlit by Fabian incl. approval flows)
+
+**The modification credit action was EXECUTED LIVE for the first time** — on throwaway data,
+residue zero. This converts execute_loan_modification from designed to buildable-on-proven-mechanics.
+
+| Observation | Value |
+|---|---|
+| Door | `acnpex_CreditActionRequest` invocable (org wrapper over the credit-action engine): `{actionType:"Modification", loanIds:[…] (List<String> on the wire), sourcePackageId, isAsync:false}` → sync JSON `{success, outputLoanId, outputPackageId, failureReasons[]}` |
+| Precondition found | Running user MUST have a UserRole — engine refuses with "User has not been assigned a role." Fixed: `Commercial Banking Manager` (00Ebb000001BAptEAG) assigned to 005bb00000ftouDAAQ (was null; KEPT — execute needs it) |
+| Throwaway fixture | insert-at-Booked re-proven (Account 001bb00001KL2W5AAL → PKG a5Fbb000000Ij57EAC → Loan a4Zbb000002BV49EAG Booked/Open/ZZWS0PROBE1) |
+| Clone | a4Zbb000002BV5lEAG: Stage `Qualification`, `Is_Modification=true`, lookupKey auto-suffixed `ZZWS0PROBE1_M1`, same package |
+| Parent | untouched Booked/Open, `hasRenewal=true` |
+| Junction | RL-00000193 anchor (rev 0, Available, ParentLoanId==RenewalLoanId) + RL-00000194 (rev 1, In Progress, HasActiveRenewalLoan=true) — exactly the Piedmont pattern incl. the self-reference gotcha |
+| Cleanup | 2 junctions + 2 loans + package + account deleted; probe residue 0 |
+
+Build consequence for execute_loan_modification: call acnpex_CreditActionRequest sync, verify by
+re-query (clone id + junction chain), then apply the staged field changes to the CLONE (Qualification
+stage = freely editable), never the parent. The plan's apply_changes step lands on outputLoanId.
