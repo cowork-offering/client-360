@@ -142,3 +142,9 @@ service request ✅ aligned. Gaps to close in the build block: (1) stage_covenan
 single-compliance-row — rebuild as package-scoped bulk (all covenants, one plan, one token,
 per-covenant assessments as items); (2) stage_collateral_valuation gets an explicit
 productPackageId anchor. Same wave as execute_loan_modification, BEFORE chat prose (WS3).
+
+## UI polish pass (Fabian, 2026-08-20) — scheduled Sept 5-15 finetuning window, NOT before
+Expectation: real-React feel — skeleton loaders, smooth zone transitions, live sync progress,
+Accenture-branded shell (logo). Explicitly not prio before Sept 4. Process: design-intent gate
+first (one concrete branded mock, Fabian picks, THEN build). Rides the normal publish pipeline
+to both surfaces.
