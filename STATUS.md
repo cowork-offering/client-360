@@ -56,7 +56,13 @@ with a product-grade cockpit on top. Deliverable quality bar: spot-on.
 6. **Mod/renewal execute** — stage-only by design (LV06/Booked wall).
 7. Housekeeping: Piedmont test rows (CV-0000000002/3, R-4) deletion decision; Credit Memo 0.54.0
    connector swap (sibling, tracked there).
-8. Dreamforce narrative/demo script — deliberately not written yet (Fabian's hold).
+8. Dreamforce is now CONCRETE: SPIN booth (690 Folsom St, SF), Sept 15-16 2026, C360/Cowork =
+   **Demo 2, COMMERCIAL banking** (Wealth = Demo 1, the web app — the "steer C360 to Wealth" idea
+   is superseded for the demo; Wealth stays roadmap). The print-approved journey panel names our
+   email-to-action moment; the demo must deliver it, and has NO voice. Full context:
+   `knowledge/DREAMFORCE-SPIN-CONTEXT.md`. Demo script still on Fabian's hold.
+9. **Regulatory currency:** SR 11-7 superseded by **SR 26-2** (Fed, Apr 2026) — update citations
+   after the control-set diff (see DREAMFORCE-SPIN-CONTEXT.md).
 
 ## Key doctrine (short form; full: knowledge/HANDOFF + LESSONS-NCINO-APEX)
 
