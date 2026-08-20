@@ -20,6 +20,7 @@ private class StageHeldCreditActionsTest {
 
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.account();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.productPackage(a.Id);
         C360Wave2Fixture.loan(a.Id, p.Id);
@@ -67,6 +68,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void modificationRefusesANonBookedFacilityWithBankerCopy() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Loan__c l = C360Wave2Fixture.existingLoan();
 
         Test.startTest();
@@ -83,6 +85,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void renewalRefusesANonBookedFacilityWithBankerCopy() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Loan__c l = C360Wave2Fixture.existingLoan();
 
         Test.startTest();
@@ -98,6 +101,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void aRefusedPlanWritesNothingAndStagesNothing() {
+        C360TestFixture.armCalloutMock();
         Map<String, Integer> before = C360Wave2Fixture.domainRowCounts();
         Integer junctionsBefore = [SELECT COUNT() FROM LLC_BI__LoanRenewal__c];
         Integer stagingBefore = [SELECT COUNT() FROM cm_Action_Staging__c];
@@ -128,6 +132,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void modificationNeedsAtLeastOneRequestedChange() {
+        C360TestFixture.armCalloutMock();
         StageLoanModification.Request r = modReq(C360Wave2Fixture.key('mod-nochange'));
         r.requestedAmount = null;
 
@@ -141,6 +146,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void renewalNeedsAMaturityDate() {
+        C360TestFixture.armCalloutMock();
         StageRenewal.Request r = renReq(C360Wave2Fixture.key('ren-nodate'));
         r.newMaturityDate = null;
 
@@ -154,6 +160,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void noExecuteClassExistsForEitherAction() {
+        C360TestFixture.armCalloutMock();
         // The strongest available guarantee that these actions cannot run: the Apex classes that
         // would run them are not in the org at all.
         Set<String> deployed = new Set<String>();
@@ -208,6 +215,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void modificationPlanOnABookedFacilityIsHeldAndSaysWhy() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
         Test.startTest();
@@ -226,6 +234,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void renewalPlanOnABookedFacilitySurfacesTheOpportunitySideEffect() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
         Test.startTest();
@@ -243,6 +252,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bookedPlansStillWriteNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(3);
         Map<String, Integer> before = C360Wave2Fixture.domainRowCounts();
         Integer junctionsBefore = [SELECT COUNT() FROM LLC_BI__LoanRenewal__c];
@@ -274,6 +284,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseTheTwoInputShapesTogether() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(2);
 
         StageLoanModification.Request m = modReq(C360Wave2Fixture.key('mod-mixed'));
@@ -297,6 +308,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseAnEmptyFacilityList() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
         StageLoanModification.Request m = modReq(C360Wave2Fixture.key('mod-empty'));
@@ -321,6 +333,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseARequestWithNoFacilityAtAll() {
+        C360TestFixture.armCalloutMock();
         // This is the assertion that replaces required=true on loanId (lesson 16aa). The platform
         // can no longer enforce it, because either shape is valid, so Apex must.
         StageLoanModification.Request m = modReq(C360Wave2Fixture.key('mod-nofacility'));
@@ -342,6 +355,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseADuplicateFacility() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(2);
         List<Id> withDupe = new List<Id>{ ids[0], ids[1], ids[0] };
 
@@ -367,6 +381,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseAFacilityFromAnotherPackage() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(2);
         Id foreignPackage = C360Wave2Fixture.fakeId(LLC_BI__Product_Package__c.SObjectType);
         // Both tools were handed the same injected list, so this moves the facility for both.
@@ -398,6 +413,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseAFacilityTheyCannotSee() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
         List<Id> unknown = new List<Id>{ C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType) };
 
@@ -421,6 +437,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void bothToolsRefuseAnIdThatIsNotAFacilityOrNotAPackage() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
         StageLoanModification.Request wrongFacility = modReq(C360Wave2Fixture.key('mod-wrongtype'));
@@ -443,6 +460,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void modificationStagesThreeFacilitiesAsOnePlanWithOneToken() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(3);
         StageLoanModification.Request m = modReq(C360Wave2Fixture.key('mod-three'));
         m.loanId = null;
@@ -485,6 +503,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void renewalStagesThreeFacilitiesAsOnePlanWithOneToken() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(3);
         StageRenewal.Request r = renReq(C360Wave2Fixture.key('ren-three'));
         r.loanId = null;
@@ -511,6 +530,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void theFlatLoanIdStillStagesASingleFacilityPlan() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
         Test.startTest();
@@ -529,6 +549,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void idInputsFailClosedRatherThanReachingSoql() {
+        C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
         StageLoanModification.Request badAnchor = modReq(C360Wave2Fixture.key('mod-badanchor'));
@@ -556,6 +577,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void facilityIdsRefusesAnEmptyEntryInTheList() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(2);
         StageLoanModification.Request m = modReq(C360Wave2Fixture.key('mod-nullentry'));
         m.loanId = null;
@@ -571,6 +593,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void aFacilityOnNoPackageAtAllSaysSo() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(1);
         StageLoanModification.seamFacilities[0].LLC_BI__Product_Package__c = null;
 
@@ -589,6 +612,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void aFacilityFlaggedBothWaysIsRefusedBeforeTheOrgRefusesIt() {
+        C360TestFixture.armCalloutMock();
         List<Id> ids = installBookedFacilities(1);
         StageLoanModification.seamFacilities[0].LLC_BI__Is_Modification__c = true;
         StageLoanModification.seamFacilities[0].LLC_BI__isRenewal__c = true;
@@ -607,6 +631,7 @@ private class StageHeldCreditActionsTest {
 
     @IsTest
     static void aMissingCoreKeyIsSurfacedRatherThanRefused() {
+        C360TestFixture.armCalloutMock();
         // The third leg of nCino's valid-facility rule. A booked facility with no core lookup key is
         // a core-sync data issue, not a banker error, so it warns and still stages.
         List<Id> ids = installBookedFacilities(2);

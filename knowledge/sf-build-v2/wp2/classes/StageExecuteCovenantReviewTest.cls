@@ -16,6 +16,7 @@ private class StageExecuteCovenantReviewTest {
 
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360Wave2Fixture.account();
     }
 
@@ -60,6 +61,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void stageWritesNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
         Map<String, Integer> before = C360Wave2Fixture.domainRowCounts();
@@ -78,6 +80,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void executeUpdatesStatusAndStartsNoApprovalChain() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
         String key = C360Wave2Fixture.key('cov-happy');
@@ -108,6 +111,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void exceptionStampsBreachedAndAnExceptionDate() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('In Progress');
         String key = C360Wave2Fixture.key('cov-exception');
@@ -127,6 +131,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void neitherToolEverWritesTheSetOnceCovenantLookup() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
         String key = C360Wave2Fixture.key('cov-setonce');
@@ -147,6 +152,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void aStatusOutsideTheAllowlistIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
 
@@ -161,6 +167,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void anUnknownComplianceRecordIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         installSeam('Pending');
         Id other = C360Wave2Fixture.fakeId(LLC_BI__Covenant_Compliance2__c.SObjectType);
@@ -176,6 +183,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void executeReplayReportsThePriorAssessmentAndWritesNothing() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
         String key = C360Wave2Fixture.key('cov-replay');
@@ -200,6 +208,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void executeRefusesMissingUsedAndMismatchedTokens() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
         String key = C360Wave2Fixture.key('cov-tokens');
@@ -234,6 +243,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void executeRefusesWhenTheTargetMovedSinceStaging() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
         String key = C360Wave2Fixture.key('cov-moved');
@@ -255,6 +265,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void executeRefusesIncompleteRequests() {
+        C360TestFixture.armCalloutMock();
         Test.startTest();
         List<ExecuteCovenantReview.Request> bad = new List<ExecuteCovenantReview.Request>();
         for (Integer i = 0; i < 3; i++) {
@@ -277,6 +288,7 @@ private class StageExecuteCovenantReviewTest {
 
     @IsTest
     static void stageRefusesIncompleteRequests() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Id target = installSeam('Pending');
 

@@ -12,6 +12,7 @@ private class StageExecuteServiceRequestTest {
         because every method re-inserted anchors and woke the managed triggers again. */
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360TestFixture.account();
     }
 
@@ -36,6 +37,7 @@ private class StageExecuteServiceRequestTest {
 
     @IsTest
     static void happyPathCreatesOneCaseAtNew() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('sr-happy');
 
@@ -70,6 +72,7 @@ private class StageExecuteServiceRequestTest {
 
     @IsTest
     static void bankinggptOffersTheHonestTypeAndOrigin() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
 
         Test.startTest();
@@ -90,6 +93,7 @@ private class StageExecuteServiceRequestTest {
 
     @IsTest
     static void slackSideEffectIsNeverClaimedAsVerified() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('sr-slack');
 
@@ -121,6 +125,7 @@ private class StageExecuteServiceRequestTest {
 
     @IsTest
     static void missingAccountIsARefusalNotAFault() {
+        C360TestFixture.armCalloutMock();
         StageServiceRequest.Request r = req(null, C360TestFixture.key('sr-noacct'));
         r.accountId = null;
 
@@ -135,6 +140,7 @@ private class StageExecuteServiceRequestTest {
 
     @IsTest
     static void oneFailureDoesNotContaminateItsSiblings() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         StageServiceRequest.Request good = req(a.Id, C360TestFixture.key('sr-good'));
         StageServiceRequest.Request bad = req(a.Id, C360TestFixture.key('sr-bad'));

@@ -11,6 +11,7 @@ private class StageExecuteNewFacilityTest {
 
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.account();
         C360Wave2Fixture.productPackage(a.Id);
     }
@@ -34,6 +35,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void stageWritesNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         Map<String, Integer> before = C360Wave2Fixture.domainRowCounts();
 
@@ -52,6 +54,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void productIsRequiredBecauseTheOrgSelfPopulatesIt() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         StageNewFacility.Request r = req(p.Id, C360Wave2Fixture.key('nf-noprod'));
         r.product = null;
@@ -66,6 +69,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void purposeAndAmountAreRequiredForTheStageHop() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
 
         StageNewFacility.Request noPurpose = req(p.Id, C360Wave2Fixture.key('nf-nopurpose'));
@@ -84,6 +88,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void planCarriesTheWaitStepWithABudget() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
 
         Test.startTest();
@@ -105,6 +110,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeCreatesTheFacilityAndReportsTheOrgAssignedName() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-happy');
 
@@ -141,6 +147,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void invocationOneFilesAndReturnsWithoutWaiting() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-inv1');
 
@@ -178,6 +185,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void invocationTwoStaysWaitingWhenTheOrgHasNotCreatedTheChild() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-inv2');
 
@@ -207,6 +215,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void invocationTwoNeedsNoNewTokenButRefusesAForeignApprover() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-inv2auth');
 
@@ -248,6 +257,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void resumeAgainstAStalePlanHashIsRefused() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-inv2hash');
 
@@ -272,6 +282,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeRefusesAMissingToken() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-notoken');
 
@@ -303,6 +314,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void repeatedInvocationsNeverCreateASecondFacility() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-replay');
 
@@ -323,6 +335,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeRefusesAStalePlanHashAndAForeignApprover() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-refuse');
 
@@ -362,6 +375,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeRefusesWhenTheAnchorMovedSinceStaging() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         String key = C360Wave2Fixture.key('nf-moved');
 
@@ -381,6 +395,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeRefusesIncompleteRequests() {
+        C360TestFixture.armCalloutMock();
         Test.startTest();
         List<ExecuteNewFacility.Request> bad = new List<ExecuteNewFacility.Request>();
         for (Integer i = 0; i < 3; i++) {
@@ -403,6 +418,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void unknownProductIsRefusedAgainstTheOrgPicklist() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         StageNewFacility.Request r = req(p.Id, C360Wave2Fixture.key('nf-badprod'));
         r.product = 'Term';
@@ -421,6 +437,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void everyRtValidProductIsAccepted() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         for (String product : new List<String>{ 'Construction', 'Equipment', 'Line of Credit', 'HELOC', 'Purchase', 'Deposit' }) {
             StageNewFacility.Request r = req(p.Id, C360Wave2Fixture.key('nf-rt-' + product));
@@ -432,6 +449,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeAddsTheBorrowerToTheBorrowingStructure() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('nf-involve');
@@ -462,6 +480,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void planCarriesTheBorrowingStructureStep() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
 
         Test.startTest();
@@ -482,6 +501,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void unknownPackageIsRefused() {
+        C360TestFixture.armCalloutMock();
         StageNewFacility.Request r = req(C360Wave2Fixture.fakeId(LLC_BI__Product_Package__c.SObjectType), C360Wave2Fixture.key('nf-nopkg'));
 
         Test.startTest();
@@ -505,6 +525,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void planWithAPackageCarriesNoCreatePackageStep() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
 
         Test.startTest();
@@ -523,6 +544,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void planWithoutAPackageCreatesOneFirstNamedToTheOrgConvention() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
 
         Test.startTest();
@@ -544,6 +566,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void stageWithoutPackageOrAccountIsRefused() {
+        C360TestFixture.armCalloutMock();
         StageNewFacility.Request r = reqNoPackage(null, C360Wave2Fixture.key('nf-neither'));
         r.accountId = null;
 
@@ -557,6 +580,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void stageWithoutAPackageStillWritesNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Integer pkgBefore = [SELECT COUNT() FROM LLC_BI__Product_Package__c];
         Map<String, Integer> before = C360Wave2Fixture.domainRowCounts();
@@ -576,6 +600,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void executeCreatesThePackageThenTheFacilityUnderIt() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('nf-pkgexec');
         Integer pkgBefore = [SELECT COUNT() FROM LLC_BI__Product_Package__c];
@@ -606,6 +631,7 @@ private class StageExecuteNewFacilityTest {
 
     @IsTest
     static void idempotencyCoversThePackageAndFacilityPair() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('nf-pkgidem');
         Integer pkgBefore = [SELECT COUNT() FROM LLC_BI__Product_Package__c];

@@ -12,6 +12,7 @@ private class StageExecuteAnnualReviewTest {
         because every method re-inserted anchors and woke the managed triggers again. */
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360TestFixture.account();
     }
 
@@ -48,6 +49,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void happyPathCreatesReviewAtInProgressWithExplicitStatusAndType() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('ar-happy');
 
@@ -88,6 +90,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void planEndsInAHandoffNotACompletion() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('ar-handoff');
 
@@ -117,6 +120,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void missingReviewTypeIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         StageAnnualReview.Request r = req(a.Id, C360TestFixture.key('ar-notype'));
         r.reviewType = null;
@@ -131,6 +135,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void unknownReviewTypeIsRefusedAgainstTheOrgPicklist() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         StageAnnualReview.Request r = req(a.Id, C360TestFixture.key('ar-badtype'));
         r.reviewType = 'Quarterly';
@@ -145,6 +150,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void editedNarrativeAttributionIsLedgerOnly() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('ar-attrib');
         StageAnnualReview.Request r = req(a.Id, key);
@@ -174,6 +180,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void executeReplayReportsThePriorReviewAndWritesNothing() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('ar-replay');
 
@@ -200,6 +207,7 @@ private class StageExecuteAnnualReviewTest {
 
     @IsTest
     static void executeWithoutATokenIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('ar-notoken');
 

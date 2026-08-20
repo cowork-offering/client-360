@@ -13,6 +13,7 @@ private class StageExecuteCollateralValuationTest {
         because every method re-inserted anchors and woke the managed triggers again. */
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360TestFixture.collateral(1000000);
     }
 
@@ -48,6 +49,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void happyPathFilesOneValuationWithExplicitBooleans() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         String key = C360TestFixture.key('cv-happy');
 
@@ -86,6 +88,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void rollupOutcomeIsReportedHonestlyEitherWay() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         String key = C360TestFixture.key('cv-rollup');
 
@@ -113,6 +116,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void unknownPicklistValueIsRefusedAgainstTheOrg() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         StageCollateralValuation.Request r = req(coll.Id, C360TestFixture.key('cv-badpick'));
         r.type = 'Vibes Based Estimate';
@@ -129,6 +133,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void negativeValueIsRefused() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         StageCollateralValuation.Request r = req(coll.Id, C360TestFixture.key('cv-negative'));
         r.value = -1;
@@ -144,6 +149,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void missingCollateralIsRefused() {
+        C360TestFixture.armCalloutMock();
         StageCollateralValuation.Request r = req(null, C360TestFixture.key('cv-nocoll'));
         r.collateralId = null;
 
@@ -158,6 +164,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void resumeReQueriesTheTargetBeforeWriting() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         String key = C360TestFixture.key('cv-resume');
 
@@ -182,6 +189,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void executeReplayReportsThePriorValuationAndWritesNothing() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         String key = C360TestFixture.key('cv-replay');
 
@@ -209,6 +217,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void executeWithoutATokenIsRefused() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         String key = C360TestFixture.key('cv-notoken');
 
@@ -252,6 +261,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void singleItemFlatRequestStillWorksUnchanged() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
         String key = C360TestFixture.key('cv-backcompat');
 
@@ -272,6 +282,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void bulkFilesEveryItemWithItsOwnNameAnchorAndRollupAnswer() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c a = C360TestFixture.existingCollateral();
         LLC_BI__Collateral__c b = secondCollateral(400000);
         String key = C360TestFixture.key('cv-bulk');
@@ -308,6 +319,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void bulkStageStillWritesNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c a = C360TestFixture.existingCollateral();
         LLC_BI__Collateral__c b = secondCollateral(400000);
 
@@ -326,6 +338,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void oneIdempotencyKeyCoversTheWholeBatch() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c a = C360TestFixture.existingCollateral();
         LLC_BI__Collateral__c b = secondCollateral(400000);
         String key = C360TestFixture.key('cv-bulkidem');
@@ -349,6 +362,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void aDuplicateCollateralInOneBatchIsRefused() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c a = C360TestFixture.existingCollateral();
 
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
@@ -366,6 +380,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void mixingTheFlatShapeAndItemsIsRefused() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c a = C360TestFixture.existingCollateral();
         StageCollateralValuation.Request r = req(a.Id, C360TestFixture.key('cv-mixed'));
         r.items = new List<StageCollateralValuation.ValuationItem>{ item(a.Id, 100) };
@@ -380,6 +395,7 @@ private class StageExecuteCollateralValuationTest {
 
     @IsTest
     static void aBadItemNamesItsPositionInTheBatch() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c a = C360TestFixture.existingCollateral();
         LLC_BI__Collateral__c b = secondCollateral(400000);
 

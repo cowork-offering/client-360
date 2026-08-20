@@ -13,6 +13,7 @@ private class C360ActionStagingTest {
         because every method re-inserted anchors and woke the managed triggers again. */
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360TestFixture.account();
     }
 
@@ -46,6 +47,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void missingTokenIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('notoken');
         StageServiceRequest.StageResult staged = stageOne(a.Id, key);
@@ -61,6 +63,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void usedTokenIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('usedtoken');
         StageServiceRequest.StageResult staged = stageOne(a.Id, key);
@@ -89,6 +92,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void tokenBoundToADifferentPlanHashIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String keyOne = C360TestFixture.key('planA');
         String keyTwo = C360TestFixture.key('planB');
@@ -117,6 +121,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void staleplanHashIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('stalehash');
         StageServiceRequest.StageResult staged = stageOne(a.Id, key);
@@ -135,6 +140,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void approverMustBeTheRunningIdentity() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('approver');
         StageServiceRequest.StageResult staged = stageOne(a.Id, key);
@@ -154,6 +160,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void repeatedStageOnOneKeyReturnsOnePlanAndOneToken() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('stagereplay');
 
@@ -175,6 +182,7 @@ private class C360ActionStagingTest {
 
     @IsTest
     static void executeReplayReportsThePriorRecordAndWritesNothing() {
+        C360TestFixture.armCalloutMock();
         Account a = C360TestFixture.existingAccount();
         String key = C360TestFixture.key('execreplay');
         StageServiceRequest.StageResult staged = stageOne(a.Id, key);

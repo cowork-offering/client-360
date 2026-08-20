@@ -10,6 +10,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360Wave2Fixture.account();
     }
 
@@ -43,6 +44,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void stageWritesNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         Map<String, Integer> before = C360Wave2Fixture.domainRowCounts();
 
@@ -60,6 +62,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void executeSetsInReviewExplicitlyRatherThanLettingItDefaultToADecision() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('rr-happy');
 
@@ -89,6 +92,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void overrideWithoutACommentIsRefusedBeforeTheOrgRefusesIt() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         StageRiskRatingReview.Request r = req(a.Id, C360Wave2Fixture.key('rr-override'));
         r.overriddenRiskGradeValue = 7;
@@ -104,6 +108,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void overrideWithACommentIsAccepted() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('rr-ovok');
         StageRiskRatingReview.Request r = req(a.Id, key);
@@ -131,6 +136,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void missingAccountIsRefused() {
+        C360TestFixture.armCalloutMock();
         StageRiskRatingReview.Request r = req(null, C360Wave2Fixture.key('rr-noacct'));
         r.accountId = null;
 
@@ -144,6 +150,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void executeReplayWritesNothingASecondTime() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('rr-replay');
 
@@ -163,6 +170,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void executeRefusesMissingUsedAndMismatchedTokens() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         String key = C360Wave2Fixture.key('rr-tokens');
 
@@ -196,6 +204,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void executeRefusesIncompleteRequests() {
+        C360TestFixture.armCalloutMock();
         Test.startTest();
         List<ExecuteRiskRatingReview.Request> bad = new List<ExecuteRiskRatingReview.Request>();
         for (Integer i = 0; i < 3; i++) {
@@ -218,6 +227,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void unknownLoanIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         StageRiskRatingReview.Request r = req(a.Id, C360Wave2Fixture.key('rr-badloan'));
         r.loanId = C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType);
@@ -232,6 +242,7 @@ private class StageExecuteRiskRatingReviewTest {
 
     @IsTest
     static void missingRationaleIsRefused() {
+        C360TestFixture.armCalloutMock();
         Account a = C360Wave2Fixture.existingAccount();
         StageRiskRatingReview.Request r = req(a.Id, C360Wave2Fixture.key('rr-norat'));
         r.rationale = null;

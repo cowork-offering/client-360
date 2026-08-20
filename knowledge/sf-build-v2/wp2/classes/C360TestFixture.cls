@@ -58,6 +58,28 @@ public class C360TestFixture {
         return 'ZZ-WP2-' + label + '-' + String.valueOf(Crypto.getRandomLong());
     }
 
+    /**
+     * SHARED-SANDBOX SHIELD (2026-08-20). On 2026-08-03 a set of 24 org-local *CDC triggers
+     * (EventBridgeCallout queueable, AWS change-stream, not ours) went live on every object these
+     * fixtures insert. Each test DML now flushes a queueable that makes an HTTP callout, which a
+     * test context refuses unless a mock is armed. Arm this mock FIRST in every @TestSetup and
+     * every test method that performs DML. The mock answers ANY request with 200 — it exists to
+     * make the foreign callout legal, never to assert on it.
+     */
+    public class NoopCalloutMock implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse r = new HttpResponse();
+            r.setStatusCode(200);
+            r.setBody('{}');
+            return r;
+        }
+    }
+
+    /** Arm the shared-sandbox callout shield. Call first in @TestSetup and each DML-performing test. */
+    public static void armCalloutMock() {
+        Test.setMock(HttpCalloutMock.class, new NoopCalloutMock());
+    }
+
     /** Row counts for the three domain write targets, for the zero-DML proof. */
     public static Map<String, Integer> domainRowCounts() {
         return new Map<String, Integer>{

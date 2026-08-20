@@ -16,12 +16,14 @@ private class C360ZeroDmlTest {
         because every method re-inserted anchors and woke the managed triggers again. */
     @TestSetup
     static void makeFixture() {
+        C360TestFixture.armCalloutMock();
         C360TestFixture.account();
         C360TestFixture.collateral(1000000);
     }
 
     @IsTest
     static void stageToolsWriteNoDomainRow() {
+        C360TestFixture.armCalloutMock();
         Account acct = C360TestFixture.existingAccount();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
 
@@ -74,6 +76,7 @@ private class C360ZeroDmlTest {
 
     @IsTest
     static void stageOutputCarriesNoRecordId() {
+        C360TestFixture.armCalloutMock();
         Account acct = C360TestFixture.existingAccount();
 
         StageServiceRequest.Request sr = new StageServiceRequest.Request();
@@ -101,6 +104,7 @@ private class C360ZeroDmlTest {
 
     @IsTest
     static void plannedStepsAreTypedAndOrdered() {
+        C360TestFixture.armCalloutMock();
         LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
 
         StageCollateralValuation.Request cv = new StageCollateralValuation.Request();

@@ -10,6 +10,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void reviewCompleteIsRefused() {
+        C360TestFixture.armCalloutMock();
         Boolean refused = false;
         try {
             C360WriteGuard.assertAllowed(
@@ -26,6 +27,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void reviewPendingApprovalIsRefused() {
+        C360TestFixture.armCalloutMock();
         Boolean refused = false;
         try {
             C360WriteGuard.assertAllowed(
@@ -41,6 +43,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void reviewStageWriteIsRefusedForAnyValue() {
+        C360TestFixture.armCalloutMock();
         for (String value : new List<String>{ 'Qualification', 'Approval', 'Complete' }) {
             Boolean refused = false;
             try {
@@ -59,6 +62,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void reviewRecordTypeIsRefused() {
+        C360TestFixture.armCalloutMock();
         Boolean refused = false;
         try {
             C360WriteGuard.assertAllowed(
@@ -74,6 +78,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void caseStatusOtherThanNewIsRefused() {
+        C360TestFixture.armCalloutMock();
         for (String value : new List<String>{ 'Closed', 'Escalated', 'In Progress' }) {
             Boolean refused = false;
             try {
@@ -91,6 +96,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void caseUpdateAndDeleteAreRefused() {
+        C360TestFixture.armCalloutMock();
         for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
             Boolean refused = false;
             try {
@@ -105,6 +111,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void valuationUpdateAndDeleteAreRefused() {
+        C360TestFixture.armCalloutMock();
         for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
             Boolean refused = false;
             try {
@@ -118,6 +125,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void valuationLendableValueIsRefused() {
+        C360TestFixture.armCalloutMock();
         Boolean refused = false;
         try {
             C360WriteGuard.assertAllowed(
@@ -133,6 +141,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void objectOutsideTheAllowlistIsRefused() {
+        C360TestFixture.armCalloutMock();
         Boolean refused = false;
         try {
             C360WriteGuard.assertAllowed('LLC_BI__LoanRenewal__c', C360WriteGuard.OP_CREATE, new Map<String, Object>());
@@ -149,6 +158,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void permittedCreatesPass() {
+        C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_CASE, C360WriteGuard.OP_CREATE, new Map<String, Object>{ 'Status' => 'New' });
         C360WriteGuard.assertAllowed(
             C360WriteGuard.OBJ_REVIEW,
@@ -164,6 +174,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void loanCreateStateIsFencedToQualificationOpen() {
+        C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN, C360WriteGuard.OP_CREATE, new Map<String, Object>{
             'LLC_BI__Stage__c' => 'Qualification', 'LLC_BI__Status__c' => 'Open',
             'LLC_BI__isRenewal__c' => false, 'LLC_BI__Is_Modification__c' => false
@@ -184,6 +195,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void loanMayHopOnlyToProposal() {
+        C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN, C360WriteGuard.OP_UPDATE, new Map<String, Object>{ 'LLC_BI__Stage__c' => 'Proposal' });
         for (String stage : new List<String>{ 'Booked', 'Credit Underwriting', 'Qualification' }) {
             Boolean refused = false;
@@ -198,6 +210,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void loanFormulaAndAbsentFieldsAreRefused() {
+        C360TestFixture.armCalloutMock();
         for (String f : new List<String>{ 'LLC_BI__hasRenewal__c', 'LLC_BI__Number_Of_Renewals__c', 'LLC_BI__RootLoanId__c' }) {
             Boolean refused = false;
             try {
@@ -214,6 +227,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void riskRatingCreateStateIsFencedToInReview() {
+        C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_RISK_RATING, C360WriteGuard.OP_CREATE, new Map<String, Object>{ 'LLC_BI__Status__c' => 'In Review' });
         for (String status : new List<String>{ 'Not Approved', 'Approved', 'Declined' }) {
             Boolean refused = false;
@@ -228,6 +242,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void riskRatingRejectsFieldsTheObjectDoesNotHave() {
+        C360TestFixture.armCalloutMock();
         for (String f : new List<String>{ 'RecordTypeId', 'OwnerId', 'LLC_BI__Final_Risk_Grade__c' }) {
             Boolean refused = false;
             try {
@@ -242,6 +257,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void covenantComplianceIsUpdateOnlyAndNeverCreated() {
+        C360TestFixture.armCalloutMock();
         Boolean refusedCreate = false;
         try {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_CREATE, new Map<String, Object>());
@@ -267,6 +283,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void covenantSetOnceAndScheduleFieldsAreRefused() {
+        C360TestFixture.armCalloutMock();
         for (String f : new List<String>{ 'LLC_BI__Covenant__c', 'LLC_BI__Effective_Date__c' }) {
             Boolean refused = false;
             try {
@@ -281,6 +298,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void deleteIsRefusedEverywhere() {
+        C360TestFixture.armCalloutMock();
         for (String obj : new List<String>{ C360WriteGuard.OBJ_CASE, C360WriteGuard.OBJ_LOAN, C360WriteGuard.OBJ_RISK_RATING, C360WriteGuard.OBJ_COVENANT_COMPLIANCE }) {
             Boolean refused = false;
             try {
@@ -294,6 +312,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void packageMayBeCreatedWithNameAndAccountOnly() {
+        C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRODUCT_PACKAGE, C360WriteGuard.OP_CREATE,
             new Map<String, Object>{ 'Name' => 'ACME - 7/26/2026 - PP', 'LLC_BI__Account__c' => '001000000000000AAA' });
 
@@ -312,6 +331,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void packageTakesNoUpdateAndNoDelete() {
+        C360TestFixture.armCalloutMock();
         for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
             Boolean refused = false;
             try {
@@ -325,6 +345,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void involvementIsCreatedAsBorrowerOnly() {
+        C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE,
             new Map<String, Object>{ 'LLC_BI__Borrower_Type__c' => 'Borrower', 'LLC_BI__Ownership__c' => 100 });
 
@@ -342,6 +363,7 @@ private class C360WriteGuardTest {
 
     @IsTest
     static void involvementFormulaFieldsAndContingentAmountAreRefused() {
+        C360TestFixture.armCalloutMock();
         for (String f : new List<String>{ 'LLC_BI__Is_Borrower__c', 'LLC_BI__Is_Guarantor__c',
                                           'LLC_BI__Is_CoBorrower__c', 'LLC_BI__Contingent_Amount__c' }) {
             Boolean refused = false;
