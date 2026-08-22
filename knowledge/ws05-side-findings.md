@@ -21,3 +21,11 @@ Both artifact URLs republished at repo 4411583 with `capabilities.mcp` = knowled
 (Customer 360: 22 tools incl. execute_loan_modification; execute_covenant_review excluded by founder decision,
 Customer360SearchAccounts excluded as no call path; IDB Gateway 3; Microsoft 365 1). Shapes come from the archived
 observed envelopes (stage/execute/replay), not guessed; no live connector call was made from this session at publish time.
+
+## Demo-beat rehearsal on Hartwell THROUGH OUR TOOLS (2026-08-22, REST = exactly what the cockpit calls)
+stage_loan_modification (REHEARSAL-HARTWELL-MOD-20260822-01, facilityIds [revolver a4Zbb0000027MaYEAU], 20,000,000)
+→ staging a8abb00001NAYAlAAP, executionHeld false, 5 steps, covenantCarryover 1
+→ execute_loan_modification (token, approver 005bb00000ftouDAAQ) → terminalState success, replayed false
+→ clone a4Zbb000002BsK5EAK (Qualification, HW1001_M1, Amount reads back 20,000,000), junction RL-00000200 rev 1,
+  parentUnchanged true. Standing for Fabian's review; rollback = delete junctions (2), clone, staging row; re-verify
+  revolver Booked/Open/15,000,000/hasRenewal false, package 6 loans, staging 11.
