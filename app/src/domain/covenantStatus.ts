@@ -11,9 +11,15 @@
 
    The rule the whole cockpit now shares:
 
-     A FINANCIAL BREACH is (a) the org's own `Breached` flag, or (b) a status
-     that says non-compliant in the org's own words, or (c) a MEASURED value
-     that misses its threshold, both numbers present.
+     A FINANCIAL BREACH is (a) `Reason for Exception = Breached` on the latest
+     compliance row, or (b) the org's own `Breached` flag, or (c) a status that
+     says non-compliant in the org's own words, or (d) a MEASURED value that
+     misses its threshold, both numbers present.
+
+     (a) arrived with WS0.5: `Customer360Covenants` now returns
+     `reasonForException`, so where the org has answered the breach-versus-
+     paperwork question this module READS the answer instead of inferring it
+     from whether a value was measured.
 
      `Exception` on its own is none of those. It gets its own chip and says so.
 
@@ -98,12 +104,21 @@ function administrativeNote(raw: string): string {
     : ADMINISTRATIVE_EXCEPTION_NOTE;
 }
 
+/** `LLC_BI__Reason_for_Exception__c`, the org's two-valued answer (see the
+ *  header). Anything else it may hold is ignored rather than mapped, on the
+ *  same rule the status strings follow. */
+function complianceReason(cov: Covenant): "breached" | "overdue" | null {
+  const r = norm(cov.reasonForException).toLowerCase();
+  return r === "breached" ? "breached" : r === "overdue" ? "overdue" : null;
+}
+
 /** Classify one covenant. Pure, total, and safe on a completely empty read. */
 export function classifyCovenant(cov: Covenant): CovenantVerdict {
   const raw = norm(cov.lastEvaluationStatus) || norm(cov.covenantStatus);
   const s = raw.toLowerCase();
   const measured = num(cov.actualValue) !== null;
   const violates = thresholdViolation(cov) === true;
+  const reason = complianceReason(cov);
 
   const build = (
     kind: CovenantKind,
@@ -128,13 +143,30 @@ export function classifyCovenant(cov: Covenant): CovenantVerdict {
     );
   }
 
-  /* The org saying so, in its own field or its own words. */
+  /* The org saying so, in its own field or its own words. The reason ranks WITH
+     the flag, not under it: the exception batch can fake neither. */
+  if (reason === "breached") {
+    return breach(
+      raw || "Breached",
+      "The compliance row records Reason for Exception as Breached, which is nCino's own answer that the test failed.",
+    );
+  }
   if (cov.breached === true) return breach(raw || "Breached", "nCino's Breached flag is set on this covenant.");
   if (raw && has(s, BREACH_WORDS)) return breach(raw, `nCino records this covenant as ${raw}.`);
 
   /* Exception and its administrative siblings. THE POINT OF THIS MODULE. */
   if (raw && has(s, EXCEPTION_WORDS)) {
     if (violates) return breach(`${raw}, threshold not met`, `${raw} recorded in nCino, and the measured value misses the test.`);
+    // `Overdue` is the org saying outright that this is a paperwork miss.
+    if (reason === "overdue") {
+      return build(
+        "exception",
+        raw,
+        "watch",
+        "The compliance row records Reason for Exception as Overdue: the document or evaluation is outstanding, not a measured breach.",
+        false,
+      );
+    }
     return build("exception", raw, "watch", `${administrativeNote(raw)}.`, false);
   }
 

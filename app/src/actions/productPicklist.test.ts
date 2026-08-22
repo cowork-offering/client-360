@@ -75,6 +75,11 @@ describe("the product choice is wired from the cache to the panel", () => {
       const schema = buildPanelSchema(actionId, { bundle, accountId: "001X", accountName: "Testco" });
       for (const f of schema?.fields ?? []) {
         if (f.optionsFrom) referenced.add(`${f.optionsFrom.object}.${f.optionsFrom.field}`);
+        // A per-item control asks the org for its value set on exactly the same
+        // terms as a field-level one.
+        for (const i of f.perItemInputs ?? []) {
+          if (i.optionsFrom) referenced.add(`${i.optionsFrom.object}.${i.optionsFrom.field}`);
+        }
       }
     }
     for (const key of Object.keys(OBSERVED_PICKLISTS)) {

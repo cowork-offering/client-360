@@ -199,8 +199,16 @@ describe("A33.3.1 — the transition allowlist", () => {
     expect(TRANSITION_ALLOWLIST["LLC_BI__LoanRenewal__c"].mayCreate).toBe(false);
     expect(TRANSITION_ALLOWLIST["LLC_BI__LoanRenewal__c"].transitions).toEqual([]);
     expect(TRANSITION_ALLOWLIST["LLC_BI__LoanRenewal__c"].refusedOperations.join(" ")).toMatch(/deletion/);
+    // The compliance row is the one object this cockpit only ever UPDATES: the
+    // create is what raises the bank's covenant approval at a named human.
     expect(TRANSITION_ALLOWLIST["LLC_BI__Covenant_Compliance2__c"].mayCreate).toBe(false);
-    expect(TRANSITION_ALLOWLIST["LLC_BI__Covenant_Compliance2__c"].held).toMatch(/acnpex_covenantApprovalProcess/);
+    expect(TRANSITION_ALLOWLIST["LLC_BI__Covenant_Compliance2__c"].mayUpdate).toBe(true);
+    // Waived is the org's own third complete status, and never a synonym.
+    expect(TRANSITION_ALLOWLIST["LLC_BI__Covenant_Compliance2__c"].transitions[0].to).toEqual([
+      "Compliant",
+      "Waived",
+      "Exception",
+    ]);
     expect(TRANSITION_ALLOWLIST["Case"].createStates).toEqual([{ field: "Status", value: "New" }]);
     expect(TRANSITION_ALLOWLIST["LLC_BI__Review__c"].createStates).toEqual([{ field: "LLC_BI__Status__c", value: "In Progress" }]);
     expect(TRANSITION_ALLOWLIST["LLC_BI__Annual_Review__c"].createStates).toEqual([{ field: "LLC_BI__Status__c", value: "In Review" }]);
@@ -216,8 +224,27 @@ describe("A33.3.1 — the transition allowlist", () => {
     expect(validateStep({ ...hop, transition: { field: "LLC_BI__Stage__c", from: "Proposal", to: "Approval" }, satisfiedConditions: ["loan-detail-verified"] })[0].reason).toMatch(/not permitted/);
   });
 
-  it("refuses creating an object the tool may never create", () => {
-    expect(validateStep({ id: "x", type: "write", object: "LLC_BI__LoanRenewal__c", fields: [] })[0].reason).toMatch(/never be created/);
+  it("refuses any write to an object the tool may neither create nor update", () => {
+    expect(validateStep({ id: "x", type: "write", object: "LLC_BI__LoanRenewal__c", fields: [] })[0].reason).toMatch(/never be written/);
+  });
+
+  it("permits the covenant review's UPDATE steps, which create nothing", () => {
+    // The mirror used to read every write step as a create, which refused every
+    // real covenant plan at the confirm gate. The compliance row may not be
+    // created and may be updated, and the plan only ever updates.
+    const write = {
+      id: "write_assessment_0",
+      type: "write",
+      objectName: "LLC_BI__Covenant_Compliance2__c",
+      fields: ["Agentic_AI_Response__c", "LLC_BI__Comments__c", "LLC_BI__Historic_Financial_Indicator__c"],
+    };
+    expect(validateStep(write)).toEqual([]);
+    expect(
+      validateStep({ ...write, id: "write_status_0", fields: ["LLC_BI__Status__c", "LLC_BI__Evaluation_Date__c"] }),
+    ).toEqual([]);
+    // A CREATE on that object still cannot get through: creating a compliance
+    // row means writing its parent covenant, which is a refused field.
+    expect(validateStep({ ...write, fields: ["LLC_BI__Covenant__c"] })[0].reason).toMatch(/set once at creation/);
   });
 
   it("refuses a formula field write on any object", () => {

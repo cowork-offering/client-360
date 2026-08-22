@@ -64,13 +64,15 @@ describe("Probe 8 — the covenant compliance object", () => {
     expect(schemaFor("covenant-review").writeObject).toBe("LLC_BI__Covenant_Compliance2__c");
   });
 
-  it("takes an observed value on the WIRE, without claiming an org column", () => {
-    // The observed request carries `observedValue`, so the tool accepts it and
-    // the field is editable. The org column it lands on was never probed, so
-    // the target stays staging: the wire contract is known, the column is not.
-    const f = schemaFor("covenant-review").fields.find((x) => x.key === "observedValue")!;
-    expect(f.editable).toBe(true);
-    expect(f.target).toEqual({ staging: true });
+  it("takes an observed value PER COVENANT, because the batch assesses several", () => {
+    // WS0.5: the review is package-scoped bulk, so the observed value is a
+    // per-item entry rather than one field for the whole ticket. One figure
+    // shared across N covenants would record a number against covenants it was
+    // never measured on.
+    const f = schemaFor("covenant-review").fields.find((x) => x.key === "covenants")!;
+    const observed = f.perItemInputs!.find((i) => i.valueKey === "covenantObservedValues")!;
+    expect(observed.type).toBe("currency");
+    expect(observed.required).toBeUndefined();
   });
 });
 

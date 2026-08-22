@@ -33,13 +33,16 @@ afterEach(() => {
   }
 });
 
-/** The live shape: a pledge that DOES carry its collateral record id, so the
- *  valuation is stageable exactly as it was in Fabian's org. */
+/** The live shape: a pledge that DOES carry its collateral record id AND a
+ *  facility that names its product package, so the valuation is stageable
+ *  exactly as it was in Fabian's org. The sample bundle carries neither, which
+ *  is why both are patched in rather than assumed. */
 function liveData(): C360Data {
   const d = structuredClone(sample) as unknown as C360Data;
   d.meta = { ...d.meta, userId: "005bb00000ftouDAAQ", instanceUrl: "https://bankinggpt.lightning.force.com" };
   const b = (d.borrowers ?? {})["001SAMPLE0000STRL"];
   for (const f of b.exposure?.facilities ?? []) {
+    f.productPackageId = "a5FSAMPLE00000STRL";
     for (const c of f.collateral ?? []) c.collateralId = "a34bb00000COL758AAA";
   }
   return d;

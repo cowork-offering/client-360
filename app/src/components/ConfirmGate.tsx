@@ -265,6 +265,78 @@ export function ConfirmGate({
         </div>
       )}
 
+      {/* PACKAGE-SCOPED COVENANT REVIEW. One plan over N covenants, and a
+          refusal is per covenant. Every covenant the plan touched is listed —
+          planned and refused alike — with the org's own reason verbatim, so a
+          banker who assessed six and gets four written learns which two did not
+          and why, BEFORE confirming rather than after. */}
+      {(plan.covenants?.length ?? 0) > 0 && (
+        <div className="border-b border-divider px-5 py-4">
+          <div className="kicker mb-2">
+            {plan.covenants!.length} {plan.covenants!.length === 1 ? "covenant" : "covenants"} in this plan
+            {typeof plan.scopeCount === "number" ? ` · ${plan.scopeCount} in the package` : ""}
+          </div>
+          <ul className="space-y-2.5">
+            {plan.covenants!.map((c) => {
+              const refused = c.state !== undefined && c.state !== "planned";
+              return (
+                <li key={c.covenantId}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[12.5px] font-semibold text-ink">{c.covenantName ?? c.covenantId}</span>
+                    <span
+                      className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+                      style={
+                        refused
+                          ? { background: "var(--warning-bg)", color: "var(--warning)" }
+                          : { background: "var(--accent-wash)", color: "var(--accent)" }
+                      }
+                    >
+                      {refused ? "not written" : (c.assessedStatus ?? "planned")}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-ink-muted">
+                    {[
+                      c.covenantType,
+                      c.attachment ? `${c.attachment}-level` : null,
+                      c.currentComplianceStatus ? `compliance row at ${c.currentComplianceStatus}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                  {/* The steps below that belong to THIS covenant. A ten-step
+                      plan over three covenants is otherwise unattributed. */}
+                  {[c.writeStepId, c.statusStepId, c.verifyStepId, c.generationStepId].some(Boolean) && (
+                    <div className="text-[11px] text-ink-muted">
+                      {[c.writeStepId, c.statusStepId, c.verifyStepId, c.generationStepId].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                  {/* The org's sentence, verbatim. It carries the reason a row
+                      is refused AND, under allowNonPending, what will not
+                      happen when it is written anyway. */}
+                  {c.reason && (
+                    <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: "var(--warning-prose)" }}>
+                      {c.reason}
+                    </div>
+                  )}
+                  {c.generatesNextRow === true && (
+                    <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: "var(--warning-prose)" }}>
+                      This covenant is Active with a Frequency Template and an Effective Date, the combination nCino
+                      uses to mint the next compliance record on a complete status. Execution measures whether it did.
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          {typeof plan.refusedCount === "number" && plan.refusedCount > 0 && (
+            <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-muted">
+              {plan.assessedCount ?? 0} of {(plan.assessedCount ?? 0) + plan.refusedCount} assessed covenants will be
+              written. The rest are reported with a reason each and nothing about them is changed.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* The plan, step by step, with types visually distinct. */}
       <div className="border-b border-divider px-5 py-4">
         <div className="kicker mb-2">The plan</div>

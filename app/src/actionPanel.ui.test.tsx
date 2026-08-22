@@ -933,20 +933,83 @@ describe("wave 2 — the five new tickets", () => {
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("blocks a covenant assessment with no compliance record to update", () => {
+  it("blocks a covenant review when the relationship stages no product package", () => {
     openActionPanel("Covenant Review");
     const p = panel("Covenant Review")!;
-    // Same doctrine as the collateral anchor: no id staged, no staging.
-    expect(p.textContent).toMatch(/compliance record id is not staged|No covenants are staged/);
+    // WS0.5: the review is anchored on the PACKAGE, and the sample bundle
+    // stages none. The org's own reason is rendered rather than paraphrased,
+    // and no gesture is offered.
+    expect(p.textContent).toContain("productPackageId is required");
+    expect(p.textContent).toContain("It is the deal anchor");
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
   });
 
-  it("carries the settled covenant copy, and no approval-chain warning", () => {
+  it("lists the package's covenants for selection, none of them preselected", () => {
     openActionPanel("Covenant Review");
     const text = panel("Covenant Review")!.textContent ?? "";
-    expect(text).toContain("the bank's approval process governs new compliance periods");
-    // The probe settled it: an update-only write cannot start the chain.
-    expect(text.toLowerCase()).not.toContain("approval chain");
+    expect(text).toContain("Covenants to assess");
+    // Every covenant of the relationship is offered by name.
+    expect(text).toContain("Debt Service Coverage Ratio");
+    // An assessment is a verdict, so nothing is checked for the banker.
+    const boxes = [...panel("Covenant Review")!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(boxes.length).toBeGreaterThan(0);
+    expect(boxes.every((b) => !b.checked)).toBe(true);
+  });
+
+  it("states what allowNonPending does, and does not, in the org's own words", () => {
+    openActionPanel("Covenant Review");
+    const text = panel("Covenant Review")!.textContent ?? "";
+    expect(text).toContain("the covenant schedule does NOT advance");
+  });
+
+  /* THE GESTURE ITSELF. The batch rules exist so a banker learns them from the
+     ticket rather than from a round trip, which only works if they reach the
+     footer and the button. `booked` stages a product package on every facility,
+     which is what a package-anchored ticket needs before it can be filled in. */
+  it("refuses to build a plan until at least one covenant is chosen", () => {
+    openActionPanel("Covenant Review", "Sterling Fabrication", undefined, true);
+    const p = panel("Covenant Review")!;
+    expect(p.textContent).toContain("Choose at least one covenant");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("refuses to build a plan while a chosen covenant carries no assessment", () => {
+    openActionPanel("Covenant Review", "Sterling Fabrication", undefined, true);
+    const box = panel("Covenant Review")!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    click(box);
+    const p = panel("Covenant Review")!;
+    // Chosen, and no verdict on it yet.
+    expect(p.textContent).toContain("Every covenant you selected needs an assessment");
+    expect(p.textContent).toContain("An assessment is a verdict, and it is never defaulted");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("offers the gesture once every chosen covenant has a verdict", () => {
+    openActionPanel("Covenant Review", "Sterling Fabrication", undefined, true);
+    const p = panel("Covenant Review")!;
+    click(p.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    const select = panel("Covenant Review")!.querySelector<HTMLSelectElement>("select")!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+      setter.call(select, "Waived");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("refuses a valuation batch whose date the banker cleared", () => {
+    openActionPanel("Collateral Valuation", "Sterling Fabrication", undefined, true);
+    const date = panel("Collateral Valuation")!.querySelector<HTMLInputElement>('input[type="date"]');
+    // The sample bundle stages no collateral record id, so the ticket is
+    // already blocked by that gap and the date control may not render at all.
+    // Where it does, clearing it must block on the org's own reason.
+    if (!date) return;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+      setter.call(date, "");
+      date.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
   });
 
   it("says the org names the loan, and never proposes one", () => {

@@ -42,6 +42,7 @@ exclusions, is `knowledge/artifact-capabilities-manifest.json`.
           "stage_risk_rating_review",
           "execute_risk_rating_review",
           "stage_covenant_review",
+          "execute_covenant_review",
           "stage_loan_modification",
           "execute_loan_modification",
           "stage_renewal"
@@ -66,9 +67,14 @@ exclusions, is `knowledge/artifact-capabilities-manifest.json`.
 }
 ```
 
-The org manifest carries **24** tools; **22** are declared. Two are left out on purpose:
-`execute_covenant_review` (founder decision, first live invocation still ungated, and the cockpit
-holds it client-side) and `Customer360SearchAccounts` (no call path in the bundle).
+The org manifest carries **24** tools; **23** are declared. One is left out on purpose:
+`Customer360SearchAccounts` (no call path in the bundle).
+
+`execute_covenant_review` joined the manifest in WS0.5 (2026-08-22). No tool NAME changed in the org
+that wave — `stage_covenant_review` and `stage_collateral_valuation` changed SHAPE only, and the
+`McpServerDefinition` was not touched. What changed is the cockpit's call path: the founder gate that
+kept the tool out of this manifest stood on it never having been run live, and it was run live on
+both arms.
 
 ### Manifest rules that bite
 
@@ -362,10 +368,11 @@ Twelve findings, all accepted. The ones that change what the cockpit will and wi
   its wire name would be a guess. The input stays, staging is BLOCKED with a named reason, and nothing
   invented goes on the wire. Silently dropping a number the banker typed was the one option not
   available.
-- **`execute_covenant_review` is founder-gated in the client.** The tool exists and is deployed, but
-  its first live invocation updates existing org data. `execute: null` with its own reason at the gate:
-  the cockpit must not be the thing that fires an unapproved first production write. Staging is fully
-  functional. One line changes when the gate clears.
+- **`execute_covenant_review` was founder-gated in the client, and no longer is (WS0.5).** The gate
+  stood on one fact — the tool had never been run live. It has now, on both arms, on throwaway data,
+  and both envelopes are archived. The ORG is still the authority on holding: a staged plan carrying
+  `executionHeld: true` blocks the gesture whatever the client map says, and the plan refuses a
+  non-Pending compliance row per covenant unless the banker opts in.
 - **Every stage payload carries a non-blank `rationale`.** The Apex Request declares it required and
   JSON drops an undefined key; `stageRationale()` uses the accepted findings, else the banker's own
   words, else a deterministic sentence naming the action and the anchor.
@@ -379,7 +386,7 @@ Twelve findings, all accepted. The ones that change what the cockpit will and wi
   controls the wire cannot carry (`effectiveDate`, renewal `newCommitment`) and gained the ones it
   does (`requestedTermMonths`, `requestedRate`). The reason field targets staging rather than claiming
   an org field, and folds into `rationale`.
-- **The covenant observed value is context, not an input** — the builder now agrees with the schema.
+- **The covenant observed value is per COVENANT, not per ticket** (WS0.5): the review is a batch, and one figure shared across N covenants would record a number against covenants it was never measured on.
 - Service request `origin` is sent; execute `status` and plan `waitBudgetMs` are parsed; a failed
   resume renders through the full error doctrine, on the screen the banker is actually looking at.
 
@@ -570,7 +577,10 @@ Two shapes were wrong in the contract build and are fixed: a new facility is anc
 `productPackageId` with NO `accountId`, and its product field is `product`; the risk rating factor
 scores are four NAMED fields (`cashFlowCoverageActual`, `revenueGrowthActual`,
 `managementExperienceActual`, `creditScoreActual`), not a map. The covenant assessment sends
-`covenantComplianceId` and an `observedValue` that is a STRING on the wire.
+`productPackageId` plus `assessments[]` of `{covenantId, status, observedValue, reasonForException,
+narrative, comments}`, with `observedValue` a NUMBER; the old `accountId` + `covenantComplianceId` +
+`result` shape was deleted from the org in WS0.5 and its fields carried `required=true`, so sending
+one makes the new shape unreachable on the wire.
 
 `executionHeld` and `heldReason` come back on the modification and renewal stage responses, and the
 gate now renders the ORG's reason verbatim rather than restating our own copy. `covenantCarryoverCount`
@@ -604,10 +614,12 @@ marked as inferred in the type.
 The org-assigned facility name is reported from `recordName`, never echoed back from anything the
 panel sent — the org rewrites `Name` as `Account - Product - Amount`.
 
-**`execute_covenant_review` has never been run live.** Its first invocation is founder-gated because
-it updates an existing compliance record and no throwaway substitute exists — a hand-created one would
-itself fire the Create-triggered approval flow and raise a work item at a named human. The tool is
-contract-observed and stage-observed; the execute path is not.
+**`execute_covenant_review` has now been run live (WS0.5, 2026-08-22).** The throwaway substitute
+that did not exist was built for the probe: a disposable account, package, loan, covenant pair and
+compliance rows, all tree-deleted afterwards. Creating those fixture rows did fire the
+Create-triggered approval flow exactly as predicted, and the two `FlowOrchestrationInstance` rows it
+raised could not be deleted — recorded in the envelope's `residue` block rather than papered over.
+Both the stage and the execute path are now wire-observed.
 
 ### Wave 2 — five more tickets (contracts frozen, tools not yet observed)
 
@@ -615,7 +627,7 @@ New Facility, Risk Rating Review, Covenant Review, Loan Modification and Renewal
 schemas and registry wiring. Manifest constants cover 14 write-tool names: 6 stage/execute pairs plus
 `stage_loan_modification` and `stage_renewal`.
 
-**Execution is HELD for RENEWAL only** (and, separately, for the founder-gated covenant review).
+**Execution is HELD for RENEWAL only.**
 `WRITE_TOOLS.renewal.execute` is `null`, not a plausible name we hope exists: no `execute_renewal`
 was built. Staging is real — the plan and the ledger row are genuine — and the confirm gate renders
 the held state with that sentence, gesture disabled. `executeAction` refuses a held action before
@@ -636,11 +648,12 @@ results) are cited as relayed, not as described by this session.
 
 Other probe-settled specifics: the org names the loan on creation and the cockpit proposes no name;
 Loan Detail arrives asynchronously; the loan officer is org-assigned and displayed readonly because
-the ACNPEX routine overwrites it; a covenant assessment is UPDATE-only and blocks without a staged
-compliance record id (the collateral-anchor doctrine); the approval-chain warning is gone, replaced by
-"status changes are recorded on the existing compliance record; the bank's approval process governs
-new compliance periods"; and a rating override with no reason is refused in the ticket rather than by
-a rejected write.
+the ACNPEX routine overwrites it; a covenant assessment is UPDATE-only and, since WS0.5, is
+anchored on the PRODUCT PACKAGE rather than on a compliance row, so it blocks without a staged
+package id (the collateral-anchor doctrine, moved up one level); the approval-trap warning is back and
+comes from the ORG, which reads Active + Frequency Template + Effective Date per covenant and measures
+at execute whether a successor row appeared rather than asserting it did not; and a rating override
+with no reason is refused in the ticket rather than by a rejected write.
 
 ### Write tools (WP5)
 

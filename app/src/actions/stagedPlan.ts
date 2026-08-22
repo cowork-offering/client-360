@@ -69,6 +69,44 @@ export interface StagedFacility {
   covenantCarryoverCount?: number;
 }
 
+/**
+ * One covenant of the package inside a staged covenant review, planned or
+ * refused, with the step ids that will report on it.
+ *
+ * OBSERVED 2026-08-22 on `stage_covenant_review`. Every covenant the package
+ * aggregates and the plan touched appears here — a refusal is REPORTED with its
+ * own reason rather than dropped, so a banker who assessed six covenants and
+ * gets four written learns which two did not and why.
+ */
+export interface StagedCovenant {
+  covenantId: string;
+  covenantName?: string;
+  covenantType?: string;
+  /** loan, relationship, or both. An empty loan junction is the fact that the
+   *  covenant is relationship-level, not a gap. */
+  attachment?: string;
+  /** The compliance row a review would act on. */
+  covenantComplianceId?: string;
+  /** The row status BEFORE this plan runs. Only Pending advances the schedule. */
+  currentComplianceStatus?: string;
+  /** The status this plan would write, or absent when surveyed only. */
+  assessedStatus?: string;
+  /** `planned`, `not_assessed`, or one of the `not_assessable_*` refusals. */
+  state?: string;
+  /** Why this covenant is not being written, when it is not — and, under
+   *  `allowNonPending`, why it IS being written and what will not happen. The
+   *  org's own sentence, rendered verbatim. */
+  reason?: string | null;
+  /** True when the covenant is Active with a Frequency Template and an
+   *  Effective Date: the configuration nCino uses to mint the next compliance
+   *  record on a complete status, which is what raises a covenant approval. */
+  generatesNextRow?: boolean;
+  writeStepId?: string;
+  statusStepId?: string;
+  verifyStepId?: string;
+  generationStepId?: string;
+}
+
 export interface StagedOutput {
   stagingId: string;
   /** Minted server-side and bound to stagingId + planHash + user. Null on an
@@ -97,6 +135,15 @@ export interface StagedOutput {
   /** Package-anchored credit action: what the plan covers, per facility. */
   facilities?: StagedFacility[];
   facilityCount?: number;
+  /** Package-scoped covenant review: every covenant in scope, planned or
+   *  refused, each carrying its own state and reason. */
+  covenants?: StagedCovenant[];
+  /** Covenants this plan will write. */
+  assessedCount?: number;
+  /** Covenants carrying an assessment that cannot be written, one reason each. */
+  refusedCount?: number;
+  /** Covenants the package aggregates, before any member selection. */
+  scopeCount?: number;
   /** Hash over the ordered steps plus resolved field values. Immutable.
    *  `execute_*` refuses a mismatch. */
   planHash: string;
@@ -141,7 +188,20 @@ export const WRITE_TARGET_ID_PREFIXES: Record<string, string> = {
  *  package-anchored plan names the BOOKED facilities it would act on, and those
  *  loans existed long before this plan was staged. Finding one proves nothing
  *  was written — it is the plan saying what it is aimed at. */
-const ID_CARRYING_KEYS = new Set(["accountId", "productPackageId", "stagingId", "decisionToken", "facilityId"]);
+const ID_CARRYING_KEYS = new Set([
+  "accountId",
+  "productPackageId",
+  "stagingId",
+  "decisionToken",
+  "facilityId",
+  // Same reason as `facilityId`, for the two BULK plans. A valuation batch
+  // names the collateral it is aimed at and a covenant review names the
+  // covenants and the compliance rows it would update; all three existed long
+  // before the plan was staged. Finding one proves nothing was written.
+  "collateralId",
+  "covenantId",
+  "covenantComplianceId",
+]);
 
 const RECORD_ID = /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/;
 

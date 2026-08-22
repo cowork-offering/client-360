@@ -65,6 +65,31 @@ export interface OptionSource {
 
 export type PanelFieldTarget = { object: string; field: string } | { staging: true };
 
+/**
+ * One input the banker fills IN PER SELECTED RECORD of a multiselect.
+ *
+ * The value lives in the panel's values under `valueKey`, as a map of option id
+ * to entry. Several are supported because a bulk covenant review needs a
+ * verdict, a figure, a reason and a note against EACH covenant, while a bulk
+ * valuation needs one figure against each collateral. One mechanism, so the
+ * two batches cannot drift apart.
+ *
+ * `options` is set directly ONLY where the legal set is the TOOL's contract
+ * rather than an org value set (the three complete statuses a covenant
+ * assessment may be written to). Where the set belongs to the org, it is read
+ * from the org exactly as A33.1.6 requires and `optionsFrom` names it.
+ */
+export interface PerItemInput {
+  valueKey: string;
+  label: string;
+  type: "currency" | "text" | "picklist";
+  options?: string[];
+  optionsFrom?: OptionSource;
+  placeholder?: string;
+  /** Every SELECTED record must carry this before the batch can be staged. */
+  required?: boolean;
+}
+
 export interface PanelField {
   key: string;
   /** Banker language, never an API name. */
@@ -81,9 +106,8 @@ export interface PanelField {
   /** A context line under each option, positionally: what the record is, what
    *  it secures, what it is worth. A chooser without it is a list of names. */
   optionDetails?: string[];
-  /** Per-option value entry (collateral valuation). Value lives in the panel's
-   *  values under this key, as a map of option id to number. */
-  perItemValueKey?: string;
+  /** Inputs the banker fills in per SELECTED record of this multiselect. */
+  perItemInputs?: PerItemInput[];
   /** Display labels for `options`, positionally. Present only on a RECORD
    *  chooser, where the value is an id and the label is for the banker: two
    *  facilities can share a name, and an option keyed on the name would let the
@@ -162,6 +186,32 @@ export function unfilledRequired(schema: PanelSchema): PanelField[] {
  *  checked before any tool call, so a knowingly-wrong payload is never sent. */
 export function stagingBlockers(schema: PanelSchema): PanelField[] {
   return schema.fields.filter((f) => f.gap?.blocksStaging);
+}
+
+/**
+ * Selected records of a multiselect that are still missing a REQUIRED per-item
+ * entry, keyed by the input.
+ *
+ * A batch is staged as one plan under one confirmation, so a row the banker
+ * selected but never answered would be filed as an assessment they did not
+ * make. This is what stops that, before any payload is built.
+ */
+export function unansweredItems(
+  field: PanelField,
+  values: Record<string, unknown>,
+): Array<{ input: PerItemInput; optionIds: string[] }> {
+  const selected = Array.isArray(values[field.key]) ? (values[field.key] as string[]) : [];
+  const out: Array<{ input: PerItemInput; optionIds: string[] }> = [];
+  for (const input of field.perItemInputs ?? []) {
+    if (!input.required) continue;
+    const map = (values[input.valueKey] as Record<string, unknown>) ?? {};
+    const missing = selected.filter((id) => {
+      const v = map[id];
+      return v === null || v === undefined || v === "";
+    });
+    if (missing.length) out.push({ input, optionIds: missing });
+  }
+  return out;
 }
 
 /** Fields the banker must type because no source exists. Each must be justified

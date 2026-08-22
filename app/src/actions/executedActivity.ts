@@ -85,11 +85,18 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
 
   if (succeeded || (recordId && !nameConfirmed)) {
     const href = recordDeepLink(instanceUrl, CREATED_OBJECT[actionId]?.object, recordId);
+    // A BULK COVENANT REVIEW created nothing and named no single record: it
+    // updated N compliance rows under one plan. Naming one of them in the title
+    // would report a batch as if it were a single assessment.
+    const written = (outcome.items ?? []).filter((i) => i.covenantId && i.written !== false);
+    const bulkCovenants = actionId === "covenant-review" && written.length > 1;
     // Named: "Collateral valuation CV-0000000002 filed against COL-000758".
     // Unnamed: the read-back failed, and the title says exactly that.
-    const title = nameConfirmed
-      ? `${sentenceCase(label)} ${recordName} filed${against}`
-      : `${sentenceCase(label)} filed${against}, name not confirmed`;
+    const title = bulkCovenants
+      ? `${written.length} covenant assessments recorded`
+      : nameConfirmed
+        ? `${sentenceCase(label)} ${recordName} filed${against}`
+        : `${sentenceCase(label)} filed${against}, name not confirmed`;
     return {
       ...base,
       kind: "ACTION_EXECUTED",
@@ -108,9 +115,14 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
       detail: {
         body: [
           outcome.outcome,
-          nameConfirmed
+          // The bulk case has no single record name to confirm, so the null
+          // doctrine does not apply to it: each covenant carries its own.
+          nameConfirmed || bulkCovenants
             ? null
             : "The verification read-back did not return the record name, so this is filed but unverified.",
+          bulkCovenants
+            ? written.map((i) => `${i.anchorName ?? i.covenantId} ${i.sourceStatus ?? "?"} to ${i.status ?? "?"}.`).join(" ")
+            : null,
           recordId ? `Record ${recordId}.` : null,
           outcome.stagingId ? `Staged as ${outcome.stagingId}.` : null,
           outcome.replayed ? "Replayed under the same idempotency key; nothing was written twice." : null,

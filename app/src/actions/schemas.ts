@@ -14,14 +14,15 @@
    until the org supplies values.
    ============================================================================= */
 
-import type { BorrowerBundle, Facility } from "../data/contract";
+import type { BorrowerBundle, Covenant, Facility } from "../data/contract";
 import { fmtCovVal } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
 import { collateralDetail, collateralRecords } from "../data/collateralRecords";
 import { fmtMoney } from "../data/format";
 import { bookedFacilities, bookedFacilityGap, facilityLabel, unbookedFacilities } from "../data/facilityStage";
 import type { PanelField, PanelSchema } from "./panelSchema";
-import { PREFILL_PROVENANCE } from "./panelSchema";
+import { PREFILL_PROVENANCE, unansweredItems } from "./panelSchema";
+import { COVENANT_ASSESSMENT_STATUSES } from "./observedPicklists";
 
 export interface SchemaContext {
   bundle: BorrowerBundle | null;
@@ -29,6 +30,28 @@ export interface SchemaContext {
   accountName: string;
   /** Picklist values loaded from the org, keyed "Object.Field". Absent = not loaded. */
   orgPicklists?: Record<string, string[]>;
+  /**
+   * `meta.generatedAt`, the deterministic clock every date derivation in this
+   * cockpit reads (A10). A date default computed from `new Date()` would move
+   * under the schema on every render and would disagree with everything else on
+   * the screen. Absent leaves a date field empty rather than guessing.
+   */
+  asOf?: string;
+  /**
+   * The DEAL the banker picked, when they picked one.
+   *
+   * The two package-scoped bulk tickets list the members of ONE package, so the
+   * chooser has to be able to change what the lists hold. Absent means "use the
+   * relationship's own package", which is the default and the usual case.
+   */
+  packageId?: string;
+}
+
+/** The ISO date the panel should treat as today, or null when the read stages
+ *  no clock. Never `new Date()`: the artifact is a snapshot with its own. */
+function today(ctx: SchemaContext): string | null {
+  const d = ctx.asOf ? new Date(ctx.asOf) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : null;
 }
 
 const provenanceOf = (source: PanelField["prefill"]["source"]) => PREFILL_PROVENANCE[source] ?? undefined;
@@ -66,13 +89,26 @@ function primaryPledge(
 function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
   const OBJ = "LLC_BI__Collateral_Valuation__c";
   const pledge = primaryPledge(ctx.bundle);
-  const records = collateralRecords(ctx.bundle);
+  const asOf = today(ctx);
+  // ANCHORED ON THE DEAL, like the covenants. A pledge the read PROVES hangs
+  // off another package's facility is refused by the tool by name, so it is
+  // listed with that reason rather than offered and then rejected.
+  const packageId = activePackageId(ctx);
+  const records = collateralRecords(onPackage(ctx.bundle, packageId));
+  const offPackage = collateralRecords(offPackageOnly(ctx.bundle, packageId)).filter(
+    (r) => !records.some((x) => x.collateralId && x.collateralId === r.collateralId),
+  );
 
   return {
     writeObject: OBJ,
     writeObjectLabel: "collateral valuation",
-    intro: "Records a new valuation against the pledged collateral. The lendable value on the collateral record is a formula and is not written here.",
+    intro:
+      "Records a new valuation against the pledged collateral. Every collateral in the batch must belong to the named deal. The lendable value on the collateral record is a formula and is not written here.",
     fields: [
+      packageField(
+        ctx,
+        "Every collateral valued must be pledged to a loan of this package, or owned by the package's borrower.",
+      ),
       field({
         key: "records",
         label: "Collateral to revalue",
@@ -88,10 +124,20 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
         options: records.filter((r) => r.collateralId).map((r) => r.collateralId!),
         optionLabels: records.filter((r) => r.collateralId).map((r) => r.displayName),
         optionDetails: records.filter((r) => r.collateralId).map(collateralDetail),
-        disabledOptions: records
-          .filter((r) => !r.collateralId)
-          .map((r) => ({ value: r.collateralType ?? "Collateral", reason: "no collateral record id staged" })),
-        perItemValueKey: "recordValues",
+        disabledOptions: [
+          ...records
+            .filter((r) => !r.collateralId)
+            .map((r) => ({ value: r.collateralType ?? "Collateral", reason: "no collateral record id staged" })),
+          ...offPackage.map((r) => ({ value: r.displayName, reason: "pledged to another package's facilities" })),
+        ],
+        perItemInputs: [
+          {
+            valueKey: "recordValues",
+            label: "New value",
+            type: "currency",
+            placeholder: "enter the new valuation",
+          },
+        ],
         target: { object: OBJ, field: "LLC_BI__Collateral__c" },
         gap: records.some((r) => r.collateralId)
           ? undefined
@@ -132,11 +178,17 @@ function collateralValuationSchema(ctx: SchemaContext): PanelSchema {
         key: "valuationDate",
         label: "Valuation date",
         type: "date",
-        value: null,
-        prefill: { source: "BANKER" },
+        // Defaulted CLIENT-side from the view's clock, never server-side: a
+        // banker correcting an offered date is a choice, an Apex default is the
+        // org inventing one, and the org refuses a null rather than filling it.
+        value: asOf,
+        prefill: asOf
+          ? { source: "COMPUTED", citation: "meta.generatedAt — the view's own clock" }
+          : { source: "BANKER" },
         editable: true,
         required: true,
         target: { object: OBJ, field: "LLC_BI__Valuation_Date__c" },
+        help: "The org refuses a second valuation of the same collateral on a date it already carries.",
       }),
       field({
         key: "value",
@@ -654,6 +706,66 @@ export const NO_FACILITY_SELECTED =
 export const FACILITIES_SPAN_PACKAGES =
   "These facilities belong to different product packages. A credit action runs on one package, so stage each package's facilities separately.";
 
+/** Same rule again, for the valuation batch. */
+export const NO_COLLATERAL_SELECTED =
+  "Choose at least one collateral to revalue. An empty selection is not the whole package, and it is not a plan.";
+
+/** Same rule as the facility selection, for the covenant batch: an empty
+ *  selection is not "every covenant of the package" and it is not a plan. */
+export const NO_COVENANT_SELECTED =
+  "Choose at least one covenant. A review with no verdict on any covenant would stage a plan that writes nothing.";
+
+/** A covenant the banker selected but never answered. Filing it under a default
+ *  would record an assessment nobody made. */
+export const COVENANT_WITHOUT_ASSESSMENT =
+  "Every covenant you selected needs an assessment before this can be staged. An assessment is a verdict, and it is never defaulted.";
+
+/** `valuationDate` is refused by the tool rather than defaulted, and the panel
+ *  says why rather than filling a blank in silently. */
+const VALUATION_DATE_REQUIRED =
+  "A valuation needs a date. nCino uses it to decide which valuation record is the latest, so a null-dated row cannot be ordered against the ones already on file.";
+
+/**
+ * What is wrong with a PACKAGE-SCOPED BULK batch, before any payload is built.
+ *
+ * Every sentence returned here is one the tool would send back anyway. It is
+ * checked client-side so a banker learns the rule from the ticket they are
+ * filling in rather than from a round trip that refused the whole batch, and
+ * so nothing knowingly wrong leaves the page.
+ *
+ * Returns null when the batch is fine, or when the action is not a batch.
+ */
+export function batchStagingGap(
+  actionId: string,
+  values: Record<string, unknown>,
+  schema: PanelSchema | null,
+): string | null {
+  const picked = (key: string) => [...new Set(Array.isArray(values[key]) ? (values[key] as string[]) : [])];
+  const fieldFor = (key: string) => schema?.fields.find((f) => f.key === key);
+
+  if (actionId === "covenant-review") {
+    const covenants = picked("covenants");
+    if (!covenants.length) return NO_COVENANT_SELECTED;
+    if (covenants.length > COVENANT_BATCH_CAP) return COVENANT_CAP_REASON;
+    const field = fieldFor("covenants");
+    if (field && unansweredItems(field, values).length) return COVENANT_WITHOUT_ASSESSMENT;
+    return null;
+  }
+
+  if (actionId === "collateral-valuation") {
+    const records = picked("records");
+    // A relationship with no valuable collateral is a GAP, already named on the
+    // field itself. Deselecting everything is a different thing and says so.
+    if (!records.length) return (fieldFor("records")?.options?.length ?? 0) > 0 ? NO_COLLATERAL_SELECTED : null;
+    if (records.length > VALUATION_BATCH_CAP) return VALUATION_CAP_REASON;
+    const date = values.valuationDate;
+    if (typeof date !== "string" || !date.trim()) return VALUATION_DATE_REQUIRED;
+    return null;
+  }
+
+  return null;
+}
+
 /** Credit Review and Risk Rating Review are DIFFERENT INSTRUMENTS on different
  *  objects. The banker must know which one they are raising. */
 export const REVIEW_FORK = {
@@ -677,67 +789,289 @@ export function overrideIsSet(values: Record<string, unknown>): boolean {
   return typeof v === "number" ? v > 0 : typeof v === "string" && v.trim() !== "" && Number(v) > 0;
 }
 
+/* --------------------------------------------------------- covenant review */
+
+/** The org's own sentence when the anchor is missing. Rendered rather than
+ *  paraphrased: it explains WHY the package is the anchor, which is the part a
+ *  banker needs. */
+export const PACKAGE_ANCHOR_REQUIRED =
+  "productPackageId is required. It is the deal anchor, and this relationship stages none: neither the snapshot nor any active facility names a product package.";
+
+/** The tool's cap, and its reason, in the tool's own words. */
+const COVENANT_BATCH_CAP = 20;
+export const COVENANT_CAP_REASON =
+  `A covenant review carries at most ${COVENANT_BATCH_CAP} covenants per plan. Each status write enqueues a change-data queueable, and a complete status may make nCino insert the next compliance row, which enqueues a second one, against a platform ceiling of 50 queued jobs per transaction. Stage the rest as a second plan.`;
+
+const VALUATION_BATCH_CAP = 20;
+export const VALUATION_CAP_REASON =
+  `A valuation batch carries at most ${VALUATION_BATCH_CAP} collaterals per plan. Every valuation insert wakes a change-data trigger that enqueues one queueable per record, against a platform ceiling of 50 queued jobs per synchronous transaction, and exceeding it rolls the whole insert back rather than filing what it could. Stage the rest as a second plan.`;
+
+/** The org's own account of what `allowNonPending` does, and does not do. */
+export const ALLOW_NON_PENDING_WARNING =
+  "An assessment recorded on a row that is not Pending is stored, and the covenant schedule does NOT advance: nCino pushes the next evaluation date only on a Pending to complete transition.";
+
+/**
+ * The PRODUCT PACKAGES this relationship stages, primary first.
+ *
+ * The relationship's own package (the snapshot's) leads, because that is the
+ * default a banker means by "this deal". The rest come off the active
+ * facilities. No package NAME is staged anywhere in the read, so each one is
+ * labelled by the facilities that hang off it — derived from staged rows, never
+ * invented — and the id itself is carried in the detail line.
+ */
+export function packageRecords(bundle: BorrowerBundle | null): Array<{ id: string; label: string; detail: string }> {
+  const facilities = (bundle?.exposure?.facilities ?? []).filter(isActiveFacility);
+  const ids: string[] = [];
+  const primary = bundle?.snapshot?.productPackageId;
+  if (primary) ids.push(primary);
+  for (const f of facilities) {
+    if (f.productPackageId && !ids.includes(f.productPackageId)) ids.push(f.productPackageId);
+  }
+  return ids.map((id) => {
+    const on = facilities.filter((f) => f.productPackageId === id);
+    const committed = on.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
+    return {
+      id,
+      label: on.length ? on.map(facilityLabel).join(" · ") : "The relationship's package",
+      detail: [
+        on.length ? `${on.length} ${on.length === 1 ? "facility" : "facilities"}` : "no facility names it",
+        committed > 0 ? `${fmtMoney(committed)} committed` : null,
+        id,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  });
+}
+
+/** The deal anchor, shared by both package-scoped bulk actions. */
+/** The bundle as it looks from ONE deal: the facilities of that package, and
+ *  nothing else. A relationship whose facilities name no package at all is
+ *  returned untouched, because filtering on a field the read does not carry
+ *  would empty the list on a data gap. */
+function onPackage(bundle: BorrowerBundle | null, packageId: string | null): BorrowerBundle | null {
+  const facilities = bundle?.exposure?.facilities ?? [];
+  if (!bundle || !packageId || !facilities.some((f) => f.productPackageId)) return bundle;
+  return { ...bundle, exposure: { ...bundle.exposure, facilities: facilities.filter((f) => f.productPackageId === packageId) } };
+}
+
+/** The mirror image: everything the read places on a DIFFERENT package. */
+function offPackageOnly(bundle: BorrowerBundle | null, packageId: string | null): BorrowerBundle | null {
+  const facilities = bundle?.exposure?.facilities ?? [];
+  if (!bundle || !packageId || !facilities.some((f) => f.productPackageId)) return null;
+  return {
+    ...bundle,
+    exposure: { ...bundle.exposure, facilities: facilities.filter((f) => f.productPackageId && f.productPackageId !== packageId) },
+  };
+}
+
+/** The deal in play: the banker's pick when it is one of the relationship's,
+ *  else the relationship's own package. Never a package this read does not
+ *  stage — an id the exposure cannot place is not a deal the ticket can list. */
+function activePackageId(ctx: SchemaContext): string | null {
+  const packages = packageRecords(ctx.bundle);
+  const picked = packages.find((p) => p.id === ctx.packageId);
+  return picked?.id ?? packages[0]?.id ?? null;
+}
+
+function packageField(ctx: SchemaContext, help: string): PanelField {
+  const packages = packageRecords(ctx.bundle);
+  const active = activePackageId(ctx);
+  return field({
+    key: "package",
+    label: "Deal",
+    // A record chooser, always, even with one option: the value IS the id the
+    // wire carries, so the payload never has to reconstruct it from a label.
+    type: "picklist",
+    value: active,
+    prefill: active ? { source: "NCINO_RECORD", citation: active } : { source: "BANKER" },
+    editable: packages.length > 1,
+    editableReason: packages.length > 1 ? undefined : "the relationship stages one product package",
+    required: true,
+    optionsAreRecords: true,
+    options: packages.map((p) => p.id),
+    optionLabels: packages.map((p) => p.label),
+    optionDetails: packages.map((p) => p.detail),
+    target: { staging: true },
+    help,
+    gap: packages.length ? undefined : { reason: PACKAGE_ANCHOR_REQUIRED, blocksStaging: true },
+  });
+}
+
+/**
+ * The covenants of the chosen package, and the ones that are not.
+ *
+ * The org resolves the real scope as the UNION of the package's loan-level and
+ * relationship-level junctions. The cockpit can only approximate that from
+ * `attachedLoans`, so it is deliberately GENEROUS: a covenant is offered unless
+ * the read PROVES it hangs off facilities of another package. Anything the
+ * cockpit gets wrong, the tool refuses by name with its own sentence, which is
+ * a better answer than a covenant silently missing from the list.
+ */
+function packageCovenants(
+  bundle: BorrowerBundle | null,
+  packageId: string | null,
+): { offered: Covenant[]; blocked: Array<{ value: string; reason: string }> } {
+  const covenants = bundle?.covenants?.covenants ?? [];
+  const facilities = bundle?.exposure?.facilities ?? [];
+  const inPackage = new Set(facilities.filter((f) => f.productPackageId === packageId).map((f) => f.loanId));
+  const known = new Set(facilities.map((f) => f.loanId));
+
+  const offered: Covenant[] = [];
+  const blocked: Array<{ value: string; reason: string }> = [];
+
+  for (const c of covenants) {
+    const label = covenantLabel(c);
+    if (!c.covenantId) {
+      blocked.push({ value: label, reason: "no covenant record id staged" });
+      continue;
+    }
+    const attached = Array.isArray(c.attachedLoans) ? c.attachedLoans : null;
+    // ABSENT is not EMPTY. An absent list means the read cannot say how this
+    // covenant is scoped, so it is offered and the tool decides.
+    if (attached === null || attached.length === 0) {
+      offered.push(c);
+      continue;
+    }
+    const reaches = attached.some((a) => !a.loanId || !known.has(a.loanId) || inPackage.has(a.loanId));
+    if (reaches) offered.push(c);
+    else blocked.push({ value: label, reason: "attached to facilities on another package" });
+  }
+
+  return { offered, blocked };
+}
+
+/** What the banker reads for a covenant. The read stages no covenant NAME, so
+ *  the type is the name, with its threshold where there is one. */
+function covenantLabel(c: Covenant): string {
+  const type = c.covenantType ?? "Covenant";
+  return c.thresholdValue != null ? `${type} against ${fmtCovVal(c.thresholdValue, c.covenantType)}` : type;
+}
+
+/** The context line under a covenant: where nCino has it standing right now. */
+function covenantDetail(c: Covenant): string {
+  const parts: string[] = [];
+  // The COMPLIANCE ROW's status, which is what decides whether an assessment
+  // advances the schedule. Distinct from the covenant-level status.
+  if (c.latestComplianceStatus) {
+    parts.push(
+      c.latestComplianceStatus === "Pending"
+        ? "compliance row Pending"
+        : `compliance row ${c.latestComplianceStatus}, not Pending`,
+    );
+  }
+  if (c.reasonForException) parts.push(`reason ${c.reasonForException}`);
+  if (c.actualValue != null) parts.push(`last reported ${fmtCovVal(c.actualValue, c.covenantType)}`);
+  const attached = Array.isArray(c.attachedLoans) ? c.attachedLoans : null;
+  if (attached !== null) {
+    parts.push(attached.length === 0 ? "relationship-level" : `on ${attached.map((a) => a.loanName ?? a.loanId ?? "a facility").join(", ")}`);
+  }
+  if (c.nextEvaluationDate) parts.push(`next test ${c.nextEvaluationDate}`);
+  return parts.join(" · ");
+}
+
+/**
+ * COVENANT REVIEW — package-anchored bulk (WS0.5, 2026-08-22).
+ *
+ * AGGREGATION FIRST. The thing under review is the covenant package of a
+ * product package; a single covenant is a member selection inside it, not a
+ * separate action. nCino says the same: "the product package shows an
+ * aggregated list of the covenants included in the loans within the package.
+ * The user still needs to manage the covenants at the individual loan or
+ * Relationship level" (kb:kAHHu000000XZTaOAO). So this is one plan, one hash,
+ * one token, and N assessments — never a package-level verdict.
+ *
+ * The assessment itself is PER COVENANT, which is why the verdict, the figure,
+ * the reason and the note are per-item entries rather than shared fields. Only
+ * the narrative is shared: it describes the review exercise, not one covenant.
+ */
 function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
   const OBJ = "LLC_BI__Covenant_Compliance2__c";
-  // UPDATE-only: the assessment lands on a compliance record that already
-  // exists. Same doctrine as the collateral anchor — no id, no staging.
-  const cov = (ctx.bundle?.covenants?.covenants ?? []).find((c) => c.complianceId) ?? (ctx.bundle?.covenants?.covenants ?? [])[0];
-  const complianceId = cov?.complianceId;
+  const packageId = activePackageId(ctx);
+  const { offered, blocked } = packageCovenants(ctx.bundle, packageId);
+  const anyNonPending = offered.some((c) => c.latestComplianceStatus && c.latestComplianceStatus !== "Pending");
 
   return {
     writeObject: OBJ,
     writeObjectLabel: "covenant assessment",
     intro:
-      "Records an assessment against the existing compliance record. Status changes are recorded on that record; the bank's approval process governs new compliance periods.",
+      "Reviews the covenants this deal aggregates. Each assessment updates one existing compliance record with the status, the observed value and the notes. No compliance record is created here, and no credit decision is made or implied.",
     fields: [
+      packageField(
+        ctx,
+        "Covenants are resolved as the union of this package's loan-level and relationship-level junctions.",
+      ),
       field({
-        key: "covenant",
-        label: "Covenant",
-        type: "readonly",
-        value: cov ? `${cov.covenantType ?? "Covenant"}${cov.thresholdValue != null ? ` against ${fmtCovVal(cov.thresholdValue, cov.covenantType)}` : ""}` : null,
-        prefill: { source: "NCINO_RECORD", citation: complianceId },
-        editable: false,
-        editableReason: "the assessment updates this compliance record",
+        key: "covenants",
+        label: "Covenants to assess",
+        type: "multiselect",
+        // Nothing is preselected, not even a single covenant: an assessment is
+        // a verdict, and a verdict must be chosen rather than defaulted into.
+        value: [],
+        prefill: { source: "NCINO_RECORD", citation: "Customer360Covenants — the covenants this package aggregates" },
+        editable: true,
         required: true,
-        target: { object: OBJ, field: "Id" },
-        gap: complianceId
+        optionsAreRecords: true,
+        options: offered.map((c) => c.covenantId!),
+        optionLabels: offered.map(covenantLabel),
+        optionDetails: offered.map(covenantDetail),
+        disabledOptions: blocked,
+        perItemInputs: [
+          {
+            valueKey: "covenantStatuses",
+            label: "Assessment",
+            type: "picklist",
+            // The TOOL's complete-status set, not the org's picklist: see
+            // COVENANT_ASSESSMENT_STATUSES.
+            options: COVENANT_ASSESSMENT_STATUSES,
+            required: true,
+          },
+          {
+            valueKey: "covenantObservedValues",
+            label: "Observed value",
+            type: "currency",
+            placeholder: "the tested figure",
+          },
+          {
+            valueKey: "covenantReasons",
+            label: "Reason",
+            type: "picklist",
+            optionsFrom: { object: OBJ, field: "LLC_BI__Reason_for_Exception__c" },
+            options: picklist(ctx, OBJ, "LLC_BI__Reason_for_Exception__c"),
+            placeholder: "Breached or Overdue",
+          },
+          {
+            valueKey: "covenantComments",
+            label: "Note",
+            type: "text",
+            placeholder: "what was tested",
+          },
+        ],
+        target: { object: OBJ, field: "LLC_BI__Status__c" },
+        // The MISSING-PACKAGE case is not restated here: the package field
+        // carries that blocking gap already, and the footer joins every
+        // blocker's reason, so a banker would read one fact twice.
+        gap: offered.length
           ? undefined
           : {
-              reason: cov
-                ? "The compliance record id is not staged in this view, so there is nothing to record an assessment against."
-                : "No covenants are staged for this relationship.",
+              reason: "No covenant of this deal carries a record id in this view, so there is nothing to assess.",
               blocksStaging: true,
             },
       }),
       field({
-        key: "assessmentResult",
-        label: "Assessment",
-        type: "picklist",
-        value: null,
+        key: "allowNonPending",
+        label: "Record on rows that are not Pending",
+        type: "boolean",
+        // OFF unless the banker turns it on. The default refusal is the org's,
+        // and it exists to stop a write that succeeds and changes nothing.
+        value: false,
         prefill: { source: "BANKER" },
-        editable: true,
-        required: true,
-        optionsFrom: { object: OBJ, field: "LLC_BI__Status__c" },
-        options: picklist(ctx, OBJ, "LLC_BI__Status__c"),
-        target: { object: OBJ, field: "LLC_BI__Status__c" },
-      }),
-      field({
-        key: "observedValue",
-        label: "Observed value",
-        type: "currency",
-        // The observed envelope carries `observedValue`, so the tool takes it
-        // and the banker may correct the last reported actual before recording
-        // the assessment. The org field it lands on was never probed, so the
-        // target stays staging: the WIRE contract is known, the org column is not.
-        value: cov?.actualValue ?? null,
-        prefill:
-          cov?.actualValue != null
-            ? { source: "NCINO_RECORD", citation: "Customer360Covenants — last reported actual" }
-            : { source: "BANKER" },
         editable: true,
         required: false,
         target: { staging: true },
-        help: "Prefilled from the covenant's last reported actual. Correct it if the assessment is on a different figure.",
+        help: anyNonPending
+          ? `A covenant in this package sits on a row that is not Pending. ${ALLOW_NON_PENDING_WARNING} Leave this off and such a covenant is refused by name, with its reason.`
+          : `${ALLOW_NON_PENDING_WARNING} Leave this off and a non-Pending row is refused by name, with its reason.`,
       }),
       field({
         key: "assessmentNarrative",
@@ -747,7 +1081,10 @@ function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
         prefill: { source: "AGENT_NARRATIVE" },
         editable: true,
         required: false,
-        target: { object: OBJ, field: "LLC_BI__Reason_for_Exception__c" },
+        // The review exercise's narrative, carried onto every assessment in the
+        // batch. Per-covenant colour goes in the per-item note.
+        target: { object: OBJ, field: "Agentic_AI_Response__c" },
+        help: "Carried onto every assessment in this batch. What is specific to one covenant belongs in its own note.",
       }),
     ],
   };

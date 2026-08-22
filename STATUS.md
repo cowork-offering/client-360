@@ -15,7 +15,7 @@ with a product-grade cockpit on top. Deliverable quality bar: spot-on.
 
 | Layer | State |
 |---|---|
-| **Salesforce MCP server** | 24 Apex tools in org `bankinggpt`, `Customer360` McpServerDefinition (22 in artifact manifest). 9 reads + stage/execute write pairs (bulk collateral valuation, service request, annual + risk-rating reviews, new facility w/ package-first + borrowing structure, covenant review) + modification stage/execute pair (WS0.5, 2026-08-22) + stage-only renewal. Engine: plan/planHash/single-use decisionToken, write-guard transition allowlist, idempotency, verification re-queries. Apex suite 170/170. Rebuild mirror: `knowledge/sf-build-v2/wp2/`. |
+| **Salesforce MCP server** | 24 Apex tools in org `bankinggpt`, `Customer360` McpServerDefinition (23 in artifact manifest). 9 reads + stage/execute write pairs (bulk collateral valuation hardened to a required package anchor + required per-item date + 20 cap, service request, annual + risk-rating reviews, new facility w/ package-first + borrowing structure, package-scoped BULK covenant review) + modification stage/execute pair + stage-only renewal. WS0.5 items 2+3 (2026-08-22) changed those two tool SHAPES; no tool name changed and the McpServerDefinition was not touched. Engine: plan/planHash/single-use decisionToken, write-guard transition allowlist, idempotency, verification re-queries. Apex suite 170/170. Rebuild mirror: `knowledge/sf-build-v2/wp2/`. |
 | **Cockpit (React)** | `app/` — worklist-first, two zones (Client Overview / KYC & Onboarding), deal-grammar tickets (package-anchored mod/renewal, bulk collateral picker, review fork), email→action suggestions, sync tiers + persistent overlay, ~1,200 tests. Compiled to `artifact/customer-360-template.html`. |
 | **Published artifact** | claude.ai artifact URLs (main `f7a6006f-…`, copy `95cf2a8d-…`), verified byte-identical to repo HEAD bundle + data. Page calls connectors live via `window.claude.mcp` with viewer credentials. |
 | **Cowork plugin** | `.claude-plugin/` + `skills/customer-360-cockpit` + bundled template + `render/assemble-cockpit.mjs` (agent fetches data → assembler bakes JSON → Cowork artifact). ⚠️ Plugin bundle STALE at commit `6eda1b6` (Jul 26) — pre-deal-grammar. Sync = outstanding item 1. |
@@ -51,8 +51,10 @@ with a product-grade cockpit on top. Deliverable quality bar: spot-on.
 3. **Codex adversarial review** of the full campaign delta (planned closer, never run).
 4. **⚠️ ARMED WARNING:** renewal clone field set does not exclude `Loan_Collateral_Aggregate` —
    re-probe before `execute_renewal` is ever unblocked (HANDOFF §2).
-5. **Covenant execute** — deployed, out of manifest; first live run fires a real approval email
-   (founder-gated).
+5. ~~**Covenant execute** — founder-gated.~~ CLEARED 2026-08-22 (WS0.5): run live on both arms on
+   throwaway data, now in the manifest and called by the cockpit behind the confirm gate. What still
+   holds it is the ORG — `executionHeld` on the staged plan, and a per-covenant refusal on any
+   compliance row that is not Pending unless the banker opts in.
 6. **Renewal execute** — stage-only by design (clone collateral-aggregate re-probe outstanding). Modification execute shipped 2026-08-22 (WS0.5); the cockpit calls it on both surfaces.
 7. Housekeeping: Piedmont test rows (CV-0000000002/3, R-4) deletion decision; Credit Memo 0.54.0
    connector swap (sibling, tracked there).

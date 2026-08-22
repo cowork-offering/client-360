@@ -64,7 +64,9 @@ export const PROVENANCE = {
   "borrower.exposure.facilities[].collateral[].collateralName": { kind: "NCINO", source: "Customer360Exposure — the collateral's autonumber name" },
   "borrower.exposure.facilities[].collateral[].collateralDescription": { kind: "NCINO", source: "Customer360Exposure — friendly description, additive; absent falls back to the autonumber name" },
   "borrower.covenants.covenants[].attachedLoans": { kind: "NCINO", source: "Customer360Covenants — loans this covenant is attached to. Empty means account-level; ABSENT means the read predates the field and the cockpit groups nothing" },
-  "borrower.covenants.covenants[].complianceId": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant_Compliance__c record id. The only valid anchor for a covenant assessment, which is UPDATE-only; absent blocks the action" },
+  "borrower.covenants.covenants[].complianceId": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Covenant_Compliance__c record id. Context for the assessment, not its anchor: stage_covenant_review is anchored on the product package and resolves the row itself (WS0.5, 2026-08-22)" },
+  "borrower.covenants.covenants[].latestComplianceStatus": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Status__c on the latest compliance row: Compliant, Exception, In Progress, Pending or Waived. Only a Pending row advances the covenant schedule when it moves to a complete status" },
+  "borrower.covenants.covenants[].reasonForException": { kind: "NCINO", source: "Customer360Covenants — LLC_BI__Reason_for_Exception__c on that row: Breached or Overdue. The org's own answer to whether an Exception is a failed test or an undelivered document, read rather than inferred" },
   "borrower.graph.connections[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Connection__c" },
   "borrower.graph.legalEntities[]": { kind: "NCINO", source: "Customer360RelationshipGraph — LLC_BI__Legal_Entities__c" },
   "borrower.opportunities.opportunities[]": { kind: "NCINO", source: "Customer360Opportunities — open Opportunity" },
@@ -140,7 +142,7 @@ export const PROVENANCE = {
   "display.covenantDirection": { kind: "DERIVED", source: "data/finance.ts — cap/floor keyword heuristic, else compliant-sign fallback" },
   "display.covenantTone": {
     kind: "DERIVED",
-    source: "domain/covenantStatus.ts — Breached flag + status string + measured value vs threshold -> compliant|breach|exception|waived|pending|unknown",
+    source: "domain/covenantStatus.ts — Reason for Exception on the compliance row, then the Breached flag, the status string and the measured value vs threshold -> compliant|breach|exception|waived|pending|unknown",
   },
   "display.aggregateCoverageStatus": { kind: "DERIVED", source: "exposure.coverageShortfall when the read carries it, else coverage < 1.0 -> Under-covered; null -> Not computed by the source" },
   "display.facilityShortfallCount": { kind: "DERIVED", source: "count of active facilities with coverageShortfall true — a relationship can clear its floor while individual facilities do not" },
@@ -312,14 +314,32 @@ export interface Snapshot {
 
 export interface Covenant {
   covenantId?: string;
-  /** The COMPLIANCE record (LLC_BI__Covenant_Compliance__c) an assessment is
-   *  written against. Distinct from `covenantId`, which is the covenant
-   *  definition. A covenant review is UPDATE-only, so absent means the action
-   *  is blocked rather than silently anchored on the wrong record. */
+  /** The COMPLIANCE record (LLC_BI__Covenant_Compliance__c) this covenant's
+   *  assessment lands on. Distinct from `covenantId`, which is the covenant
+   *  definition. STAGED BUT NO LONGER READ by any surface: since WS0.5 the
+   *  review is anchored on the PRODUCT PACKAGE and the plan resolves the row
+   *  itself, so an absent id no longer blocks the action. Kept because the
+   *  assembler emits it and the staged bundles carry it. */
   complianceId?: string;
   /** The org's own latest-compliance anchor. Null is CORRECT where an account
    *  carries no compliance rows by design; not every relationship has them. */
   latestComplianceId?: string | null;
+  /**
+   * `LLC_BI__Status__c` on that latest compliance row: Compliant, Exception,
+   * In Progress, Pending or Waived. DISTINCT from `covenantStatus`, which is
+   * the covenant-level field, and it is the one that decides whether an
+   * assessment would advance the schedule — only a Pending row does.
+   */
+  latestComplianceStatus?: string;
+  /**
+   * `LLC_BI__Reason_for_Exception__c` on that row: Breached or Overdue.
+   *
+   * THE field that separates a failed test from an undelivered document. nCino
+   * forces Exception onto any row whose due date has passed, measured or not,
+   * so Exception alone must never be read as a breach. Null when the row
+   * carries no reason.
+   */
+  reasonForException?: string;
   covenantType?: string;
   thresholdValue?: number;
   actualValue?: number;

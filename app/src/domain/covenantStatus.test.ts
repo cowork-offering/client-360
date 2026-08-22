@@ -274,3 +274,53 @@ describe("the two list helpers the surfaces count with", () => {
     expect(administrativeExceptions([])).toEqual([]);
   });
 });
+
+describe("Reason for Exception: the org's OWN answer, read rather than inferred (WS0.5)", () => {
+  it("treats Breached as a financial breach, even where nothing was measured", () => {
+    // The exception batch can force `Exception` onto any overdue row. It cannot
+    // set this field, so `Breached` here is the org saying the test failed.
+    const v = classifyCovenant({
+      covenantType: "Debt Service Coverage Ratio",
+      covenantStatus: "Exception",
+      latestComplianceStatus: "Exception",
+      reasonForException: "Breached",
+    });
+    expect(v.kind).toBe("breach");
+    expect(v.financialBreach).toBe(true);
+    expect(v.measured).toBe(false);
+    expect(v.explanation).toContain("Reason for Exception as Breached");
+  });
+
+  it("treats Overdue as administrative, and says so in the org's terms", () => {
+    const v = classifyCovenant(floor({ actualValue: undefined, lastEvaluationStatus: "Exception", reasonForException: "Overdue" }));
+    expect(v.kind).toBe("exception");
+    expect(v.financialBreach).toBe(false);
+    expect(v.severity).toBe("watch");
+    expect(v.explanation).toContain("the document or evaluation is outstanding, not a measured breach");
+  });
+
+  it("still lets a WAIVER outrank the reason, because a waiver outranks everything", () => {
+    const v = classifyCovenant(floor({ actualValue: 1.1, lastEvaluationStatus: "Waived", reasonForException: "Breached" }));
+    expect(v.kind).toBe("waived");
+    expect(v.financialBreach).toBe(false);
+  });
+
+  it("still calls a measured miss a breach when the reason says Overdue", () => {
+    // The paperwork answer does not survive contact with a figure that misses.
+    const v = classifyCovenant(floor({ actualValue: 1.1, lastEvaluationStatus: "Exception", reasonForException: "Overdue" }));
+    expect(v.kind).toBe("breach");
+    expect(v.financialBreach).toBe(true);
+  });
+
+  it("ignores a reason it does not recognise rather than mapping it", () => {
+    const v = classifyCovenant(floor({ lastEvaluationStatus: "Compliant", reasonForException: "Something Else" }));
+    expect(v.kind).toBe("compliant");
+    expect(v.financialBreach).toBe(false);
+  });
+
+  it("changes nothing when the read carries no reason at all", () => {
+    const withOut = classifyCovenant(floor({ lastEvaluationStatus: "Exception" }));
+    expect(withOut.kind).toBe("exception");
+    expect(withOut.explanation).toContain(ADMINISTRATIVE_EXCEPTION_NOTE);
+  });
+});

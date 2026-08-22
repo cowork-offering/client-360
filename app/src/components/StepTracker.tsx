@@ -134,6 +134,9 @@ export function StepTracker({
   const landed = useReveal(plan.steps.length, !outcome);
   const revealing = landed < plan.steps.length;
   const filed = filedRecord(outcome, actionId);
+  const items = outcome?.items ?? [];
+  const covenantItems = items.filter((i) => Boolean(i.covenantId));
+  const collateralItems = items.filter((i) => Boolean(i.collateralId));
   const firstBadIndex = plan.steps.findIndex((s) => {
     const rt = state.steps.find((r) => r.id === s.id);
     return rt?.state === "failed" || rt?.state === "ambiguous";
@@ -256,16 +259,68 @@ export function StepTracker({
         </div>
       )}
 
+      {/* A COVENANT BATCH reports per covenant: what the row read before and
+          what it reads now. */}
+      {!revealing && covenantItems.length > 0 && (
+        <div className="c360-row-land border-b border-divider px-5 py-4">
+          <div className="kicker mb-2">Recorded, per covenant</div>
+          <div className="flex flex-col gap-2">
+            {covenantItems.map((item) => (
+              <div key={item.covenantComplianceId ?? item.covenantId} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[12.5px] font-semibold text-ink">{item.anchorName ?? item.covenantId}</span>
+                {item.written === false ? (
+                  <span className="text-[12px]" style={{ color: "var(--warning)" }}>
+                    not written
+                  </span>
+                ) : item.sourceStatus && item.status ? (
+                  <span className="text-[12px] text-ink-body">
+                    {item.sourceStatus} to {item.status}
+                  </span>
+                ) : null}
+                {item.recordName ? (
+                  <span className="font-mono text-[10.5px] text-ink-faint">{item.recordName}</span>
+                ) : (
+                  <span className="text-[12px]" style={{ color: "var(--warning)" }}>
+                    name not confirmed
+                  </span>
+                )}
+                {/* The org's own sentence for this covenant, verbatim. */}
+                {item.outcome && <span className="w-full text-[10.5px] text-ink-faint">{item.outcome}</span>}
+              </div>
+            ))}
+          </div>
+          {/* TRI-STATE, and the null case is not silence: a replay observed
+              nothing, so it must not be reported as "no approval was raised". */}
+          {outcome?.approvalChainStarted === false && (
+            <p className="mt-2 text-[11px] text-ink-muted">
+              No successor compliance record was observed in this transaction, so no covenant approval was raised by
+              it. A record created asynchronously would not be visible from here.
+            </p>
+          )}
+          {outcome?.approvalChainStarted === true && (
+            <p className="mt-2 text-[11px]" style={{ color: "var(--warning)" }}>
+              nCino created the next compliance record in this transaction, which is what raises the bank's covenant
+              approval at a named person.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* A BATCH reports per collateral. One row per item, each with its own
           filed name or its own unverified state: a failure on one is reported
           against that collateral and never hidden behind a batch-level green. */}
-      {!revealing && (outcome?.items?.length ?? 0) > 1 && (
+      {!revealing && collateralItems.length > 1 && (
         <div className="c360-row-land border-b border-divider px-5 py-4">
           <div className="kicker mb-2">Filed, per collateral</div>
           <div className="flex flex-col gap-2">
-            {outcome!.items!.map((item) => (
+            {collateralItems.map((item) => (
               <div key={item.collateralId} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="text-[12.5px] font-semibold text-ink">{item.collateralName ?? item.collateralId}</span>
+                {/* `collateralName` is on the STAGE item; the execute item names
+                    the collateral in `anchorName`. Reading only the first
+                    printed a raw record id at the banker. */}
+                <span className="text-[12.5px] font-semibold text-ink">
+                  {item.collateralName ?? item.anchorName ?? item.collateralId}
+                </span>
                 {item.recordName ? (
                   <span className="text-[12px] text-ink-body">filed as {item.recordName}</span>
                 ) : (
