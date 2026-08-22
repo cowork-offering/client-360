@@ -223,6 +223,41 @@ describe("pre-computed cushions (no unit maths for the model)", () => {
   });
 });
 
+/* The model is handed the same distinction the screen makes. Prose that calls an
+   administrative Exception a breach is the same defect as a red chip, arriving
+   through the connector instead of the DOM. */
+describe("Exception semantics survive into the grounded prompt", () => {
+  const withCovs = (covenants: unknown[]) => {
+    const b = JSON.parse(JSON.stringify(bundle));
+    b.covenants.covenants = covenants;
+    return buildGroundedPrompt({ data: DATA, bundle: b, accountName: "X", tab: "Covenants", question: "q" });
+  };
+
+  it("counts an unmeasured Exception instead of dropping it, and never calls it a breach", () => {
+    const q = withCovs([{ covenantType: "Term Covenants", lastEvaluationStatus: "Exception" }]);
+    expect(q).toContain("1 covenant sits at Exception in nCino with no measured breach");
+    expect(q).not.toMatch(/breached by/);
+  });
+
+  it("names the Exception alongside a covenant that does have figures", () => {
+    const q = withCovs([
+      { covenantType: "Debt Service Coverage Ratio", actualValue: 1.4, thresholdValue: 1.25 },
+      { covenantType: "Term Covenants", lastEvaluationStatus: "Exception" },
+      { covenantType: "Reporting", covenantStatus: "overdue" },
+    ]);
+    expect(q).toMatch(/cushion \d+\.\d+x or about \d+ percent/);
+    expect(q).toContain("2 covenants sit at Exception in nCino with no measured breach");
+  });
+
+  it("says a waived covenant is past its threshold WITHOUT calling it breached", () => {
+    const q = withCovs([
+      { covenantType: "Debt Service Coverage Ratio", actualValue: 1.1, thresholdValue: 1.25, lastEvaluationStatus: "Waived" },
+    ]);
+    expect(q).toMatch(/past the threshold, recorded in nCino as Waived/);
+    expect(q).not.toMatch(/breached by/);
+  });
+});
+
 describe("no-inference instruction", () => {
   const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Covenants", question: "q" });
 

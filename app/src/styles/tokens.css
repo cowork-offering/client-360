@@ -56,6 +56,11 @@
   --chip-client-request-fg: var(--accent);
   --chip-covenant-breach-bg: var(--critical-bg);
   --chip-covenant-breach-fg: var(--critical);
+  /* An administrative exception is a WARNING, never the breach red — the whole
+     point of separating it. Same tint as the other warning chips, already
+     contrast-checked (scripts/contrast-check.mjs, "chip warning"). */
+  --chip-covenant-exception-bg: var(--warning-bg);
+  --chip-covenant-exception-fg: var(--warning);
   --chip-covenant-due-bg: var(--warning-bg);
   --chip-covenant-due-fg: var(--warning);
   --chip-maturity-near-bg: var(--accent-wash);

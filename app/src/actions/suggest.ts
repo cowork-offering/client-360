@@ -28,6 +28,9 @@ export const MAX_SUGGESTIONS = 3;
 /** Reason code -> the action that answers it, most urgent first. */
 const REASON_TO_ACTION: Array<{ reason: ReasonCode; actionId: string }> = [
   { reason: "COVENANT_BREACH", actionId: "covenant-review" },
+  // An administrative Exception is answered by the same action — the covenant
+  // review is where the evaluation or the document gets recorded.
+  { reason: "COVENANT_EXCEPTION", actionId: "covenant-review" },
   { reason: "COVENANT_DUE", actionId: "covenant-review" },
   { reason: "MATURITY_NEAR", actionId: "renewal" },
   { reason: "MODIFICATION_CLUSTER", actionId: "loan-modification" },

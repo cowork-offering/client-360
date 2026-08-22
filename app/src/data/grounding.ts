@@ -37,6 +37,7 @@ import {
 } from "./onboarding";
 import { fmtDate, fmtMoney } from "./format";
 import { covenantCushion } from "./finance";
+import { administrativeExceptions, classifyCovenant } from "../domain/covenantStatus";
 import { isActiveFacility } from "./worklist";
 
 /** Hard cap on the context block alone. */
@@ -106,7 +107,13 @@ function cushionPhrase(c: Covenant): string | null {
   if (cu.cushion === null) return null;
   const abs = covValue(Math.abs(cu.cushion));
   if (!abs) return null;
-  return cu.safe === false ? `breached by ${abs}` : `cushion ${abs} or about ${cu.pct} percent`;
+  if (cu.safe !== false) return `cushion ${abs} or about ${cu.pct} percent`;
+  // Past the threshold. Whether that is a BREACH is the classifier's call, not
+  // arithmetic's — a waived test is past its threshold and is not a breach.
+  const verdict = classifyCovenant(c);
+  return verdict.financialBreach
+    ? `breached by ${abs}`
+    : `${abs} past the threshold, recorded in nCino as ${verdict.label}`;
 }
 
 /** One covenant as a full sentence clause, cushion included. */
@@ -118,6 +125,13 @@ function covenantClause(c: Covenant): string | null {
   const parts = [`${shortCovenantName(c.covenantType)} ${a} against a ${th} ${cu.safe === false ? "threshold" : "floor"}`];
   const cush = cushionPhrase(c);
   if (cush) parts.push(cush);
+  // nCino's own verdict, when it is one the banker must not read as a breach.
+  const verdict = classifyCovenant(c);
+  if (verdict.kind === "exception") {
+    parts.push(`${verdict.label} recorded in nCino, administrative, not a measured breach`);
+  } else if (verdict.kind === "waived" || verdict.kind === "pending") {
+    parts.push(`status ${verdict.label} in nCino`);
+  }
   if (c.nextEvaluationDate) parts.push(`next test ${fmtDate(c.nextEvaluationDate)}`);
   return parts.join(", ");
 }
@@ -179,9 +193,17 @@ function tabSentence(bundle: BorrowerBundle, tab: string | null): string | null 
 
   if (tab === "Covenants") {
     const clauses = byTightest(covs).slice(0, 2).map(covenantClause).filter(Boolean) as string[];
-    if (!clauses.length) return null;
+    // byTightest keeps only covenants with BOTH numbers, so an Exception row
+    // with nothing measured would otherwise vanish from the prose entirely. It
+    // is counted here, and named for what it is.
+    const admin = administrativeExceptions(covs);
+    const adminLine = admin.length
+      ? `${admin.length} ${admin.length === 1 ? "covenant sits" : "covenants sit"} at Exception in nCino with no measured breach against the threshold.`
+      : "";
+    if (!clauses.length) return adminLine || null;
     // Capitalise each clause so joining with a full stop still reads as prose.
-    return `${clauses.map((c) => c[0].toUpperCase() + c.slice(1)).join(". ")}.`;
+    const body = `${clauses.map((c) => c[0].toUpperCase() + c.slice(1)).join(". ")}.`;
+    return adminLine ? `${body} ${adminLine}` : body;
   }
 
   if (tab === "Activity") {

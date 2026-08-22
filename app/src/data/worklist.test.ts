@@ -52,6 +52,53 @@ describe("deriveReasonsForBundle — clean + each code", () => {
     expect(deriveReasonsForBundle(b, GEN)).toContain("COVENANT_BREACH");
   });
 
+  /* An administrative Exception is a reason of its own. nCino forces that
+     status on an elapsed Due Date whether or not anything was measured, so
+     calling it a breach would put most of the book on the queue as credit
+     deterioration (domain/covenantStatus.ts). */
+  it("COVENANT_EXCEPTION, not COVENANT_BREACH, on an Exception with nothing measured", () => {
+    const b = cleanBundle();
+    b.covenants!.covenants![0] = { covenantType: "Term Covenants", lastEvaluationStatus: "Exception" };
+    const r = deriveReasonsForBundle(b, GEN);
+    expect(r).toContain("COVENANT_EXCEPTION");
+    expect(r).not.toContain("COVENANT_BREACH");
+  });
+
+  it("COVENANT_BREACH once the Exception carries a measured value that misses", () => {
+    const b = cleanBundle();
+    b.covenants!.covenants![0] = {
+      covenantType: "Debt Service Coverage Ratio",
+      actualValue: 1.1,
+      thresholdValue: 1.25,
+      lastEvaluationStatus: "Exception",
+    };
+    const r = deriveReasonsForBundle(b, GEN);
+    expect(r).toContain("COVENANT_BREACH");
+    expect(r).not.toContain("COVENANT_EXCEPTION");
+  });
+
+  it("never flags a Waived covenant, even one past its threshold", () => {
+    const b = cleanBundle();
+    b.covenants!.covenants![0] = {
+      covenantType: "Debt Service Coverage Ratio",
+      actualValue: 1.1,
+      thresholdValue: 1.25,
+      lastEvaluationStatus: "Waived",
+      nextEvaluationDate: day(200),
+    };
+    expect(deriveReasonsForBundle(b, GEN)).toEqual([]);
+  });
+
+  it("ranks an Exception below a breach and above a test due", () => {
+    const b = cleanBundle();
+    b.covenants!.covenants = [
+      { covenantType: "A", breached: true },
+      { covenantType: "B", lastEvaluationStatus: "Exception" },
+      { covenantType: "C", lastEvaluationStatus: "Compliant", nextEvaluationDate: day(3) },
+    ];
+    expect(deriveReasonsForBundle(b, GEN)).toEqual(["COVENANT_BREACH", "COVENANT_EXCEPTION", "COVENANT_DUE"]);
+  });
+
   it("breach beats due (no COVENANT_DUE emitted alongside a breach on same cov)", () => {
     const b = cleanBundle();
     b.covenants!.covenants![0].breached = true;

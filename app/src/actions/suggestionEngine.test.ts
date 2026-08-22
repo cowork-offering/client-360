@@ -200,6 +200,23 @@ describe("A33.2.4(b) — cushion compression", () => {
     expect(s.rationale).toMatch(/at or past its threshold/);
   });
 
+  it("ignores a WAIVED covenant, even one past its threshold", () => {
+    const b = shortBundle();
+    // Not enforced this period, so its cushion must not raise a covenant review
+    // (domain/covenantStatus.ts).
+    b.covenants = { covenants: [{ covenantType: "DSC", actualValue: 1.0, thresholdValue: 1.25, lastEvaluationStatus: "Waived" }] };
+    expect(run(b).suggestions.some((s) => s.id === "cushion-compression")).toBe(false);
+  });
+
+  it("still fires on an Exception whose measured value misses, and calls it a breach", () => {
+    const b = shortBundle();
+    b.covenants = {
+      covenants: [{ covenantType: "DSC", actualValue: 1.0, thresholdValue: 1.25, lastEvaluationStatus: "Exception" }],
+    };
+    const s = run(b).suggestions.find((x) => x.id === "cushion-compression")!;
+    expect(s.rationale).toMatch(/at or past its threshold/);
+  });
+
   it("gaps a covenant with an unusable threshold instead of dividing by it", () => {
     const b = shortBundle();
     b.covenants = { covenants: [{ covenantType: "DSC", actualValue: 1.2, thresholdValue: 0 }] };

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Covenant } from "./contract";
-import { covenantCushion, covenantDirection, covenantUnit, covTone, fmtCovThreshold, fmtCovVal, gradeTone } from "./finance";
+import { covenantCushion, covenantDirection, covenantUnit, fmtCovThreshold, fmtCovVal, gradeTone } from "./finance";
 
 describe("covenantUnit — the TYPE decides, not the magnitude", () => {
   it("reads coverage, leverage and multiples as ratios", () => {
@@ -123,14 +122,6 @@ describe("covenantCushion", () => {
     expect(covenantCushion("Leverage", 4.2, 3.0).pct).toBe(0); // unsafe → 0 room
     expect(covenantCushion("Liquidity", 50_000_000, 5_000_000).pct).toBe(100);
   });
-});
-
-describe("covTone", () => {
-  const base: Covenant = { covenantType: "DSC", actualValue: 1.4, thresholdValue: 1.25 };
-  it("is red when breached", () => expect(covTone({ ...base, breached: true })).toBe("red"));
-  it("is red on a non-compliant status", () => expect(covTone({ ...base, lastEvaluationStatus: "Non-Compliant" })).toBe("red"));
-  it("is amber on a watch status", () => expect(covTone({ ...base, lastEvaluationStatus: "Watch" })).toBe("amber"));
-  it("is green when compliant", () => expect(covTone({ ...base, lastEvaluationStatus: "Compliant" })).toBe("green"));
 });
 
 describe("gradeTone", () => {

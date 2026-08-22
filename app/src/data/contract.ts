@@ -138,7 +138,10 @@ export const PROVENANCE = {
   "display.activityRelativeTime": { kind: "DERIVED", source: "activity[].ts − meta.generatedAt, whole UTC days" },
   "display.gradeTone": { kind: "DERIVED", source: "data/finance.ts — grade <=4 green, <=6 amber, else red" },
   "display.covenantDirection": { kind: "DERIVED", source: "data/finance.ts — cap/floor keyword heuristic, else compliant-sign fallback" },
-  "display.covenantTone": { kind: "DERIVED", source: "data/finance.ts — breached/status string -> red|amber|green" },
+  "display.covenantTone": {
+    kind: "DERIVED",
+    source: "domain/covenantStatus.ts — Breached flag + status string + measured value vs threshold -> compliant|breach|exception|waived|pending|unknown",
+  },
   "display.aggregateCoverageStatus": { kind: "DERIVED", source: "exposure.coverageShortfall when the read carries it, else coverage < 1.0 -> Under-covered; null -> Not computed by the source" },
   "display.facilityShortfallCount": { kind: "DERIVED", source: "count of active facilities with coverageShortfall true — a relationship can clear its floor while individual facilities do not" },
   "display.drawnPct": { kind: "DERIVED", source: "exposure.totalOutstanding ÷ totalCommitted" },
@@ -186,6 +189,11 @@ export type ReasonCode =
    *  above every risk signal — a human is actively waiting for an answer. */
   | "CLIENT_REQUEST"
   | "COVENANT_BREACH"
+  /** An administrative Exception is recorded in nCino with nothing measured
+   *  against the threshold. It needs a document or an evaluation, NOT a credit
+   *  decision — so it is a reason of its own and never says "breach"
+   *  (domain/covenantStatus.ts). */
+  | "COVENANT_EXCEPTION"
   | "COVENANT_DUE"
   | "MATURITY_NEAR"
   | "MODIFICATION_CLUSTER"

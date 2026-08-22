@@ -21,6 +21,7 @@
 
 import type { BorrowerBundle, C360Data, Covenant, ProvenanceKind } from "../data/contract";
 import { covenantCushion } from "../data/finance";
+import { classifyCovenant } from "../domain/covenantStatus";
 import { isActiveFacility } from "../data/worklist";
 import { ACTIVE_POLICY_PACK, resolveThreshold, type PolicyKey, type PolicyPack } from "../policy/policyPack";
 
@@ -248,6 +249,9 @@ function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: Poli
 
   let tightest: { cov: Covenant; pct: number } | null = null;
   for (const c of covs) {
+    // A waived test is not being enforced this period, so its cushion must not
+    // raise a covenant review (domain/covenantStatus.ts).
+    if (classifyCovenant(c).kind === "waived") continue;
     const actualPresent = Object.hasOwn(c, "actualValue");
     const thresholdPresent = Object.hasOwn(c, "thresholdValue");
     const a = requireNumber(c.actualValue, "covenant actual", "borrower.covenants.covenants[].actualValue", NCINO_COVENANTS, actualPresent);
@@ -274,7 +278,8 @@ function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: Poli
   if (!tightest || tightest.pct >= th.value) return { suggestions: [], gaps };
 
   const c = tightest.cov;
-  const breached = tightest.pct < 0;
+  // "Breach" is the classifier's word, never the arithmetic's alone.
+  const breached = classifyCovenant(c).financialBreach;
   return {
     gaps,
     suggestions: [

@@ -68,6 +68,8 @@ function render(data: C360Data, bundle: BorrowerBundle): HTMLDivElement {
 
 const headers = (el: HTMLElement) => [...el.querySelectorAll("[data-cov-header]")];
 const rows = (el: HTMLElement) => [...el.querySelectorAll("[data-cov-row]")];
+const statuses = (el: HTMLElement) => [...el.querySelectorAll("[data-cov-status]")];
+const callout = (el: HTMLElement, kind: string) => el.querySelector(`[data-cov-callout="${kind}"]`);
 
 describe("every covenant renders under a header, in every relationship", () => {
   it("has borrowers to check", () => {
@@ -90,12 +92,23 @@ describe("every covenant renders under a header, in every relationship", () => {
       expect(rows(el)).toHaveLength(expected);
     });
 
-    it(`${name} (${file}): every row carries all six columns`, () => {
+    it(`${name} (${file}): every row carries all seven columns`, () => {
       const el = render(data, bundle);
       for (const row of rows(el)) {
-        // Six columns, plus the optional effective-challenge strip that spans
-        // the full width. Fewer than six is the defect this test exists for.
-        expect(row.children.length, `${name}: a row with ${row.children.length} columns`).toBeGreaterThanOrEqual(6);
+        // Seven columns, plus the optional effective-challenge strip that spans
+        // the full width. Fewer than seven is the defect this test exists for.
+        expect(row.children.length, `${name}: a row with ${row.children.length} columns`).toBeGreaterThanOrEqual(7);
+      }
+    });
+
+    it(`${name} (${file}): every covenant states nCino's own verdict`, () => {
+      const el = render(data, bundle);
+      // One status chip per row, never a silent row: a covenant whose status the
+      // cockpit cannot read still has to say so on screen.
+      expect(statuses(el)).toHaveLength(rows(el).length);
+      for (const chip of statuses(el)) {
+        expect((chip.textContent ?? "").trim().length, `${name}: an empty status chip`).toBeGreaterThan(0);
+        expect(chip.getAttribute("title"), `${name}: a status chip with no explanation`).toBeTruthy();
       }
     });
 
@@ -172,5 +185,93 @@ describe("Hartwell — the mixed case that exposed the defect", () => {
     const term = rows(el).find((r) => (r.children[0].textContent ?? "").includes("Term Covenants"))!;
     expect(term.children[1].textContent).toBe("—");
     expect(term.children[2].textContent).toBe("—");
+  });
+});
+
+/* =============================================================================
+   EXCEPTION IS NOT A BREACH.
+
+   In nCino the exception batch forces `Exception` onto a compliance row the
+   moment its Due Date passes, measured or not: 101 of 140 rows in this org sit
+   there with no value at all. Rendering that as "breached" overstates credit
+   deterioration on most of the book, so the surface has to keep the two apart
+   for EVERY relationship, not just the ones the demo happens to open on.
+   ============================================================================= */
+describe("an administrative Exception renders as an Exception, not a breach", () => {
+  const [, , data] = everyBorrower[0];
+  const withCovenants = (covenants: BorrowerBundle["covenants"]): BorrowerBundle => ({
+    snapshot: { accountId: "001EXC", name: "Exception Co." },
+    covenants,
+  });
+
+  it("chips it as Exception and explains what that means", () => {
+    const el = render(
+      data,
+      withCovenants({ covenants: [{ covenantId: "c1", covenantType: "Term Covenants", lastEvaluationStatus: "Exception" }] }),
+    );
+    const chip = statuses(el)[0];
+    expect(chip.textContent).toBe("Exception");
+    expect(chip.getAttribute("data-cov-status-kind")).toBe("exception");
+    expect(chip.getAttribute("title")).toContain("not a measured breach");
+  });
+
+  it("raises the exception callout and NOT the breach callout", () => {
+    const el = render(
+      data,
+      withCovenants({ covenants: [{ covenantId: "c1", covenantType: "Term Covenants", lastEvaluationStatus: "Exception" }] }),
+    );
+    expect(callout(el, "exception")).toBeTruthy();
+    expect(callout(el, "breach")).toBeNull();
+    expect(el.textContent).toContain("no measured breach");
+    expect(el.textContent).not.toContain("at or past threshold");
+  });
+
+  it("DOES call it a breach once a measured value misses the threshold", () => {
+    const el = render(
+      data,
+      withCovenants({
+        covenants: [
+          {
+            covenantId: "c1",
+            covenantType: "Debt Service Coverage Ratio",
+            actualValue: 1.1,
+            thresholdValue: 1.25,
+            lastEvaluationStatus: "Exception",
+          },
+        ],
+      }),
+    );
+    expect(statuses(el)[0].textContent).toBe("Exception, threshold not met");
+    expect(callout(el, "breach")).toBeTruthy();
+    expect(callout(el, "exception")).toBeNull();
+  });
+
+  it("keeps a Waived covenant neutral, and off both callouts", () => {
+    const el = render(
+      data,
+      withCovenants({
+        covenants: [
+          {
+            covenantId: "c1",
+            covenantType: "Debt Service Coverage Ratio",
+            actualValue: 1.1,
+            thresholdValue: 1.25,
+            lastEvaluationStatus: "Waived",
+          },
+        ],
+      }),
+    );
+    expect(statuses(el)[0].textContent).toBe("Waived");
+    expect(callout(el, "breach")).toBeNull();
+    expect(callout(el, "exception")).toBeNull();
+  });
+
+  it("renders an unmapped status verbatim rather than guessing at it", () => {
+    const el = render(
+      data,
+      withCovenants({ covenants: [{ covenantId: "c1", covenantType: "Reporting", covenantStatus: ">10% headroom" }] }),
+    );
+    expect(statuses(el)[0].textContent).toBe(">10% headroom");
+    expect(callout(el, "breach")).toBeNull();
   });
 });

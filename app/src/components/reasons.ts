@@ -21,6 +21,15 @@ export const REASON_META: Record<ReasonCode, ReasonMeta> = {
     bg: "var(--chip-covenant-breach-bg)",
     fg: "var(--chip-covenant-breach-fg)",
   },
+  // An ADMINISTRATIVE exception. Deliberately not "Breach": in nCino the
+  // exception batch forces this status the moment a Due Date passes, whether or
+  // not anything was measured (domain/covenantStatus.ts).
+  COVENANT_EXCEPTION: {
+    label: "Exception recorded",
+    short: "Exception",
+    bg: "var(--chip-covenant-exception-bg)",
+    fg: "var(--chip-covenant-exception-fg)",
+  },
   COVENANT_DUE: {
     label: "Covenant test due",
     short: "Test due",

@@ -1,8 +1,9 @@
 /* Finance display + covenant-cushion logic, ported verbatim from the legacy
    template (customer-360-template.html). The cushion/direction heuristic is
-   load-bearing derivation — unit-tested in finance.test.ts. */
+   load-bearing derivation — unit-tested in finance.test.ts.
 
-import type { Covenant } from "./contract";
+   Covenant STATUS interpretation does not live here. It lives in
+   domain/covenantStatus.ts, which is the one classifier every surface reads. */
 
 export function fmtRatio(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
@@ -163,15 +164,6 @@ export function fmtCovThreshold(
 ): string {
   if (threshold == null) return "—";
   return (covenantDirection(type, actual, threshold) === "cap" ? "≤ " : "≥ ") + fmtCovVal(threshold, type);
-}
-
-export function covTone(cov: Covenant): Tone {
-  if (cov.breached === true) return "red";
-  const st = (cov.lastEvaluationStatus || cov.covenantStatus || "").toLowerCase();
-  if (st.includes("breach") || st.includes("default") || st.includes("non-compliant") || st.includes("noncompliant"))
-    return "red";
-  if (st.includes("watch") || st.includes("warning") || st.includes("pending")) return "amber";
-  return "green";
 }
 
 export function gradeTone(grade: number | null): Tone {

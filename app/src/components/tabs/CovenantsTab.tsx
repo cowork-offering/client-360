@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { BorrowerBundle, Covenant, CovenantChallenge } from "../../data/contract";
 import { fmtDate } from "../../data/format";
 import {
   covenantCushion,
-  covTone,
   fmtCovThreshold,
   fmtCovVal,
   STATUS,
   type Tone,
 } from "../../data/finance";
+import {
+  ADMINISTRATIVE_EXCEPTION_NOTE,
+  administrativeExceptions,
+  classifyCovenant,
+  financialBreaches,
+  severityTone,
+} from "../../domain/covenantStatus";
 import { Card, SectionHead, GapChip, EmptyState, NoteCaption, StatCell, StatDivider, StatStrip } from "../ui";
 import { Pulse } from "../Pulse";
 import { groupCovenants } from "../../data/collateralRecords";
@@ -17,7 +23,11 @@ import { staggerDelay, useEnterTransition } from "../../data/motion";
 const EXPLAIN =
   "Explain these covenants: which is tightest, and how much cushion is left.";
 
-const COV_COLS = "1.6fr 0.9fr 1fr 0.9fr 1.3fr 1fr";
+/* Seven columns. STATUS is the seventh and it is not decoration: without it the
+   table showed a covenant's arithmetic and hid nCino's own verdict, which is
+   how an administrative Exception ended up indistinguishable from a clean row
+   (NCINO-PROCESS-ALIGNMENT-DRAFT, D15). */
+const COV_COLS = "1.5fr 0.85fr 0.95fr 0.85fr 1.05fr 0.95fr 1.1fr";
 
 function challengeView(ch: CovenantChallenge, type?: string): { tone: Tone; label: string } {
   const bi = ch.boomImplied ?? null;
@@ -87,7 +97,7 @@ function CovenantHeader() {
       className="grid gap-3.5 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
       style={{ gridTemplateColumns: COV_COLS }}
     >
-      <span>Covenant</span><span className="text-right">Actual</span><span className="text-right">Threshold</span><span className="text-right">Cushion</span><span>Headroom</span><span>Next test</span>
+      <span>Covenant</span><span className="text-right">Actual</span><span className="text-right">Threshold</span><span className="text-right">Cushion</span><span>Headroom</span><span>Next test</span><span>Status</span>
     </div>
   );
 }
@@ -106,7 +116,9 @@ function CovenantRow({
   index: number;
 }) {
   const cush = covenantCushion(cov.covenantType, cov.actualValue, cov.thresholdValue);
-  const barColor = STATUS[covTone(cov)].fg;
+  const verdict = classifyCovenant(cov);
+  const status = STATUS[severityTone(verdict.severity)];
+  const barColor = status.fg;
   const next = cov.nextEvaluationDate
     ? fmtDate(cov.nextEvaluationDate)
     : cov.daysUntilNextEvaluation != null
@@ -145,7 +157,39 @@ function CovenantRow({
       >
         {next}
       </span>
+      {/* nCino's own verdict, in nCino's own words, with what it means on hover. */}
+      <span
+        data-cov-status
+        data-cov-status-kind={verdict.kind}
+        title={verdict.explanation}
+        className="justify-self-start whitespace-nowrap rounded-[6px] px-2.5 py-1 text-[11px] font-bold"
+        style={{ background: status.bg, color: status.fg }}
+      >
+        {verdict.label}
+      </span>
       <EffectiveChallenge ch={challenge} type={cov.covenantType} />
+    </div>
+  );
+}
+
+/** The warning banner shape, once. Both covenant callouts are the same object
+ *  with different words, so they cannot drift apart. */
+function Callout({
+  kicker,
+  children,
+  ...rest
+}: { kicker: string; children: ReactNode } & Record<`data-${string}`, string>) {
+  return (
+    <div className="flex items-start gap-3.5 rounded-[14px] px-5 py-4" style={{ background: "var(--warning-bg)" }} {...rest}>
+      <svg width="20" height="20" viewBox="0 0 20 20" className="mt-px flex-none" style={{ color: "var(--warning)" }}>
+        <path d="M10 2L1 17.5h18z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M10 8v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="10" cy="14.6" r=".9" fill="currentColor" />
+      </svg>
+      <div>
+        <div className="mb-1 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--warning)" }}>{kicker}</div>
+        <div className="text-[14px] font-medium leading-relaxed" style={{ color: "var(--warning-prose)" }}>{children}</div>
+      </div>
     </div>
   );
 }
@@ -173,10 +217,10 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
   for (const ch of bundle.covenantChallenge ?? []) if (ch.covenantId) challengeById.set(ch.covenantId, ch);
 
   const groups = groupCovenants(covs);
-  const breached = covs.filter((c) => {
-    const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
-    return c.breached === true || cu.safe === false;
-  });
+  // TWO callouts, never one. A measured miss is credit deterioration; an
+  // administrative Exception is a missing document. Merging them was the defect.
+  const breached = financialBreaches(covs);
+  const exceptions = administrativeExceptions(covs);
 
   return (
     <div className="flex flex-col gap-4">
@@ -237,19 +281,17 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
       )}
 
       {breached.length > 0 && (
-        <div className="flex items-start gap-3.5 rounded-[14px] px-5 py-4" style={{ background: "var(--warning-bg)" }}>
-          <svg width="20" height="20" viewBox="0 0 20 20" className="mt-px flex-none" style={{ color: "var(--warning)" }}>
-            <path d="M10 2L1 17.5h18z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-            <path d="M10 8v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <circle cx="10" cy="14.6" r=".9" fill="currentColor" />
-          </svg>
-          <div>
-            <div className="mb-1 text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--warning)" }}>Watch</div>
-            <div className="text-[14px] font-medium leading-relaxed" style={{ color: "var(--warning-prose)" }}>
-              {breached.length} covenant{breached.length > 1 ? "s" : ""} at or past threshold: {breached.map((c) => c.covenantType).join(", ")}.
-            </div>
-          </div>
-        </div>
+        <Callout kicker="Watch" data-cov-callout="breach">
+          {breached.length} covenant{breached.length > 1 ? "s" : ""} at or past threshold:{" "}
+          {breached.map((c) => c.covenantType).join(", ")}.
+        </Callout>
+      )}
+
+      {exceptions.length > 0 && (
+        <Callout kicker="Exception" data-cov-callout="exception">
+          {exceptions.length} covenant{exceptions.length > 1 ? "s" : ""} at Exception with no measured breach:{" "}
+          {exceptions.map((c) => c.covenantType).join(", ")}. {ADMINISTRATIVE_EXCEPTION_NOTE}.
+        </Callout>
       )}
 
       <DataQualityCallout bundle={bundle} />

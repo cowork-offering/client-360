@@ -18,12 +18,12 @@
 import type {
   BorrowerBundle,
   C360Data,
-  Covenant,
   Id,
   ModificationEntry,
   ReasonCode,
   Worklist,
 } from "./contract";
+import { classifyCovenant } from "../domain/covenantStatus";
 import { dayDiff } from "./time";
 
 export const COVENANT_DUE_WINDOW_DAYS = 45;
@@ -38,23 +38,15 @@ const SEVERITY: ReasonCode[] = [
   // waiting on an answer, which is more urgent than a metric drifting.
   "CLIENT_REQUEST",
   "COVENANT_BREACH",
+  // Below breach, above "test due": an administrative Exception is a real
+  // outstanding item, and it is NOT credit deterioration.
+  "COVENANT_EXCEPTION",
   "COVENANT_DUE",
   "MATURITY_NEAR",
   "MODIFICATION_CLUSTER",
   "GUARANTOR_SIGNAL",
   "RECENTLY_MODIFIED",
 ];
-
-function isBreached(cov: Covenant): boolean {
-  if (cov.breached === true) return true;
-  const st = (cov.lastEvaluationStatus || cov.covenantStatus || "").toLowerCase();
-  return (
-    st.includes("breach") ||
-    st.includes("default") ||
-    st.includes("non-compliant") ||
-    st.includes("noncompliant")
-  );
-}
 
 /** A facility counts as active when status is absent or explicitly "Active"
  *  (F6). Closed / paid-off facilities never drive maturity alerts or display. */
@@ -122,9 +114,21 @@ export function deriveReasonsForBundle(bundle: BorrowerBundle, generatedAt: stri
   // itself, so it still works when the clock is unusable (A30.4).
   if (hasClientRequest(bundle)) codes.add("CLIENT_REQUEST");
 
+  // ONE classifier decides what a covenant status means (domain/covenantStatus).
+  // A financial breach and an administrative Exception are different reasons and
+  // must never collapse into one another: 101 of 140 compliance rows in this org
+  // sit at Exception with nothing measured, and calling those breaches would put
+  // the whole book on the queue as credit deterioration.
   for (const cov of bundle.covenants?.covenants ?? []) {
-    if (isBreached(cov)) {
+    const verdict = classifyCovenant(cov);
+    if (verdict.financialBreach) {
       codes.add("COVENANT_BREACH");
+      continue;
+    }
+    if (verdict.kind === "exception") {
+      // An exception row is overdue by construction, so it subsumes "test due"
+      // the same way a breach does.
+      codes.add("COVENANT_EXCEPTION");
       continue;
     }
     const d = dayDiff(cov.nextEvaluationDate, generatedAt);

@@ -1,7 +1,8 @@
 import type { BorrowerBundle } from "../../data/contract";
 import { aggregateGuarantorSignals } from "../../data/graphAggregate";
 import { fmtDate } from "../../data/format";
-import { arc, covenantCushion, fmtCovThreshold, fmtCovVal, STATUS, type Tone } from "../../data/finance";
+import { arc, fmtCovThreshold, fmtCovVal, STATUS, type Tone } from "../../data/finance";
+import { classifyCovenant } from "../../domain/covenantStatus";
 import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { staggerDelay, useEnterTransition } from "../../data/motion";
 
@@ -65,14 +66,27 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
       date: "",
     });
   }
+  // A measured miss is Critical. An administrative Exception is a Watch and says
+  // what it is: nCino forces that status on an elapsed Due Date whether or not
+  // anything was measured (domain/covenantStatus.ts).
   for (const c of covs) {
-    const cu = covenantCushion(c.covenantType, c.actualValue, c.thresholdValue);
-    if (c.breached === true || cu.safe === false) {
+    const verdict = classifyCovenant(c);
+    const date = c.lastEvaluationDate ? fmtDate(c.lastEvaluationDate) : "";
+    if (verdict.financialBreach) {
       ews.push({
         title: "Covenant at threshold · " + (c.covenantType ?? ""),
         severity: "Critical",
-        body: "Actual " + fmtCovVal(c.actualValue, c.covenantType) + " vs " + fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue),
-        date: c.lastEvaluationDate ? fmtDate(c.lastEvaluationDate) : "",
+        body: verdict.measured
+          ? "Actual " + fmtCovVal(c.actualValue, c.covenantType) + " vs " + fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)
+          : verdict.explanation,
+        date,
+      });
+    } else if (verdict.kind === "exception") {
+      ews.push({
+        title: "Covenant exception · " + (c.covenantType ?? ""),
+        severity: "Watch",
+        body: verdict.explanation,
+        date,
       });
     }
   }
@@ -124,7 +138,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
               );
             })
           ) : (
-            <EmptyState title="No structural signals" body="No modification clustering, renewal, guarantor-distress, or breached-covenant signals on file." />
+            <EmptyState title="No structural signals" body="No modification clustering, renewal, guarantor-distress, covenant-breach or covenant-exception signals on file." />
           )}
         </Card>
 
