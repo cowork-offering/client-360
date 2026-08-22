@@ -1,0 +1,224 @@
+<title>Customer 360 Road to Success</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#F6F7F5; --card:#FFFFFF; --ink:#16211E; --muted:#5C6B67; --line:#D8DEDB;
+  --accent:#0F5C5A; --accent-soft:#E3EFEE;
+  --ok:#2E7D4F; --ok-soft:#E4F2E9; --warn:#9A6A12; --warn-soft:#F7EEDA; --hard:#A23A2E; --hard-soft:#F6E3E0;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#0F1514; --card:#161D1B; --ink:#E4EAE8; --muted:#9AA8A4; --line:#2A3431;
+  --accent:#5FB3AE; --accent-soft:#15302E;
+  --ok:#6CC08E; --ok-soft:#173125; --warn:#E0B25A; --warn-soft:#352A12; --hard:#E38A7E; --hard-soft:#3A1F1B;
+}}
+:root[data-theme="dark"]{
+  --paper:#0F1514; --card:#161D1B; --ink:#E4EAE8; --muted:#9AA8A4; --line:#2A3431;
+  --accent:#5FB3AE; --accent-soft:#15302E;
+  --ok:#6CC08E; --ok-soft:#173125; --warn:#E0B25A; --warn-soft:#352A12; --hard:#E38A7E; --hard-soft:#3A1F1B;
+}
+body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,Segoe UI,Roboto,sans-serif;font-size:16px;line-height:1.55;margin:0}
+.wrap{max-width:78ch;margin:0 auto;padding:3rem 1.25rem 5rem}
+h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;text-wrap:balance;margin:0}
+h1{font-size:2.1rem;font-weight:600;line-height:1.15}
+h2{font-size:1.35rem;font-weight:600;margin-top:3rem;padding-top:1.25rem;border-top:1px solid var(--line)}
+h3{font-size:1.05rem;font-weight:600;margin-top:1.5rem}
+p{margin:.6rem 0}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{color:var(--muted);font-size:1.05rem;max-width:65ch}
+.strip{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.25rem 0 0}
+.chip{display:inline-flex;align-items:center;gap:.4rem;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.78rem;padding:.25rem .6rem;border-radius:999px;border:1px solid var(--line);background:var(--card)}
+.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.chip.hard{background:var(--hard-soft);color:var(--hard);border-color:transparent}
+.chip.acc{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+/* timeline */
+.ladder{list-style:none;padding:0;margin:1.25rem 0 0;display:grid;gap:0}
+.ladder li{display:grid;grid-template-columns:9.5rem 1rem 1fr;gap:.75rem;align-items:start;padding:.55rem 0}
+.ladder .d{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:.15rem}
+.ladder .dot{width:.7rem;height:.7rem;border-radius:50%;background:var(--line);margin-top:.45rem;position:relative}
+.ladder .dot::after{content:"";position:absolute;left:50%;top:.7rem;width:1px;height:2.2rem;background:var(--line);transform:translateX(-50%)}
+.ladder li:last-child .dot::after{display:none}
+.ladder .dot.ok{background:var(--ok)} .ladder .dot.acc{background:var(--accent)} .ladder .dot.hard{background:var(--hard)} .ladder .dot.warn{background:var(--warn)}
+.ladder .m b{font-weight:600}
+.ladder .m small{display:block;color:var(--muted)}
+/* cards */
+.ws{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.25rem;margin-top:1rem}
+.ws header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;align-items:baseline}
+.ws header h3{margin:0}
+.ws .meta{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.78rem;color:var(--muted)}
+.ws ol,.ws ul{margin:.6rem 0 0;padding-left:1.25rem}
+.ws li{margin:.3rem 0}
+.gate{margin-top:.8rem;padding:.6rem .8rem;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-size:.92rem}
+.gate b{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:.93rem;margin-top:.75rem}
+th,td{text-align:left;vertical-align:top;padding:.5rem .6rem;border-bottom:1px solid var(--line)}
+th{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.tbl{overflow-x:auto}
+.done{color:var(--ok)} .open{color:var(--warn)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media (max-width:640px){.two{grid-template-columns:1fr}.ladder li{grid-template-columns:6.5rem 1rem 1fr}}
+.foot{margin-top:3rem;color:var(--muted);font-size:.85rem;border-top:1px solid var(--line);padding-top:1rem}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">Commercial Credit Brain · Demo 2, SPIN booth, Dreamforce</div>
+<h1>Customer 360 Road to Success</h1>
+<p class="lede">Everything that has to be true by September 14, who does it, in what order, and how we know it is done. Version 2, August 22, 2026. Plan of record lives in the <span class="mono">cowork-offering/customer-360</span> repo; this page is its clean rendering.</p>
+<div class="strip">
+  <span class="chip ok">G0 passed · Aug 20</span>
+  <span class="chip acc">Now: WS0.5 Apex action wave</span>
+  <span class="chip warn">Sep 4 walkthrough for Steph</span>
+  <span class="chip hard">Sep 14 absolute lock</span>
+</div>
+
+<h2>The mission</h2>
+<p>On September 15 and 16 a banker at the SPIN booth opens Customer 360 in Cowork, sees Hartwell's needs-action queue, and a client email ("increase our line from 15 to 20M") becomes a governed modification staged against the Product Package, approved by the banker, written to nCino through the bank's own credit-action engine. Live, on both surfaces, without a single error. The printed journey panel already promises this moment.</p>
+<p><b>Non-negotiables.</b> Both surfaces spotless (claude.ai artifact and Cowork plugin). Disney on Ice: the sophisticated base brought to 100, ideally 110. Credit-memo-pattern policy layer. Full KYC stage and approve loop. C360 is the flagship. Commercial framing stays.</p>
+
+<h2>The date ladder</h2>
+<ul class="ladder">
+  <li><span class="d">Aug 20</span><span class="dot ok"></span><span class="m"><b>G0 passed.</b><small>Org verified, suite 138/138 after drift fix, modification executed live through nCino and rolled back, nCino process research done.</small></span></li>
+  <li><span class="d">Aug 22 Sat</span><span class="dot ok"></span><span class="m"><b>Road to Success shared.</b><small>This document.</small></span></li>
+  <li><span class="d">Aug 21 to 24</span><span class="dot acc"></span><span class="m"><b>WS0.5 Apex action wave.</b><small>Tools refined on proven mechanics. In progress.</small></span></li>
+  <li><span class="d">Aug 24 Mon</span><span class="dot acc"></span><span class="m"><b>Kickoff with support.</b><small>Alexis, Jon, Jordan if available, Noland on arrival. Support split agreed.</small></span></li>
+  <li><span class="d">Aug 23 to 27</span><span class="dot"></span><span class="m"><b>WS1 KYC loop</b> · gate G1</span></li>
+  <li><span class="d">Aug 21 to 29</span><span class="dot"></span><span class="m"><b>WS2 gateway, ledger, policy pack</b> (Jon) · gate G2</span></li>
+  <li><span class="d">Aug 27 to Sep 1</span><span class="dot"></span><span class="m"><b>WS3 Cowork natural chat</b> · gate G3</span></li>
+  <li><span class="d">Sep 1</span><span class="dot warn"></span><span class="m"><b>Internal feature freeze.</b><small>From here: fixes, polish, rehearsal only.</small></span></li>
+  <li><span class="d">Sep 4</span><span class="dot warn"></span><span class="m"><b>Demo walkthrough for Steph</b> · gate G4<small>Working demo only. Gateway hosting may trail in the background.</small></span></li>
+  <li><span class="d">Sep 4 to 11</span><span class="dot"></span><span class="m"><b>UAT and stress test.</b><small>Three to four Salesforce and nCino integration experts, not bank testers. Sep 7 is US Labor Day.</small></span></li>
+  <li><span class="d">Sep 5 to 13</span><span class="dot"></span><span class="m"><b>Finetuning window.</b><small>Includes the UI polish pass, intent-gated.</small></span></li>
+  <li><span class="d">Sep 10 to 11</span><span class="dot"></span><span class="m"><b>Hardening and gateway registration complete.</b></span></li>
+  <li><span class="d">Sep 11</span><span class="dot hard"></span><span class="m"><b>Hard freeze.</b><small>Sep 13 Sunday is the absolute fallback.</small></span></li>
+  <li><span class="d">Sep 14</span><span class="dot hard"></span><span class="m"><b>Absolute lock. No material changes after this point.</b></span></li>
+  <li><span class="d">Sep 15 to 16</span><span class="dot hard"></span><span class="m"><b>Dreamforce. SPIN booth. Demo 2.</b></span></li>
+</ul>
+
+<h2>Where we stand</h2>
+<div class="tbl"><table>
+<tr><th>Layer</th><th>State</th><th>Evidence</th></tr>
+<tr><td>Salesforce MCP server</td><td class="done">Verified</td><td>23 tools on the Customer360 McpServerDefinition (9 reads, 8 stage, 6 execute), connector 1:1, Apex suite 138/138</td></tr>
+<tr><td>Modification path</td><td class="done">Proven live</td><td>nCino credit action fired on Hartwell's revolver via the org's own engine: clone, junction chain, parent flags all as documented, rolled back clean</td></tr>
+<tr><td>Hartwell demo relationship</td><td class="done">Intact</td><td>18 of 18 counts, $46.0MM / $31.03MM / 6 facilities to the dollar</td></tr>
+<tr><td>Cockpit (React, ~1,200 tests)</td><td class="done">Built</td><td>Both artifact URLs byte-identical to repo HEAD; plugin served repo-fresh from the cowork-offering marketplace</td></tr>
+<tr><td>Process alignment</td><td class="done">Researched</td><td>nCino covenant and collateral lifecycle mapped against our Apex from their own docs; 39-entry danger register; 5 defects queued</td></tr>
+<tr><td>KYC zone</td><td class="open">Honest, not live</td><td>Self-gates today; IDB gateway already exposes the ~36 KYC tools to wire</td></tr>
+<tr><td>Plugin skill prose</td><td class="open">Stale</td><td>Describes 8 read tools, no writes; rewrite is WS3</td></tr>
+<tr><td>Policy layer and ledger</td><td class="open">Not started</td><td>WS2, Jon's lane</td></tr>
+</table></div>
+
+<h2>The work</h2>
+
+<section class="ws">
+<header><h3>WS0.5 · Apex action wave</h3><span class="meta">Aug 21 to 24 · Archy seat (Fabian)</span></header>
+<ol>
+<li><b>execute_loan_modification.</b> Token-gated wrapper over the proven mechanics: consume the staged plan, call the credit action (sync), verify clone and junction by re-query, apply the staged changes to the clone at Qualification, report. Never touches the parent.</li>
+<li><b>Covenant review rebuilt, package-scoped.</b> N compliance assessments under one plan and one token; traversal unions loan and account junctions; only Pending rows advance; Waived added; value written to nCino's own <span class="mono">Historic_Financial_Indicator</span>; structural guard against the auto-next-row approval trap; Effective Date never touched in a status transaction.</li>
+<li><b>Collateral valuation hardened.</b> Explicit Product Package anchor; items capped at 20 (queueable limit math with the org's CDC triggers); valuation date required.</li>
+<li><b>Demo identity preconditions.</b> UserRole and Credit Actions Delete permission set checked for every person who will drive the demo.</li>
+<li><b>Exception display corrected.</b> Exception is not breached; administrative vs financial shown honestly.</li>
+<li>Re-verify renewal stage predicate after the Aug 14 managed upgrade.</li>
+</ol>
+<div class="gate"><b>Wave gate:</b> suite green, an observed wire envelope for every new shape, danger-register items 1 to 6 closed or deferred with a stated reason.</div>
+</section>
+
+<section class="ws">
+<header><h3>WS1 · KYC full stage and approve loop</h3><span class="meta">Aug 23 to 27 · Archy seat · gate G1</span></header>
+<ul>
+<li>Wire the KYC and Onboarding zone to the IDB gateway tools: customer 360 view, stage and approve address and name changes, sanctions, adverse media, service requests, change audit.</li>
+<li>Same governed stage then approve pattern as the nCino side, on both surfaces.</li>
+<li>Observe every envelope before pinning a shape. Honest empties where the staging environment is thin.</li>
+</ul>
+<div class="gate"><b>G1:</b> a KYC change staged and approved live from the cockpit, both surfaces, envelope archived.</div>
+</section>
+
+<section class="ws">
+<header><h3>WS2 · Gateway, decision ledger, policy pack</h3><span class="meta">Aug 21 to 29 · Banksy seat (Jon) · gate G2</span></header>
+<ul>
+<li><b>Decision ledger and audit trail</b> keyed on the relationship, so a session opens warm ("last cycle the team held grade 4 because..."). Store: Jon decides Snowflake vs the gateway's own store by Aug 25; demo-reliable beats architecturally pure.</li>
+<li><b>Policy pack.</b> Credit monitoring and KYC policy documents with citable section ids. Covers exactly what nCino does not: cure periods, waiver authority, revaluation triggers, escalation bands, watch-list criteria.</li>
+<li><b>Policy-aware analysis beat.</b> "Assess Hartwell against policy": the agent pulls covenants, exposure and KYC state, reasons against the pack, cites sections, flags the 7bps FCCR cushion. SR 26-2 framing: decision support, human decides.</li>
+</ul>
+<div class="gate"><b>G2:</b> ledger round-trips (record then recall); policy analysis produces a cited assessment.</div>
+</section>
+
+<section class="ws">
+<header><h3>WS3 · Cowork natural chat</h3><span class="meta">Aug 27 to Sep 1 · Archy seat, Jon reviews · gate G3</span></header>
+<ul>
+<li>Plugin v0.5.0: skill prose rewritten to the real 23 tools and the write methodology (stage, present plan, human confirms, execute).</li>
+<li>Conversation routing: "show me Hartwell", "the client wants the line at 20M", "run the covenant review for the package", "run the KYC checks", "assess against policy".</li>
+<li>Credit memo and spreading exposed as call-outs to Noland's credit-memo plugin, never rebuilt.</li>
+<li>Assembler refreshed, marketplace bumped.</li>
+</ul>
+<div class="gate"><b>G3:</b> a cold Cowork session with the plugin installed handles the demo conversation end to end.</div>
+</section>
+
+<section class="ws">
+<header><h3>WS4 · Artifact parity</h3><span class="meta">Continuous until Sep 1 · Archy seat</span></header>
+<ul><li>Every cockpit change ships to both artifact URLs the same day through the one pipeline, byte-verified. No divergence between surfaces, ever.</li></ul>
+</section>
+
+<section class="ws">
+<header><h3>WS5 · Perfection pass</h3><span class="meta">Sep 1 to 4, then UAT to Sep 11 · both seats · gate G4</span></header>
+<ul>
+<li>Codex adversarial review of the full delta (wire payloads, guards, prose).</li>
+<li>Fabian's click-through on both surfaces, every action.</li>
+<li>The printed beat rehearsed three times with a stopwatch: email arrives, sync, client request, suggestion, prefilled package-anchored ticket, staged plan, approve. Timings recorded.</li>
+<li>Sep 4 walkthrough for Steph. Then UAT with integration experts Sep 4 to 11, fixes only.</li>
+<li>Hardening and gateway registration by Sep 10 to 11. UI polish pass inside the finetuning window, one branded mock approved before building.</li>
+</ul>
+<div class="gate"><b>G4 (Sep 4):</b> both surfaces demo the full arc without a single error. <b>Sep 14:</b> locked.</div>
+</section>
+
+<h2>Monday kickoff: proposed support split</h2>
+<div class="tbl"><table>
+<tr><th>Who</th><th>Takes</th><th>Why</th></tr>
+<tr><td>Fabian</td><td>WS0.5, WS1, WS3, WS4, org writes, rehearsals, Steph walkthrough</td><td>Owner; holds the org auth</td></tr>
+<tr><td>Jon</td><td>WS2: gateway integration, decision ledger, policy pack substrate, the Snowflake call</td><td>Gateway and data native: fnma-mcp, Snowflake ontology work, AgentCore memory decisions</td></tr>
+<tr><td>Noland</td><td>Credit-memo call-out wiring into C360; second pair of eyes on this plan; booth identity setup</td><td>Owns the credit-memo plugin</td></tr>
+<tr><td>Alexis</td><td>UAT tester lineup and schedule, PMO tracking, walkthrough logistics</td><td>Offered; owns the program timeline</td></tr>
+<tr><td>Jordan</td><td>Codex review coordination, UAT execution</td><td>If available; confirm Monday</td></tr>
+</table></div>
+
+<h2>Decisions locked</h2>
+<ul>
+<li>Aggregation-first, package-anchored, for every action: single loans, covenants, collateral are member selections inside the Product Package, never standalone anchors.</li>
+<li>nCino's APIs do the domain surgery (credit actions, clones, junctions); our layer does governance: plan, hash, single-use token, approver identity check, verification by re-query. Nothing is re-implemented.</li>
+<li>Every call runs under the user's own identity. No service account, no elevation.</li>
+<li>Commercial framing stays. Early-warning trackers out of scope. Credit memo and spreading as call-outs. UI work aligned with Debra's standards.</li>
+<li>Sandbox approval emails are acceptable during build (Fabian, Aug 20).</li>
+<li>Nothing built on unverified ground: observe the wire before pinning a shape; receipts before any done claim.</li>
+</ul>
+
+<h2>Risks and the danger register, top of list</h2>
+<div class="tbl"><table>
+<tr><th>Risk</th><th>Mitigation</th></tr>
+<tr><td>Shared sandbox drift (already bit us once: 24 foreign CDC triggers broke every test suite in the org)</td><td>Test shield in place; re-smoke at Sep 1 and Sep 11; heads-up to the trigger owner</td></tr>
+<tr><td>Covenant compliance row creation fires a real approval email; completing a row can auto-create the next one</td><td>Structural guard in the rebuilt covenant review; never assume no frequency template</td></tr>
+<tr><td>Queueable governor limit on bulk writes (CDC triggers enqueue one job per record)</td><td>Caps on bulk tools; new-facility tree sized and probed</td></tr>
+<tr><td>Demo identity lacks UserRole or permission set</td><td>Precondition probe for every demo user before Sep 4</td></tr>
+<tr><td>Booth network: live org, M365 and gateway calls</td><td>Rehearse with a baked fallback bundle; decide at G4 whether it is armed</td></tr>
+<tr><td>Renewal clone field set (collateral aggregate) unverified</td><td>Renewal execute stays blocked until re-probed</td></tr>
+<tr><td>Both-surfaces scope</td><td>One pipeline, one bundle, parity by construction</td></tr>
+</table></div>
+
+<h2>Backlog, explicitly after Sep 14</h2>
+<ul>
+<li>Agentforce integration.</li>
+<li>Renewal execute (after the clone re-probe).</li>
+<li>Wealth-management variant of the cockpit.</li>
+<li>Voice (belongs to Demo 1).</li>
+</ul>
+
+<h2>Open with Fabian</h2>
+<ul>
+<li>Artifact golden path click-through in your browser (the last G0 step).</li>
+<li>Jon intro and Monday kickoff confirmation.</li>
+<li>Heads-up to the CDC trigger owner: one-line test guard fixes the org for everyone.</li>
+<li>Which identities demo at the booth, so preconditions get set early.</li>
+</ul>
+
+<div class="foot">Customer 360 · part of the Commercial Credit Brain alongside the Commercial Credit Memo · sources of truth: STATUS.md, ROAD-TO-CLOSURE, EVIDENCE-SEPT4, NCINO-PROCESS-ALIGNMENT in the repo knowledge tree, mirrored on Banksy.</div>
+</div>
