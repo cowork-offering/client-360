@@ -1,0 +1,479 @@
+{
+  "probe": "WS0.5 item 3 \u2014 stage/execute_collateral_valuation, hardened",
+  "org": "bankinggpt (00DDz000001qeO2MAI)",
+  "date": "2026-08-22",
+  "endpoint": "POST /services/data/v67.0/actions/custom/apex/{StageCollateralValuation|ExecuteCollateralValuation}",
+  "runningUser": "005bb00000ftouDAAQ",
+  "fixture": {
+    "note": "THROWAWAY. Created for this probe and tree-deleted afterwards.",
+    "account": "001bb00001KVYW1AAP (ZZ-WS05VAL Borrower)",
+    "productPackage": "a5Fbb000000ImPZEA0",
+    "loan": "a4Zbb000002Bs2LEAS (Booked / Open / lookupKey ZZWS05VAL1)",
+    "collateral1": "a35bb00000184kDAAQ COL-000766, value 900000, owned by the borrower via LLC_BI__Account_Collateral__c",
+    "collateral2": "a35bb00000184kEAAQ COL-000767, value 300000, owned by the borrower via LLC_BI__Account_Collateral__c"
+  },
+  "happyPath": {
+    "stageRequest": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05VAL-BULK-1",
+          "productPackageId": "a5Fbb000000ImPZEA0",
+          "rationale": "WS0.5 wire probe: hardened bulk collateral valuation on throwaway data.",
+          "items": [
+            {
+              "collateralId": "a35bb00000184kDAAQ",
+              "value": 1100000,
+              "valuationDate": "2026-08-22",
+              "type": "Net Orderly Liquidation Value",
+              "source": "Third Party Source",
+              "description": "NOLV per the August field exam.",
+              "primary": true
+            },
+            {
+              "collateralId": "a35bb00000184kEAAQ",
+              "value": 275000,
+              "valuationDate": "2026-08-22",
+              "type": "As Is Value",
+              "source": "Internal Valuation",
+              "description": "Internal mark on the secondary asset.",
+              "primary": false
+            }
+          ]
+        }
+      ]
+    },
+    "stageResponse": [
+      {
+        "actionName": "StageCollateralValuation",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "warnings": [
+              "nCino binds the collateral auto-update to the Add Valuation button and it does not fire headlessly. Wave 3 probe 6 settled this on both arms: filing a valuation does NOT move the collateral value. Each item reports its own rollup answer and none of them claims a coverage improvement.",
+              "Sub-collateral creation is not offered: it fires the parent validation rules even when nothing changed, and the documented workaround has no headless equivalent.",
+              "This is one batch of 2 valuations under a single confirmation. Each is written and verified separately, so a failure on one is reported against that collateral and does not silently discard the others.",
+              "Every collateral in this batch was proved to belong to the named product package, by pledge to one of its loans or by ownership through the borrower. The batch is anchored on one deal."
+            ],
+            "summary": "Files 2 new valuations in one batch, each marked Active and not the original value. Every item is written and verified on its own, and each reports whether its collateral value moved. No status is changed anywhere and no credit decision is made or implied.",
+            "steps": [
+              {
+                "verification": "SELECT Id, Name, LLC_BI__Value__c FROM LLC_BI__Collateral_Valuation__c WHERE Id = :newId",
+                "type": "write",
+                "state": "pending",
+                "objectName": "LLC_BI__Collateral_Valuation__c",
+                "label": "File the valuation against COL-000766",
+                "id": "write_valuation_0",
+                "fields": [
+                  "LLC_BI__Collateral__c",
+                  "LLC_BI__Value__c",
+                  "LLC_BI__Valuation_Date__c",
+                  "LLC_BI__Type__c",
+                  "LLC_BI__Source__c",
+                  "LLC_BI__Valuation_Description__c",
+                  "LLC_BI__Primary__c",
+                  "LLC_BI__Active__c",
+                  "LLC_BI__Original_Value__c"
+                ],
+                "automationWoken": [
+                  "LLC_BI.CollateralValuationTrigger (before insert only)"
+                ]
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Value__c FROM LLC_BI__Collateral_Valuation__c WHERE Id = :newId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Collateral_Valuation__c",
+                "label": "Confirm the valuation for COL-000766 landed",
+                "id": "verify_valuation_0",
+                "fields": [
+                  "LLC_BI__Value__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Value__c, LLC_BI__Lendable_Value__c FROM LLC_BI__Collateral__c WHERE Id = :collateralId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Collateral__c",
+                "label": "Re-read COL-000766 to see whether the value rolled up",
+                "id": "verify_rollup_0",
+                "fields": [
+                  "LLC_BI__Value__c",
+                  "LLC_BI__Lendable_Value__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, Name, LLC_BI__Value__c FROM LLC_BI__Collateral_Valuation__c WHERE Id = :newId",
+                "type": "write",
+                "state": "pending",
+                "objectName": "LLC_BI__Collateral_Valuation__c",
+                "label": "File the valuation against COL-000767",
+                "id": "write_valuation_1",
+                "fields": [
+                  "LLC_BI__Collateral__c",
+                  "LLC_BI__Value__c",
+                  "LLC_BI__Valuation_Date__c",
+                  "LLC_BI__Type__c",
+                  "LLC_BI__Source__c",
+                  "LLC_BI__Valuation_Description__c",
+                  "LLC_BI__Primary__c",
+                  "LLC_BI__Active__c",
+                  "LLC_BI__Original_Value__c"
+                ],
+                "automationWoken": [
+                  "LLC_BI.CollateralValuationTrigger (before insert only)"
+                ]
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Value__c FROM LLC_BI__Collateral_Valuation__c WHERE Id = :newId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Collateral_Valuation__c",
+                "label": "Confirm the valuation for COL-000767 landed",
+                "id": "verify_valuation_1",
+                "fields": [
+                  "LLC_BI__Value__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Value__c, LLC_BI__Lendable_Value__c FROM LLC_BI__Collateral__c WHERE Id = :collateralId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Collateral__c",
+                "label": "Re-read COL-000767 to see whether the value rolled up",
+                "id": "verify_rollup_1",
+                "fields": [
+                  "LLC_BI__Value__c",
+                  "LLC_BI__Lendable_Value__c"
+                ],
+                "automationWoken": []
+              }
+            ],
+            "stagingId": "a8abb00001NABCXAA5",
+            "replayed": false,
+            "provenanceJson": "{\"LLC_BI__Active__c\":{\"citation\":\"A33.4.5(a): the three booleans default to false, so a revaluation sets Active and Primary explicitly.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"LLC_BI__Value__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"LLC_BI__Collateral__c\":{\"citation\":\"Selected collateral records.\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+            "productPackageId": "a5Fbb000000ImPZEA0",
+            "planHash": "dc4c45435a2179f473ee60035cbe97d98bee6c40a551dbcd8626623fe6d74418",
+            "items": [
+              {
+                "writeStepId": "write_valuation_0",
+                "verifyStepId": "verify_valuation_0",
+                "value": 1100000,
+                "rollupStepId": "verify_rollup_0",
+                "collateralName": "COL-000766",
+                "collateralId": "a35bb00000184kDAAQ"
+              },
+              {
+                "writeStepId": "write_valuation_1",
+                "verifyStepId": "verify_valuation_1",
+                "value": 275000,
+                "rollupStepId": "verify_rollup_1",
+                "collateralName": "COL-000767",
+                "collateralId": "a35bb00000184kEAAQ"
+              }
+            ],
+            "itemCount": 2,
+            "decisionToken": "4c5cca8be700a8076c7a1b3c4154eadc810c11d65144a28169209f7edbf527b4",
+            "accountId": "001bb00001KVYW1AAP"
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ],
+    "executeRequest": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05VAL-BULK-1",
+          "stagingId": "a8abb00001NABCXAA5",
+          "planHash": "dc4c45435a2179f473ee60035cbe97d98bee6c40a551dbcd8626623fe6d74418",
+          "decisionToken": "4c5cca8be700a8076c7a1b3c4154eadc810c11d65144a28169209f7edbf527b4",
+          "approverUserId": "005bb00000ftouDAAQ"
+        }
+      ]
+    },
+    "executeResponse": [
+      {
+        "actionName": "ExecuteCollateralValuation",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "valuationId": "a34bb000003EzUvAAK",
+            "terminalState": "success",
+            "steps": [
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "File the valuation against COL-000766",
+                "id": "write_valuation_0",
+                "detail": "Valuation a34bb000003EzUvAAK inserted."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Confirm the valuation for COL-000766 landed",
+                "id": "verify_valuation_0",
+                "detail": "Valuation reads back at 1100000.00."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Re-read COL-000766 to see whether the value rolled up",
+                "id": "verify_rollup_0",
+                "detail": "Collateral value unchanged at 900000.00. The rollup did not fire."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "File the valuation against COL-000767",
+                "id": "write_valuation_1",
+                "detail": "Valuation a34bb000003EzUwAAK inserted."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Confirm the valuation for COL-000767 landed",
+                "id": "verify_valuation_1",
+                "detail": "Valuation reads back at 275000.00."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Re-read COL-000767 to see whether the value rolled up",
+                "id": "verify_rollup_1",
+                "detail": "Collateral value unchanged at 300000.00. The rollup did not fire."
+              }
+            ],
+            "stagingId": "a8abb00001NABCXAA5",
+            "replayed": false,
+            "recordName": "CV-0000000014",
+            "outcome": "2 valuations filed. No collateral value moved: nCino binds that update to the Add Valuation button, so no coverage improvement is claimed for any of them.",
+            "items": [
+              {
+                "valuationId": "a34bb000003EzUvAAK",
+                "recordName": "CV-0000000014",
+                "outcome": "Valuation filed against COL-000766, collateral value unchanged. No coverage improvement is claimed.",
+                "collateralValueMoved": false,
+                "collateralId": "a35bb00000184kDAAQ",
+                "anchorName": "COL-000766"
+              },
+              {
+                "valuationId": "a34bb000003EzUwAAK",
+                "recordName": "CV-0000000015",
+                "outcome": "Valuation filed against COL-000767, collateral value unchanged. No coverage improvement is claimed.",
+                "collateralValueMoved": false,
+                "collateralId": "a35bb00000184kEAAQ",
+                "anchorName": "COL-000767"
+              }
+            ],
+            "itemCount": 2,
+            "collateralValueMoved": false,
+            "anchorName": "COL-000766"
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ]
+  },
+  "refusalArms": {
+    "request": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05VAL-REFUSE-1",
+          "productPackageId": "a5Fbb000000ImPZEA0",
+          "rationale": "Wrong-package arm.",
+          "items": [
+            {
+              "collateralId": "a35bb00000184kDAAQ",
+              "value": 1,
+              "valuationDate": "2026-08-23"
+            },
+            {
+              "collateralId": "a35bb000000gc2TAAQ",
+              "value": 2,
+              "valuationDate": "2026-08-23"
+            }
+          ]
+        },
+        {
+          "idempotencyKey": "ZZ-WS05VAL-REFUSE-2",
+          "productPackageId": "a5Fbb000000ImPZEA0",
+          "rationale": "Missing-date arm.",
+          "items": [
+            {
+              "collateralId": "a35bb00000184kDAAQ",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "idempotencyKey": "ZZ-WS05VAL-REFUSE-3",
+          "rationale": "Missing-package arm.",
+          "items": [
+            {
+              "collateralId": "a35bb00000184kDAAQ",
+              "value": 1,
+              "valuationDate": "2026-08-23"
+            }
+          ]
+        },
+        {
+          "idempotencyKey": "ZZ-WS05VAL-REFUSE-4",
+          "productPackageId": "a5Fbb000000ImPZEA0",
+          "rationale": "Same-date duplicate arm.",
+          "items": [
+            {
+              "collateralId": "a35bb00000184kDAAQ",
+              "value": 1200000,
+              "valuationDate": "2026-08-22"
+            }
+          ]
+        }
+      ]
+    },
+    "response": [
+      {
+        "actionName": "StageCollateralValuation",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": {
+            "resumable": false,
+            "orgError": null,
+            "message": "Collateral COL-000000 is not part of product package ZZ-WS05VAL Borrower - 8/22/2026 - PP (item 2 of 2). It is pledged to no loan on this package, and it is not owned by the package's borrower. A valuation batch is anchored on one deal, so a collateral that reaches it through neither route is refused rather than filed against the wrong package.",
+            "idempotencyKey": "ZZ-WS05VAL-REFUSE-1",
+            "code": "VALIDATION_FAILED"
+          },
+          "ok": false,
+          "result": null
+        },
+        "sortOrder": 0,
+        "version": 1
+      },
+      {
+        "actionName": "StageCollateralValuation",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": {
+            "resumable": false,
+            "orgError": null,
+            "message": "valuationDate is required (item 1 of 1). nCino uses it to decide which valuation record is the latest, so a null-dated row cannot be ordered against the ones already on file. It is not defaulted to today: that would make two valuations of one asset on one date the normal case, which the platform has raised errors on.",
+            "idempotencyKey": "ZZ-WS05VAL-REFUSE-2",
+            "code": "VALIDATION_FAILED"
+          },
+          "ok": false,
+          "result": null
+        },
+        "sortOrder": 1,
+        "version": 1
+      },
+      {
+        "actionName": "StageCollateralValuation",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": {
+            "resumable": false,
+            "orgError": null,
+            "message": "productPackageId is required. It is the deal anchor, and every collateral valued must be provably part of it: pledged to a loan of the package, or owned by the package's borrower. Without it a batch could span deals and nothing would say so.",
+            "idempotencyKey": "ZZ-WS05VAL-REFUSE-3",
+            "code": "VALIDATION_FAILED"
+          },
+          "ok": false,
+          "result": null
+        },
+        "sortOrder": 2,
+        "version": 1
+      },
+      {
+        "actionName": "StageCollateralValuation",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": {
+            "resumable": false,
+            "orgError": null,
+            "message": "COL-000766 already carries valuation CV-0000000014 dated 2026-08-22 (item 1 of 1). Two valuations of one asset on one date leave nCino unable to decide which is the latest. Use a different date, or amend the existing record outside this tool.",
+            "idempotencyKey": "ZZ-WS05VAL-REFUSE-4",
+            "code": "VALIDATION_FAILED"
+          },
+          "ok": false,
+          "result": null
+        },
+        "sortOrder": 3,
+        "version": 1
+      }
+    ],
+    "arms": [
+      "1 wrong-package item, named by position and by collateral name",
+      "2 missing valuationDate",
+      "3 missing productPackageId",
+      "4 same collateral, same valuation date as the row filed by the happy path"
+    ]
+  },
+  "soqlVerification": {
+    "CV-0000000014": {
+      "collateral": "COL-000766",
+      "value": 1100000,
+      "valuationDate": "2026-08-22",
+      "type": "Net Orderly Liquidation Value",
+      "source": "Third Party Source",
+      "primary": true,
+      "active": true,
+      "originalValuationRecord": false
+    },
+    "CV-0000000015": {
+      "collateral": "COL-000767",
+      "value": 275000,
+      "valuationDate": "2026-08-22",
+      "type": "As Is Value",
+      "source": "Internal Valuation",
+      "primary": false,
+      "active": true,
+      "originalValuationRecord": false
+    },
+    "collateralValuesAfter": {
+      "COL-000766": 900000,
+      "COL-000767": 300000,
+      "note": "unchanged, as the tool says. The rollup does not fire headlessly and no coverage improvement is claimed."
+    }
+  },
+  "residue": {
+    "namedObjects": "Account / Product Package / Loan / cm_Action_Staging__c on the ZZ-WS05VAL prefix: 0 each",
+    "orgWideBaselinesRestored": {
+      "LLC_BI__Collateral_Valuation__c": 10,
+      "LLC_BI__Collateral__c": 764,
+      "LLC_BI__Account_Collateral__c": 9,
+      "LLC_BI__Collateral_Type__c": 43,
+      "cm_Action_Staging__c": 11
+    }
+  }
+}

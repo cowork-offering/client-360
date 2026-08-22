@@ -14,13 +14,17 @@ private class StageExecuteCollateralValuationTest {
     @TestSetup
     static void makeFixture() {
         C360TestFixture.armCalloutMock();
-        C360TestFixture.collateral(1000000);
+        Account a = C360TestFixture.account();
+        C360TestFixture.productPackage(a.Id);
+        LLC_BI__Collateral__c c = C360TestFixture.collateral(1000000);
+        C360TestFixture.ownership(a.Id, c.Id);
     }
 
     private static StageCollateralValuation.Request req(Id collateralId, String key) {
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
         r.idempotencyKey = key;
         r.rationale = 'Fresh third-party appraisal received on the pledged inventory.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
         r.collateralId = collateralId;
         r.value = 1250000;
         r.valuationDate = Date.today();
@@ -240,11 +244,25 @@ private class StageExecuteCollateralValuationTest {
         System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Collateral_Valuation__c], 'Nothing may be written on a refused execute');
     }
 
+    /** A second collateral, owned by the same borrower so it is a member of the same package. */
     private static LLC_BI__Collateral__c secondCollateral(Decimal value) {
         LLC_BI__Collateral_Type__c ct = new LLC_BI__Collateral_Type__c(Name = 'ZZ-BULK Type', LLC_BI__Advance_Rate__c = 60);
         insert ct;
         LLC_BI__Collateral__c c = new LLC_BI__Collateral__c(LLC_BI__Collateral_Type__c = ct.Id, LLC_BI__Value__c = value);
         insert c;
+        C360TestFixture.ownership(C360TestFixture.existingAccount().Id, c.Id);
+        return c;
+    }
+
+    /** A collateral owned by somebody else entirely: the wrong-package case. */
+    private static LLC_BI__Collateral__c strangerCollateral() {
+        Account other = new Account(Name = 'ZZ-WP2-TEST Stranger');
+        insert other;
+        LLC_BI__Collateral_Type__c ct = new LLC_BI__Collateral_Type__c(Name = 'ZZ-STRANGER Type', LLC_BI__Advance_Rate__c = 70);
+        insert ct;
+        LLC_BI__Collateral__c c = new LLC_BI__Collateral__c(LLC_BI__Collateral_Type__c = ct.Id, LLC_BI__Value__c = 250000);
+        insert c;
+        C360TestFixture.ownership(other.Id, c.Id);
         return c;
     }
 
@@ -290,6 +308,7 @@ private class StageExecuteCollateralValuationTest {
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
         r.idempotencyKey = key;
         r.rationale = 'Field exam refreshed both pledged assets.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
         r.items = new List<StageCollateralValuation.ValuationItem>{ item(a.Id, 1250000), item(b.Id, 500000) };
 
         Test.startTest();
@@ -326,6 +345,7 @@ private class StageExecuteCollateralValuationTest {
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
         r.idempotencyKey = C360TestFixture.key('cv-bulkzero');
         r.rationale = 'Rationale.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
         r.items = new List<StageCollateralValuation.ValuationItem>{ item(a.Id, 1), item(b.Id, 2) };
 
         Test.startTest();
@@ -346,6 +366,7 @@ private class StageExecuteCollateralValuationTest {
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
         r.idempotencyKey = key;
         r.rationale = 'Rationale.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
         r.items = new List<StageCollateralValuation.ValuationItem>{ item(a.Id, 111), item(b.Id, 222) };
 
         Test.startTest();
@@ -368,6 +389,7 @@ private class StageExecuteCollateralValuationTest {
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
         r.idempotencyKey = C360TestFixture.key('cv-dupe');
         r.rationale = 'Rationale.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
         r.items = new List<StageCollateralValuation.ValuationItem>{ item(a.Id, 100), item(a.Id, 200) };
 
         Test.startTest();
@@ -403,6 +425,7 @@ private class StageExecuteCollateralValuationTest {
         StageCollateralValuation.Request r = new StageCollateralValuation.Request();
         r.idempotencyKey = C360TestFixture.key('cv-baditem');
         r.rationale = 'Rationale.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
         r.items = new List<StageCollateralValuation.ValuationItem>{ item(a.Id, 100), bad };
 
         Test.startTest();
@@ -412,5 +435,137 @@ private class StageExecuteCollateralValuationTest {
         System.assertEquals(false, res.ok);
         System.assert(res.error.message.contains('item 2 of 2'),
             'A batch refusal must name WHICH item is wrong or the banker cannot fix it: ' + res.error.message);
+    }
+
+    @IsTest
+    static void aValuationWithNoDateIsRefused() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
+        StageCollateralValuation.Request r = req(coll.Id, C360TestFixture.key('cv-nodate'));
+        r.valuationDate = null;
+
+        Test.startTest();
+        StageCollateralValuation.Response res =
+            StageCollateralValuation.stage(new List<StageCollateralValuation.Request>{ r })[0];
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'nCino decides which valuation is latest from this date, so a null-dated row is unorderable');
+        System.assertEquals('VALIDATION_FAILED', res.error.code);
+        System.assert(res.error.message.contains('valuationDate'), 'The refusal should name the field: ' + res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Collateral_Valuation__c], 'Nothing is written on a refusal');
+    }
+
+    @IsTest
+    static void aCollateralOutsideThePackageIsRefusedByName() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral__c mine = C360TestFixture.existingCollateral();
+        LLC_BI__Collateral__c theirs = strangerCollateral();
+
+        StageCollateralValuation.Request r = new StageCollateralValuation.Request();
+        r.idempotencyKey = C360TestFixture.key('cv-wrongpkg');
+        r.rationale = 'Rationale.';
+        r.productPackageId = C360TestFixture.existingPackage().Id;
+        r.items = new List<StageCollateralValuation.ValuationItem>{ item(mine.Id, 100), item(theirs.Id, 200) };
+
+        Test.startTest();
+        StageCollateralValuation.Response res =
+            StageCollateralValuation.stage(new List<StageCollateralValuation.Request>{ r })[0];
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A batch is anchored on one deal: a collateral reaching it through neither pledge nor ownership is refused');
+        System.assertEquals('VALIDATION_FAILED', res.error.code);
+        System.assert(res.error.message.contains('item 2 of 2'),
+            'The refusal must name WHICH item is outside the package: ' + res.error.message);
+        System.assert(res.error.message.contains('not part of product package'),
+            'The refusal must say why: ' + res.error.message);
+    }
+
+    @IsTest
+    static void aMissingProductPackageIsRefused() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
+        StageCollateralValuation.Request r = req(coll.Id, C360TestFixture.key('cv-nopkg'));
+        r.productPackageId = null;
+
+        Test.startTest();
+        StageCollateralValuation.Response res =
+            StageCollateralValuation.stage(new List<StageCollateralValuation.Request>{ r })[0];
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'The deal anchor is required, and it is enforced in Apex so the message can explain itself');
+        System.assert(res.error.message.contains('productPackageId'), 'The refusal should name the field: ' + res.error.message);
+    }
+
+    /**
+     * The cap boundary, proved WITHOUT building 21 collaterals.
+     *
+     * Manufacturing 21 collateral chains would insert some 60 rows, and every one of them wakes a
+     * change-data trigger that enqueues a queueable: the test would hit the very governor ceiling the
+     * cap exists to protect, and fail for the wrong reason. The size check runs before any org read,
+     * so a batch of well-formed but unknown ids settles the boundary exactly: 21 is refused by the
+     * cap, 20 gets past it and is refused later, on collateral visibility.
+     */
+    @IsTest
+    static void theBatchCapIsTwentyAndItSaysWhy() {
+        C360TestFixture.armCalloutMock();
+        Id pkg = C360TestFixture.existingPackage().Id;
+
+        List<StageCollateralValuation.ValuationItem> twentyOne = new List<StageCollateralValuation.ValuationItem>();
+        List<StageCollateralValuation.ValuationItem> twenty = new List<StageCollateralValuation.ValuationItem>();
+        for (Integer i = 0; i < 21; i++) {
+            StageCollateralValuation.ValuationItem it = item(C360Wave2Fixture.fakeId(LLC_BI__Collateral__c.SObjectType), 1000 + i);
+            twentyOne.add(it);
+            if (i < 20) {
+                twenty.add(it);
+            }
+        }
+
+        StageCollateralValuation.Request over = new StageCollateralValuation.Request();
+        over.idempotencyKey = C360TestFixture.key('cv-cap21');
+        over.rationale = 'Rationale.';
+        over.productPackageId = pkg;
+        over.items = twentyOne;
+
+        StageCollateralValuation.Request atCap = new StageCollateralValuation.Request();
+        atCap.idempotencyKey = C360TestFixture.key('cv-cap20');
+        atCap.rationale = 'Rationale.';
+        atCap.productPackageId = pkg;
+        atCap.items = twenty;
+
+        Test.startTest();
+        List<StageCollateralValuation.Response> out =
+            StageCollateralValuation.stage(new List<StageCollateralValuation.Request>{ over, atCap });
+        Test.stopTest();
+
+        System.assertEquals(false, out[0].ok, '21 items is over the cap');
+        System.assert(out[0].error.message.contains('the cap is 20'), 'The refusal must name the cap: ' + out[0].error.message);
+        System.assert(out[0].error.message.contains('queueable'), 'The refusal must name the reason: ' + out[0].error.message);
+
+        System.assertEquals(false, out[1].ok, '20 unknown collaterals still fail, but on visibility rather than on the cap');
+        System.assertEquals(false, out[1].error.message.contains('the cap is 20'),
+            '20 items must clear the cap check, so the boundary sits at 21: ' + out[1].error.message);
+    }
+
+    @IsTest
+    static void aSecondValuationOnTheSameCollateralAndDateIsRefused() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral__c coll = C360TestFixture.existingCollateral();
+        String key = C360TestFixture.key('cv-samedate');
+
+        Test.startTest();
+        StageCollateralValuation.Response staged =
+            StageCollateralValuation.stage(new List<StageCollateralValuation.Request>{ req(coll.Id, key) })[0];
+        System.assertEquals(true, staged.ok, 'stage should succeed, got ' + why(staged));
+        Test.stopTest();
+
+        ExecuteCollateralValuation.Response done = executeStaged(key, staged.result);
+        System.assertEquals(true, done.ok, 'execute should succeed: ' + (done.error == null ? '' : done.error.message));
+
+        StageCollateralValuation.Response again = StageCollateralValuation.stage(
+            new List<StageCollateralValuation.Request>{ req(coll.Id, C360TestFixture.key('cv-samedate2')) })[0];
+
+        System.assertEquals(false, again.ok, 'Two valuations of one asset on one date leave nCino unable to decide which is latest');
+        System.assert(again.error.message.contains('already carries valuation'),
+            'The refusal should name the incumbent record: ' + again.error.message);
     }
 }

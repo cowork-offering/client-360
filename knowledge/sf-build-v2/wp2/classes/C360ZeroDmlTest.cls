@@ -17,8 +17,10 @@ private class C360ZeroDmlTest {
     @TestSetup
     static void makeFixture() {
         C360TestFixture.armCalloutMock();
-        C360TestFixture.account();
-        C360TestFixture.collateral(1000000);
+        Account a = C360TestFixture.account();
+        C360TestFixture.productPackage(a.Id);
+        LLC_BI__Collateral__c c = C360TestFixture.collateral(1000000);
+        C360TestFixture.ownership(a.Id, c.Id);
     }
 
     @IsTest
@@ -34,8 +36,10 @@ private class C360ZeroDmlTest {
         StageCollateralValuation.Request cv = new StageCollateralValuation.Request();
         cv.idempotencyKey = C360TestFixture.key('zerodml-cv');
         cv.rationale = 'Annual revaluation of pledged inventory.';
+        cv.productPackageId = C360TestFixture.existingPackage().Id;
         cv.collateralId = coll.Id;
         cv.value = 1250000;
+        cv.valuationDate = Date.today();
         cv.primary = true;
         List<StageCollateralValuation.Response> cvOut =
             StageCollateralValuation.stage(new List<StageCollateralValuation.Request>{ cv });
@@ -110,8 +114,10 @@ private class C360ZeroDmlTest {
         StageCollateralValuation.Request cv = new StageCollateralValuation.Request();
         cv.idempotencyKey = C360TestFixture.key('steps');
         cv.rationale = 'Rationale.';
+        cv.productPackageId = C360TestFixture.existingPackage().Id;
         cv.collateralId = coll.Id;
         cv.value = 600000;
+        cv.valuationDate = Date.today();
 
         Test.startTest();
         StageCollateralValuation.Response res =

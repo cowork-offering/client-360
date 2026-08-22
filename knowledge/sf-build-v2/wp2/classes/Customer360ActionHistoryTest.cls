@@ -15,6 +15,9 @@ private class Customer360ActionHistoryTest {
 
     @TestSetup
     static void makeFixture() {
+        // The org's 24 change-data triggers enqueue a callout-making queueable per record, and a
+        // test context refuses the callout unless a mock is armed. Arm it FIRST, always.
+        C360TestFixture.armCalloutMock();
         Account a = new Account(Name = 'ZZ-WP2-TEST Borrower');
         insert a;
 
@@ -80,6 +83,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void tokenMaterialNeverReachesTheOutput() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
 
         Test.startTest();
@@ -107,6 +111,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void planHashIsReportedAsPresenceOnly() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
 
         Test.startTest();
@@ -128,6 +133,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void rowsComeBackNewestFirst() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
 
         Test.startTest();
@@ -143,6 +149,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void resultsAreCappedByMaxResults() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
 
         Test.startTest();
@@ -156,6 +163,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void nameResolvesPerKeyPrefixAndUnknownPrefixReturnsIdOnly() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
         Case c = [SELECT Id, CaseNumber FROM Case WHERE AccountId = :a.Id LIMIT 1];
         LLC_BI__Review__c rev = [SELECT Id, Name FROM LLC_BI__Review__c WHERE LLC_BI__Account__c = :a.Id LIMIT 1];
@@ -199,6 +207,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void readToolWritesNothing() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
 
         Map<String, Integer> before = new Map<String, Integer>{
@@ -226,6 +235,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void missingAccountIdIsRefusedWithoutReading() {
+        C360TestFixture.armCalloutMock();
         Test.startTest();
         Customer360ActionHistory.Response res = run(null, null);
         Test.stopTest();
@@ -236,6 +246,7 @@ private class Customer360ActionHistoryTest {
 
     @IsTest
     static void positionalEnvelopeReturnsOneElementPerInput() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
 
         Customer360ActionHistory.Request good = new Customer360ActionHistory.Request();

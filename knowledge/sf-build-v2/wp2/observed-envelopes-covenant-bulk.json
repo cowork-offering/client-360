@@ -1,0 +1,633 @@
+{
+  "probe": "WS0.5 item 2 \u2014 stage/execute_covenant_review, package-scoped bulk",
+  "org": "bankinggpt (00DDz000001qeO2MAI)",
+  "date": "2026-08-22",
+  "endpoint": "POST /services/data/v67.0/actions/custom/apex/{StageCovenantReview|ExecuteCovenantReview}",
+  "runningUser": "005bb00000ftouDAAQ",
+  "fixture": {
+    "note": "THROWAWAY. Created for this probe and tree-deleted afterwards. Hartwell and every pre-existing record were off limits.",
+    "account": "001bb00001KVX25AAH (ZZ-WS05COV Borrower)",
+    "productPackage": "a5Fbb000000ImNxEAK",
+    "loan": "a4Zbb000002Bs0jEAC (Booked / Open / lookupKey ZZWS05COV1)",
+    "covenantA": {
+      "id": "a3Bbb000000StxdEAC",
+      "name": "COV-000652",
+      "attachment": "relationship, via LLC_BI__Account_Covenant__c",
+      "complianceRow": "a3Cbb00000EK9iDEAT COMP-0489 at Pending"
+    },
+    "covenantB": {
+      "id": "a3Bbb000000StxeEAC",
+      "name": "COV-000653",
+      "attachment": "loan, via LLC_BI__Loan_Covenant__c",
+      "complianceRow": "a3Cbb00000EK9iEEAT COMP-0490 at In Progress"
+    }
+  },
+  "arm1_bulk_with_one_refusal": {
+    "stageRequest": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05COV-BULK-1",
+          "productPackageId": "a5Fbb000000ImNxEAK",
+          "rationale": "WS0.5 wire probe: package-scoped bulk covenant review on throwaway data.",
+          "assessments": [
+            {
+              "covenantId": "a3Bbb000000StxdEAC",
+              "status": "Compliant",
+              "observedValue": 1.42,
+              "narrative": "DSC 1.42x against a 1.30x floor. Cushion holds.",
+              "comments": "Tested against the Q2 spread."
+            },
+            {
+              "covenantId": "a3Bbb000000StxeEAC",
+              "status": "Exception",
+              "observedValue": 1.05,
+              "reasonForException": "Breached",
+              "narrative": "DSC 1.05x against a 1.30x floor.",
+              "comments": "Q2 miss."
+            }
+          ]
+        }
+      ]
+    },
+    "stageResponse": [
+      {
+        "actionName": "StageCovenantReview",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "warnings": [
+              "No covenant in this plan carries the Active plus Frequency Template plus Effective Date combination nCino needs to mint the next compliance row, so completing these rows is not expected to create a successor row or raise a covenant approval. Execution measures this rather than asserting it.",
+              "This action updates existing compliance records and creates none. The parent covenant's Effective Date is never written: changing it in the same transaction as a status transition corrupts the compliance schedule, and that defect is open at the vendor.",
+              "Exception in nCino is not a synonym for a breach. The platform's own batch forces Exception onto any row whose due date has passed, measured or not. What separates a failed test from an undelivered document is Reason for Exception, which this plan writes explicitly.",
+              "1 of the 2 covenants assessed will NOT be written. Each carries its own reason in the covenants list. They are reported rather than skipped, and nothing about them is fixed."
+            ],
+            "summary": "Records 1 covenant assessment on product package covenants: COV-000652. 1 further assessed covenants are refused and reported with a reason each. Each assessment updates one existing compliance record with the narrative, the observed value and the status. No compliance record is created by this tool, and no credit decision is made or implied.",
+            "steps": [
+              {
+                "verification": "SELECT Id, LLC_BI__Status__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Re-read the compliance row on COV-000652, currently Pending",
+                "id": "find_compliance_0",
+                "fields": [
+                  "LLC_BI__Status__c",
+                  "LLC_BI__Due_Date__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Historic_Financial_Indicator__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "write",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Record the assessment and observed value on COV-000652",
+                "id": "write_assessment_0",
+                "fields": [
+                  "Agentic_AI_Response__c",
+                  "LLC_BI__Comments__c",
+                  "LLC_BI__Historic_Financial_Indicator__c",
+                  "cm_Covenant_Compliance_Indicator_Value__c"
+                ],
+                "automationWoken": [
+                  "Three triggers on update (LLC_BI, nCino, nCRED.covenantCompliance_BeforeUpdate)",
+                  "ACNPEX_Covenant Mgmt Calculation Logic Update on the parent, which carries no bypass"
+                ]
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Status__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "write",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Move the compliance status on COV-000652 to Compliant",
+                "id": "write_status_0",
+                "fields": [
+                  "LLC_BI__Status__c",
+                  "LLC_BI__Evaluation_Date__c",
+                  "LLC_BI__Evaluated_By__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Status__c, LLC_BI__Historic_Financial_Indicator__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Confirm the compliance row on COV-000652 reads back at Compliant",
+                "id": "verify_0",
+                "fields": [
+                  "LLC_BI__Status__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, CreatedDate FROM LLC_BI__Covenant_Compliance2__c WHERE LLC_BI__Covenant__c = :covenantId AND Id != :targetId",
+                "type": "observed_side_effect",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Re-query COV-000652 for a compliance row nCino created in response to this write",
+                "id": "observe_generation_0",
+                "fields": [
+                  "CreatedDate"
+                ],
+                "automationWoken": [
+                  "nCino managed trigger: creates the next compliance record when this one reaches a complete status",
+                  "acnpex_covenantApprovalProcess: fires on that create, with zero entry filters, at a named human"
+                ]
+              }
+            ],
+            "stagingId": "a8abb00001N9xRJAAZ",
+            "scopeCount": 2,
+            "replayed": false,
+            "refusedCount": 1,
+            "provenanceJson": "{\"Agentic_AI_Response__c\":{\"citation\":\"Agent-drafted assessment.\",\"provenance\":\"AGENT\",\"prefill\":\"AGENT_NARRATIVE\"},\"LLC_BI__Historic_Financial_Indicator__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"LLC_BI__Status__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"targetId\":{\"citation\":\"Open compliance rows resolved from the package covenant scope.\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"productPackageId\":{\"citation\":\"a5Fbb000000ImNxEAK\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+            "productPackageId": "a5Fbb000000ImNxEAK",
+            "planHash": "61ba9140d9b9ef29ce51e3cedb34b282710c610796574e01bbc88e0bddc569ac",
+            "decisionToken": "6b3490fc91cfc47256b488c8bd783addc9eac7ca9bd2f02c6c453a0881304c0e",
+            "covenants": [
+              {
+                "writeStepId": "write_assessment_0",
+                "verifyStepId": "verify_0",
+                "statusStepId": "write_status_0",
+                "state": "planned",
+                "reason": null,
+                "generationStepId": "observe_generation_0",
+                "generatesNextRow": false,
+                "currentComplianceStatus": "Pending",
+                "covenantType": "ZZ-WS05COV Type A",
+                "covenantName": "COV-000652",
+                "covenantId": "a3Bbb000000StxdEAC",
+                "covenantComplianceId": "a3Cbb00000EK9iDEAT",
+                "attachment": "relationship",
+                "assessedStatus": "Compliant"
+              },
+              {
+                "writeStepId": null,
+                "verifyStepId": null,
+                "statusStepId": null,
+                "state": "not_assessable_row_not_pending",
+                "reason": "The compliance row is at In Progress, not Pending. Only a Pending row advances the schedule when it moves to a complete status, so a write here would succeed and change nothing. Set allowNonPending to record the assessment on the row anyway, knowing the schedule will not move.",
+                "generationStepId": null,
+                "generatesNextRow": false,
+                "currentComplianceStatus": "In Progress",
+                "covenantType": "ZZ-WS05COV Type B",
+                "covenantName": "COV-000653",
+                "covenantId": "a3Bbb000000StxeEAC",
+                "covenantComplianceId": "a3Cbb00000EK9iEEAT",
+                "attachment": "loan",
+                "assessedStatus": "Exception"
+              }
+            ],
+            "assessedCount": 1,
+            "accountId": "001bb00001KVX25AAH"
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ],
+    "executeRequest": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05COV-BULK-1",
+          "stagingId": "a8abb00001N9xRJAAZ",
+          "planHash": "61ba9140d9b9ef29ce51e3cedb34b282710c610796574e01bbc88e0bddc569ac",
+          "decisionToken": "6b3490fc91cfc47256b488c8bd783addc9eac7ca9bd2f02c6c453a0881304c0e",
+          "approverUserId": "005bb00000ftouDAAQ"
+        }
+      ]
+    },
+    "executeResponse": [
+      {
+        "actionName": "ExecuteCovenantReview",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "writtenCount": 1,
+            "terminalState": "success",
+            "steps": [
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Re-read the compliance row on COV-000652, currently Pending",
+                "id": "find_compliance_0",
+                "detail": "Compliance row re-read at Pending, unchanged since staging."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "Record the assessment and observed value on COV-000652",
+                "id": "write_assessment_0",
+                "detail": "Assessment narrative and observed value written."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "Move the compliance status on COV-000652 to Compliant",
+                "id": "write_status_0",
+                "detail": "Status set to Compliant from Pending."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Confirm the compliance row on COV-000652 reads back at Compliant",
+                "id": "verify_0",
+                "detail": "Compliance record reads back at Compliant, observed value 1.420."
+              },
+              {
+                "type": "observed_side_effect",
+                "state": "verified",
+                "label": "Re-query COV-000652 for a compliance row nCino created in response to this write",
+                "id": "observe_generation_0",
+                "detail": "No successor compliance record appeared on this covenant inside this transaction. A row created asynchronously would not be visible here."
+              }
+            ],
+            "status": "Compliant",
+            "stagingId": "a8abb00001N9xRJAAZ",
+            "replayed": false,
+            "recordName": "COMP-0489",
+            "outcome": "Assessment recorded as Compliant on COV-000652. No successor compliance record was observed in this transaction.",
+            "items": [
+              {
+                "written": true,
+                "status": "Compliant",
+                "sourceStatus": "Pending",
+                "recordName": "COMP-0489",
+                "outcome": "Assessment recorded as Compliant on COV-000652. No successor compliance record was observed in this transaction.",
+                "nextComplianceRowId": null,
+                "nextComplianceRowCreated": false,
+                "covenantId": "a3Bbb000000StxdEAC",
+                "covenantComplianceId": "a3Cbb00000EK9iDEAT",
+                "anchorName": "COV-000652"
+              }
+            ],
+            "itemCount": 1,
+            "covenantComplianceId": "a3Cbb00000EK9iDEAT",
+            "approvalChainStarted": false,
+            "anchorName": "COV-000652"
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ],
+    "replayResponse": [
+      {
+        "actionName": "ExecuteCovenantReview",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "writtenCount": null,
+            "terminalState": "success",
+            "steps": [
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Re-read the compliance row on COV-000652, currently Pending",
+                "id": "find_compliance_0",
+                "detail": "Compliance row re-read at Pending, unchanged since staging."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "Record the assessment and observed value on COV-000652",
+                "id": "write_assessment_0",
+                "detail": "Assessment narrative and observed value written."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "Move the compliance status on COV-000652 to Compliant",
+                "id": "write_status_0",
+                "detail": "Status set to Compliant from Pending."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Confirm the compliance row on COV-000652 reads back at Compliant",
+                "id": "verify_0",
+                "detail": "Compliance record reads back at Compliant, observed value 1.420."
+              },
+              {
+                "type": "observed_side_effect",
+                "state": "verified",
+                "label": "Re-query COV-000652 for a compliance row nCino created in response to this write",
+                "id": "observe_generation_0",
+                "detail": "No successor compliance record appeared on this covenant inside this transaction. A row created asynchronously would not be visible here."
+              }
+            ],
+            "status": null,
+            "stagingId": "a8abb00001N9xRJAAZ",
+            "replayed": true,
+            "recordName": null,
+            "outcome": "This idempotency key already assessed compliance record a3Cbb00000EK9iDEAT and its siblings in the same plan. Nothing was written, and whether a successor row was minted is the first run's answer, not this one's.",
+            "items": [],
+            "itemCount": null,
+            "covenantComplianceId": "a3Cbb00000EK9iDEAT",
+            "approvalChainStarted": null,
+            "anchorName": null
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ]
+  },
+  "arm2_allowNonPending_optin": {
+    "stageRequest": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05COV-BULK-2",
+          "productPackageId": "a5Fbb000000ImNxEAK",
+          "rationale": "WS0.5 wire probe arm 2: allowNonPending opt-in on an In Progress row.",
+          "covenantIds": [
+            "a3Bbb000000StxeEAC"
+          ],
+          "allowNonPending": true,
+          "assessments": [
+            {
+              "covenantId": "a3Bbb000000StxeEAC",
+              "status": "Exception",
+              "observedValue": 1.05,
+              "reasonForException": "Overdue",
+              "narrative": "Statement not delivered by the due date.",
+              "comments": "Administrative, not a measured miss."
+            }
+          ]
+        }
+      ]
+    },
+    "stageResponse": [
+      {
+        "actionName": "StageCovenantReview",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "warnings": [
+              "No covenant in this plan carries the Active plus Frequency Template plus Effective Date combination nCino needs to mint the next compliance row, so completing these rows is not expected to create a successor row or raise a covenant approval. Execution measures this rather than asserting it.",
+              "This action updates existing compliance records and creates none. The parent covenant's Effective Date is never written: changing it in the same transaction as a status transition corrupts the compliance schedule, and that defect is open at the vendor.",
+              "Exception in nCino is not a synonym for a breach. The platform's own batch forces Exception onto any row whose due date has passed, measured or not. What separates a failed test from an undelivered document is Reason for Exception, which this plan writes explicitly.",
+              "allowNonPending was set. An assessment recorded on a row that is not Pending is stored, and the covenant schedule does NOT advance: nCino pushes the next evaluation date only on a Pending to complete transition."
+            ],
+            "summary": "Records 1 covenant assessment on product package covenants: COV-000653. Each assessment updates one existing compliance record with the narrative, the observed value and the status. No compliance record is created by this tool, and no credit decision is made or implied.",
+            "steps": [
+              {
+                "verification": "SELECT Id, LLC_BI__Status__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Re-read the compliance row on COV-000653, currently In Progress",
+                "id": "find_compliance_0",
+                "fields": [
+                  "LLC_BI__Status__c",
+                  "LLC_BI__Due_Date__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Historic_Financial_Indicator__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "write",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Record the assessment and observed value on COV-000653",
+                "id": "write_assessment_0",
+                "fields": [
+                  "Agentic_AI_Response__c",
+                  "LLC_BI__Comments__c",
+                  "LLC_BI__Historic_Financial_Indicator__c",
+                  "cm_Covenant_Compliance_Indicator_Value__c"
+                ],
+                "automationWoken": [
+                  "Three triggers on update (LLC_BI, nCino, nCRED.covenantCompliance_BeforeUpdate)",
+                  "ACNPEX_Covenant Mgmt Calculation Logic Update on the parent, which carries no bypass"
+                ]
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Status__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "write",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Move the compliance status on COV-000653 to Exception",
+                "id": "write_status_0",
+                "fields": [
+                  "LLC_BI__Status__c",
+                  "LLC_BI__Reason_for_Exception__c",
+                  "LLC_BI__Exception_Date__c",
+                  "LLC_BI__Evaluation_Date__c",
+                  "LLC_BI__Evaluated_By__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, LLC_BI__Status__c, LLC_BI__Historic_Financial_Indicator__c FROM LLC_BI__Covenant_Compliance2__c WHERE Id = :targetId",
+                "type": "verification",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Confirm the compliance row on COV-000653 reads back at Exception",
+                "id": "verify_0",
+                "fields": [
+                  "LLC_BI__Status__c"
+                ],
+                "automationWoken": []
+              },
+              {
+                "verification": "SELECT Id, CreatedDate FROM LLC_BI__Covenant_Compliance2__c WHERE LLC_BI__Covenant__c = :covenantId AND Id != :targetId",
+                "type": "observed_side_effect",
+                "state": "pending",
+                "objectName": "LLC_BI__Covenant_Compliance2__c",
+                "label": "Re-query COV-000653 for a compliance row nCino created in response to this write",
+                "id": "observe_generation_0",
+                "fields": [
+                  "CreatedDate"
+                ],
+                "automationWoken": [
+                  "nCino managed trigger: creates the next compliance record when this one reaches a complete status",
+                  "acnpex_covenantApprovalProcess: fires on that create, with zero entry filters, at a named human"
+                ]
+              }
+            ],
+            "stagingId": "a8abb00001N9sHyAAJ",
+            "scopeCount": 1,
+            "replayed": false,
+            "refusedCount": 0,
+            "provenanceJson": "{\"Agentic_AI_Response__c\":{\"citation\":\"Agent-drafted assessment.\",\"provenance\":\"AGENT\",\"prefill\":\"AGENT_NARRATIVE\"},\"LLC_BI__Historic_Financial_Indicator__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"LLC_BI__Status__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"targetId\":{\"citation\":\"Open compliance rows resolved from the package covenant scope.\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"productPackageId\":{\"citation\":\"a5Fbb000000ImNxEAK\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+            "productPackageId": "a5Fbb000000ImNxEAK",
+            "planHash": "f1c92e5e52149f7de784482e7123ece10f5a2f584f5d25e52a30ba9dc95ccf32",
+            "decisionToken": "f02d7d3a0c2712837bb990933e87dd2a89f306459b55e7783cfcce1a72d28f58",
+            "covenants": [
+              {
+                "writeStepId": "write_assessment_0",
+                "verifyStepId": "verify_0",
+                "statusStepId": "write_status_0",
+                "state": "planned",
+                "reason": "The compliance row is at In Progress rather than Pending and allowNonPending was set. The assessment will be recorded; the covenant schedule will NOT advance.",
+                "generationStepId": "observe_generation_0",
+                "generatesNextRow": false,
+                "currentComplianceStatus": "In Progress",
+                "covenantType": "ZZ-WS05COV Type B",
+                "covenantName": "COV-000653",
+                "covenantId": "a3Bbb000000StxeEAC",
+                "covenantComplianceId": "a3Cbb00000EK9iEEAT",
+                "attachment": "loan",
+                "assessedStatus": "Exception"
+              }
+            ],
+            "assessedCount": 1,
+            "accountId": "001bb00001KVX25AAH"
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ],
+    "executeRequest": {
+      "inputs": [
+        {
+          "idempotencyKey": "ZZ-WS05COV-BULK-2",
+          "stagingId": "a8abb00001N9sHyAAJ",
+          "planHash": "f1c92e5e52149f7de784482e7123ece10f5a2f584f5d25e52a30ba9dc95ccf32",
+          "decisionToken": "f02d7d3a0c2712837bb990933e87dd2a89f306459b55e7783cfcce1a72d28f58",
+          "approverUserId": "005bb00000ftouDAAQ"
+        }
+      ]
+    },
+    "executeResponse": [
+      {
+        "actionName": "ExecuteCovenantReview",
+        "errors": null,
+        "expectedError": false,
+        "invocationId": null,
+        "isSuccess": true,
+        "outcome": null,
+        "outputValues": {
+          "error": null,
+          "ok": true,
+          "result": {
+            "writtenCount": 1,
+            "terminalState": "success",
+            "steps": [
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Re-read the compliance row on COV-000653, currently In Progress",
+                "id": "find_compliance_0",
+                "detail": "Compliance row re-read at In Progress, unchanged since staging."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "Record the assessment and observed value on COV-000653",
+                "id": "write_assessment_0",
+                "detail": "Assessment narrative and observed value written."
+              },
+              {
+                "type": "write",
+                "state": "verified",
+                "label": "Move the compliance status on COV-000653 to Exception",
+                "id": "write_status_0",
+                "detail": "Status set to Exception from In Progress."
+              },
+              {
+                "type": "verification",
+                "state": "verified",
+                "label": "Confirm the compliance row on COV-000653 reads back at Exception",
+                "id": "verify_0",
+                "detail": "Compliance record reads back at Exception, observed value 1.050."
+              },
+              {
+                "type": "observed_side_effect",
+                "state": "verified",
+                "label": "Re-query COV-000653 for a compliance row nCino created in response to this write",
+                "id": "observe_generation_0",
+                "detail": "No successor compliance record appeared on this covenant inside this transaction. A row created asynchronously would not be visible here."
+              }
+            ],
+            "status": "Exception",
+            "stagingId": "a8abb00001N9sHyAAJ",
+            "replayed": false,
+            "recordName": "COMP-0490",
+            "outcome": "Assessment recorded as Exception on COV-000653. No successor compliance record was observed in this transaction, and the schedule did not advance because the row was not Pending.",
+            "items": [
+              {
+                "written": true,
+                "status": "Exception",
+                "sourceStatus": "In Progress",
+                "recordName": "COMP-0490",
+                "outcome": "Assessment recorded as Exception on COV-000653. No successor compliance record was observed in this transaction, and the schedule did not advance because the row was not Pending.",
+                "nextComplianceRowId": null,
+                "nextComplianceRowCreated": false,
+                "covenantId": "a3Bbb000000StxeEAC",
+                "covenantComplianceId": "a3Cbb00000EK9iEEAT",
+                "anchorName": "COV-000653"
+              }
+            ],
+            "itemCount": 1,
+            "covenantComplianceId": "a3Cbb00000EK9iEEAT",
+            "approvalChainStarted": false,
+            "anchorName": "COV-000653"
+          }
+        },
+        "sortOrder": 0,
+        "version": 1
+      }
+    ]
+  },
+  "soqlVerification": {
+    "COMP-0489": {
+      "LLC_BI__Status__c": "Compliant",
+      "LLC_BI__Historic_Financial_Indicator__c": 1.42,
+      "cm_Covenant_Compliance_Indicator_Value__c": "1.42",
+      "LLC_BI__Evaluation_Date__c": "2026-08-22",
+      "LLC_BI__Evaluated_By__c": "005bb00000ftouDAAQ",
+      "LLC_BI__Reason_for_Exception__c": null
+    },
+    "COMP-0490_after_arm1": {
+      "LLC_BI__Status__c": "In Progress",
+      "note": "refused per item at stage, left untouched"
+    },
+    "COMP-0490_after_arm2": {
+      "LLC_BI__Status__c": "Exception",
+      "LLC_BI__Reason_for_Exception__c": "Overdue",
+      "LLC_BI__Exception_Date__c": "2026-08-22",
+      "LLC_BI__Historic_Financial_Indicator__c": 1.05
+    },
+    "complianceRowsPerCovenantAfterBothArms": {
+      "a3Bbb000000StxdEAC": 1,
+      "a3Bbb000000StxeEAC": 1,
+      "note": "no successor row minted, which is what the plan predicted and what execute measured"
+    }
+  },
+  "residue": {
+    "namedObjects": "Account / Product Package / Loan / Covenant Type / cm_Action_Staging__c on the ZZ-WS05COV prefix: 0 each",
+    "orgWideBaselinesRestored": {
+      "LLC_BI__Covenant_Compliance2__c": 144,
+      "LLC_BI__Covenant2__c": 639,
+      "cm_Action_Staging__c": 11
+    },
+    "notDeletable": "2 FlowOrchestrationInstance (0jEbb000000D95VEAS, 0jEbb000000D95WEAS) and 2 FlowOrchestrationWorkItem (0jfbb0000007tXdAAI, 0jfbb0000007tXeAAI), raised by the two fixture compliance-row CREATES. DELETE returns INSUFFICIENT_ACCESS_OR_READONLY on the instance and the object takes no Apex DML at all. Both work items are Assigned to 005bb00000H6aX0AAJ, which is an INACTIVE user."
+  }
+}

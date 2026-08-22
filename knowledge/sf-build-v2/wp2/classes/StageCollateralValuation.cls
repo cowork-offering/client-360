@@ -18,7 +18,30 @@
  * items-only call impossible: the platform refused it with REQUIRED_FIELD_MISSING and our Apex never
  * executed. Direct Apex test invocations do not enforce required-ness, so no unit test can catch
  * this: it is only observable on the wire. Requiredness is therefore enforced in Apex, where it can
- * also say WHICH item is wrong.
+ * also say WHICH item is wrong. `productPackageId` and `valuationDate` became required in this wave
+ * and are enforced the same way, for the same reason plus one more: a platform-level refusal returns
+ * REQUIRED_FIELD_MISSING and nothing else, where Apex can name the field, the reason and the item.
+ *
+ * WHAT THIS WAVE HARDENED, AND WHY EACH ONE MATTERED.
+ *   1. PACKAGE ANCHOR. The tool used to derive its account and package by reading whichever pledge
+ *      it happened to see first, which meant a batch could span deals and nothing said so. The deal
+ *      anchor is now supplied, and every item is proved to belong to it: pledged to a loan of the
+ *      package, or owned by the package's borrower through the Collateral Ownership junction.
+ *   2. BATCH CAP OF 20. items[] was unbounded. 24 org-local *CDC triggers enqueue one
+ *      EventBridgeCallout queueable PER RECORD against a platform ceiling of 50 queued jobs per
+ *      synchronous transaction, so a 51-item call raised "Too many queueable jobs added to the
+ *      queue" and rolled the whole insert back. That was a live uncapped exposure on a deployed
+ *      tool. 20 leaves headroom for the platform's own async work on the same objects.
+ *   3. VALUATION DATE REQUIRED. nCino: "The system uses this field to determine the latest valuation
+ *      record" (mapId:AxjTjH5MIQKVIp_wnaek5g), and names it as a required input for the collateral
+ *      auto-update (mapId:2opWW8UJI0Rg_v6i6wVYoQ). A null-dated valuation is unorderable in nCino's
+ *      own latest-wins logic, so it is refused rather than defaulted: defaulting to today makes
+ *      same-date collisions the normal case, which is the next item.
+ *   4. SAME COLLATERAL, SAME DATE, REFUSED. PDI-00020349: two valuations on one collateral with the
+ *      same Valuation Date raise "System.ListException: Duplicate id in list" (affected 2025_04,
+ *      resolved 2025_10). This org is on a 2026 release so the defect is likely fixed here, and the
+ *      refusal stands anyway: two valuations of one asset on one date is a data-quality problem
+ *      before it is a defect workaround.
  *
  * Org contract: A33.4.5. Write evidence: PROBE-LEDGER.md probe 1 (CONFIRMED, 2026-07-25).
  */
@@ -26,6 +49,13 @@ global with sharing class StageCollateralValuation {
 
     /** Raised for a domain-level validation failure. Surfaces as ok:false, never as a fault. */
     public class ToolException extends Exception {}
+
+    /**
+     * The batch ceiling. 24 org-local *CDC triggers enqueue one EventBridgeCallout queueable per
+     * record and the platform allows 50 per synchronous transaction, so this is a governor budget
+     * rather than a business threshold and belongs in the code.
+     */
+    public static final Integer MAX_ITEMS = 20;
 
     /**
      * One valuation in a batch. The flat fields on Request remain the single-item path and are
@@ -36,7 +66,7 @@ global with sharing class StageCollateralValuation {
         global String collateralId;
         @InvocableVariable(label='Value' description='Required in practice, enforced in Apex.')
         global Decimal value;
-        @InvocableVariable(label='Valuation Date')
+        @InvocableVariable(label='Valuation Date' description='Required in practice, enforced in Apex. nCino uses this field to decide which valuation is the latest, so a null-dated row is unorderable in the platform\'s own logic.')
         global Date valuationDate;
         @InvocableVariable(label='Type')
         global String type;
@@ -53,6 +83,8 @@ global with sharing class StageCollateralValuation {
         global String idempotencyKey;
         @InvocableVariable(label='Rationale' description='Why this valuation is being filed. Feeds the audit ledger.' required=true)
         global String rationale;
+        @InvocableVariable(label='Product Package Id' description='The deal anchor. Every collateral valued must be pledged to a loan of this package or owned by the package\'s borrower. Required in practice, enforced in Apex so the refusal can name the item that fails.')
+        global String productPackageId;
         @InvocableVariable(label='Collateral Id' description='Single-item path. Supply this and value, OR items, never both. Not flagged required=true because items supersedes it; requiredness is enforced in Apex.')
         global String collateralId;
         @InvocableVariable(label='Value' description='Single-item path. The valuation amount.')
@@ -175,6 +207,9 @@ global with sharing class StageCollateralValuation {
             } catch (ToolException e) {
                 res.ok = false;
                 res.error = err('VALIDATION_FAILED', e.getMessage(), null, req.idempotencyKey);
+            } catch (C360Facilities.SelectionException e) {
+                res.ok = false;
+                res.error = err('VALIDATION_FAILED', e.getMessage(), null, req.idempotencyKey);
             } catch (C360ActionStaging.StagingException e) {
                 res.ok = false;
                 res.error = err('STAGING_REFUSED', e.getMessage(), null, req.idempotencyKey);
@@ -194,10 +229,24 @@ global with sharing class StageCollateralValuation {
         if (String.isBlank(req.rationale)) {
             throw new ToolException('rationale is required. It feeds the audit ledger.');
         }
+        if (String.isBlank(req.productPackageId)) {
+            throw new ToolException(
+                'productPackageId is required. It is the deal anchor, and every collateral valued must be provably part of it: ' +
+                'pledged to a loan of the package, or owned by the package\'s borrower. Without it a batch could span deals and nothing would say so.'
+            );
+        }
+        Id packageId = C360Facilities.packageId(req.productPackageId);
 
         List<ValuationItem> items = normalise(req);
         if (items.isEmpty()) {
             throw new ToolException('At least one valuation is required: supply items, or the single collateralId and value.');
+        }
+        if (items.size() > MAX_ITEMS) {
+            throw new ToolException(
+                'items carries ' + items.size() + ' valuations; the cap is ' + MAX_ITEMS + ' per plan. ' +
+                'Every valuation insert wakes a change-data trigger that enqueues one queueable per record, against a platform ceiling of 50 queued jobs ' +
+                'per synchronous transaction, and exceeding it rolls the whole insert back rather than filing what it could. Stage the rest as a second plan.'
+            );
         }
 
         Set<String> seen = new Set<String>();
@@ -213,6 +262,13 @@ global with sharing class StageCollateralValuation {
             }
             if (it.value < 0) {
                 throw new ToolException('value must not be negative' + itemRef + '. A zero valuation and a missing valuation are different facts.');
+            }
+            if (it.valuationDate == null) {
+                throw new ToolException(
+                    'valuationDate is required' + itemRef +
+                    '. nCino uses it to decide which valuation record is the latest, so a null-dated row cannot be ordered against the ones already on file. ' +
+                    'It is not defaulted to today: that would make two valuations of one asset on one date the normal case, which the platform has raised errors on.'
+                );
             }
             if (seen.contains(it.collateralId)) {
                 throw new ToolException(
@@ -238,25 +294,13 @@ global with sharing class StageCollateralValuation {
             }
         }
 
-        // Anchors come through the pledge junction; the valuation object has no account or package
-        // field. On a batch the anchor is whichever pledged facility we can see first: it is
-        // deep-link only, and a batch may legitimately span facilities.
-        Id accountId = null;
-        Id packageId = null;
-        for (LLC_BI__Loan_Collateral2__c pledge : [
-            SELECT LLC_BI__Loan__r.LLC_BI__Account__c, LLC_BI__Loan__r.LLC_BI__Product_Package__c
-            FROM LLC_BI__Loan_Collateral2__c
-            WHERE LLC_BI__Collateral__c IN :collateralIds
-              AND LLC_BI__Active__c = true
-            WITH USER_MODE
-            ORDER BY LLC_BI__Is_Primary__c DESC NULLS LAST
-            LIMIT 1
-        ]) {
-            accountId = pledge.LLC_BI__Loan__r.LLC_BI__Account__c;
-            packageId = pledge.LLC_BI__Loan__r.LLC_BI__Product_Package__c;
-        }
+        Id accountId = assertPackageMembership(items, collateralById, packageId);
+        assertNoSameDateValuation(items, collateralById);
 
-        Map<String, Object> resolved = new Map<String, Object>{ 'itemCount' => items.size() };
+        Map<String, Object> resolved = new Map<String, Object>{
+            'itemCount' => items.size(),
+            'productPackageId' => String.valueOf(packageId)
+        };
         List<C360Plan.Step> steps = new List<C360Plan.Step>();
         List<PlannedItem> planned = new List<PlannedItem>();
 
@@ -316,6 +360,10 @@ global with sharing class StageCollateralValuation {
                 'so a failure on one is reported against that collateral and does not silently discard the others.'
             );
         }
+        warnings.add(
+            'Every collateral in this batch was proved to belong to the named product package, by pledge to one of its loans or by ownership through the borrower. ' +
+            'The batch is anchored on one deal.'
+        );
 
         Map<String, Object> provenance = new Map<String, Object>{
             'LLC_BI__Collateral__c' => new Map<String, String>{ 'prefill' => 'NCINO_RECORD', 'provenance' => 'NCINO', 'citation' => 'Selected collateral records.' },
@@ -387,6 +435,108 @@ global with sharing class StageCollateralValuation {
         one.description = req.description;
         one.primary = req.primary;
         return new List<ValuationItem>{ one };
+    }
+
+    /**
+     * Proves every collateral in the batch belongs to the named package, and returns the package's
+     * borrower for the staging anchor.
+     *
+     * Two membership routes, because nCino models two. A collateral reaches a deal through the
+     * PLEDGE (LLC_BI__Loan_Collateral2__c to a loan on the package) and it reaches a borrower
+     * through the OWNERSHIP junction (LLC_BI__Account_Collateral__c). Collateral Mgmt carries no
+     * account lookup of its own, so ownership is the only relationship anchor the object has. An
+     * unpledged asset owned by the borrower is a legitimate revaluation target, and refusing it
+     * would refuse most pre-close work.
+     *
+     * @param items The batch.
+     * @param collateralById The collateral records, for names in the refusal.
+     * @param packageId The deal anchor.
+     * @return The package's borrower account id, or null when the package carries none.
+     */
+    private static Id assertPackageMembership(
+        List<ValuationItem> items,
+        Map<Id, LLC_BI__Collateral__c> collateralById,
+        Id packageId
+    ) {
+        List<LLC_BI__Product_Package__c> packages = [
+            SELECT Id, Name, LLC_BI__Account__c FROM LLC_BI__Product_Package__c WHERE Id = :packageId WITH USER_MODE LIMIT 1
+        ];
+        if (packages.isEmpty()) {
+            throw new ToolException('Product package ' + packageId + ' was not found, or is not visible to you.');
+        }
+        Id accountId = packages[0].LLC_BI__Account__c;
+        Set<Id> collateralIds = collateralById.keySet();
+
+        Set<Id> member = new Set<Id>();
+        for (LLC_BI__Loan_Collateral2__c pledge : [
+            SELECT LLC_BI__Collateral__c
+            FROM LLC_BI__Loan_Collateral2__c
+            WHERE LLC_BI__Collateral__c IN :collateralIds
+              AND LLC_BI__Loan__r.LLC_BI__Product_Package__c = :packageId
+            WITH USER_MODE
+        ]) {
+            member.add(pledge.LLC_BI__Collateral__c);
+        }
+        if (accountId != null) {
+            for (LLC_BI__Account_Collateral__c owned : [
+                SELECT LLC_BI__Collateral__c
+                FROM LLC_BI__Account_Collateral__c
+                WHERE LLC_BI__Collateral__c IN :collateralIds
+                  AND LLC_BI__Account__c = :accountId
+                WITH USER_MODE
+            ]) {
+                member.add(owned.LLC_BI__Collateral__c);
+            }
+        }
+
+        for (Integer i = 0; i < items.size(); i++) {
+            Id cid = items[i].collateralId;
+            if (!member.contains(cid)) {
+                throw new ToolException(
+                    'Collateral ' + collateralById.get(cid).Name + ' is not part of product package ' + packages[0].Name +
+                    ' (item ' + (i + 1) + ' of ' + items.size() + '). It is pledged to no loan on this package, and it is not owned by the package\'s borrower. ' +
+                    'A valuation batch is anchored on one deal, so a collateral that reaches it through neither route is refused rather than filed against the wrong package.'
+                );
+            }
+        }
+        return accountId;
+    }
+
+    /**
+     * Refuses a valuation that would duplicate an existing one on the same collateral and date.
+     *
+     * PDI-00020349: the platform has raised "System.ListException: Duplicate id in list" on exactly
+     * this shape. The defect is resolved on recent releases, and the rule stands independently:
+     * two valuations of one asset on one date leave nCino's latest-wins ordering undecidable.
+     */
+    private static void assertNoSameDateValuation(List<ValuationItem> items, Map<Id, LLC_BI__Collateral__c> collateralById) {
+        Set<Id> collateralIds = collateralById.keySet();
+        List<Date> dates = new List<Date>();
+        for (ValuationItem it : items) {
+            dates.add(it.valuationDate);
+        }
+
+        Map<String, LLC_BI__Collateral_Valuation__c> existing = new Map<String, LLC_BI__Collateral_Valuation__c>();
+        for (LLC_BI__Collateral_Valuation__c cv : [
+            SELECT Id, Name, LLC_BI__Collateral__c, LLC_BI__Valuation_Date__c
+            FROM LLC_BI__Collateral_Valuation__c
+            WHERE LLC_BI__Collateral__c IN :collateralIds AND LLC_BI__Valuation_Date__c IN :dates
+            WITH USER_MODE
+        ]) {
+            existing.put(String.valueOf(cv.LLC_BI__Collateral__c) + '|' + String.valueOf(cv.LLC_BI__Valuation_Date__c), cv);
+        }
+
+        for (Integer i = 0; i < items.size(); i++) {
+            ValuationItem it = items[i];
+            String k = String.valueOf(it.collateralId) + '|' + String.valueOf(it.valuationDate);
+            if (existing.containsKey(k)) {
+                throw new ToolException(
+                    collateralById.get(it.collateralId).Name + ' already carries valuation ' + existing.get(k).Name + ' dated ' +
+                    String.valueOf(it.valuationDate) + ' (item ' + (i + 1) + ' of ' + items.size() + '). ' +
+                    'Two valuations of one asset on one date leave nCino unable to decide which is the latest. Use a different date, or amend the existing record outside this tool.'
+                );
+            }
+        }
     }
 
     private static void assertPicklist(String fieldApiName, String value, String itemRef) {

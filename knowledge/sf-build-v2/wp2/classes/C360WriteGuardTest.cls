@@ -267,18 +267,43 @@ private class C360WriteGuardTest {
         }
         System.assertEquals(true, refusedCreate, 'Probe 8: a create is what fires the bank approval chain. It is refused outright.');
 
-        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_UPDATE, new Map<String, Object>{ 'LLC_BI__Status__c' => 'Compliant' });
-        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_UPDATE, new Map<String, Object>{ 'LLC_BI__Status__c' => 'Exception' });
+        // nCino's three complete statuses, all three on the allowlist. Waived joined them in the
+        // bulk-review wave: it is one of the default Record Create Trigger Statuses and a real
+        // outcome of a covenant review, and an allowlist that could not express it pushed the
+        // banker out of the tool with the decision unrecorded.
+        for (String status : new List<String>{ 'Compliant', 'Waived', 'Exception' }) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_UPDATE, new Map<String, Object>{ 'LLC_BI__Status__c' => status });
+        }
 
-        for (String status : new List<String>{ 'Waived', 'Pending', 'In Progress' }) {
+        for (String status : new List<String>{ 'Pending', 'In Progress', 'Non-Compliant' }) {
             Boolean refused = false;
             try {
                 C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_UPDATE, new Map<String, Object>{ 'LLC_BI__Status__c' => status });
             } catch (C360WriteGuard.GuardException e) {
                 refused = true;
             }
-            System.assertEquals(true, refused, 'Only Compliant and Exception are on the transition allowlist. Tried: ' + status);
+            System.assertEquals(true, refused,
+                'Pending and In Progress are where a row starts, never where a review leaves it, and this org\'s compliance status picklist ' +
+                'carries no Non-Compliant value at all. Tried: ' + status);
         }
+    }
+
+    @IsTest
+    static void theExceptionReasonIsFencedToTheOrgsTwoValues() {
+        C360TestFixture.armCalloutMock();
+        for (String reason : new List<String>{ 'Breached', 'Overdue' }) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_UPDATE,
+                new Map<String, Object>{ 'LLC_BI__Status__c' => 'Exception', 'LLC_BI__Reason_for_Exception__c' => reason });
+        }
+        Boolean refused = false;
+        try {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT_COMPLIANCE, C360WriteGuard.OP_UPDATE,
+                new Map<String, Object>{ 'LLC_BI__Status__c' => 'Exception', 'LLC_BI__Reason_for_Exception__c' => 'Vibes' });
+        } catch (C360WriteGuard.GuardException e) {
+            refused = true;
+        }
+        System.assertEquals(true, refused,
+            'Reason for Exception is the field that separates a failed test from an undelivered document. It takes the org\'s two values and nothing else.');
     }
 
     @IsTest
