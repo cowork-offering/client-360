@@ -15,7 +15,7 @@ with a product-grade cockpit on top. Deliverable quality bar: spot-on.
 
 | Layer | State |
 |---|---|
-| **Salesforce MCP server** | 24 Apex tools in org `bankinggpt`, `Customer360` McpServerDefinition (21 in artifact manifest). 9 reads + stage/execute write pairs (bulk collateral valuation, service request, annual + risk-rating reviews, new facility w/ package-first + borrowing structure, covenant review) + stage-only mod/renewal. Engine: plan/planHash/single-use decisionToken, write-guard transition allowlist, idempotency, verification re-queries. Apex suite 170/170. Rebuild mirror: `knowledge/sf-build-v2/wp2/`. |
+| **Salesforce MCP server** | 24 Apex tools in org `bankinggpt`, `Customer360` McpServerDefinition (22 in artifact manifest). 9 reads + stage/execute write pairs (bulk collateral valuation, service request, annual + risk-rating reviews, new facility w/ package-first + borrowing structure, covenant review) + modification stage/execute pair (WS0.5, 2026-08-22) + stage-only renewal. Engine: plan/planHash/single-use decisionToken, write-guard transition allowlist, idempotency, verification re-queries. Apex suite 170/170. Rebuild mirror: `knowledge/sf-build-v2/wp2/`. |
 | **Cockpit (React)** | `app/` — worklist-first, two zones (Client Overview / KYC & Onboarding), deal-grammar tickets (package-anchored mod/renewal, bulk collateral picker, review fork), email→action suggestions, sync tiers + persistent overlay, ~1,200 tests. Compiled to `artifact/customer-360-template.html`. |
 | **Published artifact** | claude.ai artifact URLs (main `f7a6006f-…`, copy `95cf2a8d-…`), verified byte-identical to repo HEAD bundle + data. Page calls connectors live via `window.claude.mcp` with viewer credentials. |
 | **Cowork plugin** | `.claude-plugin/` + `skills/customer-360-cockpit` + bundled template + `render/assemble-cockpit.mjs` (agent fetches data → assembler bakes JSON → Cowork artifact). ⚠️ Plugin bundle STALE at commit `6eda1b6` (Jul 26) — pre-deal-grammar. Sync = outstanding item 1. |
@@ -53,7 +53,7 @@ with a product-grade cockpit on top. Deliverable quality bar: spot-on.
    re-probe before `execute_renewal` is ever unblocked (HANDOFF §2).
 5. **Covenant execute** — deployed, out of manifest; first live run fires a real approval email
    (founder-gated).
-6. **Mod/renewal execute** — stage-only by design (LV06/Booked wall).
+6. **Renewal execute** — stage-only by design (clone collateral-aggregate re-probe outstanding). Modification execute shipped 2026-08-22 (WS0.5); the cockpit calls it on both surfaces.
 7. Housekeeping: Piedmont test rows (CV-0000000002/3, R-4) deletion decision; Credit Memo 0.54.0
    connector swap (sibling, tracked there).
 8. Dreamforce is now CONCRETE: SPIN booth (690 Folsom St, SF), Sept 15-16 2026, C360/Cowork =

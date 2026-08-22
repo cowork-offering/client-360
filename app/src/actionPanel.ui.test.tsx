@@ -9,6 +9,7 @@ import { AppShell } from "./components/AppShell";
 import { vi } from "vitest";
 import sample from "../../artifact/sample-data.json";
 import observedFacilityEnvelopes from "./actions/observed-facilityIds-envelopes.json";
+import observedModEnvelopes from "./actions/observed-execute-loan-modification-envelopes.json";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -774,27 +775,123 @@ describe("wave 2 — the five new tickets", () => {
     expect(panel("Loan Modification")!.textContent).not.toContain("What this changes");
   });
 
-  it("holds filing on a modification, and says exactly why", () => {
-    installWriteMcp();
-    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+  it("offers the ordinary confirm on a modification the org will run", async () => {
+    installWriteMcp({ stage: MOD_STAGE_PLAN });
+    openActionPanel("Loan Modification", "Sterling Fabrication", { userId: APPROVER_ID }, true);
     click(byText(/Review the plan/)!);
-    return flush().then(() => {
-      const p = panel("Loan Modification")!;
-      expect(p.textContent).toContain("Staged, not filed");
-      expect(p.textContent).toContain("org rule LV06");
-      expect(p.textContent).toContain("The staged plan is preserved.");
-      const confirm = [...p.querySelectorAll("button")].find((b) => /Filing is on hold/.test(b.textContent ?? ""))!;
-      expect(confirm.hasAttribute("disabled")).toBe(true);
-    });
+    await flush();
+    const p = panel("Loan Modification")!;
+    // The client hold is gone: no "Staged, not filed" card, no disabled gesture.
+    expect(p.textContent).not.toContain("Staged, not filed");
+    const confirm = [...p.querySelectorAll("button")].find((b) => /Confirm and file/.test(b.textContent ?? ""))!;
+    expect(confirm.hasAttribute("disabled")).toBe(false);
   });
 
-  it("still stages a real plan for a held action", async () => {
-    const callTool = installWriteMcp();
-    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+  it("shows the org's warnings verbatim before the gesture, booking note included", async () => {
+    installWriteMcp({ stage: MOD_STAGE_PLAN });
+    openActionPanel("Loan Modification", "Sterling Fabrication", { userId: APPROVER_ID }, true);
+    click(byText(/Review the plan/)!);
+    await flush();
+    const text = panel("Loan Modification")!.textContent ?? "";
+    expect(text).toContain("Before you confirm");
+    // Every warning the org returned, as the org wrote it. The booking note is
+    // the one the banker acts on: nCino, not this page, books the clone.
+    for (const w of (MOD_STAGE_PLAN as { result: { warnings: string[] } }).result.warnings) {
+      expect(text).toContain(w);
+    }
+    expect(text).toContain("BOOKING that clone requires nCino's Submit for Approval button");
+  });
+
+  it("still stages before it executes, and only on the confirm gesture", async () => {
+    const callTool = installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
+    openActionPanel("Loan Modification", "Sterling Fabrication", { userId: APPROVER_ID }, true);
     click(byText(/Review the plan/)!);
     await flush();
     expect(callTool.mock.calls.filter((c) => String(c[1]) === "stage_loan_modification")).toHaveLength(1);
+    // Staging alone writes nothing: the execute tool is untouched until confirm.
     expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("execute_"))).toHaveLength(0);
+  });
+
+  it("executes the modification on the five-field contract and reports per facility", async () => {
+    const callTool = installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
+    openActionPanel("Loan Modification", "Sterling Fabrication", { userId: APPROVER_ID }, true);
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+
+    const executes = callTool.mock.calls.filter((c) => String(c[1]) === "execute_loan_modification");
+    expect(executes).toHaveLength(1);
+    expect(Object.keys(inputsOf(executes[0])).sort()).toEqual([
+      "approverUserId",
+      "decisionToken",
+      "idempotencyKey",
+      "planHash",
+      "stagingId",
+    ]);
+    // Taken from the staging result verbatim, never re-minted.
+    expect(inputsOf(executes[0]).stagingId).toBe("a8abb00001N6Z0XAAV");
+    expect(inputsOf(executes[0]).decisionToken).toBe(
+      "8fc5099ec8f0a9fa83dc7c6c39c4ed7f76e07d6b8494e7f0bf0d6bd29285ee86",
+    );
+
+    const text = panel("Loan Modification")!.textContent ?? "";
+    expect(text).toContain("Filed, per facility");
+    // The clone, the chain row and the applied change, in the org's own words.
+    expect(text).toContain("ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00");
+    expect(text).toContain("at stage Qualification");
+    expect(text).toContain("RL-00000198");
+    expect(text).toContain("records revision 1");
+    expect(text).toContain("Amount reads back at 1500000.00.");
+    expect(text).toContain("The parent facility reads back unchanged.");
+    // Booking stays nCino's run, and the tracker says so from the handoff step.
+    expect(text).toContain("Submit for Approval with real approvers");
+  });
+
+  it("writes the execution into the trail, naming the clone", async () => {
+    installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
+    openActionPanel("Loan Modification", "Sterling Fabrication", { userId: APPROVER_ID }, true);
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    // Close the ticket and read the Activity tab the entry landed on.
+    press("Escape");
+    click(buttons().find((b) => /^Activity$/.test(b.textContent ?? ""))!);
+    const shell = document.body.textContent ?? "";
+    expect(shell).toContain("Modification ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00 filed against");
+  });
+
+  it("executes the same modification from the CHAT surface, not just the actions row", async () => {
+    // A33.1.2 — the chip opens the SAME ticket. This proves the unhold reached
+    // both entry points rather than only the one the row happens to use.
+    const callTool = installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
+    mount({ userId: APPROVER_ID }, true);
+    click(openRow("Sterling Fabrication"));
+    click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+    const chip = [...document.querySelectorAll('[role="dialog"]')]
+      .flatMap((d) => [...d.querySelectorAll("button")])
+      .find((b) => b.hasAttribute("title") && b.textContent?.trim() === "Loan Modification")!;
+    click(chip);
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    expect(callTool.mock.calls.filter((c) => String(c[1]) === "execute_loan_modification")).toHaveLength(1);
+    expect(panel("Loan Modification")!.textContent).toContain("Filed, per facility");
+  });
+
+  it("says nothing was written twice when the org replays the key", async () => {
+    installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_REPLAY });
+    openActionPanel("Loan Modification", "Sterling Fabrication", { userId: APPROVER_ID }, true);
+    click(byText(/Review the plan/)!);
+    await flush();
+    click(byText(/Confirm and file/)!);
+    await flush();
+    const text = panel("Loan Modification")!.textContent ?? "";
+    expect(text).toContain("This had already been filed under the same key, so nothing was written again.");
+    // The org returns no per-facility detail on a replay, so none is invented.
+    expect(text).not.toContain("Filed, per facility");
   });
 
   it("refuses to stage a rating override with no reason, and says the rule", () => {
@@ -1051,6 +1148,15 @@ const OBSERVED_FACILITY_PLANS = observedFacilityEnvelopes as unknown as Record<
 >;
 const MULTI_FACILITY_PLAN = OBSERVED_FACILITY_PLANS.package_anchored_modification_multi[0].outputValues;
 const FLAT_FACILITY_PLAN = OBSERVED_FACILITY_PLANS.modification_flat_backcompat[0].outputValues;
+
+/* The COMPLETE modification pair, read out of the live wire probe of
+   2026-08-22 (throwaway account ZZ-WS05-PROBE, every record deleted after
+   capture). Stage and execute both, so the panel is tested against the two
+   halves of one real round trip rather than a plan we composed. */
+const OBSERVED_MOD = observedModEnvelopes as unknown as Record<string, { response: Array<{ outputValues: unknown }> }>;
+const MOD_STAGE_PLAN = OBSERVED_MOD.stage_loan_modification.response[0].outputValues;
+const MOD_EXECUTE = OBSERVED_MOD.execute_loan_modification.response[0].outputValues;
+const MOD_REPLAY = OBSERVED_MOD.execute_loan_modification_replay.response[0].outputValues;
 
 const stageEnvelope = (outputValues: unknown) => ({
   payload: { content: [{ actionName: "stage_annual_review", errors: null, isSuccess: true, outputValues, sortOrder: 0, version: 1 }] },

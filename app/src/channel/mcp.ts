@@ -89,10 +89,14 @@ export const TOOLS = {
   executeRiskRatingReview: "execute_risk_rating_review",
   stageCovenantReview: "stage_covenant_review",
   executeCovenantReview: "execute_covenant_review",
-  // Modification and renewal STAGE only. There is no execute_* for either: the
-  // org requires a facility to reach Booked through its own Submit for Approval
-  // before a credit action may run (LV06), so no execute tool was built.
+  // WS0.5, deployed 2026-08-22. The modification pair is complete: executing a
+  // staged plan clones the facility, writes the chain junction row and applies
+  // the changes to the clone. BOOKING that clone is still nCino's own Submit
+  // for Approval run (LV06), which the plan's warnings state.
   stageLoanModification: "stage_loan_modification",
+  executeLoanModification: "execute_loan_modification",
+  // Renewal STAGES only. There is no execute_renewal: the clone's collateral
+  // aggregate has never been re-probed, so no execute tool was built.
   stageRenewal: "stage_renewal",
 } as const;
 

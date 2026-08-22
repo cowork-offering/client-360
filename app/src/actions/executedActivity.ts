@@ -41,6 +41,9 @@ export function createdRecordId(actionId: string, outcome: ExecuteResult): strin
   if (actionId === "annual-review") return outcome.reviewId;
   if (actionId === "risk-rating-review") return outcome.riskRatingReviewId;
   if (actionId === "new-facility-request") return outcome.loanId;
+  // The clone, never the parent. `cloneLoanId` survives a replay, so a replayed
+  // execution still names the facility that exists.
+  if (actionId === "loan-modification") return outcome.cloneLoanId;
   return undefined;
 }
 

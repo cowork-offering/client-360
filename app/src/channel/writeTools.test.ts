@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   executeAction,
+  executionHeldReason,
   isExecutionHeld,
   resolveApproverUserId,
   isWriteAction,
@@ -81,6 +82,7 @@ describe("tool registry", () => {
     expect(Object.values(WRITE_TOOLS).flatMap((t) => [t.stage, t.execute]).filter(Boolean).sort()).toEqual([
       "execute_annual_review",
       "execute_collateral_valuation",
+      "execute_loan_modification",
       "execute_new_facility",
       "execute_risk_rating_review",
       "execute_service_request",
@@ -95,24 +97,29 @@ describe("tool registry", () => {
     ]);
   });
 
-  it("holds execution for modification and renewal, with no tool name invented", () => {
-    // LV06: the org will not run a credit action against a facility that has
-    // not been Booked through its own approval path, so no execute tool exists.
-    // A null here is the honest record of that; a plausible-looking name would
-    // be a lie the panel would eventually try to call.
-    expect(WRITE_TOOLS["loan-modification"].execute).toBeNull();
+  it("holds execution for renewal only, with no tool name invented", () => {
+    // No execute_renewal was built, so a null is the honest record of that; a
+    // plausible-looking name would be a lie the panel would eventually call.
     expect(WRITE_TOOLS.renewal.execute).toBeNull();
     // Founder-gated rather than unbuilt, and held for its own reason.
     expect(WRITE_TOOLS["covenant-review"].execute).toBeNull();
-    expect(isExecutionHeld("loan-modification")).toBe(true);
     expect(isExecutionHeld("renewal")).toBe(true);
     expect(isExecutionHeld("covenant-review")).toBe(true);
     expect(isExecutionHeld("collateral-valuation")).toBe(false);
   });
 
+  it("no longer holds the modification: the client hold is gone and the tool is named", () => {
+    // WS0.5: execute_loan_modification is deployed and was exercised live. The
+    // cockpit adds no hold of its own; the ORG still holds via the staged plan.
+    expect(WRITE_TOOLS["loan-modification"].execute).toBe("execute_loan_modification");
+    expect(WRITE_TOOLS["loan-modification"].heldReason).toBeNull();
+    expect(isExecutionHeld("loan-modification")).toBe(false);
+    expect(executionHeldReason("loan-modification")).toBeNull();
+  });
+
   it("refuses to execute a held action rather than calling a tool that is not there", async () => {
     const callTool = installMcp(envelope({ ok: true, result: {} }));
-    const out = await executeAction("loan-modification", {
+    const out = await executeAction("renewal", {
       idempotencyKey: "k",
       stagingId: "s",
       planHash: "h",
