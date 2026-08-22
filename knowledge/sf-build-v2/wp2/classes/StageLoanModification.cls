@@ -1,21 +1,22 @@
 /**
  * StageLoanModification - MCP tool: stage_loan_modification.
  *
- * STAGE ONLY. There is no execute_loan_modification in this wave, and that is a probe finding
- * rather than an omission (PROBE-LEDGER wave 3, probe 9).
+ * EXECUTION IS AVAILABLE. execute_loan_modification runs this plan behind the single-use decision
+ * token. That was not true for one wave, and the change is a probe finding rather than a change of
+ * mind (EVIDENCE-SEPT4.md "Mod-execute probe", 2026-08-20, and the WS0.5 probe in the same file).
  *
- * WHY EXECUTION IS HELD. A credit action acts only on a "valid facility", and probe 9 established
- * what that means by reading every LLC_BI__LoanRenewal__c chain in the org: every parent loan is
- * Stage = Booked, Status = Open, with a non-null core lookupKey. Anything else returns "The request
- * contains invalid facilities", at any pre-approval stage, for both Renewal and Modification.
- * Reaching Booked is then blocked outright: Loan_Validation_06 says "You Cannot Manually Change the
- * Loan to a Post Approval Stage. The Loan Must be Approved by pressing the 'Submit for Approval'
- * Button", and it carries no permission bypass. So execution requires a real human approval run,
- * which cannot be contained to throwaway data.
+ * WHAT THE HOLD ACTUALLY WAS. A credit action acts only on a "valid facility": probe 9 read every
+ * LLC_BI__LoanRenewal__c chain in the org and found every parent at Stage = Booked, Status = Open,
+ * with a non-null core lookupKey. Anything else returns "The request contains invalid facilities".
+ * The hold assumed a Booked parent was unreachable, because Loan_Validation_06 refuses a manual move
+ * to a post-approval stage with no permission bypass. LV06 keys on PRIORVALUE, which is blank on an
+ * INSERT, so a facility filed AT Booked with a lookupKey never trips it, and the credit action then
+ * ran live end to end on throwaway data. The valid-facility rule still stands and is still enforced
+ * here; what was wrong was the belief that no facility could ever satisfy it.
  *
- * The plan is still worth building and persisting. It computes, validates, hashes and holds a
- * token, and its last step is a HELD descriptor naming the exact blocker. When a founder-gated path
- * to a booked facility exists, the staged plan is already there to execute against.
+ * WHAT IS STILL HELD, AND ALWAYS WILL BE. Execution produces a modification CLONE at Qualification.
+ * BOOKING that clone is nCino's own process: Submit for Approval, real approvers, LV06 unchanged.
+ * This tool plans a modification, not an approval, and the warnings say so before the banker confirms.
  *
  * PACKAGE-ANCHORED, MULTI-FACILITY (ACTIONS-DESIGN 5.1 anchor correction, Fabian, 2026-07-25). The
  * anchor is the PRODUCT PACKAGE: nCino's CreditActionSoaXPkg takes the package id plus a list of
@@ -130,9 +131,9 @@ global with sharing class StageLoanModification {
         global String accountId;
         @InvocableVariable(label='Product Package Id')
         global String productPackageId;
-        @InvocableVariable(label='Execution Held' description='Always true in this wave. Execution needs a Booked facility and Booked is unreachable through the API.')
+        @InvocableVariable(label='Execution Held' description='False since execute_loan_modification shipped. Kept on the contract so a caller written against the held wave still reads a defined answer.')
         global Boolean executionHeld;
-        @InvocableVariable(label='Held Reason')
+        @InvocableVariable(label='Held Reason' description='Null while execution is available. Booking the resulting clone is a separate nCino step and is carried in the warnings, not here.')
         global String heldReason;
         @InvocableVariable(label='Covenant Carryover Count' description='Loan Covenant junction rows that would clone, totalled across every selected facility. An empty list is a real answer, not blank space.')
         global Integer covenantCarryoverCount;
@@ -154,14 +155,14 @@ global with sharing class StageLoanModification {
     }
 
     /**
-     * Stages a loan modification. Writes no domain record, and execution is held.
+     * Stages a loan modification. Writes no domain record; execution is a separate, token-gated call.
      *
      * @param requests One request per staged action. Element i of the response belongs to input i.
      * @return One response per request.
      */
     @InvocableMethod(
         label='stage_loan_modification'
-        description='Validate a package-anchored facility modification and return an immutable execution plan with a plan hash. Takes either the single loanId or facilityIds, the member facilities of the package, never both. Writes nothing. Execution is HELD in this wave: a credit action requires a Booked facility, and Booked is unreachable through the API because nCino requires a human Submit for Approval.'
+        description='Validate a package-anchored facility modification and return an immutable execution plan with a plan hash. Takes either the single loanId or facilityIds, the member facilities of the package, never both. Writes nothing: execute_loan_modification runs the plan behind the single-use decision token. Executing produces a modification clone at Qualification; booking that clone still requires nCino\'s human Submit for Approval.'
     )
     global static List<Response> stage(List<Request> requests) {
         List<Response> out = new List<Response>();
@@ -251,7 +252,7 @@ global with sharing class StageLoanModification {
             );
             steps.add(
                 new C360Plan.Step('apply_changes_' + s, C360Plan.TYPE_WRITE, 'Apply the requested changes to the new facility cloned from ' + loan.Name)
-                    .onObject('LLC_BI__Loan__c', new List<String>{ 'LLC_BI__Amount__c', 'LLC_BI__Maturity_Date__c', 'LLC_BI__Interest_Rate__c', 'LLC_BI__Term_Months__c' })
+                    .onObject('LLC_BI__Loan__c', new List<String>{ 'LLC_BI__Amount__c', 'LLC_BI__Maturity_Date__c', 'LLC_BI__InterestRate__c', 'LLC_BI__Term_Months__c' })
                     .provenBy('SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId')
             );
 
@@ -269,17 +270,20 @@ global with sharing class StageLoanModification {
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'Stage-driven email alerts and memo status changes the org may run')
                 .wakes(new List<String>{ 'nCino Commercial - Loan After Save' })
         );
+        // The step id is unchanged on purpose: the confirm gate, the tracker and the persisted plans
+        // from the held wave all address this step by id. What it hands off is now the BOOKING of the
+        // modification, not the modification itself.
         steps.add(
-            new C360Plan.Step('held_execution', C360Plan.TYPE_HANDOFF, 'HELD: execution needs an approved facility')
+            new C360Plan.Step('held_execution', C360Plan.TYPE_HANDOFF, 'HANDOFF: booking the modification is nCino\'s own approval run')
                 .wakes(new List<String>{ 'nCino Submit for Approval, driven by a human' })
         );
 
         List<String> warnings = new List<String>{
-            'EXECUTION IS HELD. ' + (n == 1 ? 'This facility is' : 'These facilities are') +
-                ' booked and open, which is what a credit action requires, but no execute tool ships in this wave.' +
+            'Execution is available. ' + (n == 1 ? 'This facility is' : 'These facilities are') +
+                ' booked and open, which is what a credit action requires, so execute_loan_modification will run this plan behind the decision token.' +
                 C360Facilities.lookupKeyWarning(facilities),
-            'Booked cannot be reached through the API. Loan_Validation_06 requires nCino\'s Submit for Approval button and carries no permission bypass.',
-            'The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Any future execution verifies by re-query only.',
+            'This plans a modification, NOT an approval. Executing it produces a clone facility at Qualification; BOOKING that clone requires nCino\'s Submit for Approval button, which Loan_Validation_06 enforces with no permission bypass.',
+            'The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Execution therefore verifies the clone and its chain row by re-query and claims nothing the org will not read back.',
             'The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.',
             carryover == 0
                 ? 'No loan-level covenants are attached to ' + (n == 1 ? 'this facility' : 'these facilities') + ', so nothing would carry over.'
@@ -302,16 +306,17 @@ global with sharing class StageLoanModification {
             'productPackageId' => new Map<String, String>{ 'prefill' => 'NCINO_RECORD', 'provenance' => 'NCINO', 'citation' => String.valueOf(packageId) }
         };
 
-        String heldReason =
-            'A credit action requires a Booked, core-keyed facility, and Loan_Validation_06 makes Booked unreachable through the API with no bypass. ' +
-            'Reaching it needs nCino\'s Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.';
+        String bookingHandoff =
+            'Executing this plan creates the modification at Qualification and stops there. Booking it is nCino\'s own run: ' +
+            'Submit for Approval with real approvers, which Loan_Validation_06 enforces with no permission bypass.';
 
         String summary =
             (n == 1
                 ? 'Plans a modification of ' + facilityNames[0] + ' on the package.'
                 : 'Plans a modification of ' + n + ' facilities on the package: ' + String.join(facilityNames, ', ') + '.') +
-            ' nCino would clone ' + (n == 1 ? 'the facility' : 'each facility') + ', create the chain junction row and apply the requested changes. ' +
-            'NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. ' + heldReason;
+            ' nCino will clone ' + (n == 1 ? 'the facility' : 'each facility') + ', create the chain junction row and apply the requested changes to the clone. ' +
+            'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
+            bookingHandoff;
 
         String planJson = C360Plan.serializePlan(summary, steps, warnings, provenance, resolved);
         String planHash = C360Plan.hash('loan-modification', steps, resolved);
@@ -330,8 +335,8 @@ global with sharing class StageLoanModification {
         r.provenanceJson = JSON.serialize(provenance);
         r.accountId = facilities[0].LLC_BI__Account__c;
         r.productPackageId = packageId;
-        r.executionHeld = true;
-        r.heldReason = heldReason;
+        r.executionHeld = false;
+        r.heldReason = null;
         r.covenantCarryoverCount = carryover;
         r.facilities = planned;
         r.facilityCount = n;

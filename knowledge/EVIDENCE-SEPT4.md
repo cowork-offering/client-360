@@ -57,3 +57,111 @@ residue zero. This converts execute_loan_modification from designed to buildable
 Build consequence for execute_loan_modification: call acnpex_CreditActionRequest sync, verify by
 re-query (clone id + junction chain), then apply the staged field changes to the CLONE (Qualification
 stage = freely editable), never the parent. The plan's apply_changes step lands on outputLoanId.
+
+## WS0.5 item 1: execute_loan_modification (2026-08-22, worktree c360-ws05, branch ws05-execute-mod)
+
+**The modification pair is complete.** stage_loan_modification is no longer a held plan: the new
+`execute_loan_modification` tool runs it behind the single-use decision token, and it was exercised
+live on throwaway data over the REST Actions API. Booking the resulting clone is still nCino's own
+Submit for Approval run (LV06), and every surface says so.
+
+### Deployed (additive only, nothing pre-existing touched)
+
+| Component | State | Note |
+|---|---|---|
+| `ExecuteLoanModification.cls` (+meta) | Created | `global with sharing`, contract `{idempotencyKey, stagingId, planHash, decisionToken, approverUserId}`, all `required=true` |
+| `StageExecuteLoanModificationTest.cls` (+meta) | Created | 10 methods, real Booked fixture, stubbed engine + one real-bean integration test |
+| `StageLoanModification.cls` | Changed | `executionHeld` false, `heldReason` null, header/summary/warnings retired the hold, `held_execution` step relabelled to the BOOKING handoff (id kept), apply_changes field list corrected |
+| `StageHeldCreditActionsTest.cls` | Changed | asserts the new non-held modification behaviour; renewal stays held |
+| `Customer360.mcpServerDefinition` | Changed | +1 tool row: `execute_loan_modification` → operation `ExecuteLoanModification` |
+| `sfdx-project.json` | Changed | `sourceApiVersion` 61.0 → 67.0 (see org facts) |
+
+Deploy receipts: classes `Succeeded`, 38 components, 0 errors. McpServerDefinition `Succeeded`,
+1 component. Live manifest re-read from the org: **24 tools** (was 23), `execute_loan_modification`
+present (`SELECT ToolName FROM McpServerToolDefinition`, Tooling API).
+
+### Suite
+
+`sf apex run test` over all 11 C360 classes: **149/149 pass, 0 fail**, 38.7s execution,
+testRunId `707bb0000XhTCNW`. Was 138 before this work; the 11 new rows are
+`StageExecuteLoanModificationTest` (10 methods + its @TestSetup row). Per class: C360ActionStaging 8,
+C360WriteGuard 22, C360ZeroDml 4, AnnualReview 8, CollateralValuation 16, CovenantReview 12,
+NewFacility 26, RiskRatingReview 11, ServiceRequest 6, HeldCreditActions 25, LoanModification 11.
+
+### Wire probe: REAL execution, throwaway data, residue zero
+
+Envelopes (request AND response, verbatim, both calls plus the replay):
+`knowledge/sf-build-v2/wp2/observed-envelopes-execute-loan-modification.json`.
+
+| Step | Observed |
+|---|---|
+| Fixture | Account `001bb00001KUeaHAAT` "ZZ-WS05-PROBE Borrower" → package `a5Fbb000000IltJEAS` → loan `a4Zbb000002Br4fEAC` inserted AT Booked/Open with lookupKey `ZZWS05PROBE1`, $1,000,000 |
+| Stage | `POST /services/data/v67.0/actions/custom/apex/StageLoanModification`, facilityIds shape, requestedAmount 1,500,000 → ok, stagingId `a8abb00001N6Z0XAAV`, planHash `962ba958…`, token issued, **executionHeld false, heldReason null**, 5 steps, zero domain DML |
+| Execute | `POST .../ExecuteLoanModification` with approverUserId `005bb00000ftouDAAQ` → ok, **terminalState success**, all four non-observed steps verified |
+| Clone | `a4Zbb000002Br6HEAS`: Stage `Qualification`, Status Open, `Is_Modification__c` true, lookupKey `ZZWS05PROBE1_M1`, same package, Amount **1,500,000** (the staged change, applied to the clone) |
+| Junctions | `RL-00000197` (`a4Obb000000FXGbEAO`) rev 0 self-referential anchor, Available · `RL-00000198` (`a4Obb000000FXGcEAO`) rev 1, In Progress, RenewalLoanId = clone, HasActiveRenewalLoan true |
+| Parent | re-read **unchanged**: Booked / Open / $1,000,000. Only the `hasRenewal__c` formula flipped to true |
+| Replay | Second execute with the same idempotency key → ok, `replayed: true`, same clone id, **2 loans on the account, never 3** |
+| Cleanup | 2 junctions, 2 loans, package, account, staging row all deleted (HTTP 204 each) |
+
+**Residue proof (SOQL after cleanup):** Account `Name LIKE 'ZZ-WS05%'` = 0 · Loan
+`lookupKey LIKE 'ZZWS05%'` = 0 · Product Package `Name LIKE 'ZZ-WS05%'` = 0 · staging
+`cm_Idempotency_Key__c LIKE 'ZZ-WS05%'` = 0. Org-wide baselines restored exactly:
+`LLC_BI__LoanRenewal__c` back to **43** rows, `cm_Action_Staging__c` back to the **11** kept rows.
+A trace flag and one ApexLog created to read a test's debug output were both deleted (HTTP 204);
+`SELECT COUNT() FROM ApexLog` = 0. Deleted records sit in the Recycle Bin, as with the August 20 probe.
+
+### Org facts discovered (all new, all cost real time)
+
+1. **`LLC_BI__Interest_Rate__c` DOES NOT EXIST on `LLC_BI__Loan__c`.** The staged plan's
+   `apply_changes` step had been declaring it since the tool was written. The real field is
+   **`LLC_BI__InterestRate__c`** (percent); `LLC_BI__Current_Interest_Rate__c` is a separate field.
+   Corrected in `StageLoanModification`, and the execute tool writes the real one. The held wave never
+   caught this because a field name in a plan's `fields` list is never dereferenced until something
+   executes the plan.
+2. **`LLC_BI__LoanRenewal__c` refuses an insert without `LLC_BI__PreviousVersionStage__c` AND
+   `LLC_BI__PreviousVersionStatus__c`** (`REQUIRED_FIELD_MISSING`). The object carries no validation
+   rules, triggers or flows, so this is universally-required field configuration. Anything writing a
+   chain row by hand must carry both. Found by the first live run of the new suite.
+3. **`nFORCE.BeanFactory.getInstance().getBeanByUniqueName('LLC_BI.InvokableCreditActionXPkg')`
+   returns NULL inside an Apex TEST context**, and returns the real service at runtime (proved by the
+   wire probe). Captured in the suite by an integration-style test that asserts either a verified
+   clone or a labelled org refusal; it takes the refusal branch, and that is now recorded rather than
+   assumed. This is why the engine sits behind a `@TestVisible` seam.
+4. **The bean returns no clone id.** Its output parameters, read off the org's own visible wrapper
+   `acnpex_CreditActionRequest`, are `success`, `outputPackageId`, `apexJobId` and `failureReasons`:
+   nothing that names the created loan, and our live run confirmed the clone had to be found by query. The org's `acnpex_CreditActionRequest`
+   wrapper fakes one by taking the most-recently-created loan on the output package, which races the
+   moment two facilities are modified in one call. Our tool maps clone → parent through the
+   `LLC_BI__LoanRenewal__c` chain instead, ignoring pre-existing rows and the rev-0 self-reference.
+5. **`outputPackageId` equals the SOURCE package for a Modification** (observed `a5Fbb000000IltJEAS`
+   both ways). No new package is minted.
+6. **The org rewrote the clone's Name after our amount update** to
+   "ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00". Names are read back, never echoed.
+7. **`McpServerDefinition` cannot be deployed at `sourceApiVersion` 61.0**: "Not available for deploy
+   for this API version", and `--api-version 67.0` on the command does NOT override it (the package
+   manifest version comes from `sfdx-project.json`). Bumped to 67.0. This also re-proves lesson 5:
+   deploy the classes FIRST and the server definition SECOND. A combined deploy is atomic, so the
+   definition's failure rolled back all 38 class components on the first attempt.
+8. **`LoanCDC` + `Test.stopTest()` = `CalloutException: You have uncommitted work pending`.** Every
+   Loan insert/update enqueues `EventBridgeCallout` (Queueable, AllowsCallouts). Jobs queued inside
+   the `Test.startTest`/`stopTest` window are flushed inside the test transaction, which still holds
+   uncommitted DML, and the platform refuses the callout before the armed mock is consulted. Fix used
+   here: the writing tests stage inside the window and execute AFTER `stopTest`, where nothing
+   flushes. The `armCalloutMock()` rule still stands; it is a shield, not a cure.
+
+### UNVERIFIED
+
+- **Multi-facility execution (N > 1) has never run on the wire.** The plan, the engine call and the
+  per-facility results are all built for N, and the stage side is tested at N=3, but the live probe
+  ran one facility. The partial-failure path (engine succeeds, one facility produces no chain row) is
+  likewise code-and-unit-tested only.
+- **The clone's covenant carryover was zero on the probe fixture.** nCino's junction-cloning behaviour
+  on a facility that actually carries `LLC_BI__Loan_Covenant__c` rows was not observed here.
+- **The app still holds this action client-side.** `app/src/channel/writeTools.ts` carries a
+  `heldReason` for `loan-modification` and `ConfirmGate` ORs it with the org's answer, so the panel
+  will keep showing the action as held until that entry is cleared. Apex and the manifest are ready;
+  the client is not, and no client change was made in this work package.
+- **No approval was performed and none is claimed.** Reaching Booked still requires nCino's Submit
+  for Approval with real approvers. LV06 was never touched and no `Exclude_Validation` permission was
+  granted to anyone.
