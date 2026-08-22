@@ -1,9 +1,50 @@
-# Customer 360 — Road to Closure (target: Sept 4, 2026)
+# Customer 360 — Road to Success (v2, 2026-08-22)
 
-Scoped with Fabian 2026-08-20. Non-negotiables, in his words: **both surfaces spotless, literally NO
-ROOM for errors** (career-shaping); full credit-memo-pattern policy layer; full KYC stage/approve
-loop; **C360 is the flagship**. Sept 4 = meaningful and demoable; Sept 5-15 = finetuning only.
-Booth: SPIN, Sept 15-16.
+Plan of record. v1 scoped with Fabian 2026-08-20; v2 reconciles the program timeline from the
+2026-08-20 management-support meeting (Fabian, Alexis, Lisa, Jon) and Alexis' PMO tasks.
+Non-negotiables, in Fabian's words: **both surfaces spotless, literally NO ROOM for errors**
+(career-shaping); "Disney on Ice", the sophisticated base brought to 100, ideally 110; full
+credit-memo-pattern policy layer; full KYC stage/approve loop; **C360 is the flagship**.
+
+## The date ladder (program-aligned)
+
+| Date | Milestone | Meaning |
+|---|---|---|
+| Aug 22 (Sat) | Road to Success shared | this document, v2 |
+| Aug 24 (Mon) | Kickoff with support (Alexis, Jon, Jordan?, Noland on arrival) | support split agreed (below) |
+| Aug 21-24 | WS0.5 Apex action wave | tools refined on proven mechanics |
+| Aug 23-27 | WS1 KYC loop | G1 |
+| Aug 21-29 | WS2 gateway + ledger + policy pack (Jon) | G2 |
+| Aug 27 - Sep 1 | WS3 Cowork natural chat | G3 |
+| **Sep 1** | **Internal feature freeze** | from here: fixes, polish, rehearsal only |
+| **Sep 4** | **Demo walkthrough for Steph** (working demo only; gateway hosting may trail) | G4 |
+| Sep 4-11 | UAT / stress test with 3-4 SF+nCino integration testers (not bank testers) | fixes only; Sep 7 = US Labor Day |
+| Sep 5-15 | Finetuning window incl. UI polish pass (intent-gated) | |
+| Sep 10-11 | Hardening + gateway registration complete | |
+| **Sep 11** | **Hard freeze** (Sep 13 Sunday = absolute fallback) | |
+| **Sep 14** | **Absolute lock. No material changes after this point.** | |
+| Sep 15-16 | Dreamforce, SPIN booth, Demo 2 | |
+
+## Meeting decisions baked in (2026-08-20)
+- Commercial framing stays (infrastructure could serve wealth; not repositioned).
+- Sep 4 requires a working demo only; AWS MCP gateway wiring/hosting proceeds in the background.
+- **Spreading + credit memo surface in C360 as CALL-OUTS to Noland's credit-memo plugin**
+  ("generate spreading", "draft credit memo" client actions) — never rebuilt.
+- Early-warning trackers OUT of scope for this deployment.
+- UI reactivity work aligned with Debra's team methodology/standards (polish pass, post Sep 4).
+- UAT = integration-pattern experts, Sep 4-11.
+- Agent methodology content (covenant review, collateral testing ways-of-working): lift what nCino
+  ships (mechanics + cadence, per NCINO-PROCESS-ALIGNMENT-DRAFT.md) + policy pack for the
+  judgment nCino does not cover (cure periods, waiver authority, revaluation triggers, escalation).
+
+## Support split proposal for Monday kickoff
+| Who | Takes | Why |
+|---|---|---|
+| Fabian (Archy seat) | WS0.5, WS1, WS3, WS4, org writes, rehearsals | owner; org auth |
+| Jon (Banksy seat) | WS2: gateway integration, decision ledger, policy pack substrate, Snowflake call | gateway+data native (fnma-mcp, Snowflake ontology, AgentCore memory) |
+| Noland (on arrival) | Credit-memo call-out wiring (C360 → credit-memo plugin actions); second pair of eyes on plan; booth identity setup (UserRole + permsets for any demo user) | owns the credit-memo plugin |
+| Alexis | UAT tester lineup + schedule (Sep 4-11), PMO tracking, Steph walkthrough logistics | offered; owns timeline |
+| Jordan (if available) | Codex adversarial review coordination + UAT execution | TBD with Fabian |
 
 ## The two seats
 
