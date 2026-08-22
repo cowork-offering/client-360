@@ -1,0 +1,116 @@
+<title>Customer 360 Work Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--paper:#F6F7F5;--card:#FFFFFF;--ink:#16211E;--muted:#5C6B67;--line:#D8DEDB;--accent:#0F5C5A;--accent-soft:#E3EFEE;--ok:#2E7D4F;--ok-soft:#E4F2E9;--warn:#9A6A12;--warn-soft:#F7EEDA;--hard:#A23A2E;--hard-soft:#F6E3E0;--now:#1F4E9C;--now-soft:#E3EAF7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--paper:#0F1514;--card:#161D1B;--ink:#E4EAE8;--muted:#9AA8A4;--line:#2A3431;--accent:#5FB3AE;--accent-soft:#15302E;--ok:#6CC08E;--ok-soft:#173125;--warn:#E0B25A;--warn-soft:#352A12;--hard:#E38A7E;--hard-soft:#3A1F1B;--now:#7FA6E8;--now-soft:#182640}}
+:root[data-theme="dark"]{--paper:#0F1514;--card:#161D1B;--ink:#E4EAE8;--muted:#9AA8A4;--line:#2A3431;--accent:#5FB3AE;--accent-soft:#15302E;--ok:#6CC08E;--ok-soft:#173125;--warn:#E0B25A;--warn-soft:#352A12;--hard:#E38A7E;--hard-soft:#3A1F1B;--now:#7FA6E8;--now-soft:#182640}
+body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.5;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+h1{font-family:"IBM Plex Serif",Georgia,serif;font-size:1.9rem;font-weight:600;margin:0;text-wrap:balance}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{color:var(--muted);max-width:70ch;margin:.5rem 0 0}
+.key{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0 0}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:.72rem;padding:.15rem .5rem;border-radius:999px;white-space:nowrap}
+.t-demo{background:var(--hard-soft);color:var(--hard)} .t-core{background:var(--accent-soft);color:var(--accent)} .t-polish{background:var(--warn-soft);color:var(--warn)} .t-gov{background:var(--now-soft);color:var(--now)}
+.board{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:.9rem;margin-top:1.75rem;overflow-x:auto;padding-bottom:.5rem}
+@media (max-width:980px){.board{grid-template-columns:1fr}}
+.col{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem;display:flex;flex-direction:column;gap:.6rem;min-width:0}
+.col h2{font-family:"IBM Plex Mono",monospace;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;margin:0 0 .25rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.col h2 span{font-weight:400;color:var(--muted);letter-spacing:0;text-transform:none;font-family:"IBM Plex Sans",sans-serif;font-size:.78rem}
+.col.done h2{color:var(--ok)} .col.now h2{color:var(--now)} .col.next h2{color:var(--accent)} .col.then h2{color:var(--warn)} .col.later h2{color:var(--muted)}
+.card{border:1px solid var(--line);border-radius:9px;padding:.6rem .7rem;background:var(--paper)}
+.card b{display:block;font-weight:600;line-height:1.3}
+.card small{display:block;color:var(--muted);margin-top:.2rem;line-height:1.35}
+.card .m{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.4rem;align-items:center}
+.card .who{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--muted)}
+.col.done .card{border-left:3px solid var(--ok)} .col.now .card{border-left:3px solid var(--now)} .col.next .card{border-left:3px solid var(--accent)} .col.then .card{border-left:3px solid var(--warn)} .col.later .card{border-left:3px solid var(--line)}
+.dates{margin-top:2rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem}
+.date{border:1px solid var(--line);border-radius:9px;padding:.6rem .75rem;background:var(--card)}
+.date .d{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--muted)}
+.date b{display:block;font-weight:600}
+.date.hard{border-color:var(--hard)} .date.hard .d{color:var(--hard)}
+.you{margin-top:2rem;border:1px dashed var(--line);border-radius:12px;padding:.9rem 1.1rem}
+.you h3{margin:0 0 .4rem;font-family:"IBM Plex Serif",Georgia,serif;font-size:1.05rem}
+.you ul{margin:0;padding-left:1.2rem}
+.foot{margin-top:2rem;color:var(--muted);font-size:.82rem}
+</style>
+<div class="wrap">
+<div class="eyebrow">Customer 360 · status board · August 22, 2026</div>
+<h1>What is done, what is being built, what is left</h1>
+<p class="lede">One card per deliverable. Left column is finished with receipts. The rest is the work between now and the September 14 lock, in the order it happens. Tags show what each card does for the booth demo.</p>
+<div class="key">
+  <span class="tag t-demo">demo beat</span><span class="tag t-core">core tool</span><span class="tag t-gov">governance / agent judgment</span><span class="tag t-polish">polish / packaging</span>
+</div>
+
+<div class="board">
+
+<div class="col done"><h2>Done <span>receipted</span></h2>
+<div class="card"><b>23 tools live on the Salesforce MCP server</b><small>9 reads, 8 stage, 6 execute. Connector matches 1:1.</small><div class="m"><span class="tag t-core">core tool</span></div></div>
+<div class="card"><b>Cockpit built, both surfaces</b><small>React app, ~1,200 tests. Artifact URLs byte-identical to repo. Plugin served from cowork-offering marketplace (0.4.2).</small><div class="m"><span class="tag t-core">core tool</span></div></div>
+<div class="card"><b>Hartwell demo relationship verified</b><small>18 of 18 counts, $46.0MM / $31.03MM / 6 facilities exact.</small><div class="m"><span class="tag t-demo">demo beat</span></div></div>
+<div class="card"><b>Test suite green again: 138/138</b><small>Found and shielded against org-wide drift (foreign CDC triggers).</small><div class="m"><span class="tag t-core">core tool</span></div></div>
+<div class="card"><b>Modification MECHANICS proven</b><small>nCino's credit action fired on Hartwell's revolver by hand: clone, junction chain, parent flags as documented, rolled back clean. This is proof, not yet a tool.</small><div class="m"><span class="tag t-demo">demo beat</span></div></div>
+<div class="card"><b>Staging proven live</b><small>Real 15 to 20M modification staged, bulk valuation staged: plan, hash, single-use token, zero writes.</small><div class="m"><span class="tag t-demo">demo beat</span></div></div>
+<div class="card"><b>Covenant and collateral KNOWLEDGE gathered</b><small>nCino's own process, field by field, against our Apex. 39-item danger register, 5 defects found. Knowledge, not yet the rebuilt tool.</small><div class="m"><span class="tag t-gov">judgment</span></div></div>
+<div class="card"><b>Road to Success plan, program-aligned</b><small>Dates from the Aug 20 meeting, Monday support split, decisions locked.</small><div class="m"><span class="tag t-polish">packaging</span></div></div>
+</div>
+
+<div class="col now"><h2>Building now <span>Aug 22 to 24</span></h2>
+<div class="card"><b>execute_loan_modification tool</b><small>The missing half: banker approves the staged plan, the tool consumes the token, fires the credit action, verifies clone + junction, applies the changes to the clone. Without it, "approve" does nothing.</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">Fabian · 1 d</span></div></div>
+<div class="card"><b>Covenant review rebuilt, package-scoped</b><small>Uses the gathered knowledge: all covenants of the package in one plan, correct nCino field, Waived added, status precondition, approval-trap guard.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · 1.5 d</span></div></div>
+<div class="card"><b>Collateral valuation hardened</b><small>Package anchor, 20-item cap, valuation date required.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · 0.5 d</span></div></div>
+<div class="card"><b>Demo identity preconditions</b><small>UserRole + permission set check for everyone who will drive the demo.</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">0.25 d</span></div></div>
+<div class="card"><b>Exception display fix</b><small>Exception is not "breached"; show it honestly in the cockpit.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">0.25 d</span></div></div>
+<div class="card"><b>Plugin packaging like credit memo</b><small>Own subdir, empty .mcp.json, RUNBOOK prerequisites. Stops shipping app source + 11MB knowledge to installers.</small><div class="m"><span class="tag t-polish">packaging</span><span class="who">Mon · 0.75 d</span></div></div>
+</div>
+
+<div class="col next"><h2>Next <span>Aug 23 to Sep 1</span></h2>
+<div class="card"><b>KYC loop live on both surfaces</b><small>KYC zone wired to the IDB gateway: view, stage and approve address/name change, sanctions, adverse media. Gate G1.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · Aug 23 to 27</span></div></div>
+<div class="card"><b>Decision ledger + audit trail</b><small>Sessions open warm: "last cycle the team held grade 4 because...". Snowflake vs gateway store, Jon decides by Aug 25.</small><div class="m"><span class="tag t-gov">governance</span><span class="who">Jon · Aug 21 to 29</span></div></div>
+<div class="card"><b>Policy pack + policy-aware assessment</b><small>Credit monitoring + KYC policy with citable sections: the judgment nCino does not ship. Demo beat: "assess Hartwell against policy" with citations. Gate G2.</small><div class="m"><span class="tag t-gov">judgment</span><span class="tag t-demo">demo beat</span><span class="who">Jon · by Aug 29</span></div></div>
+<div class="card"><b>Natural chat in Cowork (the agent)</b><small>Agent persona + guided skills written against the rebuilt tools: "show me Hartwell", "client wants the line at 20M", "run the covenant review". Credit memo + spreading as call-outs to Noland's plugin. v0.5.0. Gate G3.</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">Fabian · Aug 27 to Sep 1</span></div></div>
+<div class="card"><b>Artifact parity, continuous</b><small>Every cockpit change to both URLs same day, byte-verified.</small><div class="m"><span class="tag t-core">core tool</span></div></div>
+<div class="card"><b>Sep 1: internal feature freeze</b><small>After this: fixes, polish, rehearsal only.</small><div class="m"><span class="tag t-polish">gate</span></div></div>
+</div>
+
+<div class="col then"><h2>Then <span>Sep 1 to 14</span></h2>
+<div class="card"><b>Codex adversarial review</b><small>Wire payloads, guards, prose. Full delta.</small><div class="m"><span class="tag t-gov">governance</span><span class="who">Sep 1 to 3</span></div></div>
+<div class="card"><b>Your click-through, both surfaces</b><small>Every action, every zone.</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">Fabian · Sep 1 to 3</span></div></div>
+<div class="card"><b>Rehearse the email-to-approve beat, three times, stopwatched</b><small>Email arrives, sync, suggestion, prefilled package ticket, staged plan, approve, lands in nCino.</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">Sep 2 to 4</span></div></div>
+<div class="card"><b>Sep 4: walkthrough for Steph</b><small>Working demo only. Gate G4.</small><div class="m"><span class="tag t-demo">demo beat</span></div></div>
+<div class="card"><b>UAT with integration experts</b><small>3 to 4 Salesforce/nCino pattern experts. Fixes only. Sep 7 is Labor Day.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Alexis lines up · Sep 4 to 11</span></div></div>
+<div class="card"><b>UI polish pass</b><small>Skeleton loaders, smooth transitions, live sync progress, Accenture-branded shell. One branded mock first, you pick, then build. Aligned with Debra's standards.</small><div class="m"><span class="tag t-polish">polish</span><span class="who">Sep 5 to 13</span></div></div>
+<div class="card"><b>Hardening + gateway registration</b><small>Done by Sep 10, latest Sep 11.</small><div class="m"><span class="tag t-gov">governance</span><span class="who">Jon + Fabian</span></div></div>
+<div class="card"><b>Sep 11 freeze · Sep 14 lock</b><small>No material changes after Sep 14. Sep 13 Sunday is the only fallback.</small><div class="m"><span class="tag t-polish">gate</span></div></div>
+</div>
+
+<div class="col later"><h2>Later <span>after Dreamforce</span></h2>
+<div class="card"><b>Agentforce integration</b><small>Explore as backlog.</small></div>
+<div class="card"><b>Renewal execute</b><small>After the clone field-set re-probe.</small></div>
+<div class="card"><b>Wealth-management variant</b><small>Same infrastructure, deliberately not repositioned now.</small></div>
+<div class="card"><b>Early-warning trackers</b><small>Out of scope for this deployment.</small></div>
+</div>
+
+</div>
+
+<div class="dates">
+  <div class="date"><span class="d">Aug 24 Mon</span><b>Kickoff with support</b></div>
+  <div class="date"><span class="d">Sep 1</span><b>Internal feature freeze</b></div>
+  <div class="date"><span class="d">Sep 4</span><b>Steph walkthrough</b></div>
+  <div class="date"><span class="d">Sep 4 to 11</span><b>UAT window</b></div>
+  <div class="date hard"><span class="d">Sep 11</span><b>Hard freeze</b></div>
+  <div class="date hard"><span class="d">Sep 14</span><b>Absolute lock</b></div>
+  <div class="date"><span class="d">Sep 15 to 16</span><b>Dreamforce, SPIN booth</b></div>
+</div>
+
+<div class="you">
+<h3>Waiting on you</h3>
+<ul>
+<li>Open the artifact in your browser, run the Hartwell sync, confirm the M365 email lands as a client request (the last G0 step).</li>
+<li>Intro Jon and confirm Monday's kickoff and support split.</li>
+<li>Tell the CDC-trigger owner: one line (<span style="font-family:'IBM Plex Mono',monospace">if (Test.isRunningTest()) return;</span>) fixes every team's tests in the org.</li>
+<li>Name the booth demo identities so their org preconditions get set early.</li>
+</ul>
+</div>
+<div class="foot">Companion to the Road to Success plan. Sources: repo knowledge tree (STATUS, ROAD-TO-CLOSURE, EVIDENCE-SEPT4, NCINO-PROCESS-ALIGNMENT), mirrored on Banksy.</div>
+</div>
