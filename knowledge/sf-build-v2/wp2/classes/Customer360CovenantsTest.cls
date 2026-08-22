@@ -6,16 +6,25 @@
  * or smoothed-over field: it fails closed on null, which is correct, and would fail confusingly on
  * an absent key.
  *
- * The suite deliberately does NOT create LLC_BI__Covenant_Compliance2__c rows. A create fires
- * acnpex_covenantApprovalProcess unconditionally at a real named approver (probe 8), which is the
- * same reason ExecuteCovenantReview carries a seam. The populated case is therefore covered by the
- * org's own 140 existing rows at verification time, not from here.
+ * The suite used to refuse to create LLC_BI__Covenant_Compliance2__c rows at all, because a create
+ * fires acnpex_covenantApprovalProcess unconditionally at a named approver (probe 8). It creates one
+ * now, on throwaway fixture data, for the same reason the covenant review suite does: the fields
+ * this tool added, latestComplianceStatus and reasonForException, live ON the compliance row and
+ * cannot be covered from anywhere else. Test DML rolls back and this is a sandbox.
+ *
+ * reasonForException is the field that separates an administrative miss from a real failed test.
+ * nCino's exception batch forces Exception onto any row whose due date has passed, measured or not,
+ * so a caller that reads Exception alone as a breach overstates credit deterioration. Surfacing the
+ * reason lets the caller read the answer instead of inferring it.
  */
 @IsTest
 private class Customer360CovenantsTest {
 
     @TestSetup
     static void makeFixture() {
+        // The org's 24 change-data triggers enqueue a callout-making queueable per record, and a
+        // test context refuses the callout unless a mock is armed. Arm it FIRST, always.
+        C360TestFixture.armCalloutMock();
         Account a = new Account(Name = 'ZZ-COV-TEST Borrower');
         insert a;
         // Two covenants: one that will be attached to a facility, one left relationship-level.
@@ -40,6 +49,15 @@ private class Customer360CovenantsTest {
             LLC_BI__Covenant2__c = attached.Id,
             LLC_BI__Loan__c = loan.Id
         );
+
+        // One compliance row at Exception with reason Overdue: the shape 101 of this org's 140 rows
+        // are in, and the one a caller must not read as a breach.
+        insert new LLC_BI__Covenant_Compliance2__c(
+            LLC_BI__Covenant__c = attached.Id,
+            LLC_BI__Status__c = 'Exception',
+            LLC_BI__Reason_for_Exception__c = 'Overdue',
+            LLC_BI__Due_Date__c = Date.today().addDays(-10)
+        );
     }
 
     private static Account acct() {
@@ -47,7 +65,37 @@ private class Customer360CovenantsTest {
     }
 
     @IsTest
+    static void theLatestComplianceRowCarriesItsStatusAndItsExceptionReason() {
+        C360TestFixture.armCalloutMock();
+        Account a = acct();
+        LLC_BI__Covenant_Compliance2__c row = [SELECT Id, LLC_BI__Covenant__c FROM LLC_BI__Covenant_Compliance2__c LIMIT 1];
+
+        Customer360Covenants.Request req = new Customer360Covenants.Request();
+        req.accountId = a.Id;
+
+        Test.startTest();
+        Customer360Covenants.Response res = Customer360Covenants.getCovenants(new List<Customer360Covenants.Request>{ req })[0];
+        Test.stopTest();
+
+        Boolean sawIt = false;
+        for (Customer360Covenants.Covenant c : res.covenants) {
+            if (c.covenantId == String.valueOf(row.LLC_BI__Covenant__c)) {
+                sawIt = true;
+                System.assertEquals(String.valueOf(row.Id), c.latestComplianceId);
+                System.assertEquals('Exception', c.latestComplianceStatus, 'The compliance row status is distinct from the covenant status');
+                System.assertEquals('Overdue', c.reasonForException,
+                    'The reason is what separates an administrative miss from a failed test, and the caller must read it rather than infer it');
+            } else {
+                System.assertEquals(null, c.reasonForException, 'A covenant with no compliance row carries no reason');
+                System.assertEquals(null, c.latestComplianceStatus);
+            }
+        }
+        System.assertEquals(true, sawIt, 'The covenant carrying the fixture compliance row should surface');
+    }
+
+    @IsTest
     static void covenantWithNoComplianceRowReturnsNullNotAnAbsentField() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
         Customer360Covenants.Request req = new Customer360Covenants.Request();
         req.accountId = a.Id;
@@ -56,19 +104,22 @@ private class Customer360CovenantsTest {
         Customer360Covenants.Response res = Customer360Covenants.getCovenants(new List<Customer360Covenants.Request>{ req })[0];
         Test.stopTest();
 
+        Id withRow = [SELECT LLC_BI__Covenant__c FROM LLC_BI__Covenant_Compliance2__c LIMIT 1].LLC_BI__Covenant__c;
         System.assertNotEquals(0, res.covenants.size(), 'The fixture covenant should surface');
+        Integer nullCount = 0;
         for (Customer360Covenants.Covenant c : res.covenants) {
-            System.assertEquals(null, c.latestComplianceId,
-                'A covenant with no compliance row must report null. Null is a real answer here, not a gap.');
+            if (c.covenantId != String.valueOf(withRow)) {
+                nullCount++;
+                System.assertEquals(null, c.latestComplianceId,
+                    'A covenant with no compliance row must report null. Null is a real answer here, not a gap.');
+            }
         }
-        System.assert(
-            JSON.serialize(res).contains('latestComplianceId') || res.covenants[0].latestComplianceId == null,
-            'The field must exist on the wire shape even when it is null'
-        );
+        System.assertNotEquals(0, nullCount, 'The fixture must still carry a covenant with no compliance row at all');
     }
 
     @IsTest
     static void readReturnsNoCovenantsForAnUnrelatedAccount() {
+        C360TestFixture.armCalloutMock();
         Account other = new Account(Name = 'ZZ-COV-TEST Unrelated');
         insert other;
 
@@ -85,6 +136,7 @@ private class Customer360CovenantsTest {
 
     @IsTest
     static void positionalEnvelopeReturnsOneElementPerInput() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
         Customer360Covenants.Request r1 = new Customer360Covenants.Request();
         r1.accountId = a.Id;
@@ -101,6 +153,7 @@ private class Customer360CovenantsTest {
 
     @IsTest
     static void attachedLoansDistinguishesFacilityLevelFromRelationshipLevel() {
+        C360TestFixture.armCalloutMock();
         Account a = acct();
         LLC_BI__Loan__c loan = [SELECT Id, Name FROM LLC_BI__Loan__c WHERE LLC_BI__Account__c = :a.Id LIMIT 1];
 

@@ -165,3 +165,182 @@ A trace flag and one ApexLog created to read a test's debug output were both del
 - **No approval was performed and none is claimed.** Reaching Booked still requires nCino's Submit
   for Approval with real approvers. LV06 was never touched and no `Exclude_Validation` permission was
   granted to anyone.
+
+## WS0.5 items 2+3: covenant bulk + valuation hardening (2026-08-22, worktree c360-cov, branch ws05-covenant-valuation)
+
+Two tool pairs. `stage_/execute_covenant_review` rebuilt as PACKAGE-SCOPED BULK; `stage_/execute_collateral_valuation`
+hardened. Tool names and the execute contract `{idempotencyKey, stagingId, planHash, decisionToken, approverUserId}`
+are unchanged, so the `McpServerDefinition` needed no edit and was not touched. Additive deployment, classes only.
+
+### Part A: covenant review, package-scoped bulk
+
+**Input shape changed, and the old one was dropped.** `stage_covenant_review` now takes required `productPackageId`
+plus `assessments[]` of `{covenantId, status, observedValue, reasonForException, narrative, comments}`, optional
+`covenantIds[]` as a member selection, and optional `allowNonPending`. The old `accountId` + `covenantComplianceId` +
+`result` shape is **gone, deliberately**. It was not cheap to keep: it anchors on a compliance ROW and names no
+covenant, so it cannot carry the parent-covenant reads this wave added (Active, Frequency Template, Effective Date),
+which are exactly what make the approval-trap warning and the Pending precondition possible. Keeping it would have
+meant a second plan shape with a second execute branch that silently skipped both new guards. Lesson 16aa applied to
+the removal too: the superseded fields carried `required=true`, and leaving them would have made the new shape
+unreachable on the wire.
+
+**New class `C360Covenants`** carries the traversal and the precondition, shared by both tools so the rule cannot
+drift between stage-time planning and execute-time resume.
+
+| Rule | How it is implemented | Evidence |
+|---|---|---|
+| Traversal is a UNION | package → loans → `LLC_BI__Loan_Covenant__c`, UNION package borrower accounts → `LLC_BI__Account_Covenant__c`, deduped by covenant id. Templates excluded (`LLC_BI__Is_Template__c = false`). | Wire probe returned `scopeCount 2` with one covenant reached only by each junction; `attachment` reads `relationship` / `loan` / `both` |
+| One plan, one hash, one token, N assessments | Five typed steps per covenant, namespaced `_<n>`: `find_compliance` → `write_assessment` → `write_status` → `verify` → `observe_generation` | Wire probe: 5 steps for 1 planned covenant, all `verified` |
+| Pending precondition | A row advances the schedule only from `Pending`. Non-Pending is refused PER COVENANT at stage, and the precondition is re-applied at execute against the re-read row. `allowNonPending` is the only override and it must be carried in the staged plan. | `kb:kAHHu000000XZOTOA4`. Wire probe arm 1 refused the `In Progress` row and wrote the `Pending` one in the same plan |
+| Observed value reaches the packaged field | Writes `LLC_BI__Historic_Financial_Indicator__c` (double, org-verified updateable) AND mirrors to `cm_Covenant_Compliance_Indicator_Value__c` | SOQL after the probe: `hist 1.42`, `cm "1.42"` on COMP-0489 |
+| Waived is on the allowlist | `C360WriteGuard` UPDATE_TRANSITIONS for the compliance object is now `{Compliant, Waived, Exception}`, plus a new fence on `LLC_BI__Reason_for_Exception__c` = `{Breached, Overdue}` | Org describe, below |
+| Structural approval-trap guard | The plan reads Active + `LLC_BI__Frequency_Template__c` + `LLC_BI__Effective_Date__c` per covenant and WARNS when all three are present, naming One-Time templates separately as terminating. Never assumed: the quiet case states the finding too. | `kb:kAHHu000000XZRJOA4`, `PDI-00023403`, `kb:kAHPY00000055lR4AQ` |
+| `approvalChainStarted` is MEASURED | Execute snapshots the covenant's compliance row ids before the write and re-queries after, reporting `nextComplianceRowCreated` per item and the batch-level flag. The hard-coded `false` is gone. | Wire probe: `approvalChainStarted false`, matching a SOQL count of 1 row per covenant afterwards |
+| Effective Date never written | Already in `C360WriteGuard.FORBIDDEN_FIELDS` for the compliance object; unchanged, and the warning now says why in one sentence. | `PDI-00023403`, open |
+| `Exception` is never called a breach | No plan or outcome prose equates them. The distinction is carried in DATA, by a caller-supplied `reasonForException`. | Asserted by test `anExceptionCarriesItsReasonAndIsNeverCalledABreachInProse` |
+
+**Additive read.** `Customer360Covenants` now returns `latestComplianceStatus` and `reasonForException` from the
+latest compliance row per covenant. Additive fields only; no existing field changed shape. This is the request in
+`knowledge/ws05-side-findings-app.md`: it lets the cockpit read the administrative-versus-financial answer instead of
+inferring it from whether a value was measured.
+
+### Part B: collateral valuation hardening
+
+1. **`productPackageId` required** (enforced in Apex, not `required=true`, so the refusal can name the failing item).
+   Every item must be pledged to a loan of that package OR owned by the package's borrower through
+   `LLC_BI__Account_Collateral__c`. Verified by describe: `LLC_BI__Collateral__c` carries **no account lookup at all**,
+   so the ownership junction is the object's only relationship anchor.
+2. **`items[]` capped at 20**, with an error naming the cap and the governor reason (per-record CDC queueables against
+   a ceiling of 50 per synchronous transaction). This closed a live uncapped exposure on a deployed tool.
+3. **`valuationDate` required in Apex**, refused rather than defaulted to today.
+4. **Same collateral, same valuation date is refused at stage** (`PDI-00020349`, and a data-quality rule regardless):
+   defaulting the date would have made that collision the normal case, which is why 3 and 4 ship together.
+
+### Suite
+
+`sf apex run test` over the 11 C360 classes plus the two Customer360 read classes: **177 tests, 100% pass, 0 fail**
+(run `05mbb000001YWGDAA4`). Baseline before this wave was 139 over the 11 classes.
+
+| Class | Methods |
+|---|---|
+| C360ActionStagingTest | 7 |
+| C360WriteGuardTest | 23 |
+| C360ZeroDmlTest | 3 |
+| Customer360ActionHistoryTest | 8 |
+| Customer360CovenantsTest | 5 |
+| StageExecuteAnnualReviewTest | 7 |
+| StageExecuteCollateralValuationTest | 20 |
+| StageExecuteCovenantReviewTest | 18 |
+| StageExecuteLoanModificationTest | 10 |
+| StageExecuteNewFacilityTest | 25 |
+| StageExecuteRiskRatingReviewTest | 10 |
+| StageExecuteServiceRequestTest | 5 |
+| StageHeldCreditActionsTest | 24 |
+
+`Customer360CovenantsTest` and `Customer360ActionHistoryTest` were **red before this wave** and are not in the
+11-class set for that reason: every method failed with "Methods defined as TestMethod do not support Web service
+callouts" because neither armed `C360TestFixture.armCalloutMock()`. Both are fixed and both now run.
+
+**The covenant suite no longer uses the compliance-record seam.** The old suite injected a fake row through a
+`@TestVisible` seam to avoid firing `acnpex_covenantApprovalProcess`. That seam could not exercise the traversal, the
+row selection, the Pending precondition, the per-item isolation or the generation observation, which is to say it
+could not test anything this wave added. The suite now creates real throwaway covenants and compliance rows. The seam
+and its two static fields are deleted.
+
+### Wire probes: REAL execution, throwaway data
+
+Envelopes (request AND response, verbatim): `knowledge/sf-build-v2/wp2/observed-envelopes-covenant-bulk.json` and
+`knowledge/sf-build-v2/wp2/observed-envelopes-valuation-hardened.json`. Hartwell and every pre-existing record were
+off limits throughout.
+
+**Covenant bulk.** Account `001bb00001KVX25AAH` → package `a5Fbb000000ImNxEAK` → loan `a4Zbb000002Bs0jEAC`
+(Booked / Open / lookupKey `ZZWS05COV1`) → covenant `a3Bbb000000StxdEAC` COV-000652 (relationship-level, compliance
+row COMP-0489 at `Pending`) and covenant `a3Bbb000000StxeEAC` COV-000653 (loan-level, COMP-0490 at `In Progress`).
+
+| Step | Observed |
+|---|---|
+| Stage arm 1 | `scopeCount 2`, `assessedCount 1`, `refusedCount 1`. COV-000653 refused with the reason naming `In Progress`. `stagingId a8abb00001N9xRJAAZ`, `planHash 61ba9140…`, token issued, zero domain DML |
+| Execute arm 1 | `terminalState success`, `writtenCount 1`, all 5 steps `verified`, `approvalChainStarted false` |
+| SOQL | COMP-0489 `Compliant`, `Historic_Financial_Indicator 1.42`, `cm_… "1.42"`, `Evaluation_Date 2026-08-22`, `Evaluated_By 005bb00000ftouDAAQ`. COMP-0490 untouched at `In Progress` |
+| Replay | same key → `ok true`, `replayed true`, same record id, `approvalChainStarted null` (a replay observed nothing and says so) |
+| Stage arm 2 | `covenantIds` selection narrowed scope to 1; `allowNonPending true` accepted with the "schedule does NOT advance" warning |
+| Execute arm 2 | COMP-0490 → `Exception` / reason `Overdue` / exception date today / hist 1.05, outcome states the schedule did not advance because the row was not Pending |
+| Generation | 1 compliance row per covenant after both arms. No successor minted, which is what the plan predicted (neither covenant has a Frequency Template) and what execute measured |
+| Cleanup | covenants (cascading compliance rows and both junctions), covenant types, loan, package, staging rows, account, all deleted |
+
+**Valuation hardened.** Account `001bb00001KVYW1AAP` → package `a5Fbb000000ImPZEA0` → loan `a4Zbb000002Bs2LEAS`
+(`ZZWS05VAL1`) → collaterals `a35bb00000184kDAAQ` COL-000766 and `a35bb00000184kEAAQ` COL-000767, both linked to the
+borrower by ownership.
+
+| Step | Observed |
+|---|---|
+| Stage | 2 items, 6 steps, `stagingId a8abb00001NABCXAA5`, package-membership warning present, zero domain DML |
+| Execute | `terminalState success`, CV-0000000014 (1,100,000) and CV-0000000015 (275,000), each `Active true`, `Original Valuation Record false`, primary as requested |
+| Rollup | COL-000766 stayed at 900,000 and COL-000767 at 300,000. Reported as unchanged; no coverage improvement claimed |
+| Refusals, on the wire | wrong-package item named by position and collateral name · missing `valuationDate` · missing `productPackageId` · same collateral and date as CV-0000000014 |
+| Cleanup | valuations, ownership rows, collaterals, collateral type, loan, package, staging rows, account, all deleted |
+
+**Residue proof.** Named residue on the `ZZ-WS05%` prefixes: Account 0 · Product Package 0 · Loan 0 · Collateral Type 0
+· Covenant Type 0 · `cm_Action_Staging__c` 0. Org-wide baselines restored exactly:
+`LLC_BI__Covenant_Compliance2__c` **144**, `LLC_BI__Covenant2__c` **639**, `LLC_BI__Collateral_Valuation__c` **10**,
+`LLC_BI__Collateral__c` **764**, `LLC_BI__Account_Collateral__c` **9**, `LLC_BI__Collateral_Type__c` **43**,
+`cm_Action_Staging__c` back to the **11** kept rows. Deleted records sit in the Recycle Bin, as with the August 20 probe.
+
+**One residue that could NOT be cleaned, stated plainly.** Creating the two fixture compliance rows fired
+`acnpex_covenantApprovalProcess` exactly as D1 predicts. It left 2 `FlowOrchestrationInstance`
+(`0jEbb000000D95VEAS`, `0jEbb000000D95WEAS`) and 2 `FlowOrchestrationWorkItem` (`0jfbb0000007tXdAAI`,
+`0jfbb0000007tXeAAI`), now orphaned because their target rows are deleted. They cannot be removed: the object takes no
+Apex DML at all (compile error) and a REST DELETE returns `INSUFFICIENT_ACCESS_OR_READONLY`. Both work items are
+`Assigned` to `005bb00000H6aX0AAJ`, which is an **INACTIVE** user.
+
+### Org facts discovered (all new, all verified live 2026-08-22)
+
+1. **The covenant approval chain materialises as `FlowOrchestrationInstance` + `FlowOrchestrationWorkItem`, not
+   `ProcessInstance`.** `ProcessInstance` and `ProcessInstanceWorkitem` counts for the day stayed at 0 while the
+   orchestration objects went to 2 each. This positively confirms probe 8's note that ProcessInstance is the wrong
+   object to verify this chain against, and it gives the right one. **Our UPDATE raised nothing**: the count stayed at
+   2 across four stage/execute calls. The CREATE is what raised them.
+2. **`LLC_BI__Covenant_Compliance2__c.LLC_BI__Status__c` offers exactly `Compliant, Exception, In Progress, Pending,
+   Waived`** and carries **no separate non-compliant value**. `restricted = false`. So in this org a failed test is
+   recorded as `Exception` plus `LLC_BI__Reason_for_Exception__c = Breached`, and there is no third spelling to
+   allowlist. `Reason_for_Exception` offers exactly `Breached, Overdue`.
+3. **`LLC_BI__Historic_Financial_Indicator__c` is type `double`, updateable, not calculated.** Safe to write, and it
+   is where nCino sources the covenant's Last Evaluation Value from.
+4. **`LLC_BI__Covenant2__c.Name` is an auto-number and is NOT writeable** (`Field is not writeable` at compile time).
+   Any fixture that identifies covenants by a name of its own choosing fails to compile. The suite keys on the
+   covenant TYPE name instead.
+5. **The org rewrites `LLC_BI__Collateral_Type__c.Name` to the record's own 15-character id on insert**, in a real
+   (non-test) transaction. Proved directly: inserted with `Name = 'ZZ-NAMETEST Type'`, read back as
+   `a33bb000001ZpQT`, and a `WHERE LLC_BI__Collateral_Type__r.Name = 'ZZ-NAMETEST Type'` traversal matched 0 rows.
+   **This is a probe-cleanup trap**: the first valuation cleanup keyed on that name and silently deleted nothing,
+   leaving 2 collaterals and 2 valuations behind until a second pass removed them by id. Cleanup scripts must key on
+   record ids. Note the rename does NOT happen in a test context, which is why `C360TestFixture.existingCollateral()`
+   still finds its fixture by type name.
+6. **`LLC_BI__Collateral__c` has no Account lookup of any kind.** The only Account link is the
+   `LLC_BI__Account_Collateral__c` junction, labelled "Collateral Ownership". Package membership for a collateral is
+   therefore pledge OR ownership, and there is no third route.
+7. **`LLC_BI__Date_Template__c.LLC_BI__Template_Type__c` offers `Date Based, Frequency Based, One-Time, Ad Hoc`**, and
+   8 template records exist in the org. `One-Time` is the value that makes a Compliant verdict deactivate the covenant
+   permanently, and the plan warns on it by name.
+8. **`wp2/classes/Customer360Covenants.cls` had NO `.cls-meta.xml`**, so every class-directory deployment had been
+   silently skipping it. A field added to that file appeared to ship and did not; the failure only surfaced later,
+   when its test referenced the missing field. The meta file is added. A stale duplicate of the same class also sits
+   at `knowledge/sf-build-v2/Customer360Covenants.cls`, outside the declared package directory.
+9. **`nulls` is a reserved word in Apex** and cannot be used as a local variable name (`Unexpected token 'nulls'`).
+
+### UNVERIFIED
+
+- **Generation and the approval chain have never been observed FIRING through our tools.** Both probe covenants lacked
+  a Frequency Template, so `approvalChainStarted` was measured as `false` and the measurement's positive branch is
+  code-and-unit-tested only. Proving the positive branch means writing a terminal status onto a compliance row of a
+  covenant that carries a Frequency Template, which will mint a successor row and raise a real approval work item.
+  That probe was not run.
+- **The per-item DML failure path is unit-tested only.** `Database.update(..., false, AccessLevel.USER_MODE)` is used
+  so one row the org refuses does not discard its siblings, but no live run has produced a partial failure.
+- **Multi-covenant execution above N=1 has not run on the wire.** Stage was probed at N=2 with one refusal, and both
+  execute arms wrote a single covenant. The N-item write loop is exercised by the suite, not by the org.
+- **Whether the approval work item sends an email was not established.** The assignee is an inactive user, which makes
+  delivery unlikely, but org-wide email deliverability was not read and no inbox was checked.
+- **The cockpit app has not been updated.** `stage_covenant_review`'s input shape is a breaking change. Any client
+  still sending `accountId` + `covenantComplianceId` + `result` will now be refused. No client change was made in this
+  work package.

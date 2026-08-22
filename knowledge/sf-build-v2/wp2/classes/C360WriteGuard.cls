@@ -76,8 +76,17 @@ public with sharing class C360WriteGuard {
      */
     private static final Map<String, Map<String, Set<String>>> UPDATE_TRANSITIONS =
         new Map<String, Map<String, Set<String>>>{
+            // The complete-status set is nCino's, read from the org: LLC_BI__Status__c offers
+            // Compliant, Exception, In Progress, Pending and Waived, and `Waived` is one of the
+            // three default Record Create Trigger Statuses. Waiving is a real outcome of a covenant
+            // review, and an allowlist that could not express it forced the banker out of the tool
+            // with the decision unrecorded. `Pending` and `In Progress` stay off: they are where a
+            // row starts, never where a review leaves it. This org's compliance status picklist
+            // carries no separate non-compliant value; a failed test is Exception plus a Reason for
+            // Exception of Breached, which is why that field is fenced here too.
             OBJ_COVENANT_COMPLIANCE => new Map<String, Set<String>>{
-                'LLC_BI__Status__c' => new Set<String>{ 'Compliant', 'Exception' }
+                'LLC_BI__Status__c' => new Set<String>{ 'Compliant', 'Waived', 'Exception' },
+                'LLC_BI__Reason_for_Exception__c' => new Set<String>{ 'Breached', 'Overdue' }
             },
             // A33.3.1 / A33.7 Q6: exactly one hop, and only after Loan Detail verification.
             // Probe 9 finding 2 proved this hop headlessly; Booked stays unreachable (LV06).
