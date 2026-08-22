@@ -11,7 +11,7 @@ import {
   type TicketDelta,
   type TicketFact,
 } from "../actions/dealTicket";
-import type { PanelField, PanelSchema } from "../actions/panelSchema";
+import type { PanelField, PanelSchema, PerItemInput } from "../actions/panelSchema";
 import type { BorrowerBundle, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
 
@@ -249,16 +249,17 @@ function Pill({
 function MultiSelectRows({
   field,
   selected,
-  perItem,
+  values,
   onToggle,
   onItemValue,
 }: {
   field: PanelField;
   selected: string[];
-  /** Absent until the banker enters the first value. */
-  perItem?: Record<string, unknown>;
+  /** The whole panel value bag: each per-item input reads its own map out of
+   *  it, and a map is absent until the banker fills the first entry. */
+  values: Record<string, unknown>;
   onToggle: (id: string) => void;
-  onItemValue: (id: string, v: number | null) => void;
+  onItemValue: (input: PerItemInput, id: string, v: unknown) => void;
 }) {
   const options = field.options ?? [];
 
@@ -291,22 +292,65 @@ function MultiSelectRows({
               </span>
             </label>
 
-            {/* Per-item entry appears only for what the banker actually chose. */}
-            {on && field.perItemValueKey && (
-              <div className="mt-2 flex items-baseline gap-1.5 pl-[26px]">
-                <span className="text-[11px] font-semibold text-ink-muted">New value</span>
-                <span className="text-[13px] font-bold text-ink-muted">$</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  aria-label={`New value for ${field.optionLabels?.[i] ?? id}`}
-                  value={typeof perItem?.[id] === "number" ? String(perItem[id]) : ""}
-                  onChange={(e) => onItemValue(id, Number(e.target.value) || null)}
-                  className="tnum w-full border-0 bg-transparent p-0 text-[15px] font-extrabold text-ink placeholder:text-[12px] placeholder:font-semibold placeholder:text-ink-faint focus:outline-none"
-                  placeholder="enter the new valuation"
-                />
-              </div>
-            )}
+            {/* Per-item entries appear only for what the banker actually chose. */}
+            {on &&
+              (field.perItemInputs ?? []).map((input) => {
+                const map = (values[input.valueKey] as Record<string, unknown>) ?? {};
+                const label = `${input.label} for ${field.optionLabels?.[i] ?? id}`;
+                const optionsMissing = input.type === "picklist" && (input.options?.length ?? 0) === 0;
+                return (
+                  <div key={input.valueKey} className="mt-2 flex items-baseline gap-1.5 pl-[26px]">
+                    <span className="flex-none text-[11px] font-semibold text-ink-muted">
+                      {input.label}
+                      {input.required && <span style={{ color: "var(--critical)" }}> *</span>}
+                    </span>
+                    {input.type === "currency" && <span className="text-[13px] font-bold text-ink-muted">$</span>}
+                    {input.type === "picklist" ? (
+                      <select
+                        aria-label={label}
+                        disabled={optionsMissing}
+                        value={(map[id] as string) ?? ""}
+                        onChange={(e) => onItemValue(input, id, e.target.value || null)}
+                        className="w-full rounded-md border px-2 py-1 text-[12.5px] text-ink disabled:opacity-60"
+                        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+                      >
+                        <option value="">{optionsMissing ? "not loaded from the org" : (input.placeholder ?? "Select…")}</option>
+                        {(input.options ?? []).map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        inputMode={input.type === "currency" ? "decimal" : undefined}
+                        aria-label={label}
+                        value={
+                          input.type === "currency"
+                            ? typeof map[id] === "number"
+                              ? String(map[id])
+                              : ""
+                            : ((map[id] as string) ?? "")
+                        }
+                        onChange={(e) =>
+                          onItemValue(
+                            input,
+                            id,
+                            input.type === "currency" ? (Number(e.target.value) || null) : (e.target.value || null),
+                          )
+                        }
+                        className={`w-full border-0 bg-transparent p-0 ${
+                          input.type === "currency"
+                            ? "tnum text-[15px] font-extrabold"
+                            : "text-[12.5px] font-medium"
+                        } text-ink placeholder:text-[12px] placeholder:font-semibold placeholder:text-ink-faint focus:outline-none`}
+                        placeholder={input.placeholder}
+                      />
+                    )}
+                  </div>
+                );
+              })}
           </div>
         );
       })}
@@ -587,17 +631,16 @@ export function DealTicket({
             <MultiSelectRows
               field={f}
               selected={Array.isArray(values[f.key]) ? (values[f.key] as string[]) : []}
-              perItem={(f.perItemValueKey ? values[f.perItemValueKey] : undefined) as Record<string, unknown>}
+              values={values}
               onToggle={(id) => {
                 const now = Array.isArray(values[f.key]) ? (values[f.key] as string[]) : [];
                 onChange(f, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]);
               }}
-              onItemValue={(id, v) => {
-                if (!f.perItemValueKey) return;
-                const map = { ...((values[f.perItemValueKey] as Record<string, unknown>) ?? {}) };
+              onItemValue={(input, id, v) => {
+                const map = { ...((values[input.valueKey] as Record<string, unknown>) ?? {}) };
                 if (v === null) delete map[id];
                 else map[id] = v;
-                onValueMap?.(f.perItemValueKey, map);
+                onValueMap?.(input.valueKey, map);
               }}
             />
           </div>

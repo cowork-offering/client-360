@@ -56,7 +56,9 @@ describe("the ticket is a view over the schema, never a second declaration", () 
     expect(ticketFor("new-facility-request", id, b as BorrowerBundle).ticket.heroKey).toBe("amount");
     expect(ticketFor("loan-modification", id, b as BorrowerBundle).ticket.heroKey).toBe("newCommitment");
     expect(ticketFor("renewal", id, b as BorrowerBundle).ticket.heroKey).toBe("newMaturityDate");
-    expect(ticketFor("covenant-review", id, b as BorrowerBundle).ticket.heroKey).toBe("assessmentResult");
+    // A package-scoped covenant review has NO hero: the verdict is per covenant
+    // and lives on the covenant row, so no single value carries the ticket.
+    expect(ticketFor("covenant-review", id, b as BorrowerBundle).ticket.heroKey).toBeUndefined();
   });
 
   it("names every section against a field the schema actually has", () => {

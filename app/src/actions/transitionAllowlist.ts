@@ -21,6 +21,23 @@ export interface ObjectPolicy {
   label: string;
   /** May the tool create this object at all? */
   mayCreate: boolean;
+  /**
+   * May the tool write onto a record that already exists?
+   *
+   * SEPARATE FROM `mayCreate`, and it has to be. Until WS0.5 every object this
+   * mirror saw a write step on was creatable, so reading "write step" as
+   * "create" cost nothing. The covenant review broke that: it is the first tool
+   * that only ever UPDATES, and reading its writes as creates refused every
+   * real plan at the confirm gate before a banker could confirm one.
+   *
+   * The mirror does NOT try to tell a create from an update. A wire step
+   * declares its object and its field names and nothing else, and a heuristic
+   * over those was tried and was wrong both ways. What the two flags say is
+   * whether the tool touches this object AT ALL, in either mode; the one create
+   * that must be caught on an update-only object — a compliance row — is caught
+   * by `refusedFields`, because creating one means writing `LLC_BI__Covenant__c`.
+   */
+  mayUpdate: boolean;
   /** Field/value pairs a create is allowed to set as its state. */
   createStates: Array<{ field: string; value: string }>;
   /** Permitted state transitions. Empty means: none, ever. */
@@ -29,8 +46,6 @@ export interface ObjectPolicy {
   refusedFields: Array<{ field: string; reason: string }>;
   /** Prose refusals that are not field-shaped (deletes, sub-record creation). */
   refusedOperations: string[];
-  /** HELD means: specified but not shippable until a named probe lands. */
-  held?: string;
 }
 
 /** The A33.3.1 table, verbatim. Keys are the plan's `object` values. */
@@ -39,6 +54,8 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     object: "LLC_BI__Loan__c",
     label: "facility",
     mayCreate: true,
+    // A modification writes the requested amount, term and rate onto the CLONE.
+    mayUpdate: true,
     createStates: [
       { field: "LLC_BI__Stage__c", value: "Qualification" },
       { field: "LLC_BI__Status__c", value: "Open" },
@@ -70,6 +87,7 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     label: "renewal junction",
     // nCino's invocable owns this junction (founder decision 2026-07-26).
     mayCreate: false,
+    mayUpdate: false,
     createStates: [],
     transitions: [],
     refusedFields: [{ field: "LLC_BI__ParentLoanId__c", reason: "set once at creation" }],
@@ -83,24 +101,38 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
   "LLC_BI__Covenant_Compliance2__c": {
     object: "LLC_BI__Covenant_Compliance2__c",
     label: "covenant compliance record",
-    // Generation is managed automation; we never create these.
+    // Generation is managed automation; we never create these. UPDATING an
+    // existing row is the entire covenant review.
     mayCreate: false,
+    mayUpdate: true,
     createStates: [],
     transitions: [
-      { field: "LLC_BI__Status__c", from: ["Pending", "In Progress"], to: ["Compliant", "Exception"] },
+      // WAIVED joined the pair in WS0.5, matching the org's own write guard
+      // (C360WriteGuard UPDATE_TRANSITIONS = Compliant, Waived, Exception). A
+      // waiver is a decision not to enforce and is its own outcome, never a
+      // synonym for either of the other two.
+      //
+      // `In Progress` is a legitimate SOURCE only under the banker's explicit
+      // allowNonPending opt-in; without it the org refuses that row per
+      // covenant, and the plan never contains the step at all.
+      { field: "LLC_BI__Status__c", from: ["Pending", "In Progress"], to: ["Compliant", "Waived", "Exception"] },
     ],
     refusedFields: [
       { field: "LLC_BI__Effective_Date__c", reason: "writing it corrupts the whole compliance schedule" },
       { field: "LLC_BI__Covenant__c", reason: "set once at creation" },
     ],
-    refusedOperations: ["creation: generation is managed automation", "any status transition outside the permitted pair"],
-    held: "the acnpex_covenantApprovalProcess entry-criteria probe has not landed, so no covenant tool ships",
+    refusedOperations: [
+      "creation: generation is managed automation, and a create is what raises the bank's covenant approval",
+      "any status transition outside the three complete statuses",
+      "Reason for Exception outside Breached and Overdue, which the org fences too",
+    ],
   },
 
   "LLC_BI__Collateral_Valuation__c": {
     object: "LLC_BI__Collateral_Valuation__c",
     label: "collateral valuation",
     mayCreate: true,
+    mayUpdate: false,
     createStates: [
       { field: "LLC_BI__Active__c", value: "true" },
       { field: "LLC_BI__Primary__c", value: "true" },
@@ -116,6 +148,7 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     object: "LLC_BI__Review__c",
     label: "credit review",
     mayCreate: true,
+    mayUpdate: false,
     createStates: [{ field: "LLC_BI__Status__c", value: "In Progress" }],
     transitions: [],
     refusedFields: [
@@ -133,6 +166,7 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     object: "LLC_BI__Annual_Review__c",
     label: "risk rating review",
     mayCreate: true,
+    mayUpdate: false,
     createStates: [{ field: "LLC_BI__Status__c", value: "In Review" }],
     transitions: [],
     refusedFields: [{ field: "LLC_BI__Final_Risk_Grade__c", reason: "formula field" }],
@@ -145,6 +179,7 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     object: "Case",
     label: "service request",
     mayCreate: true,
+    mayUpdate: false,
     createStates: [{ field: "Status", value: "New" }],
     transitions: [],
     refusedFields: [],
@@ -203,10 +238,6 @@ export function validateStep(step: ValidatableStep): AllowlistViolation[] {
   const out: AllowlistViolation[] = [];
   const fields = normalizeFields(step.fields);
 
-  if (policy.held) {
-    out.push({ stepId: step.id, object: objectName, reason: `held: ${policy.held}` });
-  }
-
   // Refused fields, whatever the operation.
   for (const f of fields) {
     const refused = policy.refusedFields.find((r) => r.field === f.field);
@@ -235,9 +266,11 @@ export function validateStep(step: ValidatableStep): AllowlistViolation[] {
     return out;
   }
 
-  // A create.
-  if (!policy.mayCreate) {
-    out.push({ stepId: step.id, object: objectName, reason: `${policy.label} may never be created by this tool` });
+  // An ordinary field write. The mirror does not guess whether it is a create
+  // or an update (see `mayUpdate`); it asks whether the tool may write this
+  // object at all.
+  if (!policy.mayCreate && !policy.mayUpdate) {
+    out.push({ stepId: step.id, object: objectName, reason: `${policy.label} may never be written by this tool` });
     return out;
   }
 

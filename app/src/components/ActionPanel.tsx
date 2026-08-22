@@ -11,6 +11,7 @@ import {
   OVERRIDE_NOT_YET_FILEABLE,
   NO_FACILITY_SELECTED,
   FACILITIES_SPAN_PACKAGES,
+  batchStagingGap,
 } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
 import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
@@ -269,6 +270,19 @@ function GapNote({ gap }: { gap: NamedGap }) {
   );
 }
 
+/**
+ * Why a payload could not be built, per action.
+ *
+ * The old copy said "This relationship has no pledged collateral to value" for
+ * EVERY action, which was true of one of them. A precondition that names the
+ * wrong thing is worse than a generic one, because a banker acts on it.
+ */
+const NOTHING_TO_STAGE: Record<string, string> = {
+  "collateral-valuation": "This relationship has no pledged collateral to value.",
+  "covenant-review": "This deal has no covenant that can be assessed from here.",
+};
+const GENERIC_NOTHING_TO_STAGE = "This action has nothing to stage against on this relationship.";
+
 export type Phase = "form" | "compile" | "confirm" | "tracker";
 
 /** Briefing -> Plan -> Execution. Compile is the bridge between the first two,
@@ -370,6 +384,15 @@ export function ActionPanel({
   const reasonKey = (worklist.reasons[accountId] ?? []).join("|");
   const reasons = useMemo(() => (reasonKey ? (reasonKey.split("|") as ReasonCode[]) : []), [reasonKey]);
 
+  /**
+   * The banker's own deal pick, held OUTSIDE the value bag.
+   *
+   * It has to be: the schema is what the value bag is initialised from, so a
+   * schema that read the pick out of `values` would depend on itself. Null
+   * means "the schema's own default", which is the relationship's package.
+   */
+  const [pickedPackage, setPickedPackage] = useState<string | null>(null);
+
   /** The schema, then the agent's drafts overlaid onto it (WP7.2). The overlay
    *  only fills AGENT_NARRATIVE fields the panel would otherwise open empty, so
    *  every contract the classic form obeys is untouched. */
@@ -379,9 +402,16 @@ export function ActionPanel({
       accountId,
       accountName,
       orgPicklists: { ...observedPicklistMap(), ...legalValues },
+      // A10: the view's own clock, never the wall clock. A date the panel
+      // defaults must agree with every other date on the screen.
+      asOf: data.meta?.generatedAt,
+      // The banker's own deal pick, so the covenant and collateral lists are
+      // the CHOSEN package's rather than the default one's. Undefined on the
+      // first build, where the schema picks the default itself.
+      packageId: pickedPackage ?? undefined,
     });
     return base ? withDrafts(base, actionId, bundle, reasons) : null;
-  }, [actionId, bundle, accountId, accountName, legalValues, reasons]);
+  }, [actionId, bundle, accountId, accountName, legalValues, reasons, data.meta?.generatedAt, pickedPackage]);
 
   const briefing = useMemo(
     () => buildBriefing(actionId, schema, bundle, accountName, reasons),
@@ -491,6 +521,24 @@ export function ActionPanel({
     return packages.size > 1 ? FACILITIES_SPAN_PACKAGES : null;
   })();
 
+  /** The DEAL the batch is anchored on: the banker's pick when the schema
+   *  offered one, else the package the schema defaulted to. ONE answer, read by
+   *  both the gate and the payload builder — two readings of the same field
+   *  would let a batch be blocked on a package it was about to send, or sent
+   *  under one the gate never checked. */
+  function selectedPackageId(): string | null {
+    const picked = values.package;
+    if (typeof picked === "string" && picked.trim()) return picked.trim();
+    const fallback = schema?.fields.find((f) => f.key === "package")?.value;
+    return typeof fallback === "string" && fallback.trim() ? fallback.trim() : null;
+  }
+
+  /** What is wrong with the BATCH the banker assembled, before a payload is
+   *  built. Every sentence is one the tool would send back anyway; it is stated
+   *  here so a banker learns the rule from the ticket rather than from a round
+   *  trip that refused the whole batch. */
+  const batchGap = batchStagingGap(actionId, values, schema);
+
   /** The org's validation rule, enforced here so the banker learns it from the
    *  ticket rather than from a rejected write. */
   const overrideGap =
@@ -556,10 +604,6 @@ export function ActionPanel({
         .filter((f): f is Facility => !!f?.loanId && !!f.productPackageId);
       return rows.length === picked.length ? rows : [];
     };
-    const citationOf = (key: string) => {
-      const c = schema?.fields.find((f) => f.key === key)?.prefill.citation;
-      return typeof c === "string" && c ? c : null;
-    };
     // #3 — the Apex contract requires a non-blank rationale, and an undefined
     // one is simply omitted by JSON. When no suggestion is carrying the reason,
     // the action states its own, deterministically.
@@ -580,11 +624,17 @@ export function ActionPanel({
       const unique = [...new Set(chosen)];
       if (!unique.length) return null;
 
+      // HARD REQUIREMENTS since WS0.5, both refused by the tool by name. They
+      // are checked here as well so nothing knowingly wrong leaves the page.
+      const dealId = selectedPackageId();
+      const valuationDate = v("valuationDate") as string | null;
+      if (!dealId || !valuationDate) return null;
+
       const perItem = (values.recordValues as Record<string, unknown>) ?? {};
       // Basis, origin, date and notes describe the valuation EXERCISE and apply
       // to every item in it. Only the figure is per collateral record.
       const shared = {
-        valuationDate: v("valuationDate") as string | null,
+        valuationDate,
         type: v("type") as string | null,
         source: v("source") as string | null,
         description: v("description") as string | null,
@@ -594,6 +644,7 @@ export function ActionPanel({
       return {
         idempotencyKey,
         rationale,
+        productPackageId: dealId,
         items: unique.map((collateralId) => ({
           collateralId,
           value: typeof perItem[collateralId] === "number" ? (perItem[collateralId] as number) : nOf("value"),
@@ -653,19 +704,45 @@ export function ActionPanel({
     }
 
     if (actionId === "covenant-review") {
-      const complianceId = citationOf("covenant");
-      if (!complianceId) return null;
-      const observed = nOf("observedValue");
+      // PACKAGE-ANCHORED BULK. The old single shape (accountId +
+      // covenantComplianceId + result) is gone from the org: its fields carried
+      // required=true, so sending them makes this shape unreachable on the wire.
+      const dealId = selectedPackageId();
+      if (!dealId) return null;
+
+      const chosen = [...new Set(Array.isArray(values.covenants) ? (values.covenants as string[]) : [])];
+      const statuses = (values.covenantStatuses as Record<string, unknown>) ?? {};
+      const observed = (values.covenantObservedValues as Record<string, unknown>) ?? {};
+      const reasons = (values.covenantReasons as Record<string, unknown>) ?? {};
+      const comments = (values.covenantComments as Record<string, unknown>) ?? {};
+      const narrative = v("assessmentNarrative") as string | null;
+
+      // ALL OR NOTHING on the verdict. A covenant the banker selected but never
+      // answered is not filed under a default: the batch simply is not sent.
+      const assessments = chosen
+        .filter((covenantId) => typeof statuses[covenantId] === "string" && statuses[covenantId] !== "")
+        .map((covenantId) => ({
+          covenantId,
+          status: statuses[covenantId] as string,
+          // A NUMBER on this wire: the invocable declares Decimal.
+          observedValue: typeof observed[covenantId] === "number" ? (observed[covenantId] as number) : null,
+          reasonForException: typeof reasons[covenantId] === "string" && reasons[covenantId] ? (reasons[covenantId] as string) : null,
+          narrative,
+          comments: typeof comments[covenantId] === "string" && comments[covenantId] ? (comments[covenantId] as string) : null,
+        }));
+      if (!assessments.length || assessments.length !== chosen.length) return null;
+
       return {
         idempotencyKey,
-        accountId,
         rationale,
-        covenantComplianceId: complianceId,
-        result: v("assessmentResult") as string | null,
-        // Observed as a STRING on the wire, and only sent when there is one.
-        ...(observed === null ? {} : { observedValue: String(observed) }),
-        narrative: v("assessmentNarrative") as string | null,
-        comments: v("assessmentNarrative") as string | null,
+        productPackageId: dealId,
+        assessments,
+        // The member selection, stated rather than left implicit: it is what
+        // narrows the package survey to the covenants the banker chose.
+        covenantIds: chosen,
+        // Sent only when the banker turned it on. The default is the org's
+        // refusal, and a false would claim a decision nobody made.
+        ...(values.allowNonPending === true ? { allowNonPending: true } : {}),
       };
     }
 
@@ -743,9 +820,10 @@ export function ActionPanel({
             }
             if (overrideGap) throw { code: "VALIDATION_FAILED", message: overrideGap };
             if (facilityGap) throw { code: "NOT_STAGEABLE", message: facilityGap };
+            if (batchGap) throw { code: "VALIDATION_FAILED", message: batchGap };
             payload = stagePayload();
             if (!payload && mcpAvailable() && isWriteAction(actionId)) {
-              throw { code: "PRECONDITION", message: "This relationship has no pledged collateral to value." };
+              throw { code: "PRECONDITION", message: NOTHING_TO_STAGE[actionId] ?? GENERIC_NOTHING_TO_STAGE };
             }
             const filled = schema!.fields.filter((f) => values[f.key] !== null && values[f.key] !== undefined && values[f.key] !== "");
             return `${filled.length} of ${schema!.fields.length} fields carry a value`;
@@ -940,7 +1018,21 @@ export function ActionPanel({
   }
 
   function setField(f: PanelField, v: unknown) {
-    setValues((prev) => ({ ...prev, [f.key]: v }));
+    setValues((prev) => {
+      const next = { ...prev, [f.key]: v };
+      // CHANGING THE DEAL CHANGES WHAT IS SELECTABLE. The covenants and the
+      // collateral are the previous package's; carrying them forward would send
+      // package B with members resolved against package A, which the tool
+      // refuses by name. The selection is cleared rather than re-mapped: there
+      // is no honest mapping between two deals' members.
+      if (f.key === "package" && prev[f.key] !== v) {
+        for (const k of ["covenants", "covenantStatuses", "covenantObservedValues", "covenantReasons", "covenantComments", "records", "recordValues"]) {
+          delete next[k];
+        }
+      }
+      return next;
+    });
+    if (f.key === "package") setPickedPackage(typeof v === "string" && v.trim() ? v.trim() : null);
     if (f.prefill.source === "AGENT_NARRATIVE") {
       setEditedFields((prev) => (prev.includes(f.key) ? prev : [...prev, f.key]));
     }
@@ -1170,8 +1262,8 @@ export function ActionPanel({
             <div className="flex-1 text-[11px] text-ink-muted">
               {blockers.length > 0
                 ? blockers.map((b) => b.gap!.reason).join(" ")
-                : (overrideGap ?? facilityGap)
-                  ? (overrideGap ?? facilityGap)
+                : (overrideGap ?? facilityGap ?? batchGap)
+                  ? (overrideGap ?? facilityGap ?? batchGap)
                   : missing.length > 0
                   ? `${missing.length} required ${missing.length === 1 ? "field" : "fields"} still to complete.`
                   : `Creates a ${schema.writeObjectLabel}.`}
@@ -1187,7 +1279,13 @@ export function ActionPanel({
             {(mcpAvailable() && isWriteAction(actionId)) || isSimulationAllowed() ? (
               <button
                 type="button"
-                disabled={missing.length > 0 || blockers.length > 0 || overrideGap !== null || facilityGap !== null}
+                disabled={
+                  missing.length > 0 ||
+                  blockers.length > 0 ||
+                  overrideGap !== null ||
+                  facilityGap !== null ||
+                  batchGap !== null
+                }
                 onClick={() => (plan && !planIsStale ? setPhase("confirm") : void stage())}
                 className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--accent-ink)" }}

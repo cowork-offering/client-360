@@ -47,7 +47,8 @@ const HERO: Record<string, string> = {
   "annual-review": "reviewType",
   "new-facility-request": "amount",
   "risk-rating-review": "overrideValue",
-  "covenant-review": "assessmentResult",
+  // NO HERO. A package-scoped covenant review has no single value that carries
+  // it: the verdict is per covenant and lives on the covenant row itself.
   "loan-modification": "newCommitment",
   renewal: "newMaturityDate",
   // Onboarding tickets, same grammar: the one value that carries the decision.

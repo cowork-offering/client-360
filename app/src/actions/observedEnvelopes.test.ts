@@ -64,15 +64,14 @@ describe("the held verdict comes from the ORG, verbatim", () => {
 
   it("agrees with the client tool map on which actions are held", () => {
     expect(isExecutionHeld("renewal")).toBe(true);
-    // The covenant execute tool EXISTS, but the client refuses to be the thing
-    // that fires its unapproved first production write.
-    expect(isExecutionHeld("covenant-review")).toBe(true);
-    expect(executionHeldReason("covenant-review")).toContain("founder-gated");
-    // The modification is no longer held CLIENT-side (WS0.5, 2026-08-22). The
-    // org's own flag above is the only thing that can hold it now.
+    // Neither the modification nor the covenant review is held CLIENT-side any
+    // more (WS0.5, 2026-08-22). The org's own flag above is the only thing that
+    // can hold either of them now.
     expect(isExecutionHeld("loan-modification")).toBe(false);
     expect(executionHeldReason("loan-modification")).toBeNull();
-    for (const id of ["new-facility-request", "risk-rating-review", "loan-modification"]) {
+    expect(isExecutionHeld("covenant-review")).toBe(false);
+    expect(executionHeldReason("covenant-review")).toBeNull();
+    for (const id of ["new-facility-request", "risk-rating-review", "loan-modification", "covenant-review"]) {
       expect(isExecutionHeld(id), id).toBe(false);
       expect(WRITE_TOOLS[id as keyof typeof WRITE_TOOLS].execute, id).toBeTruthy();
     }
@@ -130,20 +129,6 @@ describe("the wave-2 request bodies match what the org accepted", () => {
       expect(body, k).toHaveProperty(k);
     }
     expect(body.factorScores).toBeUndefined();
-  });
-
-  it("sends the covenant compliance id and the observed value as a STRING", async () => {
-    const body = await sent("covenant-review", {
-      idempotencyKey: "zz",
-      accountId: "001bb00000O40U8AAJ",
-      covenantComplianceId: "a3Cbb00000DzjdREAR",
-      result: "Compliant",
-      observedValue: "1.42",
-      narrative: "x",
-    });
-    expect(body.covenantComplianceId).toBe("a3Cbb00000DzjdREAR");
-    expect(typeof body.observedValue).toBe("string");
-    expect(body.complianceId).toBeUndefined();
   });
 
   it("names the modification's amount `requestedAmount`", async () => {
@@ -318,17 +303,6 @@ describe("Codex review fixes, pinned against the envelopes", () => {
     expect(Object.keys(body).some((k) => /override/i.test(k))).toBe(false);
   });
 
-  it("#7 never sends the covenant observed value: it is context, not an input", async () => {
-    const body = await sent("covenant-review", {
-      idempotencyKey: "k",
-      accountId: "001X",
-      covenantComplianceId: "a3C",
-      result: "Compliant",
-      rationale: "r",
-    });
-    expect(body.observedValue).toBeUndefined();
-  });
-
   it("#8 sends the service request origin the schema advertises", async () => {
     const body = await sent("create-service-request", {
       idempotencyKey: "k",
@@ -370,9 +344,11 @@ describe("Codex review fixes, pinned against the envelopes", () => {
     expect(out.ok && out.result.steps[0].waitBudgetMs).toBe(30000);
   });
 
-  it("#2 refuses to execute the founder-gated covenant review, with its own reason", async () => {
+  it("#2 refuses to execute a HELD action rather than calling a tool that is not there", async () => {
+    // The covenant review used to sit here on a founder gate. That gate is
+    // spent (WS0.5), and renewal is now the only action with no execute tool.
     const callTool = installMcp(PLAN);
-    const out = await executeAction("covenant-review", {
+    const out = await executeAction("renewal", {
       idempotencyKey: "k",
       stagingId: "a8a",
       planHash: "h",
@@ -381,7 +357,7 @@ describe("Codex review fixes, pinned against the envelopes", () => {
     });
     expect(out.ok).toBe(false);
     expect(out.ok === false && out.error.code).toBe("EXECUTION_HELD");
-    expect(out.ok === false && out.error.message).toContain("founder-gated");
+    expect(out.ok === false && out.error.message).toContain("Submit for Approval");
     // Not one call left the page.
     expect(callTool).not.toHaveBeenCalled();
   });

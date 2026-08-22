@@ -85,7 +85,9 @@ describe("collateral records: one row per piece of security, not per pledge", ()
     expect(f.optionLabels).toEqual(["Equipment", "Accounts Receivable"]);
     expect(f.optionDetails?.[0]).toContain("secures 2 facilities");
     // Per-item value entry, keyed so each record carries its own new figure.
-    expect(f.perItemValueKey).toBe("recordValues");
+    expect(f.perItemInputs).toEqual([
+      { valueKey: "recordValues", label: "New value", type: "currency", placeholder: "enter the new valuation" },
+    ]);
   });
 
   it("preselects a lone record, and leaves a real choice open", () => {

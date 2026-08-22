@@ -82,6 +82,7 @@ describe("tool registry", () => {
     expect(Object.values(WRITE_TOOLS).flatMap((t) => [t.stage, t.execute]).filter(Boolean).sort()).toEqual([
       "execute_annual_review",
       "execute_collateral_valuation",
+      "execute_covenant_review",
       "execute_loan_modification",
       "execute_new_facility",
       "execute_risk_rating_review",
@@ -101,11 +102,18 @@ describe("tool registry", () => {
     // No execute_renewal was built, so a null is the honest record of that; a
     // plausible-looking name would be a lie the panel would eventually call.
     expect(WRITE_TOOLS.renewal.execute).toBeNull();
-    // Founder-gated rather than unbuilt, and held for its own reason.
-    expect(WRITE_TOOLS["covenant-review"].execute).toBeNull();
     expect(isExecutionHeld("renewal")).toBe(true);
-    expect(isExecutionHeld("covenant-review")).toBe(true);
     expect(isExecutionHeld("collateral-valuation")).toBe(false);
+  });
+
+  it("no longer holds the covenant review: the gate's stated reason is spent", () => {
+    // WS0.5 items 2+3: the founder gate stood on execute_covenant_review never
+    // having been run live. It has now, on both arms, on throwaway data. The
+    // ORG can still hold a plan via executionHeld; the client adds no hold.
+    expect(WRITE_TOOLS["covenant-review"].execute).toBe("execute_covenant_review");
+    expect(WRITE_TOOLS["covenant-review"].heldReason).toBeNull();
+    expect(isExecutionHeld("covenant-review")).toBe(false);
+    expect(executionHeldReason("covenant-review")).toBeNull();
   });
 
   it("no longer holds the modification: the client hold is gone and the tool is named", () => {

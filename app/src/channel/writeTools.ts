@@ -18,7 +18,7 @@
    ============================================================================= */
 
 import { callTool, SERVERS, unwrapInvocableOne, type McpFailure } from "./mcp";
-import type { PlanStep, StagedFacility, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
+import type { PlanStep, StagedCovenant, StagedFacility, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
 
 /** The eight deployed write actions, and the tools each one runs on. */
 export const WRITE_TOOLS = {
@@ -42,15 +42,21 @@ export const WRITE_TOOLS = {
     execute: "execute_loan_modification",
     heldReason: null,
   },
-  // FOUNDER GATE, enforced here rather than trusted to nobody pressing it. The
-  // execute tool EXISTS and is deployed, but it has never been run live and its
-  // first invocation updates existing org data. The cockpit must not be the
-  // thing that fires an unapproved first production write.
+  // UNHELD 2026-08-22 (WS0.5 items 2+3). The founder gate stood on one fact:
+  // `execute_covenant_review` had never been run live. It has now, twice, on
+  // throwaway data, and both arms are archived verbatim
+  // (`observed-envelopes-covenant-bulk.json`: a Pending row moved to Compliant,
+  // an In Progress row moved to Exception under `allowNonPending`, plus the
+  // replay). The reason the gate named no longer exists, so the gate does not
+  // either.
+  //
+  // What still holds the gesture is the ORG: a staged plan carrying
+  // `executionHeld: true` blocks the confirm gate whatever this map says, and
+  // the plan refuses a non-Pending row PER COVENANT unless the banker opts in.
   "covenant-review": {
     stage: "stage_covenant_review",
-    execute: null,
-    heldReason:
-      "The first live execution of this action is founder-gated. Staging works and the plan is preserved; the record update ships once that gate is cleared.",
+    execute: "execute_covenant_review",
+    heldReason: null,
   },
   // EXECUTE HELD. `execute` is null, not a name we hope exists: the tool was
   // never built for renewal.
@@ -97,20 +103,47 @@ export interface ToolError {
 
 export type ToolOutcome<T> = { ok: true; result: T } | { ok: false; error: ToolError };
 
-/** One collateral's own outcome inside a batch. A failure on one is reported
- *  against THAT collateral and does not discard the others. */
+/**
+ * One record's own outcome inside a batch. A failure on one is reported against
+ * THAT record and does not discard the others.
+ *
+ * BOTH bulk tools return this under the same wire key, `items`, and each fills
+ * the half that belongs to it (observed 2026-07-27 and 2026-08-22). The keys are
+ * kept in one interface rather than two because the wire keeps them in one
+ * array; which half is populated is read from what is present, never assumed.
+ */
 export interface ExecutedItem {
-  collateralId: string;
-  collateralName?: string;
-  valuationId?: string;
-  /** Null means the read-back did not confirm it: filed, unverified. Same
-   *  semantic as the single-record case, per item. */
+  /** Both: null means the read-back did not confirm the name — filed,
+   *  unverified. Same semantic as the single-record case, per item. */
   recordName?: string | null;
   anchorName?: string | null;
+  /** The org's own sentence for this item. */
+  outcome?: string;
+
+  /* -- collateral valuation ------------------------------------------------ */
+  collateralId?: string;
+  collateralName?: string;
+  valuationId?: string;
   /** Probe 6 settled this negative: a filed valuation does not move the
    *  collateral value. Each item reports its own answer and none may claim a
    *  coverage improvement. */
   collateralValueMoved?: boolean;
+
+  /* -- covenant review ----------------------------------------------------- */
+  covenantId?: string;
+  /** The compliance row the assessment landed on. */
+  covenantComplianceId?: string;
+  /** False when the plan carried this covenant but the write did not happen. */
+  written?: boolean;
+  /** The status the row now reads at, and the one it moved FROM. Both are the
+   *  org's read-back, which is why the pair is reported rather than the target
+   *  status the banker chose. */
+  status?: string;
+  sourceStatus?: string;
+  /* Whether nCino minted the successor row is NOT carried per item: the org
+     states it in this item's own `outcome` sentence, which is rendered
+     verbatim, and the batch-level `approvalChainStarted` carries the same
+     measurement in a form the tracker can render as a fact. */
 }
 
 /**
@@ -180,8 +213,18 @@ export interface ExecuteResult {
   anchorName?: string | null;
   riskRatingReviewId?: string;
   loanId?: string;
-  /** Bulk valuation: one result per collateral record. */
+  /** Bulk valuation and bulk covenant review: one result per record. */
   items?: ExecutedItem[];
+  /**
+   * COVENANT REVIEW, and it is MEASURED. Moving a compliance row into a
+   * complete status can make nCino create the NEXT compliance row, and that
+   * create is what fires `acnpex_covenantApprovalProcess` at a named human. The
+   * executor re-queries after the write and reports what it saw.
+   *
+   * TRI-STATE. `null` on a replay: that run observed nothing, and whether a
+   * chain started is the first run's answer rather than this one's.
+   */
+  approvalChainStarted?: boolean | null;
   /** Loan modification: one result per facility in the credit action. Absent on
    *  a replay, where the org returns null rather than restating the detail. */
   facilities?: ExecutedFacility[];
@@ -291,6 +334,48 @@ function toExecutedFacility(raw: Record<string, unknown>): ExecutedFacility {
   };
 }
 
+/** One EXECUTED item of a bulk batch. Each tool fills its own half; a key the
+ *  wire did not send stays absent rather than being coerced to a default that
+ *  would read as an answer. */
+function toExecutedItem(raw: Record<string, unknown>): ExecutedItem {
+  return {
+    recordName: typeof raw.recordName === "string" ? raw.recordName : null,
+    anchorName: typeof raw.anchorName === "string" ? raw.anchorName : null,
+    outcome: str(raw.outcome),
+    collateralId: str(raw.collateralId),
+    collateralName: str(raw.collateralName),
+    valuationId: str(raw.valuationId),
+    collateralValueMoved: typeof raw.collateralValueMoved === "boolean" ? raw.collateralValueMoved : undefined,
+    covenantId: str(raw.covenantId),
+    covenantComplianceId: str(raw.covenantComplianceId),
+    written: typeof raw.written === "boolean" ? raw.written : undefined,
+    status: str(raw.status),
+    sourceStatus: str(raw.sourceStatus),
+  };
+}
+
+/** One covenant of a package-scoped review plan. A row without a covenantId
+ *  cannot be reported against anything, so the caller drops it rather than
+ *  rendering an anonymous covenant the banker cannot place. */
+function toStagedCovenant(raw: Record<string, unknown>): StagedCovenant {
+  return {
+    covenantId: String(raw.covenantId ?? ""),
+    covenantName: str(raw.covenantName),
+    covenantType: str(raw.covenantType),
+    attachment: str(raw.attachment),
+    covenantComplianceId: str(raw.covenantComplianceId),
+    currentComplianceStatus: str(raw.currentComplianceStatus),
+    assessedStatus: str(raw.assessedStatus),
+    state: str(raw.state),
+    reason: typeof raw.reason === "string" ? raw.reason : null,
+    generatesNextRow: typeof raw.generatesNextRow === "boolean" ? raw.generatesNextRow : undefined,
+    writeStepId: str(raw.writeStepId),
+    statusStepId: str(raw.statusStepId),
+    verifyStepId: str(raw.verifyStepId),
+    generationStepId: str(raw.generationStepId),
+  };
+}
+
 /** One planned item, defensively: a row without a collateralId cannot be
  *  reported against anything and is dropped rather than rendered anonymous. */
 function toStagedItem(raw: Record<string, unknown>): StagedItem {
@@ -368,14 +453,27 @@ export interface StagePayloads {
    * ITEMS[] ONLY, observed 2026-07-27. Mixing flat fields with `items[]` is
    * REFUSED by the tool, and so is a duplicate `collateralId` within a batch.
    * One item is a batch of one: there is no separate single-item shape.
+   *
+   * HARDENED 2026-08-22 (WS0.5 item 3), observed on the wire in
+   * `observed-envelopes-valuation-hardened.json`:
+   *   - `productPackageId` is REQUIRED. It is the deal anchor, and every
+   *     collateral must be pledged to a loan of that package or owned by the
+   *     package's borrower. A batch without it is refused outright.
+   *   - `valuationDate` is REQUIRED PER ITEM and is not defaulted server-side:
+   *     nCino orders valuations by it, and defaulting it to today would make
+   *     two valuations of one asset on one date the normal case.
+   *   - the batch is capped at 20 items.
    */
   "collateral-valuation": {
     idempotencyKey: string;
     rationale?: string;
+    productPackageId: string;
     items: Array<{
       collateralId: string;
       value?: number | null;
-      valuationDate?: string | null;
+      /** REQUIRED. Typed non-optional so an omission is a compile error here
+       *  rather than a refusal the banker has to read. */
+      valuationDate: string;
       /** LLC_BI__Type__c — the valuation BASIS (Net Orderly Liquidation Value,
        *  Fair Market Value, …). NOT where the number came from. */
       type?: string | null;
@@ -458,17 +556,41 @@ export interface StagePayloads {
        failure this campaign has already paid for twice, so the ticket blocks
        staging with a named gap instead of sending an invented key. */
   };
+  /**
+   * PACKAGE-SCOPED BULK, rebuilt 2026-08-22 (WS0.5 item 2). Observed on the wire
+   * in `observed-envelopes-covenant-bulk.json`.
+   *
+   * THE OLD SHAPE IS GONE, not deprecated: `accountId` + `covenantComplianceId`
+   * + `result` anchored on a compliance ROW and named no covenant, so it could
+   * not carry the parent-covenant reads (Active, Frequency Template, Effective
+   * Date) that make the approval-trap warning and the Pending precondition
+   * possible. Those superseded fields carried `required=true` on the invocable,
+   * so sending them now makes the new shape unreachable on the wire.
+   *
+   * The anchor is the PRODUCT PACKAGE and the unit of action is still the
+   * covenant: one plan, one hash, one token, N assessments.
+   */
   "covenant-review": {
     idempotencyKey: string;
     rationale?: string;
-    accountId: string;
-    /** UPDATE-only: the existing compliance record this assessment lands on. */
-    covenantComplianceId: string;
-    result?: string | null;
-    /** Observed as a STRING on the wire, not a number. */
-    observedValue?: string | null;
-    narrative?: string | null;
-    comments?: string | null;
+    productPackageId: string;
+    /** Optional member selection. Omitted, the whole package is surveyed. */
+    covenantIds?: string[];
+    /** Explicit opt-in to writing onto a compliance row that is not Pending.
+     *  Such a write is stored and the covenant schedule does NOT advance. */
+    allowNonPending?: boolean;
+    assessments: Array<{
+      covenantId: string;
+      /** Compliant, Waived or Exception. nCino's three complete statuses. */
+      status: string;
+      /** Observed as a NUMBER on this wire (the invocable declares Decimal). */
+      observedValue?: number | null;
+      /** Breached or Overdue. THE field that separates a failed test from an
+       *  undelivered document; the tool defaults it to Breached on Exception. */
+      reasonForException?: string | null;
+      narrative?: string | null;
+      comments?: string | null;
+    }>;
   };
   "loan-modification": FacilityAnchor & {
     idempotencyKey: string;
@@ -537,6 +659,12 @@ export async function stageAction<K extends WriteActionId>(
       ? (r.facilities as Array<Record<string, unknown>>).map(toStagedFacility).filter((f) => f.facilityId !== "")
       : undefined,
     facilityCount: typeof r.facilityCount === "number" ? r.facilityCount : undefined,
+    covenants: Array.isArray(r.covenants)
+      ? (r.covenants as Array<Record<string, unknown>>).map(toStagedCovenant).filter((c) => c.covenantId !== "")
+      : undefined,
+    assessedCount: typeof r.assessedCount === "number" ? r.assessedCount : undefined,
+    refusedCount: typeof r.refusedCount === "number" ? r.refusedCount : undefined,
+    scopeCount: typeof r.scopeCount === "number" ? r.scopeCount : undefined,
     createsPackage: r.createsPackage === true,
     plannedPackageName: typeof r.plannedPackageName === "string" ? r.plannedPackageName : undefined,
     covenantCarryoverCount: typeof r.covenantCarryoverCount === "number" ? r.covenantCarryoverCount : undefined,
@@ -627,15 +755,10 @@ export async function executeAction(
     reviewId: typeof r.reviewId === "string" ? r.reviewId : undefined,
     riskRatingReviewId: typeof r.riskRatingReviewId === "string" ? r.riskRatingReviewId : undefined,
     items: Array.isArray(r.items)
-      ? (r.items as Array<Record<string, unknown>>).map((raw) => ({
-          collateralId: String(raw.collateralId ?? ""),
-          collateralName: typeof raw.collateralName === "string" ? raw.collateralName : undefined,
-          valuationId: typeof raw.valuationId === "string" ? raw.valuationId : undefined,
-          recordName: typeof raw.recordName === "string" ? raw.recordName : null,
-          anchorName: typeof raw.anchorName === "string" ? raw.anchorName : null,
-          collateralValueMoved: typeof raw.collateralValueMoved === "boolean" ? raw.collateralValueMoved : undefined,
-        }))
+      ? (r.items as Array<Record<string, unknown>>).map(toExecutedItem)
       : undefined,
+    approvalChainStarted:
+      typeof r.approvalChainStarted === "boolean" ? r.approvalChainStarted : r.approvalChainStarted === null ? null : undefined,
     facilities: Array.isArray(r.facilities)
       ? (r.facilities as Array<Record<string, unknown>>).map(toExecutedFacility).filter((f) => f.facilityId !== "")
       : undefined,

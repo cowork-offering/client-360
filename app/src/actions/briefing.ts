@@ -20,6 +20,7 @@ import type { PanelSchema } from "./panelSchema";
 import { money, type DraftFigure } from "./drafts";
 import { isActiveFacility } from "../data/worklist";
 import { bookedFacilities, facilityLabel } from "../data/facilityStage";
+import { ALLOW_NON_PENDING_WARNING, packageRecords } from "./schemas";
 
 export type BriefingSegment =
   | { kind: "text"; text: string }
@@ -99,8 +100,9 @@ function annualReview(schema: PanelSchema, b: BorrowerBundle | null, name: strin
   };
 }
 
-function collateralValuation(schema: PanelSchema, name: string): Briefing {
+function collateralValuation(schema: PanelSchema, b: BorrowerBundle | null, name: string): Briefing {
   const figures: DraftFigure[] = [];
+  const deals = packageRecords(b).length > 1;
   const anchor = schema.fields.find((x) => x.key === "collateral");
   const current = schema.fields.find((x) => x.key === "value");
   const label = typeof anchor?.value === "string" && anchor.value ? anchor.value.toLowerCase() : "pledged collateral";
@@ -116,7 +118,11 @@ function collateralValuation(schema: PanelSchema, name: string): Briefing {
       context: `Pledged by ${name}${carried ? ` and carried today at ${carried}` : ""}. Lendable value is a formula on the collateral record and is not written here.`,
     },
     lead: [
-      t(`This values collateral pledged by ${name}${carried ? `, carried today at ${carried}` : ""}. Choose what to revalue in `),
+      t(`This values collateral pledged by ${name}${carried ? `, carried today at ${carried}` : ""}. `),
+      // Same rule as the covenant ticket: the deal is a chip only when the
+      // relationship stages more than one package.
+      ...(deals ? [t("It is filed against "), f("package", "choose the deal"), t(". ")] : []),
+      t("Choose what to revalue in "),
       f("records", "choose the collateral"),
       t(". The new figure is "),
       f("value", "enter the valuation"),
@@ -205,21 +211,40 @@ function riskRating(b: BorrowerBundle | null, name: string): Briefing {
   };
 }
 
+/**
+ * AGGREGATION FIRST. The thing under review is the covenant package of a
+ * product package, so the ticket names the deal and asks which of its covenants
+ * to assess. A single covenant is a member selection, not a different action.
+ */
 function covenantReview(b: BorrowerBundle | null): Briefing {
   const figures: DraftFigure[] = [];
-  const cov = (b?.covenants?.covenants ?? []).find((c) => c.complianceId) ?? (b?.covenants?.covenants ?? [])[0];
-  const type = cov?.covenantType ?? "the covenant";
+  const covenants = b?.covenants?.covenants ?? [];
+  const count = covenants.length;
+  const nonPending = covenants.filter((c) => c.latestComplianceStatus && c.latestComplianceStatus !== "Pending").length;
+  const deals = packageRecords(b).length > 1;
   return {
     subject: {
-      title: `Assessment of ${type}`,
-      context:
-        "Status changes are recorded on the existing compliance record; the bank's approval process governs new compliance periods.",
+      title: count ? `Covenant review across ${count} ${count === 1 ? "covenant" : "covenants"}` : "Covenant review",
+      context: [
+        "Each assessment updates one existing compliance record. No compliance record is created here, and no credit decision is made or implied.",
+        nonPending ? `${nonPending} of them sit on a compliance row that is not Pending.` : null,
+        // The org's own account of the opt-in, stated wherever the opt-in is
+        // offered — which is always. A toggle whose consequence is only
+        // readable in the collapsed field list is not an informed choice.
+        `${ALLOW_NON_PENDING_WARNING} Left off, such a covenant is refused by name with its reason.`,
+      ]
+        .filter(Boolean)
+        .join(" "),
     },
+    // The DEAL is a choice only when the relationship stages more than one
+    // package. With exactly one there is nothing to choose, and a chip on a
+    // field the banker cannot edit is a promise the ticket cannot keep.
     lead: [
-      t(`This records ${type} as `),
-      f("assessmentResult", "choose the assessment"),
-      t(" at an observed "),
-      f("observedValue", "enter the observed value"),
+      t("This assesses "),
+      f("covenants", "choose the covenants"),
+      ...(deals ? [t(" on "), f("package", "choose the deal")] : [t(" on this deal")]),
+      t(". Recording onto rows that are not Pending is "),
+      f("allowNonPending", "off"),
       t("."),
     ],
     figures,
@@ -287,7 +312,7 @@ export function buildBriefing(
 ): Briefing | null {
   if (!schema) return null;
   if (actionId === "annual-review") return annualReview(schema, bundle, accountName, reasons);
-  if (actionId === "collateral-valuation") return collateralValuation(schema, accountName);
+  if (actionId === "collateral-valuation") return collateralValuation(schema, bundle, accountName);
   if (actionId === "create-service-request") return serviceRequest(bundle, accountName);
   if (actionId === "new-facility-request") return newFacility(bundle, accountName);
   if (actionId === "risk-rating-review") return riskRating(bundle, accountName);

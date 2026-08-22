@@ -22,7 +22,10 @@ const SHIPPING = [
 ];
 
 const bundle: BorrowerBundle = {
-  snapshot: { accountId: "001X", name: "Testco", primaryRiskRating: "5" },
+  // Both bulk actions are anchored on a product package since WS0.5, so a
+  // relationship without one blocks them. The shared fixture stages one; the
+  // fixtures below that deliberately omit it prove the block.
+  snapshot: { accountId: "001X", name: "Testco", primaryRiskRating: "5", productPackageId: "a5Fbb000000IGZNEA4" },
   exposure: {
     totalCommitted: 10_000_000,
     facilities: [
@@ -202,7 +205,7 @@ describe("the valuation anchor is the COLLATERAL id, never the facility id", () 
   /** The live defect: a facility loanId was sent as collateralId and the org
    *  refused it, correctly. The anchor now comes only from the pledge row. */
   const withId: BorrowerBundle = {
-    snapshot: { accountId: "001X", name: "Testco" },
+    snapshot: { accountId: "001X", name: "Testco", productPackageId: "a5Fbb000000IGZNEA4" },
     exposure: {
       facilities: [
         {
@@ -262,7 +265,9 @@ describe("the valuation anchor is the COLLATERAL id, never the facility id", () 
     // action must never reach the tool.
     const sterling = { snapshot: { accountId: "001SAMPLE0000STRL" }, exposure: { facilities: [{ loanId: "L9", collateral: [{ collateralType: "Inventory", collateralValue: 1 }] }] } };
     const schema = buildPanelSchema("collateral-valuation", { ...ctx, bundle: sterling as never })!;
-    expect(stagingBlockers(schema).length).toBe(1);
+    // Two honest gaps, not one: Sterling stages no collateral id AND no product
+    // package, and the tool requires both.
+    expect(stagingBlockers(schema).map((x) => x.key)).toEqual(["package", "records"]);
   });
 
   it("the other two actions are unaffected and still stageable", () => {
