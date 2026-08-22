@@ -101,6 +101,15 @@ Scope fixed by the G0 findings + process research. All changes wire-probed, suit
 Wave gate: suite green, envelopes for every new shape, danger-register items 1-6 closed or
 explicitly deferred with reason.
 
+### WS0.5 RESULT (2026-08-22): CLOSED, two days early. All 7 items + 2 consequences shipped and verified:
+execute_loan_modification (wire-proven, manifest 24), package-scoped bulk covenant review + hardened
+valuation (177/177 Apex across 13 classes, probes residue zero), plugin packaging 0.4.3, demo identities,
+renewal property check, cockpit Exception classifier + mod-execute unhold + adaptation to the new shapes
+(1,483/1,483), both artifact URLs republished with explicit 23-tool manifest (D3 closed). Demo beat
+rehearsed on Hartwell through our own tools. Decision surfaced to Fabian: execute_covenant_review is now
+UNHELD in the cockpit (org guards intact) since the email fence was relaxed; re-hold is one line if wanted.
+Evidence: EVIDENCE-SEPT4.md + ws05-side-findings*.md.
+
 ### WS1 — KYC full stage/approve loop (Aug 23-27) · Archy · GATE G1
 The cockpit KYC & Onboarding zone goes from display to workable. The IDB gateway staging tools
 already exist as connector tools (get_customer360, stage/approve address + name change, sanctions,
