@@ -15,3 +15,9 @@ the clone field set before any execute_renewal work, as before.
 
 ## Plugin packaging (DONE 08-22): client-360/ subdir, 0.4.3, marketplace path updated, assets
 parity guard `scripts/sync-plugin-assets.mjs --check`.
+
+## D3 closed (2026-08-22): artifact capabilities manifest now explicit and source-derived
+Both artifact URLs republished at repo 4411583 with `capabilities.mcp` = knowledge/artifact-capabilities-manifest.json
+(Customer 360: 22 tools incl. execute_loan_modification; execute_covenant_review excluded by founder decision,
+Customer360SearchAccounts excluded as no call path; IDB Gateway 3; Microsoft 365 1). Shapes come from the archived
+observed envelopes (stage/execute/replay), not guessed; no live connector call was made from this session at publish time.
