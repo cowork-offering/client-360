@@ -35,7 +35,7 @@ h1{font-family:"IBM Plex Serif",Georgia,serif;font-size:1.9rem;font-weight:600;m
 .foot{margin-top:2rem;color:var(--muted);font-size:.82rem}
 </style>
 <div class="wrap">
-<div class="eyebrow">Customer 360 · status board · August 22, 2026, 3rd update</div>
+<div class="eyebrow">Customer 360 · status board · August 22, 2026, 4th update</div>
 <h1>What is done, what is being built, what is left</h1>
 <p class="lede">One card per deliverable. Left column is finished with receipts. The rest is the work between now and the September 14 lock, in the order it happens. Tags show what each card does for the booth demo.</p>
 <div class="key">
@@ -56,13 +56,14 @@ h1{font-family:"IBM Plex Serif",Georgia,serif;font-size:1.9rem;font-weight:600;m
 <div class="card"><b>Demo identities prepared</b><small>Noland's user lacked access to our action tools: fixed. UserRole, Credit Actions and Credit Actions Delete set for both demo users. Repeat the three checks for any new booth identity.</small><div class="m"><span class="tag t-demo">demo beat</span></div></div>
 <div class="card"><b>Renewal stage property re-checked</b><small>RenewalsStageStatusBookedLoansPSC = true after the Aug 14 upgrade. Renewal stays stage-only.</small><div class="m"><span class="tag t-core">core tool</span></div></div>
 <div class="card"><b>Exception is not a breach: one covenant-status classifier</b><small>Every surface (worklist, covenant table, signals, prose, suggestions) now reads status through one classifier. Administrative Exceptions never render as breaches; Waived is its own state. 1,399/1,399 tests, contrast gate clean, republished to both artifact URLs.</small><div class="m"><span class="tag t-core">core tool</span></div></div>
+<div class="card"><b>execute_loan_modification: built, tested, wire-proven</b><small>The missing half of "approve". Token-gated, calls nCino's credit-action engine in-process, verifies clone + junction by re-query, applies the staged change to the clone only. 149/149 suite, manifest now 24 tools, envelopes archived, residue zero.</small><div class="m"><span class="tag t-demo">demo beat</span></div></div>
 <div class="card"><b>Road to Success plan, program-aligned</b><small>Dates from the Aug 20 meeting, Monday support split, decisions locked.</small><div class="m"><span class="tag t-polish">packaging</span></div></div>
 </div>
 
 <div class="col now"><h2>Building now <span>Aug 22 to 24</span></h2>
-<div class="card"><b>execute_loan_modification tool</b><small>IN BUILD (agent on its own branch, org deploy + wire probe + tests). The missing half: banker approves the staged plan, the tool consumes the token, fires the credit action, verifies clone + junction, applies the changes to the clone. Without it, "approve" does nothing.</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">Fabian · 1 d</span></div></div>
-<div class="card"><b>Covenant review rebuilt, package-scoped</b><small>Uses the gathered knowledge: all covenants of the package in one plan, correct nCino field, Waived added, status precondition, approval-trap guard.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · 1.5 d</span></div></div>
-<div class="card"><b>Collateral valuation hardened</b><small>Package anchor, 20-item cap, valuation date required.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · 0.5 d</span></div></div>
+<div class="card"><b>Covenant review rebuilt, package-scoped</b><small>IN BUILD. Uses the gathered knowledge: all covenants of the package in one plan, correct nCino field, Waived added, status precondition, approval-trap guard.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · 1.5 d</span></div></div>
+<div class="card"><b>Collateral valuation hardened</b><small>IN BUILD. Package anchor, 20-item cap, valuation date required.</small><div class="m"><span class="tag t-core">core tool</span><span class="who">Fabian · 0.5 d</span></div></div>
+<div class="card"><b>Cockpit: release the client-side hold on modification execute</b><small>IN BUILD. The app still marks modification as held from before the tool existed; remove the hold, wire execute_loan_modification, surface the org's warnings, refresh the artifact capabilities manifest (24 tools).</small><div class="m"><span class="tag t-demo">demo beat</span><span class="who">today</span></div></div>
 </div>
 
 <div class="col next"><h2>Next <span>Aug 23 to Sep 1</span></h2>
