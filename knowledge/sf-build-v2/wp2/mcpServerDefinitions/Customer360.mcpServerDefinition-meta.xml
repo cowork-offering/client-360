@@ -180,6 +180,14 @@
     </tools>
     <tools>
         <apiDefinition>
+            <apiIdentifier>aa:apex-ExecuteLoanModification</apiIdentifier>
+            <apiSource>API_CATALOG</apiSource>
+            <operation>ExecuteLoanModification</operation>
+        </apiDefinition>
+        <toolName>execute_loan_modification</toolName>
+    </tools>
+    <tools>
+        <apiDefinition>
             <apiIdentifier>aa:apex-StageRenewal</apiIdentifier>
             <apiSource>API_CATALOG</apiSource>
             <operation>StageRenewal</operation>

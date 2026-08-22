@@ -1,10 +1,13 @@
 /**
- * StageHeldCreditActionsTest - the two stage-only credit actions.
+ * StageHeldCreditActionsTest - the two package-anchored credit actions, at stage time.
  *
- * These tools plan and never execute. The point of this file is to prove the HELD state is a real,
- * inspectable output rather than a comment: every plan carries executionHeld true, a held reason
- * naming Loan_Validation_06, and a terminal handoff step. No execute class exists for either
- * action, which is the strongest guarantee available that nothing runs.
+ * WHAT CHANGED, AND WHY THIS FILE NO LONGER SAYS "BOTH ARE HELD". stage_renewal is still stage-only:
+ * no execute class ships for it, which is the strongest guarantee available that nothing runs.
+ * stage_loan_modification is not: execute_loan_modification ships, so its plan now carries
+ * executionHeld false with no held reason, and the terminal handoff step hands off the BOOKING of the
+ * modification rather than the modification itself. Booking is still nCino's own approval run and the
+ * plan still says so, in the warnings where it belongs. The end-to-end pair lives in
+ * StageExecuteLoanModificationTest; what stays here is the selection contract the two tools share.
  *
  * It also carries the package-anchored selection contract, which both tools share through
  * C360Facilities: flat loanId XOR facilityIds, mixing refused, an explicitly empty list refused,
@@ -123,12 +126,9 @@ private class StageHeldCreditActionsTest {
     }
 
     // NOTE ON WHAT IS NOT TESTED HERE, AND WHY.
-    // A REAL booked facility is unreachable from a unit test. Staging requires Booked + Open, and
-    // Booked is unreachable through the API: LV05 and LV06 refuse it with no permission bypass, and
-    // the only route is nCino's Submit for Approval with real approvers. So the plan-shape
-    // assertions below run against facilities injected through the tools' test seam, and the wire
-    // path still refuses every real unbooked facility. Contriving a fake booked loan IN THE ORG to
-    // colour in coverage would test our mock, not the org.
+    // The plan-shape assertions below run against facilities injected through the tools' test seam,
+    // for cost rather than for reachability: see installBookedFacilities. The one place it matters
+    // that a REAL booked facility can exist is the execute pair, and that suite uses one.
 
     @IsTest
     static void modificationNeedsAtLeastOneRequestedChange() {
@@ -159,24 +159,28 @@ private class StageHeldCreditActionsTest {
     }
 
     @IsTest
-    static void noExecuteClassExistsForEitherAction() {
+    static void renewalHasNoExecuteClassAndModificationDoes() {
         C360TestFixture.armCalloutMock();
-        // The strongest available guarantee that these actions cannot run: the Apex classes that
-        // would run them are not in the org at all.
+        // For the action that is still held, the strongest available guarantee that it cannot run: the
+        // Apex class that would run it is not in the org at all. For the one that is not held any more,
+        // the same query is the receipt that it is.
         Set<String> deployed = new Set<String>();
         for (ApexClass c : [SELECT Name FROM ApexClass WHERE Name IN ('ExecuteLoanModification', 'ExecuteRenewal')]) {
             deployed.add(c.Name);
         }
-        System.assertEquals(0, deployed.size(), 'No execute class ships for a held credit action. Found: ' + deployed);
+        System.assertEquals(false, deployed.contains('ExecuteRenewal'), 'No execute class ships for a held credit action');
+        System.assertEquals(true, deployed.contains('ExecuteLoanModification'), 'The modification pair is complete and the plan says execution is available');
     }
 
     /**
      * Injects booked facilities on the fixture package through the stage tools' testability seam.
      *
-     * Booked is unreachable through the API (LV05/LV06, no bypass, only nCino's Submit for Approval
-     * with real approvers), so a fixture cannot produce a stageable facility and the plan-building
-     * body was untestable. Same precedent as ExecuteCovenantReview's seam: inject what the org will
-     * not let a test create, and leave the wire path refusing real unbooked facilities.
+     * A real Booked facility IS insertable (LV06 keys on PRIORVALUE, blank on insert; LV05 wants a
+     * lookupKey), and StageExecuteLoanModificationTest uses one. The seam is kept here because these
+     * selection tests need SEVERAL facilities on one package, and each real Loan insert wakes five
+     * managed namespaces and 21 validation rules: paying that cost three times per method is what
+     * killed the first live suite run on time (lesson 7). The seam answers the read; the wire path is
+     * unchanged and still refuses real unbooked facilities.
      *
      * The FIRST injected facility is the real fixture loan, so the flat single-facility path stages
      * against a genuine record id. Any further ones carry synthetic ids, which never reach SOQL:
@@ -214,7 +218,7 @@ private class StageHeldCreditActionsTest {
     }
 
     @IsTest
-    static void modificationPlanOnABookedFacilityIsHeldAndSaysWhy() {
+    static void modificationPlanOnABookedFacilityIsExecutableAndSaysWhatIsStillManual() {
         C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
 
@@ -223,11 +227,17 @@ private class StageHeldCreditActionsTest {
         Test.stopTest();
 
         System.assertEquals(true, res.ok, 'A booked facility stages, got ' + whyMod(res));
-        System.assertEquals(true, res.result.executionHeld, 'Execution is held in this wave');
-        System.assert(res.result.heldReason.contains('Booked'), 'The held reason names the blocking state: ' + res.result.heldReason);
-        System.assert(res.result.heldReason.contains('Loan_Validation_06'), 'And the rule with no bypass: ' + res.result.heldReason);
+        System.assertEquals(false, res.result.executionHeld, 'execute_loan_modification ships, so the plan is not held');
+        System.assertEquals(null, res.result.heldReason, 'Nothing is held, so nothing explains a hold');
         System.assertEquals(C360Plan.TYPE_HANDOFF, res.result.steps[res.result.steps.size() - 1].type,
-            'The plan ends in a handoff descriptor, not a write');
+            'The plan still ends in a handoff descriptor: booking is nCino\'s run, not ours');
+
+        Boolean sawBookingWarning = false;
+        for (String w : res.result.warnings) {
+            if (w.contains('Submit for Approval') && w.contains('Loan_Validation_06')) { sawBookingWarning = true; }
+        }
+        System.assertEquals(true, sawBookingWarning,
+            'The banker must be told that executing produces a clone and booking it is still a human nCino step: ' + res.result.warnings);
         System.assertNotEquals(null, res.result.covenantCarryoverCount,
             'An empty carryover list is a real answer and must be reported as zero');
     }
@@ -476,7 +486,7 @@ private class StageHeldCreditActionsTest {
         System.assertEquals(1, [SELECT COUNT() FROM cm_Action_Staging__c], 'One call is one staging row');
         System.assertNotEquals(null, res.result.decisionToken, 'One batch, one single-use token');
         System.assertNotEquals(null, res.result.planHash);
-        System.assertEquals(true, res.result.executionHeld);
+        System.assertEquals(false, res.result.executionHeld, 'The whole batch executes under that one token');
         System.assertEquals(String.valueOf(C360Wave2Fixture.existingPackage().Id), res.result.productPackageId,
             'The plan is anchored on the package it was given');
 
