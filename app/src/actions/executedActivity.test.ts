@@ -258,3 +258,54 @@ describe("merging the trail", () => {
     expect(out.map((e) => e.ts)).toEqual(["2026-07-26T11:04:00Z", "2026-07-20T00:00:00Z", "2026-07-01T00:00:00Z"]);
   });
 });
+
+
+/* The modification's trail entry. The created record is the CLONE nCino made;
+   the parent facility existed already and is the anchor, not the result. Values
+   read out of the live wire probe of 2026-08-22. */
+describe("a loan modification in the trail", () => {
+  const MOD: ExecuteResult = {
+    stagingId: "a8abb00001N6Z0XAAV",
+    terminalState: "success",
+    outcome:
+      "Modification ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00 created from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 at stage Qualification.",
+    cloneLoanId: "a4Zbb000002Br6HEAS",
+    recordName: "ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00",
+    anchorName: "ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+    steps: [{ id: "credit_action_0", type: "write", label: "Invoke the modification credit action", state: "verified" }],
+  };
+
+  it("names the clone as the created record, never the parent", () => {
+    expect(createdRecordId("loan-modification", MOD)).toBe("a4Zbb000002Br6HEAS");
+  });
+
+  it("titles the entry with the clone filed against the parent", () => {
+    const e = executedActivityEntry({ actionId: "loan-modification", outcome: MOD, now: NOW })!;
+    expect(e.kind).toBe("ACTION_EXECUTED");
+    expect(e.title).toBe(
+      "Modification ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00 filed against ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+    );
+  });
+
+  it("deep links the clone as a facility", () => {
+    const e = executedActivityEntry({
+      actionId: "loan-modification",
+      outcome: MOD,
+      instanceUrl: "https://x.lightning.force.com",
+      now: NOW,
+    })!;
+    expect(e.reference?.webLink).toBe(
+      "https://x.lightning.force.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002Br6HEAS/view",
+    );
+  });
+
+  it("says nothing was written twice on a replay, and still names the clone", () => {
+    const e = executedActivityEntry({
+      actionId: "loan-modification",
+      outcome: { ...MOD, replayed: true, anchorName: null, outcome: "This idempotency key already produced modification facility a4Zbb000002Br6HEAS. Nothing was written." },
+      now: NOW,
+    })!;
+    expect(e.detail?.body).toContain("Replayed under the same idempotency key; nothing was written twice.");
+    expect(e.reference?.id).toBe("a4Zbb000002Br6HEAS");
+  });
+});

@@ -1,0 +1,315 @@
+{
+ "_provenance": {
+  "captured": "2026-08-22",
+  "org": "bankinggpt (accenture-d8 sandbox, 00DDz000001qeO2MAI)",
+  "surface": "REST Actions API, POST /services/data/v67.0/actions/custom/apex/{Operation}",
+  "runningUser": "005bb00000ftouDAAQ (fabian.goetzens@accenture.com.bankinggpt, role Commercial Banking Manager)",
+  "data": "THROWAWAY. Account 001bb00001KUeaHAAT 'ZZ-WS05-PROBE Borrower', package a5Fbb000000IltJEAS, parent loan a4Zbb000002Br4fEAC (Booked/Open, lookupKey ZZWS05PROBE1). Clone a4Zbb000002Br6HEAS, junctions RL-00000197 (rev 0 anchor) and RL-00000198 (rev 1). Every record listed here was tree-deleted after capture; the envelopes are the only thing kept.",
+  "note": "Verbatim request and response bodies. Nothing edited, nothing redacted: the decision token in these envelopes was consumed by the execute call and its staging row is deleted."
+ },
+ "stage_loan_modification": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS05-PROBE-MOD-1",
+     "productPackageId": "a5Fbb000000IltJEAS",
+     "facilityIds": [
+      "a4Zbb000002Br4fEAC"
+     ],
+     "rationale": "WS0.5 wire probe: client asked to increase the equipment facility.",
+     "requestedAmount": 1500000
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "StageLoanModification",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "warnings": [
+       "Execution is available. This facility is booked and open, which is what a credit action requires, so execute_loan_modification will run this plan behind the decision token.",
+       "This plans a modification, NOT an approval. Executing it produces a clone facility at Qualification; BOOKING that clone requires nCino's Submit for Approval button, which Loan_Validation_06 enforces with no permission bypass.",
+       "The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Execution therefore verifies the clone and its chain row by re-query and claims nothing the org will not read back.",
+       "The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.",
+       "No loan-level covenants are attached to this facility, so nothing would carry over."
+      ],
+      "summary": "Plans a modification of ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 on the package. nCino will clone the facility, create the chain junction row and apply the requested changes to the clone. NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. Executing this plan creates the modification at Qualification and stops there. Booking it is nCino's own run: Submit for Approval with real approvers, which Loan_Validation_06 enforces with no permission bypass.",
+      "steps": [
+       {
+        "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan__c",
+        "label": "Invoke the modification credit action on the package for ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "id": "credit_action_0",
+        "fields": [
+         "clone created by nCino"
+        ],
+        "automationWoken": [
+         "nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row"
+        ]
+       },
+       {
+        "verification": "SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId",
+        "type": "verification",
+        "state": "pending",
+        "objectName": "LLC_BI__LoanRenewal__c",
+        "label": "Re-query for the new facility cloned from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 and its junction row",
+        "id": "verify_clone_0",
+        "fields": [
+         "LLC_BI__ParentLoanId__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "verification": "SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan__c",
+        "label": "Apply the requested changes to the new facility cloned from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "id": "apply_changes_0",
+        "fields": [
+         "LLC_BI__Amount__c",
+         "LLC_BI__Maturity_Date__c",
+         "LLC_BI__InterestRate__c",
+         "LLC_BI__Term_Months__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "verification": null,
+        "type": "observed_side_effect",
+        "state": "pending",
+        "objectName": null,
+        "label": "Stage-driven email alerts and memo status changes the org may run",
+        "id": "observe_side_effects",
+        "fields": [],
+        "automationWoken": [
+         "nCino Commercial - Loan After Save"
+        ]
+       },
+       {
+        "verification": null,
+        "type": "handoff",
+        "state": "pending",
+        "objectName": null,
+        "label": "HANDOFF: booking the modification is nCino's own approval run",
+        "id": "held_execution",
+        "fields": [],
+        "automationWoken": [
+         "nCino Submit for Approval, driven by a human"
+        ]
+       }
+      ],
+      "stagingId": "a8abb00001N6Z0XAAV",
+      "replayed": false,
+      "provenanceJson": "{\"productPackageId\":{\"citation\":\"a5Fbb000000IltJEAS\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"facilityIds\":{\"citation\":\"a4Zbb000002Br4fEAC\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+      "productPackageId": "a5Fbb000000IltJEAS",
+      "planHash": "962ba9589fe41637d48392575f63dd2cfb25245fe7f54e615de38de67847ed8c",
+      "heldReason": null,
+      "facilityCount": 1,
+      "facilities": [
+       {
+        "verifyStepId": "verify_clone_0",
+        "facilityName": "ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "facilityId": "a4Zbb000002Br4fEAC",
+        "creditActionStepId": "credit_action_0",
+        "covenantCarryoverCount": 0,
+        "applyStepId": "apply_changes_0"
+       }
+      ],
+      "executionHeld": false,
+      "decisionToken": "8fc5099ec8f0a9fa83dc7c6c39c4ed7f76e07d6b8494e7f0bf0d6bd29285ee86",
+      "covenantCarryoverCount": 0,
+      "accountId": "001bb00001KUeaHAAT"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_loan_modification": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS05-PROBE-MOD-1",
+     "stagingId": "a8abb00001N6Z0XAAV",
+     "planHash": "962ba9589fe41637d48392575f63dd2cfb25245fe7f54e615de38de67847ed8c",
+     "decisionToken": "8fc5099ec8f0a9fa83dc7c6c39c4ed7f76e07d6b8494e7f0bf0d6bd29285ee86",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteLoanModification",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "success",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Invoke the modification credit action on the package for ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "id": "credit_action_0",
+        "detail": "nCino created modification facility a4Zbb000002Br6HEAS from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Re-query for the new facility cloned from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 and its junction row",
+        "id": "verify_clone_0",
+        "detail": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000198 records revision 1; the parent re-reads unchanged at Booked / Open."
+       },
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Apply the requested changes to the new facility cloned from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "id": "apply_changes_0",
+        "detail": "Amount reads back at 1500000.00."
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "filed_unverified",
+        "label": "Stage-driven email alerts and memo status changes the org may run",
+        "id": "observe_side_effects",
+        "detail": "Stage-driven email alerts and memo status changes run org-side on their own transactions and report nothing back here."
+       },
+       {
+        "type": "handoff",
+        "state": "verified",
+        "label": "HANDOFF: booking the modification is nCino's own approval run",
+        "id": "held_execution",
+        "detail": "The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved."
+       }
+      ],
+      "stagingId": "a8abb00001N6Z0XAAV",
+      "replayed": false,
+      "recordName": "ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00",
+      "productPackageId": "a5Fbb000000IltJEAS",
+      "outputPackageId": "a5Fbb000000IltJEAS",
+      "outcome": "Modification ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00 created from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 at stage Qualification. Amount reads back at 1500000.00. The parent was not touched. The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved.",
+      "facilityCount": 1,
+      "facilities": [
+       {
+        "verification": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000198 records revision 1; the parent re-reads unchanged at Booked / Open.",
+        "revisionNumber": 1,
+        "parentUnchanged": true,
+        "outcome": "Modification ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00 created from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 at stage Qualification. Amount reads back at 1500000.00. The parent was not touched.",
+        "junctionName": "RL-00000198",
+        "junctionId": "a4Obb000000FXGcEAO",
+        "facilityName": "ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "facilityId": "a4Zbb000002Br4fEAC",
+        "cloneStage": "Qualification",
+        "cloneName": "ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00",
+        "cloneLookupKey": "ZZWS05PROBE1_M1",
+        "cloneLoanId": "a4Zbb000002Br6HEAS",
+        "appliedChanges": "Amount reads back at 1500000.00."
+       }
+      ],
+      "cloneLoanId": "a4Zbb000002Br6HEAS",
+      "bookingHandoff": "The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved.",
+      "anchorName": "ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_loan_modification_replay": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS05-PROBE-MOD-1",
+     "stagingId": "a8abb00001N6Z0XAAV",
+     "planHash": "962ba9589fe41637d48392575f63dd2cfb25245fe7f54e615de38de67847ed8c",
+     "decisionToken": "8fc5099ec8f0a9fa83dc7c6c39c4ed7f76e07d6b8494e7f0bf0d6bd29285ee86",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteLoanModification",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "success",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Invoke the modification credit action on the package for ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "id": "credit_action_0",
+        "detail": "nCino created modification facility a4Zbb000002Br6HEAS from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Re-query for the new facility cloned from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00 and its junction row",
+        "id": "verify_clone_0",
+        "detail": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000198 records revision 1; the parent re-reads unchanged at Booked / Open."
+       },
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Apply the requested changes to the new facility cloned from ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00",
+        "id": "apply_changes_0",
+        "detail": "Amount reads back at 1500000.00."
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "filed_unverified",
+        "label": "Stage-driven email alerts and memo status changes the org may run",
+        "id": "observe_side_effects",
+        "detail": "Stage-driven email alerts and memo status changes run org-side on their own transactions and report nothing back here."
+       },
+       {
+        "type": "handoff",
+        "state": "verified",
+        "label": "HANDOFF: booking the modification is nCino's own approval run",
+        "id": "held_execution",
+        "detail": "The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved."
+       }
+      ],
+      "stagingId": "a8abb00001N6Z0XAAV",
+      "replayed": true,
+      "recordName": "ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00",
+      "productPackageId": null,
+      "outputPackageId": null,
+      "outcome": "This idempotency key already produced modification facility a4Zbb000002Br6HEAS. Nothing was written. The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved.",
+      "facilityCount": null,
+      "facilities": null,
+      "cloneLoanId": "a4Zbb000002Br6HEAS",
+      "bookingHandoff": "The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved.",
+      "anchorName": null
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ }
+}

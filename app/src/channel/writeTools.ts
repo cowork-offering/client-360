@@ -20,13 +20,28 @@
 import { callTool, SERVERS, unwrapInvocableOne, type McpFailure } from "./mcp";
 import type { PlanStep, StagedFacility, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
 
-/** The six deployed write tools. */
+/** The eight deployed write actions, and the tools each one runs on. */
 export const WRITE_TOOLS = {
   "collateral-valuation": { stage: "stage_collateral_valuation", execute: "execute_collateral_valuation", heldReason: null },
   "create-service-request": { stage: "stage_service_request", execute: "execute_service_request", heldReason: null },
   "annual-review": { stage: "stage_annual_review", execute: "execute_annual_review", heldReason: null },
   "new-facility-request": { stage: "stage_new_facility", execute: "execute_new_facility", heldReason: null },
   "risk-rating-review": { stage: "stage_risk_rating_review", execute: "execute_risk_rating_review", heldReason: null },
+  // UNHELD 2026-08-22 (WS0.5 item 1). `execute_loan_modification` is deployed
+  // and was exercised live over the REST Actions API on throwaway data, so the
+  // client no longer carries a hold of its own. What the org still enforces is
+  // the BOOKING handoff: executing produces a clone facility at Qualification,
+  // and moving that clone past approval is nCino's own Submit for Approval run
+  // (Loan_Validation_06). That fact reaches the banker through the plan's
+  // `warnings[]` and the `held_execution` handoff step, not through a gate.
+  //
+  // The ORG remains the authority on holding: a staged plan carrying
+  // `executionHeld: true` still blocks the gesture in the confirm gate.
+  "loan-modification": {
+    stage: "stage_loan_modification",
+    execute: "execute_loan_modification",
+    heldReason: null,
+  },
   // FOUNDER GATE, enforced here rather than trusted to nobody pressing it. The
   // execute tool EXISTS and is deployed, but it has never been run live and its
   // first invocation updates existing org data. The cockpit must not be the
@@ -38,14 +53,7 @@ export const WRITE_TOOLS = {
       "The first live execution of this action is founder-gated. Staging works and the plan is preserved; the record update ships once that gate is cleared.",
   },
   // EXECUTE HELD. `execute` is null, not a name we hope exists: the tool was
-  // never built, because nCino requires a facility to be Booked through its own
-  // Submit for Approval before a credit action can run against it (LV06).
-  "loan-modification": {
-    stage: "stage_loan_modification",
-    execute: null,
-    heldReason:
-      "Staging works; execution awaits an approved facility path: nCino requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.",
-  },
+  // never built for renewal.
   renewal: {
     stage: "stage_renewal",
     execute: null,
@@ -105,6 +113,40 @@ export interface ExecutedItem {
   collateralValueMoved?: boolean;
 }
 
+/**
+ * One facility's own outcome inside a package-anchored credit action.
+ *
+ * OBSERVED 2026-08-22 on `execute_loan_modification`
+ * (`knowledge/sf-build-v2/wp2/observed-envelopes-execute-loan-modification.json`).
+ * Every key below appeared on the wire; nothing here is inferred. The org
+ * reports the clone it created, the chain row that records the revision, and
+ * its own sentence for what it read back — the parent is named too, because
+ * "the parent was not touched" is the fact a banker checks first.
+ *
+ * The whole array is NULL on a replay. That is not an empty batch: it means the
+ * org is not re-asserting per-facility detail for a call that wrote nothing.
+ */
+export interface ExecutedFacility {
+  /** The PARENT facility the modification was raised against. */
+  facilityId: string;
+  facilityName?: string;
+  /** The facility nCino cloned. Named by the org after the changes landed. */
+  cloneLoanId?: string;
+  cloneName?: string;
+  cloneStage?: string;
+  cloneLookupKey?: string;
+  /** The `LLC_BI__LoanRenewal__c` chain row tying clone to parent. */
+  junctionId?: string;
+  junctionName?: string;
+  revisionNumber?: number;
+  /** The org's re-read of the parent. A modification must not move it. */
+  parentUnchanged?: boolean;
+  /** The org's own sentence about what the apply step read back. */
+  appliedChanges?: string;
+  verification?: string;
+  outcome?: string;
+}
+
 export interface ExecuteStepResult {
   id: string;
   type: string;
@@ -140,6 +182,19 @@ export interface ExecuteResult {
   loanId?: string;
   /** Bulk valuation: one result per collateral record. */
   items?: ExecutedItem[];
+  /** Loan modification: one result per facility in the credit action. Absent on
+   *  a replay, where the org returns null rather than restating the detail. */
+  facilities?: ExecutedFacility[];
+  facilityCount?: number;
+  /** The clone the modification created. Present on the first run AND on the
+   *  replay, which is how a replay still names what already exists. */
+  cloneLoanId?: string;
+  /** The org's sentence about what booking the clone requires. Rendered
+   *  verbatim: it is the org's account of the nCino run, not ours. */
+  bookingHandoff?: string;
+  /** The package the credit action ran on. For a modification it is the SOURCE
+   *  package: no new package is minted. */
+  outputPackageId?: string;
   /** The package the facility was filed on. Created by the plan when the
    *  relationship had none; observed as `productPackageId`, not `packageId`. */
   productPackageId?: string;
@@ -212,6 +267,27 @@ function toStagedFacility(raw: Record<string, unknown>): StagedFacility {
     applyStepId: typeof raw.applyStepId === "string" ? raw.applyStepId : undefined,
     covenantCarryoverCount:
       typeof raw.covenantCarryoverCount === "number" ? raw.covenantCarryoverCount : undefined,
+  };
+}
+
+/** One EXECUTED facility. Same doctrine as the staged row: a result without a
+ *  parent facilityId cannot be reported against anything and is dropped rather
+ *  than rendered as a clone the banker cannot place. */
+function toExecutedFacility(raw: Record<string, unknown>): ExecutedFacility {
+  return {
+    facilityId: String(raw.facilityId ?? ""),
+    facilityName: str(raw.facilityName),
+    cloneLoanId: str(raw.cloneLoanId),
+    cloneName: str(raw.cloneName),
+    cloneStage: str(raw.cloneStage),
+    cloneLookupKey: str(raw.cloneLookupKey),
+    junctionId: str(raw.junctionId),
+    junctionName: str(raw.junctionName),
+    revisionNumber: typeof raw.revisionNumber === "number" ? raw.revisionNumber : undefined,
+    parentUnchanged: typeof raw.parentUnchanged === "boolean" ? raw.parentUnchanged : undefined,
+    appliedChanges: str(raw.appliedChanges),
+    verification: str(raw.verification),
+    outcome: str(raw.outcome),
   };
 }
 
@@ -560,6 +636,13 @@ export async function executeAction(
           collateralValueMoved: typeof raw.collateralValueMoved === "boolean" ? raw.collateralValueMoved : undefined,
         }))
       : undefined,
+    facilities: Array.isArray(r.facilities)
+      ? (r.facilities as Array<Record<string, unknown>>).map(toExecutedFacility).filter((f) => f.facilityId !== "")
+      : undefined,
+    facilityCount: typeof r.facilityCount === "number" ? r.facilityCount : undefined,
+    cloneLoanId: str(r.cloneLoanId),
+    bookingHandoff: str(r.bookingHandoff),
+    outputPackageId: typeof r.outputPackageId === "string" ? r.outputPackageId : undefined,
     productPackageId: typeof r.productPackageId === "string" ? r.productPackageId : undefined,
     packageCreated: typeof r.packageCreated === "boolean" ? r.packageCreated : r.packageCreated === null ? null : undefined,
     involvementId: typeof r.involvementId === "string" ? r.involvementId : undefined,

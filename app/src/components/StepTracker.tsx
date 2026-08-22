@@ -55,15 +55,23 @@ interface FiledRecord {
   nameConfirmed: boolean;
 }
 
-function filedRecord(outcome: ExecuteResult | null | undefined): FiledRecord | null {
+function filedRecord(outcome: ExecuteResult | null | undefined, actionId: string): FiledRecord | null {
   if (!outcome) return null;
-  const id = outcome.valuationId ?? outcome.caseId ?? outcome.reviewId;
+  // A modification's created record is the CLONE. The parent facility already
+  // existed and is never what was filed.
+  const id =
+    outcome.valuationId ??
+    outcome.caseId ??
+    outcome.reviewId ??
+    (actionId === "loan-modification" ? outcome.cloneLoanId : undefined);
   if (!id) return null;
   const label = outcome.valuationId
     ? "collateral valuation"
     : outcome.caseId
       ? "service request"
-      : "annual credit review";
+      : outcome.reviewId
+        ? "annual credit review"
+        : "modification";
   const name = outcome.recordName ?? null;
   return { label, id, name, anchor: outcome.anchorName ?? null, nameConfirmed: name !== null };
 }
@@ -115,12 +123,17 @@ export function StepTracker({
   continuing?: boolean;
   onChange?: (s: TrackerState) => void;
 }) {
-  const terminal = actionTerminal(state, plan.steps);
+  // THE EXECUTOR'S OWN VERDICT WINS once it has run. It read the org back; the
+  // local machine only mirrors the step states it returned, and it derives
+  // `partial` from any step the org itself calls unverifiable — an observed
+  // side effect that reports nothing back is exactly that. Downgrading a run
+  // the org called a success would put resume copy under a completed action.
+  const terminal = outcome?.terminalState === "success" ? "success" : actionTerminal(state, plan.steps);
   // Nothing to reveal when no executor has run: the rows are already the plan's
   // own starting states and there is no outcome to pace out.
   const landed = useReveal(plan.steps.length, !outcome);
   const revealing = landed < plan.steps.length;
-  const filed = filedRecord(outcome);
+  const filed = filedRecord(outcome, actionId);
   const firstBadIndex = plan.steps.findIndex((s) => {
     const rt = state.steps.find((r) => r.id === s.id);
     return rt?.state === "failed" || rt?.state === "ambiguous";
@@ -207,6 +220,39 @@ export function StepTracker({
           <div className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Credit package created</div>
           <div className="mt-0.5 text-[12.5px] font-semibold text-ink">{outcome.anchorName ?? "New credit package"}</div>
           <div className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{outcome.productPackageId}</div>
+        </div>
+      )}
+
+      {/* A PACKAGE-ANCHORED CREDIT ACTION reports per facility. Each row names
+          the clone nCino created, the chain row that records the revision, and
+          what the apply step read back — the org's own sentence, not a
+          restatement. A replay returns no facilities at all, so this block
+          simply does not render for one: nothing was written to report. */}
+      {!revealing && (outcome?.facilities?.length ?? 0) > 0 && (
+        <div className="c360-row-land border-b border-divider px-5 py-4">
+          <div className="kicker mb-2">Filed, per facility</div>
+          <div className="flex flex-col gap-3">
+            {outcome!.facilities!.map((f) => (
+              <div key={f.facilityId}>
+                <div className="text-[12.5px] font-semibold text-ink">{f.cloneName ?? f.cloneLoanId ?? f.facilityId}</div>
+                <div className="mt-0.5 text-[11.5px] leading-relaxed text-ink-body">
+                  Cloned from {f.facilityName ?? f.facilityId}
+                  {f.cloneStage ? ` at stage ${f.cloneStage}` : ""}.
+                </div>
+                {f.junctionName && (
+                  <div className="mt-0.5 text-[11px] text-ink-muted">
+                    Chain row {f.junctionName}
+                    {typeof f.revisionNumber === "number" ? ` records revision ${f.revisionNumber}` : ""}.
+                  </div>
+                )}
+                {f.appliedChanges && <div className="mt-0.5 text-[11px] text-ink-muted">{f.appliedChanges}</div>}
+                {f.parentUnchanged === true && (
+                  <div className="mt-0.5 text-[11px] text-ink-muted">The parent facility reads back unchanged.</div>
+                )}
+                {f.cloneLoanId && <div className="mt-0.5 font-mono text-[10.5px] text-ink-faint">{f.cloneLoanId}</div>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

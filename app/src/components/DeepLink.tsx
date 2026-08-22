@@ -36,6 +36,9 @@ export const CREATED_OBJECT: Record<string, { object: string; label: string }> =
   "risk-rating-review": { object: "LLC_BI__Annual_Review__c", label: "risk rating review" },
   "new-facility-request": { object: "LLC_BI__Loan__c", label: "facility" },
   "covenant-review": { object: "LLC_BI__Covenant_Compliance2__c", label: "covenant assessment" },
+  // The modification IS a facility: nCino clones the parent and the clone is
+  // the record that was created. The parent is never the created record.
+  "loan-modification": { object: "LLC_BI__Loan__c", label: "modification" },
 };
 
 /** The record the write just created. Hero on a successful terminal state. */

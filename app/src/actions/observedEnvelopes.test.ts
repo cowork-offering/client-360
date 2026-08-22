@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stageAction, executeAction, executionHeldReason, isExecutionHeld, WRITE_TOOLS } from "../channel/writeTools";
+import observedModEnvelopes from "./observed-execute-loan-modification-envelopes.json";
 
 /* =============================================================================
    OBSERVED ENVELOPES (wave 2, 2026-07-26)
@@ -62,14 +63,16 @@ describe("the held verdict comes from the ORG, verbatim", () => {
   });
 
   it("agrees with the client tool map on which actions are held", () => {
-    expect(isExecutionHeld("loan-modification")).toBe(true);
     expect(isExecutionHeld("renewal")).toBe(true);
     // The covenant execute tool EXISTS, but the client refuses to be the thing
     // that fires its unapproved first production write.
     expect(isExecutionHeld("covenant-review")).toBe(true);
     expect(executionHeldReason("covenant-review")).toContain("founder-gated");
-    expect(executionHeldReason("loan-modification")).toContain("LV06");
-    for (const id of ["new-facility-request", "risk-rating-review"]) {
+    // The modification is no longer held CLIENT-side (WS0.5, 2026-08-22). The
+    // org's own flag above is the only thing that can hold it now.
+    expect(isExecutionHeld("loan-modification")).toBe(false);
+    expect(executionHeldReason("loan-modification")).toBeNull();
+    for (const id of ["new-facility-request", "risk-rating-review", "loan-modification"]) {
       expect(isExecutionHeld(id), id).toBe(false);
       expect(WRITE_TOOLS[id as keyof typeof WRITE_TOOLS].execute, id).toBeTruthy();
     }
@@ -621,5 +624,122 @@ describe("bulk collateral valuation (OBSERVED live 2026-07-27)", () => {
     expect(out.error.message).toContain("item 2 of 2");
     // The per-item legal list is still parsed from the tool's own words.
     expect(out.error.legalValues).toEqual(["Appraisal", "Receivables Aging"]);
+  });
+});
+
+
+/* =============================================================================
+   LOAN MODIFICATION — the complete pair, OBSERVED live 2026-08-22.
+
+   Read out of the wire probe against throwaway account ZZ-WS05-PROBE (every
+   record deleted after capture). Stage, execute and the replay, verbatim.
+   ============================================================================= */
+
+const MOD = observedModEnvelopes as unknown as Record<string, { response: Array<{ outputValues: unknown }> }>;
+const MOD_STAGE = MOD.stage_loan_modification.response[0].outputValues;
+const MOD_EXECUTE = MOD.execute_loan_modification.response[0].outputValues;
+const MOD_REPLAY = MOD.execute_loan_modification_replay.response[0].outputValues;
+
+const MOD_EXECUTE_PAYLOAD = {
+  idempotencyKey: "ZZ-WS05-PROBE-MOD-1",
+  stagingId: "a8abb00001N6Z0XAAV",
+  planHash: "962ba9589fe41637d48392575f63dd2cfb25245fe7f54e615de38de67847ed8c",
+  decisionToken: "8fc5099ec8f0a9fa83dc7c6c39c4ed7f76e07d6b8494e7f0bf0d6bd29285ee86",
+  approverUserId: "005bb00000ftouDAAQ",
+};
+
+describe("loan modification, stage and execute (OBSERVED live 2026-08-22)", () => {
+  it("stages a plan the org will RUN: executionHeld false, heldReason null", async () => {
+    installMcp(MOD_STAGE);
+    const out = await stageAction("loan-modification", {
+      idempotencyKey: "ZZ-WS05-PROBE-MOD-1",
+      productPackageId: "a5Fbb000000IltJEAS",
+      facilityIds: ["a4Zbb000002Br4fEAC"],
+      requestedAmount: 1_500_000,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.executionHeld).toBe(false);
+    expect(out.result.heldReason).toBeUndefined();
+    expect(out.result.decisionToken).toBe(MOD_EXECUTE_PAYLOAD.decisionToken);
+    expect(out.result.facilities?.[0].facilityId).toBe("a4Zbb000002Br4fEAC");
+  });
+
+  it("carries the booking warning the banker acts on, verbatim", async () => {
+    installMcp(MOD_STAGE);
+    const out = await stageAction("loan-modification", { idempotencyKey: "k", facilityIds: ["a4Zbb000002Br4fEAC"] });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.warnings).toHaveLength(5);
+    expect(out.result.warnings.some((w) => w.includes("Loan_Validation_06"))).toBe(true);
+    expect(out.result.warnings[0]).toContain("Execution is available.");
+  });
+
+  it("calls execute_loan_modification on the same five-field contract", async () => {
+    const callTool = installMcp(MOD_EXECUTE);
+    await executeAction("loan-modification", MOD_EXECUTE_PAYLOAD);
+    expect(callTool.mock.calls[0][1]).toBe("execute_loan_modification");
+    expect((callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> }).inputs[0]).toEqual(
+      MOD_EXECUTE_PAYLOAD,
+    );
+  });
+
+  it("reads the clone, the chain row and the applied change off the result", async () => {
+    installMcp(MOD_EXECUTE);
+    const out = await executeAction("loan-modification", MOD_EXECUTE_PAYLOAD);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.terminalState).toBe("success");
+    expect(out.result.cloneLoanId).toBe("a4Zbb000002Br6HEAS");
+    // A modification runs on the SOURCE package: no new package is minted.
+    expect(out.result.outputPackageId).toBe("a5Fbb000000IltJEAS");
+    expect(out.result.packageCreated).toBeUndefined();
+
+    const f = out.result.facilities![0];
+    expect(out.result.facilityCount).toBe(1);
+    expect(f.facilityId).toBe("a4Zbb000002Br4fEAC");
+    expect(f.cloneLoanId).toBe("a4Zbb000002Br6HEAS");
+    expect(f.cloneName).toBe("ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00");
+    expect(f.cloneStage).toBe("Qualification");
+    expect(f.cloneLookupKey).toBe("ZZWS05PROBE1_M1");
+    expect(f.junctionName).toBe("RL-00000198");
+    expect(f.junctionId).toBe("a4Obb000000FXGcEAO");
+    expect(f.revisionNumber).toBe(1);
+    expect(f.parentUnchanged).toBe(true);
+    expect(f.appliedChanges).toBe("Amount reads back at 1500000.00.");
+    // The org's per-facility evidence, in its own words. Both are carried
+    // through rather than paraphrased: they are what it read back.
+    expect(f.verification).toContain("chain row RL-00000198 records revision 1");
+    expect(f.verification).toContain("the parent re-reads unchanged at Booked / Open");
+    expect(f.outcome).toContain("at stage Qualification");
+  });
+
+  it("keeps the org's booking handoff as its own sentence", async () => {
+    installMcp(MOD_EXECUTE);
+    const out = await executeAction("loan-modification", MOD_EXECUTE_PAYLOAD);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.bookingHandoff).toContain("Submit for Approval with real approvers");
+    expect(out.result.bookingHandoff).toContain("Nothing here has been approved.");
+    // The name is the org's, rewritten by it after the amount landed.
+    expect(out.result.recordName).toBe("ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00");
+    expect(out.result.anchorName).toBe("ZZ-WS05-PROBE Borrower - Equipment - $1,000,000.00");
+  });
+
+  it("replays without re-asserting per-facility detail, and still names the clone", async () => {
+    installMcp(MOD_REPLAY);
+    const out = await executeAction("loan-modification", MOD_EXECUTE_PAYLOAD);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.result.replayed).toBe(true);
+    // NULL is not an empty batch: the org is not restating detail for a call
+    // that wrote nothing, so nothing per-facility may be rendered.
+    expect(out.result.facilities).toBeUndefined();
+    expect(out.result.facilityCount).toBeUndefined();
+    expect(out.result.outputPackageId).toBeUndefined();
+    expect(out.result.anchorName).toBeNull();
+    // The clone still exists and the replay says which one it is.
+    expect(out.result.cloneLoanId).toBe("a4Zbb000002Br6HEAS");
+    expect(out.result.outcome).toContain("Nothing was written.");
   });
 });

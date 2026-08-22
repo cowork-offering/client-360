@@ -11,7 +11,10 @@ Written against runtime contract **0.1.15** (`window.claude.mcp` type definition
 
 ## 1. The capabilities manifest
 
-Pass this as the `capabilities` input to the Artifact tool:
+Pass this as the `capabilities` input to the Artifact tool. It is generated from source, never
+hand-typed: the Customer 360 names come from the org's own `Customer360.mcpServerDefinition`, the
+rest from `app/src/channel/mcp.ts`. The generated copy of record, with the derivation and the
+exclusions, is `knowledge/artifact-capabilities-manifest.json`.
 
 ```json
 {
@@ -20,19 +23,28 @@ Pass this as the `capabilities` input to the Artifact tool:
       {
         "server": "Customer 360",
         "tools": [
-          "Customer360Portfolio",
           "Customer360Snapshot",
           "Customer360RelationshipGraph",
           "Customer360Exposure",
           "Customer360Covenants",
           "Customer360Opportunities",
           "Customer360StructuralSignals",
+          "Customer360Portfolio",
           "stage_collateral_valuation",
           "execute_collateral_valuation",
           "stage_service_request",
           "execute_service_request",
           "stage_annual_review",
-          "execute_annual_review"
+          "execute_annual_review",
+          "Customer360ActionHistory",
+          "stage_new_facility",
+          "execute_new_facility",
+          "stage_risk_rating_review",
+          "execute_risk_rating_review",
+          "stage_covenant_review",
+          "stage_loan_modification",
+          "execute_loan_modification",
+          "stage_renewal"
         ]
       },
       {
@@ -45,12 +57,18 @@ Pass this as the `capabilities` input to the Artifact tool:
       },
       {
         "server": "Microsoft 365",
-        "tools": ["outlook_email_search"]
+        "tools": [
+          "outlook_email_search"
+        ]
       }
     ]
   }
 }
 ```
+
+The org manifest carries **24** tools; **22** are declared. Two are left out on purpose:
+`execute_covenant_review` (founder decision, first live invocation still ungated, and the cockpit
+holds it client-side) and `Customer360SearchAccounts` (no call path in the bundle).
 
 ### Manifest rules that bite
 
@@ -597,12 +615,19 @@ New Facility, Risk Rating Review, Covenant Review, Loan Modification and Renewal
 schemas and registry wiring. Manifest constants cover 14 write-tool names: 6 stage/execute pairs plus
 `stage_loan_modification` and `stage_renewal`.
 
-**Execution is HELD for modification and renewal.** `WRITE_TOOLS[...].execute` is `null`, not a
-plausible name we hope exists: nCino requires a facility to be Booked through its own Submit for
-Approval before a credit action can run against it (org rule LV06), so no execute tool was built.
-Staging is real — the plan and the ledger row are genuine — and the confirm gate renders the held
-state with that sentence, gesture disabled. `executeAction` refuses a held action before calling
-anything.
+**Execution is HELD for RENEWAL only** (and, separately, for the founder-gated covenant review).
+`WRITE_TOOLS.renewal.execute` is `null`, not a plausible name we hope exists: no `execute_renewal`
+was built. Staging is real — the plan and the ledger row are genuine — and the confirm gate renders
+the held state with that sentence, gesture disabled. `executeAction` refuses a held action before
+calling anything.
+
+**The modification pair is complete (WS0.5, 2026-08-22).** `execute_loan_modification` is deployed
+and was exercised live over the REST Actions API, so the cockpit's own hold is gone and the confirm
+gate offers the ordinary "Confirm and file". What LV06 still governs is BOOKING: executing produces a
+clone facility at Qualification, and moving that clone past approval is nCino's own Submit for
+Approval run. The banker learns that from the plan's `warnings[]` and the `held_execution` handoff
+step, rendered verbatim, rather than from a gate. The ORG remains the authority on holding: a staged
+plan carrying `executionHeld: true` still blocks the gesture, whatever the client map says.
 
 **Built against the contract, not observed wire.** The Apex Request classes for these five are not
 deployed, so `StagePayloads` carries PROVISIONAL field names, declared in one place so the seam swap
