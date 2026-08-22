@@ -29,7 +29,7 @@
 //                   NOTE ON WORDING: an earlier revision of this brief described --legacy as "the
 //                   old executable-assignment path" (a window.C360_DATA = {...} JS statement, no
 //                   type attribute). That shape does not exist anywhere in this repo — the actual
-//                   current template (artifact/customer-360-template.html, out of this agent's
+//                   current template (client-360/assets/customer-360-template.html, out of this agent's
 //                   edit scope) uses the inert {{C360_DATA_JSON}} anchor above. --legacy targets
 //                   that real, on-disk anchor, since that's the one the QA gate exercises.
 //
@@ -100,7 +100,7 @@ const die = (msg) => { console.error(`ERROR: ${msg}`); process.exit(1); };
 const dataPath = arg("--data");
 const outPath = arg("--out");
 // Default template resolves relative to THIS script (import.meta.url), never cwd.
-const templatePath = arg("--template") ?? join(here, "..", "artifact", "customer-360-template.html");
+const templatePath = arg("--template") ?? join(here, "..", "assets", "customer-360-template.html");
 const legacyFlag = flag("--legacy");
 const allowPartial = flag("--allow-partial");
 const unsafeNoValidate = flag("--UNSAFE-no-validate-for-tests");

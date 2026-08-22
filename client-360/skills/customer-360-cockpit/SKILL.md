@@ -13,7 +13,7 @@ full artifact replace.
 **Demo anchor:** Piedmont Precision Components, Inc. · Account `001bb00001DLtRMAA1` · org `bankinggpt`.
 
 **You never write UI.** The artifact HTML is a compiled React app (`app/`, built to
-`artifact/customer-360-template.html`). Your only job is data + one assembler command.
+`<pluginRoot>/assets/customer-360-template.html`). Your only job is data + one assembler command.
 
 ---
 
@@ -225,8 +225,8 @@ carries the provenance map.
 node <pluginRoot>/render/assemble-cockpit.mjs --data /tmp/c360-data.json --out /tmp/customer-360.html
 ```
 
-Resolve `<pluginRoot>` as the directory containing `.claude-plugin/` (also holds `app/`, `artifact/`,
-`render/`, `skills/`). `--template` defaults to the committed template — do not pass it.
+Resolve `<pluginRoot>` as the directory containing `.claude-plugin/` (also holds `assets/`,
+`render/`, `skills/`; in the source repo this is the `client-360/` folder). `--template` defaults to the committed template — do not pass it.
 
 1. **Write the composed object to a temp JSON file.** ONLY the `C360_DATA` object — no
    `window.C360_DATA =` wrapper, no `<script>` tag.

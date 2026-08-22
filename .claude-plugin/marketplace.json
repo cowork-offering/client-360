@@ -6,8 +6,8 @@
   "plugins": [
     {
       "name": "client-360",
-      "source": "./",
-      "description": "Customer 360 relationship cockpit \u2014 worklist-first React artifact over the Salesforce-hosted Customer360 MCP data plane (8 tools, per-user OAuth): needs-action queue, activity audit trail, covenant effective-challenge, page-agnostic AI chat, data-gated Client Actions."
+      "source": "./client-360",
+      "description": "Customer 360 relationship cockpit \u2014 worklist-first React artifact over the Salesforce-hosted Customer360 MCP data plane (23 tools: 9 reads + stage/execute write pairs, per-user OAuth): needs-action queue, activity audit trail, covenant effective-challenge, page-agnostic AI chat, data-gated Client Actions."
     }
   ]
 }
