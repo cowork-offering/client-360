@@ -344,3 +344,70 @@ Apex DML at all (compile error) and a REST DELETE returns `INSUFFICIENT_ACCESS_O
 - **The cockpit app has not been updated.** `stage_covenant_review`'s input shape is a breaking change. Any client
   still sending `accountId` + `covenantComplianceId` + `result` will now be refused. No client change was made in this
   work package.
+
+## WS3 envelope probes: the four relationship-actions tools (2026-08-25, worktree `c360-probes`, branch `ws3-envelope-probes`)
+
+Closes UNVERIFIED item 2 from `knowledge/ws3-side-findings.md`: service request, annual review, risk
+rating review and new facility had shipped in the `relationship-actions` skill off the deployed Apex
+`@InvocableVariable` declarations only, with no archived wire envelope. All four now have one, captured
+live on throwaway data, zero residue. Envelopes:
+`knowledge/sf-build-v2/wp2/observed-envelopes-relationship-actions.json`.
+
+**Fixture:** Account `001bb00001KfNPkAAN` "ZZ-WS3-PROBE Borrower" → package `a5Fbb000000IokjEAC`
+"ZZ-WS3-PROBE Package" (`LLC_BI__Account__c` only). Executes ran as `approverUserId`
+`005bb00000ftouDAAQ`, per the recipe.
+
+| Tool | Stage | Execute | Created record |
+|---|---|---|---|
+| `stage_service_request` / `execute_service_request` | ok, no refusals. `accountId` alone is sufficient; the tool auto-attached our package as the deep-link `productPackageId` from the account's most-recently-modified package | `terminalState: success`. Type `Service Request`, Origin `Agent` (org offers the preferred pair, `degradedTypeMode: false`) | Case `500bb00000tsVjvAAE` (00001329), Status New — deleted |
+| `stage_annual_review` / `execute_annual_review` | ok, no refusals. `reviewType` validated against the live picklist (`Annual`, `AdHoc`, `Problem Loan` all active); used `Annual` | `terminalState: success`. Review created at `In Progress`, org assigned RecordType `012bb000000NNeMAAW` in the `observe_after_save` step (`filed_unverified` by design, per the tool's own contract) | Review `a5nbb00000mLU13AAG` (R-7) — deleted |
+| `stage_risk_rating_review` / `execute_risk_rating_review` | ok, no refusals. No override supplied so `Mandatory_comment` never engaged; scoring inputs only | `terminalState: success`. Status `In Review`, `LLC_BI__Final_Risk_Grade__c` formula computed 4.00 from the inputs on read-back | Risk Rating Review `a2bbb000001HzZZAA0` (RG-0000003) — deleted |
+| `stage_new_facility` / `execute_new_facility` (two invocations) | ok, no refusals. `productPackageId` supplied (no package-first branch exercised), `product: Equipment` against the maintained RT picklist, `primaryLoanPurpose: equipment` validated live against `LLC_BI__Loan_Detail__c` describe (23 active values) | **Invocation 1**: `terminalState: partial`, `resumable: true`. Loan created at Qualification, involvement row added (100% ownership), org renamed the facility "ZZ-WS3-PROBE Borrower - Equipment - $250,000.00". **Invocation 2** (resume, ~8s later, same stagingId/planHash/idempotencyKey/approver, no new token): Loan Detail had already landed (`a4Wbb000001KLkTEAW`, well inside the 30000ms budget), purpose written, stage hopped Qualification → Proposal. `terminalState: success` | Loan `a4Zbb000002CE2rEAG`, Loan Detail `a4Wbb000001KLkTEAW`, Involvement `a4Lbb000000OsIbEAK` — all deleted |
+
+**No refusals were hit on any of the four tools.** Every field the recipe's read-first pass flagged as
+required lined up with what the wire actually accepted; nothing needed adjusting from the Apex-declared
+shape. This is a cleaner outcome than the mod-execute and covenant probes, which both found live defects.
+
+### Org facts discovered
+
+1. **`stage_service_request` silently attaches a deep-link package.** The Case itself is
+   account-anchored (no `LLC_BI__Product_Package__c` field on Case), but the staged plan's
+   `productPackageId` output picked up our fixture package via `ORDER BY LastModifiedDate DESC LIMIT 1`
+   on the account, confirming the class comment's documented behavior on live data.
+2. **The annual review record type assignment is asynchronous-looking but landed same-transaction on
+   read-back.** `observe_after_save` reported `filed_unverified` per the tool's own design (it never
+   claims the after-save flow's effect as verified), but the immediate re-query already showed
+   RecordType `012bb000000NNeMAAW` set — the flow ran fast enough to be visible, though the tool
+   correctly does not depend on that timing.
+3. **The two-invocation new-facility resume window was comfortably short in practice.** Probe 5's
+   documented ~4 second Loan Detail creation held: an 8 second sleep before invocation 2 was enough,
+   nowhere near the 30000ms wait budget the plan declares.
+4. **`LLC_BI__Final_Risk_Grade__c` formula computation is immediate.** The 1–12 scale value (4.00) was
+   readable on the same synchronous re-query the execute tool performs, no async lag observed.
+
+### Residue proof
+
+SOQL after cleanup: `Account WHERE Name LIKE 'ZZ-WS3%'` = 0 · `LLC_BI__Product_Package__c WHERE Name
+LIKE 'ZZ-WS3%'` = 0 · `LLC_BI__Loan__c WHERE Name LIKE 'ZZ-WS3%'` = 0 · `Case WHERE CaseNumber =
+'00001329'` = 0 · `LLC_BI__Review__c WHERE Name = 'R-7'` = 0 · `LLC_BI__Annual_Review__c WHERE Name =
+'RG-0000003'` = 0 · `cm_Action_Staging__c WHERE cm_Idempotency_Key__c LIKE 'ZZ-WS3-%'` = 0.
+`cm_Action_Staging__c` total back to the **11** kept rows (was 15 with our 4 staging rows standing,
+confirmed before deletion). Hartwell (`001bb00001I7*`, package `a5Fbb000000IHFJEA4`, loans
+`a4Zbb0000027M*`) and every pre-existing record were not touched by this probe.
+
+### UNVERIFIED
+
+- **The package-first branch of `stage_new_facility`/`execute_new_facility` remains unobserved.** This
+  probe supplied `productPackageId` throughout. The `createPackage: true` path (no package supplied,
+  tool creates one before the loan) is code-and-unit-tested only, per `StageExecuteNewFacilityTest.cls`.
+- **The degraded-type-mode branch of `stage_service_request` remains unobserved on this org.** bankinggpt
+  offers the preferred `Type = 'Service Request'` / `Origin = 'Agent'` pair, so the fallback substitution
+  branch (`Question` / `Web`) has never fired live here.
+- **The `Mandatory_comment` override branch of `stage_risk_rating_review` remains unobserved.** This
+  probe supplied no `overriddenRiskGradeValue`, so the validation-rule mirror was never exercised against
+  a live override + comment pair.
+- **The replay path was not probed for these four tools.** `execute_loan_modification`'s replay behavior
+  (same idempotency key, `replayed: true`, nothing written twice) is proven on the wire; the equivalent
+  replay call was not made here for service request, annual review, risk rating review or new facility.
+- **Multi-record staging (N > 1 requests in one `inputs[]` array) was not probed for any of the four.**
+  Each call staged and executed exactly one request.

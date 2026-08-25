@@ -1,0 +1,891 @@
+{
+ "_provenance": {
+  "captured": "2026-08-25",
+  "org": "bankinggpt (accenture-d8 sandbox, 00DDz000001qeO2MAI)",
+  "surface": "REST Actions API, POST /services/data/v67.0/actions/custom/apex/{Operation}",
+  "runningUser": "005bb00000ftouDAAQ (fabian.goetzens@accenture.com.bankinggpt, role Commercial Banking Manager)",
+  "data": "THROWAWAY. Account 001bb00001KfNPkAAN 'ZZ-WS3-PROBE Borrower', package a5Fbb000000IokjEAC 'ZZ-WS3-PROBE Package'. Created records: Case 500bb00000tsVjvAAE (00001329), Review a5nbb00000mLU13AAG (R-7), Risk Rating Review a2bbb000001HzZZAA0 (RG-0000003), Loan a4Zbb000002CE2rEAG (ZZ-WS3-PROBE Borrower - Equipment - $250,000.00) with Loan Detail a4Wbb000001KLkTEAW and Involvement a4Lbb000000OsIbEAK. Every record listed here was deleted after capture; the envelopes are the only thing kept.",
+  "note": "Verbatim request and response bodies. Nothing edited, nothing redacted."
+ },
+ "stage_service_request": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-SR-1",
+     "accountId": "001bb00001KfNPkAAN",
+     "rationale": "WS3 wire probe: client called asking about a fee dispute on their account.",
+     "requestType": "Fee dispute inquiry",
+     "summary": "Client called asking why a maintenance fee was charged this month and wants it reviewed.",
+     "referenceKind": "probe",
+     "referenceId": "ZZ-WS3-PROBE-SR-REF-1"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "StageServiceRequest",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "warnings": [
+       "slackv2.caseTrigger fires on insert and may post to Slack. Probe 2 observed no side effect, but nothing in that probe watched Slack, so this is absence of observation and not proof of absence.",
+       "The case is created at status New and takes no transition and no closure from this tool. Everything after New belongs to the servicing process."
+      ],
+      "summary": "Raises one Case against ZZ-WS3-PROBE Borrower at status New, typed 'Service Request' with origin 'Agent'. No status is transitioned, nothing is closed, and no credit decision is made or implied.",
+      "steps": [
+       {
+        "verification": "SELECT Id, CaseNumber, Status, Type, Origin FROM Case WHERE Id = :newId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "Case",
+        "label": "Raise the service request against ZZ-WS3-PROBE Borrower",
+        "id": "write_case",
+        "fields": [
+         "AccountId",
+         "Type",
+         "Origin",
+         "Status",
+         "Subject",
+         "Description"
+        ],
+        "automationWoken": [
+         "FinServ.CaseTrigger (before insert, before update)",
+         "slackv2.caseTrigger (after insert, after update, before delete)"
+        ]
+       },
+       {
+        "verification": "SELECT Id, CaseNumber, Status, Type, Origin FROM Case WHERE Id = :newId",
+        "type": "verification",
+        "state": "pending",
+        "objectName": "Case",
+        "label": "Confirm the case landed at status New with the intended type and origin",
+        "id": "verify_case",
+        "fields": [
+         "Status",
+         "Type",
+         "Origin"
+        ],
+        "automationWoken": []
+       },
+       {
+        "verification": null,
+        "type": "observed_side_effect",
+        "state": "pending",
+        "objectName": null,
+        "label": "The org may post this case to Slack",
+        "id": "observe_slack",
+        "fields": [],
+        "automationWoken": [
+         "slackv2.caseTrigger"
+        ]
+       }
+      ],
+      "stagingId": "a8abb00001NLB1KAAX",
+      "replayed": false,
+      "provenanceJson": "{\"Origin\":{\"citation\":\"Read from the Case.Origin picklist in this org, not carried as a literal.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"Type\":{\"citation\":\"Read from the Case.Type picklist in this org, not carried as a literal.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"Description\":{\"citation\":\"ZZ-WS3-PROBE-SR-REF-1\",\"provenance\":\"DERIVED\",\"prefill\":\"CLIENT_REQUEST\"},\"Subject\":{\"citation\":\"ZZ-WS3-PROBE-SR-REF-1\",\"provenance\":\"DERIVED\",\"prefill\":\"CLIENT_REQUEST\"},\"AccountId\":{\"citation\":\"001bb00001KfNPkAAN\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+      "productPackageId": "a5Fbb000000IokjEAC",
+      "planHash": "5c242aa18675bbbaee8417487b644a1b1ca91c75c2e9df85901994e243d46098",
+      "degradedTypeMode": false,
+      "decisionToken": "b76cfeb9ee2efd7ae99b8964bccad5151b87a24f6c370db5bf22ea2e99d2c39e",
+      "accountId": "001bb00001KfNPkAAN"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_service_request": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-SR-1",
+     "stagingId": "a8abb00001NLB1KAAX",
+     "planHash": "5c242aa18675bbbaee8417487b644a1b1ca91c75c2e9df85901994e243d46098",
+     "decisionToken": "b76cfeb9ee2efd7ae99b8964bccad5151b87a24f6c370db5bf22ea2e99d2c39e",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteServiceRequest",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "success",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Raise the service request against ZZ-WS3-PROBE Borrower",
+        "id": "write_case",
+        "detail": "Case 500bb00000tsVjvAAE inserted."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Confirm the case landed at status New with the intended type and origin",
+        "id": "verify_case",
+        "detail": "Case 00001329 reads back at status New, type Service Request, origin Agent."
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "filed_unverified",
+        "label": "The org may post this case to Slack",
+        "id": "observe_slack",
+        "detail": "slackv2.caseTrigger fired as part of the insert. Whether it posted to Slack is not observable from here and is not claimed."
+       }
+      ],
+      "stagingId": "a8abb00001NLB1KAAX",
+      "replayed": false,
+      "recordName": "00001329",
+      "outcome": "Service request raised as case 00001329 at status New. It has not been routed, transitioned or closed by this tool.",
+      "caseNumber": "00001329",
+      "caseId": "500bb00000tsVjvAAE",
+      "anchorName": "ZZ-WS3-PROBE Borrower"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "stage_annual_review": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-AR-1",
+     "accountId": "001bb00001KfNPkAAN",
+     "rationale": "WS3 wire probe: scheduled annual review for the relationship.",
+     "reviewType": "Annual",
+     "productPackageId": "a5Fbb000000IokjEAC",
+     "narrative": "Probe narrative for the annual review wire test.",
+     "relationshipSummary": "Throwaway probe relationship, no real exposure.",
+     "recommendationNarrative": "Continue monitoring."
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "StageAnnualReview",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "warnings": [
+       "This tool creates the review at In Progress and stops. It never writes Complete, never writes cm_Review_Stage__c, and never sets the record type. The narrative is staged for a banker to submit through nCino's own Submit for Approval.",
+       "Entities added to the borrowing structure after the review is created get no LLC_BI__Review_Account__c snapshot row and become invisible on this review.",
+       "Package rollups recalculate based on the running user's record access, so a review opened by an identity with narrower sharing produces narrower rollups.",
+       "Do not retry or refresh after this runs. The org is known to create two records on a retried credit action, which is why a resume re-queries first."
+      ],
+      "summary": "Opens one Annual review on ZZ-WS3-PROBE Borrower at status In Progress, with the drafted narrative attached. The org assigns the record type. Nothing is approved and nothing is completed: the last step hands off to nCino's Submit for Approval, and the org's own process mints Complete.",
+      "steps": [
+       {
+        "verification": "SELECT Id, Name, LLC_BI__Status__c, LLC_BI__Review_Type__c, RecordTypeId FROM LLC_BI__Review__c WHERE Id = :newId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Review__c",
+        "label": "Open a Annual review on ZZ-WS3-PROBE Borrower at In Progress",
+        "id": "write_review",
+        "fields": [
+         "LLC_BI__Account__c",
+         "LLC_BI__Product_Package__c",
+         "LLC_BI__Status__c",
+         "LLC_BI__Review_Type__c",
+         "LLC_BI__Is_Agentic_Review__c",
+         "LLC_BI__Narrative__c",
+         "cm_Relationship_Summary__c",
+         "cm_Strengths_Narrative__c",
+         "cm_Weakness_Narrative__c",
+         "cm_Recommendation_Narrative__c",
+         "cm_Collateral_Analysis_Narrative__c",
+         "cm_Financial_Analyst_Narrative__c",
+         "cm_Guarantor_Narrative__c",
+         "cm_Risk_Rating_Comments__c"
+        ],
+        "automationWoken": [
+         "Review After Save (assigns the record type and populates the loan officer from the relationship owner)"
+        ]
+       },
+       {
+        "verification": "SELECT Id, LLC_BI__Status__c, LLC_BI__Review_Type__c, RecordTypeId FROM LLC_BI__Review__c WHERE Id = :newId",
+        "type": "verification",
+        "state": "pending",
+        "objectName": "LLC_BI__Review__c",
+        "label": "Confirm the review landed with an explicit status and type",
+        "id": "verify_review",
+        "fields": [
+         "LLC_BI__Status__c",
+         "LLC_BI__Review_Type__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "verification": null,
+        "type": "observed_side_effect",
+        "state": "pending",
+        "objectName": null,
+        "label": "The org assigns the record type and the loan officer",
+        "id": "observe_after_save",
+        "fields": [],
+        "automationWoken": [
+         "Review After Save"
+        ]
+       },
+       {
+        "verification": null,
+        "type": "handoff",
+        "state": "pending",
+        "objectName": null,
+        "label": "Control passes to nCino Submit for Approval",
+        "id": "handoff_approval",
+        "fields": [],
+        "automationWoken": [
+         "The org's own review approval process"
+        ]
+       }
+      ],
+      "stagingId": "a8abb00001NL27lAAD",
+      "replayed": false,
+      "provenanceJson": "{\"LLC_BI__Review_Type__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"LLC_BI__Status__c\":{\"citation\":\"PROBE-LEDGER probe 3: nothing defaults this field, so the tool sets it explicitly.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"LLC_BI__Account__c\":{\"citation\":\"001bb00001KfNPkAAN\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+      "productPackageId": "a5Fbb000000IokjEAC",
+      "planHash": "e942eb5ba6bf4dcfb9520f160869991f2a463b215cd83b459a53a5ae5f4eb6fe",
+      "decisionToken": "7e8233ac6bbf5f513e1f7abf85f5ea0db17b49bc0531d25aa27a49474c80d6af",
+      "accountId": "001bb00001KfNPkAAN"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_annual_review": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-AR-1",
+     "stagingId": "a8abb00001NL27lAAD",
+     "planHash": "e942eb5ba6bf4dcfb9520f160869991f2a463b215cd83b459a53a5ae5f4eb6fe",
+     "decisionToken": "7e8233ac6bbf5f513e1f7abf85f5ea0db17b49bc0531d25aa27a49474c80d6af",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteAnnualReview",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "success",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Open a Annual review on ZZ-WS3-PROBE Borrower at In Progress",
+        "id": "write_review",
+        "detail": "Review a5nbb00000mLU13AAG inserted."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Confirm the review landed with an explicit status and type",
+        "id": "verify_review",
+        "detail": "Review R-7 reads back at status In Progress, type Annual."
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "filed_unverified",
+        "label": "The org assigns the record type and the loan officer",
+        "id": "observe_after_save",
+        "detail": "The org assigned record type 012bb000000NNeMAAW and populated the loan officer. Neither was set by this tool."
+       },
+       {
+        "type": "handoff",
+        "state": "verified",
+        "label": "Control passes to nCino Submit for Approval",
+        "id": "handoff_approval",
+        "detail": "Control passes to nCino Submit for Approval. This tool advances nothing further."
+       }
+      ],
+      "stagingId": "a8abb00001NL27lAAD",
+      "reviewName": "R-7",
+      "reviewId": "a5nbb00000mLU13AAG",
+      "replayed": false,
+      "recordName": "R-7",
+      "outcome": "Review R-7 opened at In Progress with the drafted narrative attached. Nothing has been approved or completed.",
+      "nextStep": "Submit for Approval in nCino. The org's own process mints Complete; this tool never does.",
+      "anchorName": "ZZ-WS3-PROBE Borrower"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "stage_risk_rating_review": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-RR-1",
+     "accountId": "001bb00001KfNPkAAN",
+     "rationale": "WS3 wire probe: routine risk rating review with scoring inputs, no override.",
+     "computedRiskGradeValue": 4,
+     "cashFlowCoverageActual": 1.25,
+     "creditScoreActual": 720,
+     "managementExperienceActual": 8,
+     "revenueGrowthActual": 3.5
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "StageRiskRatingReview",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "warnings": [
+       "This review is created at In Review. Approved and Declined belong to the org's own RiskRatingReviewDecisioned path and are never written here.",
+       "The final risk grade is a formula. This action writes the inputs; the org computes the grade.",
+       "A risk rating review launched from a loan can hang with no error when the account violates a validation rule, so this plan verifies by re-query rather than trusting a synchronous success.",
+       "Account.LLC_BI__Highest_Risk_Grade__c has a maximum length of two characters. A grade label rather than a number would be refused, so this action never writes it."
+      ],
+      "summary": "Opens one risk rating review on ZZ-WS3-PROBE Borrower at status In Review, with the scoring inputs attached. The org computes the final grade from those inputs. No decision is recorded: this action never writes Approved or Declined.",
+      "steps": [
+       {
+        "verification": "SELECT Id, Name, LLC_BI__Status__c, LLC_BI__Final_Risk_Grade__c FROM LLC_BI__Annual_Review__c WHERE Id = :newId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Annual_Review__c",
+        "label": "Open a risk rating review on ZZ-WS3-PROBE Borrower at In Review",
+        "id": "write_risk_rating",
+        "fields": [
+         "LLC_BI__Account__c",
+         "LLC_BI__Loan__c",
+         "LLC_BI__Status__c",
+         "LLC_BI__Computed_Risk_Grade_Value__c",
+         "LLC_BI__Overridden_Risk_Grade_Value__c",
+         "LLC_BI__Comments__c",
+         "LLC_BI__Cash_Flow_Coverage_actual__c",
+         "LLC_BI__Credit_Score_actual__c",
+         "LLC_BI__Management_Experience_actual__c",
+         "LLC_BI__Revenue_Growth_actual__c"
+        ],
+        "automationWoken": [
+         "Risk Rating (Annual) Review After Save, which writes back onto the Loan when the product line is Commercial"
+        ]
+       },
+       {
+        "verification": "SELECT Id, LLC_BI__Status__c, LLC_BI__Final_Risk_Grade__c FROM LLC_BI__Annual_Review__c WHERE Id = :newId",
+        "type": "verification",
+        "state": "pending",
+        "objectName": "LLC_BI__Annual_Review__c",
+        "label": "Confirm the review landed at In Review rather than at a decision",
+        "id": "verify_risk_rating",
+        "fields": [
+         "LLC_BI__Status__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "verification": null,
+        "type": "observed_side_effect",
+        "state": "pending",
+        "objectName": null,
+        "label": "The org may write the grade back onto the loan",
+        "id": "observe_loan_writeback",
+        "fields": [],
+        "automationWoken": [
+         "Risk Rating (Annual) Review After Save"
+        ]
+       }
+      ],
+      "stagingId": "a8abb00001NL606AAD",
+      "replayed": false,
+      "provenanceJson": "{\"LLC_BI__Computed_Risk_Grade_Value__c\":{\"citation\":\"Model output on the 1 to 12 review scale.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"LLC_BI__Status__c\":{\"citation\":\"Probe 4: the field defaults to Not Approved, which reads as a decision. Set explicitly.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"LLC_BI__Account__c\":{\"citation\":\"001bb00001KfNPkAAN\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+      "planHash": "e7d88a4f9a27ee6cf921e2a1225a6f628390aded090a426788bc4bd0ede8e7b7",
+      "decisionToken": "97a495b3df91df166981ed151a00fb8dcf9dffa3cd158577a81ea456ff80ced6",
+      "accountId": "001bb00001KfNPkAAN"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_risk_rating_review": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-RR-1",
+     "stagingId": "a8abb00001NL606AAD",
+     "planHash": "e7d88a4f9a27ee6cf921e2a1225a6f628390aded090a426788bc4bd0ede8e7b7",
+     "decisionToken": "97a495b3df91df166981ed151a00fb8dcf9dffa3cd158577a81ea456ff80ced6",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteRiskRatingReview",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "success",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Open a risk rating review on ZZ-WS3-PROBE Borrower at In Review",
+        "id": "write_risk_rating",
+        "detail": "Risk rating review a2bbb000001HzZZAA0 created."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Confirm the review landed at In Review rather than at a decision",
+        "id": "verify_risk_rating",
+        "detail": "Review RG-0000003 reads back at In Review, computed grade 4.00."
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "filed_unverified",
+        "label": "The org may write the grade back onto the loan",
+        "id": "observe_loan_writeback",
+        "detail": "Risk Rating (Annual) Review After Save may write the grade back onto the loan. That is org automation and is not verified here."
+       }
+      ],
+      "status": "In Review",
+      "stagingId": "a8abb00001NL606AAD",
+      "riskRatingReviewId": "a2bbb000001HzZZAA0",
+      "replayed": false,
+      "recordName": "RG-0000003",
+      "outcome": "Risk rating review RG-0000003 opened at In Review with the scoring inputs attached. The org computes the final grade. No decision was recorded.",
+      "anchorName": "ZZ-WS3-PROBE Borrower"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "stage_new_facility": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-NF-1",
+     "productPackageId": "a5Fbb000000IokjEAC",
+     "rationale": "WS3 wire probe: new equipment facility on the existing throwaway package.",
+     "product": "Equipment",
+     "amount": 250000,
+     "primaryLoanPurpose": "equipment",
+     "termMonths": 60
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "StageNewFacility",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "warnings": [
+       "The org rewrites the facility name as \"Account - Product - Amount\". The name you see after creation is the org's, not one this panel chose.",
+       "The Loan Detail is created by the org moments after the facility is filed, in its own transaction. This action files the facility and returns; continuing it verifies the Loan Detail and completes the move to Proposal. Nothing is lost in between, and no second confirmation is needed.",
+       "The loan officer is assigned by org automation from the account owner, not by this panel.",
+       "This action does not suppress org automation. Its two-phase design depends on the async Loan Detail flow.",
+       "A borrower row is added to the facility's borrowing structure as part of this action. A facility insert creates none on its own, so without this step the facility would have no borrowing structure at all."
+      ],
+      "summary": "Adds the borrower to the facility's borrowing structure at 100 percent ownership. Creates one facility on ZZ-WS3-PROBE Borrower - 8/24/2026 - PP at stage Qualification, status Open, product Equipment, amount 250000. The org names the record and assigns the loan officer. Once nCino has created the Loan Detail, the purpose is written and the facility moves one step to Proposal. Nothing is approved: post-approval stages are unreachable through this panel.",
+      "steps": [
+       {
+        "waitBudgetMs": null,
+        "verification": "SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Product__c FROM LLC_BI__Loan__c WHERE Id = :newId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan__c",
+        "label": "Create the facility at Qualification on ZZ-WS3-PROBE Borrower - 8/24/2026 - PP",
+        "id": "write_loan",
+        "fields": [
+         "LLC_BI__Account__c",
+         "LLC_BI__Product_Package__c",
+         "LLC_BI__Stage__c",
+         "LLC_BI__Status__c",
+         "LLC_BI__isRenewal__c",
+         "LLC_BI__Is_Modification__c",
+         "LLC_BI__Product__c",
+         "LLC_BI__Amount__c"
+        ],
+        "automationWoken": [
+         "Five managed namespaces (LLC_BI, nFORCE, nCino, NDOC, nCRED) and 21 validation rules",
+         "A before-save flow that REBUILDS the loan name as Account - Product - Amount",
+         "ACNPEX_ AccountOwnerAsLoanOfficer, which assigns the loan officer"
+        ]
+       },
+       {
+        "waitBudgetMs": null,
+        "verification": "SELECT Id, LLC_BI__Borrower_Type__c FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c = :newId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Legal_Entities__c",
+        "label": "Add the borrower to the facility's borrowing structure",
+        "id": "write_involvement",
+        "fields": [
+         "LLC_BI__Account__c",
+         "LLC_BI__Loan__c",
+         "LLC_BI__Product_Package__c",
+         "LLC_BI__Borrower_Type__c",
+         "LLC_BI__Ownership__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "waitBudgetMs": null,
+        "verification": "SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Product__c FROM LLC_BI__Loan__c WHERE Id = :newId",
+        "type": "verification",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan__c",
+        "label": "Read back the facility and report the name the org assigned",
+        "id": "verify_loan",
+        "fields": [
+         "Name",
+         "LLC_BI__Stage__c",
+         "LLC_BI__Product__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "waitBudgetMs": 30000,
+        "verification": "SELECT Id, LLC_BI__Loan_Detail__c FROM LLC_BI__Loan__c WHERE Id = :newId (re-read on the continuing call, never awaited in-transaction)",
+        "type": "wait",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan_Detail__c",
+        "label": "nCino creates the Loan Detail, then this action continues",
+        "id": "wait_loan_detail",
+        "fields": [],
+        "automationWoken": [
+         "An async-path flow: Loan_Detail_Exists, Create_Loan_Detail, Update_Loan_with_New_Loan_Details_Record"
+        ]
+       },
+       {
+        "waitBudgetMs": null,
+        "verification": "SELECT Id, LLC_BI__Primary_Loan_Purpose__c FROM LLC_BI__Loan_Detail__c WHERE Id = :loanDetailId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan_Detail__c",
+        "label": "Set the primary loan purpose on the Loan Detail",
+        "id": "write_loan_purpose",
+        "fields": [
+         "LLC_BI__Primary_Loan_Purpose__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "waitBudgetMs": null,
+        "verification": "SELECT Id, LLC_BI__Stage__c FROM LLC_BI__Loan__c WHERE Id = :newId",
+        "type": "write",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan__c",
+        "label": "Move the facility from Qualification to Proposal",
+        "id": "hop_to_proposal",
+        "fields": [
+         "LLC_BI__Stage__c"
+        ],
+        "automationWoken": [
+         "The LV11 to LV14 validation ladder"
+        ]
+       },
+       {
+        "waitBudgetMs": null,
+        "verification": "SELECT Id, LLC_BI__Stage__c FROM LLC_BI__Loan__c WHERE Id = :newId",
+        "type": "verification",
+        "state": "pending",
+        "objectName": "LLC_BI__Loan__c",
+        "label": "Confirm the facility now reads Proposal",
+        "id": "verify_hop",
+        "fields": [
+         "LLC_BI__Stage__c"
+        ],
+        "automationWoken": []
+       },
+       {
+        "waitBudgetMs": null,
+        "verification": null,
+        "type": "observed_side_effect",
+        "state": "pending",
+        "objectName": null,
+        "label": "The org assigns the loan officer",
+        "id": "observe_loan_officer",
+        "fields": [],
+        "automationWoken": [
+         "ACNPEX_ AccountOwnerAsLoanOfficer"
+        ]
+       }
+      ],
+      "stagingId": "a8abb00001NL3OpAAL",
+      "replayed": false,
+      "provenanceJson": "{\"LLC_BI__Stage__c\":{\"citation\":\"A33.3.1: the only state this tool may create with.\",\"provenance\":\"DERIVED\",\"prefill\":\"COMPUTED\"},\"LLC_BI__Amount__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"LLC_BI__Product__c\":{\"citation\":null,\"provenance\":null,\"prefill\":\"BANKER\"},\"LLC_BI__Product_Package__c\":{\"citation\":\"a5Fbb000000IokjEAC\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"},\"LLC_BI__Account__c\":{\"citation\":\"001bb00001KfNPkAAN\",\"provenance\":\"NCINO\",\"prefill\":\"NCINO_RECORD\"}}",
+      "productPackageId": "a5Fbb000000IokjEAC",
+      "plannedPackageName": null,
+      "planHash": "6cb7d24fedba3c4ea2cfcdf3d8af92f579c333ac06cd2be9ed8ecab62bb32611",
+      "decisionToken": "8e50dfc454d0b465d290d8b8d7cac1aaf355caca91f4150ef6a54adcefccacd8",
+      "createsPackage": false,
+      "accountId": "001bb00001KfNPkAAN"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_new_facility_invocation_1": {
+  "note": "Invocation 1: files the Loan + involvement, commits, returns immediately. Never waits in-transaction for the async Loan Detail flow. terminalState partial, resumable true.",
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-NF-1",
+     "stagingId": "a8abb00001NL3OpAAL",
+     "planHash": "6cb7d24fedba3c4ea2cfcdf3d8af92f579c333ac06cd2be9ed8ecab62bb32611",
+     "decisionToken": "8e50dfc454d0b465d290d8b8d7cac1aaf355caca91f4150ef6a54adcefccacd8",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteNewFacility",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "partial",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Create the facility at Qualification on ZZ-WS3-PROBE Borrower - 8/24/2026 - PP",
+        "id": "write_loan",
+        "detail": "Facility a4Zbb000002CE2rEAG created at Qualification."
+       },
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Add the borrower to the facility's borrowing structure",
+        "id": "write_involvement",
+        "detail": "Borrower added to the borrowing structure at 100.00 percent ownership."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Read back the facility and report the name the org assigned",
+        "id": "verify_loan",
+        "detail": "The org named this facility ZZ-WS3-PROBE Borrower - Equipment - $250,000.00 and set product Equipment."
+       },
+       {
+        "type": "wait",
+        "state": "waiting",
+        "label": "nCino creates the Loan Detail, then this action continues",
+        "id": "wait_loan_detail",
+        "detail": "nCino creates the Loan Detail moments after this filing, in a separate transaction. It cannot be seen from here."
+       },
+       {
+        "type": "write",
+        "state": "pending",
+        "label": "Set the primary loan purpose on the Loan Detail",
+        "id": "write_loan_purpose",
+        "detail": null
+       },
+       {
+        "type": "write",
+        "state": "pending",
+        "label": "Move the facility from Qualification to Proposal",
+        "id": "hop_to_proposal",
+        "detail": null
+       },
+       {
+        "type": "verification",
+        "state": "pending",
+        "label": "Confirm the facility now reads Proposal",
+        "id": "verify_hop",
+        "detail": null
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "pending",
+        "label": "The org assigns the loan officer",
+        "id": "observe_loan_officer",
+        "detail": null
+       }
+      ],
+      "stagingId": "a8abb00001NL3OpAAL",
+      "stage": "Qualification",
+      "resumeDescriptor": "Continue this action to verify the Loan Detail and complete the move to Proposal. No new confirmation is needed: the same plan is still running.",
+      "resumable": true,
+      "replayed": false,
+      "recordName": "ZZ-WS3-PROBE Borrower - Equipment - $250,000.00",
+      "productPackageId": "a5Fbb000000IokjEAC",
+      "packageCreated": false,
+      "outcome": "Facility ZZ-WS3-PROBE Borrower - Equipment - $250,000.00 filed at Qualification. The org creates the Loan Detail moments after filing, in its own transaction. Continue this action to verify the Loan Detail and complete the move to Proposal. No new confirmation is needed: the same plan is still running.",
+      "loanId": "a4Zbb000002CE2rEAG",
+      "loanDetailId": null,
+      "involvementId": "a4Lbb000000OsIbEAK",
+      "anchorName": "ZZ-WS3-PROBE Borrower - 8/24/2026 - PP"
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ },
+ "execute_new_facility_invocation_2": {
+  "note": "Invocation 2 (resume), same stagingId/planHash/idempotencyKey/approver, no new decision token: the org's async Loan_Detail_Exists/Create_Loan_Detail/Update_Loan_with_New_Loan_Details_Record flow had created the Loan Detail (a4Wbb000001KLkTEAW, observed via SOQL re-read ~8s after invocation 1, well inside the 30000ms wait budget). Writes the primary loan purpose and hops the facility Qualification to Proposal. terminalState success.",
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "ZZ-WS3-PROBE-NF-1",
+     "stagingId": "a8abb00001NL3OpAAL",
+     "planHash": "6cb7d24fedba3c4ea2cfcdf3d8af92f579c333ac06cd2be9ed8ecab62bb32611",
+     "decisionToken": "8e50dfc454d0b465d290d8b8d7cac1aaf355caca91f4150ef6a54adcefccacd8",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteNewFacility",
+    "errors": null,
+    "expectedError": false,
+    "invocationId": null,
+    "isSuccess": true,
+    "outcome": null,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "terminalState": "success",
+      "steps": [
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Create the facility at Qualification on ZZ-WS3-PROBE Borrower - 8/24/2026 - PP",
+        "id": "write_loan",
+        "detail": "Facility a4Zbb000002CE2rEAG created at Qualification."
+       },
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Add the borrower to the facility's borrowing structure",
+        "id": "write_involvement",
+        "detail": "Borrower added to the borrowing structure at 100.00 percent ownership."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Read back the facility and report the name the org assigned",
+        "id": "verify_loan",
+        "detail": "The org named this facility ZZ-WS3-PROBE Borrower - Equipment - $250,000.00 and set product Equipment."
+       },
+       {
+        "type": "wait",
+        "state": "verified",
+        "label": "nCino creates the Loan Detail, then this action continues",
+        "id": "wait_loan_detail",
+        "detail": "nCino created Loan Detail a4Wbb000001KLkTEAW."
+       },
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Set the primary loan purpose on the Loan Detail",
+        "id": "write_loan_purpose",
+        "detail": "Primary loan purpose set to equipment."
+       },
+       {
+        "type": "write",
+        "state": "verified",
+        "label": "Move the facility from Qualification to Proposal",
+        "id": "hop_to_proposal",
+        "detail": "Stage moved from Qualification to Proposal."
+       },
+       {
+        "type": "verification",
+        "state": "verified",
+        "label": "Confirm the facility now reads Proposal",
+        "id": "verify_hop",
+        "detail": "Facility reads back at stage Proposal."
+       },
+       {
+        "type": "observed_side_effect",
+        "state": "filed_unverified",
+        "label": "The org assigns the loan officer",
+        "id": "observe_loan_officer",
+        "detail": "The loan officer was assigned by org automation from the account owner. This tool did not set it."
+       }
+      ],
+      "stagingId": "a8abb00001NL3OpAAL",
+      "stage": "Proposal",
+      "resumeDescriptor": null,
+      "resumable": false,
+      "replayed": false,
+      "recordName": "ZZ-WS3-PROBE Borrower - Equipment - $250,000.00",
+      "productPackageId": "a5Fbb000000IokjEAC",
+      "packageCreated": null,
+      "outcome": "Facility ZZ-WS3-PROBE Borrower - Equipment - $250,000.00 completed and moved to Proposal. The org assigned the name and the loan officer. Nothing has been approved: reaching Booked requires nCino's Submit for Approval.",
+      "loanId": "a4Zbb000002CE2rEAG",
+      "loanDetailId": "a4Wbb000001KLkTEAW",
+      "involvementId": null,
+      "anchorName": null
+     }
+    },
+    "sortOrder": 0,
+    "version": 1
+   }
+  ]
+ }
+}
