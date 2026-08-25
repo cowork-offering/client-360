@@ -411,3 +411,24 @@ confirmed before deletion). Hartwell (`001bb00001I7*`, package `a5Fbb000000IHFJE
   replay call was not made here for service request, annual review, risk rating review or new facility.
 - **Multi-record staging (N > 1 requests in one `inputs[]` array) was not probed for any of the four.**
   Each call staged and executed exactly one request.
+
+## Showcase build on Hartwell (2026-08-25, Fabian request: "the full show", TEST-flagged, standing)
+
+Governed path end to end, then linkage, then proof via our own reads:
+| Piece | Id | How |
+|---|---|---|
+| Facility "Equipment - $3,000,000.00", Stage Proposal | a4Zbb000002CECXEA4 | stage_new_facility → execute (3 invocations, async Loan Detail resume), borrowing structure + purpose set by the tool |
+| TEST collateral (Mazak tooling cells, $4.0M) | a35bb0000018TAjAAM | data build, TEST-flagged description |
+| Ownership junction | a2Vbb000001Zpa9EAC | Account_Collateral 100% primary |
+| Valuation $4.0M Book Value/Appraisal | a34bb000003FKxZAAW | stage_collateral_valuation (package-anchored) → execute, token-gated |
+| Aggregate | a4Sbb00000G7BlVEAV | lookupKey HWTEST-AGG-1 |
+| Pledge $3.0M @75% override, 1st | a4Rbb0000027J4nEAE | mirrors fleet pledge conventions incl. override reason |
+| Covenant junction (FCCR → new facility) | a4Vbb000000qMCXEA2 | Loan_Covenant |
+| Lien 1st $3.0M | a4Mbb000001I41NEAS | Is_Internal not writable by profile (org fact) |
+
+Proof: Customer360Exposure returns 7 facilities; the new one carries pledged share $3.0M with the
+TEST collateral at 75% "Pledge override". Customer360Covenants shows the FCCR covenant
+(type "Debt Service Coverage with and without Distributions") with the new facility in
+attachedLoans. Staging rows SHOWCASE-* Completed (kept while the showcase stands).
+Rollback when asked: lien, covenant junction, pledge, aggregate, valuation, ownership, collateral,
+facility (+ its Loan Detail/involvement children), staging rows.
