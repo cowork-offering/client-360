@@ -445,3 +445,11 @@ Every action fired through the SAME REST invocables the cockpit calls; Salesforc
 | 6 | renewal stage | held as designed | executionHeld true, LV06 heldReason verbatim; newMaturityDate wire-required (envelope updated knowledge); staging row deleted |
 | 7 | loan_modification stage+execute+rollback | success | clone a4Zbb000002CEIzEAO + RL-00000202 created, then clone+junctions+staging deleted; revolver Booked $15M hasRenewal false |
 Layer caveat: this validates the ORG CONTRACT. The cockpit's client-side construction + confirm flow (layers 2+3) still need the human browser drive; the frame is invisible to extension screenshots (capture limitation, NOT a render defect — bundle verified rendering in 2 headless environments and visually by Fabian).
+
+## Multi-facility package-anchored modification PROVEN (2026-08-25, closes the last UNVERIFIED contract arm)
+ONE package anchor + TWO member facilities (both credit lines) + ONE plan (8 steps) + ONE token +
+one approval -> TWO clones (both maturity 2027-09-30 applied, Qualification) + junction chains
+RL-00000205/206, both parents untouched. Rolled back complete: 4 junctions + 2 clones + staging row
+deleted; package 7 loans; parents hasRenewal false. The aggregation-first doctrine is now observed,
+not just designed: the package is the anchor, facilities are member selections, N members ride one
+governed decision.
