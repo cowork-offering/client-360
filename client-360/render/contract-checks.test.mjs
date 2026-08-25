@@ -504,7 +504,10 @@ test("regression fixture: validateC360 populates covenantChallenge + dataQuality
 
 // ---------------------------------------------------------------- fixture against the real sample data
 test("real sample-data.json satisfies the full contract end to end", () => {
-  const path = new URL("../artifact/sample-data.json", import.meta.url);
+  // The plugin's own copy, kept byte-identical to the repo's artifact/ publish staging by
+  // scripts/sync-plugin-assets.mjs. (Was ../artifact/, which stopped resolving when the plugin was
+  // isolated into client-360/ and silently took this assertion out of the release gate.)
+  const path = new URL("../assets/sample-data.json", import.meta.url);
   const data = JSON.parse(readFileSync(path, "utf8"));
   assert.doesNotThrow(() => assertGeneratedAt(data));
   assert.doesNotThrow(() => assertBorrowersStructure(data));
