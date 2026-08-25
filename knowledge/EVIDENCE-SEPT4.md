@@ -432,3 +432,16 @@ TEST collateral at 75% "Pledge override". Customer360Covenants shows the FCCR co
 attachedLoans. Staging rows SHOWCASE-* Completed (kept while the showcase stands).
 Rollback when asked: lien, covenant junction, pledge, aggregate, valuation, ownership, collateral,
 facility (+ its Loan Detail/involvement children), staging rows.
+
+## Full action sweep, org-contract layer (2026-08-25, Fabian request)
+Every action fired through the SAME REST invocables the cockpit calls; Salesforce footprint verified per action.
+| # | Action | Result | Salesforce footprint |
+|---|---|---|---|
+| 1 | service_request stage+execute | success | Case 00001330 "Treasury reporting change", New, on Hartwell — KEPT (TEST texture) |
+| 2 | annual_review stage+execute | success | Review R-8, Annual, In Progress — KEPT |
+| 3 | risk_rating_review stage+execute | success | RG-0000004, In Review, grade 4 — KEPT |
+| 4 | collateral_valuation | GUARDS PROVEN | wrong picklist refused with the org's legal list; corrected type refused by the same-collateral-same-date guard (CV-0000000016 already on 2026-08-25). No write — correct |
+| 5 | covenant_review stage on Hartwell | GUARD PROVEN | verbatim refusal: no compliance rows exist and creating one raises the bank's approval work item; "a plan that promises no write is not a plan". Zero staged — correct (write path proven separately on the throwaway fixture 08-25) |
+| 6 | renewal stage | held as designed | executionHeld true, LV06 heldReason verbatim; newMaturityDate wire-required (envelope updated knowledge); staging row deleted |
+| 7 | loan_modification stage+execute+rollback | success | clone a4Zbb000002CEIzEAO + RL-00000202 created, then clone+junctions+staging deleted; revolver Booked $15M hasRenewal false |
+Layer caveat: this validates the ORG CONTRACT. The cockpit's client-side construction + confirm flow (layers 2+3) still need the human browser drive; the frame is invisible to extension screenshots (capture limitation, NOT a render defect — bundle verified rendering in 2 headless environments and visually by Fabian).
