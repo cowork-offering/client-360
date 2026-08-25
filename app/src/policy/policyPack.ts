@@ -24,8 +24,12 @@ export type PolicyKey =
   | "modification.subsumesValuation";
 
 export interface PolicyPack {
-  /** Stamped onto every Suggestion and re-checked at confirm (A33.2.7). */
+  /** Stamped onto every Suggestion and re-checked at confirm (A33.2.7). The
+   *  LEDGER's name for the pack, never the banker's: an id is not a label. */
   version: string;
+  /** What a banker reads. `demo-2026-07` rendered on a live ticket reads like a
+   *  bank policy version, and the founder said so on 2026-08-25. It is not one;
+   *  the label says what it is and what is still coming. */
   label: string;
   values: Partial<Record<PolicyKey, number | boolean>>;
 }
@@ -43,7 +47,7 @@ export interface PolicyPack {
  */
 export const DEMO_POLICY_PACK: PolicyPack = {
   version: "demo-2026-07",
-  label: "Demo engagement pack",
+  label: "Demo policy pack (WS2 policy layer pending)",
   values: {
     "collateral.coverageFloor": 1.1,
     "covenant.cushionAlertFloor": 15,

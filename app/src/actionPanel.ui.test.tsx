@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { clearOverlays } from "./state/syncOverlay";
+import { clearOverlays, dataVersionOf, saveOverlay } from "./state/syncOverlay";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { CHALLENGE_PANEL_INTRO } from "./components/ActionPanel";
 import { vi } from "vitest";
 import sample from "../../artifact/sample-data.json";
 import observedFacilityEnvelopes from "./actions/observed-facilityIds-envelopes.json";
@@ -552,8 +553,9 @@ describe("wave 2 — the five new tickets", () => {
     });
 
   /** The org refuses a modification that asks for nothing, and so does the
-   *  ticket. A relationship with no staged client ask therefore opens with an
-   *  empty commitment, and a test about the WIRE has to name a change first. */
+   *  ticket. Since F5 the amount opens on the selected member's CURRENT
+   *  commitment, so a test about the WIRE still has to name a real change:
+   *  a standstill is refused by `MODIFICATION_NO_MOVEMENT` instead. */
   const askForACommitment = (amount = "20000000") =>
     setInput(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, amount);
 
@@ -682,9 +684,10 @@ describe("wave 2 — the five new tickets", () => {
 
   it("refuses a modification that asks for nothing, in the org's own words", async () => {
     const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
-    // Kingsley stages no client ask, so the ticket opens with every requested
-    // change empty — which is exactly the plan StageLoanModification throws on.
     openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    // Clearing the prefill leaves every requested change empty, which is
+    // exactly the plan StageLoanModification throws on.
+    setInput(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, "");
     const p = panel("Loan Modification")!;
     expect(p.textContent).toContain("At least one requested change is required: amount, maturity date, rate or term.");
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
@@ -700,6 +703,31 @@ describe("wave 2 — the five new tickets", () => {
     expect(inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_"))).requestedMaturityDate).toBe(
       "2029-06-30",
     );
+  });
+
+  /* F5 (founder, 2026-08-25) — the amount now OPENS on what the selected member
+     carries today, so the ticket reads from -> to. The consequence is that the
+     org's at-least-one-change rule is satisfied by a plan that changes nothing,
+     and the ticket has to catch that itself. */
+  it("opens on the member's current commitment and refuses to stage a standstill", async () => {
+    const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    const hero = panel("Loan Modification")!.querySelector("#hero-newCommitment") as HTMLInputElement;
+    // Kingsley's largest booked member is the 10.0M equipment term loan.
+    expect(hero.value).toBe("10000000");
+
+    const p = panel("Loan Modification")!;
+    // The from -> to reading, per selected member, on the ticket itself.
+    expect(p.textContent).toContain("Each selected facility");
+    expect(p.textContent).toContain("The amount is what every selected facility already carries");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+    await flush();
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(0);
+
+    // Move it and the ticket lets go.
+    setInput(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, "13000000");
+    expect(panel("Loan Modification")!.textContent).not.toContain("already carries");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(false);
   });
 
   it("blocks an EMPTY selection in the ticket, before anything is sent", async () => {
@@ -819,7 +847,9 @@ describe("wave 2 — the five new tickets", () => {
     expect(at("Deal")).toBeGreaterThan(-1);
     expect(at("Deal")).toBeLessThan(at("Facilities in this credit action"));
     expect(at("Facilities in this credit action")).toBeLessThan(at("New commitment"));
-    // The header states what the deal aggregates, since no package name exists.
+    // The header leads with the deal's NAME and states what it aggregates in
+    // one line under it (founder finding F1, 2026-08-25).
+    expect(text).toContain("Sterling Fabrication Co. credit package");
     expect(text).toContain("2 facilities · $18M committed · $16.90M drawn");
     // And every change says where it lands.
     expect(text).toContain("Applies to EACH selected facility");
@@ -1016,10 +1046,13 @@ describe("wave 2 — the five new tickets", () => {
     openActionPanel("Covenant Review");
     const p = panel("Covenant Review")!;
     // WS0.5: the review is anchored on the PACKAGE, and the sample bundle
-    // stages none. The org's own reason is rendered rather than paraphrased,
-    // and no gesture is offered.
-    expect(p.textContent).toContain("productPackageId is required");
-    expect(p.textContent).toContain("It is the deal anchor");
+    // stages none. F4 (2026-08-25): the banker reads the CONSEQUENCE, not the
+    // wire field name, and no gesture is offered either way.
+    expect(p.textContent).toContain("stages no credit package");
+    expect(p.textContent).toContain("no deal for this action to run on");
+    expect(p.textContent).not.toContain("productPackageId is required");
+    // The wire field name still reaches whoever needs it, on the toggle.
+    expect(byText(/Where this comes from/)).toBeTruthy();
     expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
   });
 
@@ -1853,11 +1886,14 @@ describe("collateral anchor gap blocks the tool (live defect 2026-07-26)", () =>
 });
 
 describe("A33.2 — suggestions and named gaps in the panel", () => {
-  it("shows the deterministic suggestion with its policy stamp", () => {
+  it("shows the deterministic finding under a panel that says what it is for", () => {
     openActionPanel("Collateral Valuation");
     const text = panel("Collateral Valuation")!.textContent ?? "";
-    expect(text).toContain("What the figures say");
-    expect(text).toMatch(/Policy demo-2026-07/);
+    expect(text).toContain("Effective challenge");
+    expect(text).toContain(CHALLENGE_PANEL_INTRO);
+    // F5 — the pack id is not a bank policy version and must not read as one.
+    expect(text).toContain("Demo policy pack (WS2 policy layer pending)");
+    expect(text).not.toContain("demo-2026-07");
   });
 
   it("requires a reason before a suggestion can be declined", () => {
@@ -1870,5 +1906,229 @@ describe("A33.2 — suggestions and named gaps in the panel", () => {
       /Record and decline/.test(b.textContent ?? ""),
     )!;
     expect(record.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+/* =============================================================================
+   FOUNDER UAT, 2026-08-25 — the ticket flow as the banker read it.
+
+   Five findings, live. Each one below is the founder's own reading turned into
+   a test, so the ticket cannot quietly go back to the shape they rejected.
+   ============================================================================= */
+
+const setHero = (el: Element, value: string) =>
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    setter.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+describe("F1 — the ticket leads with the deal and reads its members as clean rows", () => {
+  it("puts the package NAME at headline size, above everything it governs", () => {
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    const p = panel("Loan Modification")!;
+    const headline = p.querySelector("h4")!;
+    expect(headline.textContent).toBe("Sterling Fabrication Co. credit package");
+    // ONE metadata line under it, and it is members, committed, drawn.
+    expect(headline.nextElementSibling?.textContent).toBe("2 facilities · $18M committed · $16.90M drawn");
+  });
+
+  it("keeps the org's record id off the banker's line and behind a toggle", () => {
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    const p = panel("Loan Modification")!;
+    const headline = p.querySelector("h4")!;
+    expect(headline.parentElement?.textContent).not.toContain("a5Fbb000000HA1NEAW");
+    const toggle = [...p.querySelectorAll("button")].find((b) => /Record reference/.test(b.textContent ?? ""))!;
+    expect(toggle).toBeTruthy();
+    click(toggle);
+    expect(panel("Loan Modification")!.textContent).toContain("a5Fbb000000HA1NEAW");
+  });
+
+  it("gives every member row a checkbox, its own name and its stage as a chip", () => {
+    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+    const p = panel("Loan Modification")!;
+    const boxes = [...p.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes.length).toBeGreaterThan(1);
+    for (const box of boxes) {
+      const row = box.closest("label")!;
+      // Name, then stage chip, then one line of figures. Nothing else.
+      expect(row.textContent).toMatch(/Booked|Final Review|Paid Off/);
+      expect(row.textContent).toContain("committed");
+    }
+  });
+});
+
+describe("F2 — the effective challenge asks for a decision", () => {
+  it("says what the panel is before it says anything about the figures", () => {
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    expect(text).toContain("Effective challenge");
+    expect(text).toContain("Advisory only: the decision stays with you");
+    // The intro comes before the first card.
+    expect(text.indexOf(CHALLENGE_PANEL_INTRO)).toBeLessThan(text.indexOf("below the 1.10x floor"));
+  });
+
+  it("leads each card with the verdict, then the detail, then the two decisions", () => {
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    const verdict = "Collateral coverage is 0.96x, below the 1.10x floor.";
+    expect(text).toContain(verdict);
+    expect(text.indexOf(verdict)).toBeLessThan(text.indexOf("Lendable collateral covers"));
+    expect(text.indexOf("Lendable collateral covers")).toBeLessThan(text.indexOf("Acknowledge and continue"));
+    expect(text).toContain("Decline with reason");
+  });
+
+  it("records the acknowledgement and collapses the card that asked for it", () => {
+    openActionPanel("Collateral Valuation");
+    const before = panel("Collateral Valuation")!.textContent ?? "";
+    expect(before).toContain("Lendable collateral covers");
+
+    const ack = [...panel("Collateral Valuation")!.querySelectorAll("button")].find((b) =>
+      /Acknowledge and continue/.test(b.textContent ?? ""),
+    )!;
+    click(ack);
+
+    const after = panel("Collateral Valuation")!.textContent ?? "";
+    // The verdict SURVIVES — an acknowledged check is still a check on file —
+    // and the detail plus the two gestures fold away.
+    expect(after).toContain("Collateral coverage is 0.96x, below the 1.10x floor.");
+    expect(after).toContain("acknowledged");
+    expect(after).not.toContain("Lendable collateral covers");
+    // Only the SECOND card still asks; the acknowledged one has stopped.
+    const asks = [...panel("Collateral Valuation")!.querySelectorAll("button")].filter((b) =>
+      /Acknowledge and continue/.test(b.textContent ?? ""),
+    );
+    expect(asks).toHaveLength(before.match(/Acknowledge and continue/g)!.length - 1);
+  });
+
+  it("names a DECLINED check by its verdict, never by its rule id", () => {
+    openActionPanel("Collateral Valuation");
+    const decline = [...panel("Collateral Valuation")!.querySelectorAll("button")].find((b) =>
+      /Decline with reason/.test(b.textContent ?? ""),
+    )!;
+    click(decline);
+    const box = panel("Collateral Valuation")!.querySelector("textarea")!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(box, "Fresh appraisal already commissioned.");
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click(
+      [...panel("Collateral Valuation")!.querySelectorAll("button")].find((b) =>
+        /Record and decline/.test(b.textContent ?? ""),
+      )!,
+    );
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    expect(text).toContain("declined: Fresh appraisal already commissioned.");
+    expect(text).not.toContain("coverage-shortfall");
+  });
+});
+
+describe("F3 — the challenge quotes the read the ticket itself is using", () => {
+  it("quotes the BAKED bundle's own clock when nothing has been synced", () => {
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    expect(text).toContain("as it was prepared on Jul 2, 2026, 09:15 UTC");
+    expect(text).toContain("Sync this relationship to recheck it on today's figures");
+  });
+
+  it("quotes the SYNC once a live read has replaced the bundle the ticket reads", () => {
+    // A session that already synced: the overlay is the same one the Sync
+    // sweep writes, restored through the same reducer path.
+    const account = "001SAMPLE0000STRL";
+    const synced = Date.parse("2026-08-25T14:05:00Z");
+    saveOverlay(dataVersionOf(DATA.meta), account, {
+      patch: {
+        exposure: {
+          ...structuredClone(DATA.borrowers![account].exposure!),
+          totalCommitted: 21_000_000,
+        },
+      },
+      activity: [],
+      storedAt: synced,
+    });
+
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    expect(text).toContain("as it was read from nCino on Aug 25, 2026, 14:05 UTC");
+    expect(text).not.toContain("Jul 2, 2026, 09:15 UTC");
+    // And the FIGURES moved with the timestamp: the same read, one story.
+    expect(text).toContain("0.82x");
+  });
+
+  it("says which figures that sync did NOT refresh, in banker language", () => {
+    const account = "001SAMPLE0000STRL";
+    saveOverlay(dataVersionOf(DATA.meta), account, {
+      // Exposure only. The covenant rule is live in its clock and baked in its
+      // inputs, and the card has to admit that rather than claim both.
+      patch: { exposure: structuredClone(DATA.borrowers![account].exposure!) },
+      activity: [],
+      storedAt: Date.parse("2026-08-25T14:05:00Z"),
+    });
+    openActionPanel("Collateral Valuation");
+    const text = panel("Collateral Valuation")!.textContent ?? "";
+    expect(text).toContain("except the covenant figures, which that sync did not refresh");
+  });
+});
+
+describe("F4 — nothing on any ticket speaks in contract paths", () => {
+  /** Every leak family the founder read on 2026-08-25, plus its relatives. */
+  const LEAKS: Array<[string, RegExp]> = [
+    ["a contract path", /borrower\.[a-z]/],
+    ["a tool name", /Customer360[A-Z]/],
+    ["an array path segment", /\[\]\./],
+    ["a managed field name", /\bLLC_BI__/],
+    ["a wire field name", /productPackageId|covenantComplianceId|facilityIds|attachedLoans|loanCovenants/],
+    ["a policy pack id", /demo-2026-07/],
+  ];
+
+  it.each([
+    ["Collateral Valuation", "Sterling Fabrication"],
+    ["Covenant Review", "Sterling Fabrication"],
+    ["Annual Review", "Sterling Fabrication"],
+    ["Risk Rating Review", "Kingsley Precision"],
+    ["New Facility Request", "Kingsley Precision"],
+  ])("keeps %s clean", (action, account) => {
+    openActionPanel(action, account);
+    const text = panel(action)!.textContent ?? "";
+    for (const [what, re] of LEAKS) expect(text, `${action} leaks ${what}`).not.toMatch(re);
+    // And the same with the completeness view open, which is where the schema's
+    // own labels and helps are read.
+    expandAllFields();
+    const all = panel(action)!.textContent ?? "";
+    for (const [what, re] of LEAKS) expect(all, `${action} leaks ${what} in All fields`).not.toMatch(re);
+  });
+});
+
+describe("F5 — the amount reads from -> to, and the deal is selectable when there is a choice", () => {
+  it("shows a per-member from -> to summary once an amount is entered", () => {
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    setHero(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, "13000000");
+    const p = panel("Loan Modification")!;
+    const rows = [...p.querySelectorAll("div")].find((d) => /^Each selected facility/.test(d.textContent ?? ""))!;
+    expect(rows.textContent).toContain("Sterling Working Capital Revolver");
+    expect(rows.textContent).toContain("$10M");
+    expect(rows.textContent).toContain("$13M");
+  });
+
+  it("adds a row per member as more members are ticked", () => {
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    setHero(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, "13000000");
+    const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    const other = boxes.find((b) => !b.checked)!;
+    click(other);
+    const rows = [...panel("Loan Modification")!.querySelectorAll("div")].find((d) =>
+      /^Each selected facility/.test(d.textContent ?? ""),
+    )!;
+    expect(rows.textContent).toContain("Sterling Working Capital Revolver");
+    expect(rows.textContent).toContain("Sterling Equipment Term Loan");
+  });
+
+  it("renders NO deal selector when the relationship carries a single package", () => {
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    const p = panel("Loan Modification")!;
+    // The headline, and the reason there is nothing to choose. No chooser.
+    expect(p.textContent).toContain("the relationship stages one product package");
+    expect(p.querySelector('[role="group"]')).toBeNull();
   });
 });

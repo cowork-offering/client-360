@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { useApp } from "../state/appState";
 import { STATUS, type Tone } from "../data/finance";
 import { AccentureCaretWatermark } from "./brand";
@@ -119,6 +119,45 @@ export function NoteCaption({ note }: { note?: string | null }) {
   return (
     <div className="mt-3 border-t border-divider pt-3 text-[11px] leading-relaxed text-ink-faint" style={{ textWrap: "pretty" as never }}>
       {note}
+    </div>
+  );
+}
+
+/**
+ * THE TECHNICAL ACCOUNT, ONE CLICK AWAY (founder finding F4, 2026-08-25).
+ *
+ * Contract paths, wire field names, tool names and record ids are real and
+ * somebody needs them. That somebody is not the banker reading a ticket, who
+ * on 2026-08-25 was shown
+ * "borrower.covenants.covenants[].actualValue is present but null ·
+ * Customer360Covenants" and could act on none of it. Every such string now
+ * renders through here: a small labelled affordance, the detail also on the
+ * title attribute so a hover answers it without a click.
+ */
+export function TechnicalToggle({
+  label = "Where this comes from",
+  detail,
+}: {
+  label?: string;
+  detail?: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!detail) return null;
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        title={detail}
+        onClick={() => setOpen((v) => !v)}
+        // ink-muted, not ink-faint: this affordance renders on three different
+        // grounds — the card, the warning banner and the deal header's accent
+        // wash — and only ink-muted clears 3:1 on all of them.
+        className="c360-press text-[10px] font-semibold text-ink-muted underline decoration-dotted underline-offset-2 hover:text-ink"
+      >
+        {label}
+      </button>
+      {open && <div className="mt-1 break-words font-mono text-[10px] leading-relaxed text-ink-muted">{detail}</div>}
     </div>
   );
 }

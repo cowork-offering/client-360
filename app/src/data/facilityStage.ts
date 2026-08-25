@@ -70,6 +70,41 @@ export function facilityLabel(f: Facility): string {
   return f.name ?? f.loanId ?? "Facility";
 }
 
+/**
+ * The same facility, named for a LIST the banker is scanning.
+ *
+ * nCino names a loan `<Borrower> - <Product> - <$Amount>`, so a six-member deal
+ * renders as six rows that all begin with the same forty characters and differ
+ * only at the end. The relationship name is already the headline of the screen,
+ * so it is dropped from each row and what is left is the product and the amount
+ * — the founder's own reading of what a member row should say.
+ *
+ * FAIL SAFE, and the separator is what makes it safe. The prefix is dropped
+ * only where the name starts with the relationship's name AND an explicit
+ * separator follows it. Without that rule "Testcorp Working Capital Revolver"
+ * under "Testco" would be cut to "rp Working Capital Revolver" — half-stripping
+ * a name is worse than not stripping it. "Sterling Working Capital Revolver"
+ * under "Sterling Fabrication Co." does not match at all and stays whole.
+ *
+ * DISPLAY ONLY. `facilityLabel` remains the canonical name; nothing that
+ * resolves a record or builds a payload reads this.
+ */
+export function shortFacilityLabel(f: Facility, relationship?: string | null): string {
+  return shortFacilityName(facilityLabel(f), relationship);
+}
+
+/** The same rule against a bare NAME, for the reads that carry a loan's name
+ *  without the facility row behind it (covenant junctions name their loan). */
+export function shortFacilityName(name: string | null | undefined, relationship?: string | null): string {
+  const full = (name ?? "").trim();
+  const rel = (relationship ?? "").trim();
+  if (!full) return "";
+  if (!rel || full.length <= rel.length) return full;
+  if (full.slice(0, rel.length).toLowerCase() !== rel.toLowerCase()) return full;
+  const rest = full.slice(rel.length).match(/^\s*[-–—:·|]\s*(\S.*)$/);
+  return rest ? rest[1].trim() : full;
+}
+
 export interface BookedAvailability {
   available: boolean;
   reason?: string;

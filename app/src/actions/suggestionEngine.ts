@@ -23,12 +23,65 @@ import type { BorrowerBundle, C360Data, Covenant, ProvenanceKind } from "../data
 import { covenantCushion } from "../data/finance";
 import { classifyCovenant } from "../domain/covenantStatus";
 import { isActiveFacility } from "../data/worklist";
+import { shortFacilityName } from "../data/facilityStage";
+import { fmtInstant } from "../data/format";
 import { ACTIVE_POLICY_PACK, resolveThreshold, type PolicyKey, type PolicyPack } from "../policy/policyPack";
 
 export interface SuggestionInput {
   path: string;
   value: number | null;
   provenance: ProvenanceKind;
+}
+
+/**
+ * WHICH READ THE CHECK RAN ON (founder finding F3, 2026-08-25).
+ *
+ * The engine used to stamp every suggestion with `data.meta.generatedAt`, the
+ * instant the BAKED bundle was assembled. After a live Sync the ticket reads the
+ * merged bundle while the card still claimed the baked date, so the banker was
+ * told the check was a month old when it had just been recomputed on today's
+ * figures. The freshness now travels with the data it describes.
+ */
+export interface DataFreshness {
+  /** ISO instant of the read this rule consumed. */
+  asOf: string;
+  /** A sync in THIS session supplied the sections below. */
+  live: boolean;
+  /** Sections the rule read that the sync did not replace. On a live read these
+   *  are the parts still coming from the prepared bundle, and the card says so. */
+  bakedSections: string[];
+}
+
+/** Bundle sections named the way a banker names them. */
+const SECTION_WORDS: Record<string, string> = {
+  exposure: "facility and collateral",
+  covenants: "covenant",
+  snapshot: "relationship",
+  boom: "financial spread",
+  opportunities: "pipeline",
+  signals: "structural signal",
+  graph: "relationship graph",
+};
+
+const sectionWords = (keys: string[]): string =>
+  keys.map((k) => SECTION_WORDS[k] ?? k).join(" and ");
+
+/**
+ * The freshness line, in banker language. One sentence, no paths, no tool names.
+ *
+ * Three cases and they are three different facts: recomputed on a live read,
+ * recomputed on a live read whose sync did not cover every input, and never
+ * synced at all.
+ */
+export function freshnessSentence(f: DataFreshness): string {
+  const when = fmtInstant(f.asOf);
+  if (!f.live) {
+    return `Checked against the relationship as it was prepared on ${when}. Sync this relationship to recheck it on today's figures.`;
+  }
+  if (f.bakedSections.length) {
+    return `Checked against the relationship as it was read from nCino on ${when}, except the ${sectionWords(f.bakedSections)} figures, which that sync did not refresh and are still the prepared bundle's.`;
+  }
+  return `Checked against the relationship as it was read from nCino on ${when}.`;
 }
 
 export interface SuggestionTrigger {
@@ -38,14 +91,32 @@ export interface SuggestionTrigger {
   formula: string;
 }
 
+/** How hard the card should read. Deterministic, from the same arithmetic that
+ *  produced the trigger — never a tone chosen by phrasing. */
+export type Severity = "critical" | "warning" | "info";
+
 export interface Suggestion {
   id: string;
   trigger: SuggestionTrigger;
   inputs: SuggestionInput[];
   /** meta.generatedAt of the data this was computed from (A33.2.7 binding). */
   asOf: string;
+  /** Which read it ran on, and how much of that read was live (F3). */
+  freshness: DataFreshness;
   /** Policy pack id supplying the threshold (A33.2.7 binding). */
   policyVersion: string;
+  /** The same pack, named for a banker rather than for the ledger (F5). */
+  policyLabel: string;
+  /**
+   * THE ASK, FIRST (founder finding F2, 2026-08-25).
+   *
+   * One sentence saying what the figures mean for the decision on the table.
+   * The card leads with it and the detail sentence follows, because a banker
+   * reading analysis with no verdict asked, correctly, "what should I do with
+   * this information?".
+   */
+  verdict: string;
+  severity: Severity;
   /** AGENT phrasing over the deterministic figure. */
   rationale: string;
   /** Provenance of the TRIGGER FIGURE, not of the phrasing. */
@@ -59,11 +130,21 @@ export interface NamedGap {
   ruleId: string;
   /** Which input failed. */
   input: string;
-  /** Dotted path into C360_DATA, so the gap is actionable. */
+  /**
+   * BANKER LANGUAGE, and the only part of a gap that renders inline (F4).
+   *
+   * The founder read "borrower.covenants.covenants[].actualValue is present but
+   * null · Customer360Covenants" on a live ticket. A contract path is not a
+   * fact a banker can act on. `note` says what the missing figure MEANS; the
+   * path, the system and the raw detail stay below, behind an info toggle.
+   */
+  note: string;
+  /** Dotted path into C360_DATA, so the gap is actionable. TECHNICAL. */
   path: string;
-  /** Which system owns it. */
+  /** Which system owns it. TECHNICAL. */
   sourceSystem: string;
   reason: "missing" | "null" | "not_finite" | "denominator_not_positive" | "policy_key_missing";
+  /** TECHNICAL. Never rendered inline. */
   detail: string;
 }
 
@@ -74,8 +155,12 @@ export interface EngineResult {
 
 /* ------------------------------------------------------------- guards 1-4 */
 
+/** A guard reports the TECHNICAL half of a gap. The banker-facing `note` is the
+ *  rule's to write, because only the rule knows what the missing figure meant
+ *  for the check it was running (F4). */
+type TechnicalGap = Omit<NamedGap, "ruleId" | "note">;
 type GuardOk = { ok: true; value: number };
-type GuardFail = { ok: false; gap: Omit<NamedGap, "ruleId"> };
+type GuardFail = { ok: false; gap: TechnicalGap };
 
 /** Guards 1 to 3: present, non-null, finite. Distinguishes missing from null,
  *  because they are different facts (A33.2.6). */
@@ -118,6 +203,7 @@ function requireThreshold(key: PolicyKey, ruleId: string, pack: PolicyPack): { o
       gap: {
         ruleId,
         input: "policy threshold",
+        note: `The policy pack in force sets no limit for this check, so it was switched off rather than run against a made-up one.`,
         path: key,
         sourceSystem: `bank policy pack ${t.policyVersion}`,
         reason: "policy_key_missing",
@@ -141,11 +227,12 @@ const NCINO_EXPOSURE = "Customer360Exposure";
  */
 function ruleCoverageShortfall(
   bundle: BorrowerBundle,
-  asOf: string,
+  freshness: DataFreshness,
   proposedCommitment: number | null,
   pack: PolicyPack,
 ): EngineResult {
   const RULE = "coverage-shortfall";
+  const asOf = freshness.asOf;
   const gaps: NamedGap[] = [];
 
   const th = requireThreshold("collateral.coverageFloor", RULE, pack);
@@ -155,7 +242,17 @@ function ruleCoverageShortfall(
   if (!facs.length) {
     return {
       suggestions: [],
-      gaps: [{ ruleId: RULE, input: "active facilities", path: "borrower.exposure.facilities[]", sourceSystem: NCINO_EXPOSURE, reason: "missing", detail: "no active facility to measure coverage against" }],
+      gaps: [
+        {
+          ruleId: RULE,
+          input: "active facilities",
+          note: "This relationship carries no active facility, so there is no commitment to measure collateral coverage against.",
+          path: "borrower.exposure.facilities[]",
+          sourceSystem: NCINO_EXPOSURE,
+          reason: "missing",
+          detail: "no active facility to measure coverage against",
+        },
+      ],
     };
   }
 
@@ -172,10 +269,12 @@ function ruleCoverageShortfall(
       // The gap card carries the ORG'S OWN reason where the read supplies one.
       // "all 3 pledges are Abundance-of-Caution" is actionable; "present but
       // null" sends a banker to look for a defect that is not there.
-      const detail = f.coverageNote
-        ? `${g.gap.detail} — ${f.name ?? "the facility"}: ${f.coverageNote}`
-        : g.gap.detail;
-      gaps.push({ ruleId: RULE, ...g.gap, detail });
+      const who = f.name ?? "one facility";
+      const detail = f.coverageNote ? `${g.gap.detail} — ${who}: ${f.coverageNote}` : g.gap.detail;
+      const note = f.coverageNote
+        ? `${who} carries no lendable collateral figure: ${f.coverageNote}. Coverage could not be computed for this relationship.`
+        : `${who} carries no lendable collateral figure, so coverage could not be computed for this relationship.`;
+      gaps.push({ ruleId: RULE, ...g.gap, note, detail });
       return { suggestions: [], gaps };
     }
     lendable += g.value;
@@ -186,12 +285,20 @@ function ruleCoverageShortfall(
   const basisPresent = proposedCommitment !== null || Object.hasOwn(bundle.exposure ?? {}, "totalCommitted");
   const basisG = requireNumber(basisRaw, "commitment basis", "borrower.exposure.totalCommitted", NCINO_EXPOSURE, basisPresent);
   if (!basisG.ok) {
-    gaps.push({ ruleId: RULE, ...basisG.gap });
+    gaps.push({
+      ruleId: RULE,
+      ...basisG.gap,
+      note: "No committed amount is on file for this relationship, so there is nothing to measure collateral coverage against.",
+    });
     return { suggestions: [], gaps };
   }
   const posG = requirePositive(basisG.value, "commitment basis", "borrower.exposure.totalCommitted", NCINO_EXPOSURE);
   if (!posG.ok) {
-    gaps.push({ ruleId: RULE, ...posG.gap });
+    gaps.push({
+      ruleId: RULE,
+      ...posG.gap,
+      note: "The committed amount on file is zero, so a coverage ratio cannot be computed from it.",
+    });
     return { suggestions: [], gaps };
   }
 
@@ -201,24 +308,36 @@ function ruleCoverageShortfall(
   // The gap is a CURRENCY figure, never an adjective (A33.2.4(a)).
   const shortfall = th.value * posG.value - lendable;
 
+  // Present tense when the basis is what the relationship already carries,
+  // conditional when a proposal is on the table. The two are different claims
+  // and the card must not make the stronger one on the weaker basis.
+  const onProposal = proposedCommitment !== null;
+  const basisPhrase = onProposal ? "the proposed commitment" : "the committed exposure on file";
+
   return {
     gaps,
     suggestions: [
       {
         id: RULE,
         trigger: {
-          figure: "pro-forma collateral coverage",
+          figure: onProposal ? "pro-forma collateral coverage" : "collateral coverage",
           value: coverage,
           threshold: th.value,
-          formula: "sum(active facility pledged share) / proposed commitment",
+          formula: `sum(active facility pledged share) / ${onProposal ? "proposed commitment" : "committed exposure"}`,
         },
         inputs: [
           { path: "borrower.exposure.facilities[].totalLendableValue", value: lendable, provenance: "NCINO" },
           { path: "borrower.exposure.totalCommitted", value: posG.value, provenance: "NCINO" },
         ],
         asOf,
+        freshness,
         policyVersion: th.policyVersion,
-        rationale: `Lendable collateral covers ${coverage.toFixed(2)}x of the proposed commitment, below the ${th.value.toFixed(2)}x floor. Additional security of about ${Math.round(shortfall).toLocaleString("en-US")} dollars, or a fresh valuation, would close the gap.`,
+        policyLabel: pack.label,
+        verdict: onProposal
+          ? `Coverage would fall below the ${th.value.toFixed(2)}x floor.`
+          : `Collateral coverage is ${coverage.toFixed(2)}x, below the ${th.value.toFixed(2)}x floor.`,
+        severity: "warning",
+        rationale: `Lendable collateral covers ${coverage.toFixed(2)}x of ${basisPhrase}, below the ${th.value.toFixed(2)}x floor. Additional security of about ${Math.round(shortfall).toLocaleString("en-US")} dollars, or a fresh valuation, would close the gap.`,
         source: "NCINO",
         defaultAction: { actionId: "collateral-valuation", params: { shortfall, coverage, floor: th.value } },
         override: { allowed: true, reasonRequired: true },
@@ -232,8 +351,9 @@ function ruleCoverageShortfall(
 const NCINO_COVENANTS = "Customer360Covenants";
 
 /** A33.2.4(b) — pro-forma covenant cushion compression. */
-function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: PolicyPack): EngineResult {
+function ruleCushionCompression(bundle: BorrowerBundle, freshness: DataFreshness, pack: PolicyPack): EngineResult {
   const RULE = "cushion-compression";
+  const asOf = freshness.asOf;
   const gaps: NamedGap[] = [];
 
   const th = requireThreshold("covenant.cushionAlertFloor", RULE, pack);
@@ -243,7 +363,17 @@ function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: Poli
   if (!covs.length) {
     return {
       suggestions: [],
-      gaps: [{ ruleId: RULE, input: "covenants", path: "borrower.covenants.covenants[]", sourceSystem: NCINO_COVENANTS, reason: "missing", detail: "no covenants staged for this relationship" }],
+      gaps: [
+        {
+          ruleId: RULE,
+          input: "covenants",
+          note: "No covenants are on file for this relationship, so there is no cushion to measure.",
+          path: "borrower.covenants.covenants[]",
+          sourceSystem: NCINO_COVENANTS,
+          reason: "missing",
+          detail: "no covenants staged for this relationship",
+        },
+      ],
     };
   }
 
@@ -254,20 +384,36 @@ function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: Poli
     if (classifyCovenant(c).kind === "waived") continue;
     const actualPresent = Object.hasOwn(c, "actualValue");
     const thresholdPresent = Object.hasOwn(c, "thresholdValue");
+    // NAMED IN BANKER LANGUAGE. A gap on a covenant is about THAT covenant, so
+    // it says which one: an unnamed "a covenant has no value" sends a banker
+    // through the whole schedule looking for it.
+    const named = c.covenantType ?? "One covenant";
     const a = requireNumber(c.actualValue, "covenant actual", "borrower.covenants.covenants[].actualValue", NCINO_COVENANTS, actualPresent);
     if (!a.ok) {
-      gaps.push({ ruleId: RULE, ...a.gap });
+      gaps.push({
+        ruleId: RULE,
+        ...a.gap,
+        note: `The last test of ${named} carries no measured value, so its cushion could not be computed.`,
+      });
       continue;
     }
     const t = requireNumber(c.thresholdValue, "covenant threshold", "borrower.covenants.covenants[].thresholdValue", NCINO_COVENANTS, thresholdPresent);
     if (!t.ok) {
-      gaps.push({ ruleId: RULE, ...t.gap });
+      gaps.push({
+        ruleId: RULE,
+        ...t.gap,
+        note: `${named} has no threshold on file, so there is nothing to measure its cushion against.`,
+      });
       continue;
     }
     // The cushion percentage divides by the threshold, so guard 4 applies.
     const denom = requirePositive(Math.abs(t.value), "covenant threshold", "borrower.covenants.covenants[].thresholdValue", NCINO_COVENANTS);
     if (!denom.ok) {
-      gaps.push({ ruleId: RULE, ...denom.gap });
+      gaps.push({
+        ruleId: RULE,
+        ...denom.gap,
+        note: `${named} carries a threshold of zero, so a cushion percentage cannot be computed from it.`,
+      });
       continue;
     }
     const cu = covenantCushion(c.covenantType, a.value, t.value);
@@ -296,7 +442,13 @@ function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: Poli
           { path: "borrower.covenants.covenants[].thresholdValue", value: c.thresholdValue ?? null, provenance: "NCINO" },
         ],
         asOf,
+        freshness,
         policyVersion: th.policyVersion,
+        policyLabel: pack.label,
+        verdict: breached
+          ? `${c.covenantType ?? "A covenant"} is at or past its threshold.`
+          : `${c.covenantType ?? "A covenant"} has ${tightest.pct} percent cushion, below the ${th.value} percent alert floor.`,
+        severity: breached ? "critical" : "warning",
         rationale: breached
           ? `${c.covenantType ?? "A covenant"} is at or past its threshold. A covenant review should record the position before anything else moves.`
           : `${c.covenantType ?? "A covenant"} has about ${tightest.pct} percent cushion, below the ${th.value} percent alert floor. This is an alert, not a breach.`,
@@ -321,14 +473,84 @@ function ruleCushionCompression(bundle: BorrowerBundle, asOf: string, pack: Poli
  * bankinggpt caveat honoured here: Piedmont's four covenants are all
  * Account-level with ZERO junction rows, so an empty list is legitimate and
  * renders as "no loan-level covenants attached", never as blank space.
+ *
+ * TWO READS CARRY THE SAME JUNCTION, and this rule used to consult only one of
+ * them (founder finding, live Hartwell test 2026-08-25). `Customer360Exposure`
+ * supplies `facilities[].loanCovenants[]`, which the live read does NOT carry —
+ * it is null on every Hartwell facility. `Customer360Covenants` supplies the
+ * same fact from the other side, as `covenants[].attachedLoans[]`, and on
+ * Hartwell it names the Accounts Receivable covenant on the 15.0M revolver.
+ * Reading one source alone made the card state, as a fact, that no loan-level
+ * covenant attaches to a facility that plainly has one.
+ *
+ * So: the union of both, deduplicated, and ABSENT is no longer read as EMPTY.
+ * A relationship where neither read carries the field produces a NAMED GAP —
+ * "cannot tell" — rather than an all-clear the data does not support.
  */
-function ruleJunctionCarryover(bundle: BorrowerBundle, asOf: string, actionId: string, pack: PolicyPack): EngineResult {
+/** The junctions named, so a banker knows WHICH covenant is about to travel
+ *  rather than only how many. Capped: a list is a sentence, not the schedule. */
+function junctionSentence(junctions: Array<{ facility?: string; covenant?: string }>): string {
+  const named = junctions.map((j) => (j.covenant && j.facility ? `${j.covenant} on ${j.facility}` : (j.covenant ?? j.facility ?? "an unnamed covenant")));
+  if (named.length <= 3) return named.join("; ");
+  return `${named.slice(0, 3).join("; ")} and ${named.length - 3} more`;
+}
+
+function ruleJunctionCarryover(bundle: BorrowerBundle, freshness: DataFreshness, actionId: string, pack: PolicyPack): EngineResult {
   const RULE = "junction-carryover";
+  const asOf = freshness.asOf;
   if (actionId !== "renewal" && actionId !== "loan-modification") return { suggestions: [], gaps: [] };
 
-  const junctions = (bundle.exposure?.facilities ?? [])
-    .filter(isActiveFacility)
-    .flatMap((f) => (f.loanCovenants ?? []).map((lc) => ({ facility: f.name, covenant: lc.covenantType ?? lc.name })));
+  const facilities = (bundle.exposure?.facilities ?? []).filter(isActiveFacility);
+  const covenants = bundle.covenants?.covenants ?? [];
+  const live = new Set(facilities.map((f) => f.loanId).filter(Boolean));
+  // Named for a reader, not for the record: every nCino loan name repeats the
+  // relationship's, and the relationship is the screen the card sits on.
+  const relationship = bundle.snapshot?.name;
+  const short = (n: string | undefined) => shortFacilityName(n, relationship) || undefined;
+
+  // Does EITHER read actually carry the field? An absent array is not an empty
+  // one, and the difference is the whole finding.
+  const exposureCarries = facilities.some((f) => Array.isArray(f.loanCovenants));
+  const covenantsCarry = covenants.some((c) => Array.isArray(c.attachedLoans));
+
+  const seen = new Set<string>();
+  const junctions: Array<{ facility?: string; covenant?: string }> = [];
+  const add = (facility: string | undefined, covenant: string | undefined) => {
+    const key = `${facility ?? ""}|${covenant ?? ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    junctions.push({ facility, covenant });
+  };
+
+  for (const f of facilities) {
+    for (const lc of f.loanCovenants ?? []) add(short(f.name), lc.covenantType ?? lc.name);
+  }
+  for (const c of covenants) {
+    for (const a of c.attachedLoans ?? []) {
+      // Only facilities THIS ticket's exposure stages. A junction onto a loan
+      // the read never staged cannot be placed on the deal and is not claimed.
+      if (!a.loanId || !live.has(a.loanId)) continue;
+      add(short(facilities.find((f) => f.loanId === a.loanId)?.name ?? a.loanName), c.covenantType);
+    }
+  }
+
+  if (!exposureCarries && !covenantsCarry) {
+    return {
+      suggestions: [],
+      gaps: [
+        {
+          ruleId: RULE,
+          input: "loan covenant attachments",
+          note: "This read does not say which covenants are attached to the individual facilities, so whether any carries onto the new loan could not be established. Sync this relationship, then check the covenant schedule before the clone is booked.",
+          path: "borrower.exposure.facilities[].loanCovenants[] / borrower.covenants.covenants[].attachedLoans[]",
+          sourceSystem: `${NCINO_EXPOSURE} / ${NCINO_COVENANTS}`,
+          reason: "missing",
+          detail:
+            "neither loanCovenants[] nor attachedLoans[] is present on this read; an absent junction list is not an empty one and is not reported as none",
+        },
+      ],
+    };
+  }
 
   // No junction rows is a FACT, not a gap. It renders as an explicit statement.
   return {
@@ -344,10 +566,18 @@ function ruleJunctionCarryover(bundle: BorrowerBundle, asOf: string, actionId: s
         },
         inputs: [{ path: "borrower.exposure.facilities[].loanCovenants[]", value: junctions.length, provenance: "NCINO" }],
         asOf,
+        freshness,
         policyVersion: pack.version,
+        policyLabel: pack.label,
+        verdict: junctions.length
+          ? `${junctions.length} loan-level covenant ${junctions.length === 1 ? "attachment carries" : "attachments carry"} onto the new facility.`
+          : "No loan-level covenants carry onto the new facility.",
+        // A FACT, not a finding. Toning it as a warning would put a decision in
+        // front of a banker where there is nothing wrong to decide about.
+        severity: "info",
         rationale: junctions.length
-          ? `${junctions.length} loan-level covenant ${junctions.length === 1 ? "junction clones" : "junctions clone"} onto the new facility. Review each one; nothing is carried or deleted automatically.`
-          : "No loan-level covenants are attached to this facility, so nothing clones onto the new loan. Account-level covenants are unaffected.",
+          ? `${junctions.length} loan-level covenant ${junctions.length === 1 ? "junction clones" : "junctions clone"} onto the new facility: ${junctionSentence(junctions)}. Review each one; nothing is carried or deleted automatically.`
+          : "No loan-level covenants are attached to any facility on this relationship, so nothing clones onto the new loan. Account-level covenants are unaffected.",
         source: "NCINO",
         defaultAction: { actionId: "covenant-review", params: { junctions } },
         override: { allowed: true, reasonRequired: true },
@@ -365,30 +595,77 @@ export interface EngineContext {
   /** A commitment on the table (from a client request or a panel edit). */
   proposedCommitment?: number | null;
   pack?: PolicyPack;
+  /**
+   * WHEN THE BUNDLE PASSED IN WAS READ (F3).
+   *
+   * The caller owns this because only the caller knows whether the bundle it
+   * handed over is the baked one or the live-merged one. Absent falls back to
+   * `data.meta.generatedAt`, which is correct for a caller that did no merging.
+   */
+  liveStoredAt?: number | null;
+  /** Bundle sections a sync in this session replaced. */
+  liveSections?: string[];
+}
+
+/** Which bundle sections each rule actually reads. Drives the honest "this part
+ *  is still the prepared bundle's" line on a partially-synced read. */
+const RULE_SECTIONS: Record<string, string[]> = {
+  "coverage-shortfall": ["exposure"],
+  "cushion-compression": ["covenants"],
+  "junction-carryover": ["exposure"],
+};
+
+function freshnessFor(ruleId: string, ctx: EngineContext): DataFreshness {
+  const baked = ctx.data.meta?.generatedAt ?? "";
+  const live = typeof ctx.liveStoredAt === "number" && Number.isFinite(ctx.liveStoredAt);
+  if (!live) return { asOf: baked, live: false, bakedSections: [] };
+  const synced = new Set(ctx.liveSections ?? []);
+  return {
+    asOf: new Date(ctx.liveStoredAt as number).toISOString(),
+    live: true,
+    bakedSections: (RULE_SECTIONS[ruleId] ?? []).filter((s) => !synced.has(s)),
+  };
 }
 
 /** Run every Tier 1 rule for an action. Deterministic and side-effect free, so
  *  the confirm gate can recompute it and compare (A33.2.7). */
 export function computeSuggestions(ctx: EngineContext): EngineResult {
   const pack = ctx.pack ?? ACTIVE_POLICY_PACK;
-  const asOf = ctx.data.meta?.generatedAt ?? "";
   if (!ctx.bundle) {
     return {
       suggestions: [],
-      gaps: [{ ruleId: "all", input: "staged bundle", path: "borrowers[accountId]", sourceSystem: "assembler", reason: "missing", detail: "the relationship is not staged in this view" }],
+      gaps: [
+        {
+          ruleId: "all",
+          input: "staged bundle",
+          note: "This relationship is not staged in this view, so no pre-decision check could be run on it.",
+          path: "borrowers[accountId]",
+          sourceSystem: "assembler",
+          reason: "missing",
+          detail: "the relationship is not staged in this view",
+        },
+      ],
     };
   }
 
   const results = [
-    ruleCoverageShortfall(ctx.bundle, asOf, ctx.proposedCommitment ?? null, pack),
-    ruleCushionCompression(ctx.bundle, asOf, pack),
-    ruleJunctionCarryover(ctx.bundle, asOf, ctx.actionId, pack),
+    ruleCoverageShortfall(ctx.bundle, freshnessFor("coverage-shortfall", ctx), ctx.proposedCommitment ?? null, pack),
+    ruleCushionCompression(ctx.bundle, freshnessFor("cushion-compression", ctx), pack),
+    ruleJunctionCarryover(ctx.bundle, freshnessFor("junction-carryover", ctx), ctx.actionId, pack),
   ];
 
   return {
     suggestions: results.flatMap((r) => r.suggestions),
     gaps: results.flatMap((r) => r.gaps),
   };
+}
+
+/** The instant the whole panel should quote for a read, for callers that need
+ *  one figure rather than a per-rule one. Same rule as `freshnessFor`. */
+export function bundleAsOf(ctx: Pick<EngineContext, "data" | "liveStoredAt">): string {
+  return typeof ctx.liveStoredAt === "number" && Number.isFinite(ctx.liveStoredAt)
+    ? new Date(ctx.liveStoredAt).toISOString()
+    : (ctx.data.meta?.generatedAt ?? "");
 }
 
 /* --------------------------------------------------- A33.2.7 drift check */

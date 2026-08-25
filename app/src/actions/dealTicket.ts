@@ -26,6 +26,7 @@ import type { Briefing } from "./briefing";
 import { fmtMoney } from "../data/format";
 import { covenantCushion, fmtCovVal, fmtRatio } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
+import { shortFacilityLabel } from "../data/facilityStage";
 import { draftForAction } from "./drafts";
 import type { ReasonCode } from "../data/contract";
 
@@ -268,7 +269,7 @@ function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null, selec
       direction: selectedAfter > selected ? "up" : selectedAfter < selected ? "down" : "flat",
       note:
         n === 1
-          ? `on ${members[0]!.name ?? "the selected facility"}`
+          ? `on ${shortFacilityLabel(members[0]!, bundle.snapshot?.name) || "the selected facility"}`
           : `across ${n} selected facilities, each moving to ${fmtMoney(proposed)}`,
     },
   ];
@@ -301,6 +302,103 @@ function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null, selec
   }
 
   return out;
+}
+
+/* ------------------------------------------------------------- security (F6) */
+
+export interface SecurityPledge {
+  /** The org's own name for the collateral, with its description when staged. */
+  name: string;
+  description?: string;
+  /** Type, lien position and whether the pledge is the primary one. */
+  facts: string;
+  /** This facility's SHARE, the advance rate, and the collateral's lendable
+   *  value — the three figures a banker reads a pledge by. */
+  figures: string;
+}
+
+export interface SecurityRow {
+  loanId: string;
+  facility: string;
+  pledges: SecurityPledge[];
+  /** Present INSTEAD of pledges, in banker language, when there are none or
+   *  when the read does not carry them. Two different facts, two sentences. */
+  note?: string;
+  /** This facility's pledged share of collateral, org-computed. */
+  share: number | null;
+}
+
+export interface SecurityContext {
+  rows: SecurityRow[];
+  /**
+   * The relationship's whole lendable collateral — the SAME numerator the
+   * coverage check divides by the commitment. Stated here so the challenge
+   * card's ratio and these rows are visibly one calculation rather than two
+   * unrelated blocks on one screen (founder finding F6, 2026-08-25).
+   */
+  coverageBasis: number | null;
+}
+
+/**
+ * WHAT SECURES THE FACILITIES THE BANKER JUST TICKED.
+ *
+ * Same principle as the covenant context: a member selection is not just a name
+ * and an amount, it is a position, and the position is what the security says.
+ * Read straight off `exposure.facilities[].collateral[]`, which the org already
+ * stages per pledge with its share, advance rate and lien.
+ *
+ * HONEST GAPS. A facility with an EMPTY pledge list says it carries no
+ * collateral. A facility whose read does not carry the list at all says that
+ * instead, and the two never render the same way. Where the org itself supplies
+ * a reason (`coverageNote`) that reason is rendered rather than paraphrased.
+ */
+export function securityContext(bundle: BorrowerBundle | null, selection: unknown): SecurityContext | null {
+  const picked = [...new Set(Array.isArray(selection) ? (selection as string[]) : [])];
+  if (!bundle || !picked.length) return null;
+
+  const facilities = bundle.exposure?.facilities ?? [];
+  const relationship = bundle.snapshot?.name;
+  const rows: SecurityRow[] = [];
+
+  for (const id of picked) {
+    const f = facilities.find((x) => x.loanId === id);
+    if (!f) continue;
+    const pledges = f.collateral;
+    const row: SecurityRow = {
+      loanId: id,
+      facility: shortFacilityLabel(f, relationship),
+      pledges: [],
+      share: num(f.totalPledgedValue ?? f.totalLendableValue),
+    };
+
+    if (!Array.isArray(pledges)) {
+      row.note = "The security for this facility is not carried in this read, so what secures it could not be shown.";
+    } else if (!pledges.length) {
+      row.note = f.coverageNote ?? "No collateral is pledged to this facility.";
+    } else {
+      row.pledges = pledges.map((p) => ({
+        name: p.collateralName ?? p.collateralType ?? "Pledged collateral",
+        description: p.collateralDescription,
+        facts: [p.collateralType, p.lienPosition ? `${p.lienPosition} lien` : null, p.isPrimary ? "primary" : null]
+          .filter(Boolean)
+          .join(" · "),
+        figures:
+          [
+            p.amountPledged != null ? `${fmtMoney(p.amountPledged)} pledged here` : null,
+            p.advanceRate != null ? `${p.advanceRate} percent advance` : null,
+            p.currentLendableValue != null ? `${fmtMoney(p.currentLendableValue)} lendable in total` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "no figures staged against this pledge",
+      }));
+      // The org's own reason still travels where it gave one.
+      if (f.coverageNote) row.note = f.coverageNote;
+    }
+    rows.push(row);
+  }
+
+  if (!rows.length) return null;
+  return { rows, coverageBasis: relationshipLendable(bundle, facilities.filter(isActiveFacility)) };
 }
 
 /* ------------------------------------------------------- what a review covers */

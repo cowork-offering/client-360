@@ -428,7 +428,10 @@ describe("the covenant ticket is package-anchored and per covenant", () => {
     const f = buildPanelSchema("covenant-review", { ...ctx, bundle: twoDeals })!.fields.find((x) => x.key === "package")!;
     expect(f.editable).toBe(true);
     expect(f.options).toEqual([DEAL, "a5FOTHERDEAL0001"]);
-    expect(f.optionLabels?.[1]).toBe("Revolver");
+    // The deal is named as a deal (founder finding F1). With no product type
+    // on either package, the member names are what tells them apart.
+    expect(f.optionLabels?.[0]).toBe("Testco credit package · Term Loan");
+    expect(f.optionLabels?.[1]).toBe("Testco credit package · Revolver");
   });
 
   it("offers a covenant whose facility the read does not stage, rather than hiding it", () => {
