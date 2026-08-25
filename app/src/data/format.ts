@@ -23,6 +23,31 @@ export function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+/**
+ * An INSTANT, date and time, pinned to UTC.
+ *
+ * Org reads carry UTC instants and the freshness line has to be comparable
+ * between two of them, so the zone is stated rather than left to the viewer's
+ * machine. A local rendering would also make the same data read differently in
+ * London and Atlanta, which is not a property a freshness claim may have.
+ */
+export function fmtInstant(iso: string | null | undefined): string {
+  if (!iso) return "an unrecorded time";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return (
+    d.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "UTC",
+    }) + " UTC"
+  );
+}
+
 /** Activity timestamp relative to the render clock (A30.2): "3d ago",
  *  "today", "in 2d". Falls back to the absolute date when either side is
  *  unparseable — never a fabricated interval. */

@@ -106,6 +106,14 @@ export interface PanelField {
   /** A context line under each option, positionally: what the record is, what
    *  it secures, what it is worth. A chooser without it is a list of names. */
   optionDetails?: string[];
+  /** One short status word per option, positionally, rendered as a chip beside
+   *  the name rather than buried at the end of the context line. */
+  optionChips?: string[];
+  /** The MONEY figure each option carries today, positionally. Present on a
+   *  record chooser whose members have a commitment, so a from -> to reading and
+   *  the no-movement rule both read one source rather than each deriving its
+   *  own. Null where the read does not stage the figure — never a zero. */
+  optionAmounts?: Array<number | null>;
   /** Inputs the banker fills in per SELECTED record of this multiselect. */
   perItemInputs?: PerItemInput[];
   /** Display labels for `options`, positionally. Present only on a RECORD
@@ -135,7 +143,15 @@ export interface PanelField {
   /** Set when the value could NOT be sourced. Carries the honest reason, and
    *  when the field anchors the write it also blocks staging: we would rather
    *  say what is missing than send the org an id we know is the wrong type. */
-  gap?: { reason: string; blocksStaging: boolean };
+  gap?: {
+    /** BANKER LANGUAGE. This is what renders. No contract path, no tool name,
+     *  no wire field: a banker acts on this sentence and cannot act on a path. */
+    reason: string;
+    blocksStaging: boolean;
+    /** The technical account of the same fact — paths, wire fields, tool names.
+     *  Rendered only behind an explicit info affordance, never inline. */
+    technical?: string;
+  };
 }
 
 /** A33.1.7 — editing AGENT prose does NOT change its ProvenanceKind. The honest

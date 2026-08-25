@@ -18,8 +18,14 @@ import type { BorrowerBundle, Covenant, Facility } from "../data/contract";
 import { fmtCovVal } from "../data/finance";
 import { isActiveFacility } from "../data/worklist";
 import { collateralDetail, collateralRecords } from "../data/collateralRecords";
-import { fmtMoney } from "../data/format";
-import { bookedFacilities, bookedFacilityGap, facilityLabel, unbookedFacilities } from "../data/facilityStage";
+import { fmtDate, fmtMoney } from "../data/format";
+import {
+  bookedFacilities,
+  bookedFacilityGap,
+  facilityLabel,
+  shortFacilityLabel,
+  unbookedFacilities,
+} from "../data/facilityStage";
 import type { PanelField, PanelSchema } from "./panelSchema";
 import { PREFILL_PROVENANCE, unansweredItems } from "./panelSchema";
 import { COVENANT_ASSESSMENT_STATUSES } from "./observedPicklists";
@@ -719,9 +725,24 @@ export const EACH_SELECTED = "Applies to EACH selected facility. Stage them sepa
  *  null-check exactly: any ONE of the four is enough, and a zero amount is
  *  refused separately by the tool's own `requestedAmount > 0` rule. */
 function hasRequestedChange(values: Record<string, unknown>): boolean {
-  const set = (v: unknown) => v !== null && v !== undefined && v !== "";
-  return [values.newCommitment, values.requestedMaturityDate, values.requestedRate, values.requestedTermMonths].some(set);
+  return [values.newCommitment, values.requestedMaturityDate, values.requestedRate, values.requestedTermMonths].some(isSet);
 }
+
+const isSet = (v: unknown) => v !== null && v !== undefined && v !== "";
+
+/**
+ * The consequence of prefilling the amount from what the facility carries
+ * today (founder, 2026-08-25).
+ *
+ * The org's at-least-one-change rule counts a PRESENT amount, not a DIFFERENT
+ * one, so a ticket left on its prefill would stage a plan that clones every
+ * selected facility and applies a diff of nothing. The ticket refuses that
+ * where it can prove it: only when the amount is the sole change asked for, and
+ * only when every selected member's current commitment is known and equal to
+ * it. An unknown commitment is silence, never an assumption of movement.
+ */
+export const MODIFICATION_NO_MOVEMENT =
+  "The amount is what every selected facility already carries, so this plan would ask for no change. Enter a different amount, or a new maturity, rate or term.";
 
 /** Same rule again, for the valuation batch. */
 export const NO_COLLATERAL_SELECTED =
@@ -774,7 +795,8 @@ export function batchStagingGap(
   // left is the rule the org states and this ticket never used to: a plan has
   // to ask for something.
   if (actionId === "loan-modification") {
-    return hasRequestedChange(values) ? null : MODIFICATION_NEEDS_A_CHANGE;
+    if (!hasRequestedChange(values)) return MODIFICATION_NEEDS_A_CHANGE;
+    return noMovementGap(values, fieldFor("facility"), picked("facility"));
   }
 
   if (actionId === "collateral-valuation") {
@@ -789,6 +811,31 @@ export function batchStagingGap(
   }
 
   return null;
+}
+
+/** The amount every selected member carries today, when the schema staged it
+ *  for all of them. Null the moment one is unknown: a partial answer here would
+ *  decide whether a plan may be staged. */
+function currentCommitments(field: PanelField | undefined, picked: string[]): number[] | null {
+  if (!field || !picked.length) return null;
+  const out: number[] = [];
+  for (const id of picked) {
+    const i = (field.options ?? []).indexOf(id);
+    const amount = i >= 0 ? field.optionAmounts?.[i] : undefined;
+    if (typeof amount !== "number") return null;
+    out.push(amount);
+  }
+  return out;
+}
+
+function noMovementGap(values: Record<string, unknown>, field: PanelField | undefined, picked: string[]): string | null {
+  const amount = typeof values.newCommitment === "number" ? values.newCommitment : Number(values.newCommitment);
+  if (!Number.isFinite(amount)) return null;
+  // Any OTHER requested change makes the plan a change whatever the amount does.
+  if ([values.requestedMaturityDate, values.requestedRate, values.requestedTermMonths].some(isSet)) return null;
+  const current = currentCommitments(field, picked);
+  if (!current) return null;
+  return current.every((c) => c === amount) ? MODIFICATION_NO_MOVEMENT : null;
 }
 
 /** Credit Review and Risk Rating Review are DIFFERENT INSTRUMENTS on different
@@ -820,7 +867,12 @@ export function overrideIsSet(values: Record<string, unknown>): boolean {
  *  paraphrased: it explains WHY the package is the anchor, which is the part a
  *  banker needs. */
 export const PACKAGE_ANCHOR_REQUIRED =
-  "productPackageId is required. It is the deal anchor, and this relationship stages none: neither the snapshot nor any active facility names a product package.";
+  "This relationship stages no credit package, so there is no deal for this action to run on. Neither the relationship record nor any of its active facilities names one.";
+
+/** The same fact for whoever has to fix it, behind the ticket's info toggle.
+ *  A banker cannot act on a wire field name; an engineer cannot act without it. */
+export const PACKAGE_ANCHOR_TECHNICAL =
+  "productPackageId is required on the staging tool and resolves from neither borrower.snapshot.productPackageId nor borrower.exposure.facilities[].productPackageId.";
 
 /** The tool's cap, and its reason, in the tool's own words. */
 const COVENANT_BATCH_CAP = 20;
@@ -835,16 +887,32 @@ export const VALUATION_CAP_REASON =
 export const ALLOW_NON_PENDING_WARNING =
   "An assessment recorded on a row that is not Pending is stored, and the covenant schedule does NOT advance: nCino pushes the next evaluation date only on a Pending to complete transition.";
 
+export interface PackageRecord {
+  id: string;
+  /** The HEADLINE. What the banker reads at the top of the ticket. */
+  label: string;
+  /** The one compact metadata line under it: members, committed, drawn. */
+  detail: string;
+}
+
 /**
  * The PRODUCT PACKAGES this relationship stages, primary first.
  *
  * The relationship's own package (the snapshot's) leads, because that is the
  * default a banker means by "this deal". The rest come off the active
- * facilities. No package NAME is staged anywhere in the read, so each one is
- * labelled by the facilities that hang off it — derived from staged rows, never
- * invented — and the id itself is carried in the detail line.
+ * facilities.
+ *
+ * NAMING. No package NAME is staged anywhere in the read. The previous
+ * derivation named the deal by concatenating its members, which on Hartwell's
+ * six-facility package produced a headline three loan names long, each of them
+ * beginning with the borrower's own name — the density the founder read as
+ * "dense and weird" on 2026-08-25. A package IS the relationship's credit
+ * container, so it is named as one, and the raw record id moves off the visible
+ * line and behind the ticket's info toggle. Where the relationship stages more
+ * than one, the products on each package distinguish them; that too is derived
+ * from staged rows, never invented.
  */
-export function packageRecords(bundle: BorrowerBundle | null): Array<{ id: string; label: string; detail: string }> {
+export function packageRecords(bundle: BorrowerBundle | null): PackageRecord[] {
   const facilities = (bundle?.exposure?.facilities ?? []).filter(isActiveFacility);
   const ids: string[] = [];
   const primary = bundle?.snapshot?.productPackageId;
@@ -852,6 +920,9 @@ export function packageRecords(bundle: BorrowerBundle | null): Array<{ id: strin
   for (const f of facilities) {
     if (f.productPackageId && !ids.includes(f.productPackageId)) ids.push(f.productPackageId);
   }
+  const relationship = (bundle?.snapshot?.name ?? "").trim();
+  const several = ids.length > 1;
+
   return ids.map((id) => {
     const on = facilities.filter((f) => f.productPackageId === id);
     const committed = on.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
@@ -861,28 +932,36 @@ export function packageRecords(bundle: BorrowerBundle | null): Array<{ id: strin
     const drawn = on.every((f) => typeof f.outstanding === "number")
       ? on.reduce((sum, f) => sum + (f.outstanding as number), 0)
       : null;
-    // No package NAME is staged anywhere in the read, so the deal is named by
-    // what hangs off it. Capped at three: a six-facility package rendered as
-    // one line of six loan names is not a name, it is the list again.
-    const names = on.map(facilityLabel);
-    const label = names.length
-      ? names.length <= 3
-        ? names.join(" · ")
-        : `${names.slice(0, 3).join(" · ")} and ${names.length - 3} more`
-      : "The relationship's package";
     return {
       id,
-      label,
+      label: packageLabel(relationship, on, several),
       detail: [
         on.length ? `${on.length} ${on.length === 1 ? "facility" : "facilities"}` : "no facility names it",
         committed > 0 ? `${fmtMoney(committed)} committed` : null,
         drawn !== null && on.length ? `${fmtMoney(drawn)} drawn` : null,
-        id,
       ]
         .filter(Boolean)
         .join(" · "),
     };
   });
+}
+
+/** One deal's headline. See `packageRecords` for why it is derived at all. */
+function packageLabel(relationship: string, on: Facility[], several: boolean): string {
+  const base = relationship ? `${relationship} credit package` : "Credit package";
+  if (!several) return base;
+
+  // Two packages on one relationship need telling apart, and the products
+  // booked on each is the fact that does it. Failing that, the member names,
+  // capped: a six-member package rendered as six names is the list again.
+  const products = [...new Set(on.map((f) => (f.productType ?? "").trim()).filter(Boolean))];
+  if (products.length) {
+    const shown = products.slice(0, 2).join(" and ");
+    return `${base} · ${shown}${products.length > 2 ? ` and ${products.length - 2} more` : ""}`;
+  }
+  const names = on.map((f) => shortFacilityLabel(f, relationship));
+  if (!names.length) return base;
+  return `${base} · ${names.length <= 2 ? names.join(" and ") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`}`;
 }
 
 /** The deal anchor, shared by both package-scoped bulk actions. */
@@ -935,7 +1014,9 @@ function packageField(ctx: SchemaContext, help: string): PanelField {
     optionDetails: packages.map((p) => p.detail),
     target: { staging: true },
     help,
-    gap: packages.length ? undefined : { reason: PACKAGE_ANCHOR_REQUIRED, blocksStaging: true },
+    gap: packages.length
+      ? undefined
+      : { reason: PACKAGE_ANCHOR_REQUIRED, blocksStaging: true, technical: PACKAGE_ANCHOR_TECHNICAL },
   });
 }
 
@@ -1147,18 +1228,19 @@ function packageFacilities(
   const booked = bookedFacilities(bundle);
   const scoped = packageId !== null && (bundle?.exposure?.facilities ?? []).some((f) => f.productPackageId);
   const offered = scoped ? booked.filter((f) => f.productPackageId === packageId) : booked;
+  const relationship = bundle?.snapshot?.name ?? null;
 
   const blocked: Array<{ value: string; reason: string }> = [];
   for (const b of unbookedFacilities(bundle)) {
     // Off-package AND unbooked: the deal is the sharper fact, and it is the one
     // that decides whether this ticket could ever carry it.
     blocked.push({
-      value: facilityLabel(b.facility),
+      value: shortFacilityLabel(b.facility, relationship),
       reason: scoped && b.facility.productPackageId && b.facility.productPackageId !== packageId ? "on another deal" : b.reason,
     });
   }
   for (const f of booked) {
-    if (!offered.includes(f)) blocked.push({ value: facilityLabel(f), reason: "booked on another deal" });
+    if (!offered.includes(f)) blocked.push({ value: shortFacilityLabel(f, relationship), reason: "booked on another deal" });
   }
   return { offered, blocked };
 }
@@ -1229,15 +1311,20 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
     editable: true,
     required: true,
     optionsAreRecords: true,
-    // The VALUE is the record id; the label is what the banker reads.
+    // The VALUE is the record id; the label is what the banker reads. Shortened
+    // against the relationship name, because every nCino loan name repeats it
+    // and a member list is read by what differs between its rows.
     options: offered.map((f) => f.loanId ?? ""),
-    optionLabels: offered.map(facilityLabel),
+    optionLabels: offered.map((f) => shortFacilityLabel(f, ctx.bundle?.snapshot?.name)),
+    // The stage moves to its own chip: it is a status, not another clause in a
+    // sentence of figures.
+    optionChips: offered.map((f) => (f.stage ?? "").trim() || "Booked"),
+    optionAmounts: offered.map((f) => (typeof f.committed === "number" ? f.committed : null)),
     optionDetails: offered.map((f) =>
       [
         f.committed != null ? `${fmtMoney(f.committed)} committed` : null,
         f.outstanding != null ? `${fmtMoney(f.outstanding)} drawn` : null,
-        f.maturityDate ? `matures ${f.maturityDate}` : null,
-        "Booked",
+        f.maturityDate ? `matures ${fmtDate(f.maturityDate)}` : null,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -1336,15 +1423,22 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
         key: "newCommitment",
         label: "New commitment",
         type: "currency",
-        // The client's own ask when one is staged. NOT the current commitment:
-        // offering a facility's own figure as the new one would satisfy the
-        // org's at-least-one-change rule while asking for nothing, and with
-        // several members selected it is one member's number presented as
-        // everyone's.
-        value: asked,
+        // PREFILLED FROM WHAT IS ON THE TABLE (founder, 2026-08-25): the
+        // client's own ask when one is staged, otherwise the CURRENT commitment
+        // of the member the ticket opened on, so the field opens as a from -> to
+        // reading rather than as a blank the banker has to look up.
+        //
+        // The hazard the previous wave guarded against is real and is handled
+        // rather than avoided: a prefill equal to the current figure satisfies
+        // the org's at-least-one-change rule while asking for nothing. That is
+        // now caught by name — MODIFICATION_NO_MOVEMENT — instead of by leaving
+        // the field empty.
+        value: asked ?? (typeof chosen?.committed === "number" ? chosen.committed : null),
         prefill: asked
           ? { source: "CLIENT_REQUEST", citation: (ctx.bundle?.requests ?? [])[0]?.reference?.id }
-          : { source: "BANKER" },
+          : typeof chosen?.committed === "number"
+            ? { source: "NCINO_RECORD", citation: chosen.loanId }
+            : { source: "BANKER" },
         editable: true,
         required: false,
         target: { object: OBJ, field: "LLC_BI__Amount__c" },

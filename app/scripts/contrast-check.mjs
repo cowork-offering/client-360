@@ -21,6 +21,7 @@ const over = ([r, g, b], a, base) => base.map((bc, i) => Math.round([r, g, b][i]
 
 const WHITE = hex("#ffffff"); // card surface
 const PAGE = hex("#f4f3f8"); // page surface
+const OVERLAY = hex("#f6f5fa"); // --surface-overlay, the wash inside a card
 const accent = hex("#6b1cc4");
 
 // [label, fg, bg, minRatio]
@@ -67,6 +68,41 @@ const checks = [
   ["user tone / card", hex("#6038ea"), WHITE, 4.5],
   ["user tone on activity row wash", hex("#6038ea"), over(hex("#6038ea"), 0.04, WHITE), 4.5],
   ["user tone marker on its wash", hex("#6038ea"), over(hex("#6038ea"), 0.1, WHITE), 4.5],
+
+  /* --- The UX pass, founder UAT 2026-08-25 ------------------------------- */
+  // F2 — the effective-challenge card. The card sits on --surface-overlay and
+  // the VERDICT is toned by severity, so each tone is checked on that ground.
+  // The severity chip sits on its own solid *-bg token, not on a tint.
+  ["verdict critical / overlay", hex("#991b1b"), OVERLAY, 4.5],
+  ["verdict warning / overlay", hex("#92400e"), OVERLAY, 4.5],
+  ["verdict info (accent) / overlay", accent, OVERLAY, 4.5],
+  ["severity chip critical", hex("#991b1b"), hex("#fbecec"), 4.5],
+  ["severity chip warning", hex("#92400e"), hex("#fbf2e7"), 4.5],
+  ["severity chip info on accent wash", accent, over(accent, 0.1, WHITE), 4.5],
+  ["acknowledged caption / card", hex("#8f8c99"), WHITE, 3.0],
+
+  // F4 — the technical toggle. A supplementary affordance, checked at 3:1 on
+  // every ground it renders on: the gap note (card), the ticket's blocking-gap
+  // banner (warning tint) and the deal header (accent wash). ink-faint fails
+  // the last two, which is why the toggle carries ink-muted.
+  ["technical toggle / card", hex("#6e6b7b"), WHITE, 3.0],
+  ["technical toggle / warning banner", hex("#6e6b7b"), hex("#fbf2e7"), 3.0],
+  ["technical toggle / deal header wash", hex("#6e6b7b"), over(accent, 0.1, WHITE), 3.0],
+
+  // F1/F5 — the deal header and the from -> to rows.
+  ["deal name / header wash", hex("#1a1a1a"), over(accent, 0.1, WHITE), 4.5],
+  ["deal metadata / header wash", hex("#56535f"), over(accent, 0.1, WHITE), 4.5],
+  ["deal selector inactive / raised", hex("#6e6b7b"), WHITE, 4.5],
+  ["deal selector active on accent", WHITE, accent, 4.5],
+  ["from-to increase / overlay", hex("#047857"), OVERLAY, 4.5],
+  ["from-to decrease / overlay", hex("#991b1b"), OVERLAY, 4.5],
+  ["from-to unchanged / overlay", hex("#6e6b7b"), OVERLAY, 4.5],
+
+  // F6 — the security rows sit on the same overlay ground.
+  ["security facility ink / overlay", hex("#1a1a1a"), OVERLAY, 4.5],
+  ["security pledge ink / overlay", hex("#56535f"), OVERLAY, 4.5],
+  ["security figures / overlay", hex("#6e6b7b"), OVERLAY, 4.5],
+  ["security description / overlay", hex("#8f8c99"), OVERLAY, 3.0],
 ];
 
 let fail = 0;

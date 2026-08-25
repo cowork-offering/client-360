@@ -129,9 +129,11 @@ describe("a credit action is package-centric", () => {
     expect(f.type).toBe("multiselect");
     expect(f.options).toHaveLength(6);
     expect(f.label).toContain("Facilities in this credit action");
-    // Each carries what a banker needs to choose between them.
+    // Each carries what a banker needs to choose between them: the figures on
+    // the detail line, the stage as its own chip (founder finding F1).
     expect(f.optionDetails?.[0]).toContain("committed");
-    expect(f.optionDetails?.[0]).toContain("Booked");
+    expect(f.optionDetails?.[0]).not.toContain("Booked");
+    expect(f.optionChips?.[0]).toBe("Booked");
   });
 
   it("preselects one so the ticket opens ready", () => {

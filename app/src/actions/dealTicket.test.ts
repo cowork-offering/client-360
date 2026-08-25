@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { buildTicket, deltaHeading, promptFor, ratingFacts, reviewFacts, ticketDeltas } from "./dealTicket";
+import { buildTicket, deltaHeading, promptFor, ratingFacts, reviewFacts, securityContext, ticketDeltas } from "./dealTicket";
 import { buildBriefing } from "./briefing";
 import { buildPanelSchema, overrideNeedsComment } from "./schemas";
 import sample from "../../../artifact/sample-data.json";
@@ -477,5 +477,94 @@ describe("the delta readout on the distinct-collateral basis", () => {
     const coverage = deltas.find((d) => d.label === "Collateral coverage")!;
     expect(coverage.note).toContain("$14M lendable");
     expect(coverage.note).toContain("$20M commitment after this");
+  });
+});
+
+/* =============================================================================
+   F6 — THE SECURITY CONTEXT (founder UAT, 2026-08-25).
+
+   Same principle as the covenants: a member selection is a position, not a name
+   and an amount. And the same honesty rule: an EMPTY pledge list and an ABSENT
+   one are two facts and get two sentences.
+   ============================================================================= */
+
+describe("the security behind the selected members", () => {
+  const secured = (over: Record<string, unknown> = {}): BorrowerBundle =>
+    ({
+      snapshot: { accountId: "001X", name: "Testco" },
+      exposure: {
+        totalCommitted: 20_000_000,
+        totalUniqueCollateralLendableValue: 14_000_000,
+        facilities: [
+          {
+            loanId: "L1",
+            name: "Testco - Line of Credit - $10,000,000.00",
+            stage: "Booked",
+            status: "Active",
+            committed: 10_000_000,
+            totalPledgedValue: 8_000_000,
+            collateral: [
+              {
+                collateralId: "C1",
+                collateralName: "COL-000762",
+                collateralDescription: "All present and future accounts receivable.",
+                collateralType: "UCC-Accounts",
+                lienPosition: "1st",
+                isPrimary: true,
+                amountPledged: 8_000_000,
+                advanceRate: 80,
+                currentLendableValue: 9_600_000,
+              },
+            ],
+          },
+          { loanId: "L2", name: "Testco - Equipment - $10,000,000.00", stage: "Booked", status: "Active", committed: 10_000_000, ...over },
+        ],
+      },
+    }) as unknown as BorrowerBundle;
+
+  it("reads each pledge as name, facts and figures, with the borrower dropped", () => {
+    const ctx = securityContext(secured(), ["L1"])!;
+    expect(ctx.rows).toHaveLength(1);
+    expect(ctx.rows[0].facility).toBe("Line of Credit - $10,000,000.00");
+    expect(ctx.rows[0].share).toBe(8_000_000);
+    const p = ctx.rows[0].pledges[0];
+    expect(p.name).toBe("COL-000762");
+    expect(p.facts).toBe("UCC-Accounts · 1st lien · primary");
+    expect(p.figures).toBe("$8M pledged here · 80 percent advance · $9.60M lendable in total");
+    expect(p.description).toBe("All present and future accounts receivable.");
+  });
+
+  it("states the coverage numerator, so the ratio above is visibly the same sum", () => {
+    expect(securityContext(secured(), ["L1"])!.coverageBasis).toBe(14_000_000);
+  });
+
+  it("says plainly when a facility carries no security at all", () => {
+    const row = securityContext(secured({ collateral: [] }), ["L2"])!.rows[0];
+    expect(row.pledges).toEqual([]);
+    expect(row.note).toBe("No collateral is pledged to this facility.");
+  });
+
+  it("distinguishes an ABSENT pledge list from an empty one", () => {
+    const row = securityContext(secured(), ["L2"])!.rows[0];
+    expect(row.note).toBe("The security for this facility is not carried in this read, so what secures it could not be shown.");
+  });
+
+  it("renders the org's own reason where the org gave one", () => {
+    const row = securityContext(
+      secured({ collateral: [], coverageNote: "All 3 pledges are flagged Abundance-of-Caution." }),
+      ["L2"],
+    )!.rows[0];
+    expect(row.note).toBe("All 3 pledges are flagged Abundance-of-Caution.");
+  });
+
+  it("shows nothing at all until the banker has selected a member", () => {
+    expect(securityContext(secured(), [])).toBeNull();
+    expect(securityContext(secured(), undefined)).toBeNull();
+    expect(securityContext(null, ["L1"])).toBeNull();
+  });
+
+  it("adds a row per selected member and drops an id the read cannot place", () => {
+    const ctx = securityContext(secured(), ["L1", "L2", "NOT-STAGED"])!;
+    expect(ctx.rows.map((r) => r.loanId)).toEqual(["L1", "L2"]);
   });
 });

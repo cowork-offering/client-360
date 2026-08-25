@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { computeSuggestions, detectDrift, type Suggestion } from "./suggestionEngine";
+import { bundleAsOf, computeSuggestions, detectDrift, freshnessSentence, type Suggestion } from "./suggestionEngine";
 import { DEMO_POLICY_PACK, resolveThreshold, resolveSwitch, type PolicyPack } from "../policy/policyPack";
 
 const ASOF = "2026-07-26T09:00:00Z";
@@ -226,13 +226,20 @@ describe("A33.2.4(b) — cushion compression", () => {
 });
 
 describe("A33.2.4(c) — junction carryover", () => {
+  /** A read that CARRIES the junction field and says there are none. */
+  const stated = (): BorrowerBundle => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].loanCovenants = [];
+    return b;
+  };
+
   it("only applies to renewal and modification", () => {
-    expect(run(shortBundle(), "annual-review").suggestions.some((s) => s.id === "junction-carryover")).toBe(false);
-    expect(run(shortBundle(), "renewal").suggestions.some((s) => s.id === "junction-carryover")).toBe(true);
+    expect(run(stated(), "annual-review").suggestions.some((s) => s.id === "junction-carryover")).toBe(false);
+    expect(run(stated(), "renewal").suggestions.some((s) => s.id === "junction-carryover")).toBe(true);
   });
 
   it("an EMPTY junction list is a fact, stated explicitly, never blank space", () => {
-    const s = run(shortBundle(), "renewal").suggestions.find((x) => x.id === "junction-carryover")!;
+    const s = run(stated(), "renewal").suggestions.find((x) => x.id === "junction-carryover")!;
     expect(s.trigger.value).toBe(0);
     expect(s.rationale).toMatch(/No loan-level covenants are attached/);
     expect(s.rationale).toMatch(/Account-level covenants are unaffected/);
@@ -244,6 +251,75 @@ describe("A33.2.4(c) — junction carryover", () => {
     const s = run(b, "renewal").suggestions.find((x) => x.id === "junction-carryover")!;
     expect(s.trigger.value).toBe(2);
     expect(s.rationale).toMatch(/nothing is carried or deleted automatically/);
+    // Named, not only counted: which covenant travels is the actionable half.
+    expect(s.rationale).toContain("DSCR on Revolver");
+  });
+
+  /* Founder, live Hartwell test 2026-08-25. The rule consulted ONE of the two
+     reads that carry this fact, and the one it consulted is the one the live
+     read leaves null — so the card stated as a fact that no covenant attaches
+     to a facility that plainly has one. */
+  it("reads the covenant side of the junction too, not only the exposure side", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].loanId = "a4Zbb0000027MaYEAU";
+    b.exposure!.facilities![0].name = "Testco - Line of Credit - $15,000,000.00";
+    b.covenants = {
+      covenants: [
+        {
+          covenantType: "Accounts Receivable",
+          actualValue: 80,
+          thresholdValue: 80,
+          attachedLoans: [{ loanId: "a4Zbb0000027MaYEAU", loanName: "Testco - Line of Credit - $15,000,000.00" }],
+        },
+      ],
+    };
+    const s = run(b, "loan-modification").suggestions.find((x) => x.id === "junction-carryover")!;
+    expect(s.trigger.value).toBe(1);
+    expect(s.verdict).toBe("1 loan-level covenant attachment carries onto the new facility.");
+    expect(s.rationale).toContain("Accounts Receivable on Line of Credit - $15,000,000.00");
+  });
+
+  it("counts a junction ONCE when both reads carry it", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].loanCovenants = [{ id: "lc1", covenantType: "Accounts Receivable" }];
+    b.covenants = {
+      covenants: [
+        {
+          covenantType: "Accounts Receivable",
+          actualValue: 80,
+          thresholdValue: 80,
+          attachedLoans: [{ loanId: "L1", loanName: "Revolver" }],
+        },
+      ],
+    };
+    expect(run(b, "renewal").suggestions.find((x) => x.id === "junction-carryover")!.trigger.value).toBe(1);
+  });
+
+  it("ignores an attachment onto a facility this read does not stage", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].loanCovenants = [];
+    b.covenants = {
+      covenants: [
+        {
+          covenantType: "Accounts Receivable",
+          actualValue: 80,
+          thresholdValue: 80,
+          attachedLoans: [{ loanId: "SOME-OTHER-LOAN", loanName: "Not on this relationship" }],
+        },
+      ],
+    };
+    expect(run(b, "renewal").suggestions.find((x) => x.id === "junction-carryover")!.trigger.value).toBe(0);
+  });
+
+  it("refuses to call an ABSENT junction list an empty one", () => {
+    // Neither read carries the field. "Cannot tell" is not "none", and a
+    // renewal briefed on "none" would silently carry a covenant it never named.
+    const r = run(shortBundle(), "renewal");
+    expect(r.suggestions.some((s) => s.id === "junction-carryover")).toBe(false);
+    const gap = r.gaps.find((g) => g.ruleId === "junction-carryover")!;
+    expect(gap.note).toContain("does not say which covenants are attached");
+    expect(gap.note).toContain("Sync this relationship");
+    expect(gap.detail).toContain("an absent junction list is not an empty one");
   });
 });
 
@@ -323,7 +399,16 @@ describe("the coverage rule on the new exposure contract", () => {
     ];
     const s = run(b).suggestions.find((x) => x.id === "coverage-shortfall")!;
     expect(s.trigger.value).toBe(0.96);
-    expect(s.trigger.formula).toBe("sum(active facility pledged share) / proposed commitment");
+    // The basis is named for what it IS. With no proposal on the table the
+    // denominator is the committed exposure on file, and the card must not
+    // call that pro-forma (founder finding F2, 2026-08-25).
+    expect(s.trigger.formula).toBe("sum(active facility pledged share) / committed exposure");
+    expect(s.trigger.figure).toBe("collateral coverage");
+    const proposed = run(b, "collateral-valuation", undefined, 12_000_000).suggestions.find(
+      (x) => x.id === "coverage-shortfall",
+    )!;
+    expect(proposed.trigger.formula).toBe("sum(active facility pledged share) / proposed commitment");
+    expect(proposed.trigger.figure).toBe("pro-forma collateral coverage");
   });
 
   it("puts the org's OWN reason on the gap card when the share is null", () => {
@@ -347,5 +432,186 @@ describe("the coverage rule on the new exposure contract", () => {
     // No reason on file means no reason invented, and no facility named as if
     // one had been given.
     expect(gap.detail).not.toContain("Revolver");
+  });
+});
+
+/* =============================================================================
+   FOUNDER UAT, 2026-08-25 — F2 verdicts, F3 freshness, F4 banker language.
+
+   Three findings, one engine. The panel could not lead with a verdict the
+   engine never produced, could not quote the live read the engine never got
+   told about, and could not keep a contract path off the screen while the only
+   sentence a gap carried WAS a contract path.
+   ============================================================================= */
+
+describe("F2 — every finding leads with a verdict, toned by what the arithmetic found", () => {
+  it("gives the coverage shortfall a verdict, an ask-shaped one, at alert severity", () => {
+    const s = run(shortBundle()).suggestions.find((x) => x.id === "coverage-shortfall")!;
+    expect(s.verdict).toBe("Collateral coverage is 0.92x, below the 1.10x floor.");
+    expect(s.severity).toBe("warning");
+    // The verdict is a SENTENCE about the decision, not a repeat of the figure
+    // name, and it comes before the detail rather than instead of it.
+    expect(s.rationale).not.toBe(s.verdict);
+  });
+
+  it("says 'would fall below' only when a proposal is actually on the table", () => {
+    const s = run(shortBundle(), "collateral-valuation", undefined, 12_000_000).suggestions.find(
+      (x) => x.id === "coverage-shortfall",
+    )!;
+    expect(s.verdict).toBe("Coverage would fall below the 1.10x floor.");
+  });
+
+  it("raises a breached covenant to critical and an alert to warning", () => {
+    const tight = shortBundle();
+    tight.covenants = { covenants: [{ covenantType: "Debt Service Coverage Ratio", actualValue: 1.31, thresholdValue: 1.3 }] };
+    const alert = run(tight).suggestions.find((x) => x.id === "cushion-compression")!;
+    expect(alert.severity).toBe("warning");
+    expect(alert.verdict).toContain("below the 15 percent alert floor");
+
+    const broken = shortBundle();
+    broken.covenants = { covenants: [{ covenantType: "Debt Service Coverage Ratio", actualValue: 1.1, thresholdValue: 1.3 }] };
+    const breach = run(broken).suggestions.find((x) => x.id === "cushion-compression")!;
+    expect(breach.severity).toBe("critical");
+    expect(breach.verdict).toBe("Debt Service Coverage Ratio is at or past its threshold.");
+  });
+
+  it("keeps the junction carryover as information, because nothing about it is wrong", () => {
+    const b = shortBundle();
+    b.exposure!.facilities![0].loanCovenants = [];
+    const s = run(b, "loan-modification").suggestions.find((x) => x.id === "junction-carryover")!;
+    expect(s.severity).toBe("info");
+    expect(s.verdict).toBe("No loan-level covenants carry onto the new facility.");
+  });
+
+  it("names the policy pack for a banker and keeps its id for the ledger", () => {
+    const s = run(shortBundle()).suggestions[0];
+    expect(s.policyVersion).toBe("demo-2026-07");
+    expect(s.policyLabel).toBe("Demo policy pack (WS2 policy layer pending)");
+  });
+});
+
+describe("F3 — the check quotes the read it actually ran on", () => {
+  const SYNCED = Date.parse("2026-08-25T10:30:00Z");
+
+  it("falls back to the baked bundle's own clock when nothing has been synced", () => {
+    const s = run(shortBundle()).suggestions[0];
+    expect(s.freshness.live).toBe(false);
+    expect(s.freshness.asOf).toBe(ASOF);
+    expect(s.asOf).toBe(ASOF);
+    expect(freshnessSentence(s.freshness)).toContain("as it was prepared on");
+    expect(freshnessSentence(s.freshness)).toContain("Sync this relationship");
+  });
+
+  it("quotes the SYNC's own instant once a live read has replaced the bundle", () => {
+    const b = shortBundle();
+    const r = computeSuggestions({
+      data: data(b),
+      bundle: b,
+      actionId: "collateral-valuation",
+      liveStoredAt: SYNCED,
+      liveSections: ["exposure", "covenants"],
+    });
+    const s = r.suggestions.find((x) => x.id === "coverage-shortfall")!;
+    expect(s.freshness.live).toBe(true);
+    expect(s.freshness.asOf).toBe("2026-08-25T10:30:00.000Z");
+    expect(s.freshness.bakedSections).toEqual([]);
+    expect(freshnessSentence(s.freshness)).toBe(
+      "Checked against the relationship as it was read from nCino on Aug 25, 2026, 10:30 UTC.",
+    );
+  });
+
+  it("says in banker language which figures that sync did NOT refresh", () => {
+    const b = shortBundle();
+    const r = computeSuggestions({
+      data: data(b),
+      bundle: b,
+      actionId: "collateral-valuation",
+      liveStoredAt: SYNCED,
+      // A sync that carried exposure but not covenants: the cushion rule is
+      // live in its clock and baked in its inputs, and must say so.
+      liveSections: ["exposure"],
+    });
+    const cushion = r.suggestions.find((x) => x.id === "cushion-compression");
+    const coverage = r.suggestions.find((x) => x.id === "coverage-shortfall")!;
+    expect(coverage.freshness.bakedSections).toEqual([]);
+    if (cushion) {
+      expect(cushion.freshness.bakedSections).toEqual(["covenants"]);
+      const line = freshnessSentence(cushion.freshness);
+      expect(line).toContain("except the covenant figures");
+      expect(line).not.toContain("covenants");
+    }
+  });
+
+  it("bundleAsOf gives the panel one instant, on the same rule", () => {
+    const b = shortBundle();
+    expect(bundleAsOf({ data: data(b), liveStoredAt: null })).toBe(ASOF);
+    expect(bundleAsOf({ data: data(b), liveStoredAt: SYNCED })).toBe("2026-08-25T10:30:00.000Z");
+  });
+
+  it("does not report drift when the plan is rechecked against the SAME live read", () => {
+    const b = shortBundle();
+    const ctx = { data: data(b), bundle: b, actionId: "collateral-valuation", liveStoredAt: SYNCED, liveSections: ["exposure", "covenants"] };
+    const first = computeSuggestions(ctx);
+    const again = computeSuggestions(ctx);
+    expect(detectDrift(first.suggestions, again, bundleAsOf(ctx))).toEqual([]);
+  });
+});
+
+describe("F4 — a gap says what it MEANS, and keeps the path behind it", () => {
+  it("turns the null covenant value into a sentence a banker can act on", () => {
+    const b = shortBundle();
+    b.covenants = {
+      covenants: [
+        { covenantType: "Term Covenants", actualValue: null as unknown as number, thresholdValue: null as unknown as number },
+        { covenantType: "Debt Service Coverage Ratio", actualValue: 1.38, thresholdValue: 1.3 },
+      ],
+    };
+    const gap = run(b).gaps.find((g) => g.path.includes("actualValue"))!;
+    expect(gap.note).toBe("The last test of Term Covenants carries no measured value, so its cushion could not be computed.");
+    // The technical half is still there, and it is still exact.
+    expect(gap.detail).toContain("present but null");
+    expect(gap.path).toBe("borrower.covenants.covenants[].actualValue");
+    expect(gap.sourceSystem).toBe("Customer360Covenants");
+  });
+
+  it("carries a banker sentence on EVERY gap the engine can emit", () => {
+    const cases: BorrowerBundle[] = [];
+    const noFacilities = shortBundle();
+    noFacilities.exposure = { totalCommitted: 1, facilities: [] };
+    cases.push(noFacilities);
+
+    const noCovenants = shortBundle();
+    noCovenants.covenants = { covenants: [] };
+    cases.push(noCovenants);
+
+    const nullShare = shortBundle();
+    nullShare.exposure!.facilities![0].totalLendableValue = null;
+    cases.push(nullShare);
+
+    const zeroBasis = shortBundle();
+    zeroBasis.exposure!.totalCommitted = 0;
+    cases.push(zeroBasis);
+
+    const noThreshold = shortBundle();
+    noThreshold.covenants = { covenants: [{ covenantType: "Minimum Liquidity", actualValue: 4, thresholdValue: null as unknown as number }] };
+    cases.push(noThreshold);
+
+    const zeroThreshold = shortBundle();
+    zeroThreshold.covenants = { covenants: [{ covenantType: "Minimum Liquidity", actualValue: 4, thresholdValue: 0 }] };
+    cases.push(zeroThreshold);
+
+    const gaps = cases.flatMap((b) => run(b).gaps);
+    // Plus the two the engine reaches only through its own edges.
+    gaps.push(...computeSuggestions({ data: data(shortBundle()), bundle: null, actionId: "collateral-valuation" }).gaps);
+    gaps.push(
+      ...run(shortBundle(), "collateral-valuation", { version: "empty-pack", label: "Empty pack", values: {} }).gaps,
+    );
+
+    expect(gaps.length).toBeGreaterThan(6);
+    for (const g of gaps) {
+      expect(g.note.length).toBeGreaterThan(20);
+      // NO CONTRACT PATH, NO TOOL NAME, NO WIRE FIELD in the rendered sentence.
+      expect(g.note).not.toMatch(/borrower\.|\[\]|Customer360|productPackageId|null\b/);
+    }
   });
 });

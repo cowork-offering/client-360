@@ -14,7 +14,15 @@ import {
   batchStagingGap,
 } from "../actions/schemas";
 import { chipFor, stagingBlockers, unfilledRequired, type NarrativeAttribution, type PanelField } from "../actions/panelSchema";
-import { computeSuggestions, detectDrift, type NamedGap, type Suggestion } from "../actions/suggestionEngine";
+import {
+  bundleAsOf,
+  computeSuggestions,
+  detectDrift,
+  freshnessSentence,
+  type NamedGap,
+  type Severity,
+  type Suggestion,
+} from "../actions/suggestionEngine";
 import { runCompile, type CompileLine } from "../actions/compile";
 import { CompileScreen } from "./CompileScreen";
 import { validatePlan } from "../actions/transitionAllowlist";
@@ -27,6 +35,7 @@ import { fmtMoney } from "../data/format";
 import { bookedFacilities } from "../data/facilityStage";
 import { ConfirmGate } from "./ConfirmGate";
 import { StepTracker } from "./StepTracker";
+import { TechnicalToggle } from "./ui";
 import { isSimulationAllowed, simulateStagedOutput, type StagedOutput } from "../actions/stagedPlan";
 import {
   executeAction,
@@ -195,25 +204,68 @@ function FieldRow({
   );
 }
 
+/** What this panel IS, said once, above the cards (F2). A banker asked "what
+ *  should I do with this information?" — the honest answer starts with what the
+ *  information is and where the decision sits. */
+export const CHALLENGE_PANEL_INTRO =
+  "Pre-decision checks the cockpit runs on the proposed change. Advisory only: the decision stays with you.";
+
+const SEVERITY_TONE: Record<Severity, { fg: string; bg: string }> = {
+  critical: { fg: "var(--critical)", bg: "var(--critical-bg)" },
+  warning: { fg: "var(--warning)", bg: "var(--warning-bg)" },
+  info: { fg: "var(--accent)", bg: "var(--accent-wash)" },
+};
+
 function SuggestionCard({
   suggestion,
+  acknowledged,
+  onAcknowledge,
   onOverride,
 }: {
   suggestion: Suggestion;
+  acknowledged: boolean;
+  onAcknowledge: () => void;
   onOverride: (reason: string) => void;
 }) {
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState("");
+  const tone = SEVERITY_TONE[suggestion.severity];
+
+  // Acknowledged collapses to one line. The check does not disappear — it is
+  // recorded and it stays readable — but it stops asking for a decision that
+  // has already been made.
+  if (acknowledged) {
+    return (
+      <div className="flex flex-wrap items-baseline gap-x-2 rounded-[8px] border border-border px-3 py-2">
+        <span className="text-[11px] font-bold" style={{ color: tone.fg }}>
+          {suggestion.verdict}
+        </span>
+        <span className="text-[10.5px] text-ink-faint">acknowledged</span>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-[10px] border border-border px-3.5 py-3" style={{ background: "var(--surface-overlay)" }}>
+      {/* THE VERDICT FIRST, toned by severity. What the figures MEAN for the
+          decision, before the arithmetic that produced it. */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12px] font-bold text-ink">{suggestion.trigger.figure}</span>
+        <span
+          className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+          style={{ background: tone.bg, color: tone.fg }}
+        >
+          {suggestion.severity === "info" ? "For information" : suggestion.severity === "critical" ? "Breach" : "Alert"}
+        </span>
         <ProvenanceChip kind={suggestion.source} citation={suggestion.trigger.formula} />
       </div>
+      <p className="mt-1.5 text-[13px] font-bold leading-snug" style={{ color: tone.fg }}>
+        {suggestion.verdict}
+      </p>
       <p className="mt-1 text-[12px] leading-relaxed text-ink-body">{suggestion.rationale}</p>
-      <div className="mt-1.5 text-[10px] text-ink-faint">
-        Policy {suggestion.policyVersion} · computed from data as of {suggestion.asOf || "unknown"}
+      {/* F3 — the read this ran on, said in banker language, and it is the read
+          the TICKET is using rather than whatever the bundle was baked from. */}
+      <div className="mt-1.5 text-[10px] leading-relaxed text-ink-faint">
+        {suggestion.policyLabel} · {freshnessSentence(suggestion.freshness)}
       </div>
 
       {/* A33.2.3 — declining requires a reason, which lands in Activity and the
@@ -246,26 +298,37 @@ function SuggestionCard({
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => setDeclining(true)}
-          className="c360-press mt-2 rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-ink-muted hover:text-ink"
-        >
-          Decline with reason
-        </button>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onAcknowledge}
+            className="c360-press rounded-md px-2.5 py-1 text-[11px] font-semibold"
+            style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+          >
+            Acknowledge and continue
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeclining(true)}
+            className="c360-press rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-ink-muted hover:text-ink"
+          >
+            Decline with reason
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-/** A33.2.6 — a named gap. Never rendered as an all-clear. */
+/** A33.2.6 — a named gap. Never rendered as an all-clear.
+ *
+ *  F4: the BANKER SENTENCE renders; the path, the source system and the raw
+ *  guard detail sit behind the toggle. */
 function GapNote({ gap }: { gap: NamedGap }) {
   return (
     <div className="rounded-[8px] border border-dashed border-border px-3 py-2 text-[11px] leading-relaxed text-ink-muted">
-      <span className="font-semibold">{gap.input}</span> could not be used: {gap.detail}.{" "}
-      <span className="text-ink-faint">
-        {gap.path} · {gap.sourceSystem}
-      </span>
+      {gap.note}
+      <TechnicalToggle detail={`${gap.detail} · ${gap.path} · ${gap.sourceSystem}`} />
     </div>
   );
 }
@@ -370,6 +433,19 @@ export function ActionPanel({
   // sync just ingested is invisible to the prefill that exists to use it.
   const livePatch = state.livePatches[accountId];
   const bundle = staged && livePatch ? { ...staged, ...livePatch } : staged;
+  /** F3 — WHICH READ THE TICKET IS ACTUALLY USING.
+   *
+   *  The effective-challenge math has always run on `bundle`, which is the
+   *  live-merged one. It stamped its cards with `data.meta.generatedAt`, which
+   *  is the BAKED bundle's assembly time, so a card recomputed seconds after a
+   *  sync still claimed the date the artifact was built. The two facts now
+   *  travel together: the instant comes from the same overlay the patch did,
+   *  and the sections that sync replaced are named so a partially refreshed
+   *  read cannot claim to be wholly live. */
+  const liveStoredAt = livePatch ? (state.liveStoredAt[accountId] ?? null) : null;
+  const liveSectionKey = livePatch ? Object.keys(livePatch).sort().join(",") : "";
+  const liveSections = useMemo(() => (liveSectionKey ? liveSectionKey.split(",") : []), [liveSectionKey]);
+  const asOf = bundleAsOf({ data, liveStoredAt });
   /** The key session-local activity is stored under. Resolved the same way the
    *  Activity tab resolves it, so a written entry is always a readable one. */
   const activityAccountId = accountKey(state.accountId, bundle?.snapshot?.accountId);
@@ -423,6 +499,11 @@ export function ActionPanel({
   );
   const [editedFields, setEditedFields] = useState<string[]>([]);
   const [declined, setDeclined] = useState<Record<string, string>>({});
+  /** F2 — an acknowledgement is a DECISION, so the ticket records it: which
+   *  check, and when the banker took it. Unlike a decline it does not remove
+   *  the finding from the plan's stated rationale, because acknowledging is
+   *  accepting; it collapses the card and nothing more. */
+  const [acknowledged, setAcknowledged] = useState<Record<string, string>>({});
   /** briefing -> compile -> plan -> execution. Compile is the bridge, not a
    *  stop on the stepper: it is how the plan gets built. */
   const [phase, setPhase] = useState<Phase>("form");
@@ -451,8 +532,8 @@ export function ActionPanel({
   const sheetCloserRef = useRef<(() => void) | null>(null);
 
   const engine = useMemo(
-    () => computeSuggestions({ data, bundle, actionId }),
-    [data, bundle, actionId],
+    () => computeSuggestions({ data, bundle, actionId, liveStoredAt, liveSections }),
+    [data, bundle, actionId, liveStoredAt, liveSections],
   );
 
   // A31.1 modal chrome: focus in on open, focus back to the opener on close.
@@ -854,8 +935,10 @@ export function ActionPanel({
           id: "recompute",
           label: "Recomputing the figures and checking for drift",
           run: () => {
-            const fresh = computeSuggestions({ data, bundle, actionId });
-            const moved = detectDrift(engine.suggestions, fresh, data.meta?.generatedAt ?? "");
+            // Recomputed on the SAME read the cards were computed from, or the
+            // drift check would report "data replaced" on every synced ticket.
+            const fresh = computeSuggestions({ data, bundle, actionId, liveStoredAt, liveSections });
+            const moved = detectDrift(engine.suggestions, fresh, asOf);
             if (moved.length) {
               throw {
                 code: "VALIDATION_FAILED",
@@ -1209,22 +1292,32 @@ export function ActionPanel({
               />
             )}
 
-            {/* Suggestions and gaps next: they may change what the banker enters. */}
+            {/* Effective challenge next: it may change what the banker enters. */}
             {(engine.suggestions.length > 0 || engine.gaps.length > 0) && (
               <div className="flex flex-col gap-2 border-b border-divider px-5 py-4">
-                <div className="kicker">What the figures say</div>
+                <div className="kicker">Effective challenge</div>
+                <p className="-mt-1 text-[11px] leading-relaxed text-ink-muted">{CHALLENGE_PANEL_INTRO}</p>
                 {engine.suggestions
                   .filter((s) => !declined[s.id])
                   .map((s) => (
                     <SuggestionCard
                       key={s.id}
                       suggestion={s}
+                      acknowledged={Boolean(acknowledged[s.id])}
+                      onAcknowledge={() =>
+                        setAcknowledged((prev) => ({ ...prev, [s.id]: new Date().toISOString() }))
+                      }
                       onOverride={(reason) => setDeclined((prev) => ({ ...prev, [s.id]: reason }))}
                     />
                   ))}
+                {/* A declined check is named by its VERDICT, not by its rule id:
+                    "coverage-shortfall declined" is a slug, not a sentence. */}
                 {Object.entries(declined).map(([id, reason]) => (
-                  <div key={id} className="rounded-[8px] border border-border px-3 py-2 text-[11px] text-ink-muted">
-                    <span className="font-semibold">{id}</span> declined: {reason}
+                  <div key={id} className="rounded-[8px] border border-border px-3 py-2 text-[11px] leading-relaxed text-ink-muted">
+                    <span className="font-semibold">
+                      {engine.suggestions.find((s) => s.id === id)?.verdict ?? "This check"}
+                    </span>{" "}
+                    declined: {reason}
                   </div>
                 ))}
                 {engine.gaps.map((g, i) => (

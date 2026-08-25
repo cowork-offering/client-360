@@ -7,13 +7,16 @@ import {
   promptFor,
   ratingFacts,
   reviewFacts,
+  securityContext,
   ticketDeltas,
+  type SecurityContext,
   type TicketDelta,
   type TicketFact,
 } from "../actions/dealTicket";
 import type { PanelField, PanelSchema, PerItemInput } from "../actions/panelSchema";
 import type { BorrowerBundle, ReasonCode } from "../data/contract";
 import { fmtMoney } from "../data/format";
+import { TechnicalToggle } from "./ui";
 
 /* =============================================================================
    THE DEAL TICKET (WP8)
@@ -276,16 +279,32 @@ function MultiSelectRows({
               background: on ? "var(--accent-wash)" : "var(--surface)",
             }}
           >
+            {/* One clean row: checkbox, the member's own name (the relationship
+                name is the headline above and is not repeated here), its stage
+                as a chip rather than as another clause, then one line of
+                figures — committed, drawn, maturity. */}
             <label className="flex cursor-pointer items-start gap-2.5">
               <input
                 type="checkbox"
                 checked={on}
                 aria-label={field.optionLabels?.[i] ?? id}
                 onChange={() => onToggle(id)}
-                className="mt-0.5 flex-none"
+                className="mt-[3px] flex-none"
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12.5px] font-semibold text-ink">{field.optionLabels?.[i] ?? id}</span>
+                <span className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">
+                    {field.optionLabels?.[i] ?? id}
+                  </span>
+                  {field.optionChips?.[i] && (
+                    <span
+                      className="flex-none rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
+                      style={{ background: "var(--neutral-bg)", color: "var(--neutral-fg)" }}
+                    >
+                      {field.optionChips[i]}
+                    </span>
+                  )}
+                </span>
                 {field.optionDetails?.[i] && (
                   <span className="mt-0.5 block text-[10.5px] leading-relaxed text-ink-faint">{field.optionDetails[i]}</span>
                 )}
@@ -374,57 +393,151 @@ function MultiSelectRows({
 /* ------------------------------------------------------------ deal header */
 
 /**
- * THE DEAL, AT THE TOP, ALWAYS.
+ * THE DEAL, AT THE TOP, ALWAYS — AND IT LEADS WITH ITS NAME.
  *
  * A package-anchored action runs on ONE product package and covers the members
  * selected inside it. Rendering the deal as one pill among the properties put
  * the anchor below the values it governs and left the ticket reading like a
- * single-record form. This states it first: what the deal is, what it
- * aggregates, and — only when the relationship stages more than one — a way to
- * change it.
+ * single-record form.
+ *
+ * FOUNDER FINDING F1 (2026-08-25): the header was still dense. The package name
+ * was a concatenation of its members, the metadata line ended in a raw record
+ * id, and the only way to change deal was a button that opened a sheet. So:
+ * the name is the headline at headline size, ONE compact metadata line under it
+ * (members, committed, drawn), the id behind an info toggle, and a real
+ * selector at the top when the relationship carries more than one package. A
+ * single package renders as the headline and nothing else, because there is
+ * nothing to select.
  */
 function DealHeader({
   field,
   value,
   chip,
-  onOpen,
+  onPick,
 }: {
   field: PanelField;
   value: unknown;
   chip: ReactNode;
-  onOpen: () => void;
+  onPick: (v: string) => void;
 }) {
-  const i = (field.options ?? []).indexOf(String(value));
+  const options = field.options ?? [];
+  const i = options.indexOf(String(value));
   // A relationship staging no package has nothing to head the ticket with, and
   // the field's own blocking gap already says so above. Two statements of one
   // fact is one too many.
   if (i < 0) return null;
   const label = field.optionLabels?.[i] ?? String(value);
   const detail = field.optionDetails?.[i];
+  const several = field.editable && options.length > 1;
 
   return (
-    <div className="rounded-[12px] border px-4 py-3" style={{ borderColor: "var(--accent)", background: "var(--accent-wash)" }}>
+    <div className="rounded-[12px] border px-4 py-3.5" style={{ borderColor: "var(--accent)", background: "var(--accent-wash)" }}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="kicker">{field.label}</span>
         {chip}
-        {field.editable && (
-          <button
-            type="button"
-            onClick={onOpen}
-            className="c360-press ml-auto rounded-md px-2 py-0.5 text-[11px] font-semibold"
-            style={{ color: "var(--accent)" }}
-          >
-            Change deal
-          </button>
-        )}
       </div>
-      <div className="mt-1 text-[13px] font-bold leading-snug text-ink">{label}</div>
-      {/* Member count, committed and drawn — derived from the staged rows, so
-          the header states what the deal IS rather than naming it. */}
-      {detail && <div className="mt-0.5 text-[11px] leading-relaxed text-ink-muted">{detail}</div>}
-      {!field.editable && field.editableReason && (
-        <div className="mt-0.5 text-[10.5px] text-ink-faint">{field.editableReason}</div>
+
+      {/* THE NAME, LARGE. */}
+      <h4 className="mt-1 text-[19px] font-extrabold leading-tight tracking-tight text-ink">{label}</h4>
+
+      {/* ONE metadata line: members, committed, drawn. Derived from the staged
+          rows, so the header states what the deal IS rather than only naming it. */}
+      {/* ink-body rather than ink-muted: on the accent wash ink-muted lands at
+          4.35:1, under the 4.5 body-text gate. */}
+      {detail && <div className="mt-1 text-[11.5px] leading-relaxed text-ink-body">{detail}</div>}
+
+      {several && (
+        <div className="mt-2.5 flex flex-wrap gap-1.5" role="group" aria-label={`Choose the ${field.label.toLowerCase()}`}>
+          {options.map((id, n) => {
+            const on = id === String(value);
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onPick(id)}
+                className="c360-press max-w-full truncate rounded-[8px] border px-2.5 py-1 text-[11.5px] font-semibold"
+                style={{
+                  borderColor: on ? "var(--accent)" : "var(--border-strong)",
+                  background: on ? "var(--accent)" : "var(--surface-raised)",
+                  color: on ? "var(--accent-ink)" : "var(--ink-muted)",
+                }}
+              >
+                {field.optionLabels?.[n] ?? id}
+              </button>
+            );
+          })}
+        </div>
       )}
+
+      {!field.editable && field.editableReason && (
+        <div className="mt-1 text-[10.5px] text-ink-faint">{field.editableReason}</div>
+      )}
+      {/* F4 — the org's record id is technical. It stays reachable and stops
+          sitting in the middle of the banker's metadata line. */}
+      <TechnicalToggle label="Record reference" detail={String(value)} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------- from -> to reading */
+
+/**
+ * WHAT EACH SELECTED MEMBER MOVES FROM, AND TO (founder finding F1/F5).
+ *
+ * The aggregate delta says the book moves by X. It does not say that THIS
+ * revolver goes from 15.0M to 18.0M, which is the sentence a banker checks
+ * before staging. One row per selected member, and only once an amount is
+ * entered: a from -> to with no "to" is just the member list again.
+ *
+ * SILENT ON A MISSING FIGURE. A member whose current commitment the read does
+ * not stage is listed with what is known and no arrow, never with a zero.
+ */
+function FromToRows({
+  field,
+  selected,
+  proposed,
+}: {
+  field: PanelField;
+  selected: string[];
+  proposed: number;
+}) {
+  const rows = selected
+    .map((id) => {
+      const i = (field.options ?? []).indexOf(id);
+      if (i < 0) return null;
+      return { id, label: field.optionLabels?.[i] ?? id, from: field.optionAmounts?.[i] ?? null };
+    })
+    .filter((r): r is { id: string; label: string; from: number | null } => r !== null);
+  if (!rows.length) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[10px] px-3.5 py-3" style={{ background: "var(--surface-overlay)" }}>
+      <div className="kicker">Each selected facility</div>
+      {rows.map((r) => (
+        <div key={r.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-ink-body">{r.label}</span>
+          {r.from === null ? (
+            <span className="text-[11px] text-ink-faint">no commitment on file, so no change can be read</span>
+          ) : (
+            <>
+              <span className="tnum text-[12.5px] font-semibold text-ink-muted line-through decoration-1">{fmtMoney(r.from)}</span>
+              <span aria-hidden="true" className="text-[11px] text-ink-faint">
+                →
+              </span>
+              <span
+                className="tnum text-[13.5px] font-extrabold"
+                style={{
+                  color:
+                    proposed > r.from ? "var(--positive)" : proposed < r.from ? "var(--critical)" : "var(--ink-muted)",
+                }}
+              >
+                {fmtMoney(proposed)}
+              </span>
+            </>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -523,6 +636,61 @@ function DeltaReadout({ deltas, heading }: { deltas: TicketDelta[]; heading: { t
   );
 }
 
+/* ---------------------------------------------------------- security (F6) */
+
+/**
+ * WHAT SECURES THE SELECTED MEMBERS.
+ *
+ * The covenant position and the collateral position are the two things a
+ * banker checks before moving a commitment, and the ticket only ever showed
+ * one of them. Compact rows, in the same grammar as the member list: the
+ * facility, then its pledges, each with what it is, where the lien sits and
+ * the three figures that matter.
+ *
+ * The footer states the coverage numerator explicitly, so the ratio on the
+ * challenge card above is visibly the same calculation as these rows.
+ */
+function SecurityRows({ context }: { context: SecurityContext }) {
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[10px] px-3.5 py-3" style={{ background: "var(--surface-overlay)" }}>
+      <div className="kicker">Security on the selected facilities</div>
+      {context.rows.map((row) => (
+        <div key={row.loanId} className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-[11.5px] font-bold text-ink">{row.facility}</span>
+            {row.share !== null && (
+              <span className="tnum text-[11px] text-ink-muted">{fmtMoney(row.share)} pledged share</span>
+            )}
+          </div>
+          {row.pledges.map((p) => (
+            <div key={p.name} className="border-l pl-2.5" style={{ borderColor: "var(--border-strong)" }}>
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-[11.5px] font-semibold text-ink-body">{p.name}</span>
+                {p.facts && <span className="text-[10.5px] text-ink-faint">{p.facts}</span>}
+              </div>
+              <div className="tnum text-[11px] text-ink-muted">{p.figures}</div>
+              {p.description && (
+                <div className="mt-0.5 line-clamp-2 text-[10.5px] leading-relaxed text-ink-faint" title={p.description}>
+                  {p.description}
+                </div>
+              )}
+            </div>
+          ))}
+          {/* An empty pledge list and an absent one are different facts and get
+              different sentences. Neither is rendered as blank space. */}
+          {row.note && <div className="text-[11px] leading-relaxed text-ink-faint">{row.note}</div>}
+        </div>
+      ))}
+      {context.coverageBasis !== null && (
+        <p className="text-[10.5px] leading-relaxed text-ink-faint">
+          The coverage check measures this relationship's lendable collateral, {fmtMoney(context.coverageBasis)},
+          against its commitment. These pledges are what that figure is summed from.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** What a review will cover. Facts from staged data, or nothing. */
 function FactStrip({ title, facts }: { title: string; facts: TicketFact[] }) {
   return (
@@ -600,6 +768,24 @@ export function DealTicket({
   const multiSelects = owned.filter((f) => f.type === "multiselect");
   const properties = owned.filter((f) => f !== deal && f.type !== "multiselect");
 
+  /** The modification's from -> to reading, once there is a "to" to read. The
+   *  amount reaches every selected member as one scalar, so the rows are the
+   *  members and the arrow is the same figure on each of them. */
+  const fromTo = (() => {
+    if (actionId !== "loan-modification") return null;
+    const member = byKey.get("facility");
+    const proposed = values.newCommitment;
+    if (!member || typeof proposed !== "number" || !Number.isFinite(proposed) || proposed <= 0) return null;
+    const selected = [...new Set(Array.isArray(values.facility) ? (values.facility as string[]) : [])];
+    return selected.length ? { field: member, selected, proposed } : null;
+  })();
+
+  /** F6 — the security behind the members the banker ticked. Only where the
+   *  ticket HAS members: a review of the relationship has no member selection
+   *  to hang a pledge list on. */
+  const security =
+    actionId === "loan-modification" || actionId === "renewal" ? securityContext(bundle, values.facility) : null;
+
   useEffect(() => {
     sheetCloserRef.current = sheetKey ? () => setSheetKey(null) : null;
     return () => {
@@ -624,6 +810,9 @@ export function DealTicket({
           style={{ background: "var(--warning-bg)", color: "var(--warning)" }}
         >
           {f.gap!.reason}
+          {/* F4 — the wire field name that explains it stays available and
+              stops being the first thing the banker reads. */}
+          <TechnicalToggle detail={f.gap!.technical} />
         </div>
       ))}
 
@@ -633,7 +822,7 @@ export function DealTicket({
           field={deal}
           value={values[deal.key]}
           chip={renderChip(deal, editedFields.includes(deal.key))}
-          onOpen={() => setSheetKey(deal.key)}
+          onPick={(v) => onChange(deal, v)}
         />
       )}
 
@@ -719,6 +908,14 @@ export function DealTicket({
           {hero.help && <div className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">{hero.help}</div>}
         </div>
       )}
+
+      {/* The per-member from -> to, before the aggregate: a banker checks the
+          facility they are moving before they check what it does to the book. */}
+      {fromTo && <FromToRows field={fromTo.field} selected={fromTo.selected} proposed={fromTo.proposed} />}
+
+      {/* And what secures each of them, on the same principle as the covenants:
+          a member selection is a position, not just a name and an amount. */}
+      {security && <SecurityRows context={security} />}
 
       {/* Live delta: nothing renders until every input it needs is present. */}
       {deltas.length > 0 && <DeltaReadout deltas={deltas} heading={deltaHeading(actionId)} />}

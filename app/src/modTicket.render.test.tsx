@@ -7,7 +7,15 @@ import { AppProvider } from "./state/appState";
 import { ConfirmGate } from "./components/ConfirmGate";
 import { StepTracker } from "./components/StepTracker";
 import { initTracker } from "./actions/tracker";
-import { buildPanelSchema, EACH_SELECTED, impliedFacility, MODIFICATION_NEEDS_A_CHANGE } from "./actions/schemas";
+import {
+  batchStagingGap,
+  buildPanelSchema,
+  EACH_SELECTED,
+  impliedFacility,
+  MODIFICATION_NEEDS_A_CHANGE,
+  MODIFICATION_NO_MOVEMENT,
+  PACKAGE_ANCHOR_TECHNICAL,
+} from "./actions/schemas";
 import { buildBriefing } from "./actions/briefing";
 import type { PlanStep, StagedOutput } from "./actions/stagedPlan";
 import type { ExecuteResult } from "./channel/writeTools";
@@ -102,11 +110,32 @@ describe("the deal is the anchor, and it is the first thing the ticket states", 
     expect(pkg.value).toBe(DEAL);
   });
 
-  it("says what the deal AGGREGATES, since the read stages no package name", () => {
-    // Member count, committed and drawn — all derived from the staged rows.
-    expect(fieldOf(BUNDLE, "package").optionDetails![0]).toBe(
-      `3 facilities · $30M committed · $18M drawn · ${DEAL}`,
-    );
+  /* F1 (founder, 2026-08-25). The old headline was the members concatenated,
+     which on a six-member package was three loan names each beginning with the
+     borrower's own. The deal is named as what it is; the metadata line carries
+     members, committed and drawn and NOTHING else; the record id moves behind
+     the ticket's info toggle. */
+  it("leads with the deal's NAME, not with a list of its members", () => {
+    expect(fieldOf(BUNDLE, "package").optionLabels![0]).toBe("Testco credit package");
+  });
+
+  it("says what the deal AGGREGATES in one compact line, with no record id in it", () => {
+    const detail = fieldOf(BUNDLE, "package").optionDetails![0];
+    expect(detail).toBe("3 facilities · $30M committed · $18M drawn");
+    expect(detail).not.toContain(DEAL);
+  });
+
+  it("tells two deals on one relationship apart by the products booked on each", () => {
+    const twoDeals = deal([
+      facility({ loanId: "L1", name: "Revolver", productType: "Revolving Line of Credit", committed: 10_000_000 }),
+      facility({ loanId: "L9", name: "Other", productType: "Term Loan", committed: 5_000_000, productPackageId: OTHER_DEAL }),
+    ]);
+    const pkg = fieldOf(twoDeals, "package");
+    expect(pkg.editable).toBe(true);
+    expect(pkg.optionLabels).toEqual([
+      "Testco credit package · Revolving Line of Credit",
+      "Testco credit package · Term Loan",
+    ]);
   });
 
   it("is not editable when the relationship stages one deal, and says why", () => {
@@ -120,7 +149,12 @@ describe("the deal is the anchor, and it is the first thing the ticket states", 
     bare.snapshot.productPackageId = undefined;
     const pkg = fieldOf(bare, "package");
     expect(pkg.gap?.blocksStaging).toBe(true);
-    expect(pkg.gap?.reason).toContain("productPackageId is required");
+    // F4 — the sentence a banker reads carries no wire field name. The wire
+    // field name is still there, behind the toggle, for whoever has to fix it.
+    expect(pkg.gap?.reason).toContain("stages no credit package");
+    expect(pkg.gap?.reason).not.toContain("productPackageId");
+    expect(pkg.gap?.technical).toBe(PACKAGE_ANCHOR_TECHNICAL);
+    expect(pkg.gap?.technical).toContain("productPackageId");
   });
 
   it("states the deal, not a facility, in the ticket's subject", () => {
@@ -139,7 +173,30 @@ describe("the facilities are member selections inside that deal", () => {
     const f = fieldOf(BUNDLE, "facility");
     expect(f.type).toBe("multiselect");
     expect(f.options).toEqual(["L1", "L2", "L3"]);
-    expect(f.optionDetails![0]).toBe("$10M committed · $6M drawn · matures 2027-03-15 · Booked");
+    // F1 — figures on the detail line, the STAGE as a chip beside the name,
+    // and a maturity a banker reads rather than an ISO string.
+    expect(f.optionDetails![0]).toBe("$10M committed · $6M drawn · matures Mar 15, 2027");
+    expect(f.optionChips).toEqual(["Booked", "Booked", "Booked"]);
+  });
+
+  it("drops the borrower's name from every member row, since it is the headline", () => {
+    // nCino names a loan <Borrower> - <Product> - <$Amount>. Six of those in a
+    // list are six rows that differ only at the end.
+    const ncinoNames = deal([
+      facility({ loanId: "L1", name: "Testco - Line of Credit - $15,000,000.00", committed: 15_000_000 }),
+      facility({ loanId: "L2", name: "Testco - Equipment - $8,000,000.00", committed: 8_000_000 }),
+    ]);
+    expect(fieldOf(ncinoNames, "facility").optionLabels).toEqual([
+      "Line of Credit - $15,000,000.00",
+      "Equipment - $8,000,000.00",
+    ]);
+  });
+
+  it("leaves a name that only LOOKS like it starts with the borrower alone", () => {
+    // "Sterling Working Capital Revolver" under "Sterling Fabrication Co.".
+    // Half-stripping a name is worse than not stripping it.
+    const near = deal([facility({ loanId: "L1", name: "Testcorp Working Capital Revolver", committed: 1 })]);
+    expect(fieldOf(near, "facility").optionLabels).toEqual(["Testcorp Working Capital Revolver"]);
   });
 
   it("scopes the list to the CHOSEN deal and says where the others sit", () => {
@@ -249,15 +306,61 @@ describe("the requested changes carry the wire semantic they actually have", () 
     );
   });
 
-  it("never offers a member's CURRENT commitment as the new one", () => {
-    // It would satisfy the at-least-one-change rule while asking for nothing,
-    // and with several members selected it is one member's number presented as
-    // everyone's. Only a real client ask prefills it.
-    expect(fieldOf(BUNDLE, "newCommitment").value).toBeNull();
+  it("prefills the amount from the client's ask when the client made one", () => {
     const asked = deal(BUNDLE.exposure!.facilities!, [{ id: "REQ-4", ask: { from: 10_000_000, to: 14_000_000 } }]);
     const prefilled = fieldOf(asked, "newCommitment");
     expect(prefilled.value).toBe(14_000_000);
     expect(prefilled.prefill.source).toBe("CLIENT_REQUEST");
+  });
+
+  /* F5 (founder, 2026-08-25). The previous wave left this field EMPTY where no
+     client ask existed, because a prefill equal to the current figure satisfies
+     the org's at-least-one-change rule while asking for nothing. The founder
+     wants the from -> to reading, so the prefill is back and the hazard is
+     caught by name instead of avoided. */
+  it("otherwise opens on the CURRENT commitment of the member the ticket opened on", () => {
+    const f = fieldOf(BUNDLE, "newCommitment");
+    // L2 is the largest member and the one impliedFacility ticks.
+    expect(f.value).toBe(12_000_000);
+    expect(f.prefill.source).toBe("NCINO_RECORD");
+    expect(f.prefill.citation).toBe("L2");
+  });
+
+  it("stays empty when the member the ticket opened on stages no commitment", () => {
+    const noFigure = deal([facility({ loanId: "L1", name: "Revolver" })]);
+    const f = fieldOf(noFigure, "newCommitment");
+    expect(f.value).toBeNull();
+    expect(f.prefill.source).toBe("BANKER");
+  });
+
+  it("refuses a plan whose only change is the amount it already carries", () => {
+    const schema = schemaFor(BUNDLE);
+    const onPrefill = { facility: ["L2"], newCommitment: 12_000_000 };
+    expect(batchStagingGap("loan-modification", onPrefill, schema)).toBe(MODIFICATION_NO_MOVEMENT);
+    // Moving it is a change.
+    expect(batchStagingGap("loan-modification", { ...onPrefill, newCommitment: 15_000_000 }, schema)).toBeNull();
+    // So is any OTHER requested change, whatever the amount does.
+    expect(
+      batchStagingGap("loan-modification", { ...onPrefill, requestedMaturityDate: "2029-06-30" }, schema),
+    ).toBeNull();
+  });
+
+  it("says nothing about movement it cannot prove", () => {
+    // One selected member carries no committed figure, so whether the amount
+    // moves anything is unknown. Unknown is silence, never a refusal.
+    const partial = deal([
+      facility({ loanId: "L1", name: "Revolver", committed: 10_000_000 }),
+      facility({ loanId: "L2", name: "Term" }),
+    ]);
+    const schema = schemaFor(partial);
+    expect(
+      batchStagingGap("loan-modification", { facility: ["L1", "L2"], newCommitment: 10_000_000 }, schema),
+    ).toBeNull();
+  });
+
+  it("carries the committed figure per member so the ticket can read from -> to", () => {
+    const f = fieldOf(BUNDLE, "facility");
+    expect(f.optionAmounts).toEqual([10_000_000, 12_000_000, 8_000_000]);
   });
 });
 
