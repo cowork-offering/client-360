@@ -110,7 +110,13 @@ rehearsed on Hartwell through our own tools. Decision surfaced to Fabian: execut
 UNHELD in the cockpit (org guards intact) since the email fence was relaxed; re-hold is one line if wanted.
 Evidence: EVIDENCE-SEPT4.md + ws05-side-findings*.md.
 
-### WS1 — KYC full stage/approve loop (Aug 23-27) · Archy · GATE G1
+### WS1 — KYC loop · DOWNGRADED TO STRETCH (Fabian, 2026-08-25): C360 core is the priority, KYC is
+nice-to-have. Build only if time remains after G3 and rehearsals. Kept ready: gateway reconnected,
+read envelopes observed 2026-08-25 (get_customer, get_customer360 incl. two hidden-required quirks,
+demo personas DemoHappy/DemoPep/DemoSanctions/DemoHighRisk found). G1 is no longer a gate on the
+critical path; the cockpit KYC zone keeps its honest self-gating display.
+
+### WS1-original (for reference) — KYC full stage/approve loop · Archy
 The cockpit KYC & Onboarding zone goes from display to workable. The IDB gateway staging tools
 already exist as connector tools (get_customer360, stage/approve address + name change, sanctions,
 adverse media, service requests, change audit). Work: wire the zone to live calls on BOTH surfaces,
