@@ -1,6 +1,6 @@
 ---
 name: customer-360-cockpit
-description: Open the Customer 360 relationship cockpit — a worklist-first commercial-credit control center. Fetches the book and the needs-action accounts from Salesforce (nCino + FSC) via the Customer360 MCP server plus Boom-spread financials, composes C360_DATA, and renders a prebuilt interactive Cowork artifact (needs-action queue, activity/audit trail, exposure, covenants, relationship graph, whitespace, structural signals) with a chat FAB and a Client Actions panel. Trigger on "customer 360", "open the cockpit", "pull up the relationship view", "what needs my attention", "relationship overview for <account>", or any account-level portfolio question.
+description: Open the Customer 360 relationship cockpit, a worklist-first commercial-credit control center. Fetches the book and the needs-action accounts from Salesforce (nCino + FSC) via the 9 read tools of the 24-tool Customer360 MCP server plus Boom-spread financials, composes C360_DATA, and renders a prebuilt interactive Cowork artifact (needs-action queue, activity/audit trail, exposure, covenants, relationship graph, whitespace, structural signals) with a chat FAB and a Client Actions panel. This is the read and render skill; the 15 governed write tools run through the guided skills. Trigger on "customer 360", "open the cockpit", "pull up the relationship view", "what needs my attention", "relationship overview for <account>", or any account-level portfolio question.
 ---
 
 # Customer 360 Cockpit (v3)
@@ -41,9 +41,11 @@ Customer360 tools.** A wrong committed-exposure figure in front of a banker is w
 
 ## The MCP surfaces
 
-**Customer360** — Salesforce-hosted, per-user OAuth, read-only. Tool names derive from the Apex class
-(`aa:apex-{ClassName}`), so match by the **class-name suffix** — the host may namespace it
-(`customer360__Customer360Snapshot`). Never hardcode a prefix.
+**Customer360**: Salesforce-hosted, per-user OAuth, **24 tools: 9 reads plus 15 governed write
+tools**. Tool names derive from the Apex class (`aa:apex-{ClassName}`), so match by the **class-name
+suffix**, since the host may namespace it (`customer360__Customer360Snapshot`). Never hardcode a prefix.
+
+### Reads (9): everything this skill fetches
 
 | Tool | Returns |
 |---|---|
@@ -52,9 +54,25 @@ Customer360 tools.** A wrong committed-exposure figure in front of a banker is w
 | `Customer360Snapshot` | per-account rollup (rating, stage, revenue, TCE/TBE/TOE, outstanding, packageCount) |
 | `Customer360RelationshipGraph` | `connections[]`, `legalEntities[]`, `note` |
 | `Customer360Exposure` | totals + `facilities[]` each with `collateral[]` |
-| `Customer360Covenants` | `covenants[]`, `note` |
+| `Customer360Covenants` | `covenants[]`, `note`, plus `latestComplianceStatus` and `reasonForException` per covenant |
 | `Customer360Opportunities` | `opportunities[]`, `note` |
 | `Customer360StructuralSignals` | `modifications[]`, `modificationClusterFlag`, `renewals[]`, `maturityWatch[]`, `guarantorSignals[]`, `note` |
+| `Customer360ActionHistory` | governed actions already run against the account (`accountId` required, `maxResults` default 50, max 200, newest first) |
+
+### Governed writes (15): never called by this skill
+
+Seven `stage_*` / `execute_*` pairs plus one stage-only tool:
+
+`stage_loan_modification` · `execute_loan_modification` · `stage_covenant_review` ·
+`execute_covenant_review` · `stage_collateral_valuation` · `execute_collateral_valuation` ·
+`stage_service_request` · `execute_service_request` · `stage_annual_review` ·
+`execute_annual_review` · `stage_risk_rating_review` · `execute_risk_rating_review` ·
+`stage_new_facility` · `execute_new_facility` · `stage_renewal`
+
+**This skill renders. It does not write.** Every write runs through a guided skill, under the write
+discipline in `agents/customer-360.md`: stage, present the org's plan and warnings verbatim, the
+banker confirms in words, execute with the five-field payload, verify by re-query. See the ACTIONS
+section below for the routing.
 
 **Boom** — `boom_get_ratios` + `boom_get_spread` for the Financials tab.
 
@@ -271,6 +289,25 @@ ratio definitions; the bank's *contractual* ones are nCino-owned and can differ 
 averages, pro-forma adjustments). A `diverges` result is a **review flag for effective challenge,
 never a breach determination.** Never present divergence as a covenant breach.
 
+### Compliance status semantics: Exception is not a breach
+
+`Customer360Covenants` returns `latestComplianceStatus` and `reasonForException` per covenant. Read
+both. The org's compliance status picklist offers exactly `Compliant`, `Exception`, `In Progress`,
+`Pending`, `Waived`, and carries **no separate non-compliant value**. `Reason for Exception` offers
+exactly `Breached` and `Overdue`.
+
+| Data | Meaning | Render and narrate as |
+|---|---|---|
+| `Exception` + reason `Breached` | measured, and the test failed | "Exception, reason Breached". Ranks with the `Breached` flag |
+| `Exception` + reason `Overdue` | the document or statement was not delivered by the due date | "Exception, reason Overdue". Administrative, explicitly |
+| `Exception`, no reason | nCino's own batch forces Exception onto any row past its due date, measured or not | "Exception, reason not recorded". **Never** a breach |
+| `Waived` | its own neutral state; it **outranks the arithmetic** | "Waived" |
+| `Pending` / `In Progress` | arrival states, not verdicts | neither compliant nor in breach |
+
+In this org 101 of 140 Exception rows carry no measured value at all, so a bare "in breach" on
+`Exception` is wrong on the facts. An unmapped status renders verbatim. The covenant-level status,
+not the compliance-row status, still drives the classification kind.
+
 ---
 
 ## RENDER
@@ -352,20 +389,35 @@ are well-formed instructions naming the account and id:
 
 | Prompt | Route to |
 |---|---|
-| `Draft the credit memo for <name> (<id>).` | the credit-memo agent flow |
-| `Pull up the Boom spreads for <name> (<id>).` | `boom_get_spread` + `boom_get_ratios` |
-| `Run a covenant review for <name> (<id>) — …` | `Customer360Covenants` + the Boom challenge read |
-| `Re-value the pledged collateral for <name> (<id>) …` | `Customer360Exposure` collateral analysis |
-| `Start a loan modification for <name> (<id>) — …` | modification prep / analysis |
-| `Begin the renewal workflow for <name> (<id>) — …` | renewal prep / analysis |
-| `Run the annual credit review for <name> (<id>).` | full review across the staged bundle |
-| `Review the risk rating for <name> (<id>) …` | rating rationale from live figures |
-| `Structure a new facility request for <name> (<id>).` | structuring analysis |
-| `Create a service request for <name> (<id>).` | servicing prep |
+| `Draft the credit memo for <name> (<id>).` | the credit-memo plugin, as a call-out. Never rebuilt here |
+| `Generate the spreading for <name> (<id>).` | the credit-memo plugin, as a call-out |
+| `Pull up the Boom spreads for <name> (<id>).` | `boom_get_spread` + `boom_get_ratios`, then a short prose read |
+| `Run a covenant review for <name> (<id>) — …` | the **`covenant-review`** skill |
+| `Re-value the pledged collateral for <name> (<id>) …` | the **`collateral-valuation`** skill |
+| `Start a loan modification for <name> (<id>) — …` | the **`client-request-to-action`** skill |
+| `Begin the renewal workflow for <name> (<id>) — …` | the **`relationship-actions`** skill, renewal workflow. **Stages only** |
+| `Run the annual credit review for <name> (<id>).` | the **`relationship-actions`** skill, annual review workflow |
+| `Review the risk rating for <name> (<id>) …` | the **`relationship-actions`** skill, risk rating workflow |
+| `Structure a new facility request for <name> (<id>).` | the **`relationship-actions`** skill, new facility workflow |
+| `Create a service request for <name> (<id>).` | the **`relationship-actions`** skill, service request workflow |
 
-**Until v2 gated writes exist, every action is analysis and preparation only.** Never claim a record
-was created, a memo filed, a modification staged, or anything written to nCino. Produce the analysis,
-say what the banker would need to approve, and stop. Claiming a write that did not happen is the
+**Governed writes exist, and they are governed.** Every one of them stages first, shows the org's plan
+and every warning verbatim, waits for the banker's confirmation in words, executes behind a single-use
+decision token bound to the running identity, and verifies by re-query. The guided skills carry that
+methodology; this skill never calls a `stage_*` or `execute_*` tool itself.
+
+**What a completed write does and does not mean:**
+
+- a modification produces a **clone facility at Qualification**. It is not booked, approved or funded.
+  Booking is nCino's own Submit for Approval run, which `Loan_Validation_06` enforces with no
+  permission bypass;
+- a new facility advances **one step, to Proposal**, across two execute invocations;
+- a **renewal stages and stops**. No `execute_renewal` exists;
+- a valuation is filed and the **collateral value does not move**;
+- a covenant assessment updates an existing compliance row and **creates none**.
+
+**Never claim a write that did not happen.** If a plan was staged and not executed, say "staged, not
+filed". If the org held it, report `heldReason` verbatim. Claiming a write that did not happen is the
 single worst failure mode in this skill.
 
 ---

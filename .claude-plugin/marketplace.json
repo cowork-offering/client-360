@@ -7,7 +7,7 @@
     {
       "name": "client-360",
       "source": "./client-360",
-      "description": "Customer 360 relationship cockpit \u2014 worklist-first React artifact over the Salesforce-hosted Customer360 MCP data plane (23 tools: 9 reads + stage/execute write pairs, per-user OAuth): needs-action queue, activity audit trail, covenant effective-challenge, page-agnostic AI chat, data-gated Client Actions."
+      "description": "Customer 360 relationship cockpit — a worklist-first React artifact plus a natural-chat layer over the Salesforce-hosted Customer360 MCP data plane (24 tools: 9 reads plus 7 governed stage/execute write pairs and one stage-only renewal, per-user OAuth). Needs-action queue, activity audit trail, covenant effective-challenge, page-agnostic AI chat, data-gated Client Actions, and guided workflows for client-request-to-action, package-scoped covenant review, collateral valuation and relationship actions. Every write stages first, shows the org's warnings verbatim, and executes only on a named human's confirmation."
     }
   ]
 }
