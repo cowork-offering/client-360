@@ -371,6 +371,64 @@ function MultiSelectRows({
   );
 }
 
+/* ------------------------------------------------------------ deal header */
+
+/**
+ * THE DEAL, AT THE TOP, ALWAYS.
+ *
+ * A package-anchored action runs on ONE product package and covers the members
+ * selected inside it. Rendering the deal as one pill among the properties put
+ * the anchor below the values it governs and left the ticket reading like a
+ * single-record form. This states it first: what the deal is, what it
+ * aggregates, and — only when the relationship stages more than one — a way to
+ * change it.
+ */
+function DealHeader({
+  field,
+  value,
+  chip,
+  onOpen,
+}: {
+  field: PanelField;
+  value: unknown;
+  chip: ReactNode;
+  onOpen: () => void;
+}) {
+  const i = (field.options ?? []).indexOf(String(value));
+  // A relationship staging no package has nothing to head the ticket with, and
+  // the field's own blocking gap already says so above. Two statements of one
+  // fact is one too many.
+  if (i < 0) return null;
+  const label = field.optionLabels?.[i] ?? String(value);
+  const detail = field.optionDetails?.[i];
+
+  return (
+    <div className="rounded-[12px] border px-4 py-3" style={{ borderColor: "var(--accent)", background: "var(--accent-wash)" }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="kicker">{field.label}</span>
+        {chip}
+        {field.editable && (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="c360-press ml-auto rounded-md px-2 py-0.5 text-[11px] font-semibold"
+            style={{ color: "var(--accent)" }}
+          >
+            Change deal
+          </button>
+        )}
+      </div>
+      <div className="mt-1 text-[13px] font-bold leading-snug text-ink">{label}</div>
+      {/* Member count, committed and drawn — derived from the staged rows, so
+          the header states what the deal IS rather than naming it. */}
+      {detail && <div className="mt-0.5 text-[11px] leading-relaxed text-ink-muted">{detail}</div>}
+      {!field.editable && field.editableReason && (
+        <div className="mt-0.5 text-[10.5px] text-ink-faint">{field.editableReason}</div>
+      )}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- narrative */
 
 function NarrativeCard({
@@ -530,6 +588,18 @@ export function DealTicket({
   const factTitle = actionId === "annual-review" ? "What this review covers" : "The rating position";
   const blockingGaps = schema.fields.filter((f) => f.gap);
 
+  /** The three shapes a pill key can take, split once so each renders in the
+   *  place its meaning belongs: the deal anchors the ticket, the member lists
+   *  say what the action covers, and everything else is a property. */
+  const owned = ticket.pillKeys.map((key) => byKey.get(key)).filter((f): f is PanelField => Boolean(f));
+  // Read off the SCHEMA, not the briefing's reading order: a relationship with
+  // one package gives the banker nothing to choose, and the anchor is still the
+  // first thing they need to see. The header renders it as context there; the
+  // "Change deal" affordance appears only where there is a choice.
+  const deal = byKey.get("package");
+  const multiSelects = owned.filter((f) => f.type === "multiselect");
+  const properties = owned.filter((f) => f !== deal && f.type !== "multiselect");
+
   useEffect(() => {
     sheetCloserRef.current = sheetKey ? () => setSheetKey(null) : null;
     return () => {
@@ -554,6 +624,44 @@ export function DealTicket({
           style={{ background: "var(--warning-bg)", color: "var(--warning)" }}
         >
           {f.gap!.reason}
+        </div>
+      ))}
+
+      {/* The deal first: a package-anchored action's anchor is not a property. */}
+      {deal && (
+        <DealHeader
+          field={deal}
+          value={values[deal.key]}
+          chip={renderChip(deal, editedFields.includes(deal.key))}
+          onOpen={() => setSheetKey(deal.key)}
+        />
+      )}
+
+      {/* Then the members it acts on. ABOVE the hero deliberately: the banker
+          picks what the action covers before the value that carries it, and a
+          hero over an unread member list is what made a package-anchored ticket
+          read like a single-record form. */}
+      {multiSelects.map((f) => (
+        <div key={f.key} className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="kicker">{f.label}</span>
+            {renderChip(f, editedFields.includes(f.key))}
+          </div>
+          <MultiSelectRows
+            field={f}
+            selected={Array.isArray(values[f.key]) ? (values[f.key] as string[]) : []}
+            values={values}
+            onToggle={(id) => {
+              const now = Array.isArray(values[f.key]) ? (values[f.key] as string[]) : [];
+              onChange(f, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]);
+            }}
+            onItemValue={(input, id, v) => {
+              const map = { ...((values[input.valueKey] as Record<string, unknown>) ?? {}) };
+              if (v === null) delete map[id];
+              else map[id] = v;
+              onValueMap?.(input.valueKey, map);
+            }}
+          />
         </div>
       ))}
 
@@ -618,52 +726,20 @@ export function DealTicket({
       {/* The review's equivalent: what it will cover, from staged data only. */}
       {facts.length > 0 && <FactStrip title={factTitle} facts={facts} />}
 
-      {/* Multi-selects: the records this action acts on. */}
-      {ticket.pillKeys
-        .map((key) => byKey.get(key))
-        .filter((f): f is PanelField => Boolean(f) && f!.type === "multiselect")
-        .map((f) => (
-          <div key={f.key} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="kicker">{f.label}</span>
-              {renderChip(f, editedFields.includes(f.key))}
-            </div>
-            <MultiSelectRows
-              field={f}
-              selected={Array.isArray(values[f.key]) ? (values[f.key] as string[]) : []}
-              values={values}
-              onToggle={(id) => {
-                const now = Array.isArray(values[f.key]) ? (values[f.key] as string[]) : [];
-                onChange(f, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]);
-              }}
-              onItemValue={(input, id, v) => {
-                const map = { ...((values[input.valueKey] as Record<string, unknown>) ?? {}) };
-                if (v === null) delete map[id];
-                else map[id] = v;
-                onValueMap?.(input.valueKey, map);
-              }}
-            />
-          </div>
-        ))}
-
       {/* Properties. */}
-      {ticket.pillKeys.length > 0 && (
+      {properties.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
-          {ticket.pillKeys.map((key) => {
-            const field = byKey.get(key);
-            if (!field || field.type === "multiselect") return null;
-            return (
-              <Pill
-                key={key}
-                field={field}
-                value={values[key]}
-                prompt={promptFor(briefing, key)}
-                chip={renderChip(field, editedFields.includes(key))}
-                onOpen={() => setSheetKey(key)}
-                onChange={(v) => onChange(field, v)}
-              />
-            );
-          })}
+          {properties.map((field) => (
+            <Pill
+              key={field.key}
+              field={field}
+              value={values[field.key]}
+              prompt={promptFor(briefing, field.key)}
+              chip={renderChip(field, editedFields.includes(field.key))}
+              onOpen={() => setSheetKey(field.key)}
+              onChange={(v) => onChange(field, v)}
+            />
+          ))}
         </div>
       )}
 

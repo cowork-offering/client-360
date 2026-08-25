@@ -220,8 +220,13 @@ describe("wave 2 — the modification's delta drama", () => {
     boom: { ratios: { ebitda: 5_000_000, totalLeverage: 2.0 } },
   };
 
+  /** The selection is part of the question now: `requestedAmount` is applied to
+   *  every member of `facilityIds`, so a delta computed without knowing which
+   *  members were named is a number about nothing. */
+  const one = { newCommitment: 13_000_000, facility: ["a1X1"] };
+
   it("moves commitment, coverage and leverage together", () => {
-    const d = ticketDeltas("loan-modification", bundle, { newCommitment: 13_000_000 });
+    const d = ticketDeltas("loan-modification", bundle, one);
     expect(d.map((x) => x.label)).toEqual(["Commitment", "Collateral coverage", "Total leverage"]);
     expect(d[0]).toMatchObject({ before: "$10M", after: "$13M", direction: "up" });
     // 12.0M lendable over 13.0M committed.
@@ -232,29 +237,96 @@ describe("wave 2 — the modification's delta drama", () => {
   });
 
   it("restates leverage on unchanged earnings, and says so", () => {
-    const d = ticketDeltas("loan-modification", bundle, { newCommitment: 13_000_000 });
+    const d = ticketDeltas("loan-modification", bundle, one);
     expect(d[2].note).toContain("earnings unchanged");
   });
 
   it("drops the leverage line when Boom staged no EBITDA to restate on", () => {
     const noBoom = structuredClone(bundle);
     delete noBoom.boom;
-    const d = ticketDeltas("loan-modification", noBoom, { newCommitment: 13_000_000 });
+    const d = ticketDeltas("loan-modification", noBoom, one);
     expect(d.map((x) => x.label)).toEqual(["Commitment", "Collateral coverage"]);
   });
 
   it("drops the coverage line when a lendable value is missing, never treating it as zero", () => {
     const partial = structuredClone(bundle);
     delete partial.exposure!.facilities![0].totalLendableValue;
-    expect(ticketDeltas("loan-modification", partial, { newCommitment: 13_000_000 }).map((x) => x.label)).toEqual([
+    expect(ticketDeltas("loan-modification", partial, one).map((x) => x.label)).toEqual([
       "Commitment",
       "Total leverage",
     ]);
   });
 
   it("says nothing until a new commitment is entered", () => {
-    expect(ticketDeltas("loan-modification", bundle, {})).toEqual([]);
-    expect(ticketDeltas("loan-modification", bundle, { newCommitment: 0 })).toEqual([]);
+    expect(ticketDeltas("loan-modification", bundle, { facility: ["a1X1"] })).toEqual([]);
+    expect(ticketDeltas("loan-modification", bundle, { newCommitment: 0, facility: ["a1X1"] })).toEqual([]);
+  });
+
+  it("says nothing until a facility is named, whatever the commitment", () => {
+    // A modification with no member is not a plan, so it is not a delta either.
+    expect(ticketDeltas("loan-modification", bundle, { newCommitment: 13_000_000 })).toEqual([]);
+    expect(ticketDeltas("loan-modification", bundle, { newCommitment: 13_000_000, facility: [] })).toEqual([]);
+  });
+
+  /* ------------------------------------------------- the aggregated reading */
+
+  const pkg: BorrowerBundle = {
+    snapshot: { accountId: "001X" },
+    exposure: {
+      totalCommitted: 20_000_000,
+      totalOutstanding: 12_000_000,
+      facilities: [
+        { loanId: "a1X1", name: "Revolver", committed: 10_000_000, totalLendableValue: 12_000_000 },
+        { loanId: "a1X2", name: "Term Loan", committed: 6_000_000, totalLendableValue: 6_000_000 },
+        { loanId: "a1X3", name: "CapEx", committed: 4_000_000, totalLendableValue: 4_000_000 },
+      ],
+    },
+    boom: { ratios: { ebitda: 5_000_000, totalLeverage: 2.0 } },
+  };
+
+  it("aggregates the commitment move across the SELECTED members, not the relationship", () => {
+    // Two members at 10.0M and 6.0M, each asked to move to 8.0M: 16.0M becomes
+    // 16.0M of selection. The relationship total does not move at all, which is
+    // the case the old single-facility reading got most spectacularly wrong.
+    const d = ticketDeltas("loan-modification", pkg, { newCommitment: 8_000_000, facility: ["a1X1", "a1X2"] });
+    expect(d[0]).toMatchObject({ before: "$16M", after: "$16M", direction: "flat" });
+    expect(d[0].note).toBe("across 2 selected facilities, each moving to $8M");
+  });
+
+  it("prices coverage and leverage off the relationship's commitment AFTER the change", () => {
+    // Two members at 6.0M and 4.0M moving to 9.0M each: +8.0M on a 20.0M book,
+    // so 28.0M committed and 22.0M lendable against it.
+    const d = ticketDeltas("loan-modification", pkg, { newCommitment: 9_000_000, facility: ["a1X2", "a1X3"] });
+    expect(d[0]).toMatchObject({ before: "$10M", after: "$18M", direction: "up" });
+    expect(d[1]).toMatchObject({ before: "1.10×", after: "0.79×", direction: "down" });
+    expect(d[1].note).toContain("$28M commitment after this");
+    // +8.0M of debt on 5.0M of EBITDA: 2.00x becomes 3.60x.
+    expect(d[2]).toMatchObject({ before: "2.00x", after: "3.60x", direction: "down" });
+  });
+
+  it("names the single selected facility rather than talking about the relationship", () => {
+    const d = ticketDeltas("loan-modification", pkg, { newCommitment: 12_000_000, facility: ["a1X3"] });
+    expect(d[0]).toMatchObject({ before: "$4M", after: "$12M" });
+    expect(d[0].note).toBe("on CapEx");
+  });
+
+  it("counts a member named twice once, the way the payload dedupes it", () => {
+    const d = ticketDeltas("loan-modification", pkg, { newCommitment: 12_000_000, facility: ["a1X3", "a1X3"] });
+    expect(d[0]).toMatchObject({ before: "$4M", after: "$12M" });
+  });
+
+  it("withholds everything when a selected member carries no commitment figure", () => {
+    // A missing commitment is not a zero. Summing it as one would report a
+    // relationship total that no row on the screen adds up to.
+    const partial = structuredClone(pkg);
+    delete partial.exposure!.facilities![1].committed;
+    expect(ticketDeltas("loan-modification", partial, { newCommitment: 8_000_000, facility: ["a1X1", "a1X2"] })).toEqual(
+      [],
+    );
+  });
+
+  it("withholds everything when a selected id is not a facility this read stages", () => {
+    expect(ticketDeltas("loan-modification", pkg, { newCommitment: 8_000_000, facility: ["a1X1", "nope"] })).toEqual([]);
   });
 
   it("adds a new facility to the book total", () => {
@@ -394,8 +466,16 @@ describe("the delta readout on the distinct-collateral basis", () => {
   });
 
   it("prices a modification against the same distinct-collateral base", () => {
-    const deltas = ticketDeltas("loan-modification", bundle, { newCommitment: 20_000_000 });
+    // The relationship's one facility carries the whole commitment, so the
+    // selection IS the book and the coverage denominator is the ask itself.
+    const sole = structuredClone(bundle);
+    sole.exposure!.facilities![0].committed = 17_500_000;
+    const deltas = ticketDeltas("loan-modification", sole, {
+      newCommitment: 20_000_000,
+      facility: ["a4Zbb000001vaxREAQ"],
+    });
     const coverage = deltas.find((d) => d.label === "Collateral coverage")!;
     expect(coverage.note).toContain("$14M lendable");
+    expect(coverage.note).toContain("$20M commitment after this");
   });
 });

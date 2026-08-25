@@ -282,21 +282,45 @@ function facilityChange(b: BorrowerBundle | null, name: string, kind: "modificat
     };
   }
 
+  // PACKAGE FIRST. The subject states the DEAL — what it aggregates, what it
+  // carries and how much is drawn — because that is what the action runs on.
+  // The facilities are member selections inside it.
+  const deals = packageRecords(b);
+  const members = booked.length;
+  const committed = money(b?.exposure?.totalCommitted, "borrower.exposure.totalCommitted", figures);
+  const scale = [
+    members ? `${members} booked ${members === 1 ? "facility" : "facilities"} can carry it` : null,
+    committed ? `${committed} committed` : null,
+    drawn ? `${drawn} drawn` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return {
     subject: {
-      title: `Modification for ${name}`,
-      context: `${drawn ? `${drawn} is drawn today. ` : ""}${only && !picks ? `${only} is the booked facility on this relationship. ` : ""}${held}`,
+      title: `Modification on ${name}'s deal`,
+      context: [
+        scale ? `This deal: ${scale}.` : null,
+        "One plan covers every facility you select, under a single confirmation and a single decision token.",
+        "Each requested change below is applied to each selected facility.",
+        held,
+      ]
+        .filter(Boolean)
+        .join(" "),
     },
     lead: [
       t("This modifies "),
       f("facility", "choose the facilities"),
-      t(", moving the commitment to "),
+      ...(deals.length > 1 ? [t(" on "), f("package", "choose the deal")] : [t(" on this deal")]),
+      t(". Each selected facility moves to "),
       f("newCommitment", "enter the new commitment"),
-      t(" over "),
+      t(", maturing "),
+      f("requestedMaturityDate", "pick the new maturity"),
+      t(", over "),
       f("requestedTermMonths", "enter the term"),
       t(" months at "),
       f("requestedRate", "enter the rate"),
-      t(" percent."),
+      t(" percent. Any one of the four is enough; the org refuses a plan that asks for none of them."),
     ],
     figures,
     sections: ["modificationReason"],

@@ -551,6 +551,12 @@ describe("wave 2 — the five new tickets", () => {
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
+  /** The org refuses a modification that asks for nothing, and so does the
+   *  ticket. A relationship with no staged client ask therefore opens with an
+   *  empty commitment, and a test about the WIRE has to name a change first. */
+  const askForACommitment = (amount = "20000000") =>
+    setInput(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, amount);
+
   // One mount per case: the harness keeps a single root, so looping mounts
   // inside one test would leave four orphaned trees in the document.
   it.each(["New Facility Request", "Risk Rating Review", "Covenant Review"])("opens a ticket for %s", (label) => {
@@ -631,6 +637,7 @@ describe("wave 2 — the five new tickets", () => {
     // Tick the second booked facility. Both are in the same package, so this is
     // one credit action over two facilities, which is how nCino frames it.
     click(boxes[1]);
+    askForACommitment();
     click(byText(/Review the plan/)!);
     await flush();
 
@@ -641,16 +648,58 @@ describe("wave 2 — the five new tickets", () => {
     expect(body.facilityIds).toHaveLength(2);
     // Never both keys: the tool refuses a mixed shape.
     expect("loanId" in body).toBe(false);
+    // ONE scalar for the whole selection: that is what the wire carries and
+    // what the ticket says it does.
+    expect(body.requestedAmount).toBe(20_000_000);
   });
 
-  it("keeps the flat loanId shape when exactly one facility is selected", async () => {
+  it("names ONE facility as a member too, because the ticket is package-first", async () => {
+    // The flat `loanId` is still a supported shape on the wire and renewal
+    // still sends it. THIS ticket does not: a modification runs on the deal and
+    // covers the members named inside it, and one member is a selection of one.
     const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
     openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    askForACommitment();
+    click(byText(/Review the plan/)!);
+    await flush();
+    const body = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_")));
+    expect(body.facilityIds).toHaveLength(1);
+    expect("loanId" in body).toBe(false);
+    expect(typeof body.productPackageId).toBe("string");
+  });
+
+  it("keeps the flat loanId shape on a RENEWAL of exactly one facility", async () => {
+    const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
+    openActionPanel("Renewal", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    const p = panel("Renewal")!;
+    setInput(p.querySelector("#hero-newMaturityDate")!, "2029-06-30");
     click(byText(/Review the plan/)!);
     await flush();
     const body = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_")));
     expect(typeof body.loanId).toBe("string");
     expect("facilityIds" in body).toBe(false);
+  });
+
+  it("refuses a modification that asks for nothing, in the org's own words", async () => {
+    const callTool = installWriteMcp({ stage: FLAT_FACILITY_PLAN });
+    // Kingsley stages no client ask, so the ticket opens with every requested
+    // change empty — which is exactly the plan StageLoanModification throws on.
+    openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    const p = panel("Loan Modification")!;
+    expect(p.textContent).toContain("At least one requested change is required: amount, maturity date, rate or term.");
+    expect(byText(/Review the plan/)!.hasAttribute("disabled")).toBe(true);
+    await flush();
+    expect(callTool.mock.calls.filter((c) => String(c[1]).startsWith("stage_"))).toHaveLength(0);
+
+    // Any one of the four lifts it. The maturity date is the one the ticket
+    // could not ask for at all before this wave.
+    setInput(panel("Loan Modification")!.querySelector('input[type="date"]')!, "2029-06-30");
+    expect(panel("Loan Modification")!.textContent).not.toContain("At least one requested change is required");
+    click(byText(/Review the plan/)!);
+    await flush();
+    expect(inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("stage_"))).requestedMaturityDate).toBe(
+      "2029-06-30",
+    );
   });
 
   it("blocks an EMPTY selection in the ticket, before anything is sent", async () => {
@@ -670,6 +719,7 @@ describe("wave 2 — the five new tickets", () => {
     installWriteMcp({ stage: MULTI_FACILITY_PLAN });
     openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
     click([...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')][1]);
+    askForACommitment();
     click(byText(/Review the plan/)!);
     await flush();
 
@@ -702,6 +752,7 @@ describe("wave 2 — the five new tickets", () => {
       },
     });
     openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
+    askForACommitment();
     click(byText(/Review the plan/)!);
     await flush();
     // Verbatim: a refusal from this tool is banker-readable by design, and
@@ -756,6 +807,34 @@ describe("wave 2 — the five new tickets", () => {
     )!;
     expect(row.hasAttribute("disabled")).toBe(true);
     expect(row.textContent).toContain("Facility stages are not staged in this view");
+  });
+
+  it("reads deal, then members, then the changes — not amount first", () => {
+    // The founder's complaint about the old ticket was an ORDER complaint: the
+    // hero amount sat above an unread facility list, so a package-anchored
+    // action read as a single-loan form.
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    const text = panel("Loan Modification")!.textContent ?? "";
+    const at = (s: string) => text.indexOf(s);
+    expect(at("Deal")).toBeGreaterThan(-1);
+    expect(at("Deal")).toBeLessThan(at("Facilities in this credit action"));
+    expect(at("Facilities in this credit action")).toBeLessThan(at("New commitment"));
+    // The header states what the deal aggregates, since no package name exists.
+    expect(text).toContain("2 facilities · $18M committed · $16.90M drawn");
+    // And every change says where it lands.
+    expect(text).toContain("Applies to EACH selected facility");
+  });
+
+  it("preselects the facility the client's ask is about, and leaves the rest choosable", () => {
+    // Sterling asked to move a 10.0M facility to 13.0M. That is the revolver,
+    // and the equipment loan stays available rather than being ruled out.
+    openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
+    const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes.filter((b) => b.checked).map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Sterling Working Capital Revolver",
+    ]);
+    expect(boxes).toHaveLength(2);
+    expect(boxes.every((b) => !b.disabled)).toBe(true);
   });
 
   it("prefills the modification from the client's own ask", () => {

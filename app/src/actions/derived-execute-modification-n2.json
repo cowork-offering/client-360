@@ -1,0 +1,144 @@
+{
+ "_derivation": {
+  "status": "DERIVED, NOT OBSERVED",
+  "why": "The N=2 execute round trip WAS run live on 2026-08-25 and its outcome is recorded in knowledge/EVIDENCE-SEPT4.md, section 'Multi-facility package-anchored modification PROVEN': one package anchor, two member facilities, one plan of 8 steps, one token, one approval, two clones at Qualification with maturity 2027-09-30 applied, junction chains RL-00000205 and RL-00000206, both parents untouched, then rolled back to zero residue. The response BODY of that run was not archived, so this file reconstructs it rather than quoting it.",
+  "built_from": [
+   "app/src/actions/observed-facilityIds-envelopes.json :: package_anchored_modification_multi \u2014 the OBSERVED N=2 stage plan (stagingId, planHash, 8 steps, facilities[]), quoted unchanged",
+   "app/src/actions/observed-execute-loan-modification-envelopes.json :: execute_loan_modification \u2014 the OBSERVED N=1 execute response, whose per-facility field set (cloneLoanId, cloneName, cloneStage, junctionName, revisionNumber, parentUnchanged, appliedChanges, verification, outcome) is repeated here per member",
+   "knowledge/EVIDENCE-SEPT4.md \u2014 the recorded N=2 outcome: 2 clones, maturity 2027-09-30, RL-00000205/206"
+  ],
+  "unverified": [
+   "cloneLoanId values are placeholders. The real ids were deleted with the rollback and were never archived.",
+   "junctionId is null here. The N=1 envelope carries one; the N=2 run's junction record ids were not archived.",
+   "cloneLookupKey is null here. nCino derives it from the parent's key and the revision; the N=2 values were not archived.",
+   "cloneName repeats the parent's name. The org renames a clone on creation, so the real names differed.",
+   "The exact wording of the batch-level `outcome` string for N>1 has never been read off the wire."
+  ],
+  "use": "Rendering only. Nothing in this file may be cited as observed wire behaviour."
+ },
+ "execute_loan_modification_n2": {
+  "request": {
+   "inputs": [
+    {
+     "idempotencyKey": "DERIVED-N2",
+     "stagingId": "a8abb00001KyVHvAAN",
+     "planHash": "e7c56fb8e9dc46127cd7ded443ebac2b34502a486c63e5701cd64d5a37edf52d",
+     "decisionToken": "4ff2bdc34b855bc059ee32aea036ab362e72a86b9e0edf5d55cd986d837bcfdb",
+     "approverUserId": "005bb00000ftouDAAQ"
+    }
+   ]
+  },
+  "response": [
+   {
+    "actionName": "ExecuteLoanModification",
+    "errors": null,
+    "isSuccess": true,
+    "outputValues": {
+     "error": null,
+     "ok": true,
+     "result": {
+      "stagingId": "a8abb00001KyVHvAAN",
+      "terminalState": "success",
+      "replayed": false,
+      "recordName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+      "productPackageId": "a5Fbb000000IHFJEA4",
+      "outputPackageId": "a5Fbb000000IHFJEA4",
+      "cloneLoanId": "a4Zbb000002DRV1EAS",
+      "facilityCount": 2,
+      "facilities": [
+       {
+        "facilityId": "a4Zbb0000027MaYEAU",
+        "facilityName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+        "cloneLoanId": "a4Zbb000002DRV1EAS",
+        "cloneName": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+        "cloneStage": "Qualification",
+        "cloneLookupKey": null,
+        "junctionId": null,
+        "junctionName": "RL-00000205",
+        "revisionNumber": 1,
+        "parentUnchanged": true,
+        "appliedChanges": "Maturity date reads back at 2027-09-30.",
+        "verification": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000205 records revision 1; the parent re-reads unchanged at Booked / Open.",
+        "outcome": "Modification created from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 at stage Qualification. Maturity date reads back at 2027-09-30. The parent was not touched."
+       },
+       {
+        "facilityId": "a4Zbb0000027Mp3EAE",
+        "facilityName": "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+        "cloneLoanId": "a4Zbb000002DRV2EAS",
+        "cloneName": "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+        "cloneStage": "Qualification",
+        "cloneLookupKey": null,
+        "junctionId": null,
+        "junctionName": "RL-00000206",
+        "revisionNumber": 1,
+        "parentUnchanged": true,
+        "appliedChanges": "Maturity date reads back at 2027-09-30.",
+        "verification": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000206 records revision 1; the parent re-reads unchanged at Booked / Open.",
+        "outcome": "Modification created from Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00 at stage Qualification. Maturity date reads back at 2027-09-30. The parent was not touched."
+       }
+      ],
+      "outcome": "2 modifications created on the package, both at stage Qualification, both with maturity 2027-09-30 applied. Chain rows RL-00000205 and RL-00000206 record the revisions. Neither parent was touched. Booking either clone requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved.",
+      "steps": [
+       {
+        "id": "credit_action_0",
+        "type": "write",
+        "label": "Invoke the modification credit action on the package for Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+        "state": "verified",
+        "detail": "nCino created modification facility a4Zbb000002DRV1EAS from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00."
+       },
+       {
+        "id": "verify_clone_0",
+        "type": "verification",
+        "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 and its junction row",
+        "state": "verified",
+        "detail": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000205 records revision 1; the parent re-reads unchanged at Booked / Open."
+       },
+       {
+        "id": "apply_changes_0",
+        "type": "write",
+        "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+        "state": "verified",
+        "detail": "Maturity date reads back at 2027-09-30."
+       },
+       {
+        "id": "credit_action_1",
+        "type": "write",
+        "label": "Invoke the modification credit action on the package for Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+        "state": "verified",
+        "detail": "nCino created modification facility a4Zbb000002DRV2EAS from Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00."
+       },
+       {
+        "id": "verify_clone_1",
+        "type": "verification",
+        "label": "Re-query for the new facility cloned from Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00 and its junction row",
+        "state": "verified",
+        "detail": "the clone reads back with Is_Modification true; it sits on the same product package as the parent; chain row RL-00000206 records revision 1; the parent re-reads unchanged at Booked / Open."
+       },
+       {
+        "id": "apply_changes_1",
+        "type": "write",
+        "label": "Apply the requested changes to the new facility cloned from Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
+        "state": "verified",
+        "detail": "Maturity date reads back at 2027-09-30."
+       },
+       {
+        "id": "observe_side_effects",
+        "type": "observed_side_effect",
+        "label": "Stage-driven email alerts and memo status changes the org may run",
+        "state": "filed_unverified",
+        "detail": "Stage-driven email alerts and memo status changes run org-side on their own transactions and report nothing back here."
+       },
+       {
+        "id": "held_execution",
+        "type": "handoff",
+        "label": "HELD: execution needs an approved facility",
+        "state": "verified",
+        "detail": "The modification exists as a facility at Qualification. Booking it requires nCino's Submit for Approval with real approvers: Loan_Validation_06 refuses a manual move to a post-approval stage and carries no permission bypass. Nothing here has been approved."
+       }
+      ]
+     }
+    }
+   }
+  ]
+ }
+}

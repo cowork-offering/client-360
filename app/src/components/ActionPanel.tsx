@@ -757,23 +757,44 @@ export function ActionPanel({
       const packages = new Set(picked.map((f) => f.productPackageId));
       if (packages.size !== 1) return null;
       const productPackageId = picked[0].productPackageId!;
-      // XOR, and the tool refuses anything else: SEVERAL facilities travel as
-      // `facilityIds` and come back as one plan with one hash and one token;
-      // ONE travels as the flat `loanId`, byte-identical to what shipped
-      // before the package-anchored shape landed.
+      // And the deal the TICKET is showing must be that same package. The
+      // package chooser and the member list are two readings of one anchor, so
+      // a disagreement between them is a bug, never something to send.
+      const shown = selectedPackageId();
+      if (shown && shown !== productPackageId) return null;
+
+      if (actionId === "loan-modification") {
+        // ALWAYS THE PACKAGE-ANCHORED SHAPE. The ticket is package-first, so it
+        // names its members as members — one facility is a selection of one,
+        // not a different kind of request. The flat `loanId` remains supported
+        // on the wire (see FacilityAnchor) and renewal still sends it for one;
+        // nothing that already worked stopped working.
+        return {
+          idempotencyKey,
+          rationale,
+          facilityIds: picked.map((f) => f.loanId!),
+          productPackageId,
+          requestedAmount: nOf("newCommitment"),
+          requestedMaturityDate: v("requestedMaturityDate") as string | null,
+          requestedTermMonths: nOf("requestedTermMonths"),
+          requestedRate: nOf("requestedRate"),
+        };
+      }
+
+      // Renewal, unchanged: XOR on the anchor, and the tool refuses anything
+      // else. SEVERAL facilities travel as `facilityIds` and come back as one
+      // plan with one hash and one token; ONE travels as the flat `loanId`,
+      // byte-identical to what shipped before the package-anchored shape landed.
       const anchor: FacilityAnchor =
-        picked.length > 1
-          ? { facilityIds: picked.map((f) => f.loanId!) }
-          : { loanId: picked[0].loanId! };
-      const common = { idempotencyKey, rationale, ...anchor, productPackageId };
-      return actionId === "loan-modification"
-        ? {
-            ...common,
-            requestedAmount: nOf("newCommitment"),
-            requestedTermMonths: nOf("requestedTermMonths"),
-            requestedRate: nOf("requestedRate"),
-          }
-        : { ...common, newMaturityDate: v("newMaturityDate") as string | null, requestedRate: nOf("requestedRate") };
+        picked.length > 1 ? { facilityIds: picked.map((f) => f.loanId!) } : { loanId: picked[0].loanId! };
+      return {
+        idempotencyKey,
+        rationale,
+        ...anchor,
+        productPackageId,
+        newMaturityDate: v("newMaturityDate") as string | null,
+        requestedRate: nOf("requestedRate"),
+      };
     }
 
     return {
@@ -1026,7 +1047,18 @@ export function ActionPanel({
       // refuses by name. The selection is cleared rather than re-mapped: there
       // is no honest mapping between two deals' members.
       if (f.key === "package" && prev[f.key] !== v) {
-        for (const k of ["covenants", "covenantStatuses", "covenantObservedValues", "covenantReasons", "covenantComments", "records", "recordValues"]) {
+        for (const k of [
+          "covenants",
+          "covenantStatuses",
+          "covenantObservedValues",
+          "covenantReasons",
+          "covenantComments",
+          "records",
+          "recordValues",
+          // Same rule for the credit action's own members: a facility of deal A
+          // carried into deal B is refused by the tool by name.
+          "facility",
+        ]) {
           delete next[k];
         }
       }
