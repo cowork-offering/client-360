@@ -431,15 +431,6 @@ function annualReviewSchema(ctx: SchemaContext): PanelSchema {
    and the confirm gate is where the held state is explained.
    ============================================================================= */
 
-/** The facility a modification or renewal acts on: the largest active one. */
-function primaryFacility(bundle: BorrowerBundle | null): Facility | null {
-  let best: Facility | null = null;
-  for (const f of (bundle?.exposure?.facilities ?? []).filter(isActiveFacility)) {
-    if (!best || (f.committed ?? 0) > (best.committed ?? 0)) best = f;
-  }
-  return best;
-}
-
 /** The commitment the client actually asked for, when one is staged. */
 function requestedCommitment(bundle: BorrowerBundle | null): number | null {
   const ask = (bundle?.requests ?? [])[0]?.ask;
@@ -706,6 +697,32 @@ export const NO_FACILITY_SELECTED =
 export const FACILITIES_SPAN_PACKAGES =
   "These facilities belong to different product packages. A credit action runs on one package, so stage each package's facilities separately.";
 
+/**
+ * The org's own refusal when a modification asks for nothing, VERBATIM.
+ *
+ * `StageLoanModification.build` throws it before it reads a single facility:
+ * "At least one requested change is required: amount, maturity date, rate or
+ * term." A plan that changes nothing would clone every selected facility and
+ * apply an empty diff, so the ticket states the rule where the banker is
+ * standing rather than letting a round trip refuse the whole batch.
+ */
+export const MODIFICATION_NEEDS_A_CHANGE =
+  "At least one requested change is required: amount, maturity date, rate or term.";
+
+/** The wire semantic of every requested change, said where the banker enters
+ *  one. `requestedAmount`, `requestedMaturityDate`, `requestedRate` and
+ *  `requestedTermMonths` are single scalars applied to EVERY facility in
+ *  `facilityIds` — the org's own warning on an N>1 plan says the same thing. */
+export const EACH_SELECTED = "Applies to EACH selected facility. Stage them separately if they need different terms.";
+
+/** Whether the ticket carries a change the tool would accept. Mirrors the Apex
+ *  null-check exactly: any ONE of the four is enough, and a zero amount is
+ *  refused separately by the tool's own `requestedAmount > 0` rule. */
+function hasRequestedChange(values: Record<string, unknown>): boolean {
+  const set = (v: unknown) => v !== null && v !== undefined && v !== "";
+  return [values.newCommitment, values.requestedMaturityDate, values.requestedRate, values.requestedTermMonths].some(set);
+}
+
 /** Same rule again, for the valuation batch. */
 export const NO_COLLATERAL_SELECTED =
   "Choose at least one collateral to revalue. An empty selection is not the whole package, and it is not a plan.";
@@ -750,6 +767,14 @@ export function batchStagingGap(
     const field = fieldFor("covenants");
     if (field && unansweredItems(field, values).length) return COVENANT_WITHOUT_ASSESSMENT;
     return null;
+  }
+
+  // The EMPTY selection and the two-package selection are checked by the panel's
+  // own facility gate, which runs first and owns those two sentences. What is
+  // left is the rule the org states and this ticket never used to: a plan has
+  // to ask for something.
+  if (actionId === "loan-modification") {
+    return hasRequestedChange(values) ? null : MODIFICATION_NEEDS_A_CHANGE;
   }
 
   if (actionId === "collateral-valuation") {
@@ -830,12 +855,28 @@ export function packageRecords(bundle: BorrowerBundle | null): Array<{ id: strin
   return ids.map((id) => {
     const on = facilities.filter((f) => f.productPackageId === id);
     const committed = on.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
+    // DRAWN is summed only when EVERY member stages it. A partial sum presented
+    // beside a complete committed figure would read as a utilisation nobody can
+    // reproduce, so the line is dropped instead.
+    const drawn = on.every((f) => typeof f.outstanding === "number")
+      ? on.reduce((sum, f) => sum + (f.outstanding as number), 0)
+      : null;
+    // No package NAME is staged anywhere in the read, so the deal is named by
+    // what hangs off it. Capped at three: a six-facility package rendered as
+    // one line of six loan names is not a name, it is the list again.
+    const names = on.map(facilityLabel);
+    const label = names.length
+      ? names.length <= 3
+        ? names.join(" · ")
+        : `${names.slice(0, 3).join(" · ")} and ${names.length - 3} more`
+      : "The relationship's package";
     return {
       id,
-      label: on.length ? on.map(facilityLabel).join(" · ") : "The relationship's package",
+      label,
       detail: [
         on.length ? `${on.length} ${on.length === 1 ? "facility" : "facilities"}` : "no facility names it",
         committed > 0 ? `${fmtMoney(committed)} committed` : null,
+        drawn !== null && on.length ? `${fmtMoney(drawn)} drawn` : null,
         id,
       ]
         .filter(Boolean)
@@ -1090,8 +1131,75 @@ function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
   };
 }
 
+/**
+ * The BOOKED members of one deal, and everything that is not one, with reasons.
+ *
+ * Same generosity rule as `onPackage`: a read where NO facility carries a
+ * product package cannot be filtered by one, so every booked facility is
+ * offered and the tool decides. Where the read DOES place facilities on
+ * packages, a booked facility of another deal is listed with that reason rather
+ * than hidden — a banker hunting for a facility learns where it actually sits.
+ */
+function packageFacilities(
+  bundle: BorrowerBundle | null,
+  packageId: string | null,
+): { offered: Facility[]; blocked: Array<{ value: string; reason: string }> } {
+  const booked = bookedFacilities(bundle);
+  const scoped = packageId !== null && (bundle?.exposure?.facilities ?? []).some((f) => f.productPackageId);
+  const offered = scoped ? booked.filter((f) => f.productPackageId === packageId) : booked;
+
+  const blocked: Array<{ value: string; reason: string }> = [];
+  for (const b of unbookedFacilities(bundle)) {
+    // Off-package AND unbooked: the deal is the sharper fact, and it is the one
+    // that decides whether this ticket could ever carry it.
+    blocked.push({
+      value: facilityLabel(b.facility),
+      reason: scoped && b.facility.productPackageId && b.facility.productPackageId !== packageId ? "on another deal" : b.reason,
+    });
+  }
+  for (const f of booked) {
+    if (!offered.includes(f)) blocked.push({ value: facilityLabel(f), reason: "booked on another deal" });
+  }
+  return { offered, blocked };
+}
+
+/**
+ * The facility the ENTRY POINT implied, out of the ones this deal offers.
+ *
+ * A ticket opened from a client request about the revolver should open with the
+ * revolver ticked. Three derivations, all from staged rows and in this order:
+ * the ask's own facility name, the ask's CURRENT commitment matched against a
+ * member's committed figure, and failing both the largest commitment in the
+ * deal. Never a lock: the banker can untick it and tick three others.
+ */
+export function impliedFacility(bundle: BorrowerBundle | null, offered: Facility[]): Facility | null {
+  if (!offered.length) return null;
+  const ask = (bundle?.requests ?? [])[0]?.ask;
+
+  const wanted = typeof ask?.facilityName === "string" ? ask.facilityName.trim().toLowerCase() : "";
+  if (wanted) {
+    const named = offered.filter((f) => {
+      const name = (f.name ?? "").trim().toLowerCase();
+      return name !== "" && (name === wanted || name.includes(wanted) || wanted.includes(name));
+    });
+    if (named.length === 1) return named[0];
+  }
+
+  // The ask's "from" figure IS a member's commitment when the client wrote
+  // about one facility. Only ever used when exactly one member carries it:
+  // two facilities at the same commitment is not an implication.
+  if (typeof ask?.from === "number") {
+    const matched = offered.filter((f) => f.committed === ask.from);
+    if (matched.length === 1) return matched[0];
+  }
+
+  let best = offered[0];
+  for (const f of offered) if ((f.committed ?? 0) > (best.committed ?? 0)) best = f;
+  return best;
+}
+
 /** Modification and renewal share their anchor: both act on an existing booked
- *  facility, both are staged and neither is executed.
+ *  facility of one deal, both are staged and neither books anything.
  *
  *  EVERY CONTROL BELOW MAPS ONE-FOR-ONE TO AN OBSERVED WIRE FIELD, with one
  *  deliberate exception: the reason. It has no wire field of its own and folds
@@ -1099,49 +1207,60 @@ function covenantReviewSchema(ctx: SchemaContext): PanelSchema {
  *  control the wire cannot carry is a promise the panel cannot keep. */
 function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewal"): PanelSchema {
   const OBJ = "LLC_BI__Loan__c";
-  const fac = primaryFacility(ctx.bundle);
   const asked = requestedCommitment(ctx.bundle);
 
-  // Only BOOKED facilities can carry a credit action. The rest are listed with
-  // their stage rather than hidden, so a banker hunting for a facility learns
-  // why it is not on offer.
-  const booked = bookedFacilities(ctx.bundle);
-  const blocked = unbookedFacilities(ctx.bundle);
-  const chosen = booked.find((f) => f.loanId === fac?.loanId) ?? booked[0];
+  // PACKAGE FIRST. The deal is the driver's seat and the facilities are member
+  // selections inside it, which is both nCino's framing and the wire's:
+  // `productPackageId` is required on every call and `facilityIds` names the
+  // members. Only BOOKED members can carry a credit action; the rest are listed
+  // with their reason rather than hidden.
+  const packageId = activePackageId(ctx);
+  const { offered, blocked } = packageFacilities(ctx.bundle, packageId);
+  const chosen = impliedFacility(ctx.bundle, offered);
+  const anyBooked = bookedFacilities(ctx.bundle).length > 0;
 
   const anchor = field({
     key: "facility",
     label: "Facilities in this credit action",
-    // PACKAGE-CENTRIC: a credit action runs on the PACKAGE and covers the
-    // facilities selected within it, which is how nCino frames it. The wire
-    // now carries that shape too — `facilityIds` for several, the flat `loanId`
-    // for one — so the selection is filed as ONE plan over N facilities.
     type: "multiselect",
-    // One booked facility is the answer, not a question: preselect it.
+    // The entry point's own implication, ticked and never locked.
     value: chosen?.loanId ? [chosen.loanId] : [],
     prefill: chosen ? { source: "NCINO_RECORD", citation: chosen.loanId } : { source: "BANKER" },
     editable: true,
     required: true,
     optionsAreRecords: true,
     // The VALUE is the record id; the label is what the banker reads.
-    options: booked.map((f) => f.loanId ?? ""),
-    optionLabels: booked.map(facilityLabel),
-    optionDetails: booked.map((f) =>
-      [f.committed != null ? `${fmtMoney(f.committed)} committed` : null, f.maturityDate ? `matures ${f.maturityDate}` : null, "Booked"]
+    options: offered.map((f) => f.loanId ?? ""),
+    optionLabels: offered.map(facilityLabel),
+    optionDetails: offered.map((f) =>
+      [
+        f.committed != null ? `${fmtMoney(f.committed)} committed` : null,
+        f.outstanding != null ? `${fmtMoney(f.outstanding)} drawn` : null,
+        f.maturityDate ? `matures ${f.maturityDate}` : null,
+        "Booked",
+      ]
         .filter(Boolean)
         .join(" · "),
     ),
-    disabledOptions: blocked.map((b) => ({ value: facilityLabel(b.facility), reason: b.reason })),
+    disabledOptions: blocked,
     target: { object: OBJ, field: "Id" },
     gap: chosen
       ? undefined
       : {
-          // Built from the availability rule, so "cannot tell" and "none are
-          // booked" stay different sentences here too.
-          reason: bookedFacilityGap(ctx.bundle, kind === "renewal" ? "renewals" : "modifications") ?? "",
+          // Three different facts, three different sentences. "Cannot tell" and
+          // "none are booked" come from the availability rule; "none on THIS
+          // deal" is the package-first case and is neither of them.
+          reason: anyBooked
+            ? `No facility of this deal is booked, so this deal has nothing a ${kind} can run against. Facilities booked on another deal are listed below with that reason.`
+            : (bookedFacilityGap(ctx.bundle, kind === "renewal" ? "renewals" : "modifications") ?? ""),
           blocksStaging: true,
         },
   });
+
+  /** The facility a "currently…" line can honestly describe: the one the ticket
+   *  opened on. With several selected the current figures differ per member, so
+   *  the help says what the change DOES instead of what one facility carries. */
+  const one = offered.length === 1 ? offered[0] : chosen;
 
   /** `requestedRate` on both observed envelopes. */
   const rate = field({
@@ -1153,7 +1272,12 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
     editable: true,
     required: false,
     target: { staging: true },
-    help: fac?.interestRate != null ? `Currently ${fac.interestRate} percent.` : undefined,
+    help:
+      kind === "modification"
+        ? `${EACH_SELECTED}${one?.interestRate != null ? ` ${facilityLabel(one)} carries ${one.interestRate} percent today.` : ""}`
+        : one?.interestRate != null
+          ? `Currently ${one.interestRate} percent.`
+          : undefined,
   });
 
   const reason = field({
@@ -1186,7 +1310,7 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
           editable: true,
           required: true,
           target: { object: OBJ, field: "LLC_BI__Maturity_Date__c" },
-          help: fac?.maturityDate ? `Currently matures ${fac.maturityDate}.` : undefined,
+          help: one?.maturityDate ? `Currently matures ${one.maturityDate}.` : undefined,
         }),
         rate,
         reason,
@@ -1197,24 +1321,49 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
   return {
     writeObject: OBJ,
     writeObjectLabel: "modification",
-    intro: "Builds the modification plan for this facility. The plan is staged and preserved; filing it awaits the org's own approval path.",
+    intro:
+      "Builds one modification plan on this deal, covering the facilities you select within it. Every requested change below applies to each selected facility, and the whole batch travels under a single confirmation and a single decision token. The plan is staged and preserved; booking the clones it creates is nCino's own approval path.",
     fields: [
+      packageField(
+        ctx,
+        "The deal anchor. Every facility this modification covers must be a booked member of it, and the org refuses a member of any other package by name.",
+      ),
       anchor,
+      // NONE of the four is required on its own. The org's rule is that at least
+      // ONE of them is present, which is a rule about the ticket rather than
+      // about any one field — `batchStagingGap` states it in the org's words.
       field({
         key: "newCommitment",
         label: "New commitment",
         type: "currency",
-        // The client's own ask when one is staged: the banker should not have to
-        // retype a number the relationship already carries.
-        value: asked ?? fac?.committed ?? null,
+        // The client's own ask when one is staged. NOT the current commitment:
+        // offering a facility's own figure as the new one would satisfy the
+        // org's at-least-one-change rule while asking for nothing, and with
+        // several members selected it is one member's number presented as
+        // everyone's.
+        value: asked,
         prefill: asked
           ? { source: "CLIENT_REQUEST", citation: (ctx.bundle?.requests ?? [])[0]?.reference?.id }
-          : fac?.committed != null
-            ? { source: "NCINO_RECORD", citation: "current commitment on the facility" }
-            : { source: "BANKER" },
+          : { source: "BANKER" },
         editable: true,
-        required: true,
+        required: false,
         target: { object: OBJ, field: "LLC_BI__Amount__c" },
+        help: EACH_SELECTED,
+      }),
+      // OBSERVED as `requestedMaturityDate` on StageLoanModification.Request and
+      // applied by the plan's `apply_changes_*` step. The ticket carried no
+      // control for it, so a banker could not ask for the one change a
+      // modification most often is.
+      field({
+        key: "requestedMaturityDate",
+        label: "New maturity",
+        type: "date",
+        value: null,
+        prefill: { source: "BANKER" },
+        editable: true,
+        required: false,
+        target: { object: OBJ, field: "LLC_BI__Maturity_Date__c" },
+        help: EACH_SELECTED,
       }),
       field({
         key: "requestedTermMonths",
@@ -1225,6 +1374,7 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
         editable: true,
         required: false,
         target: { staging: true },
+        help: EACH_SELECTED,
       }),
       rate,
       reason,

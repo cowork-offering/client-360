@@ -6,6 +6,7 @@ import {
   buildPanelSchema,
   COVENANT_CAP_REASON,
   COVENANT_WITHOUT_ASSESSMENT,
+  MODIFICATION_NEEDS_A_CHANGE,
   NO_COLLATERAL_SELECTED,
   NO_COVENANT_SELECTED,
   packageRecords,
@@ -611,9 +612,28 @@ describe("the batch is checked HERE, so the org never has to refuse the whole pl
   });
 
   it("leaves every other action alone", () => {
-    for (const id of ["annual-review", "create-service-request", "loan-modification", "renewal"]) {
+    for (const id of ["annual-review", "create-service-request", "renewal"]) {
       expect(batchStagingGap(id, {}, null), id).toBeNull();
     }
+  });
+
+  it("holds the modification to the org's at-least-one-change rule, in its own words", () => {
+    // The rule is the Apex's, verbatim: StageLoanModification.build throws it
+    // before it reads a single facility.
+    expect(batchStagingGap("loan-modification", {}, null)).toBe(MODIFICATION_NEEDS_A_CHANGE);
+    for (const change of [
+      { newCommitment: 20_000_000 },
+      { requestedMaturityDate: "2028-09-30" },
+      { requestedRate: 6.25 },
+      { requestedTermMonths: 60 },
+    ]) {
+      expect(batchStagingGap("loan-modification", change, null), JSON.stringify(change)).toBeNull();
+    }
+    // An emptied field is not a change: the panel writes "" where a banker
+    // cleared an input, and JSON would send it as a null the org counts out.
+    expect(batchStagingGap("loan-modification", { newCommitment: "", requestedRate: null }, null)).toBe(
+      MODIFICATION_NEEDS_A_CHANGE,
+    );
   });
 });
 

@@ -597,6 +597,10 @@ export interface StagePayloads {
     rationale?: string;
     productPackageId?: string | null;
     requestedAmount?: number | null;
+    /** OBSERVED on StageLoanModification.Request as a Date, and applied by the
+     *  plan's `apply_changes_*` step to `LLC_BI__Maturity_Date__c` on each
+     *  clone. One of the four the tool's at-least-one-change rule counts. */
+    requestedMaturityDate?: string | null;
     requestedTermMonths?: number | null;
     requestedRate?: number | null;
   };

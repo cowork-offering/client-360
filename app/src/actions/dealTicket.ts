@@ -128,7 +128,7 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 export function ticketDeltas(actionId: string, bundle: BorrowerBundle | null, values: Record<string, unknown>): TicketDelta[] {
   if (!bundle) return [];
   if (actionId === "new-facility-request") return newFacilityDeltas(bundle, values);
-  if (actionId === "loan-modification") return commitmentDeltas(bundle, num(values.newCommitment));
+  if (actionId === "loan-modification") return commitmentDeltas(bundle, num(values.newCommitment), values.facility);
   if (actionId !== "collateral-valuation") return [];
 
   const proposed = num(values.value);
@@ -227,35 +227,62 @@ function newFacilityDeltas(bundle: BorrowerBundle, values: Record<string, unknow
  * The modification's drama, and it is real drama: moving a commitment moves
  * coverage and leverage at once, and the banker should see both before staging.
  *
- * Coverage is lendable over the PROPOSED commitment (the suggestion engine's
- * own basis). Leverage is Boom's, restated against the new commitment only when
+ * AGGREGATED OVER THE SELECTED MEMBERS, because that is the wire semantic.
+ * `requestedAmount` is ONE scalar applied to EVERY facility in `facilityIds`,
+ * so a selection of three at 4MM each asking for 5MM adds 3MM to the book, not
+ * a move from the relationship's total to 5MM. The old reading was only ever
+ * right on a relationship with exactly one facility, and it was silently wrong
+ * everywhere else.
+ *
+ * Coverage is lendable over the relationship's commitment AFTER the change.
+ * Leverage is Boom's, restated on the selected members' delta and only when
  * Boom staged the debt figure it was computed from; otherwise that line is
  * absent rather than approximated.
+ *
+ * SILENCE OVER INVENTION, unchanged: no selection, an unresolvable member or a
+ * member with no committed figure returns nothing at all. A partial sum shown
+ * as a total is worse than no number.
  */
-function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null): TicketDelta[] {
+function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null, selection: unknown): TicketDelta[] {
   const committed = num(bundle.exposure?.totalCommitted);
   if (proposed === null || proposed <= 0 || committed === null || committed <= 0) return [];
+
+  const picked = [...new Set(Array.isArray(selection) ? (selection as string[]) : [])];
+  if (!picked.length) return [];
+
+  const facilities = bundle.exposure?.facilities ?? [];
+  const members = picked.map((id) => facilities.find((f) => f.loanId === id));
+  if (members.some((f) => !f || num(f.committed) === null)) return [];
+
+  const n = members.length;
+  const selected = members.reduce((sum, f) => sum + (f!.committed as number), 0);
+  // Each member moves TO the proposed figure, so the selection carries n × it.
+  const selectedAfter = proposed * n;
+  const after = committed - selected + selectedAfter;
 
   const out: TicketDelta[] = [
     {
       label: "Commitment",
-      before: fmtMoney(committed),
-      after: fmtMoney(proposed),
-      direction: proposed > committed ? "up" : proposed < committed ? "down" : "flat",
-      note: "on this relationship",
+      before: fmtMoney(selected),
+      after: fmtMoney(selectedAfter),
+      direction: selectedAfter > selected ? "up" : selectedAfter < selected ? "down" : "flat",
+      note:
+        n === 1
+          ? `on ${members[0]!.name ?? "the selected facility"}`
+          : `across ${n} selected facilities, each moving to ${fmtMoney(proposed)}`,
     },
   ];
 
-  const lendable = relationshipLendable(bundle, (bundle.exposure?.facilities ?? []).filter(isActiveFacility));
-  if (lendable !== null && lendable > 0) {
+  const lendable = relationshipLendable(bundle, facilities.filter(isActiveFacility));
+  if (lendable !== null && lendable > 0 && after > 0) {
     const before = lendable / committed;
-    const after = lendable / proposed;
+    const now = lendable / after;
     out.push({
       label: "Collateral coverage",
       before: fmtRatio(before),
-      after: fmtRatio(after),
-      direction: after > before ? "up" : after < before ? "down" : "flat",
-      note: `${fmtMoney(lendable)} lendable against the commitment`,
+      after: fmtRatio(now),
+      direction: now > before ? "up" : now < before ? "down" : "flat",
+      note: `${fmtMoney(lendable)} lendable against the relationship's ${fmtMoney(after)} commitment after this`,
     });
   }
 
@@ -263,12 +290,12 @@ function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null): Tick
   const leverage = num(bundle.boom?.ratios?.totalLeverage);
   if (ebitda !== null && ebitda > 0 && leverage !== null) {
     // Restated on the same EBITDA: the ask changes the debt, not the earnings.
-    const after = leverage + (proposed - committed) / ebitda;
+    const now = leverage + (selectedAfter - selected) / ebitda;
     out.push({
       label: "Total leverage",
       before: `${leverage.toFixed(2)}x`,
-      after: `${after.toFixed(2)}x`,
-      direction: after > leverage ? "down" : after < leverage ? "up" : "flat",
+      after: `${now.toFixed(2)}x`,
+      direction: now > leverage ? "down" : now < leverage ? "up" : "flat",
       note: `on ${fmtMoney(ebitda)} of EBITDA, earnings unchanged`,
     });
   }
