@@ -2124,6 +2124,34 @@ describe("F5 — the amount reads from -> to, and the deal is selectable when th
     expect(rows.textContent).toContain("Sterling Equipment Term Loan");
   });
 
+  /* ---------------------------------------------- never a bare member count */
+
+  /** FOUNDER MISREAD, 2026-08-26: a bare "1 facility" on a ticket anchored to a
+   *  multi-member package reads as the package's own size. Every
+   *  selection-scoped label on the ticket now states both numbers. */
+  it("labels the member selection as a fraction of the deal, at N = 1 and N = 2", () => {
+    openActionPanel("Loan Modification", "Kingsley Precision", undefined, true);
+    setHero(panel("Loan Modification")!.querySelector("#hero-newCommitment")!, "13000000");
+
+    const p = () => panel("Loan Modification")!;
+    const members = () =>
+      [...p().querySelectorAll("div")].find((d) => /^Facilities/.test(d.textContent ?? ""))!.textContent ?? "";
+    const fromTo = () =>
+      [...p().querySelectorAll("div")].find((d) => /^Each selected facility/.test(d.textContent ?? ""))!.textContent ??
+      "";
+
+    // One preselected member, out of everything the list shows.
+    expect(members()).toContain("1 of 4 selected");
+    expect(fromTo()).toContain("1 of 4 selected");
+    // And never the bare count that caused the misread.
+    expect(fromTo()).not.toMatch(/Each selected facility · 1 facility\b/);
+
+    const boxes = [...p().querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    click(boxes.find((b) => !b.checked && !b.disabled)!);
+    expect(members()).toContain("2 of 4 selected");
+    expect(fromTo()).toContain("2 of 4 selected");
+  });
+
   it("renders NO deal selector when the relationship carries a single package", () => {
     openActionPanel("Loan Modification", "Sterling Fabrication", undefined, true);
     const p = panel("Loan Modification")!;

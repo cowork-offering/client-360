@@ -207,6 +207,28 @@ describe("what an annual review covers", () => {
   it("has nothing to say without a bundle", () => {
     expect(reviewFacts(null)).toEqual([]);
   });
+
+  it("states the review's scope against the relationship's own total", () => {
+    // Five active facilities, three of them on the deal being reviewed. A bare
+    // "5 active facilities" on a three-member deal is the misread this closes.
+    const spread: BorrowerBundle = {
+      snapshot: { accountId: "001X" },
+      exposure: {
+        facilities: [
+          { loanId: "a1", productPackageId: "PKG-A" },
+          { loanId: "a2", productPackageId: "PKG-A" },
+          { loanId: "a3", productPackageId: "PKG-A" },
+          { loanId: "b1", productPackageId: "PKG-B" },
+          { loanId: "b2", productPackageId: "PKG-B" },
+        ],
+      },
+    };
+    expect(reviewFacts(spread, [], "PKG-A").find((f) => f.label === "In scope")!.value).toBe(
+      "3 of 5 active facilities",
+    );
+    // No pick, or a pick that covers everything: a plain total, unchanged.
+    expect(reviewFacts(spread).find((f) => f.label === "In scope")!.value).toBe("5 active facilities");
+  });
 });
 
 describe("wave 2 — the modification's delta drama", () => {
@@ -290,7 +312,7 @@ describe("wave 2 — the modification's delta drama", () => {
     // the case the old single-facility reading got most spectacularly wrong.
     const d = ticketDeltas("loan-modification", pkg, { newCommitment: 8_000_000, facility: ["a1X1", "a1X2"] });
     expect(d[0]).toMatchObject({ before: "$16M", after: "$16M", direction: "flat" });
-    expect(d[0].note).toBe("across 2 selected facilities, each moving to $8M");
+    expect(d[0].note).toBe("2 of 3 selected, each moving to $8M");
   });
 
   it("prices coverage and leverage off the relationship's commitment AFTER the change", () => {
@@ -307,7 +329,50 @@ describe("wave 2 — the modification's delta drama", () => {
   it("names the single selected facility rather than talking about the relationship", () => {
     const d = ticketDeltas("loan-modification", pkg, { newCommitment: 12_000_000, facility: ["a1X3"] });
     expect(d[0]).toMatchObject({ before: "$4M", after: "$12M" });
-    expect(d[0].note).toBe("on CapEx");
+    expect(d[0].note).toBe("on CapEx, 1 of 3 selected");
+  });
+
+  /* --------------------------------------- never a bare count on a selection */
+
+  /** Seven members on ONE package. The founder read a bare "1 facility" on a
+   *  ticket like this as the package's size on 2026-08-26. */
+  const seven: BorrowerBundle = {
+    snapshot: { accountId: "001X", productPackageId: "PKG7" },
+    exposure: {
+      totalCommitted: 70_000_000,
+      totalOutstanding: 40_000_000,
+      facilities: Array.from({ length: 7 }, (_, i) => ({
+        loanId: `a1X${i + 1}`,
+        name: `Facility ${i + 1}`,
+        committed: 10_000_000,
+        productPackageId: "PKG7",
+      })),
+    },
+  };
+
+  it("states one selected member as a fraction of the deal, never as a bare count", () => {
+    const d = ticketDeltas("loan-modification", seven, { newCommitment: 12_000_000, facility: ["a1X3"] });
+    expect(d[0].note).toBe("on Facility 3, 1 of 7 selected");
+    expect(d[0].note).toContain("of 7");
+  });
+
+  it("states two selected members the same way", () => {
+    const d = ticketDeltas("loan-modification", seven, { newCommitment: 12_000_000, facility: ["a1X3", "a1X4"] });
+    expect(d[0].note).toBe("2 of 7 selected, each moving to $12M");
+  });
+
+  it("counts the DEAL's members, not every facility on the relationship", () => {
+    // One more facility, booked on another package. The selection is still out
+    // of seven: the other deal is not what this ticket acts on.
+    const plusOther = structuredClone(seven);
+    plusOther.exposure!.facilities!.push({
+      loanId: "zzz",
+      name: "Other deal",
+      committed: 1_000_000,
+      productPackageId: "PKG-OTHER",
+    });
+    const d = ticketDeltas("loan-modification", plusOther, { newCommitment: 12_000_000, facility: ["a1X1"] });
+    expect(d[0].note).toBe("on Facility 1, 1 of 7 selected");
   });
 
   it("counts a member named twice once, the way the payload dedupes it", () => {

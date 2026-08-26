@@ -30,6 +30,29 @@ import { shortFacilityLabel } from "../data/facilityStage";
 import { draftForAction } from "./drafts";
 import type { ReasonCode } from "../data/contract";
 
+/**
+ * N OF M SELECTED, EVERYWHERE A SELECTION IS COUNTED.
+ *
+ * A bare "1 facility" on a ticket anchored to a seven-member package reads as
+ * the package's own size, and the founder read it exactly that way on
+ * 2026-08-26. The deal HEADER may state a plain total, because that is what it
+ * is. Every selection-scoped label states both numbers.
+ */
+export function selectionLabel(selected: number, total: number): string {
+  return `${selected} of ${total} selected`;
+}
+
+/**
+ * How many facilities the deal has: the active members of that product package,
+ * or the relationship's active facilities when the read stages no package at
+ * all. The denominator behind `selectionLabel` on every facility surface.
+ */
+export function packageFacilityCount(bundle: BorrowerBundle | null, packageId: string | null | undefined): number {
+  const active = (bundle?.exposure?.facilities ?? []).filter(isActiveFacility);
+  if (!packageId || !active.some((f) => f.productPackageId)) return active.length;
+  return active.filter((f) => f.productPackageId === packageId).length;
+}
+
 export interface TicketLayout {
   title: string;
   context: string;
@@ -256,6 +279,8 @@ function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null, selec
   if (members.some((f) => !f || num(f.committed) === null)) return [];
 
   const n = members.length;
+  // The deal the selection sits on, so the note can say "2 of 7 selected".
+  const scope = packageFacilityCount(bundle, members[0]!.productPackageId);
   const selected = members.reduce((sum, f) => sum + (f!.committed as number), 0);
   // Each member moves TO the proposed figure, so the selection carries n × it.
   const selectedAfter = proposed * n;
@@ -267,10 +292,13 @@ function commitmentDeltas(bundle: BorrowerBundle, proposed: number | null, selec
       before: fmtMoney(selected),
       after: fmtMoney(selectedAfter),
       direction: selectedAfter > selected ? "up" : selectedAfter < selected ? "down" : "flat",
+      // The selection is stated as a fraction of the deal on BOTH branches: a
+      // note reading "on CapEx" or "across 2 facilities" left the banker to
+      // guess how much of the package the move covers.
       note:
         n === 1
-          ? `on ${shortFacilityLabel(members[0]!, bundle.snapshot?.name) || "the selected facility"}`
-          : `across ${n} selected facilities, each moving to ${fmtMoney(proposed)}`,
+          ? `on ${shortFacilityLabel(members[0]!, bundle.snapshot?.name) || "the selected facility"}, ${selectionLabel(n, scope)}`
+          : `${selectionLabel(n, scope)}, each moving to ${fmtMoney(proposed)}`,
     },
   ];
 
@@ -417,7 +445,12 @@ export interface TicketFact {
  * not produce a zero, an "unknown" or a dash: the strip states facts or says
  * nothing at all.
  */
-export function reviewFacts(bundle: BorrowerBundle | null, reasons: ReasonCode[] = []): TicketFact[] {
+export function reviewFacts(
+  bundle: BorrowerBundle | null,
+  reasons: ReasonCode[] = [],
+  /** The deal the review is filed against, when the ticket has one picked. */
+  packageId?: string | null,
+): TicketFact[] {
   if (!bundle) return [];
   const facts: TicketFact[] = [];
 
@@ -456,11 +489,20 @@ export function reviewFacts(bundle: BorrowerBundle | null, reasons: ReasonCode[]
     });
   }
 
+  // WHAT THE REVIEW COVERS, AGAINST WHAT THE RELATIONSHIP CARRIES. The review
+  // is filed against ONE product package while the bundle is the whole
+  // relationship, so a bare count here reads as either and is reliably misread
+  // as the deal's size. Both numbers, whenever they differ.
   const active = (bundle.exposure?.facilities ?? []).filter(isActiveFacility);
+  const scoped = packageId ? active.filter((f) => f.productPackageId === packageId) : active;
+  const covered = scoped.length || active.length;
   if (active.length) {
     facts.push({
       label: "In scope",
-      value: `${active.length} active ${active.length === 1 ? "facility" : "facilities"}`,
+      value:
+        covered === active.length
+          ? `${active.length} active ${active.length === 1 ? "facility" : "facilities"}`
+          : `${covered} of ${active.length} active facilities`,
       note: bundle.snapshot?.primaryRiskRating ? `carried at grade ${bundle.snapshot.primaryRiskRating}` : undefined,
     });
   }

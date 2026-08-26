@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../data/contract";
-import { bundleAsOf, computeSuggestions, detectDrift, freshnessSentence, type Suggestion } from "./suggestionEngine";
+import {
+  blockingDrift,
+  bundleAsOf,
+  computeSuggestions,
+  detectDrift,
+  freshnessSentence,
+  isRecheckOnly,
+  type Suggestion,
+} from "./suggestionEngine";
 import { DEMO_POLICY_PACK, resolveThreshold, resolveSwitch, type PolicyPack } from "../policy/policyPack";
 
 const ASOF = "2026-07-26T09:00:00Z";
@@ -346,10 +354,32 @@ describe("A33.2.7 — recompute at confirm blocks on drift", () => {
     expect(drift.some((d) => d.kind === "policy_changed")).toBe(true);
   });
 
-  it("blocks when the staged bundle was replaced", () => {
+  it("reports a replaced read but does NOT block on the timestamp alone", () => {
+    // The founder staged a ticket, ran a Sync and was refused although every
+    // figure was identical (2026-08-26). The recheck still reports the newer
+    // read; what it must not do is stand in the way of the confirm.
     const was = displayed();
     const drift = detectDrift(was, run(shortBundle()), "2026-07-27T09:00:00Z");
     expect(drift.some((d) => d.kind === "data_replaced")).toBe(true);
+    expect(blockingDrift(drift)).toEqual([]);
+    expect(isRecheckOnly(drift)).toBe(true);
+  });
+
+  it("still blocks on a moved figure when the read is newer too", () => {
+    // A timestamp change never launders a value change out of the block.
+    const was = displayed();
+    const moved = shortBundle();
+    moved.exposure!.facilities![0].totalLendableValue = 5_000_000;
+    const drift = detectDrift(was, run(moved), "2026-07-27T09:00:00Z");
+    expect(drift.some((d) => d.kind === "data_replaced")).toBe(true);
+    expect(blockingDrift(drift).every((d) => d.kind !== "data_replaced")).toBe(true);
+    expect(blockingDrift(drift).some((d) => d.kind === "value_moved")).toBe(true);
+    expect(isRecheckOnly(drift)).toBe(false);
+  });
+
+  it("calls a clean recompute neither blocking nor a recheck", () => {
+    expect(isRecheckOnly(detectDrift(displayed(), run(shortBundle()), ASOF))).toBe(false);
+    expect(blockingDrift([])).toEqual([]);
   });
 
   it("blocks when a suggestion vanished entirely", () => {
