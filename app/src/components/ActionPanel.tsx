@@ -1208,6 +1208,14 @@ export function ActionPanel({
                 actionId={actionId}
                 simulated={!live}
                 idempotencyKey={idempotencyKeyRef.current}
+                // The gate recomputes on the SAME read the ticket computed on.
+                liveStoredAt={liveStoredAt}
+                liveSections={liveSections}
+                asOf={asOf}
+                // The way out of a blocked gate: the same staging call, the
+                // same inputs, the current data. It replaces the plan and the
+                // banker confirms the fresh one; nothing executes.
+                onRestage={() => void stage()}
                 onBack={stepBack}
                 onConfirmed={onConfirmed}
               />

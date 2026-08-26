@@ -8,6 +8,7 @@ import {
   ratingFacts,
   reviewFacts,
   securityContext,
+  selectionLabel,
   ticketDeltas,
   type SecurityContext,
   type TicketDelta,
@@ -513,7 +514,10 @@ function FromToRows({
 
   return (
     <div className="flex flex-col gap-1.5 rounded-[10px] px-3.5 py-3" style={{ background: "var(--surface-overlay)" }}>
-      <div className="kicker">Each selected facility</div>
+      <div className="kicker">
+        Each selected facility ·{" "}
+        {selectionLabel(rows.length, (field.options?.length ?? 0) + (field.disabledOptions?.length ?? 0))}
+      </div>
       {rows.map((r) => (
         <div key={r.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-ink-body">{r.label}</span>
@@ -749,7 +753,7 @@ export function DealTicket({
   const deltas = ticketDeltas(actionId, bundle, values);
   const facts =
     actionId === "annual-review"
-      ? reviewFacts(bundle, reasons)
+      ? reviewFacts(bundle, reasons, typeof values.package === "string" ? values.package : null)
       : actionId === "risk-rating-review"
         ? ratingFacts(bundle, values)
         : [];
@@ -834,6 +838,15 @@ export function DealTicket({
         <div key={f.key} className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="kicker">{f.label}</span>
+            {/* THE SELECTION, AS A FRACTION OF THE LIST. Every row the list
+                renders counts toward the total, the unselectable ones
+                included: the banker sees them and reads them as members. */}
+            <span className="text-[11px] font-semibold text-ink-muted">
+              {selectionLabel(
+                (Array.isArray(values[f.key]) ? (values[f.key] as string[]) : []).length,
+                (f.options?.length ?? 0) + (f.disabledOptions?.length ?? 0),
+              )}
+            </span>
             {renderChip(f, editedFields.includes(f.key))}
           </div>
           <MultiSelectRows

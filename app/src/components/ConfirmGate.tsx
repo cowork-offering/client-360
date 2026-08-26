@@ -1,8 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useApp } from "../state/appState";
 import type { StagedOutput } from "../actions/stagedPlan";
 import { SIMULATION_BANNER, assertNoRecordIds } from "../actions/stagedPlan";
-import { computeSuggestions, detectDrift, type DriftReason } from "../actions/suggestionEngine";
+import {
+  RECHECK_LINE,
+  blockingDrift,
+  computeSuggestions,
+  detectDrift,
+  isRecheckOnly,
+  type DriftReason,
+} from "../actions/suggestionEngine";
+import { packageFacilityCount } from "../actions/dealTicket";
 import { validatePlan } from "../actions/transitionAllowlist";
 import { mintDecisionToken, type DecisionToken } from "../actions/decisionToken";
 import {
@@ -32,8 +40,10 @@ import type { OnboardingAction } from "../actions/onboardingActions";
    closing line.
 
    Before the gesture is offered:
-     - every suggestion that fed the plan is RECOMPUTED (A33.2.7). Any drift
-       blocks the confirm and the panel re-renders naming what moved.
+     - every suggestion that fed the plan is RECOMPUTED (A33.2.7). Drift that
+       moved a FIGURE blocks the confirm and the panel re-renders naming what
+       moved, with a way forward: re-stage on the current data. A read that is
+       merely newer, with every figure unchanged, is stated and does not block.
      - the plan is validated against the transition allowlist (A33.3.1).
      - warnings[] are surfaced, because a banker must see the side effects
        BEFORE confirming, not after.
@@ -45,7 +55,23 @@ export const CLOSING_LINE = "Real approval happens in nCino's credit-risk proces
 /** Vocabulary the summary may never contain (A33.3.1). */
 export const FORBIDDEN_GATE_WORDS = ["approve", "approval of", "submit for credit approval", "authorise credit", "credit decision"];
 
-function DriftNotice({ drift }: { drift: DriftReason[] }) {
+/** The label on the way out of a blocked gate. Named once so the copy and the
+ *  test that guards it cannot drift apart. */
+export const RESTAGE_LABEL = "Refresh figures and re-stage";
+
+/**
+ * WHAT MOVED, AND THE WAY FORWARD.
+ *
+ * The notice used to end at "review the new figures and confirm again", which
+ * on a blocked gate is an instruction with nothing behind it: the plan holds
+ * the figures it was staged with, so confirming again recomputes the same
+ * divergence and refuses again. The banker is standing in a dead end.
+ *
+ * `onRestage` is the exit. It re-runs the SAME staging call with the SAME
+ * inputs against the current data and replaces the stale plan in place; the
+ * banker then confirms the fresh one. It never executes anything.
+ */
+function DriftNotice({ drift, onRestage }: { drift: DriftReason[]; onRestage?: () => void }) {
   return (
     <div className="rounded-[10px] px-3.5 py-3" style={{ background: "var(--warning-bg)" }}>
       <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--warning)" }}>
@@ -62,8 +88,20 @@ function DriftNotice({ drift }: { drift: DriftReason[] }) {
         ))}
       </ul>
       <div className="mt-2 text-[11.5px]" style={{ color: "var(--warning-prose)" }}>
-        Review the new figures and confirm again. Nothing runs against numbers you did not see.
+        {onRestage
+          ? "This plan was built on the earlier figures, so it cannot be confirmed. Re-stage it on the current data and confirm the plan that comes back. Nothing runs against numbers you did not see."
+          : "Review the new figures and confirm again. Nothing runs against numbers you did not see."}
       </div>
+      {onRestage && (
+        <button
+          type="button"
+          onClick={onRestage}
+          className="c360-btn mt-2.5 rounded-md px-3.5 py-1.5 text-[12px] font-semibold"
+          style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+        >
+          {RESTAGE_LABEL}
+        </button>
+      )}
     </div>
   );
 }
@@ -74,6 +112,10 @@ export function ConfirmGate({
   simulated,
   idempotencyKey,
   pendingGate,
+  liveStoredAt,
+  liveSections,
+  asOf,
+  onRestage,
   onGateDismiss,
   onConfirmed,
   onBack,
@@ -89,6 +131,18 @@ export function ConfirmGate({
    *  decision token would be redeemed the banker meets the honest gate instead
    *  of a confirm gesture. Nothing is minted, nothing is sent. */
   pendingGate?: OnboardingAction;
+  /** THE READ THE PANEL IS ON, threaded so the gate recomputes against the same
+   *  one the cards were computed from. Without these the gate recomputed on the
+   *  BAKED bundle while the plan carried live-merged figures, which reported a
+   *  move backwards to stale numbers on every synced ticket. Absent means the
+   *  surface never synced, which is the onboarding and test case. */
+  liveStoredAt?: number | null;
+  liveSections?: string[];
+  /** The instant that read is quoted at. Defaults to the baked assembly time. */
+  asOf?: string;
+  /** Re-runs the staging call on the current data with the same inputs and
+   *  replaces this plan. The only way out of a blocked gate; never executes. */
+  onRestage?: () => void;
   /** Closes the whole ticket from the terminal gate card. */
   onGateDismiss?: () => void;
   onConfirmed: (token: DecisionToken, executed?: ExecuteResult) => void;
@@ -101,6 +155,21 @@ export function ConfirmGate({
   const [toolError, setToolError] = useState<ToolError | null>(null);
 
   const bundle = resolveBundle(data, state.accountId);
+
+  /** A33.2.7 recomputation, in one place: the gesture runs it to decide, and
+   *  the render runs it to say whether the read moved on underneath. */
+  const recompute = useCallback(
+    () =>
+      detectDrift(
+        plan.suggestions,
+        computeSuggestions({ data, bundle, actionId, liveStoredAt, liveSections }),
+        asOf ?? data.meta?.generatedAt ?? "",
+      ),
+    [plan.suggestions, data, bundle, actionId, liveStoredAt, liveSections, asOf],
+  );
+
+  /** A newer read with every figure unchanged. Informational, never a block. */
+  const rechecked = useMemo(() => isRecheckOnly(recompute()), [recompute]);
 
   // A33.3.1 — the plan must be allowlisted before a gesture is offered at all.
   //
@@ -126,19 +195,24 @@ export function ConfirmGate({
   /** A package-anchored plan over SEVERAL facilities. Drives the plural copy
    *  below: "the new facility" is wrong when the plan clones four of them. */
   const multi = (plan.facilities?.length ?? 0) > 1;
+  /** How many members the deal HAS, so the plan's member count is stated as a
+   *  selection out of it rather than as a bare figure a banker can read as the
+   *  package's own size. Zero means the read cannot place the package. */
+  const dealSize = packageFacilityCount(bundle, plan.productPackageId);
 
   async function confirm() {
     setError(null);
     setToolError(null);
 
     // A33.2.7 — MANDATORY recompute. A plan is never executed against figures
-    // the banker did not see.
-    const fresh = computeSuggestions({ data, bundle, actionId });
-    const moved = detectDrift(plan.suggestions, fresh, data.meta?.generatedAt ?? "");
+    // the banker did not see. A moved FIGURE stops here; a newer timestamp over
+    // identical figures is stated above and does not.
+    const moved = blockingDrift(recompute());
     if (moved.length > 0) {
       setDrift(moved);
       return;
     }
+    setDrift(null);
 
     const userId = data.meta?.user;
     if (!userId) {
@@ -231,13 +305,26 @@ export function ConfirmGate({
         <p className="text-[13px] leading-relaxed text-ink">{plan.summary}</p>
       </div>
 
+      {/* A SYNC LANDED UNDER THIS PLAN AND MOVED NOTHING. Stated, because the
+          banker who ran that sync is owed the result of the recheck — and
+          stated as information, because there is nothing here to act on. */}
+      {rechecked && !drift && (
+        <div className="border-b border-divider px-5 py-3 text-[11.5px] leading-relaxed text-ink-muted">
+          {RECHECK_LINE}
+        </div>
+      )}
+
       {/* PACKAGE-ANCHORED CREDIT ACTION. The org returned one plan over N
           facilities, so the gate shows what each facility gets rather than
           leaving the banker to count step ids. Rendered only for a real batch:
           with one facility the summary already names it. */}
       {multi && (
         <div className="border-b border-divider px-5 py-4">
-          <div className="kicker mb-2">{plan.facilities!.length} facilities in this credit action</div>
+          <div className="kicker mb-2">
+            {dealSize >= plan.facilities!.length
+              ? `${plan.facilities!.length} of ${dealSize} facilities in this credit action`
+              : `${plan.facilities!.length} facilities in this credit action`}
+          </div>
           <ul className="space-y-2.5">
             {plan.facilities!.map((f) => (
               <li key={f.facilityId}>
@@ -435,7 +522,7 @@ export function ConfirmGate({
 
       {drift && (
         <div className="border-b border-divider px-5 py-4">
-          <DriftNotice drift={drift} />
+          <DriftNotice drift={drift} onRestage={onRestage} />
         </div>
       )}
 
@@ -520,7 +607,10 @@ export function ConfirmGate({
         {pendingGate ? null : (
         <button
           type="button"
-          disabled={blocked || executing}
+          // A blocked gate with a re-stage affordance offers ONE way forward.
+          // Leaving Confirm live beside it would recompute the same divergence
+          // and refuse again, which is the dead end this pass removes.
+          disabled={blocked || executing || Boolean(drift && onRestage)}
           onClick={() => void confirm()}
           className="c360-btn rounded-md px-3.5 py-1.5 text-[12px] font-semibold disabled:opacity-40"
           style={{ background: "var(--accent)", color: "var(--accent-ink)" }}

@@ -680,8 +680,10 @@ export type DriftReason =
  * Mandatory recomputation at the confirm gate (A33.2.7). A plan is NEVER
  * executed against figures the banker did not see, so this compares the
  * suggestions that fed the plan against a fresh computation and reports every
- * divergence. A non-empty result BLOCKS the confirm; the caller re-renders with
- * the new figures and an explicit notice naming what moved.
+ * divergence.
+ *
+ * Reporting is not the same as blocking. `blockingDrift` decides that, and a
+ * bare timestamp change is deliberately not in it: see below.
  */
 export function detectDrift(displayed: Suggestion[], fresh: EngineResult, currentGeneratedAt: string): DriftReason[] {
   const out: DriftReason[] = [];
@@ -712,3 +714,33 @@ export function detectDrift(displayed: Suggestion[], fresh: EngineResult, curren
     return true;
   });
 }
+
+/**
+ * The reasons that actually stop a confirm.
+ *
+ * A `data_replaced` on its own means the read carries a NEWER TIMESTAMP than
+ * the one the plan was staged against. It does not mean a figure moved: every
+ * value the plan quoted is checked by `value_moved`, every finding by
+ * `suggestion_vanished`, and the pack by `policy_changed`. When none of those
+ * fire, the recomputation has proven the plan still describes the same numbers,
+ * and blocking on the clock alone leaves the banker with a panel that names no
+ * changed figure and offers no way forward. The founder hit exactly that on
+ * 2026-08-26: staged a ticket, ran a Sync, and was refused although nothing
+ * material had moved.
+ *
+ * So the timestamp is reported (the caller renders it as an informational line)
+ * and never blocks. Everything else blocks, unchanged.
+ */
+export function blockingDrift(drift: DriftReason[]): DriftReason[] {
+  return drift.filter((d) => d.kind !== "data_replaced");
+}
+
+/** True when the recompute found a newer read and nothing else: the figures
+ *  were re-checked against it and came back the same. */
+export function isRecheckOnly(drift: DriftReason[]): boolean {
+  return drift.length > 0 && blockingDrift(drift).length === 0;
+}
+
+/** The informational line for that case. Not a warning: nothing is wrong. */
+export const RECHECK_LINE =
+  "The figures were re-checked against the synced data and are unchanged, so this plan still describes what would be filed.";
