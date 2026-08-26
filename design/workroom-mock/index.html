@@ -1,0 +1,1461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Modification Workroom · static mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+/* =============================================================================
+   Modification Workroom, static clickable mock.
+   Palette, type, radii, shadows and motion are lifted from the cockpit's
+   app/src/styles/tokens.css so this reads as the same product.
+   Every figure is a real Hartwell figure (DEMO-RELATIONSHIP.md).
+   ============================================================================= */
+:root{
+  color-scheme: light;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --surface:#f4f3f8; --surface-raised:#ffffff; --surface-overlay:#f6f5fa; --wash-2:#f1f0f6;
+  --row-divider:#f1f0f5; --border:#eceaf2; --border-strong:#e4e1ec;
+
+  --ink:#1a1a1a; --ink-muted:#6e6b7b; --ink-label:#8a8794; --ink-body:#56535f;
+  --ink-body-strong:#3f3d4a; --ink-faint:#8f8c99;
+
+  --accent:#6b1cc4; --accent-ink:#ffffff; --accent-wash:rgba(107,28,196,.10);
+
+  --positive:#047857; --positive-bg:#e8f4ef;
+  --warning:#92400e; --warning-bg:#fbf2e7;
+  --neutral-fg:#56535f; --neutral-bg:#f1f0f6;
+
+  --fill-strong:#36323f; --ink-inverse:#ffffff; --divider-soft:#edecf2;
+  --crumb-sep:#d2cfda; --tree-line:#cdc9db; --scroll-thumb:#d8d5e2;
+  --prose-deep:#2e2640; --warning-prose:#5a4423;
+  --ambient-2:#2f7fd0;
+  --gloss:rgba(255,255,255,.30);
+  --frost-bar:rgba(255,255,255,.82);
+  --shadow-panel:0 24px 60px -12px rgba(20,0,40,.30), 0 8px 20px -8px rgba(20,0,40,.20);
+  --user-tone:#6038ea; --user-tone-wash:rgba(96,56,234,.10);
+
+  --radius:14px; --radius-sm:9px;
+  --shadow-card:0 1px 2px rgba(26,10,54,.05), 0 6px 22px rgba(26,10,54,.05);
+  --shadow-card-hover:0 2px 4px rgba(26,10,54,.06), 0 14px 34px rgba(26,10,54,.10);
+
+  --gutter:24px;
+  --ease-out:cubic-bezier(.22,.8,.28,1);
+  --ease-weight:cubic-bezier(.32,.72,0,1);
+  /* Strong deceleration, zero overshoot. Weight without bounce. */
+  --ease-spring:cubic-bezier(.19,1,.3,1);
+  --dur-fast:130ms; --dur-mid:260ms; --dur-dial:640ms;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:radial-gradient(135% 85% at 50% -12%, #fbfafe 0%, #f4f3f8 44%);
+  color:var(--ink); font-family:var(--font-sans); font-size:13px; line-height:1.45;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1;
+  overflow:hidden;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+.kicker{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
+.tnum{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ------------------------------------------------------------------ cockpit
+   A deliberately simplified impression of the Customer 360 cockpit. It exists
+   so the workroom reads as an overlay ON something, not a page of its own. */
+.ck{position:fixed;inset:0;overflow:hidden;transition:filter 320ms var(--ease-out), transform 320ms var(--ease-out), opacity 320ms var(--ease-out)}
+body[data-modal="1"] .ck{filter:blur(3px) saturate(.85);transform:scale(1.012);opacity:.85}
+.ck-nav{height:52px;display:flex;align-items:center;gap:14px;padding:0 var(--gutter);
+  background:rgba(244,243,248,.72);backdrop-filter:blur(8px);box-shadow:0 1px 0 rgba(20,0,40,.07)}
+.ck-mark{width:22px;height:22px;border-radius:6px;background:var(--fill-strong);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800}
+.ck-nav b{font-size:12.5px;font-weight:700}
+.ck-nav .sep{color:var(--crumb-sep)}
+.ck-nav .sp{margin-left:auto}
+.ck-tabs{display:flex;gap:18px;font-size:11.5px;font-weight:600;color:var(--ink-label)}
+.ck-tabs .on{color:var(--ink);position:relative}
+.ck-tabs .on::after{content:"";position:absolute;left:0;right:0;bottom:-17px;height:2px;background:var(--accent);border-radius:2px}
+.ck-page{max-width:1340px;margin:0 auto;padding:18px var(--gutter)}
+.ck-hero{position:relative;overflow:hidden;border-radius:var(--radius);background:var(--surface-raised);box-shadow:var(--shadow-card);padding:18px 20px}
+.ck-hero h1{margin:2px 0 0;font-size:21px;font-weight:800;letter-spacing:-.01em}
+.ck-hero .sub{font-size:11.5px;color:var(--ink-label);margin-top:3px}
+.ck-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+.ck-kpi div{border-radius:var(--radius-sm);background:var(--surface-raised);box-shadow:var(--shadow-card);padding:12px 14px}
+.ck-kpi .v{font-size:17px;font-weight:800;margin-top:4px}
+.ck-rows{margin-top:12px;border-radius:var(--radius);background:var(--surface-raised);box-shadow:var(--shadow-card);overflow:hidden}
+.ck-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--row-divider);font-size:12px}
+.ck-row:first-child{border-top:none}
+.ck-row .g{margin-left:auto;color:var(--ink-label);font-size:11.5px}
+
+/* ------------------------------------------------------------------- scrim */
+.scrim{position:fixed;inset:0;background:rgba(20,0,40,.28);opacity:0;pointer-events:none;
+  transition:opacity 300ms var(--ease-out);z-index:90}
+body[data-modal="1"] .scrim{opacity:1;pointer-events:auto}
+
+/* reopen affordance, shown when the workroom is dismissed */
+.reopen{position:fixed;inset:0;display:none;place-items:center;z-index:95}
+body[data-modal="0"] .reopen{display:grid}
+.reopen button{border:none;border-radius:12px;background:var(--accent);color:var(--accent-ink);
+  padding:12px 20px;font-size:13px;font-weight:700;box-shadow:0 10px 30px -8px rgba(107,28,196,.55);
+  transition:transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)}
+.reopen button:hover{transform:translate3d(0,-1px,0);box-shadow:0 14px 36px -8px rgba(107,28,196,.6)}
+
+/* ------------------------------------------------------------------- modal */
+.wr{
+  position:fixed;z-index:100;
+  top:26px;left:26px;right:26px;bottom:26px;
+  max-width:1420px;margin:0 auto;
+  display:flex;flex-direction:column;
+  border-radius:22px;overflow:hidden;
+  background:var(--surface);
+  box-shadow:var(--shadow-panel), 0 0 0 1px rgba(20,0,40,.06);
+  opacity:0;transform:translate3d(0,10px,0) scale(.975);
+  transition:opacity 300ms var(--ease-spring), transform 340ms var(--ease-spring);
+  pointer-events:none;
+}
+body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
+
+.wr-head{
+  position:relative;flex:0 0 auto;display:flex;align-items:center;gap:12px;
+  padding:14px 20px 13px;background:var(--frost-bar);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+.wr-head .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-wash)}
+.wr-title{font-size:13.5px;font-weight:800;letter-spacing:-.005em}
+.wr-sub{font-size:11px;color:var(--ink-label)}
+.wr-head .spacer{margin-left:auto}
+.badge-mock{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-faint);border:1px dashed var(--border-strong);border-radius:999px;padding:3px 9px}
+.wr-x{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface-raised);
+  display:grid;place-items:center;color:var(--ink-muted);transition:all var(--dur-fast) var(--ease-out)}
+.wr-x:hover{border-color:var(--border-strong);color:var(--ink);background:var(--surface-overlay)}
+
+/* assembly progress: the designed loading moment */
+.wr-load{position:absolute;left:0;right:0;bottom:-1px;height:2px;background:transparent;overflow:hidden}
+.wr-load i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#8b45e0);
+  transition:width 420ms var(--ease-out)}
+.wr-loadtext{font-size:11px;color:var(--ink-muted);display:flex;align-items:center;gap:7px;
+  transition:opacity 260ms var(--ease-out)}
+.wr-loadtext .pip{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pip 1100ms ease-in-out infinite}
+@keyframes pip{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+
+.wr-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+
+/* ------------------------------------------------------------- deal strip */
+.strip{flex:0 0 auto;padding:14px 20px 12px;border-bottom:1px solid var(--border);background:var(--surface-overlay);position:relative;overflow:hidden}
+.strip .amb{position:absolute;inset:0;pointer-events:none}
+.strip .amb span{position:absolute;display:block;border-radius:50%;filter:blur(60px)}
+.strip .amb .a{width:36%;height:260%;top:-80%;left:6%;background:var(--accent);opacity:.05;animation:driftA 28s ease-in-out infinite alternate}
+.strip .amb .b{width:30%;height:240%;top:-70%;right:8%;background:var(--ambient-2);opacity:.035;animation:driftB 34s ease-in-out infinite alternate}
+@keyframes driftA{from{transform:translate3d(-4%,0,0) scale(1)}to{transform:translate3d(6%,3%,0) scale(1.12)}}
+@keyframes driftB{from{transform:translate3d(3%,2%,0) scale(1.08)}to{transform:translate3d(-5%,-2%,0) scale(1)}}
+.strip-top{position:relative;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.strip h2{margin:3px 0 0;font-size:16px;font-weight:800;letter-spacing:-.01em}
+.strip .meta{font-size:11.5px;color:var(--ink-label)}
+.strip .totals{margin-left:auto;display:flex;gap:18px;text-align:right}
+.strip .totals div span{display:block}
+.strip .totals .l{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.strip .totals .v{font-size:14px;font-weight:800;margin-top:2px}
+
+.members{position:relative;display:flex;gap:9px;margin-top:12px;overflow-x:auto;padding-bottom:3px}
+.members::-webkit-scrollbar{height:0}
+.mem{flex:0 0 auto;width:158px;border-radius:11px;background:var(--surface-raised);border:1px solid var(--border);
+  padding:9px 11px;box-shadow:var(--shadow-card);position:relative;
+  transition:box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)}
+.mem:hover{transform:translate3d(0,-1px,0);box-shadow:var(--shadow-card-hover)}
+.mem .k{font-size:10px;font-weight:800;letter-spacing:.07em;color:var(--ink-faint)}
+.mem .p{font-size:12px;font-weight:700;margin-top:2px;color:var(--ink-body-strong)}
+.mem .a{font-size:13.5px;font-weight:800;margin-top:3px}
+.mem .o{font-size:10.5px;color:var(--ink-label);margin-top:1px}
+.mem.hero{width:252px;border-color:color-mix(in srgb,var(--accent) 30%,transparent);
+  box-shadow:0 1px 2px rgba(26,10,54,.05), 0 10px 26px -8px rgba(107,28,196,.28)}
+.mem.hero .k{color:var(--accent)}
+.mem.hero .a{font-size:17px}
+.mem.prop{border-style:dashed;background:var(--surface-overlay)}
+.mem .tag{position:absolute;top:8px;right:9px;font-size:9.5px;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-faint)}
+.mem.hero .tag{color:var(--accent)}
+.meter{height:5px;border-radius:3px;background:var(--wash-2);margin-top:8px;overflow:hidden}
+.meter i{display:block;height:100%;width:0;border-radius:3px;background:var(--accent);
+  transition:width var(--dur-dial) var(--ease-weight)}
+.mem .util{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-label);margin-top:5px}
+
+/* -------------------------------------------------------------- main grid */
+.grid{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 452px;gap:0}
+.col-l{min-height:0;overflow-y:auto;padding:0 18px 18px 20px;display:flex;flex-direction:column;gap:14px}
+.col-l>*:first-child{margin-top:16px}
+/* Children keep their natural height. Without this the flex column shrinks the
+   position card and clips its own content. */
+.col-l>*{flex:0 0 auto}
+.col-r{min-height:0;display:flex;flex-direction:column;border-left:1px solid var(--border);background:var(--surface-raised)}
+
+.card{border-radius:var(--radius);background:var(--surface-raised);box-shadow:var(--shadow-card);overflow:hidden}
+.card-h{display:flex;align-items:center;gap:9px;padding:12px 15px 0}
+.card-b{padding:11px 15px 14px}
+
+/* reveal primitive used by the assembly timeline */
+.rv{opacity:0;transform:translate3d(0,8px,0)}
+.rv.in{opacity:1;transform:none;transition:opacity 260ms var(--ease-spring), transform 300ms var(--ease-spring)}
+
+/* skeleton shimmer */
+.sk{border-radius:6px;background:linear-gradient(90deg,var(--wash-2) 0%,#e9e7f0 40%,var(--wash-2) 80%);
+  background-size:280% 100%;animation:shimmer 1250ms linear infinite;height:10px}
+@keyframes shimmer{from{background-position:120% 0}to{background-position:-120% 0}}
+.sk.t{height:13px}
+.sk-stack>*{margin-top:8px}
+.sk-stack>*:first-child{margin-top:0}
+
+/* --------------------------------------------------------------- position */
+.pos{border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--surface-raised)),var(--surface-raised) 60%)}
+.pos .headline{font-size:15.5px;font-weight:800;line-height:1.35;letter-spacing:-.01em;color:var(--prose-deep);margin-top:6px}
+.pos .why{margin-top:12px;display:grid;gap:9px}
+.why-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:12px;align-items:start;
+  padding-top:9px;border-top:1px solid var(--row-divider)}
+.why-row:first-child{border-top:none;padding-top:0}
+.why-row .lab{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);padding-top:1px}
+.why-row .txt{font-size:12.3px;color:var(--ink-body);line-height:1.55}
+.src{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-family:var(--font-mono);font-size:10px;color:var(--ink-faint)}
+.src::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--tree-line)}
+
+.alts{margin-top:12px;border-top:1px solid var(--row-divider);padding-top:10px}
+.alt-t{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:0;text-align:left;
+  font-size:11.5px;font-weight:700;color:var(--ink-muted)}
+.alt-t:hover{color:var(--accent)}
+.alt-t .cx{transition:transform var(--dur-fast) var(--ease-out)}
+.alt-t[aria-expanded="true"] .cx{transform:rotate(90deg)}
+.alt-body{display:none;margin-top:10px;gap:9px;grid-template-columns:1fr 1fr}
+.alt-body.open{display:grid}
+.alt{border:1px solid var(--border);border-radius:11px;padding:10px 12px;background:var(--surface-overlay)}
+.alt .t{font-size:12px;font-weight:700;color:var(--ink-body-strong)}
+.alt .d{font-size:11.5px;color:var(--ink-body);margin-top:5px;line-height:1.5}
+.gov{margin-top:11px;font-size:11px;color:var(--ink-faint);border-top:1px solid var(--row-divider);padding-top:9px}
+
+/* ------------------------------------------------------------------ email */
+.mail{border-left:3px solid var(--accent)}
+.mail .from{font-size:12.5px;font-weight:700}
+.mail .when{font-size:10.5px;color:var(--ink-faint)}
+.mail .prose{font-size:12.5px;line-height:1.62;color:var(--ink-body);white-space:pre-line;margin-top:9px}
+.hl{background:var(--accent-wash);color:var(--prose-deep);font-weight:700;border-radius:4px;padding:0 3px;
+  box-shadow:0 0 0 0 var(--accent-wash)}
+.hl.pop{animation:hlpop 900ms var(--ease-out) both}
+@keyframes hlpop{0%{background:transparent;box-shadow:0 0 0 0 transparent}
+  35%{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 4px var(--accent-wash)}
+  100%{background:var(--accent-wash);box-shadow:0 0 0 0 transparent}}
+.mail-foot{display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:9px;border-top:1px solid var(--row-divider);
+  font-size:11px;color:var(--ink-faint)}
+/* Pinned: once the conversation opens the request compacts to one line and
+   sticks to the top of the column, so the ask never scrolls away. */
+.mail .askline{display:none;font-size:12.2px;color:var(--ink-body);line-height:1.5}
+.mail .pinbtn{display:none;margin-left:auto;border:1px solid var(--border-strong);background:var(--surface-raised);
+  border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:700;color:var(--ink-muted);flex:0 0 auto}
+.mail .pinbtn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.mail.pinned{position:sticky;top:0;z-index:3;box-shadow:var(--shadow-card), 0 14px 26px -16px rgba(20,0,40,.32)}
+.mail.pinned .pinbtn{display:inline-flex}
+.mail.pinned .when,
+.mail.pinned:not(.open) .prose,
+.mail.pinned:not(.open) .mail-foot{display:none}
+.mail.pinned:not(.open) .askline{display:block}
+.mail.pinned .card-h{align-items:center}
+.ok-tick{width:14px;height:14px;border-radius:50%;background:var(--positive-bg);color:var(--positive);
+  display:grid;place-items:center;font-size:9px;font-weight:900}
+
+/* ----------------------------------------------------------- conversation */
+.thread{display:flex;flex-direction:column;gap:11px}
+.msg{max-width:88%;display:flex;flex-direction:column;gap:4px;animation:msgin 240ms var(--ease-spring) both}
+@keyframes msgin{from{opacity:0;transform:translate3d(0,7px,0)}to{opacity:1;transform:none}}
+.msg .who{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.msg .bub{border-radius:13px;padding:10px 13px;font-size:12.6px;line-height:1.58}
+.msg.banker{align-self:flex-end;align-items:flex-end}
+.msg.banker .bub{background:var(--user-tone-wash);color:var(--prose-deep);border:1px solid color-mix(in srgb,var(--user-tone) 16%,transparent);border-bottom-right-radius:5px}
+.msg.agent .bub{background:var(--surface-raised);border:1px solid var(--border);color:var(--ink-body);border-bottom-left-radius:5px;box-shadow:var(--shadow-card)}
+.caret{display:inline-block;width:2px;height:1em;background:var(--accent);vertical-align:-2px;margin-left:1px;animation:blink 900ms steps(1) infinite}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.think{display:inline-flex;gap:4px;padding:2px 0}
+.think i{width:5px;height:5px;border-radius:50%;background:var(--tree-line);animation:think 1000ms ease-in-out infinite}
+.think i:nth-child(2){animation-delay:140ms}
+.think i:nth-child(3){animation-delay:280ms}
+@keyframes think{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+
+/* composer */
+.composer{display:flex;align-items:center;gap:10px;border:1px solid var(--border-strong);border-radius:12px;
+  background:var(--surface-raised);padding:10px 12px;box-shadow:var(--shadow-card);
+  transition:border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)}
+.composer.hot{border-color:color-mix(in srgb,var(--accent) 40%,transparent);
+  box-shadow:0 0 0 3px var(--accent-wash), var(--shadow-card)}
+.composer .txt{flex:1;min-height:18px;font-size:12.6px;color:var(--ink-body-strong)}
+.composer .txt:empty::before{content:"Talk the change into shape.";color:var(--ink-faint)}
+.composer .send{width:28px;height:28px;border-radius:8px;border:none;background:var(--wash-2);color:var(--ink-faint);
+  display:grid;place-items:center;transition:all var(--dur-fast) var(--ease-out)}
+.composer.hot .send{background:var(--accent);color:var(--accent-ink)}
+
+/* ------------------------------------------------------------------ chips */
+.chips{display:flex;flex-direction:column;gap:9px}
+.chip{border-radius:12px;border:1px solid var(--border-strong);background:var(--surface-raised);
+  box-shadow:var(--shadow-card);padding:11px 13px;
+  animation:chipin 300ms var(--ease-spring) both;
+  transition:border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    opacity 200ms var(--ease-out), transform 240ms var(--ease-spring)}
+@keyframes chipin{from{opacity:0;transform:translate3d(-10px,0,0) scale(.985)}to{opacity:1;transform:none}}
+.chip .top{display:flex;align-items:center;gap:8px}
+.kind{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  border-radius:999px;padding:3px 8px;background:var(--accent-wash);color:var(--accent)}
+.kind.new{background:var(--positive-bg);color:var(--positive)}
+.kind.col{background:var(--neutral-bg);color:var(--neutral-fg)}
+.kind.no{background:var(--warning-bg);color:var(--warning)}
+.chip .tgt{font-size:11px;color:var(--ink-label);margin-left:auto}
+.chip .line{margin-top:8px;font-size:13px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.chip .fld{font-weight:700;color:var(--ink-body-strong)}
+.was{color:var(--ink-faint);text-decoration:line-through;text-decoration-color:var(--crumb-sep)}
+.arw{color:var(--ink-faint)}
+.now{font-weight:800;color:var(--prose-deep)}
+.chip .note{margin-top:7px;font-size:11.2px;color:var(--ink-muted);line-height:1.5}
+.chip .acts{display:flex;align-items:center;gap:8px;margin-top:10px}
+.btn{border-radius:9px;padding:6px 12px;font-size:11.5px;font-weight:700;border:1px solid transparent;
+  transition:transform 90ms var(--ease-out), background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out)}
+.btn:active{transform:scale(.97)}
+.btn-p{background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 14px -6px rgba(107,28,196,.7), inset 0 1px 0 var(--gloss)}
+.btn-p:hover{filter:brightness(1.05);transform:translate3d(0,-1px,0)}
+.btn-g{background:var(--surface-raised);border-color:var(--border-strong);color:var(--ink-muted)}
+.btn-g:hover{border-color:var(--crumb-sep);color:var(--ink-body-strong)}
+.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;filter:none}
+.chip.done{border-color:color-mix(in srgb,var(--positive) 26%,transparent);background:var(--positive-bg)}
+.chip.done .acts,.chip.done .note{display:none}
+.chip .settled{display:none;align-items:center;gap:7px;margin-top:9px;font-size:11.5px;font-weight:700;color:var(--positive)}
+.chip.done .settled{display:flex}
+.chip.gone{opacity:0;transform:translate3d(0,-6px,0);pointer-events:none}
+.chip.refuse{border-color:color-mix(in srgb,var(--warning) 28%,transparent);background:var(--warning-bg)}
+.chip.refuse .note{color:var(--warning-prose)}
+.chip.refuse .quote{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.6);
+  border:1px solid color-mix(in srgb,var(--warning) 18%,transparent);
+  font-size:11.5px;line-height:1.55;color:var(--warning-prose)}
+
+/* -------------------------------------------------------------- challenge */
+.chal{border-radius:var(--radius);background:var(--surface-raised);box-shadow:var(--shadow-card);
+  border:1px solid var(--border);overflow:hidden;animation:chipin 320ms var(--ease-spring) both}
+.chal .hd{display:flex;align-items:center;gap:9px;padding:11px 15px 0}
+.live{display:inline-flex;align-items:center;gap:5px;margin-left:auto;font-size:10px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--positive)}
+.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--positive);animation:pip 1600ms ease-in-out infinite}
+.chal .verdict{padding:8px 15px 0;font-size:13.4px;font-weight:800;line-height:1.45;color:var(--prose-deep)}
+.chal .math{margin:11px 15px 0;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.mrow{display:flex;align-items:center;gap:12px;padding:7px 11px;font-size:12px;border-top:1px solid var(--row-divider)}
+.mrow:first-child{border-top:none}
+.mrow .l{color:var(--ink-body)}
+.mrow .v{margin-left:auto;font-weight:700;color:var(--ink-body-strong)}
+.mrow.sum{background:var(--surface-overlay);font-weight:700}
+.mrow.sum .l{color:var(--ink-body-strong)}
+.mrow.key .v{color:var(--accent)}
+.chal .say{padding:10px 15px 0;font-size:11.8px;line-height:1.55;color:var(--ink-muted)}
+.chal .ft{display:flex;align-items:center;gap:10px;padding:11px 15px 13px}
+.chal.ack{border-color:color-mix(in srgb,var(--positive) 22%,transparent)}
+.chal.ack .ft .btn-p{display:none}
+.chal .acked{display:none;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:var(--positive)}
+.chal.ack .acked{display:flex}
+
+/* --------------------------------------------------------------- manifest */
+.man-h{flex:0 0 auto;padding:14px 18px 12px;border-bottom:1px solid var(--border);background:var(--surface-raised)}
+.man-h .t{font-size:13.5px;font-weight:800;letter-spacing:-.005em;margin-top:3px}
+.man-h .c{font-size:11.5px;color:var(--ink-label);margin-top:3px}
+.man-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 18px 18px}
+.man-sec{margin-top:16px}
+.man-sec:first-child{margin-top:0}
+.man-sec>.kicker{display:flex;align-items:center;gap:8px}
+.man-sec>.kicker .rule{flex:1;height:1px;background:var(--border)}
+
+.have{margin-top:9px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface-raised)}
+.have-row{padding:10px 12px;border-top:1px solid var(--row-divider)}
+.have-row:first-child{border-top:none}
+.have-row .l{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+.have-row .v{font-size:12.4px;font-weight:700;color:var(--ink-body-strong);margin-top:3px}
+.have-row .d{font-size:11.3px;color:var(--ink-muted);margin-top:2px;line-height:1.5}
+
+.empty{margin-top:9px;border:1px dashed var(--border-strong);border-radius:12px;padding:18px 14px;text-align:center;
+  color:var(--ink-faint);font-size:11.8px;background:var(--surface-overlay)}
+
+.ent{margin-top:9px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface-raised);
+  overflow:hidden;box-shadow:var(--shadow-card);animation:entland 320ms var(--ease-spring) both}
+@keyframes entland{from{opacity:0;transform:translate3d(0,10px,0) scale(.99)}to{opacity:1;transform:none}}
+.ent.pulse{animation:entland 320ms var(--ease-spring) both, entpulse 1500ms var(--ease-out) 300ms both}
+@keyframes entpulse{0%{box-shadow:0 0 0 3px var(--accent-wash), var(--shadow-card);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  100%{box-shadow:0 0 0 0 transparent, var(--shadow-card);border-color:var(--border-strong)}}
+.ent-t{width:100%;display:flex;align-items:flex-start;gap:9px;background:none;border:none;text-align:left;padding:10px 12px}
+.ent-t:hover{background:var(--surface-overlay)}
+.ent-t .cx{margin-left:auto;color:var(--ink-faint);transition:transform var(--dur-fast) var(--ease-out);flex:0 0 auto;margin-top:2px}
+.ent-t[aria-expanded="true"] .cx{transform:rotate(90deg)}
+.ent .ttl{font-size:12.4px;font-weight:700;color:var(--ink-body-strong)}
+.ent .tgt{font-size:10.8px;color:var(--ink-label);margin-top:2px}
+.ent .delta{margin-top:6px;font-size:12.2px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.ent-x{display:none;padding:0 12px 12px}
+.ent-x.open{display:block;animation:opendown 200ms var(--ease-out) both}
+@keyframes opendown{from{opacity:0;transform:translate3d(0,-4px,0)}to{opacity:1;transform:none}}
+.mapbox{border:1px solid var(--border);border-radius:10px;background:var(--surface-overlay);padding:9px 11px}
+.mapbox .h{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.mapbox .r{display:flex;gap:10px;font-size:11.6px;margin-top:6px}
+.mapbox .r .k{color:var(--ink-label);flex:0 0 96px}
+.mapbox .r .v{color:var(--ink-body-strong);font-weight:600}
+.itog{margin-top:9px;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);
+  border-radius:999px;background:var(--surface-raised);padding:3px 9px 3px 4px;font-size:10.5px;font-weight:700;color:var(--ink-muted)}
+.itog:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.itog .i{width:14px;height:14px;border-radius:50%;background:var(--wash-2);display:grid;place-items:center;font-size:9px;font-weight:900}
+.fields{display:none;margin-top:8px;border-top:1px dashed var(--border-strong);padding-top:8px}
+.fields.open{display:block;animation:opendown 180ms var(--ease-out) both}
+.fields code{display:block;font-family:var(--font-mono);font-size:10.6px;color:var(--ink-muted);padding:2px 0;word-break:break-all}
+.ent .cav{margin-top:8px;font-size:11.2px;line-height:1.5;color:var(--warning-prose);background:var(--warning-bg);
+  border-radius:8px;padding:7px 9px}
+
+.ent.filed{border-color:color-mix(in srgb,var(--positive) 26%,transparent)}
+.filedbar{display:none;align-items:center;gap:8px;padding:8px 12px;background:var(--positive-bg);
+  border-top:1px solid color-mix(in srgb,var(--positive) 18%,transparent)}
+.ent.filed .filedbar{display:flex;animation:opendown 220ms var(--ease-out) both}
+.filedbar .st{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--positive)}
+.filedbar .id{font-family:var(--font-mono);font-size:10.6px;color:var(--ink-body-strong);margin-left:auto}
+.reqline{display:none;padding:7px 12px 10px;font-size:11px;color:var(--ink-muted);font-family:var(--font-mono);word-break:break-all}
+.ent.filed .reqline{display:block}
+
+/* landing badge, the "Covenant added" moment */
+.landtoast{position:absolute;right:18px;pointer-events:none;display:flex;align-items:center;gap:7px;
+  background:var(--prose-deep);color:#fff;border-radius:999px;padding:6px 13px;font-size:11.5px;font-weight:700;
+  box-shadow:0 10px 26px -10px rgba(20,0,40,.6);animation:toast 2200ms var(--ease-out) both;z-index:5}
+@keyframes toast{0%{opacity:0;transform:translate3d(0,8px,0) scale(.96)}
+  12%{opacity:1;transform:none}78%{opacity:1;transform:none}100%{opacity:0;transform:translate3d(0,-6px,0)}}
+
+/* ------------------------------------------------------------ approve bar */
+.man-f{flex:0 0 auto;border-top:1px solid var(--border);background:var(--frost-bar);backdrop-filter:blur(10px);
+  padding:12px 18px 14px;display:none}
+.man-f.on{display:block;animation:opendown 260ms var(--ease-spring) both}
+.plan{border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:12px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 5%,var(--surface-raised)),var(--surface-raised));padding:11px 13px}
+.plan .t{font-size:12.6px;font-weight:800;color:var(--prose-deep)}
+.plan .g{display:flex;gap:14px;margin-top:8px}
+.plan .g div .l{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.plan .g div .v{font-size:13px;font-weight:800;margin-top:2px}
+.plan .who{margin-top:9px;padding-top:8px;border-top:1px solid var(--row-divider);font-size:11px;color:var(--ink-muted);line-height:1.5}
+.approve{margin-top:10px;width:100%;border-radius:11px;padding:11px 14px;font-size:13px;font-weight:800;
+  background:var(--accent);color:var(--accent-ink);border:none;
+  box-shadow:0 8px 22px -8px rgba(107,28,196,.75), inset 0 1px 0 var(--gloss);
+  transition:transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out)}
+.approve:hover{transform:translate3d(0,-1px,0);filter:brightness(1.05)}
+.approve:active{transform:scale(.99)}
+.approve[disabled]{opacity:.6;pointer-events:none}
+.tokline{display:none;margin-top:9px;align-items:center;gap:7px;font-size:11px;color:var(--positive);font-weight:700}
+.tokline.on{display:flex;animation:opendown 220ms var(--ease-out) both}
+
+/* -------------------------------------------------------------- scene bar */
+.scenebar{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:10px 20px;
+  border-top:1px solid var(--border);background:var(--frost-bar);backdrop-filter:blur(10px)}
+.steps{display:flex;align-items:center;gap:7px}
+.step{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-faint);transition:color var(--dur-mid) var(--ease-out)}
+.step .b{width:7px;height:7px;border-radius:50%;background:var(--crumb-sep);transition:all var(--dur-mid) var(--ease-out)}
+.step.on{color:var(--accent)}
+.step.on .b{background:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+.step.past{color:var(--ink-muted)}
+.step.past .b{background:var(--ink-muted)}
+.step .ln{width:16px;height:1px;background:var(--border-strong)}
+.scenebar .sp{margin-left:auto}
+.notes-btn{border:1px solid var(--border-strong);background:var(--surface-raised);border-radius:9px;
+  padding:6px 11px;font-size:11.2px;font-weight:700;color:var(--ink-muted);
+  transition:all var(--dur-fast) var(--ease-out)}
+.notes-btn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+body.notes-on .notes-btn{background:var(--accent-wash);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.next{border-radius:10px;padding:8px 16px;font-size:12.3px;font-weight:800;border:none;
+  background:var(--fill-strong);color:#fff;
+  transition:transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out)}
+.next:hover{transform:translate3d(0,-1px,0);filter:brightness(1.15)}
+.next:disabled{opacity:.35;pointer-events:none}
+.gatehint{font-size:11px;color:var(--ink-faint)}
+
+/* ---------------------------------------------------------- design notes */
+.dnote{display:none;border-left:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent);
+  border-radius:0 8px 8px 0;padding:8px 11px;margin:0 0 10px;font-size:11.4px;line-height:1.55;color:var(--prose-deep)}
+body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both}
+.dnote b{font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:10px;color:var(--accent);display:block;margin-bottom:3px}
+
+/* ------------------------------------------------------------------ reply */
+.reply{border:1px solid color-mix(in srgb,var(--positive) 24%,transparent);
+  background:linear-gradient(180deg,var(--positive-bg),var(--surface-raised) 55%)}
+.reply .prose{font-size:12.6px;line-height:1.65;color:var(--ink-body);white-space:pre-wrap;margin-top:8px;min-height:20px}
+.reply .subj{font-size:12.4px;font-weight:800;color:var(--prose-deep)}
+.reply .ft{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--row-divider)}
+
+/* Below the two-column threshold the workroom becomes one continuous scroll.
+   Nested scroll panes inside a stacked column strand content. */
+@media (max-width:1180px){
+  .grid{grid-template-columns:1fr;overflow-y:auto}
+  .col-l,.col-r,.man-scroll{overflow:visible;min-height:auto}
+  .col-r{border-left:none;border-top:1px solid var(--border)}
+  .mail.pinned{position:static}
+  .wr{top:0;left:0;right:0;bottom:0;border-radius:0}
+  .alt-body.open{grid-template-columns:1fr}
+  .members{padding-bottom:6px}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:.001s !important;animation-duration:.001s !important;animation-delay:0s !important}
+  .strip .amb span,.live::before,.wr-loadtext .pip,.think i,.caret,.sk{animation:none !important}
+  .sk{background:var(--wash-2)}
+}
+</style>
+</head>
+<body data-modal="0">
+
+<!-- ============================================================== cockpit -->
+<div class="ck" aria-hidden="true">
+  <div class="ck-nav">
+    <span class="ck-mark">C</span>
+    <b>Customer 360</b><span class="sep">/</span>
+    <span style="font-size:12.5px;color:var(--ink-muted)">Hartwell Precision Manufacturing LLC</span>
+    <span class="sp"></span>
+    <div class="ck-tabs"><span>Overview</span><span class="on">Portfolio</span><span>Covenants</span><span>Collateral</span><span>Activity</span></div>
+  </div>
+  <div class="ck-page">
+    <div class="ck-hero">
+      <div class="kicker">Commercial and industrial borrower</div>
+      <h1>Hartwell Precision Manufacturing LLC</h1>
+      <div class="sub">NAICS 332710 machine shops · 340 employees · relationship since 2012 · risk grade 4</div>
+    </div>
+    <div class="ck-kpi">
+      <div><div class="kicker">Committed</div><div class="v">$46.0MM</div></div>
+      <div><div class="kicker">Outstanding</div><div class="v">$31.03MM</div></div>
+      <div><div class="kicker">Unused</div><div class="v">$14.97MM</div></div>
+      <div><div class="kicker">Covenants</div><div class="v">6 of 6 compliant</div></div>
+    </div>
+    <div class="ck-rows">
+      <div class="ck-row"><b>HW1001</b> Revolving line of credit <span class="g">$15,000,000 · $9,200,000 outstanding</span></div>
+      <div class="ck-row"><b>HW1002</b> Equipment <span class="g">$8,000,000 · $5,900,000 outstanding</span></div>
+      <div class="ck-row"><b>HW1003</b> Construction <span class="g">$12,000,000 · $7,350,000 outstanding</span></div>
+      <div class="ck-row"><b>HW1004</b> Purchase <span class="g">$5,000,000 · $4,420,000 outstanding</span></div>
+      <div class="ck-row"><b>HW1005</b> Equipment <span class="g">$3,500,000 · $3,010,000 outstanding</span></div>
+      <div class="ck-row"><b>HW1006</b> Seasonal line of credit <span class="g">$2,500,000 · $1,150,000 outstanding</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim"></div>
+<div class="reopen"><button id="reopen">Open the Modification Workroom</button></div>
+
+<!-- ============================================================= workroom -->
+<div class="wr" role="dialog" aria-modal="true" aria-label="Modification Workroom">
+
+  <header class="wr-head">
+    <span class="dot"></span>
+    <div>
+      <div class="wr-title">Modification Workroom</div>
+      <div class="wr-sub">Hartwell Precision Manufacturing LLC · opened from an inbound client request</div>
+    </div>
+    <span class="spacer"></span>
+    <div class="wr-loadtext" id="loadtext"><span class="pip"></span><span id="loadlabel">Reading the request</span></div>
+    <span class="badge-mock">Static mock</span>
+    <button class="wr-x" id="closeWr" aria-label="Close the workroom">
+      <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+    <div class="wr-load"><i id="loadbar"></i></div>
+  </header>
+
+  <div class="wr-body">
+
+    <!-- ------------------------------------------------------- deal strip -->
+    <section class="strip">
+      <div class="amb"><span class="a"></span><span class="b"></span></div>
+      <div class="dnote" id="note-strip" style="margin-bottom:12px;position:relative">
+        <b>Zone 1 · Deal context strip</b>
+        The banker never leaves to remember what the package is. The facility under discussion is hero'd because a
+        modification is always about one member first. The rest stay visible because coverage and covenant math are
+        package level, not facility level.
+      </div>
+      <div class="strip-top rv" id="rv-strip-top">
+        <div>
+          <div class="kicker">Product package · a5Fbb000000IHFJEA4</div>
+          <h2>Hartwell Industrial C&amp;I Credit Package</h2>
+          <div class="meta">7 of 7 members shown · 6 booked, 1 at proposal · risk rating 4 · stage Complete, status Approved</div>
+        </div>
+        <div class="totals">
+          <div><span class="l">Committed</span><span class="v tnum">$46.0MM</span></div>
+          <div><span class="l">Outstanding</span><span class="v tnum">$31.03MM</span></div>
+          <div><span class="l">Unused</span><span class="v tnum">$14.97MM</span></div>
+        </div>
+      </div>
+      <div class="members" id="members"></div>
+    </section>
+
+    <!-- ------------------------------------------------------------ grid -->
+    <div class="grid">
+
+      <!-- LEFT: the room and the conversation -->
+      <div class="col-l" id="colL">
+
+        <div class="dnote" id="note-pos">
+          <b>Zone 2 · The agent's position</b>
+          Stated before the banker types, because the analysis already ran on entry. One recommended structure with
+          its reasoning cited to records, alternatives collapsed so this reads as a position rather than a menu.
+          SR 26-2 framing: the agent recommends, the banker decides.
+        </div>
+
+        <section class="card pos rv" id="posCard">
+          <div class="card-h"><div class="kicker">The agent's position</div>
+            <span class="live" style="margin-left:auto">Analysed 09:02</span>
+          </div>
+          <div class="card-b">
+            <div id="posSkeleton" class="sk-stack">
+              <div class="sk t" style="width:82%"></div><div class="sk t" style="width:64%"></div>
+              <div class="sk" style="width:96%;margin-top:14px"></div><div class="sk" style="width:92%"></div>
+              <div class="sk" style="width:74%"></div>
+              <div class="sk" style="width:94%;margin-top:14px"></div><div class="sk" style="width:88%"></div>
+            </div>
+            <div id="posReal" style="display:none">
+              <div class="kicker">Recommended structure</div>
+              <div class="headline" id="posHeadline"></div>
+              <div class="why" id="posWhy" style="display:none">
+                <div class="why-row">
+                  <div class="lab">Utilisation</div>
+                  <div class="txt">The line is 61% drawn, $9,200,000 against a $15,000,000 commitment. A $20,000,000
+                    commitment would take utilisation to 46% and add $5,000,000 of revolving capacity that the current
+                    borrowing base does not support.
+                    <span class="src">HW1001 · a4Zbb0000027MaYEAU · SOFR+275, 7.60%, matures 2027-03-15</span></div>
+                </div>
+                <div class="why-row">
+                  <div class="lab">Collateral headroom</div>
+                  <div class="txt">The existing pool is $44,000,000 appraised and $31,600,000 lendable, and it is pledged
+                    to the dollar across seven pledge rows. There is no unencumbered lendable value left in it. The Mazak
+                    tooling adds $4,000,000 appraised at a 75% advance rate, which is $3,000,000 lendable and unencumbered.
+                    <span class="src">4 collateral records, 7 pledges, 8 valuations, all re-queried 2026-08-26 09:02</span></div>
+                </div>
+                <div class="why-row">
+                  <div class="lab">Covenant cushion</div>
+                  <div class="txt">Fixed charge coverage runs 1.22x against a 1.15x floor. That is a cushion of 7 bps and
+                    the thinnest number in the package. $5,000,000 of incremental revolver at SOFR+275 loads the fixed
+                    charge denominator faster than a $2,000,000 amortising facility sized to the asset that generates the ramp.
+                    <span class="src">Covenant a3Bbb000000S0ZlEAK · last evaluated 2026-06-30 · next 2026-09-30</span></div>
+                </div>
+              </div>
+              <div class="alts" id="posAlts" style="display:none">
+                <button class="alt-t" id="altToggle" aria-expanded="false">
+                  <svg class="cx" width="9" height="9" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Two alternatives considered
+                </button>
+                <div class="alt-body" id="altBody">
+                  <div class="alt">
+                    <div class="t">Full $20.0MM increase with additional security</div>
+                    <div class="d">Needs new collateral or a guarantee enhancement to cover the incremental $5,000,000.
+                      The only unencumbered asset identified is the Mazak tooling at $3,000,000 lendable, which is
+                      $2,000,000 short. Elena Hartwell's limited guarantee on HW1001 is capped at $5,000,000 and would
+                      have to be raised.</div>
+                  </div>
+                  <div class="alt">
+                    <div class="t">Hold and revisit after the Q3 covenant test</div>
+                    <div class="d">Defers the decision to 2026-09-30 when fixed charge coverage is re-measured. The client
+                      states the Mazak cells land in October, so the deposit and install would be funded on the existing
+                      line at 61% utilisation in the meantime.</div>
+                  </div>
+                </div>
+              </div>
+              <div class="gov">Recommendation only. Nothing here is written. The banker decides, and the approval that
+                follows is the banker's own.</div>
+            </div>
+          </div>
+        </section>
+
+        <div class="dnote" id="note-mail">
+          <b>Zone 3 · The pinned request</b>
+          Kept verbatim so the ask is never paraphrased away, with the figures the parse latched onto highlighted in
+          place. The banker can see what the system read before trusting anything it proposes. When a modification
+          starts from the action rather than a client request, this zone and every mention of email disappear.
+        </div>
+
+        <section class="card mail rv" id="mailCard">
+          <div class="card-h">
+            <div>
+              <div class="kicker">Client request · pinned</div>
+              <div class="from" style="margin-top:3px">James Hartwell, President and CEO</div>
+              <div class="when">Hartwell Precision Manufacturing LLC · received 2026-08-25, 08:14</div>
+            </div>
+            <button class="pinbtn" id="pinBtn">Show the full request</button>
+          </div>
+          <div class="card-b">
+            <div class="askline">Asks to increase the operating line from $15,000,000 to $20,000,000 to fund the Kokomo tooling ramp and the receivable build behind it.</div>
+            <div class="prose" id="mailProse"></div>
+            <div class="mail-foot">
+              <span class="ok-tick">&#10003;</span>
+              <span id="mailFoot">Interpreted on entry. Package re-queried, coverage and covenant math pre-run at 09:02.</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="dnote" id="note-chat">
+          <b>Zone 4 · The conversation is the operator</b>
+          Natural language in, structured deltas out. The parse is a language model call, the validation that follows is
+          deterministic against org fields, picklists and guards, so an invalid parse never becomes a chip. A chip on
+          screen is always writable, which is what makes one tap safe. Chips are staged intent with zero DML.
+        </div>
+
+        <section class="thread" id="thread"></section>
+
+        <div class="composer" id="composer">
+          <div class="txt" id="composerTxt"></div>
+          <button class="send" aria-label="Send" tabindex="-1">
+            <svg width="13" height="13" viewBox="0 0 14 14"><path d="M1.6 7h9.4M7.2 3.2L11 7l-3.8 3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: the change manifest -->
+      <aside class="col-r">
+        <div class="man-h">
+          <div class="kicker">Change manifest</div>
+          <div class="t">What we have <span style="color:var(--ink-faint);font-weight:700">&rarr;</span> what this modification changes</div>
+          <div class="c" id="manCount">0 changes staged · 0 of 7 members affected</div>
+        </div>
+        <div class="man-scroll" id="manScroll" style="position:relative">
+          <div class="dnote" id="note-man">
+            <b>Zone 5 · Two columns of truth</b>
+            The top half is what the org holds today. The bottom half is only what this modification changes, nothing
+            else. Every entry carries its org mapping and will show it on expand, with the API field names one more tap
+            behind an info toggle, so the banker can audit where a change lands before approving it.
+          </div>
+
+          <div class="man-sec">
+            <div class="kicker">What we have<span class="rule"></span></div>
+            <div class="have" id="haveList"></div>
+          </div>
+
+          <div class="man-sec">
+            <div class="kicker">What this modification changes<span class="rule"></span></div>
+            <div class="empty" id="manEmpty">Nothing staged yet. Confirmed deltas land here.</div>
+            <div id="entries"></div>
+          </div>
+
+          <div class="dnote" id="note-filed" style="margin-top:16px">
+            <b>Zone 6 · The ending</b>
+            The manifest does not clear on approval. It flips, entry by entry, to the real record ids, each one verified
+            by re-query rather than by the write response. The drafted client reply then closes the loop so the banker
+            never leaves the workroom to finish the job.
+          </div>
+        </div>
+
+        <div class="man-f" id="manFoot">
+          <div class="plan">
+            <div class="t">One clone. One single use token. One approval.</div>
+            <div class="g">
+              <div><div class="l">Changes</div><div class="v tnum" id="planChanges">0</div></div>
+              <div><div class="l">Members</div><div class="v tnum">1 of 7 changed, 1 new</div></div>
+              <div><div class="l">Writes now</div><div class="v tnum">0</div></div>
+            </div>
+            <div class="who">Approver is the running identity: fabian.goetzens@accenture.com.bankinggpt.
+              Org validation messages are carried through verbatim. Execution delegates to the same clone, stage and
+              book mechanics the org already runs.</div>
+          </div>
+          <button class="approve" id="approveBtn">Approve and file all 4 changes</button>
+          <div class="tokline" id="tokline"><span class="ok-tick">&#10003;</span><span id="toktext"></span></div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+  <footer class="scenebar">
+    <div class="steps" id="steps"></div>
+    <span class="sp"></span>
+    <span class="gatehint" id="gatehint"></span>
+    <button class="notes-btn" id="notesBtn">Design notes</button>
+    <button class="next" id="nextBtn" disabled>Assembling</button>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var RM = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var $ = function(id){ return document.getElementById(id); };
+function el(tag, cls, html){ var n=document.createElement(tag); if(cls) n.className=cls; if(html!=null) n.innerHTML=html; return n; }
+function wait(ms){ return new Promise(function(r){ setTimeout(r, RM?0:ms); }); }
+
+/* ------------------------------------------------------------------ data */
+
+var MEMBERS = [
+  {hero:true, key:"HW1001", tag:"Booked", product:"Revolving line of credit", amt:"$15.0MM",
+   out:"$9,200,000 outstanding · SOFR+275, 7.60% · matures 2027-03-15", util:61},
+  {key:"HW1002", tag:"Booked", product:"Equipment", amt:"$8.0MM", out:"$5.9MM outstanding · 6.85% fixed"},
+  {key:"HW1003", tag:"Booked", product:"Construction", amt:"$12.0MM", out:"$7.35MM outstanding · grade 5"},
+  {key:"HW1004", tag:"Booked", product:"Purchase", amt:"$5.0MM", out:"$4.42MM outstanding · 6.25% fixed"},
+  {key:"HW1005", tag:"Booked", product:"Equipment", amt:"$3.5MM", out:"$3.01MM outstanding · 7.35% fixed"},
+  {key:"HW1006", tag:"Booked", product:"Seasonal line of credit", amt:"$2.5MM", out:"$1.15MM outstanding · matures 2026-06-30"},
+  {prop:true, key:"Proposal", tag:"Proposal", product:"Equipment", amt:"$3.0MM", out:"Staged, not booked · showcase member"}
+];
+
+var HAVE = [
+  {l:"The facility in question", v:"HW1001 · Revolving line of credit · $15,000,000",
+   d:"$9,200,000 outstanding, 61% drawn. SOFR+275, 7.60% today. Closed 2024-03-15, matures 2027-03-15. Risk grade 4."},
+  {l:"Covenants on the relationship", v:"6 covenants, 6 compliant, 2 loan junctions",
+   d:"Fixed charge coverage 1.22x against a 1.15x floor, 7 bps of cushion. Debt service coverage 1.38x against 1.25x. Minimum liquidity $6.8MM against a $5.0MM floor, tested at account level. Borrowing base certificate junctions to HW1001, Kokomo completion junctions to HW1003. No facility level liquidity test exists on HW1001."},
+  {l:"Collateral pool", v:"$48,000,000 appraised · $34,600,000 lendable",
+   d:"Receivables $12.0MM at 80%, inventory $8.0MM at 50%, equipment $10.0MM at 75%, real estate $14.0MM at 75%. Those four are pledged to the dollar, $31,600,000 lendable against $31,600,000 pledged across seven rows. The Mazak tooling at $4.0MM and 75% is appraised and unpledged, $3,000,000 lendable and the only headroom in the pool."},
+  {l:"Package position", v:"7 of 7 members · $46.0MM committed",
+   d:"$31,030,000 outstanding, $14,970,000 unused across the booked six. Borrower is the operating company, guaranteed by Hartwell Industrial Holdings LLC and James Hartwell unlimited, Elena Hartwell limited to $5.0MM on HW1001."}
+];
+
+var MAIL = [
+  {t:"Good morning,\n\nThe Kokomo tooling package is further along than we planned. The "},
+  {t:"Mazak", h:1},
+  {t:" cells land in "},
+  {t:"October", h:1},
+  {t:" and we need to fund the deposit and the install before the aerospace programme ramps in Q1.\n\nWe would like to increase our operating line from "},
+  {t:"15 to 20 million", h:1},
+  {t:" to fund the "},
+  {t:"Kokomo tooling ramp", h:1},
+  {t:" and to carry the receivable build that comes with it. Elena can send the June figures and the updated equipment schedule today.\n\nLet me know what you need from us.\n\nJames Hartwell\nPresident and CEO\nHartwell Precision Manufacturing LLC"}
+];
+
+var POS_HEADLINE = "Partial increase to $18,000,000 now, plus a new $2,000,000 equipment facility secured by the Mazak tooling.";
+
+/* the four confirmable deltas */
+var ENTRIES = {
+  amount:{
+    kind:"Term change", badge:"Term changed",
+    title:"Commitment amount", target:"HW1001 · Revolving line of credit",
+    before:"$15,000,000", after:"$18,000,000",
+    member:"HW1001",
+    map:[["Object","Loan, proposed revision"],["Record","Clone of a4Zbb0000027MaYEAU"],
+         ["Written as","Amount 18,000,000 on the clone. The booked facility is untouched until the plan books."]],
+    fields:["LLC_BI__Loan__c.LLC_BI__Amount__c = 18000000",
+            "LLC_BI__Loan__c.LLC_BI__lookupKey__c = HW1001 (carried on the clone)",
+            "LLC_BI__LoanRenewal__c (chain junction, revision number and prior stage)"],
+    filed:{id:"a4Zbb0000027NpMEAU", req:"Re-queried a4Zbb0000027NpMEAU · LLC_BI__Amount__c = 18000000 · Stage = Proposed"}
+  },
+  covenant:{
+    kind:"New covenant", badge:"Covenant added", kindCls:"new",
+    title:"Minimum Liquidity", target:"HW1001 · Revolving line of credit",
+    before:"No facility level test", after:"≥ $6,000,000, quarterly",
+    member:"HW1001",
+    map:[["Object","Covenant plus loan covenant junction"],["Record","New covenant on Hartwell Precision Manufacturing LLC"],
+         ["Written as","Operator ≥, threshold 6,000,000, next evaluation 2026-09-30, junctioned to the proposed revision."]],
+    fields:["LLC_BI__Covenant__c.Acnpex_Operator__c = >=",
+            "LLC_BI__Covenant__c.Acnpex_Threshold_Value__c = 6000000",
+            "LLC_BI__Covenant__c.Acnpex_Statement_Frequency__c = Not Annual",
+            "LLC_BI__Covenant__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30",
+            "LLC_BI__Loan_Covenant__c (junction to the proposed revision of HW1001)"],
+    caveat:"Frequency writes as Not Annual. The Financial Ratio record type offers a restricted picklist of Annual and Not Annual only, so the quarterly cadence is carried by the evaluation dates, exactly as the five existing quarterly covenants on this relationship do.",
+    filed:{id:"a3Bbb000000S1FhEAK", req:"Re-queried a3Bbb000000S1FhEAK · threshold 6000000, operator >= · junction a4Vbb000000pNQzEAM active"}
+  },
+  facility:{
+    kind:"New facility", badge:"Facility added", kindCls:"new",
+    title:"Equipment facility", target:"New member of the package",
+    before:"Not on the package", after:"$2,000,000 equipment",
+    newMember:true,
+    map:[["Object","Loan"],["Record","New member of a5Fbb000000IHFJEA4"],
+         ["Written as","Amount 2,000,000, product Equipment, borrower and guarantor structure copied from HW1002, staged at Proposed."]],
+    fields:["LLC_BI__Loan__c.LLC_BI__Amount__c = 2000000",
+            "LLC_BI__Loan__c.LLC_BI__Product_Package__c = a5Fbb000000IHFJEA4",
+            "LLC_BI__Legal_Entities__c (borrower, guarantor and limited guarantor rows)"],
+    filed:{id:"a4Zbb0000027NrQEAU", req:"Re-queried a4Zbb0000027NrQEAU · Amount 2000000 · package a5Fbb000000IHFJEA4 · 3 entity involvement rows"}
+  },
+  pledge:{
+    kind:"Collateral pledged", badge:"Collateral pledged", kindCls:"col",
+    title:"Mazak tooling", target:"Pledged to the new equipment facility",
+    before:"Appraised, unpledged", after:"$2,000,000 pledged, 1st position",
+    map:[["Object","Collateral plus the pledge junction"],["Record","New collateral and one Collateral Pledged row"],
+         ["Written as","$4,000,000 appraised, 75% advance rate, $3,000,000 lendable, $2,000,000 pledged, first position lien."]],
+    fields:["LLC_BI__Collateral__c.LLC_BI__Value__c = 4000000",
+            "LLC_BI__Loan_Collateral2__c (label “Collateral Pledged”, the live junction)",
+            "LLC_BI__Loan_Collateral2__c.LLC_BI__Advance_Rate_Override__c = 75",
+            "LLC_BI__Loan_Collateral2__c.LLC_BI__Override_Reason__c (required, written)",
+            "LLC_BI__Collateral_Valuation__c (appraisal, flagged Active and Primary)"],
+    caveat:"The advance rate is an override with a written reason. Every collateral type in this org defaults to 80%, and three of the seven existing Hartwell pledges already carry the same override for the same reason.",
+    filed:{id:"a35bb0000013y5VAAQ", req:"Re-queried a35bb0000013y5VAAQ · lendable 3,000,000 · pledge a4Rbb0000026snlEAA amount 2,000,000, override 75 with reason"}
+  }
+};
+
+/* ------------------------------------------------------------- rendering */
+
+function renderMembers(){
+  var box = $("members");
+  MEMBERS.forEach(function(m, i){
+    var n = el("div", "mem rv" + (m.hero?" hero":"") + (m.prop?" prop":""));
+    n.innerHTML =
+      '<span class="tag">'+m.tag+'</span>'+
+      '<div class="k">'+m.key+'</div>'+
+      '<div class="p">'+m.product+'</div>'+
+      '<div class="a tnum">'+m.amt+'</div>'+
+      '<div class="o">'+m.out+'</div>'+
+      (m.util? '<div class="meter"><i></i></div><div class="util"><span>'+m.util+'% drawn</span><span>$5.8MM available</span></div>' : '');
+    box.appendChild(n);
+  });
+}
+
+function renderHave(){
+  var box = $("haveList");
+  HAVE.forEach(function(h){
+    var n = el("div","have-row rv");
+    n.innerHTML = '<div class="l">'+h.l+'</div><div class="v">'+h.v+'</div><div class="d">'+h.d+'</div>';
+    box.appendChild(n);
+  });
+}
+
+function renderMail(){
+  var p = $("mailProse");
+  MAIL.forEach(function(seg){
+    if(seg.h){ var s = el("span","hl"); s.textContent = seg.t; p.appendChild(s); }
+    else p.appendChild(document.createTextNode(seg.t));
+  });
+}
+
+/* -------------------------------------------------------- text streaming */
+
+function streamInto(node, text, speed, done){
+  if(RM){ node.textContent = text; if(done) done(); return; }
+  var words = text.split(/(\s+)/), i = 0;
+  var caret = el("span","caret");
+  node.textContent = "";
+  node.appendChild(caret);
+  var timer = setInterval(function(){
+    if(i >= words.length){
+      clearInterval(timer);
+      if(caret.parentNode) caret.parentNode.removeChild(caret);
+      if(done) done();
+      return;
+    }
+    caret.parentNode.insertBefore(document.createTextNode(words[i]), caret);
+    i++;
+    autoscroll();
+  }, speed || 15);
+}
+
+function typeInto(node, text, speed, done){
+  if(RM){ node.textContent = text; if(done) done(); return; }
+  var i = 0;
+  var timer = setInterval(function(){
+    node.textContent = text.slice(0, ++i);
+    if(i >= text.length){ clearInterval(timer); if(done) done(); }
+  }, speed || 16);
+}
+
+var colL = null, follow = false;
+/* The left column follows the conversation, but never during entry assembly:
+   the position card is the first thing the banker must read. */
+function autoscroll(){
+  if(!follow) return;
+  if(!colL) colL = $("colL");
+  colL.scrollTop = colL.scrollHeight;
+}
+
+/* -------------------------------------------------------- assembly / boot */
+
+var LOAD_STEPS = [
+  [0,   "Reading the request",                  8],
+  [420, "Re-querying the package, 7 of 7 members", 34],
+  [980, "Valuing collateral, 4 positions and 7 pledges", 62],
+  [1540,"Testing 6 covenants against the ask",   84],
+  [2050,"Composing a position",                  96],
+  [2600,"Ready",                                 100]
+];
+
+function reveal(node, delay){
+  setTimeout(function(){ node.classList.add("in"); }, RM?0:delay);
+}
+
+function boot(){
+  renderMembers(); renderHave(); renderMail();
+  renderSteps();
+
+  var bar = $("loadbar"), lbl = $("loadlabel");
+  LOAD_STEPS.forEach(function(s){
+    setTimeout(function(){ lbl.textContent = s[1]; bar.style.width = s[2] + "%"; }, RM?0:s[0]);
+  });
+  setTimeout(function(){
+    $("loadtext").style.opacity = "0";
+    setTimeout(function(){ $("loadtext").style.display = "none"; bar.style.opacity = "0"; }, 300);
+  }, RM?10:3000);
+
+  // zone 1: strip, then member tiles staggered, revolver meter tweens
+  reveal($("rv-strip-top"), 120);
+  var mems = document.querySelectorAll(".mem");
+  for(var i=0;i<mems.length;i++) reveal(mems[i], 200 + i*55);
+  setTimeout(function(){
+    var m = document.querySelector(".mem.hero .meter i");
+    if(m) m.style.width = "61%";
+  }, RM?0:700);
+
+  // zone 2: position card arrives as a skeleton, then resolves and streams
+  reveal($("posCard"), 480);
+  setTimeout(function(){
+    $("posSkeleton").style.display = "none";
+    $("posReal").style.display = "block";
+    streamInto($("posHeadline"), POS_HEADLINE, 16, function(){
+      $("posWhy").style.display = "grid";
+      $("posAlts").style.display = "block";
+      var rows = $("posWhy").children;
+      for(var k=0;k<rows.length;k++){
+        (function(r,idx){
+          r.style.opacity = "0"; r.style.transform = "translate3d(0,6px,0)";
+          setTimeout(function(){
+            r.style.transition = "opacity 240ms var(--ease-spring), transform 260ms var(--ease-spring)";
+            r.style.opacity = "1"; r.style.transform = "none";
+          }, RM?0:idx*110);
+        })(rows[k], k);
+      }
+    });
+  }, RM?0:1650);
+
+  // zone 3: the pinned request, figures light up in reading order
+  reveal($("mailCard"), 760);
+  setTimeout(function(){
+    var hls = document.querySelectorAll("#mailProse .hl");
+    for(var j=0;j<hls.length;j++){
+      (function(h,idx){ setTimeout(function(){ h.classList.add("pop"); }, RM?0:idx*130); })(hls[j], j);
+    }
+  }, RM?0:2200);
+
+  // zone 5: the manifest assembles last
+  var haves = document.querySelectorAll(".have-row");
+  for(var q=0;q<haves.length;q++) reveal(haves[q], 1050 + q*90);
+
+  setTimeout(function(){
+    setNext("Open the conversation", true);
+    $("gatehint").textContent = "";
+  }, RM?10:3000);
+}
+
+/* ------------------------------------------------------------- scene bar */
+
+var SCENES = ["Entry","Conversation","Challenge","Approve","Filed"];
+var scene = 0, step = 0, pending = 0;
+
+function renderSteps(){
+  var box = $("steps");
+  box.innerHTML = "";
+  SCENES.forEach(function(s, i){
+    if(i) box.appendChild(el("span","ln"));
+    var n = el("span","step" + (i===scene?" on":(i<scene?" past":"")));
+    n.innerHTML = '<span class="b"></span>' + s;
+    box.appendChild(n);
+  });
+}
+function setScene(i){ scene = i; renderSteps(); }
+function setNext(label, on){
+  var b = $("nextBtn");
+  b.textContent = label;
+  b.disabled = !on;
+}
+function gate(n, hint){
+  pending = n;
+  setNext("Next", false);
+  $("gatehint").textContent = hint || "";
+}
+function resolve(){
+  pending--;
+  if(pending <= 0){
+    pending = 0;
+    $("gatehint").textContent = "";
+    setNext(BEATS[step] ? (BEATS[step].next || "Next") : "Next", true);
+  }
+}
+
+/* ----------------------------------------------------- conversation parts */
+
+function bankerSays(text){
+  return new Promise(function(res){
+    var comp = $("composer"), txt = $("composerTxt");
+    comp.classList.add("hot");
+    typeInto(txt, text, 9, function(){
+      setTimeout(function(){
+        txt.textContent = "";
+        comp.classList.remove("hot");
+        var m = el("div","msg banker");
+        m.innerHTML = '<div class="who">Banker</div><div class="bub"></div>';
+        m.querySelector(".bub").textContent = text;
+        $("thread").appendChild(m);
+        autoscroll();
+        res();
+      }, RM?0:260);
+    });
+  });
+}
+
+function agentSays(text, thinkMs){
+  return new Promise(function(res){
+    var m = el("div","msg agent");
+    m.innerHTML = '<div class="who">Workroom agent</div><div class="bub"><span class="think"><i></i><i></i><i></i></span></div>';
+    $("thread").appendChild(m);
+    autoscroll();
+    setTimeout(function(){
+      var bub = m.querySelector(".bub");
+      bub.innerHTML = "";
+      streamInto(bub, text, 14, function(){ autoscroll(); res(); });
+    }, RM?0:(thinkMs||620));
+  });
+}
+
+function chipHolder(){
+  var c = el("div","chips");
+  $("thread").appendChild(c);
+  autoscroll();
+  return c;
+}
+
+function deltaChip(holder, key){
+  var e = ENTRIES[key];
+  var n = el("div","chip");
+  n.innerHTML =
+    '<div class="top"><span class="kind '+(e.kindCls||"")+'">'+e.kind+'</span><span class="tgt">'+e.target+'</span></div>'+
+    '<div class="line"><span class="fld">'+e.title+'</span>'+
+      '<span class="was">'+e.before+'</span><span class="arw">&rarr;</span><span class="now">'+e.after+'</span></div>'+
+    '<div class="note">Parsed from the message, then validated against the org. Staged intent only, nothing is written until approval.</div>'+
+    '<div class="acts"><button class="btn btn-p">Confirm</button><button class="btn btn-g">Discard</button></div>'+
+    '<div class="settled"><span class="ok-tick">&#10003;</span><span>Confirmed. In the manifest.</span></div>';
+  holder.appendChild(n);
+  autoscroll();
+  n.querySelector(".btn-p").addEventListener("click", function(){
+    if(n.classList.contains("done")) return;
+    n.classList.add("done");
+    landEntry(key);
+    resolve();
+  });
+  n.querySelector(".btn-g").addEventListener("click", function(){
+    if(n.classList.contains("done")) return;
+    n.classList.add("gone");
+    setTimeout(function(){ n.style.display = "none"; }, 260);
+    resolve();
+  });
+  return n;
+}
+
+function refusalChip(holder){
+  var n = el("div","chip refuse");
+  n.innerHTML =
+    '<div class="top"><span class="kind no">Not staged</span><span class="tgt">HW1003 · Construction</span></div>'+
+    '<div class="line"><span class="fld">Minimum Liquidity on HW1003</span></div>'+
+    '<div class="quote">HW1003 is not a member of this modification. A covenant junction is written against the proposed '+
+      'revision of a facility, and HW1001 is the only facility with one in this plan. HW1003 stays Booked and unchanged.</div>'+
+    '<div class="note">To put the test on the construction facility, stage a separate modification on HW1003. It carries its '+
+      'own clone, its own plan and its own approval. HW1003 already holds the Kokomo completion covenant through junction '+
+      'a4Vbb000000pNKLEA2, one off, 61% complete at the June inspection.</div>'+
+    '<div class="acts"><button class="btn btn-p">Understood</button>'+
+      '<button class="btn btn-g" disabled title="Not part of this mock">Stage a separate modification on HW1003</button></div>';
+  holder.appendChild(n);
+  autoscroll();
+  n.querySelector(".btn-p").addEventListener("click", function(){
+    if(n.classList.contains("done")) return;
+    n.classList.add("done");
+    n.querySelector(".acts").style.display = "none";
+    resolve();
+  });
+  return n;
+}
+
+/* ------------------------------------------------------ manifest landing */
+
+var landed = [];
+var membersChanged = {}, newMembers = 0;
+
+function updateCount(){
+  var changed = Object.keys(membersChanged).length;
+  var txt = landed.length + (landed.length===1?" change staged":" changes staged") + " · " +
+            changed + " of 7 members affected";
+  if(newMembers) txt += " · " + newMembers + " new member" + (newMembers>1?"s":"");
+  $("manCount").textContent = txt;
+  $("planChanges").textContent = landed.length;
+  $("approveBtn").textContent = "Approve and file all " + landed.length + " changes";
+}
+
+function landEntry(key){
+  var e = ENTRIES[key];
+  $("manEmpty").style.display = "none";
+  var n = el("div","ent pulse");
+  n.setAttribute("data-key", key);
+
+  var fieldsHtml = e.fields.map(function(f){ return "<code>" + f + "</code>"; }).join("");
+  var mapHtml = e.map.map(function(r){
+    return '<div class="r"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>';
+  }).join("");
+
+  n.innerHTML =
+    '<button class="ent-t" aria-expanded="false">'+
+      '<div style="min-width:0">'+
+        '<div class="ttl">'+e.title+'</div>'+
+        '<div class="tgt">'+e.kind+' · '+e.target+'</div>'+
+        '<div class="delta"><span class="was">'+e.before+'</span><span class="arw">&rarr;</span><span class="now">'+e.after+'</span></div>'+
+      '</div>'+
+      '<svg class="cx" width="10" height="10" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+    '</button>'+
+    '<div class="ent-x">'+
+      '<div class="mapbox"><div class="h">Where this lands in the org</div>'+ mapHtml +
+        '<button class="itog"><span class="i">i</span>Field names</button>'+
+        '<div class="fields">'+ fieldsHtml +'</div>'+
+      '</div>'+
+      (e.caveat ? '<div class="cav">'+e.caveat+'</div>' : '')+
+    '</div>'+
+    '<div class="filedbar"><span class="st">Filed</span><span class="id"></span></div>'+
+    '<div class="reqline"></div>';
+
+  $("entries").appendChild(n);
+
+  var t = n.querySelector(".ent-t"), x = n.querySelector(".ent-x");
+  t.addEventListener("click", function(){
+    var open = x.classList.toggle("open");
+    t.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  var itog = n.querySelector(".itog"), flds = n.querySelector(".fields");
+  itog.addEventListener("click", function(ev){ ev.stopPropagation(); flds.classList.toggle("open"); });
+
+  landed.push(key);
+  if(e.newMember) newMembers++;
+  if(e.member) membersChanged[e.member] = 1;
+  updateCount();
+
+  toast(e.badge);
+  var ms = $("manScroll");
+  setTimeout(function(){ ms.scrollTop = ms.scrollHeight; }, RM?0:60);
+}
+
+function toast(label){
+  var host = $("manScroll");
+  var t = el("div","landtoast", '<span class="ok-tick">&#10003;</span>' + label);
+  t.style.top = (host.scrollTop + 12) + "px";
+  host.appendChild(t);
+  setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, RM?200:2300);
+}
+
+/* ------------------------------------------------------------- challenge */
+
+function challengeCard(spec){
+  var n = el("div","chal");
+  n.innerHTML =
+    '<div class="hd"><div class="kicker">'+spec.kicker+'</div><span class="live">Live '+spec.stamp+'</span></div>'+
+    '<div class="verdict">'+spec.verdict+'</div>'+
+    '<div class="math">'+ spec.rows.map(function(r){
+        return '<div class="mrow'+(r[2]||"")+'"><span class="l">'+r[0]+'</span><span class="v tnum">'+r[1]+'</span></div>';
+      }).join("") +'</div>'+
+    '<div class="say">'+spec.say+'</div>'+
+    '<div class="ft"><button class="btn btn-p">Acknowledge and continue</button>'+
+      '<span class="acked"><span class="ok-tick">&#10003;</span>Acknowledged</span></div>';
+  $("thread").appendChild(n);
+  autoscroll();
+  n.querySelector(".btn-p").addEventListener("click", function(){
+    if(n.classList.contains("ack")) return;
+    n.classList.add("ack");
+    resolve();
+  });
+  return n;
+}
+
+var CHAL_COVERAGE = {
+  kicker:"Challenge · coverage pro forma for the $3,000,000 increase",
+  stamp:"09:06",
+  verdict:"The increase creates no collateral shortfall. It raises the ceiling, not availability.",
+  rows:[
+    ["Eligible receivables $12,000,000 at 80%","$9,600,000"],
+    ["Eligible inventory $8,000,000 at 50%","$4,000,000"],
+    ["Borrowing base, gross","$13,600,000"," sum"],
+    ["Less receivables pledged to HW1006","($1,600,000)"],
+    ["Base available to HW1001","$12,000,000"," sum"],
+    ["Outstanding today","$9,200,000"],
+    ["Base coverage of outstanding","1.30x"," key"],
+    ["Commitment after the increase","$18,000,000"],
+    ["Base coverage of commitment, was 0.80x","0.67x"," key"]
+  ],
+  say:"Advances stay capped by the monthly borrowing base certificate on HW1001, junction a4Vbb000000pNIjEAM, at 80% of eligible receivables and 50% of eligible inventory. The $18,000,000 face never funds ahead of the base. The receivable build the client describes is what lifts availability, and the base formula picks it up automatically. Unencumbered lendable value in the pool is $3,000,000, all of it the Mazak tooling, which the new equipment facility takes."
+};
+
+var CHAL_FCCR = {
+  kicker:"Challenge · fixed charge coverage cushion",
+  stamp:"09:06",
+  verdict:"The thinnest covenant in the package gets thinner. On today's figures it still clears the September test.",
+  rows:[
+    ["Fixed charge coverage floor","1.15x"],
+    ["Actual at 2026-06-30","1.22x"],
+    ["Cushion","7 bps"," key"],
+    ["Debt service coverage floor","1.25x"],
+    ["Debt service coverage actual","1.38x"],
+    ["Cushion","13 bps"],
+    ["Next evaluation","2026-09-30"," sum"]
+  ],
+  say:"The revolver increase adds no scheduled amortisation. Interest follows drawn balances at SOFR+275, 7.60% today, so the $3,000,000 only reaches the fixed charge denominator to the extent it is drawn. The $2,000,000 equipment facility is different: scheduled principal and interest enter the denominator from first draw and land in the 2026-09-30 test. Recommendation: re-test fixed charge coverage against the equipment amortisation schedule before first draw, and hold the September base certificate as the trigger. Covenant a3Bbb000000S0ZlEAK carries its evaluation history in its own fields; this relationship has no compliance rows by design."
+};
+
+/* ----------------------------------------------------------- filing flow */
+
+function fileAll(){
+  $("approveBtn").disabled = true;
+  var nodes = document.querySelectorAll("#entries .ent");
+  var i = 0;
+  function nextOne(){
+    if(i >= nodes.length){
+      $("approveBtn").style.display = "none";
+      document.querySelector(".plan .t").textContent = "Filed. One clone, one token, " + landed.length + " changes.";
+      $("tokline").classList.add("on");
+      $("toktext").textContent = "Token redeemed 2026-08-26 09:07 · single use · " + landed.length + " of " + landed.length + " entries verified by re-query";
+      setScene(4);
+      setTimeout(showReply, RM?0:400);
+      return;
+    }
+    var n = nodes[i];
+    var key = n.getAttribute("data-key");
+    var e = ENTRIES[key];
+    n.classList.add("filed");
+    n.querySelector(".filedbar .id").textContent = e.filed.id;
+    n.querySelector(".reqline").textContent = e.filed.req;
+    var ms = $("manScroll");
+    ms.scrollTop = ms.scrollHeight;
+    i++;
+    setTimeout(nextOne, RM?0:340);
+  }
+  setTimeout(nextOne, RM?0:260);
+}
+
+var REPLY_SUBJ = "Hartwell Industrial, operating line increase and equipment facility";
+var REPLY_BODY =
+"James,\n\n"+
+"Thank you for the note on the Kokomo tooling. We have taken the request through credit and this is where we landed.\n\n"+
+"We are increasing the operating line from $15.0 million to $18.0 million rather than to $20.0 million. Advances stay governed by the borrowing base certificate, which is unchanged at 80 percent of eligible receivables and 50 percent of eligible inventory, so the higher commitment gives you room as the receivable build comes through without changing how availability is calculated.\n\n"+
+"Alongside the increase we are adding a $2.0 million equipment facility secured by the Mazak tooling, appraised at $4.0 million and advanced at 75 percent. Funding the tooling on an amortising facility rather than on the revolver keeps the line available for working capital through the ramp.\n\n"+
+"One new condition attaches to the increase: a minimum liquidity test of $6.0 million, measured quarterly. Your 30 June position of $6.8 million clears it. The existing $5.0 million relationship test is unchanged, and we will re-measure fixed charge coverage against the equipment amortisation schedule before the first draw.\n\n"+
+"The structure is approved. Documents are being prepared and booking follows on execution.\n\n"+
+"Regards,\n"+
+"Relationship Manager, Commercial Banking";
+
+function showReply(){
+  var c = el("section","card reply");
+  c.innerHTML =
+    '<div class="card-h"><div class="kicker">Drafted client reply</div><span class="live" style="margin-left:auto">Composed 09:07</span></div>'+
+    '<div class="card-b"><div class="subj">Subject: '+REPLY_SUBJ+'</div><div class="prose"></div>'+
+      '<div class="ft"><button class="btn btn-p" id="sendBtn">Send to James Hartwell</button>'+
+      '<button class="btn btn-g">Edit</button>'+
+      '<span style="margin-left:auto;font-size:11px;color:var(--ink-faint)" id="sendNote">Draft only. References the approved structure; booking follows execution.</span></div></div>';
+  $("thread").appendChild(c);
+  autoscroll();
+  c.querySelector("#sendBtn").addEventListener("click", function(){
+    this.disabled = true;
+    $("sendNote").textContent = "Static mock. Nothing leaves the workroom.";
+  });
+  typeInto(c.querySelector(".prose"), REPLY_BODY, 3, function(){
+    autoscroll();
+    setNext("Replay from the top", true);
+  });
+  $("gatehint").textContent = "Filed. The workroom holds.";
+}
+
+/* ------------------------------------------------------------- the beats */
+
+var BEATS = [
+  { scene:0, next:"Open the conversation", run:function(){
+      setNext("Open the conversation", true);
+    }},
+
+  { scene:1, next:"Continue", run:function(){
+      follow = true;
+      $("mailCard").classList.add("pinned");
+      gate(2, "Confirm both chips to continue");
+      bankerSays("Go with the recommendation, but add a minimum liquidity covenant at 6 million tested quarterly on the increase.")
+      .then(function(){
+        return agentSays("Understood. Two changes staged against HW1001, the revolving line of credit. The commitment moves from $15,000,000 to $18,000,000. A facility level minimum liquidity test is added at $6,000,000, measured quarterly, alongside the $5,000,000 relationship test already in force. Reported liquidity was $6,800,000 at 2026-06-30, so the borrower clears the tighter test on today's figures. Neither change is written yet.");
+      })
+      .then(function(){
+        var h = chipHolder();
+        deltaChip(h, "amount");
+        setTimeout(function(){ deltaChip(h, "covenant"); }, RM?0:220);
+      });
+    }},
+
+  { scene:1, next:"Continue", run:function(){
+      gate(1, "Acknowledge the refusal to continue");
+      bankerSays("Set the covenant on the construction loan too.")
+      .then(function(){
+        return agentSays("I cannot stage that one. The org will not accept it in this plan, and here is the reason in full.");
+      })
+      .then(function(){ refusalChip(chipHolder()); });
+    }},
+
+  { scene:1, next:"Run the challenge", run:function(){
+      gate(2, "Confirm both chips to continue");
+      bankerSays("Fine. Add the two million equipment facility for the tooling and pledge the Mazak against it.")
+      .then(function(){
+        return agentSays("Staged. A new equipment facility at $2,000,000 joins the package as an eighth member, and the Mazak tooling is pledged to it at $4,000,000 appraised and a 75% advance rate, which is $3,000,000 lendable against $2,000,000 pledged. The existing pool is untouched, so no facility loses coverage. This is the second leg of the recommended structure.");
+      })
+      .then(function(){
+        var h = chipHolder();
+        deltaChip(h, "facility");
+        setTimeout(function(){ deltaChip(h, "pledge"); }, RM?0:220);
+      });
+    }},
+
+  { scene:2, next:"Go to approval", run:function(){
+      gate(2, "Acknowledge both challenges to continue");
+      bankerSays("Run the challenge on the increase before I approve.")
+      .then(function(){
+        return agentSays("Two cards, both on figures re-queried a moment ago rather than on the entry snapshot.", 500);
+      })
+      .then(function(){
+        challengeCard(CHAL_COVERAGE);
+        setTimeout(function(){ challengeCard(CHAL_FCCR); }, RM?0:260);
+      });
+    }},
+
+  { scene:3, next:"", run:function(){
+      gate(1, "Approve to file the plan");
+      $("manFoot").classList.add("on");
+      var ms = $("manScroll");
+      setTimeout(function(){ ms.scrollTop = ms.scrollHeight; }, RM?0:80);
+      $("approveBtn").addEventListener("click", function once(){
+        $("approveBtn").removeEventListener("click", once);
+        pending = 0;
+        $("gatehint").textContent = "Filing";
+        setNext("Filing", false);
+        fileAll();
+      });
+    }}
+];
+
+$("nextBtn").addEventListener("click", function(){
+  if($("nextBtn").textContent === "Replay from the top"){ location.reload(); return; }
+  step++;
+  if(step >= BEATS.length) return;
+  var b = BEATS[step];
+  setScene(b.scene);
+  b.run();
+});
+
+/* --------------------------------------------------------------- chrome */
+
+$("pinBtn").addEventListener("click", function(){
+  var open = $("mailCard").classList.toggle("open");
+  this.textContent = open ? "Collapse the request" : "Show the full request";
+});
+
+$("altToggle").addEventListener("click", function(){
+  var open = $("altBody").classList.toggle("open");
+  this.setAttribute("aria-expanded", open ? "true" : "false");
+});
+
+$("notesBtn").addEventListener("click", function(){
+  document.body.classList.toggle("notes-on");
+  this.textContent = document.body.classList.contains("notes-on") ? "Hide design notes" : "Design notes";
+});
+
+$("closeWr").addEventListener("click", function(){ document.body.setAttribute("data-modal","0"); });
+$("reopen").addEventListener("click", function(){ document.body.setAttribute("data-modal","1"); });
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape") document.body.setAttribute("data-modal","0");
+});
+
+/* open the workroom over the cockpit, then assemble it */
+setTimeout(function(){
+  document.body.setAttribute("data-modal","1");
+  setTimeout(boot, RM?0:260);
+}, RM?0:420);
+
+})();
+</script>
+</body>
+</html>
