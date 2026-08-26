@@ -221,3 +221,13 @@ brand assets, intentionally-empty .mcp.json + RUNBOOK prerequisites):
 | 6 | Plugin-level smoke test (assemble-cockpit from live-data → validate) like credit-memo `test/` | 0.25 d | WS3 |
 | 7 | Version 0.5.0 + marketplace bump | 0.1 d | G3 |
 Total ≈ 4.5 dev-days, inside the WS3 window; #1/#2 pulled forward to Monday.
+
+## Strategic lanes added 2026-08-26 (Fabian, committed direction: "we will not fail on this")
+1. THE MODIFICATION WORKROOM (Sept 1): conversational composer that COMMITS — spec in
+   DESIGN-MOD-WORKROOM.md, mock in co-design, wiring Aug 27-31. The flagship interaction.
+2. PORTFOLIO EXECUTOR (backlog, post-Sept): agents redeem human-approved tokens at scale
+   (book-wide covenant reviews, mass revaluations, maturity waves); agents execute, never approve;
+   org isAsync for large trees; natural Agentforce landing zone.
+3. KNOWLEDGE OVERLAY as product (backlog): base skills (shipped) + org overlay (the discovery +
+   process-alignment method, repeatable per client org) + bank overlay (policy pack, WS2 first
+   instance). Layers 2+3 are the recurring commercial engine.
