@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Modification Workroom · static mock v2</title>
+<title>Modification Workroom · static mock v2.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
 /* =============================================================================
-   Modification Workroom, static clickable mock, v2.
+   Modification Workroom, static clickable mock, v2.2.
 
    v2 corrections from founder review of v1:
    1. ALTITUDE. The story is told at PRODUCT PACKAGE level. Loans are the record
@@ -24,6 +24,24 @@
       stepper was clicked. Off-script asks get an honest refusal.
    5. THE MANIFEST IS FELT. A confirm physically travels to the right rail,
       the entry lands, the counts tick and the package figures bump pro forma.
+   v2.2 (founder direction, 2026-08-26):
+   6. NOTHING SCROLLS. There is no scrollbar anywhere in the room, in any
+      scene. Two structural moves buy that, rather than a smaller font:
+        - THE PEEK. Every disclosure in the room, evidence, member detail,
+          org record maps, the math behind a check, opens as an overlay that
+          floats over the room. No drawer ever grows the layout, so no pane
+          can ever be pushed past its height. One primitive, used everywhere.
+        - THE WINDOWED THREAD. The conversation keeps the live exchange on
+          screen and folds what is settled behind a chevron line, the way a
+          desk clears rather than a page scrolls.
+   7. SOURCES ARE USED, NOT DISPLAYED. What the agent read is a row of icon
+      chips. The client email is a chip, not a wall of quoted text.
+   8. THE MULTI-STEP SKELETON. Understand, Compose, Checks, Approve, carried
+      by the brand chevron. It is a progress spine under a conversation, never
+      a form wizard: every step advances because the banker said something or
+      confirmed something, never because a step was clicked.
+   9. CHECKS COME TO YOU. A confirmed change that trips a challenge gets the
+      challenge back as an agent message, inline, with a verdict chip.
 
    Palette, type, radii, shadows and motion come from the cockpit's
    app/src/styles/tokens.css. Every figure is a real Hartwell figure
@@ -41,9 +59,9 @@
   --ink-body-strong:#3f3d4a; --ink-faint:#8f8c99;
 
   --accent:#6b1cc4; --accent-ink:#ffffff; --accent-wash:rgba(107,28,196,.10);
-  /* The brand thread. Reserved for exactly two moments: the boot chevron and
-     the approval. Everywhere else the room works in the quieter engagement
-     accent, which is what keeps the brand moment loud when it comes. */
+  /* The brand thread. Reserved for the load and progress moments and the
+     approval: the boot chevron, the step spine, the arrival marks, the approve
+     action. Everywhere else the room works in the quieter engagement accent. */
   --brand:#A100FF; --brand-ink:#ffffff; --brand-wash:rgba(161,0,255,.10);
 
   --positive:#047857; --positive-bg:#e8f4ef;
@@ -51,18 +69,19 @@
   --neutral-fg:#56535f; --neutral-bg:#f1f0f6;
 
   --fill-strong:#36323f; --divider-soft:#edecf2;
-  --crumb-sep:#d2cfda; --tree-line:#cdc9db; --scroll-thumb:#d8d5e2;
+  --crumb-sep:#d2cfda; --tree-line:#cdc9db;
   --prose-deep:#2e2640; --warning-prose:#5a4423;
   --ambient-2:#2f7fd0;
   --gloss:rgba(255,255,255,.30);
   --frost-bar:rgba(255,255,255,.82);
   --shadow-panel:0 24px 60px -12px rgba(20,0,40,.30), 0 8px 20px -8px rgba(20,0,40,.20);
+  --shadow-peek:0 30px 70px -16px rgba(20,0,40,.38), 0 10px 24px -10px rgba(20,0,40,.24);
   --user-tone:#6038ea; --user-tone-wash:rgba(96,56,234,.10);
 
   --radius:14px; --radius-sm:9px;
   --shadow-card:0 1px 2px rgba(26,10,54,.05), 0 6px 22px rgba(26,10,54,.05);
 
-  --gutter:24px;
+  --gutter:22px;
   --ease-out:cubic-bezier(.22,.8,.28,1);
   --ease-weight:cubic-bezier(.32,.72,0,1);
   /* Strong deceleration, zero overshoot. Weight without bounce. */
@@ -84,9 +103,6 @@ button{font:inherit;color:inherit;cursor:pointer}
 .kicker{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)}
 .tnum{font-variant-numeric:tabular-nums}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:8px;border:3px solid transparent;background-clip:content-box}
-::-webkit-scrollbar-track{background:transparent}
 
 /* ------------------------------------------------------------------ cockpit
    A simplified impression of the Customer 360 cockpit, so the workroom reads
@@ -137,24 +153,23 @@ body[data-modal="0"] .reopen{display:grid}
 }
 body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
 
-.wr-head{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:12px;
-  padding:14px 20px 13px;background:var(--frost-bar);backdrop-filter:blur(10px);
+.wr-head{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding:11px 18px 10px;background:var(--frost-bar);backdrop-filter:blur(10px);
   border-bottom:1px solid var(--border)}
 .wr-head .dot{width:8px;height:8px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 4px var(--brand-wash)}
-.wr-title{font-size:13.5px;font-weight:800;letter-spacing:-.005em}
-.wr-sub{font-size:11px;color:var(--ink-label)}
+.wr-title{font-size:13px;font-weight:800;letter-spacing:-.005em}
 .wr-head .spacer{margin-left:auto}
-.badge-mock{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+.badge-mock{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
   color:var(--ink-faint);border:1px dashed var(--border-strong);border-radius:999px;padding:3px 9px}
-.wr-x{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--surface-raised);
-  display:grid;place-items:center;color:var(--ink-muted);transition:all var(--dur-fast) var(--ease-out)}
-.wr-x:hover{border-color:var(--border-strong);color:var(--ink);background:var(--surface-overlay)}
+.icobtn{width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--surface-raised);
+  display:grid;place-items:center;color:var(--ink-muted);transition:all var(--dur-fast) var(--ease-out);padding:0}
+.icobtn:hover{border-color:color-mix(in srgb,var(--accent) 35%,transparent);color:var(--accent);background:var(--surface-overlay)}
+body.notes-on #notesBtn{background:var(--accent-wash);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 @keyframes pip{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
 
 /* ------------------------------------------------------------------ boot
    Arrival is a scene of its own: the brand chevron carries the load moments,
-   one line at a time, and only then does the room assemble. One thing to read
-   at any moment, which is the whole digestion fix. */
+   one line at a time, and only then does the room assemble. */
 .boot{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:var(--surface);
   transition:opacity 420ms var(--ease-out), transform 460ms var(--ease-spring)}
 .boot.gone{opacity:0;transform:scale(1.015);pointer-events:none}
@@ -174,9 +189,9 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
 .wr-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 
 /* ================================================== ZONE 1: THE PACKAGE
-   The story altitude. Name, one aggregate strip, and the members reduced to a
-   quiet chip row that expands to the card view on request. */
-.pkg{flex:0 0 auto;padding:14px 20px 12px;border-bottom:1px solid var(--border);
+   The story altitude. Name, one aggregate strip, and the members as a single
+   row of chips that never slides: they share the width. */
+.pkg{flex:0 0 auto;padding:11px 18px 10px;border-bottom:1px solid var(--border);
   background:var(--surface-overlay);position:relative;overflow:hidden}
 .pkg .amb{position:absolute;inset:0;pointer-events:none}
 .pkg .amb span{position:absolute;display:block;border-radius:50%;filter:blur(60px)}
@@ -184,12 +199,12 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
 .pkg .amb .b{width:30%;height:240%;top:-70%;right:8%;background:var(--ambient-2);opacity:.035;animation:driftB 34s ease-in-out infinite alternate}
 @keyframes driftA{from{transform:translate3d(-4%,0,0) scale(1)}to{transform:translate3d(6%,3%,0) scale(1.12)}}
 @keyframes driftB{from{transform:translate3d(3%,2%,0) scale(1.08)}to{transform:translate3d(-5%,-2%,0) scale(1)}}
-.pkg-top{position:relative;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
-.pkg h2{margin:3px 0 0;font-size:17px;font-weight:800;letter-spacing:-.012em}
+.pkg-top{position:relative;display:flex;align-items:flex-end;gap:16px}
+.pkg h2{margin:2px 0 0;font-size:16px;font-weight:800;letter-spacing:-.012em}
 .agg{margin-left:auto;display:flex;gap:20px;text-align:right}
-.agg div .l{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
-.agg div .v{font-size:14.5px;font-weight:800;margin-top:2px;display:block}
-.agg div .n{font-size:10.5px;color:var(--ink-label);margin-top:1px;display:block}
+.agg div .l{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+.agg div .v{font-size:14px;font-weight:800;margin-top:1px;display:block}
+.agg div .n{font-size:10px;color:var(--ink-label);margin-top:0;display:block;min-height:0}
 .agg .thin .n{color:var(--warning)}
 /* A live aggregate figure lights where it sits when a landed change moves it. */
 .agg .v{border-radius:5px}
@@ -198,15 +213,16 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
   100%{background:transparent;box-shadow:0 0 0 0 transparent}}
 .agg div .n.pro{color:var(--accent)}
 
-.mbar{position:relative;display:flex;align-items:center;gap:9px;margin-top:12px}
-.mchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0}
-.mchips::-webkit-scrollbar{height:0}
-.mchip{flex:0 0 auto;display:inline-flex;align-items:baseline;gap:5px;border-radius:999px;
-  border:1px solid var(--border-strong);background:var(--surface-raised);padding:5px 10px;
-  font-size:11px;color:var(--ink-body);white-space:nowrap;
+/* Law 5. The member row never scrolls sideways: the chips share the row and
+   shrink, and the detail that used to sit in a sliding card rail is a peek. */
+.mbar{position:relative;display:flex;align-items:center;gap:8px;margin-top:9px}
+.mchips{display:flex;gap:5px;flex:1 1 auto;min-width:0;overflow:hidden}
+.mchip{flex:0 1 auto;min-width:0;display:inline-flex;align-items:baseline;gap:5px;border-radius:999px;
+  border:1px solid var(--border-strong);background:var(--surface-raised);padding:4px 9px;
+  font-size:10.8px;color:var(--ink-body);white-space:nowrap;overflow:hidden;
   transition:border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out)}
-.mchip b{font-weight:800;color:var(--ink-body-strong);font-size:10.5px;letter-spacing:.02em}
+.mchip b{font-weight:800;color:var(--ink-body-strong);font-size:10.2px;letter-spacing:.02em}
 .mchip .amt{font-weight:700;color:var(--ink-body-strong)}
 .mchip:hover{border-color:var(--crumb-sep)}
 .mchip.prop{border-style:dashed;color:var(--ink-muted)}
@@ -216,54 +232,52 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
 .mchip.named.flash{animation:named 1400ms var(--ease-out) both}
 @keyframes named{0%{box-shadow:0 0 0 0 var(--accent-wash)}25%{box-shadow:0 0 0 5px var(--accent-wash)}100%{box-shadow:0 0 0 0 transparent}}
 .mchip.fresh{animation:chipin 320ms var(--ease-spring) both}
-.mtoggle{flex:0 0 auto;margin-left:6px;border:1px solid var(--border-strong);background:var(--surface-raised);
-  border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:700;color:var(--ink-muted);
+.mtoggle{flex:0 0 auto;width:24px;height:24px;padding:0;border:1px solid var(--border-strong);
+  background:var(--surface-raised);border-radius:999px;display:grid;place-items:center;color:var(--ink-faint);
   transition:all var(--dur-fast) var(--ease-out)}
 .mtoggle:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 
-.mcards{position:relative;display:none;gap:9px;margin-top:10px;overflow-x:auto;padding-bottom:3px}
-.mcards.open{display:flex;animation:opendown 220ms var(--ease-out) both}
-.mcards::-webkit-scrollbar{height:0}
-.mcard{flex:0 0 auto;width:170px;border-radius:11px;background:var(--surface-raised);border:1px solid var(--border);
+/* The member cards live in a peek now, four across, so opening them can
+   never take height from the conversation. */
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.mcard{border-radius:11px;background:var(--surface-raised);border:1px solid var(--border);
   padding:9px 11px;box-shadow:var(--shadow-card);position:relative}
 .mcard .k{font-size:10px;font-weight:800;letter-spacing:.07em;color:var(--ink-faint)}
-.mcard .p{font-size:12px;font-weight:700;margin-top:2px;color:var(--ink-body-strong)}
-.mcard .a{font-size:14px;font-weight:800;margin-top:3px}
-.mcard .o{font-size:10.5px;color:var(--ink-label);margin-top:2px;line-height:1.45}
+.mcard .p{font-size:11.6px;font-weight:700;margin-top:2px;color:var(--ink-body-strong)}
+.mcard .a{font-size:13.5px;font-weight:800;margin-top:3px}
+.mcard .o{font-size:10.4px;color:var(--ink-label);margin-top:2px;line-height:1.45}
 .mcard.prop{border-style:dashed;background:var(--surface-overlay)}
-.mcard.named{border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
 .mcard .tag{position:absolute;top:8px;right:9px;font-size:9.5px;font-weight:800;letter-spacing:.07em;
   text-transform:uppercase;color:var(--ink-faint)}
 .meter{height:5px;border-radius:3px;background:var(--wash-2);margin-top:8px;overflow:hidden}
 .meter i{display:block;height:100%;width:0;border-radius:3px;background:var(--accent);
   transition:width var(--dur-dial) var(--ease-weight)}
-.mcard .util{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-label);margin-top:5px}
+.mcard .util{display:flex;justify-content:space-between;font-size:10.4px;color:var(--ink-label);margin-top:5px}
 
 /* -------------------------------------------------------------- main grid
-   Entry mode gives the whole room to the three calm blocks; the manifest rail
-   opens when the conversation does. */
-.grid{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 452px;
+   Entry mode gives the whole room to the position; the manifest rail opens
+   when the conversation does. Neither column scrolls, in any mode. */
+.grid{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;
   transition:grid-template-columns 420ms var(--ease-spring)}
 .wr-body[data-mode="entry"] .grid{grid-template-columns:minmax(0,1fr) 0px}
-.col-l{min-height:0;overflow-y:auto;padding:0 18px 18px 20px;display:flex;flex-direction:column;gap:14px;
+.col-l{min-height:0;overflow:hidden;padding:14px 16px 14px 18px;display:flex;flex-direction:column;gap:10px;
   max-width:1600px;transition:max-width 420ms var(--ease-spring)}
-.col-l>*,.ctx>*{flex:0 0 auto}
-/* A real spacer rather than padding: the sticky context bars pin at top 0 and
-   must have nothing showing above them once the column scrolls. */
-.col-pad{height:18px}
-.wr-body[data-mode="entry"] .col-l{max-width:900px;margin:0 auto}
-/* At entry the room holds three blocks and nothing else. The composer is the
-   conversation's affordance, so it arrives with the conversation. */
+/* At entry the position is the only thing in the room, so it sits in the
+   middle of it. The space around it is the point, not a gap. */
+.wr-body[data-mode="entry"] .col-l{max-width:860px;margin:0 auto;justify-content:center;padding-bottom:60px}
+/* At entry the room holds the package and the position and nothing else. The
+   composer is the conversation's affordance, so it arrives with it. */
 .wr-body[data-mode="entry"] .composer,
 .wr-body[data-mode="entry"] .sugg,
-.wr-body[data-mode="entry"] #note-chat{display:none}
+.wr-body[data-mode="entry"] .stepper{display:none}
+/* The thread only claims the room once there is a conversation in it. */
+.wr-body[data-mode="entry"] .thread{flex:0 0 auto}
 .col-r{min-height:0;display:flex;flex-direction:column;border-left:1px solid var(--border);
   background:var(--surface-raised);overflow:hidden;transition:opacity 280ms var(--ease-out) 140ms}
 .wr-body[data-mode="entry"] .col-r{opacity:0;pointer-events:none;border-left-color:transparent}
 
 .card{border-radius:var(--radius);background:var(--surface-raised);box-shadow:var(--shadow-card);overflow:hidden}
-.card-h{display:flex;align-items:center;gap:9px;padding:12px 15px 0}
-.card-b{padding:9px 15px 14px}
+.card-b{padding:12px 15px 13px}
 
 .rv{opacity:0;transform:translate3d(0,8px,0)}
 .rv.in{opacity:1;transform:none;transition:opacity 260ms var(--ease-spring), transform 300ms var(--ease-spring)}
@@ -276,109 +290,164 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
 .sk-stack>*:first-child{margin-top:0}
 
 /* --------------------------------------------------- the disclosure primitive
-   One expander pattern, used for every piece of evidence in the room. */
-.dt{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);
-  background:var(--surface-raised);border-radius:999px;padding:5px 12px 5px 9px;
-  font-size:11.2px;font-weight:700;color:var(--ink-muted);
+   One trigger shape for every peek in the room. */
+.dt{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);
+  background:var(--surface-raised);border-radius:999px;padding:4px 11px 4px 8px;
+  font-size:11px;font-weight:700;color:var(--ink-muted);
   transition:all var(--dur-fast) var(--ease-out)}
 .dt:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
-.dt .cx{transition:transform var(--dur-fast) var(--ease-out)}
 .dt[aria-expanded="true"]{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);
   background:color-mix(in srgb,var(--accent) 5%,var(--surface-raised))}
-.dt[aria-expanded="true"] .cx{transform:rotate(90deg)}
-.drawer{display:none}
-.drawer.open{display:block;animation:opendown 220ms var(--ease-out) both}
-@keyframes opendown{from{opacity:0;transform:translate3d(0,-5px,0)}to{opacity:1;transform:none}}
 
-/* ================================================== ZONE 2: THE ASK */
-.ask{border-left:3px solid var(--accent)}
-.ask .head-line{font-size:14.5px;font-weight:700;color:var(--prose-deep);line-height:1.4}
-.ask .prov{font-size:11.3px;color:var(--ink-label);line-height:1.5;margin-bottom:9px}
-.ask .drawer{margin-top:11px;border-top:1px solid var(--row-divider);padding-top:10px}
-.ask .prose{font-size:12.5px;line-height:1.62;color:var(--ink-body);white-space:pre-line}
+/* ====================================================== THE PEEK
+   Law 5's structural answer. Every disclosure floats over the room instead of
+   growing inside it, so no pane can ever be pushed past its own height. */
+.peek{position:fixed;inset:0;z-index:130}
+.peek[hidden]{display:none}
+.peek-bd{position:absolute;inset:0;background:rgba(20,0,40,.20);opacity:0;transition:opacity 180ms var(--ease-out)}
+.peek.in .peek-bd{opacity:1}
+.peek-card{position:fixed;border-radius:16px;background:var(--surface-raised);
+  box-shadow:var(--shadow-peek), 0 0 0 1px rgba(20,0,40,.07);overflow:hidden;
+  max-height:calc(100vh - 96px);display:flex;flex-direction:column;
+  opacity:0;transform:translate3d(0,8px,0) scale(.985);
+  transition:opacity 190ms var(--ease-spring), transform 210ms var(--ease-spring)}
+.peek.in .peek-card{opacity:1;transform:none}
+.peek-h{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px 9px;
+  border-bottom:1px solid var(--row-divider)}
+.peek-h .kicker{color:var(--accent)}
+.peek-x{margin-left:auto;width:24px;height:24px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface-raised);color:var(--ink-faint);display:grid;place-items:center;padding:0;
+  transition:all var(--dur-fast) var(--ease-out)}
+.peek-x:hover{color:var(--ink);border-color:var(--border-strong)}
+.peek-b{flex:1 1 auto;min-height:0;padding:12px 14px 14px;overflow:hidden}
+.peek-b .prose{font-size:12.2px;line-height:1.6;color:var(--ink-body);white-space:pre-line}
+.peek-b .prov{font-size:10.8px;color:var(--ink-label);line-height:1.5;margin-bottom:8px}
 .hl{background:var(--accent-wash);color:var(--prose-deep);font-weight:700;border-radius:4px;padding:0 3px}
 .hl.pop{animation:hlpop 900ms var(--ease-out) both}
 @keyframes hlpop{0%{background:transparent;box-shadow:0 0 0 0 transparent}
   35%{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 4px var(--accent-wash)}
   100%{background:var(--accent-wash);box-shadow:0 0 0 0 transparent}}
+
 .ok-tick{width:14px;height:14px;border-radius:50%;background:var(--positive-bg);color:var(--positive);
   display:grid;place-items:center;font-size:9px;font-weight:900;flex:0 0 auto}
 
-/* ================================================== ZONE 3: THE POSITION */
+/* ================================================== ZONE 2: THE POSITION
+   The one thing to read on arrival. The ask sits on it as a pin, the client's
+   own words are a source chip, and everything that justifies it is a peek. */
 .pos{border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);
-  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--surface-raised)),var(--surface-raised) 62%)}
-.pos .headline{font-size:16.5px;font-weight:800;line-height:1.38;letter-spacing:-.012em;color:var(--prose-deep)}
-.pos .acts{margin-top:12px;display:flex;align-items:center;gap:10px}
-.pos .gov{margin-top:12px;padding-top:10px;border-top:1px solid var(--row-divider);
-  font-size:11.2px;color:var(--ink-faint);line-height:1.5}
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--surface-raised)),var(--surface-raised) 62%);
+  flex:0 0 auto}
+.posrow{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.askpin{font-size:10.5px;font-weight:700;color:var(--accent);background:var(--accent-wash);
+  border-radius:999px;padding:2px 9px}
+.pos .headline{font-size:16px;font-weight:800;line-height:1.38;letter-spacing:-.012em;color:var(--prose-deep)}
+.posfoot{margin-top:11px;display:flex;align-items:center;gap:9px;flex-wrap:nowrap}
 .caret{display:inline-block;width:2px;height:1em;background:var(--accent);vertical-align:-2px;margin-left:1px;animation:blink 900ms steps(1) infinite}
 @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
 
-.why{margin-top:12px;border-top:1px solid var(--row-divider);padding-top:11px;display:grid;gap:10px}
-.why-row{display:grid;grid-template-columns:118px minmax(0,1fr);gap:12px;align-items:start;
-  padding-top:10px;border-top:1px solid var(--row-divider)}
-.why-row:first-child{border-top:none;padding-top:0}
-.why-row .lab{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);padding-top:1px}
-.why-row .txt{font-size:12.3px;color:var(--ink-body);line-height:1.55}
-.src{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-family:var(--font-mono);font-size:10px;color:var(--ink-faint)}
-.src::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--tree-line)}
-.alts{margin-top:12px;border-top:1px solid var(--row-divider);padding-top:11px}
-.alt-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:8px}
-.alt{border:1px solid var(--border);border-radius:11px;padding:10px 12px;background:var(--surface-overlay)}
-.alt .t{font-size:12px;font-weight:700;color:var(--ink-body-strong)}
-.alt .d{font-size:11.5px;color:var(--ink-body);margin-top:5px;line-height:1.5}
+/* Once the conversation opens, the position shrinks to one pinned line so the
+   room belongs to the chat. Nothing is lost: Why and the sources stay. */
+.pos.compact{background:var(--surface-raised)}
+.pos.compact .card-b{padding:8px 13px}
+.pos.compact .posrow{display:none}
+.pos.compact .headline{font-size:12.2px;font-weight:700;line-height:1.35;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.pos.compact .posfoot{margin-top:7px}
+.pos.compact .srclabel{display:none}
+.pos.compact .srcchip{padding:4px 7px}
 
-/* Compact context: once the conversation opens, the ask and the position
-   shrink to two pinned lines so the room belongs to the decision at hand. */
-.ctx{display:contents}
-.ctx-compact .ask,.ctx-compact .pos{position:sticky;z-index:3}
-.ctx-compact .ask{top:0}
-.ctx-compact .ask .card-h,.ctx-compact .pos .card-h{padding:9px 14px 0}
-.ctx-compact .ask .card-b,.ctx-compact .pos .card-b{padding:2px 14px 9px}
-.ctx-compact .ask .head-line{font-size:12.4px;font-weight:600;color:var(--ink-body)}
-.ctx-compact .pos .headline{font-size:12.6px;font-weight:700}
-.ctx-compact .pos .gov{display:none}
-.ctx-compact .pos{background:var(--surface-raised)}
+/* ---------------------------------------------------------- the source tray
+   Used, not displayed. What the agent read is a row of icon chips; the content
+   peeks. The client email never sits in the layout as a wall of quoted text. */
+.srctray{display:flex;align-items:center;gap:6px;margin-left:auto;min-width:0}
+.srcchip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-strong);
+  background:var(--surface-raised);border-radius:999px;padding:4px 10px 4px 8px;
+  font-size:10.8px;font-weight:600;color:var(--ink-muted);white-space:nowrap;
+  transition:all var(--dur-fast) var(--ease-out)}
+.srcchip svg{color:var(--ink-faint);flex:0 0 auto;transition:color var(--dur-fast) var(--ease-out)}
+.srcchip:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.srcchip:hover svg{color:var(--accent)}
+.srcchip.hot{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 6%,var(--surface-raised))}
+.srcchip.hot svg{color:var(--accent)}
 
-/* ================================================== ZONE 4: CONVERSATION */
-.thread{display:flex;flex-direction:column;gap:11px}
-.msg{max-width:88%;display:flex;flex-direction:column;gap:4px;animation:msgin 240ms var(--ease-spring) both}
+/* ============================================ THE STEP SPINE (multi-step)
+   Understand, Compose, Checks, Approve, carried by the brand chevron. A quiet
+   skeleton under a conversation, never a wizard: nothing here is clickable,
+   every advance comes from something the banker said or confirmed. */
+.stepper{flex:0 0 auto;display:flex;align-items:center;gap:0;padding:0 2px}
+.stg{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 0;
+  font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-faint);transition:color var(--dur-mid) var(--ease-out)}
+.stg .chev{color:var(--crumb-sep);flex:0 0 auto;transition:color var(--dur-mid) var(--ease-out)}
+.stg.on{color:var(--brand)}
+.stg.on .chev{color:var(--brand);animation:chevpulse 1700ms var(--ease-out) infinite}
+@keyframes chevpulse{0%,100%{opacity:.45;transform:translate3d(0,0,0)}45%{opacity:1;transform:translate3d(2px,0,0)}}
+.stg.done{color:var(--ink-muted)}
+.stg.done .chev{color:var(--brand);opacity:.75}
+.stg .cnt{font-size:9.5px;font-weight:800;color:var(--brand);background:var(--brand-wash);
+  border-radius:999px;padding:1px 6px;letter-spacing:.03em}
+.stepper .rail{flex:1 1 auto;height:1px;background:var(--border-strong);margin-left:6px;position:relative;overflow:hidden}
+.stepper .rail i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--brand),#c36bff);
+  transition:width 460ms var(--ease-out)}
+
+/* ================================================== ZONE 3: CONVERSATION
+   The protagonist: the largest surface in the room. It never scrolls. What is
+   settled folds behind a chevron line, the way a desk clears. */
+.thread{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;
+  gap:9px;overflow:hidden}
+.blk{flex:0 0 auto}
+.blk.folded{display:none}
+.foldline{flex:0 0 auto;display:inline-flex;align-self:flex-start;align-items:center;gap:6px;
+  border:none;background:none;padding:2px 0;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-faint);transition:color var(--dur-fast) var(--ease-out)}
+.foldline:hover{color:var(--brand)}
+.foldline svg{color:var(--brand);opacity:.7}
+.foldline[hidden]{display:none}
+
+.msg{max-width:86%;display:flex;flex-direction:column;gap:3px;animation:msgin 240ms var(--ease-spring) both}
 @keyframes msgin{from{opacity:0;transform:translate3d(0,7px,0)}to{opacity:1;transform:none}}
-.msg .who{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
-.msg .bub{border-radius:13px;padding:10px 13px;font-size:13px;line-height:1.58}
+.msg .who{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+/* An integer line height so a clamp can never leave half a line showing. */
+.msg .bub{border-radius:13px;padding:9px 12px;font-size:12.6px;line-height:20px}
 .msg.banker{align-self:flex-end;align-items:flex-end}
 .msg.banker .bub{background:var(--user-tone-wash);color:var(--prose-deep);
   border:1px solid color-mix(in srgb,var(--user-tone) 16%,transparent);border-bottom-right-radius:5px}
 .msg.agent .bub{background:var(--surface-raised);border:1px solid var(--border);color:var(--ink-body);
   border-bottom-left-radius:5px;box-shadow:var(--shadow-card)}
+/* The fit pass clamps prose before it ever folds a whole block. A clamped
+   bubble is never lost: it opens in full as a peek. */
+.msg .bub.clamp{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;cursor:zoom-in}
+.msg .bub.clamp.c3{-webkit-line-clamp:3;max-height:78px}
+.msg .bub.clamp.c2{-webkit-line-clamp:2;max-height:58px}
 .think{display:inline-flex;gap:4px;padding:2px 0}
 .think i{width:5px;height:5px;border-radius:50%;background:var(--tree-line);animation:think 1000ms ease-in-out infinite}
 .think i:nth-child(2){animation-delay:140ms}
 .think i:nth-child(3){animation-delay:280ms}
 @keyframes think{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
 
-.composer{display:flex;align-items:center;gap:10px;border:1px solid var(--border-strong);border-radius:12px;
-  background:var(--surface-raised);padding:10px 12px;box-shadow:var(--shadow-card);
+.composer{flex:0 0 auto;display:flex;align-items:center;gap:10px;border:1px solid var(--border-strong);
+  border-radius:12px;background:var(--surface-raised);padding:9px 12px;box-shadow:var(--shadow-card);
   transition:border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
     opacity var(--dur-mid) var(--ease-out)}
 .composer.hot{border-color:color-mix(in srgb,var(--accent) 40%,transparent);
   box-shadow:0 0 0 3px var(--accent-wash), var(--shadow-card)}
-.composer .txt{flex:1;min-height:18px;font-size:12.6px;color:var(--ink-body-strong);outline:none;caret-color:var(--accent)}
+.composer .txt{flex:1;min-height:18px;font-size:12.6px;color:var(--ink-body-strong);outline:none;caret-color:var(--accent);
+  white-space:nowrap;overflow:hidden}
 .composer .txt:empty::before{content:attr(data-ph);color:var(--ink-faint)}
-.composer .send{width:28px;height:28px;border-radius:8px;border:none;background:var(--wash-2);color:var(--ink-faint);
+.composer .send{width:26px;height:26px;border-radius:8px;border:none;background:var(--wash-2);color:var(--ink-faint);
   display:grid;place-items:center;transition:all var(--dur-fast) var(--ease-out)}
 .composer.hot .send,.composer:focus-within .send{background:var(--accent);color:var(--accent-ink)}
 .composer:focus-within{border-color:color-mix(in srgb,var(--accent) 40%,transparent);
   box-shadow:0 0 0 3px var(--accent-wash), var(--shadow-card)}
 .composer.off{opacity:.55;pointer-events:none}
 
-/* Suggested utterances — the next natural move, tap to say it. The banker can
-   equally type it in their own words; the pill is the script's handrail. */
-.sugg{display:flex;gap:7px;flex-wrap:wrap}
+/* Suggested utterances, the next natural move, tap to say it. */
+.sugg{flex:0 0 auto;display:flex;gap:7px;flex-wrap:wrap}
 .sugg:empty{display:none}
 .pill{border:1px solid color-mix(in srgb,var(--accent) 26%,transparent);
   background:color-mix(in srgb,var(--accent) 5%,var(--surface-raised));
-  color:var(--accent);border-radius:999px;padding:6px 12px;font-size:11.4px;font-weight:600;
+  color:var(--accent);border-radius:999px;padding:5px 12px;font-size:11.2px;font-weight:600;
   animation:chipin 300ms var(--ease-spring) both;
   transition:background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
     transform 90ms var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)}
@@ -394,29 +463,29 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
   z-index:120;pointer-events:none}
 
 /* ----------------------------------------------------------- delta chips
-   The decision is on the face. The validation is behind the info toggle. */
-.chips{display:flex;flex-direction:column;gap:9px}
+   The decision is on the face. The validation is a peek. A confirmed chip
+   does not stay: it collapses to a one line receipt, because the thing itself
+   has moved to the manifest. */
+.chips{display:flex;flex-direction:column;gap:8px}
 .chip{border-radius:12px;border:1px solid var(--border-strong);background:var(--surface-raised);
-  box-shadow:var(--shadow-card);padding:11px 13px;animation:chipin 300ms var(--ease-spring) both;
+  box-shadow:var(--shadow-card);padding:9px 12px;animation:chipin 300ms var(--ease-spring) both;
   transition:border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out),
     opacity 200ms var(--ease-out), transform 240ms var(--ease-spring)}
 @keyframes chipin{from{opacity:0;transform:translate3d(-10px,0,0) scale(.985)}to{opacity:1;transform:none}}
 .chip .top{display:flex;align-items:center;gap:8px}
 .kind{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
-  border-radius:999px;padding:3px 8px;background:var(--accent-wash);color:var(--accent)}
+  border-radius:999px;padding:2px 8px;background:var(--accent-wash);color:var(--accent)}
 .kind.new{background:var(--positive-bg);color:var(--positive)}
 .kind.col{background:var(--neutral-bg);color:var(--neutral-fg)}
 .kind.no{background:var(--warning-bg);color:var(--warning)}
-.chip .tgt{font-size:11px;color:var(--ink-label);margin-left:auto}
-.chip .line{margin-top:8px;font-size:13px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.chip .tgt{font-size:10.6px;color:var(--ink-label);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .line{margin-top:6px;font-size:12.4px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
 .chip .fld{font-weight:700;color:var(--ink-body-strong)}
 .was{color:var(--ink-faint);text-decoration:line-through;text-decoration-color:var(--crumb-sep)}
 .arw{color:var(--ink-faint)}
 .now{font-weight:800;color:var(--prose-deep)}
-.chip .acts{display:flex;align-items:center;gap:8px;margin-top:10px}
-.chip .drawer{margin-top:9px;border-top:1px solid var(--row-divider);padding-top:9px;
-  font-size:11.4px;line-height:1.55;color:var(--ink-muted)}
-.btn{border-radius:9px;padding:6px 12px;font-size:11.5px;font-weight:700;border:1px solid transparent;
+.chip .acts{display:flex;align-items:center;gap:7px;margin-top:8px}
+.btn{border-radius:9px;padding:5px 11px;font-size:11.2px;font-weight:700;border:1px solid transparent;
   transition:transform 90ms var(--ease-out), background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out)}
 .btn:active{transform:scale(.97)}
@@ -425,188 +494,187 @@ body[data-modal="1"] .wr{opacity:1;transform:none;pointer-events:auto}
 .btn-g{background:var(--surface-raised);border-color:var(--border-strong);color:var(--ink-muted)}
 .btn-g:hover{border-color:var(--crumb-sep);color:var(--ink-body-strong)}
 .btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;filter:none}
-.btn-i{width:26px;height:26px;padding:0;border-radius:50%;display:grid;place-items:center;
+.btn-i{width:24px;height:24px;padding:0;border-radius:50%;display:grid;place-items:center;
   border:1px solid var(--border-strong);background:var(--surface-raised);color:var(--ink-faint);
-  font-size:10.5px;font-weight:900;margin-left:auto}
+  font-size:10px;font-weight:900;margin-left:auto}
 .btn-i:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
-.chip.done{border-color:color-mix(in srgb,var(--positive) 26%,transparent);background:var(--positive-bg)}
-.chip.done .acts{display:none}
-.chip .settled{display:none;align-items:center;gap:7px;margin-top:9px;font-size:11.5px;font-weight:700;color:var(--positive)}
-.chip.done .settled{display:flex}
 .chip.gone{opacity:0;transform:translate3d(0,-6px,0);pointer-events:none}
 .chip.refuse{border-color:color-mix(in srgb,var(--warning) 28%,transparent);background:var(--warning-bg)}
-.chip.refuse .drawer{color:var(--warning-prose);border-top-color:color-mix(in srgb,var(--warning) 18%,transparent)}
-.chip.refuse .quote{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.6);
+.chip.refuse .quote{margin-top:7px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.6);
   border:1px solid color-mix(in srgb,var(--warning) 18%,transparent);
-  font-size:11.7px;line-height:1.55;color:var(--warning-prose)}
+  font-size:11.5px;line-height:1.5;color:var(--warning-prose)}
 
-/* ---------------------------------------------------------- challenge cards
-   Verdict first, one consequence line, the math one expander away. */
-.chal{border-radius:var(--radius);background:var(--surface-raised);box-shadow:var(--shadow-card);
-  border:1px solid var(--border);overflow:hidden;animation:chipin 320ms var(--ease-spring) both}
-.chal .hd{display:flex;align-items:center;gap:9px;padding:11px 15px 0}
-.live{display:inline-flex;align-items:center;gap:5px;margin-left:auto;font-size:10px;font-weight:700;
-  letter-spacing:.06em;text-transform:uppercase;color:var(--positive)}
-.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--positive);animation:pip 1600ms ease-in-out infinite}
-.chal .verdict{padding:8px 15px 0;font-size:13.6px;font-weight:800;line-height:1.42;color:var(--prose-deep)}
-.chal .conseq{padding:6px 15px 0;font-size:12.2px;line-height:1.55;color:var(--ink-body)}
-.chal .ft{display:flex;align-items:center;gap:10px;padding:12px 15px 13px}
-.chal .drawer{margin:10px 15px 0}
+/* The receipt a confirmed chip leaves behind. One line, because the change is
+   now on the right hand side of the room. */
+.receipt{display:flex;align-items:center;gap:8px;font-size:11.4px;color:var(--positive);
+  font-weight:700;padding:2px 2px;animation:chipin 260ms var(--ease-spring) both}
+.receipt .what{color:var(--ink-muted);font-weight:600}
+.receipt.removed{color:var(--ink-faint)}
+.receipt.removed .ok-tick{background:var(--wash-2);color:var(--ink-faint)}
+
+/* ---------------------------------------------- challenge as agent message
+   A confirmed change that trips a check gets the check back inline, in the
+   conversation, verdict first. */
+.chalmsg .bub{padding:9px 12px}
+.vhead{display:flex;align-items:center;gap:8px}
+.vchip{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;
+  padding:2px 9px;background:var(--positive-bg);color:var(--positive);flex:0 0 auto}
+.vchip.warn{background:var(--warning-bg);color:var(--warning)}
+.vk{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vtxt{margin-top:6px;font-size:12.4px;line-height:1.5;color:var(--ink-body)}
+.vact{margin-top:8px;display:flex;align-items:center;gap:8px}
+.vact .acked{display:none;align-items:center;gap:6px;font-size:11.2px;font-weight:700;color:var(--positive)}
+.chalmsg.ack .vact .btn-p{display:none}
+.chalmsg.ack .vact .acked{display:flex}
 .math{border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.mrow{display:flex;align-items:center;gap:12px;padding:7px 11px;font-size:12px;border-top:1px solid var(--row-divider)}
+.mrow{display:flex;align-items:center;gap:12px;padding:6px 11px;font-size:11.6px;border-top:1px solid var(--row-divider)}
 .mrow:first-child{border-top:none}
 .mrow .l{color:var(--ink-body)}
 .mrow .v{margin-left:auto;font-weight:700;color:var(--ink-body-strong)}
 .mrow.sum{background:var(--surface-overlay);font-weight:700}
 .mrow.sum .l{color:var(--ink-body-strong)}
 .mrow.key .v{color:var(--accent)}
-.chal .say{margin-top:10px;font-size:11.8px;line-height:1.55;color:var(--ink-muted)}
-.chal.ack{border-color:color-mix(in srgb,var(--positive) 22%,transparent)}
-.chal.ack .ft .btn-p{display:none}
-.chal .acked{display:none;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:var(--positive)}
-.chal.ack .acked{display:flex}
+.saynote{margin-top:9px;font-size:11.4px;line-height:1.5;color:var(--ink-muted)}
+.live{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--positive)}
+.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--positive);animation:pip 1600ms ease-in-out infinite}
 
-/* ================================================== ZONE 5: THE MANIFEST
-   Changes to the PACKAGE, grouped the way a credit committee reads them. */
-.man-h{flex:0 0 auto;padding:14px 18px 12px;border-bottom:1px solid var(--border);background:var(--surface-raised)}
-.man-h .t{font-size:13.5px;font-weight:800;letter-spacing:-.005em;margin-top:3px}
-.man-h .c{font-size:11.5px;color:var(--ink-label);margin-top:3px}
-.man-h .dt{margin-top:10px}
-.man-h .drawer{margin-top:10px}
-.man-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 18px 18px;position:relative}
+/* ================================================== ZONE 4: THE MANIFEST
+   Changes to the PACKAGE, grouped the way a credit committee reads them.
+   Starts empty. Items arrive here, and the approval sits underneath them. */
+.man-h{flex:0 0 auto;padding:10px 16px 10px;border-bottom:1px solid var(--border);background:var(--surface-raised)}
+.man-h .row{display:flex;align-items:center;gap:10px;margin-top:4px}
+.man-h .c{font-size:11.4px;color:var(--ink-label);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.man-h .row .dt{margin-left:auto;flex:0 0 auto}
+.man-body{flex:1 1 auto;min-height:0;overflow:hidden;padding:10px 16px 12px;position:relative}
 
-.have{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface-raised)}
-.have-row{padding:10px 12px;border-top:1px solid var(--row-divider)}
-.have-row:first-child{border-top:none}
-.have-row .l{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
-.have-row .v{font-size:12.4px;font-weight:700;color:var(--ink-body-strong);margin-top:3px}
-.have-row .d{font-size:11.3px;color:var(--ink-muted);margin-top:2px;line-height:1.5}
+.have-row{padding:9px 0;border-top:1px solid var(--row-divider)}
+.have-row:first-child{border-top:none;padding-top:0}
+.have-row .l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+.have-row .v{font-size:12.2px;font-weight:700;color:var(--ink-body-strong);margin-top:2px}
+.have-row .d{font-size:11.2px;color:var(--ink-muted);margin-top:2px;line-height:1.5}
 
-.empty{border:1px dashed var(--border-strong);border-radius:12px;padding:20px 14px;text-align:center;
-  color:var(--ink-faint);font-size:11.8px;background:var(--surface-overlay);
+.empty{border:1px dashed var(--border-strong);border-radius:12px;padding:18px 14px;text-align:center;
+  color:var(--ink-faint);font-size:11.6px;background:var(--surface-overlay);
   transition:opacity 200ms var(--ease-out), transform 200ms var(--ease-out)}
 .empty.gone{opacity:0;transform:translate3d(0,-4px,0)}
 
-.grp{display:none;margin-bottom:16px}
+.grp{display:none;margin-bottom:7px}
 .grp.on{display:block;animation:opendown 240ms var(--ease-out) both}
-.grp>.kicker{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+@keyframes opendown{from{opacity:0;transform:translate3d(0,-5px,0)}to{opacity:1;transform:none}}
+.grp>.kicker{display:flex;align-items:center;gap:8px;margin-bottom:4px;line-height:1.2}
 .grp>.kicker .rule{flex:1;height:1px;background:var(--border)}
 
-.ent{margin-top:9px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface-raised);
-  overflow:hidden;box-shadow:var(--shadow-card);animation:entland 320ms var(--ease-spring) both}
+.ent{margin-top:7px;border:1px solid var(--border-strong);border-radius:11px;background:var(--surface-raised);
+  overflow:hidden;box-shadow:var(--shadow-card);animation:entland 320ms var(--ease-spring) both;
+  transition:opacity 200ms var(--ease-out), transform 220ms var(--ease-out)}
 .ent:first-child{margin-top:0}
 @keyframes entland{from{opacity:0;transform:translate3d(0,10px,0) scale(.99)}to{opacity:1;transform:none}}
 .ent.pulse{animation:entland 320ms var(--ease-spring) both, entpulse 1500ms var(--ease-out) 300ms both}
-@keyframes entpulse{0%{box-shadow:0 0 0 3px var(--accent-wash), var(--shadow-card);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+@keyframes entpulse{0%{box-shadow:0 0 0 3px var(--brand-wash), var(--shadow-card);border-color:color-mix(in srgb,var(--brand) 45%,transparent)}
   100%{box-shadow:0 0 0 0 transparent, var(--shadow-card);border-color:var(--border-strong)}}
-.ent-t{width:100%;display:flex;align-items:flex-start;gap:9px;background:none;border:none;text-align:left;padding:10px 12px}
-.ent-t:hover{background:var(--surface-overlay)}
-.ent-t .cx{margin-left:auto;color:var(--ink-faint);transition:transform var(--dur-fast) var(--ease-out);flex:0 0 auto;margin-top:2px}
-.ent-t[aria-expanded="true"] .cx{transform:rotate(90deg)}
-.ent .ttl{font-size:12.4px;font-weight:700;color:var(--ink-body-strong)}
-.ent .tgt{font-size:10.8px;color:var(--ink-label);margin-top:2px}
-.ent .delta{margin-top:6px;font-size:12.2px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
-.ent .drawer{padding:0 12px 12px}
+.ent.gone{opacity:0;transform:translate3d(6px,0,0)}
+.ent-row{display:flex;align-items:flex-start;gap:6px;padding:6px 7px 7px 11px}
+.ent-t{flex:1 1 auto;min-width:0;display:block;background:none;border:none;text-align:left;padding:0}
+.ent .ttl{font-size:12px;font-weight:700;color:var(--ink-body-strong);line-height:1.25}
+.ent .tgt{font-size:10.2px;line-height:1.25;color:var(--ink-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ent .delta{margin-top:2px;font-size:11.4px;line-height:1.3;display:flex;align-items:baseline;gap:6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ent .delta .now{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ent-x{flex:0 0 auto;width:20px;height:20px;padding:0;border-radius:50%;border:1px solid transparent;
+  background:none;color:var(--ink-faint);display:grid;place-items:center;opacity:.45;
+  transition:all var(--dur-fast) var(--ease-out)}
+.ent-row:hover .ent-x{opacity:1}
+.ent-x:hover{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 30%,transparent);
+  background:var(--warning-bg)}
 .mapbox{border:1px solid var(--border);border-radius:10px;background:var(--surface-overlay);padding:9px 11px}
 .mapbox .h{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
-.mapbox .r{display:flex;gap:10px;font-size:11.6px;margin-top:6px}
-.mapbox .r .k{color:var(--ink-label);flex:0 0 96px}
+.mapbox .r{display:flex;gap:10px;font-size:11.4px;margin-top:5px}
+.mapbox .r .k{color:var(--ink-label);flex:0 0 92px}
 .mapbox .r .v{color:var(--ink-body-strong);font-weight:600}
-.mapbox .dt{margin-top:9px;padding:3px 9px 3px 4px;font-size:10.5px}
-.mapbox .dt .i{width:14px;height:14px;border-radius:50%;background:var(--wash-2);display:grid;place-items:center;font-size:9px;font-weight:900}
-.fields{margin-top:8px;border-top:1px dashed var(--border-strong);padding-top:8px}
-.fields code{display:block;font-family:var(--font-mono);font-size:10.6px;color:var(--ink-muted);padding:2px 0;word-break:break-all}
-.ent .cav{margin-top:8px;font-size:11.2px;line-height:1.5;color:var(--warning-prose);background:var(--warning-bg);
-  border-radius:8px;padding:7px 9px}
+.fields{margin-top:8px;border-top:1px dashed var(--border-strong);padding-top:7px}
+.fields code{display:block;font-family:var(--font-mono);font-size:10.4px;color:var(--ink-muted);padding:1px 0;word-break:break-all}
+.cav{margin-top:9px;font-size:11.2px;line-height:1.5;color:var(--warning-prose);background:var(--warning-bg);
+  border-radius:8px;padding:8px 10px}
 .ent.filed{border-color:color-mix(in srgb,var(--positive) 26%,transparent)}
-.filedbar{display:none;align-items:center;gap:8px;padding:8px 12px;background:var(--positive-bg);
+.ent.filed .ent-x{display:none}
+.filedbar{display:none;align-items:center;gap:8px;padding:6px 11px;background:var(--positive-bg);
   border-top:1px solid color-mix(in srgb,var(--positive) 18%,transparent)}
 .ent.filed .filedbar{display:flex;animation:opendown 220ms var(--ease-out) both}
 .filedbar .st{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--positive)}
-.filedbar .id{font-family:var(--font-mono);font-size:10.6px;color:var(--ink-body-strong);margin-left:auto}
-.reqline{display:none;padding:7px 12px 10px;font-size:11px;color:var(--ink-muted);font-family:var(--font-mono);word-break:break-all}
-.ent.filed .reqline{display:block}
+.filedbar .id{font-family:var(--font-mono);font-size:10.2px;color:var(--ink-body-strong);margin-left:auto}
 
-.landtoast{position:absolute;right:18px;pointer-events:none;display:flex;align-items:center;gap:7px;
-  background:var(--prose-deep);color:#fff;border-radius:999px;padding:6px 13px;font-size:11.5px;font-weight:700;
+/* The signature moment: the arrival mark, in the brand chevron. */
+.landtoast{position:absolute;right:16px;top:12px;pointer-events:none;display:flex;align-items:center;gap:7px;
+  background:var(--prose-deep);color:#fff;border-radius:999px;padding:6px 13px;font-size:11.4px;font-weight:700;
   box-shadow:0 10px 26px -10px rgba(20,0,40,.6);animation:toast 2200ms var(--ease-out) both;z-index:5}
+.landtoast svg{color:var(--brand)}
 @keyframes toast{0%{opacity:0;transform:translate3d(0,8px,0) scale(.96)}
   12%{opacity:1;transform:none}78%{opacity:1;transform:none}100%{opacity:0;transform:translate3d(0,-6px,0)}}
 
-/* ------------------------------------------------------------ approve bar */
+/* ------------------------------------------------------------ approve bar
+   Under the manifest rail. You sign what is stacked above it. */
 .man-f{flex:0 0 auto;border-top:1px solid var(--border);background:var(--frost-bar);backdrop-filter:blur(10px);
-  padding:12px 18px 14px;display:none}
+  padding:11px 16px 13px;display:none}
 .man-f.on{display:block;animation:opendown 260ms var(--ease-spring) both}
-.plan{border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:12px;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 5%,var(--surface-raised)),var(--surface-raised));padding:11px 13px}
-.plan .t{font-size:12.6px;font-weight:800;color:var(--prose-deep)}
-.plan .s{font-size:11.5px;color:var(--ink-muted);margin-top:5px;line-height:1.5}
-.plan .dt{margin-top:9px}
-.plan .drawer{margin-top:9px;padding-top:8px;border-top:1px solid var(--row-divider);
-  font-size:11px;color:var(--ink-muted);line-height:1.55}
-/* The approval is the brand moment: the one full-strength use of the mark. */
-.approve{margin-top:10px;width:100%;border-radius:11px;padding:11px 14px;font-size:13px;font-weight:800;
+.plan{border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:11px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 5%,var(--surface-raised)),var(--surface-raised));padding:9px 12px}
+.plan .t{font-size:11.8px;font-weight:800;color:var(--prose-deep);line-height:1.35}
+.plan .s{font-size:11px;color:var(--ink-muted);margin-top:3px;line-height:1.45}
+.plan .dt{margin-top:7px}
+/* The approval is the brand moment: the one full strength use of the mark. */
+.approve{margin-top:9px;width:100%;border-radius:11px;padding:10px 14px;font-size:12.6px;font-weight:800;
   background:var(--brand);color:var(--brand-ink);border:none;
   box-shadow:0 8px 22px -8px rgba(161,0,255,.65), inset 0 1px 0 var(--gloss);
   transition:transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out)}
 .approve:hover{transform:translate3d(0,-1px,0);filter:brightness(1.05)}
 .approve:active{transform:scale(.99)}
-.tokline{display:none;margin-top:9px;align-items:center;gap:7px;font-size:11px;color:var(--positive);font-weight:700}
+.tokline{display:none;margin-top:8px;align-items:center;gap:7px;font-size:10.8px;color:var(--positive);font-weight:700;line-height:1.4}
 .tokline.on{display:flex;animation:opendown 220ms var(--ease-out) both}
 
 /* -------------------------------------------------------------- scene bar */
-.scenebar{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:10px 20px;
+.scenebar{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:8px 18px;
   border-top:1px solid var(--border);background:var(--frost-bar);backdrop-filter:blur(10px)}
-.steps{display:flex;align-items:center;gap:7px}
-.step{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--ink-faint);transition:color var(--dur-mid) var(--ease-out)}
-.step .b{width:7px;height:7px;border-radius:50%;background:var(--crumb-sep);transition:all var(--dur-mid) var(--ease-out)}
-.step.on{color:var(--accent)}
-.step.on .b{background:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
-.step.past{color:var(--ink-muted)}
-.step.past .b{background:var(--ink-muted)}
-.step .ln{width:16px;height:1px;background:var(--border-strong)}
 .scenebar .sp{margin-left:auto}
-.notes-btn{border:1px solid var(--border-strong);background:var(--surface-raised);border-radius:9px;
-  padding:6px 11px;font-size:11.2px;font-weight:700;color:var(--ink-muted);
-  transition:all var(--dur-fast) var(--ease-out)}
-.notes-btn:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
-body.notes-on .notes-btn{background:var(--accent-wash);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
-.next{border-radius:10px;padding:8px 16px;font-size:12.3px;font-weight:800;border:none;
+.gatehint{font-size:11px;color:var(--ink-faint)}
+.next{border-radius:10px;padding:7px 15px;font-size:12px;font-weight:800;border:none;
   background:var(--fill-strong);color:#fff;
   transition:transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out)}
 .next:hover{transform:translate3d(0,-1px,0);filter:brightness(1.15)}
 .next:disabled{opacity:.35;pointer-events:none}
-.gatehint{font-size:11px;color:var(--ink-faint)}
 
-/* ---------------------------------------------------------- design notes */
-.dnote{display:none;border-left:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent);
-  border-radius:0 8px 8px 0;padding:8px 11px;margin:0 0 10px;font-size:11.4px;line-height:1.55;color:var(--prose-deep)}
-body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both}
+/* ---------------------------------------------------------- design notes
+   A demo aid. It peeks like everything else, so turning it on can never move
+   a single pixel of the room. */
+.dnotes{columns:2;column-gap:14px}
+.dnote{break-inside:avoid;border-left:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent);
+  border-radius:0 8px 8px 0;padding:7px 10px;margin:0 0 9px;font-size:10.8px;line-height:1.45;color:var(--prose-deep)}
+.dnote:last-child{margin-bottom:0}
 .dnote b{font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:10px;color:var(--accent);display:block;margin-bottom:3px}
 
 /* ------------------------------------------------------------------ reply */
 .reply{border:1px solid color-mix(in srgb,var(--positive) 24%,transparent);
   background:linear-gradient(180deg,var(--positive-bg),var(--surface-raised) 55%)}
-.reply .prose{font-size:12.6px;line-height:1.65;color:var(--ink-body);white-space:pre-wrap;margin-top:8px;min-height:20px}
-.reply .subj{font-size:12.4px;font-weight:800;color:var(--prose-deep)}
-.reply .ft{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--row-divider)}
+.reply .subj{font-size:12.2px;font-weight:800;color:var(--prose-deep)}
+.reply .lede{font-size:11.8px;line-height:1.5;color:var(--ink-body);margin-top:5px}
+.reply .ft{display:flex;align-items:center;gap:8px;margin-top:9px}
+.peek-b .replybody{font-size:12.2px;line-height:1.6;color:var(--ink-body);white-space:pre-wrap}
 
-/* Below the two-column threshold the workroom becomes one continuous scroll. */
+/* Below the two column threshold the workroom becomes one continuous page. */
 @media (max-width:1180px){
   .grid,.wr-body[data-mode="entry"] .grid{grid-template-columns:1fr;overflow-y:auto}
-  .col-l,.col-r,.man-scroll{overflow:visible;min-height:auto}
+  .col-l,.col-r,.man-body{overflow:visible;min-height:auto}
+  .thread{overflow:visible;justify-content:flex-start}
   .wr-body[data-mode="entry"] .col-l{max-width:none}
   .col-r{border-left:none;border-top:1px solid var(--border)}
   .wr-body[data-mode="entry"] .col-r{display:none}
-  .ctx-compact .ask,.ctx-compact .pos{position:static}
   .wr{top:0;left:0;right:0;bottom:0;border-radius:0}
-  .alt-grid{grid-template-columns:1fr}
 }
 
 @media (prefers-reduced-motion: reduce){
   *{transition-duration:.001s !important;animation-duration:.001s !important;animation-delay:0s !important}
-  .pkg .amb span,.live::before,.think i,.caret,.sk,.boot-chev,.boot-chev path{animation:none !important}
+  .pkg .amb span,.live::before,.think i,.caret,.sk,.boot-chev,.boot-chev path,.stg.on .chev{animation:none !important}
   .sk{background:var(--wash-2)}
   .boot-chev path{stroke-dashoffset:0}
 }
@@ -654,13 +722,13 @@ body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both
 
   <header class="wr-head">
     <span class="dot"></span>
-    <div>
-      <div class="wr-title">Modification Workroom</div>
-      <div class="wr-sub">Hartwell Industrial C&amp;I Credit Package · opened from an inbound client request</div>
-    </div>
+    <div class="wr-title">Modification Workroom</div>
     <span class="spacer"></span>
     <span class="badge-mock">Static mock</span>
-    <button class="wr-x" id="closeWr" aria-label="Close the workroom">
+    <button class="icobtn" id="notesBtn" aria-label="Design notes" title="Design notes">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 2h7v8h-7z" stroke="currentColor" stroke-width="1.2"/><path d="M4.2 4.4h3.6M4.2 6.2h3.6M4.2 8h2.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+    </button>
+    <button class="icobtn" id="closeWr" aria-label="Close the workroom">
       <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
     </button>
   </header>
@@ -683,154 +751,59 @@ body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both
     <!-- ================================================ ZONE 1: THE PACKAGE -->
     <section class="pkg">
       <div class="amb"><span class="a"></span><span class="b"></span></div>
-      <div class="dnote" id="note-pkg" style="position:relative">
-        <b>Zone 1 · The package is the story</b>
-        A modification is a decision about a credit relationship, not about a loan record. The altitude here is the
-        package: one name, one aggregate strip, one line on the covenant position. The seven members are reduced to a
-        quiet chip row and expand only when the banker asks. Loan level detail sits one level down, which is also the
-        level the writes land at. Arrival is staged: the brand chevron carries the load moments, then the room
-        assembles one zone at a time, so there is never more than one thing to digest.
-      </div>
       <div class="pkg-top rv" id="rv-pkg-top">
         <div>
           <div class="kicker">Product package</div>
           <h2>Hartwell Industrial C&amp;I Credit Package</h2>
         </div>
         <div class="agg rv" id="rv-agg">
-          <div><span class="l">Members</span><span class="v tnum" id="aggMembers">7 of 7</span><span class="n" id="memberNote"></span></div>
-          <div><span class="l">Committed</span><span class="v tnum" id="aggCommitted">$46.0MM</span></div>
-          <div><span class="l">Drawn</span><span class="v tnum">$31.03MM</span></div>
-          <div><span class="l">Risk grade</span><span class="v tnum">4</span></div>
-          <div class="thin"><span class="l">Covenants</span><span class="v tnum" id="covValue">6 compliant</span><span class="n" id="covNote">one thin cushion</span></div>
+          <div><span class="l">Members</span><span class="v tnum" id="aggMembers">7</span><span class="n" id="memberNote"></span></div>
+          <div><span class="l">Committed</span><span class="v tnum" id="aggCommitted">$46.0MM</span><span class="n" id="commNote"></span></div>
+          <div class="thin"><span class="l">Covenants</span><span class="v tnum" id="covValue">6/6</span><span class="n" id="covNote"></span></div>
         </div>
       </div>
       <div class="mbar rv" id="rv-mbar">
         <div class="mchips" id="mchips"></div>
-        <button class="mtoggle" id="memberToggle" aria-expanded="false">Expand</button>
+        <button class="mtoggle" id="memberToggle" aria-label="Member detail" title="Member detail">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 2h8M1.5 5.5h8M1.5 9h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
       </div>
-      <div class="mcards" id="mcards"></div>
     </section>
 
     <!-- ------------------------------------------------------------ grid -->
     <div class="grid">
 
       <div class="col-l" id="colL">
-        <div class="col-pad"></div>
-        <div class="ctx" id="ctx">
 
-          <!-- ============================================ ZONE 2: THE ASK -->
-          <div class="dnote" id="note-ask">
-            <b>Zone 2 · The ask, in package terms</b>
-            The request is stated as what it does to the package, not as a field on a loan. The client's own words stay
-            one tap behind, so the interpretation stays auditable without taking up the room.
+        <!-- ========================================== ZONE 2: THE POSITION -->
+        <section class="card pos rv" id="posCard">
+          <div class="card-b">
+            <div id="posSkeleton" class="sk-stack">
+              <div class="sk t" style="width:78%"></div><div class="sk t" style="width:44%"></div>
+              <div class="sk" style="width:28%;margin-top:14px"></div>
+            </div>
+            <div id="posReal" style="display:none">
+              <div class="posrow">
+                <div class="kicker">Position</div>
+                <span class="askpin tnum">Ask $20.0MM</span>
+                <span class="live" style="margin-left:auto">09:02</span>
+              </div>
+              <div class="headline" id="posHeadline"></div>
+              <div class="posfoot" id="posFoot" style="display:none">
+                <button class="dt" id="whyBtn">Why</button>
+                <div class="srctray" id="srctray"></div>
+              </div>
+            </div>
           </div>
-          <section class="card ask rv" id="askCard">
-            <div class="card-h">
-              <div class="kicker">The ask</div>
-              <button class="dt" id="askToggle" aria-expanded="false" style="margin-left:auto">
-                <svg class="cx" width="9" height="9" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Client request
-              </button>
-            </div>
-            <div class="card-b">
-              <div class="head-line">The client requests $5,000,000 of additional revolving capacity on the package.</div>
-              <div class="drawer" id="askDrawer">
-                <div class="prov">James Hartwell, President and CEO. Received 2026-08-25 at 08:14. Interpreted on entry, package re-queried and the analysis pre-run at 09:02.</div>
-                <div class="prose" id="mailProse"></div>
-              </div>
-            </div>
-          </section>
+        </section>
 
-          <!-- ======================================= ZONE 3: THE POSITION -->
-          <div class="dnote" id="note-pos">
-            <b>Zone 3 · The position, one sentence</b>
-            One recommended reshape of the package, stated before the banker types because the analysis already ran.
-            Everything that justifies it, utilisation, collateral headroom, covenant cushion and the HW1001 record ids,
-            lives behind Why. The banker reads a position first and chooses how deep to go. SR 26-2 framing: the agent
-            recommends, the banker decides.
-          </div>
-          <section class="card pos rv" id="posCard">
-            <div class="card-h">
-              <div class="kicker">The agent's position</div>
-              <span class="live" style="margin-left:auto">Analysed 09:02</span>
-            </div>
-            <div class="card-b">
-              <div id="posSkeleton" class="sk-stack">
-                <div class="sk t" style="width:88%"></div><div class="sk t" style="width:56%"></div>
-                <div class="sk" style="width:32%;margin-top:16px"></div>
-              </div>
-              <div id="posReal" style="display:none">
-                <div class="headline" id="posHeadline"></div>
-                <div class="acts" id="posActs" style="display:none">
-                  <button class="dt" id="whyToggle" aria-expanded="false">
-                    <svg class="cx" width="9" height="9" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Why
-                  </button>
-                </div>
-                <div class="drawer" id="whyDrawer">
-                  <div class="why">
-                    <div class="why-row">
-                      <div class="lab">Utilisation</div>
-                      <div class="txt">The revolver is 61% drawn, $9,200,000 against a $15,000,000 commitment. Taking it to
-                        $20,000,000 would put utilisation at 46% and add $5,000,000 of revolving capacity the current
-                        borrowing base does not support.
-                        <span class="src">HW1001 · a4Zbb0000027MaYEAU · SOFR+275, 7.60%, matures 2027-03-15</span></div>
-                    </div>
-                    <div class="why-row">
-                      <div class="lab">Collateral headroom</div>
-                      <div class="txt">The existing pool is $44,000,000 appraised and $31,600,000 lendable, pledged to the
-                        dollar across seven pledge rows. There is no unencumbered lendable value left in it. The Mazak
-                        tooling adds $4,000,000 appraised at a 75% advance rate, which is $3,000,000 lendable and
-                        unencumbered.
-                        <span class="src">4 collateral records, 7 pledges, 8 valuations, re-queried 2026-08-26 09:02</span></div>
-                    </div>
-                    <div class="why-row">
-                      <div class="lab">Covenant cushion</div>
-                      <div class="txt">Fixed charge coverage runs 1.22x against a 1.15x floor. That is a cushion of 7 bps
-                        and the thinnest number in the package. $5,000,000 of incremental revolver at SOFR+275 loads the
-                        fixed charge denominator faster than a $2,000,000 amortising facility sized to the asset that
-                        generates the ramp.
-                        <span class="src">Covenant a3Bbb000000S0ZlEAK · last evaluated 2026-06-30 · next 2026-09-30</span></div>
-                    </div>
-                  </div>
-                  <div class="alts">
-                    <div class="kicker">Alternatives considered</div>
-                    <div class="alt-grid">
-                      <div class="alt">
-                        <div class="t">Full $20.0MM increase with additional security</div>
-                        <div class="d">Needs new collateral or a guarantee enhancement to cover the incremental
-                          $5,000,000. The only unencumbered asset identified is the Mazak tooling at $3,000,000 lendable,
-                          which is $2,000,000 short. Elena Hartwell's limited guarantee on HW1001 is capped at $5,000,000
-                          and would have to be raised.</div>
-                      </div>
-                      <div class="alt">
-                        <div class="t">Hold and revisit after the Q3 covenant test</div>
-                        <div class="d">Defers the decision to 2026-09-30 when fixed charge coverage is re-measured. The
-                          client states the Mazak cells land in October, so the deposit and install would be funded on the
-                          existing line at 61% utilisation in the meantime.</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="gov">Recommendation only. Nothing is written. The banker decides, and the approval that
-                    follows is the banker's own.</div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
+        <!-- ============================= THE STEP SPINE (multi-step motif) -->
+        <div class="stepper" id="stepper"></div>
 
-        <!-- ==================================== ZONE 4: THE CONVERSATION -->
-        <div class="dnote" id="note-chat">
-          <b>Zone 4 · The conversation is the operator</b>
-          Natural language in, structured deltas out. The parse is a language model call; the validation that follows is
-          deterministic against org fields, picklists and guards, so an invalid parse never becomes a chip. Each chip
-          carries its decision on the face and its validation behind the info toggle. Chips are staged intent with zero
-          DML, which is what makes one tap safe. In this mock the composer itself is live: type the move in your own
-          words or tap the suggested utterance; anything off the storyline gets an honest refusal rather than a fake
-          parse.
-        </div>
-
-        <section class="thread" id="thread"></section>
+        <!-- ====================================== ZONE 3: THE CONVERSATION -->
+        <section class="thread" id="thread">
+          <button class="foldline" id="foldline" hidden></button>
+        </section>
 
         <div class="sugg" id="sugg"></div>
 
@@ -842,51 +815,25 @@ body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both
         </div>
       </div>
 
-      <!-- ====================================== ZONE 5: THE CHANGE MANIFEST -->
+      <!-- ====================================== ZONE 4: THE CHANGE MANIFEST -->
       <aside class="col-r">
         <div class="man-h">
-          <div class="kicker">Change manifest</div>
-          <div class="t">Changes to the package</div>
-          <div class="c" id="manCount">Nothing staged</div>
-          <button class="dt" id="haveToggle" aria-expanded="false">
-            <svg class="cx" width="9" height="9" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            What the package holds today
-          </button>
-          <div class="drawer" id="haveDrawer"><div class="have" id="haveList"></div></div>
-        </div>
-        <div class="man-scroll" id="manScroll">
-          <div class="dnote" id="note-man">
-            <b>Zone 5 · Changes to the package</b>
-            Grouped the way a credit committee reads a modification: structure, then terms, then covenants, then
-            security. What the package holds today is one expander away rather than a wall of current state. Each entry
-            opens to the org records it will write, because the package is where the decision lives and the loan records
-            are where the writes land. Every confirm travels here visibly, so the rail reads as the running answer to
-            one question: what will this commit.
+          <div class="kicker">This modification</div>
+          <div class="row">
+            <div class="c" id="manCount">Nothing staged</div>
+            <button class="dt" id="haveBtn">Package today</button>
           </div>
+        </div>
+        <div class="man-body" id="manBody">
           <div class="empty" id="manEmpty">Nothing staged yet. Confirmed changes land here, grouped.</div>
           <div id="groups"></div>
-          <div class="dnote" id="note-filed" style="margin-top:16px">
-            <b>Zone 6 · The ending</b>
-            The manifest does not clear on approval. It flips, entry by entry, to the real record ids, each one verified
-            by re-query rather than by the write response. The drafted reply then closes the loop so the banker never
-            leaves the workroom to finish the job.
-          </div>
         </div>
 
         <div class="man-f" id="manFoot">
           <div class="plan">
             <div class="t">One clone. One single use token. One approval.</div>
-            <div class="s" id="planSummary">4 changes to the package. 1 of 7 members changes, 1 member is added.</div>
-            <button class="dt" id="govToggle" aria-expanded="false">
-              <svg class="cx" width="9" height="9" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Governance
-            </button>
-            <div class="drawer" id="govDrawer">
-              Approver is the running identity: fabian.goetzens@accenture.com.bankinggpt. Nothing has been written up to
-              this point; the chips were staged intent. Approval redeems a single use token, the execution delegates to
-              the same clone, stage and book mechanics the org already runs, and any org validation message is carried
-              through verbatim.
-            </div>
+            <div class="s" id="planSummary"></div>
+            <button class="dt" id="govBtn">Governance</button>
           </div>
           <button class="approve" id="approveBtn">Approve and file</button>
           <div class="tokline" id="tokline"><span class="ok-tick">&#10003;</span><span id="toktext"></span></div>
@@ -897,12 +844,24 @@ body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both
   </div>
 
   <footer class="scenebar">
-    <div class="steps" id="steps"></div>
-    <span class="sp"></span>
     <span class="gatehint" id="gatehint"></span>
-    <button class="notes-btn" id="notesBtn">Design notes</button>
+    <span class="sp"></span>
     <button class="next" id="nextBtn" disabled>Assembling</button>
   </footer>
+</div>
+
+<!-- ================================================================= peek -->
+<div class="peek" id="peek" hidden>
+  <div class="peek-bd" id="peekBd"></div>
+  <div class="peek-card" id="peekCard" role="dialog" aria-modal="true">
+    <div class="peek-h">
+      <div class="kicker" id="peekK"></div>
+      <button class="peek-x" id="peekX" aria-label="Close">
+        <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="peek-b" id="peekB"></div>
+  </div>
 </div>
 
 <script>
@@ -912,18 +871,15 @@ body.notes-on .dnote{display:block;animation:opendown 200ms var(--ease-out) both
 var RM = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 var $ = function(id){ return document.getElementById(id); };
 function el(tag, cls, html){ var n=document.createElement(tag); if(cls) n.className=cls; if(html!=null) n.innerHTML=html; return n; }
-var CX = '<svg class="cx" width="9" height="9" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
-/* One expander behaviour for every disclosure in the room. */
-function wireDisclosure(btn, drawer){
-  btn.addEventListener("click", function(ev){
-    ev.stopPropagation();
-    var open = drawer.classList.toggle("open");
-    btn.setAttribute("aria-expanded", open ? "true" : "false");
-  });
+/* The brand chevron, the room's one progress mark. */
+function chev(size, cls){
+  return '<svg class="'+(cls||"chev")+'" width="'+size+'" height="'+size+'" viewBox="0 0 10 10" fill="none" aria-hidden="true">'+
+    '<path d="M3.4 1.6L6.8 5l-3.4 3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
 
-/* ------------------------------------------------------------------ data */
+/* ================================================================== data */
 
 var MEMBERS = [
   {key:"HW1001", short:"Revolver", tag:"Booked", product:"Revolving line of credit", amt:"$15.0MM",
@@ -933,7 +889,7 @@ var MEMBERS = [
   {key:"HW1004", short:"Purchase", tag:"Booked", product:"Purchase", amt:"$5.0MM", out:"$4.42MM outstanding · 6.25% fixed"},
   {key:"HW1005", short:"Equipment", tag:"Booked", product:"Equipment", amt:"$3.5MM", out:"$3.01MM outstanding · 7.35% fixed"},
   {key:"HW1006", short:"Seasonal", tag:"Booked", product:"Seasonal line of credit", amt:"$2.5MM", out:"$1.15MM outstanding · matures 2026-06-30"},
-  {key:"Proposal", short:"Equipment", tag:"Proposal", product:"Equipment", amt:"$3.0MM", prop:true, out:"Staged, not booked · showcase member"}
+  {key:"PROP", short:"Equipment", tag:"Proposal", product:"Equipment", amt:"$3.0MM", prop:true, out:"Staged, not booked · showcase member"}
 ];
 
 var HAVE = [
@@ -959,7 +915,69 @@ var MAIL = [
   {t:" and to carry the receivable build that comes with it. Elena can send the June figures and the updated equipment schedule today.\n\nLet me know what you need from us.\n\nJames Hartwell\nPresident and CEO\nHartwell Precision Manufacturing LLC"}
 ];
 
-var POS_HEADLINE = "Reshape the package: revolver to $18.0MM now, plus a new $2.0MM equipment facility secured by the Mazak tooling.";
+/* Law 3. The opening view is one sentence of position, one aggregate strip and
+   a member row. Everything else in the story is a chip away. */
+var POS_HEADLINE = "Revolver to $18.0MM, plus a $2.0MM equipment facility on the Mazak tooling.";
+
+var WHY_HTML =
+  '<div class="have-row"><div class="l">Utilisation</div>'+
+  '<div class="d">The revolver is 61% drawn, $9,200,000 against a $15,000,000 commitment. Taking it to $20,000,000 would put '+
+  'utilisation at 46% and add $5,000,000 of revolving capacity the current borrowing base does not support. '+
+  '<b>HW1001 · a4Zbb0000027MaYEAU · SOFR+275, 7.60%, matures 2027-03-15</b></div></div>'+
+  '<div class="have-row"><div class="l">Collateral headroom</div>'+
+  '<div class="d">The existing pool is $44,000,000 appraised and $31,600,000 lendable, pledged to the dollar across seven pledge '+
+  'rows. There is no unencumbered lendable value left in it. The Mazak tooling adds $4,000,000 appraised at a 75% advance rate, '+
+  'which is $3,000,000 lendable and unencumbered.</div></div>'+
+  '<div class="have-row"><div class="l">Covenant cushion</div>'+
+  '<div class="d">Fixed charge coverage runs 1.22x against a 1.15x floor. That is a cushion of 7 bps and the thinnest number in '+
+  'the package. $5,000,000 of incremental revolver at SOFR+275 loads the fixed charge denominator faster than a $2,000,000 '+
+  'amortising facility sized to the asset that generates the ramp.</div></div>'+
+  '<div class="have-row"><div class="l">Alternatives considered</div>'+
+  '<div class="d"><b>Full $20.0MM with additional security.</b> Needs new collateral or a guarantee enhancement to cover the '+
+  'incremental $5,000,000. The only unencumbered asset is the Mazak tooling at $3,000,000 lendable, which is $2,000,000 short. '+
+  'Elena Hartwell’s limited guarantee is capped at $5,000,000 and would have to be raised.<br>'+
+  '<b>Hold and revisit after the Q3 test.</b> Defers the decision to 2026-09-30. The client states the Mazak cells land in '+
+  'October, so the deposit and install would be funded on the existing line at 61% utilisation in the meantime.</div></div>'+
+  '<div class="cav">Recommendation only. Nothing is written. The banker decides, and the approval that follows is the '+
+  'banker’s own. SR 26-2 framing: the agent recommends, the banker decides.</div>';
+
+var GOV_HTML =
+  '<div class="d" style="font-size:11.8px;line-height:1.6;color:var(--ink-muted)">Approver is the running identity: '+
+  'fabian.goetzens@accenture.com.bankinggpt. Nothing has been written up to this point; the chips were staged intent. '+
+  'Approval redeems a single use token, the execution delegates to the same clone, stage and book mechanics the org already '+
+  'runs, and any org validation message is carried through verbatim.</div>';
+
+/* The source tray. Used, not displayed. */
+var SRC = [
+  {id:"email", label:"Email", kicker:"Client request · James Hartwell · 2026-08-25 08:14", w:440,
+   icon:'<path d="M1.2 2.6h9.6v6.8H1.2z" stroke="currentColor" stroke-width="1.1"/><path d="M1.4 3l4.6 3.4L10.6 3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>',
+   build:function(){
+     var w = el("div");
+     w.appendChild(el("div","prov","Interpreted on entry. Package re-queried and the analysis pre-run at 09:02."));
+     var p = el("div","prose");
+     MAIL.forEach(function(seg){
+       if(seg.h){ var s = el("span","hl"); s.textContent = seg.t; p.appendChild(s); }
+       else p.appendChild(document.createTextNode(seg.t));
+     });
+     w.appendChild(p);
+     return w;
+   },
+   after:function(){
+     var hls = $("peekB").querySelectorAll(".hl");
+     for(var j=0;j<hls.length;j++){
+       (function(h,idx){ setTimeout(function(){ h.classList.add("pop"); }, RM?0:120+idx*110); })(hls[j], j);
+     }
+   }},
+  {id:"package", label:"Package", kicker:"Product package a5Fbb000000IHFJEA4", w:440,
+   icon:'<path d="M6 1.2l4.4 2.3v5L6 10.8 1.6 8.5v-5z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M1.8 3.6L6 5.9l4.2-2.3M6 5.9v4.7" stroke="currentColor" stroke-width="1.1"/>',
+   rows:[0,1]},
+  {id:"collateral", label:"Collateral", kicker:"Collateral pool · re-queried 09:02", w:440,
+   icon:'<path d="M1.6 4.2h8.8v5.2H1.6z" stroke="currentColor" stroke-width="1.1"/><path d="M3.6 4.2V2.6h4.8v1.6" stroke="currentColor" stroke-width="1.1"/>',
+   rows:[3]},
+  {id:"covenants", label:"Covenants", kicker:"6 covenants · 2 loan junctions", w:440,
+   icon:'<path d="M6 1.6v8.8M2.2 3.6h7.6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M2.2 3.6L.9 6.6h2.6zM9.8 3.6L8.5 6.6h2.6z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>',
+   rows:[2]}
+];
 
 /* Manifest groups, in the order a credit committee reads a modification. */
 var GROUPS = [
@@ -971,10 +989,10 @@ var GROUPS = [
 
 var ENTRIES = {
   facility:{
-    group:"structure", kind:"New facility", kindCls:"new", badge:"Facility added",
+    group:"structure", kind:"New facility", kindCls:"new", badge:"Equipment facility added",
     title:"Equipment facility", target:"New member of the package",
     before:"7 members", after:"8 members, $2,000,000 added",
-    newMember:true,
+    newMember:true, committed:2,
     map:[["Object","Loan"],["Record","New member of a5Fbb000000IHFJEA4"],
          ["Written as","Amount 2,000,000, product Equipment, borrower and guarantor structure copied from HW1002, staged at Proposed."]],
     fields:["LLC_BI__Loan__c.LLC_BI__Amount__c = 2000000",
@@ -983,10 +1001,10 @@ var ENTRIES = {
     filed:{id:"a4Zbb0000027NrQEAU", req:"Re-queried a4Zbb0000027NrQEAU · Amount 2000000 · package a5Fbb000000IHFJEA4 · 3 entity involvement rows"}
   },
   amount:{
-    group:"terms", kind:"Term change", badge:"Term changed",
+    group:"terms", kind:"Term change", badge:"Commitment raised to $18.0MM",
     title:"Commitment amount", target:"HW1001 · Revolving line of credit",
     before:"$15,000,000", after:"$18,000,000",
-    member:"HW1001",
+    member:"HW1001", committed:3,
     map:[["Object","Loan, proposed revision"],["Record","Clone of a4Zbb0000027MaYEAU"],
          ["Written as","Amount 18,000,000 on the clone. The booked facility is untouched until the plan books."]],
     fields:["LLC_BI__Loan__c.LLC_BI__Amount__c = 18000000",
@@ -995,7 +1013,7 @@ var ENTRIES = {
     filed:{id:"a4Zbb0000027NpMEAU", req:"Re-queried a4Zbb0000027NpMEAU · LLC_BI__Amount__c = 18000000 · Stage = Proposed"}
   },
   covenant:{
-    group:"covenants", kind:"New covenant", kindCls:"new", badge:"Covenant added",
+    group:"covenants", kind:"New covenant", kindCls:"new", badge:"Minimum Liquidity added",
     title:"Minimum Liquidity", target:"HW1001 · Revolving line of credit",
     before:"No facility level test", after:"&ge; $6,000,000, quarterly",
     member:"HW1001",
@@ -1010,7 +1028,7 @@ var ENTRIES = {
     filed:{id:"a3Bbb000000S1FhEAK", req:"Re-queried a3Bbb000000S1FhEAK · threshold 6000000, operator >= · junction a4Vbb000000pNQzEAM active"}
   },
   pledge:{
-    group:"security", kind:"Collateral pledged", kindCls:"col", badge:"Collateral pledged",
+    group:"security", kind:"Collateral pledged", kindCls:"col", badge:"Mazak tooling pledged",
     title:"Mazak tooling", target:"Pledged to the new equipment facility",
     before:"Appraised, unpledged", after:"$2,000,000 pledged, 1st position",
     map:[["Object","Collateral plus the pledge junction"],["Record","New collateral and one Collateral Pledged row"],
@@ -1025,41 +1043,115 @@ var ENTRIES = {
   }
 };
 
-/* --------------------------------------------------------------- render */
+/* The two challenges. Each is triggered by the confirm that causes it, and
+   arrives back in the conversation as an agent message with a verdict chip. */
+var CHALLENGES = {
+  amount:{
+    key:"coverage", verdict:"No shortfall", tone:"ok",
+    kicker:"Coverage pro forma · live 09:06",
+    line:"The increase raises the ceiling, not availability. Base coverage of outstanding stays at 1.30x, and advances remain capped by the monthly borrowing base certificate, so the $18,000,000 face never funds ahead of the base.",
+    rows:[
+      ["Eligible receivables $12,000,000 at 80%","$9,600,000"],
+      ["Eligible inventory $8,000,000 at 50%","$4,000,000"],
+      ["Borrowing base, gross","$13,600,000"," sum"],
+      ["Less receivables pledged to HW1006","($1,600,000)"],
+      ["Base available to HW1001","$12,000,000"," sum"],
+      ["Outstanding today","$9,200,000"],
+      ["Base coverage of outstanding","1.30x"," key"],
+      ["Commitment after the increase","$18,000,000"],
+      ["Base coverage of commitment, was 0.80x","0.67x"," key"]
+    ],
+    say:"The base certificate on HW1001, junction a4Vbb000000pNIjEAM, caps advances at 80% of eligible receivables and 50% of eligible inventory. The receivable build the client describes is what lifts availability, and the base formula picks it up automatically. Unencumbered lendable value in the pool is $3,000,000, all of it the Mazak tooling, which the new equipment facility takes."
+  },
+  covenant:{
+    key:"cushion", verdict:"Cushion thins", tone:"warn",
+    kicker:"Fixed charge cushion · live 09:06",
+    line:"The thinnest covenant in the package gets thinner, and on today's figures it still clears the September test. Cushion is 7 bps at the 30 June test. Re-test fixed charge coverage against the equipment amortisation schedule before first draw.",
+    rows:[
+      ["Fixed charge coverage floor","1.15x"],
+      ["Actual at 2026-06-30","1.22x"],
+      ["Cushion","7 bps"," key"],
+      ["Debt service coverage floor","1.25x"],
+      ["Debt service coverage actual","1.38x"],
+      ["Cushion","13 bps"],
+      ["Next evaluation","2026-09-30"," sum"]
+    ],
+    say:"The revolver increase adds no scheduled amortisation. Interest follows drawn balances at SOFR+275, 7.60% today, so the $3,000,000 only reaches the fixed charge denominator to the extent it is drawn. The $2,000,000 equipment facility is different: scheduled principal and interest enter the denominator from first draw and land in the 2026-09-30 test. Covenant a3Bbb000000S0ZlEAK carries its evaluation history in its own fields; this relationship has no compliance rows by design."
+  }
+};
+
+/* Design notes, a demo aid. They peek, so they never move the room. */
+var NOTES = [
+  ["Zone 1 · The package is the story",
+   "A modification is a decision about a credit relationship, not about a loan record. The altitude is the package: one name, one aggregate strip, one member row. Loan level detail is a peek away, and that is also the level the writes land at."],
+  ["Zone 2 · The position, one sentence",
+   "One recommended reshape, stated before the banker types, because the analysis already ran. The ask sits on it as a pin. What justifies it, utilisation, collateral headroom, covenant cushion, alternatives, is behind Why."],
+  ["Sources are used, not displayed",
+   "What the agent read is a row of icon chips. The client email is a chip, not a wall of quoted text in the layout. Click one and the content peeks over the room, highlighted where it was parsed."],
+  ["The step spine",
+   "Understand, Compose, Checks, Approve, carried by the Accenture chevron. Nothing here is clickable. Every advance comes from something the banker said or confirmed, so the progression is a quiet skeleton under a conversation, never a form wizard."],
+  ["Zone 3 · The conversation is the operator",
+   "Natural language in, structured deltas out. The parse is a language model call; the validation that follows is deterministic against org fields, picklists and guards, so an invalid parse never becomes a chip. Chips are staged intent with zero DML. A confirmed chip leaves a one line receipt, because the thing itself has moved to the right."],
+  ["Checks come to you",
+   "A confirmed change that trips a challenge gets the challenge back inline, as an agent message with a verdict chip. The banker does not go to a checks tab; the checks arrive at the moment they become true."],
+  ["Zone 4 · Changes to the package",
+   "Grouped the way a credit committee reads a modification: structure, terms, covenants, security. Every confirm travels here visibly. Each entry has a quiet remove; undo is remove and re-say in the chat, never an in place editing form. The approval sits underneath the stack, because you sign what is above it."],
+  ["Nothing scrolls",
+   "There is no scrollbar anywhere in this room, in any scene. Every disclosure is a peek that floats over the layout instead of growing inside it, and the conversation folds what is settled behind a chevron line rather than sliding a page."]
+];
+
+/* ================================================================ render */
 
 function renderMembers(){
-  var chips = $("mchips"), cards = $("mcards");
+  var chips = $("mchips");
   MEMBERS.forEach(function(m){
     var c = el("button", "mchip" + (m.prop?" prop":""));
     c.setAttribute("data-key", m.key);
-    c.innerHTML = "<b>" + m.key + "</b>" + m.short + '<span class="amt tnum">' + m.amt + "</span>";
+    c.innerHTML = "<b>" + m.key + '</b><span class="amt tnum">' + m.amt + "</span>";
+    c.addEventListener("click", openMembers);
     chips.appendChild(c);
+  });
+}
 
-    var d = el("div", "mcard" + (m.prop?" prop":""));
-    d.setAttribute("data-key", m.key);
-    d.innerHTML =
+function memberCardsHTML(){
+  return '<div class="mgrid">' + MEMBERS.map(function(m){
+    return '<div class="mcard'+(m.prop?" prop":"")+'" data-key="'+m.key+'">'+
       '<span class="tag">'+m.tag+'</span>'+
       '<div class="k">'+m.key+'</div>'+
       '<div class="p">'+m.product+'</div>'+
       '<div class="a tnum">'+m.amt+'</div>'+
       '<div class="o">'+m.out+'</div>'+
-      (m.util? '<div class="meter"><i></i></div><div class="util"><span>'+m.util+'% drawn</span><span>'+m.avail+'</span></div>' : '');
-    cards.appendChild(d);
+      (m.util? '<div class="meter"><i></i></div><div class="util"><span>'+m.util+'% drawn</span><span>'+m.avail+'</span></div>' : '')+
+      '</div>';
+  }).join("") + '</div>';
+}
+
+function openMembers(){
+  openPeek("Members of the package", memberCardsHTML(), $("memberToggle"), 760, function(){
+    var m = $("peekB").querySelector('[data-key="HW1001"] .meter i');
+    if(m) setTimeout(function(){ m.style.width = "61%"; }, RM?0:80);
   });
 }
 
-function renderHave(){
-  HAVE.forEach(function(h){
-    $("haveList").appendChild(el("div","have-row",
-      '<div class="l">'+h.l+'</div><div class="v">'+h.v+'</div><div class="d">'+h.d+'</div>'));
-  });
+function haveHTML(idxs){
+  return (idxs || [0,1,2,3]).map(function(i){
+    var h = HAVE[i];
+    return '<div class="have-row"><div class="l">'+h.l+'</div><div class="v">'+h.v+'</div><div class="d">'+h.d+'</div></div>';
+  }).join("");
 }
 
-function renderMail(){
-  var p = $("mailProse");
-  MAIL.forEach(function(seg){
-    if(seg.h){ var s = el("span","hl"); s.textContent = seg.t; p.appendChild(s); }
-    else p.appendChild(document.createTextNode(seg.t));
+function renderSources(){
+  var tray = $("srctray");
+  SRC.forEach(function(s){
+    var b = el("button","srcchip");
+    b.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none">'+s.icon+'</svg>'+
+      '<span class="srclabel">'+s.label+'</span>';
+    b.setAttribute("title", s.kicker);
+    b.addEventListener("click", function(){
+      var body = s.build ? s.build() : haveHTML(s.rows);
+      openPeek(s.kicker, body, b, s.w, s.after);
+    });
+    tray.appendChild(b);
   });
 }
 
@@ -1073,15 +1165,55 @@ function renderGroups(){
   });
 }
 
-/* Mark a member as named by the recommendation. */
 function nameMember(key){
-  ["#mchips","#mcards"].forEach(function(sel){
-    var n = document.querySelector(sel + ' [data-key="' + key + '"]');
-    if(n){ n.classList.add("named"); n.classList.add("flash"); }
-  });
+  var n = document.querySelector('#mchips [data-key="' + key + '"]');
+  if(n){ n.classList.add("named"); n.classList.add("flash"); }
 }
 
-/* ----------------------------------------------------------- text motion */
+/* ================================================================== peek
+   Law 5's structural answer: one overlay primitive for every disclosure. */
+
+var peekOpen = false;
+function openPeek(kicker, content, anchor, width, after){
+  var pk = $("peek"), card = $("peekCard"), b = $("peekB");
+  $("peekK").textContent = kicker;
+  b.innerHTML = "";
+  if(typeof content === "string") b.innerHTML = content;
+  else b.appendChild(content);
+  card.style.width = (width || 420) + "px";
+  card.style.visibility = "hidden";
+  pk.hidden = false;
+  peekOpen = true;
+
+  var wr = document.querySelector(".wr").getBoundingClientRect();
+  var r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+  var place = function(){
+    var ch = card.offsetHeight, cw = card.offsetWidth, top, left;
+    if(r){ top = r.bottom + 8; left = r.left - 6; }
+    else { top = wr.top + 70; left = wr.left + (wr.width - cw)/2; }
+    if(r && top + ch > wr.bottom - 14) top = r.top - 8 - ch;
+    if(top + ch > wr.bottom - 14) top = wr.bottom - 14 - ch;
+    if(top < wr.top + 14) top = wr.top + 14;
+    if(left + cw > wr.right - 14) left = wr.right - 14 - cw;
+    if(left < wr.left + 14) left = wr.left + 14;
+    card.style.top = top + "px";
+    card.style.left = left + "px";
+    card.style.visibility = "";
+    pk.classList.add("in");
+    if(after) after();
+  };
+  if(RM) place(); else requestAnimationFrame(place);
+}
+function closePeek(){
+  if(!peekOpen) return;
+  peekOpen = false;
+  $("peek").classList.remove("in");
+  setTimeout(function(){ $("peek").hidden = true; $("peekB").innerHTML = ""; }, RM?0:180);
+}
+$("peekBd").addEventListener("click", closePeek);
+$("peekX").addEventListener("click", closePeek);
+
+/* --------------------------------------------------------- text motion */
 
 function streamInto(node, text, speed, done){
   if(RM){ node.textContent = text; if(done) done(); return; }
@@ -1098,7 +1230,7 @@ function streamInto(node, text, speed, done){
     }
     caret.parentNode.insertBefore(document.createTextNode(words[i]), caret);
     i++;
-    autoscroll();
+    fitThread();
   }, speed || 15);
 }
 
@@ -1111,16 +1243,94 @@ function typeInto(node, text, speed, done){
   }, speed || 12);
 }
 
-var colL = null, follow = false;
-/* The column follows the conversation, never the entry assembly: at entry the
-   three blocks must sit still and the position must be the thing you read. */
-function autoscroll(){
-  if(!follow) return;
-  if(!colL) colL = $("colL");
-  colL.scrollTop = colL.scrollHeight;
+/* ======================================================= the fit pass
+   Law 5, in code. The conversation never scrolls: when the live exchange no
+   longer fits, prose clamps first, then settled blocks fold behind the
+   chevron line. Nothing is lost; the fold is readable as a peek. */
+
+var folded = [];
+
+function threadOverflow(){
+  var t = $("thread"), kids = t.children, h = 0, n = 0;
+  for(var i=0;i<kids.length;i++){
+    var k = kids[i];
+    if(k.hasAttribute("hidden") || k.classList.contains("folded")) continue;
+    h += k.getBoundingClientRect().height; n++;
+  }
+  h += Math.max(0, n-1) * 9;
+  return h - t.clientHeight;
 }
 
-/* ------------------------------------------------------------ assembly */
+/* The fit pass runs in both directions, so the thread always holds as much
+   conversation as the pane can carry and never one line more. Relax first,
+   then tighten: a turn that was folded when the room was tight comes back the
+   moment a confirm collapses a chip into a receipt and frees the space. */
+function fitThread(){
+  var t = $("thread");
+  if(!t.clientHeight) return;
+
+  Array.prototype.forEach.call(t.querySelectorAll(".bub.clamp"), function(b){
+    b.classList.remove("clamp","c3","c2");
+    b.removeAttribute("title");
+  });
+  while(folded.length){
+    var last = folded[folded.length-1];
+    last.classList.remove("folded");
+    if(threadOverflow() > 0){ last.classList.add("folded"); break; }
+    folded.pop();
+  }
+  updateFoldline();
+
+  var guard = 0;
+  while(threadOverflow() > 0 && guard++ < 40){
+    /* 1. clamp the oldest unclamped prose. A challenge message is never
+       clamped: its verdict and its acknowledge button carry a live gate. */
+    var bubs = t.querySelectorAll(".blk:not(.folded) .msg:not(.chalmsg) .bub:not(.c2)");
+    var did = false;
+    for(var i=0;i<bubs.length;i++){
+      var b = bubs[i];
+      if(!b.classList.contains("clamp")){ b.classList.add("clamp","c3"); b.title = "Read in full"; did = true; break; }
+      if(b.classList.contains("c3")){ b.classList.remove("c3"); b.classList.add("c2"); did = true; break; }
+    }
+    if(did) continue;
+    /* 2. fold the oldest settled block. A block holding a live decision, an
+       unconfirmed chip or an unacknowledged check, is never folded away. */
+    var blks = t.querySelectorAll(".blk:not(.folded):not(.hold)");
+    if(blks.length <= 1) break;
+    blks[0].classList.add("folded");
+    folded.push(blks[0]);
+    updateFoldline();
+  }
+}
+
+/* A clamped bubble is shortened, never lost. */
+$("thread").addEventListener("click", function(ev){
+  var n = ev.target;
+  while(n && n !== this && !(n.classList && n.classList.contains("bub"))){
+    if(n.tagName === "BUTTON") return;
+    n = n.parentNode;
+  }
+  if(!n || n === this || !n.classList.contains("clamp")) return;
+  openPeek("The message in full", '<div class="prose">'+esc(n.textContent)+'</div>', n, 470);
+});
+
+function updateFoldline(){
+  var f = $("foldline");
+  if(!folded.length){ f.hidden = true; return; }
+  f.hidden = false;
+  f.innerHTML = chev(9,"") + folded.length + (folded.length===1?" earlier turn":" earlier turns");
+}
+
+$("foldline").addEventListener("click", function(){
+  var html = folded.map(function(n){
+    var who = n.getAttribute("data-who") || "";
+    var txt = (n.getAttribute("data-log") || n.textContent || "").replace(/\s+/g," ").trim();
+    return '<div class="have-row"><div class="l">'+esc(who)+'</div><div class="d">'+esc(txt)+'</div></div>';
+  }).join("");
+  openPeek("Earlier in this conversation", html, $("foldline"), 460);
+});
+
+/* ============================================================== assembly */
 
 var LOAD_STEPS = [
   [0,    "Reading the request",                          10],
@@ -1133,10 +1343,8 @@ var LOAD_STEPS = [
 
 function reveal(node, delay){ setTimeout(function(){ node.classList.add("in"); }, RM?0:delay); }
 
-/* Arrival: the chevron scene carries the load, then the room assembles one
-   zone at a time. */
 function boot(){
-  renderMembers(); renderHave(); renderMail(); renderGroups(); renderSteps();
+  renderMembers(); renderSources(); renderGroups(); renderStepper();
 
   var lbl = $("bootLabel"), bar = $("bootBar");
   LOAD_STEPS.forEach(function(s, i){
@@ -1152,6 +1360,9 @@ function boot(){
 
   setTimeout(function(){
     $("boot").classList.add("gone");
+    /* Taken out of the box model once it has faded: a scaled overlay still
+       counts against the modal's own overflow otherwise. */
+    setTimeout(function(){ $("boot").style.display = "none"; }, RM?0:520);
     assemble();
   }, RM?0:2700);
 }
@@ -1160,42 +1371,75 @@ function assemble(){
   reveal($("rv-pkg-top"), 100);
   reveal($("rv-agg"), 220);
   reveal($("rv-mbar"), 340);
-  reveal($("askCard"), 560);
-  reveal($("posCard"), 820);
+  reveal($("posCard"), 560);
 
-  /* The position resolves from its skeleton and states itself, then names the
-     member it touches. That naming is the only highlight in the strip. */
   setTimeout(function(){
     $("posSkeleton").style.display = "none";
     $("posReal").style.display = "block";
     streamInto($("posHeadline"), POS_HEADLINE, 16, function(){
-      $("posActs").style.display = "flex";
+      $("posFoot").style.display = "flex";
       setTimeout(function(){ nameMember("HW1001"); }, RM?0:320);
       setNext("Open the conversation", true);
       $("gatehint").textContent = "";
     });
-  }, RM?0:1200);
+  }, RM?0:900);
 }
 
-/* ------------------------------------------------------------- scene bar */
+/* ========================================================== the step spine
+   Understand, Compose, Checks, Approve. Advanced by what the banker does,
+   never clickable. The chevron is the progress motif. */
 
-var SCENES = ["Entry","Conversation","Challenge","Approve","Filed"];
-var scene = 0, step = 0, pending = 0;
-var PREFILLED = false;
+var STAGES = [
+  {id:"understand", label:"Understand"},
+  {id:"compose",    label:"Compose"},
+  {id:"checks",     label:"Checks"},
+  {id:"approve",    label:"Approve"}
+];
+var stageState = ["on","",""," "];
+stageState = ["on","","",""];
 
-function renderSteps(){
-  var box = $("steps");
+function renderStepper(){
+  var box = $("stepper");
   box.innerHTML = "";
-  SCENES.forEach(function(s, i){
-    if(i) box.appendChild(el("span","ln"));
-    var n = el("span","step" + (i===scene?" on":(i<scene?" past":"")));
-    n.innerHTML = '<span class="b"></span>' + s;
+  STAGES.forEach(function(s, i){
+    var n = el("span","stg " + (stageState[i]||""));
+    n.setAttribute("data-stage", s.id);
+    n.innerHTML = chev(10) + s.label + '<span class="cnt" data-cnt style="display:none"></span>';
     box.appendChild(n);
   });
+  box.appendChild(el("span","rail",'<i id="stepRail"></i>'));
+  syncRail();
 }
-function setScene(i){ scene = i; renderSteps(); }
+function setStage(i, state){
+  stageState[i] = state;
+  var n = $("stepper").children[i];
+  if(!n) return;
+  n.className = "stg " + (state||"");
+  syncRail();
+}
+function stageCount(i, txt){
+  var n = $("stepper").children[i];
+  if(!n) return;
+  var c = n.querySelector("[data-cnt]");
+  if(!c) return;
+  if(txt){ c.style.display = ""; c.textContent = txt; }
+  else c.style.display = "none";
+}
+function syncRail(){
+  var r = $("stepRail");
+  if(!r) return;
+  var done = stageState.filter(function(s){ return s === "done"; }).length;
+  r.style.width = Math.round(done / STAGES.length * 100) + "%";
+}
+
+/* ====================================================== conversation parts */
+
+var step = 0, pending = 0;
+var PREFILLED = false;
+
 function setNext(label, on){ var b = $("nextBtn"); b.textContent = label; b.disabled = !on; }
 function gate(n, hint){ pending = n; setNext("Next", false); $("gatehint").textContent = hint || ""; }
+function bumpGate(n, hint){ pending += n; if(hint) $("gatehint").textContent = hint; setNext("Next", false); }
 function resolve(){
   pending--;
   if(pending <= 0){
@@ -1208,21 +1452,29 @@ function resolve(){
   }
 }
 
-/* ----------------------------------------------------- conversation parts */
+function block(who, log){
+  var b = el("div","blk");
+  if(who) b.setAttribute("data-who", who);
+  if(log) b.setAttribute("data-log", log);
+  $("thread").appendChild(b);
+  return b;
+}
 
 function bankerSays(text){
-  /* A message the banker already typed themselves lands as a bubble at once;
-     a scripted or suggested one types itself into the composer first. */
+  /* A message the banker already typed themselves lands at once; a scripted or
+     suggested one types itself into the composer first. */
+  function land(res){
+    var b = block("Banker", text);
+    var m = el("div","msg banker");
+    m.innerHTML = '<div class="who">Banker</div><div class="bub"></div>';
+    m.querySelector(".bub").textContent = text;
+    b.appendChild(m);
+    fitThread();
+    res();
+  }
   if(PREFILLED){
     PREFILLED = false;
-    return new Promise(function(res){
-      var m = el("div","msg banker");
-      m.innerHTML = '<div class="who">Banker</div><div class="bub"></div>';
-      m.querySelector(".bub").textContent = text;
-      $("thread").appendChild(m);
-      autoscroll();
-      res();
-    });
+    return new Promise(land);
   }
   return new Promise(function(res){
     var comp = $("composer"), txt = $("composerTxt");
@@ -1231,12 +1483,7 @@ function bankerSays(text){
       setTimeout(function(){
         txt.textContent = "";
         comp.classList.remove("hot");
-        var m = el("div","msg banker");
-        m.innerHTML = '<div class="who">Banker</div><div class="bub"></div>';
-        m.querySelector(".bub").textContent = text;
-        $("thread").appendChild(m);
-        autoscroll();
-        res();
+        land(res);
       }, RM?0:250);
     });
   });
@@ -1244,23 +1491,37 @@ function bankerSays(text){
 
 function agentSays(text, thinkMs){
   return new Promise(function(res){
+    var b = block("Workroom agent", text);
     var m = el("div","msg agent");
     m.innerHTML = '<div class="who">Workroom agent</div><div class="bub"><span class="think"><i></i><i></i><i></i></span></div>';
-    $("thread").appendChild(m);
-    autoscroll();
+    b.appendChild(m);
+    fitThread();
     setTimeout(function(){
       var bub = m.querySelector(".bub");
       bub.innerHTML = "";
-      streamInto(bub, text, 14, function(){ autoscroll(); res(); });
-    }, RM?0:(thinkMs||580));
+      streamInto(bub, text, 14, function(){ fitThread(); res(); });
+    }, RM?0:(thinkMs||520));
   });
 }
 
 function chipHolder(){
+  var b = block("Proposed changes", "");
+  b.classList.add("hold");
   var c = el("div","chips");
-  $("thread").appendChild(c);
-  autoscroll();
+  b.appendChild(c);
+  fitThread();
   return c;
+}
+
+/* A block stops holding the moment nothing in it is still waiting on the
+   banker. Until then the fit pass may not fold it out of sight. */
+function releaseHold(node){
+  var b = node;
+  while(b && !(b.classList && b.classList.contains("blk"))) b = b.parentNode;
+  if(!b) return;
+  if(b.querySelector(".chip:not([data-settled]), .chalmsg:not(.ack)")) return;
+  b.classList.remove("hold");
+  fitThread();
 }
 
 function deltaChip(holder, key){
@@ -1271,30 +1532,57 @@ function deltaChip(holder, key){
     '<div class="line"><span class="fld">'+e.title+'</span>'+
       '<span class="was">'+e.before+'</span><span class="arw">&rarr;</span><span class="now">'+e.after+'</span></div>'+
     '<div class="acts"><button class="btn btn-p">Confirm</button><button class="btn btn-g">Discard</button>'+
-      '<button class="btn-i" aria-label="How this was validated" aria-expanded="false">i</button></div>'+
-    '<div class="drawer">Parsed from the message, then validated deterministically against the org before it was offered. '+
-      'Staged intent only: nothing is written until the single approval. Lands under <b>'+
-      GROUPS.filter(function(g){return g.id===e.group;})[0].label + '</b> in the manifest.</div>'+
-    '<div class="settled"><span class="ok-tick">&#10003;</span><span>Confirmed. In the manifest.</span></div>';
+      '<button class="btn-i" aria-label="How this was validated">i</button></div>';
   holder.appendChild(n);
-  autoscroll();
-  wireDisclosure(n.querySelector(".btn-i"), n.querySelector(".drawer"));
+  fitThread();
+
+  n.querySelector(".btn-i").addEventListener("click", function(){
+    openPeek("How this was validated",
+      '<div class="d" style="font-size:11.8px;line-height:1.6;color:var(--ink-muted)">Parsed from the message, then validated '+
+      'deterministically against the org before it was offered. Staged intent only: nothing is written until the single '+
+      'approval. Lands under <b>'+GROUPS.filter(function(g){return g.id===e.group;})[0].label+'</b> in the manifest.</div>'+
+      '<div class="mapbox" style="margin-top:10px"><div class="h">The org records this writes</div>'+
+      e.map.map(function(r){ return '<div class="r"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>'; }).join("")+
+      '<div class="fields">'+ e.fields.map(function(f){ return "<code>"+esc(f)+"</code>"; }).join("") +'</div></div>'+
+      (e.caveat ? '<div class="cav">'+e.caveat+'</div>' : ''),
+      n, 460);
+  });
+
   n.querySelector(".btn-p").addEventListener("click", function(){
-    if(n.classList.contains("done")) return;
-    n.classList.add("done");
-    n.querySelector(".drawer").classList.remove("open");
+    if(n.getAttribute("data-settled")) return;
+    n.setAttribute("data-settled","1");
+    /* A challenge triggered by this confirm is part of the same gate. */
+    var chal = CHALLENGES[key];
+    if(chal) bumpGate(1, "Confirm the changes, then acknowledge the checks");
+    var host = holder;
     flyToManifest(n, function(){
       landEntry(key);
+      replaceWithReceipt(n, e, key);
+      releaseHold(host);
       resolve();
+      if(chal) setTimeout(function(){ challengeMessage(chal); }, RM?0:520);
     });
   });
   n.querySelector(".btn-g").addEventListener("click", function(){
-    if(n.classList.contains("done")) return;
+    if(n.getAttribute("data-settled")) return;
+    n.setAttribute("data-settled","1");
     n.classList.add("gone");
-    setTimeout(function(){ n.style.display = "none"; }, 260);
+    var host = holder;
+    setTimeout(function(){ if(n.parentNode) n.parentNode.removeChild(n); releaseHold(host); }, RM?0:220);
     resolve();
   });
   return n;
+}
+
+/* A confirmed chip does not stay in the conversation. The change itself has
+   moved to the manifest; what is left behind is a one line receipt. */
+function replaceWithReceipt(chipNode, e, key){
+  var r = el("div","receipt");
+  r.setAttribute("data-key", key);
+  r.innerHTML = '<span class="ok-tick">&#10003;</span><span>'+e.title+'</span>'+
+    '<span class="what">in the manifest</span>';
+  if(chipNode.parentNode) chipNode.parentNode.replaceChild(r, chipNode);
+  fitThread();
 }
 
 function refusalChip(holder){
@@ -1305,45 +1593,71 @@ function refusalChip(holder){
     '<div class="quote">HW1003 is not a member of this modification. A covenant junction is written against the proposed '+
       'revision of a facility, and HW1001 is the only member with one in this plan. HW1003 stays Booked and unchanged.</div>'+
     '<div class="acts"><button class="btn btn-p">Understood</button>'+
-      '<button class="btn btn-g" disabled title="Not part of this mock">Stage a separate modification on HW1003</button>'+
-      '<button class="btn-i" aria-label="More on this refusal" aria-expanded="false">i</button></div>'+
-    '<div class="drawer">To put the test on the construction facility, stage a separate modification on HW1003. It carries '+
-      'its own clone, its own plan and its own approval. HW1003 already holds the Kokomo completion covenant through '+
-      'junction a4Vbb000000pNKLEA2, one off, 61% complete at the June inspection.</div>';
+      '<button class="btn-i" aria-label="More on this refusal">i</button></div>';
   holder.appendChild(n);
-  autoscroll();
-  wireDisclosure(n.querySelector(".btn-i"), n.querySelector(".drawer"));
+  fitThread();
+  n.querySelector(".btn-i").addEventListener("click", function(){
+    openPeek("Why this cannot be staged here",
+      '<div class="d" style="font-size:11.8px;line-height:1.6;color:var(--ink-muted)">To put the test on the construction '+
+      'facility, stage a separate modification on HW1003. It carries its own clone, its own plan and its own approval. '+
+      'HW1003 already holds the Kokomo completion covenant through junction a4Vbb000000pNKLEA2, one off, 61% complete at '+
+      'the June inspection.</div>', n, 420);
+  });
   n.querySelector(".btn-p").addEventListener("click", function(){
-    if(n.classList.contains("done")) return;
-    n.classList.add("done");
+    if(n.getAttribute("data-settled")) return;
+    n.setAttribute("data-settled","1");
     n.querySelector(".acts").style.display = "none";
+    releaseHold(n);
     resolve();
   });
   return n;
 }
 
-/* ------------------------------------------------------ manifest landing */
+/* ------------------------------------ the challenge, as an agent message */
 
-var landed = [];
-var membersChanged = {}, newMembers = 0;
-var AGGC = 46.0;
+var checksArrived = 0, checksAcked = 0;
 
-/* A landed change moves the package figures, pro forma, where they already
-   sit. The bump is colour only, no movement to chase. */
-function bumpAgg(id, val, note){
-  var v = $(id);
-  if(!v) return;
-  if(val != null) v.textContent = val;
-  v.classList.remove("bump"); void v.offsetWidth; v.classList.add("bump");
-  if(note != null){
-    var host = v.parentNode, n = host.querySelector(".n");
-    if(!n){ n = el("span","n"); host.appendChild(n); }
-    n.classList.add("pro"); n.textContent = note;
-  }
+function challengeMessage(spec){
+  if(stageState[2] !== "done") setStage(2, "on");
+  checksArrived++;
+  var b = block("Workroom agent", spec.verdict + ". " + spec.line);
+  b.classList.add("hold");
+  var m = el("div","msg agent chalmsg");
+  m.innerHTML =
+    '<div class="who">Workroom agent</div>'+
+    '<div class="bub">'+
+      '<div class="vhead"><span class="vchip'+(spec.tone==="warn"?" warn":"")+'">'+spec.verdict+'</span>'+
+        '<span class="vk">'+spec.kicker+'</span></div>'+
+      '<div class="vtxt">'+spec.line+'</div>'+
+      '<div class="vact"><button class="btn btn-p">Acknowledge</button>'+
+        '<span class="acked"><span class="ok-tick">&#10003;</span>Acknowledged</span>'+
+        '<button class="dt" style="margin-left:auto">Show the math</button></div>'+
+    '</div>';
+  b.appendChild(m);
+  fitThread();
+
+  m.querySelector(".dt").addEventListener("click", function(){
+    openPeek(spec.kicker,
+      '<div class="math">'+ spec.rows.map(function(r){
+        return '<div class="mrow'+(r[2]||"")+'"><span class="l">'+r[0]+'</span><span class="v tnum">'+r[1]+'</span></div>';
+      }).join("") +'</div><div class="saynote">'+spec.say+'</div>', this, 440);
+  });
+  m.querySelector(".btn-p").addEventListener("click", function(){
+    if(m.classList.contains("ack")) return;
+    m.classList.add("ack");
+    checksAcked++;
+    if(checksAcked >= 2) setStage(2, "done");
+    releaseHold(m);
+    resolve();
+  });
+  return m;
 }
 
-/* The confirm's travel: a puck departs the chip and arrives at the manifest
-   count. Cause on the left, effect on the right. */
+/* ====================================================== manifest landing */
+
+var landed = [];
+var AGGC = 46.0;
+
 function flyToManifest(fromEl, done){
   var target = $("manCount");
   var narrow = window.matchMedia("(max-width:1180px)").matches;
@@ -1366,14 +1680,45 @@ function flyToManifest(fromEl, done){
   };
 }
 
-function updateCount(){
-  var changed = Object.keys(membersChanged).length;
-  var txt = landed.length + (landed.length===1?" change":" changes") + " · " + changed + " of 7 members";
-  if(newMembers) txt += " · " + newMembers + " new member" + (newMembers>1?"s":"");
+/* Counts and package figures are derived from what is actually in the rail, so
+   a removal walks them back exactly as a landing walked them forward. */
+function recalc(){
+  var changed = {}, newM = 0, comm = 46.0;
+  landed.forEach(function(k){
+    var e = ENTRIES[k];
+    if(e.member) changed[e.member] = 1;
+    if(e.newMember) newM++;
+    if(e.committed) comm += e.committed;
+  });
+  var nChanged = Object.keys(changed).length;
+  AGGC = comm;
+
+  var txt = landed.length ? (landed.length + (landed.length===1?" change":" changes") + " · " +
+    nChanged + " of 7 members" + (newM ? " · " + newM + " new member" + (newM>1?"s":"") : "")) : "Nothing staged";
   $("manCount").textContent = txt;
-  $("planSummary").textContent = landed.length + " changes to the package. " + changed + " of 7 members changed" +
-    (newMembers ? ", " + newMembers + " member added." : ".");
-  $("approveBtn").textContent = "Approve and file " + landed.length + " changes";
+  $("planSummary").textContent = landed.length + " changes to the package. " + nChanged + " of 7 members changed" +
+    (newM ? ", " + newM + " member added." : ".");
+  $("approveBtn").textContent = "Approve and file " + landed.length + (landed.length===1?" change":" changes");
+
+  bumpAgg("aggCommitted", "$" + AGGC.toFixed(1) + "MM", comm !== 46.0 ? "pro forma · was $46.0MM" : "", "commNote");
+  bumpAgg("aggMembers", newM ? (7+newM) + "" : "7", newM ? "+" + newM + " proposed" : "", "memberNote");
+  var hasCov = landed.indexOf("covenant") >= 0;
+  bumpAgg("covValue", hasCov ? "6/6" : "6/6", hasCov ? "1 proposed" : "", "covNote");
+
+  var empty = $("manEmpty");
+  if(!landed.length){ empty.style.display = ""; empty.classList.remove("gone"); }
+}
+
+var lastAgg = {};
+function bumpAgg(id, val, note, noteId){
+  var v = $(id);
+  if(!v) return;
+  var changed = lastAgg[id] !== val + "|" + note;
+  lastAgg[id] = val + "|" + note;
+  if(val != null) v.textContent = val;
+  if(changed){ v.classList.remove("bump"); void v.offsetWidth; v.classList.add("bump"); }
+  var n = $(noteId);
+  if(n){ n.textContent = note || ""; if(note) n.classList.add("pro"); else n.classList.remove("pro"); }
 }
 
 function landEntry(key){
@@ -1389,142 +1734,88 @@ function landEntry(key){
   var n = el("div","ent pulse");
   n.setAttribute("data-key", key);
   n.innerHTML =
-    '<button class="ent-t" aria-expanded="false">'+
-      '<div style="min-width:0">'+
+    '<div class="ent-row">'+
+      '<button class="ent-t">'+
         '<div class="ttl">'+e.title+'</div>'+
         '<div class="tgt">'+e.kind+' · '+e.target+'</div>'+
         '<div class="delta"><span class="was">'+e.before+'</span><span class="arw">&rarr;</span><span class="now">'+e.after+'</span></div>'+
-      '</div>'+
-      '<svg class="cx" width="10" height="10" viewBox="0 0 9 9"><path d="M2.5 1l4 3.5-4 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
-    '</button>'+
-    '<div class="drawer">'+
-      '<div class="mapbox"><div class="h">The org records this writes</div>'+
-        e.map.map(function(r){ return '<div class="r"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>'; }).join("")+
-        '<button class="dt" aria-expanded="false"><span class="i">i</span>Field names</button>'+
-        '<div class="drawer fields">'+ e.fields.map(function(f){ return "<code>"+f+"</code>"; }).join("") +'</div>'+
-      '</div>'+
-      (e.caveat ? '<div class="cav">'+e.caveat+'</div>' : '')+
+      '</button>'+
+      '<button class="ent-x" aria-label="Remove from the manifest" title="Remove. To change it, say it again in the chat.">'+
+        '<svg width="9" height="9" viewBox="0 0 12 12"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'+
+      '</button>'+
     '</div>'+
-    '<div class="filedbar"><span class="st">Filed</span><span class="id"></span></div>'+
-    '<div class="reqline"></div>';
+    '<div class="filedbar"><span class="st">Filed</span><span class="id"></span></div>';
 
   grp.querySelector(".grp-body").appendChild(n);
 
-  wireDisclosure(n.querySelector(".ent-t"), n.querySelector(":scope > .drawer"));
-  wireDisclosure(n.querySelector(".mapbox .dt"), n.querySelector(".fields"));
+  n.querySelector(".ent-t").addEventListener("click", function(){
+    openPeek(e.title + " · what this writes",
+      '<div class="mapbox"><div class="h">The org records this writes</div>'+
+      e.map.map(function(r){ return '<div class="r"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>'; }).join("")+
+      '<div class="fields">'+ e.fields.map(function(f){ return "<code>"+esc(f)+"</code>"; }).join("") +'</div></div>'+
+      (e.caveat ? '<div class="cav">'+e.caveat+'</div>' : '')+
+      (n.classList.contains("filed") ? '<div class="saynote">'+e.filed.req+'</div>' : ''),
+      n, 460);
+  });
+  n.querySelector(".ent-x").addEventListener("click", function(ev){
+    ev.stopPropagation();
+    removeEntry(key, n);
+  });
 
   landed.push(key);
-  if(e.newMember) newMembers++;
-  if(e.member) membersChanged[e.member] = 1;
-  updateCount();
-
-  /* The package strip is live: landed changes move the aggregates, pro forma. */
-  if(key === "amount"){
-    AGGC += 3;
-    bumpAgg("aggCommitted", "$" + AGGC.toFixed(1) + "MM", "pro forma · was $46.0MM");
-  }
-  if(key === "facility"){
-    AGGC += 2;
-    bumpAgg("aggCommitted", "$" + AGGC.toFixed(1) + "MM", "pro forma · was $46.0MM");
-    bumpAgg("aggMembers", "8 of 8", null);
-  }
-  if(key === "covenant"){
-    bumpAgg("covValue", null, null);
-    var cn = $("covNote");
-    if(cn){ cn.classList.add("pro"); cn.textContent = "one thin cushion · 1 proposed"; }
-  }
+  recalc();
 
   if(e.newMember) addProposedMemberChip();
   toast(e.badge);
-  var ms = $("manScroll");
-  setTimeout(function(){ ms.scrollTop = n.offsetTop - 40; }, RM?0:80);
+
+  /* Compose progress: each confirmed change advances the spine. */
+  if(stageState[1] !== "done") setStage(1, "on");
+  stageCount(1, landed.length + "/4");
+  if(landed.length >= 4){ setStage(1, "done"); stageCount(1, null); }
   return n;
 }
 
-/* The new facility joins the member strip as a proposed addition, so the
-   package altitude stays true once the structure changes. */
-function addProposedMemberChip(){
-  var c = el("button","mchip prop named flash fresh");
-  c.setAttribute("data-key","NEW");
-  c.innerHTML = "<b>NEW</b>Equipment" + '<span class="amt tnum">$2.0MM</span>';
-  $("mchips").appendChild(c);
-  $("memberNote").textContent = "1 proposed addition";
-  $("mchips").scrollLeft = $("mchips").scrollWidth;
+function removeEntry(key, node){
+  var e = ENTRIES[key];
+  var i = landed.indexOf(key);
+  if(i < 0) return;
+  landed.splice(i, 1);
+  node.classList.add("gone");
+  setTimeout(function(){
+    var grp = node.parentNode;
+    if(node.parentNode) node.parentNode.removeChild(node);
+    if(grp && !grp.children.length) grp.parentNode.classList.remove("on");
+  }, RM?0:200);
+  if(e.newMember) removeProposedMemberChip();
+  recalc();
+  if(landed.length < 4 && stageState[1] === "done"){ setStage(1, "on"); stageCount(1, landed.length + "/4"); }
+  var r = document.querySelector('.receipt[data-key="'+key+'"]');
+  if(r){ r.classList.add("removed"); r.querySelector(".what").textContent = "removed · say it again to restage"; }
+  toast("Removed from the manifest");
 }
 
+function addProposedMemberChip(){
+  if(document.querySelector('#mchips [data-key="NEW"]')) return;
+  var c = el("button","mchip prop named flash fresh");
+  c.setAttribute("data-key","NEW");
+  c.innerHTML = '<b>NEW</b><span class="amt tnum">$2.0MM</span>';
+  c.addEventListener("click", openMembers);
+  $("mchips").appendChild(c);
+}
+function removeProposedMemberChip(){
+  var c = document.querySelector('#mchips [data-key="NEW"]');
+  if(c && c.parentNode) c.parentNode.removeChild(c);
+}
+
+/* The signature moment, marked in the brand chevron. */
 function toast(label){
-  var host = $("manScroll");
-  var t = el("div","landtoast", '<span class="ok-tick">&#10003;</span>' + label);
-  t.style.top = (host.scrollTop + 12) + "px";
+  var host = $("manBody");
+  var t = el("div","landtoast", chev(10,"") + label);
   host.appendChild(t);
   setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, RM?200:2300);
 }
 
-/* ------------------------------------------------------------- challenge */
-
-function challengeCard(spec){
-  var n = el("div","chal");
-  n.innerHTML =
-    '<div class="hd"><div class="kicker">'+spec.kicker+'</div><span class="live">Live '+spec.stamp+'</span></div>'+
-    '<div class="verdict">'+spec.verdict+'</div>'+
-    '<div class="conseq">'+spec.conseq+'</div>'+
-    '<div class="drawer">'+
-      '<div class="math">'+ spec.rows.map(function(r){
-        return '<div class="mrow'+(r[2]||"")+'"><span class="l">'+r[0]+'</span><span class="v tnum">'+r[1]+'</span></div>';
-      }).join("") +'</div>'+
-      '<div class="say">'+spec.say+'</div>'+
-    '</div>'+
-    '<div class="ft"><button class="btn btn-p">Acknowledge and continue</button>'+
-      '<span class="acked"><span class="ok-tick">&#10003;</span>Acknowledged</span>'+
-      '<button class="dt" aria-expanded="false" style="margin-left:auto">'+CX+'Show the math</button></div>';
-  $("thread").appendChild(n);
-  autoscroll();
-  wireDisclosure(n.querySelector(".ft .dt"), n.querySelector(".drawer"));
-  n.querySelector(".btn-p").addEventListener("click", function(){
-    if(n.classList.contains("ack")) return;
-    n.classList.add("ack");
-    resolve();
-  });
-  return n;
-}
-
-var CHAL_COVERAGE = {
-  kicker:"Challenge · coverage pro forma",
-  stamp:"09:06",
-  verdict:"The increase creates no collateral shortfall. It raises the ceiling, not availability.",
-  conseq:"Base coverage of outstanding stays at 1.30x. Advances remain capped by the monthly borrowing base certificate, so the $18,000,000 face never funds ahead of the base.",
-  rows:[
-    ["Eligible receivables $12,000,000 at 80%","$9,600,000"],
-    ["Eligible inventory $8,000,000 at 50%","$4,000,000"],
-    ["Borrowing base, gross","$13,600,000"," sum"],
-    ["Less receivables pledged to HW1006","($1,600,000)"],
-    ["Base available to HW1001","$12,000,000"," sum"],
-    ["Outstanding today","$9,200,000"],
-    ["Base coverage of outstanding","1.30x"," key"],
-    ["Commitment after the increase","$18,000,000"],
-    ["Base coverage of commitment, was 0.80x","0.67x"," key"]
-  ],
-  say:"The base certificate on HW1001, junction a4Vbb000000pNIjEAM, caps advances at 80% of eligible receivables and 50% of eligible inventory. The receivable build the client describes is what lifts availability, and the base formula picks it up automatically. Unencumbered lendable value in the pool is $3,000,000, all of it the Mazak tooling, which the new equipment facility takes."
-};
-
-var CHAL_FCCR = {
-  kicker:"Challenge · fixed charge coverage cushion",
-  stamp:"09:06",
-  verdict:"The thinnest covenant in the package gets thinner. On today's figures it still clears the September test.",
-  conseq:"Cushion is 7 bps at the 30 June test. Re-test fixed charge coverage against the equipment amortisation schedule before first draw.",
-  rows:[
-    ["Fixed charge coverage floor","1.15x"],
-    ["Actual at 2026-06-30","1.22x"],
-    ["Cushion","7 bps"," key"],
-    ["Debt service coverage floor","1.25x"],
-    ["Debt service coverage actual","1.38x"],
-    ["Cushion","13 bps"],
-    ["Next evaluation","2026-09-30"," sum"]
-  ],
-  say:"The revolver increase adds no scheduled amortisation. Interest follows drawn balances at SOFR+275, 7.60% today, so the $3,000,000 only reaches the fixed charge denominator to the extent it is drawn. The $2,000,000 equipment facility is different: scheduled principal and interest enter the denominator from first draw and land in the 2026-09-30 test. Covenant a3Bbb000000S0ZlEAK carries its evaluation history in its own fields; this relationship has no compliance rows by design."
-};
-
-/* ----------------------------------------------------------- filing flow */
+/* ========================================================== filing flow */
 
 function fileAll(){
   $("approveBtn").disabled = true;
@@ -1539,7 +1830,7 @@ function fileAll(){
       $("tokline").classList.add("on");
       $("toktext").textContent = "Token redeemed 2026-08-26 09:07 · single use · " + landed.length + " of " +
         landed.length + " entries verified by re-query";
-      setScene(4);
+      setStage(3, "done");
       setTimeout(showReply, RM?0:400);
       return;
     }
@@ -1547,8 +1838,6 @@ function fileAll(){
     var e = ENTRIES[n.getAttribute("data-key")];
     n.classList.add("filed");
     n.querySelector(".filedbar .id").textContent = e.filed.id;
-    n.querySelector(".reqline").textContent = e.filed.req;
-    $("manScroll").scrollTop = n.offsetTop - 40;
     i++;
     setTimeout(nextOne, RM?0:340);
   }
@@ -1567,50 +1856,49 @@ var REPLY_BODY =
 "Relationship Manager, Commercial Banking";
 
 function showReply(){
+  var b = block("Workroom agent", "Drafted client reply: " + REPLY_SUBJ);
+  b.classList.add("hold");
   var c = el("section","card reply");
   c.innerHTML =
-    '<div class="card-h"><div class="kicker">Drafted client reply</div><span class="live" style="margin-left:auto">Composed 09:07</span></div>'+
-    '<div class="card-b"><div class="subj">Subject: '+REPLY_SUBJ+'</div><div class="prose"></div>'+
+    '<div class="card-b">'+
+      '<div class="vhead"><span class="vchip">Drafted reply</span><span class="vk">Composed 09:07</span></div>'+
+      '<div class="subj" style="margin-top:7px">'+REPLY_SUBJ+'</div>'+
+      '<div class="lede">Confirms $18.0MM, the $2.0MM equipment facility on the Mazak tooling and the $6.0MM quarterly liquidity test.</div>'+
       '<div class="ft"><button class="btn btn-p" id="sendBtn">Send to James Hartwell</button>'+
-      '<button class="btn btn-g">Edit</button>'+
-      '<span style="margin-left:auto;font-size:11px;color:var(--ink-faint)" id="sendNote">Draft only. References the approved structure; booking follows execution.</span></div></div>';
-  $("thread").appendChild(c);
-  autoscroll();
+      '<button class="dt" id="readBtn">Read it</button>'+
+      '<span style="margin-left:auto;font-size:10.6px;color:var(--ink-faint)" id="sendNote">Draft only.</span></div>'+
+    '</div>';
+  b.appendChild(c);
+  fitThread();
+  c.querySelector("#readBtn").addEventListener("click", function(){
+    openPeek("Drafted client reply · 09:07",
+      '<div class="subj">Subject: '+REPLY_SUBJ+'</div><div class="replybody" style="margin-top:8px">'+esc(REPLY_BODY)+'</div>',
+      this, 520);
+  });
   c.querySelector("#sendBtn").addEventListener("click", function(){
     this.disabled = true;
     $("sendNote").textContent = "Static mock. Nothing leaves the workroom.";
   });
-  typeInto(c.querySelector(".prose"), REPLY_BODY, 3, function(){
-    autoscroll();
-    setNext("Replay from the top", true);
-  });
+  setNext("Replay from the top", true);
   $("gatehint").textContent = "Filed. The workroom holds.";
 }
 
-/* ------------------------------------------------------------- the beats
-   One decision per scene. Everything that supports a decision is an expander
-   inside that scene, never a second thing to read. The banker drives: each
-   beat fires because they said the move, typed or tapped, never because a
-   stepper was clicked. The Next button remains as a hands-free autopilot. */
+/* ============================================================== the beats
+   One decision per view. The banker drives: each beat fires because they said
+   the move, typed or tapped, never because a step was clicked. */
 
 var BEATS = [
-  { scene:0, next:"Open the conversation", run:function(){
+  { stage:0, next:"Open the conversation", run:function(){
       setNext("Open the conversation", true);
     }},
 
-  { scene:1, next:"Continue", run:function(text){
-      follow = true;
+  { stage:1, next:"Continue", run:function(text){
       $("wrBody").setAttribute("data-mode","work");
-      $("ctx").classList.add("ctx-compact");
-      /* The position pins directly under the ask. Its offset is the ask's own
-         compact height, measured once the layout transition settles rather than
-         guessed, so the two bars never overlap at any width. */
-      setTimeout(syncCtxOffset, RM?0:480);
-      $("askDrawer").classList.remove("open");
-      $("whyDrawer").classList.remove("open");
-      $("askToggle").setAttribute("aria-expanded","false");
-      $("whyToggle").setAttribute("aria-expanded","false");
+      $("posCard").classList.add("compact");
+      setStage(0, "done");
+      setStage(1, "on");
       gate(2, "Confirm both changes to continue");
+      setTimeout(fitThread, RM?0:460);
       bankerSays(text || "Go with the recommendation, but add a minimum liquidity covenant at 6 million tested quarterly on the increase.")
       .then(function(){
         return agentSays("Understood. Two changes to the package. The revolver commitment moves from $15,000,000 to $18,000,000, and a facility level minimum liquidity test is added at $6,000,000, measured quarterly, alongside the $5,000,000 relationship test already in force. Reported liquidity was $6,800,000 at 2026-06-30, so the borrower clears the tighter test on today's figures. Neither change is written yet.");
@@ -1622,7 +1910,7 @@ var BEATS = [
       });
     }},
 
-  { scene:1, next:"Continue", run:function(text){
+  { stage:1, next:"Continue", run:function(text){
       gate(1, "Acknowledge the refusal to continue");
       bankerSays(text || "Set the covenant on the construction loan too.")
       .then(function(){
@@ -1631,11 +1919,11 @@ var BEATS = [
       .then(function(){ refusalChip(chipHolder()); });
     }},
 
-  { scene:1, next:"Run the challenge", run:function(text){
+  { stage:1, next:"Go to approval", run:function(text){
       gate(2, "Confirm both changes to continue");
       bankerSays(text || "Fine. Add the two million equipment facility for the tooling and pledge the Mazak against it.")
       .then(function(){
-        return agentSays("Staged. The package gains an eighth member, an equipment facility at $2,000,000, and the Mazak tooling is pledged to it at $4,000,000 appraised and a 75% advance rate, which is $3,000,000 lendable against $2,000,000 pledged. The existing pool is untouched, so no member loses coverage. This is the second leg of the recommended structure.");
+        return agentSays("Staged. The package gains an eighth member, an equipment facility at $2,000,000, and the Mazak tooling is pledged to it at $4,000,000 appraised and a 75% advance rate, which is $3,000,000 lendable against $2,000,000 pledged. The existing pool is untouched, so no member loses coverage.");
       })
       .then(function(){
         var h = chipHolder();
@@ -1644,20 +1932,9 @@ var BEATS = [
       });
     }},
 
-  { scene:2, next:"Go to approval", run:function(text){
-      gate(2, "Acknowledge both challenges to continue");
-      bankerSays(text || "Run the challenge before I approve.")
-      .then(function(){
-        return agentSays("Two cards, both on figures re-queried a moment ago rather than on the entry snapshot.", 460);
-      })
-      .then(function(){
-        challengeCard(CHAL_COVERAGE);
-        setTimeout(function(){ challengeCard(CHAL_FCCR); }, RM?0:260);
-      });
-    }},
-
-  { scene:3, next:"", auto:true, run:function(){
+  { stage:3, next:"", auto:true, run:function(){
       gate(1, "Approve to file the plan");
+      setStage(3, "on");
       $("manFoot").classList.add("on");
       $("approveBtn").addEventListener("click", function once(){
         $("approveBtn").removeEventListener("click", once);
@@ -1680,10 +1957,7 @@ var INTENTS = {
      keys:["construction","hw1003"]},
   3:{label:"Add the $2.0MM equipment facility, pledge the Mazak",
      say:"Fine. Add the two million equipment facility for the tooling and pledge the Mazak against it.",
-     keys:["equipment","mazak","tooling","pledge","facility","2 million","$2","2.0"]},
-  4:{label:"Run the challenge before I approve",
-     say:"Run the challenge before I approve.",
-     keys:["challenge","check","verify","stress","test"]}
+     keys:["equipment","mazak","tooling","pledge","facility","2 million","$2","2.0"]}
 };
 
 function advance(text, userTyped){
@@ -1691,7 +1965,6 @@ function advance(text, userTyped){
   hidePills();
   step++;
   var b = BEATS[step];
-  setScene(b.scene);
   PREFILLED = !!userTyped;
   b.run(text);
 }
@@ -1705,7 +1978,7 @@ function showPills(){
   p.addEventListener("click", function(){ advance(it.say, false); });
   box.appendChild(p);
   try{ $("composerTxt").focus({preventScroll:true}); }catch(e){}
-  autoscroll();
+  fitThread();
 }
 
 function hidePills(){ $("sugg").innerHTML = ""; }
@@ -1717,7 +1990,7 @@ function submitTyped(){
   if(pending > 0){
     PREFILLED = true;
     bankerSays(t).then(function(){
-      return agentSays("One decision at a time. The open cards above, or the approve button in the manifest, carry the next move.");
+      return agentSays("One decision at a time. The open cards above, or the approve button under the manifest, carry the next move.");
     });
     return;
   }
@@ -1749,55 +2022,37 @@ $("nextBtn").addEventListener("click", function(){
   advance(it ? it.say : null, false);
 });
 
-/* The compact position bar pins under the compact ask bar. */
-function syncCtxOffset(){
-  if(!$("ctx").classList.contains("ctx-compact")) return;
-  $("posCard").style.top = $("askCard").offsetHeight + "px";
-}
-window.addEventListener("resize", syncCtxOffset);
-/* The ask bar changes height when its drawer opens and while the layout
-   transition settles, so track it rather than measuring once. */
-if(window.ResizeObserver) new ResizeObserver(syncCtxOffset).observe($("askCard"));
+/* ================================================================ chrome */
 
-/* --------------------------------------------------------------- chrome */
-
-wireDisclosure($("askToggle"), $("askDrawer"));
-wireDisclosure($("whyToggle"), $("whyDrawer"));
-wireDisclosure($("haveToggle"), $("haveDrawer"));
-wireDisclosure($("govToggle"), $("govDrawer"));
-
-$("askToggle").addEventListener("click", function(){
-  if(!$("askDrawer").classList.contains("open")) return;
-  var hls = document.querySelectorAll("#mailProse .hl");
-  for(var j=0;j<hls.length;j++){
-    (function(h,idx){
-      h.classList.remove("pop");
-      setTimeout(function(){ h.classList.add("pop"); }, RM?0:idx*110);
-    })(hls[j], j);
-  }
+$("whyBtn").addEventListener("click", function(){
+  openPeek("Why this position", WHY_HTML, this, 520);
 });
-
-$("memberToggle").addEventListener("click", function(){
-  var open = $("mcards").classList.toggle("open");
-  this.setAttribute("aria-expanded", open ? "true" : "false");
-  this.textContent = open ? "Collapse" : "Expand";
-  if(open){
-    var m = document.querySelector('#mcards [data-key="HW1001"] .meter i');
-    if(m) setTimeout(function(){ m.style.width = "61%"; }, RM?0:60);
-  }
+$("haveBtn").addEventListener("click", function(){
+  openPeek("What the package holds today", haveHTML(), this, 460);
 });
+$("govBtn").addEventListener("click", function(){
+  openPeek("Governance", GOV_HTML, this, 420);
+});
+$("memberToggle").addEventListener("click", openMembers);
 
 $("notesBtn").addEventListener("click", function(){
   document.body.classList.toggle("notes-on");
-  this.textContent = document.body.classList.contains("notes-on") ? "Hide design notes" : "Design notes";
+  if(!document.body.classList.contains("notes-on")){ closePeek(); return; }
+  openPeek("Design notes", '<div class="dnotes">' + NOTES.map(function(n){
+    return '<div class="dnote"><b>'+n[0]+'</b>'+n[1]+'</div>';
+  }).join("") + '</div>', this, 760);
 });
 
 $("closeWr").addEventListener("click", function(){ document.body.setAttribute("data-modal","0"); });
 $("reopen").addEventListener("click", function(){ document.body.setAttribute("data-modal","1"); });
 document.addEventListener("keydown", function(e){
-  if(e.key === "Escape" && document.activeElement !== $("composerTxt")) document.body.setAttribute("data-modal","0");
+  if(e.key !== "Escape") return;
+  if(peekOpen){ closePeek(); return; }
+  if(document.activeElement !== $("composerTxt")) document.body.setAttribute("data-modal","0");
 });
+window.addEventListener("resize", function(){ fitThread(); });
 
+recalc();
 setTimeout(function(){
   document.body.setAttribute("data-modal","1");
   setTimeout(boot, RM?0:260);
