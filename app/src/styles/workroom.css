@@ -1558,6 +1558,22 @@ body.wk-open #root {
 .wk-ent:first-child {
   margin-top: 0;
 }
+/* A REMOVAL IS NOT A CHANGE WITH A DIFFERENT VALUE. The manifest is a diff
+   against the roll-over baseline — the clone carries the parent's covenants,
+   pledges and borrowing structure unless an entry says otherwise — so the one
+   entry that TAKES SOMETHING AWAY is marked on its edge and struck through what
+   it removes. A banker signing a change set must never mistake one for the
+   other. */
+.wk-ent.wk-rm {
+  border-left: 3px solid var(--warning);
+}
+.wk-ent.wk-rm .wk-was {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.wk-ent.wk-rm .wk-now {
+  color: var(--warning);
+}
 @keyframes wk-entland {
   from {
     opacity: 0;

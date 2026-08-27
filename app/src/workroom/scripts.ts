@@ -1,5 +1,5 @@
 import { COMMITTED_MM } from "./fixture";
-import type { DraftedReply, WorkroomDelta, WorkroomDoor, WorkroomMode, WorkroomRefusal } from "./types";
+import type { DraftedReply, HaveRow, WorkroomDelta, WorkroomDoor, WorkroomMode, WorkroomRefusal } from "./types";
 
 /* =============================================================================
    THE THREE STORYLINES.
@@ -22,8 +22,11 @@ export interface SourceChip {
   label: string;
   kicker: string;
   icon: "email" | "package" | "collateral" | "covenants" | "calendar" | "account";
-  /** Keys into fixture.HAVE. */
+  /** Keys into fixture.HAVE. Scripted engines only. */
   rows?: string[];
+  /** The rows themselves, where the engine read them from the org rather than
+   *  addressing a fixture. Wins over `rows` when both are present. */
+  have?: HaveRow[];
   /** The client's own words, with the parsed spans highlighted. */
   email?: true;
 }
@@ -160,10 +163,10 @@ const MODIFY_DELTAS: Record<string, WorkroomDelta> = {
       ["Written as", "Operator ≥, threshold 6,000,000, next evaluation 2026-09-30, junctioned to the proposed revision."],
     ],
     fields: [
-      "LLC_BI__Covenant__c.Acnpex_Operator__c = >=",
-      "LLC_BI__Covenant__c.Acnpex_Threshold_Value__c = 6000000",
-      "LLC_BI__Covenant__c.Acnpex_Statement_Frequency__c = Not Annual",
-      "LLC_BI__Covenant__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30",
+      "LLC_BI__Covenant2__c.Acnpex_Operator__c = >=",
+      "LLC_BI__Covenant2__c.Acnpex_Threshold_Value__c = 6000000",
+      "LLC_BI__Covenant2__c.Acnpex_Statement_Frequency__c = Not Annual",
+      "LLC_BI__Covenant2__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30",
       "LLC_BI__Loan_Covenant__c (junction to the proposed revision of HW1001)",
     ],
     caveat:
@@ -310,7 +313,7 @@ const MODIFY: WorkroomScript = {
   whyCaveat: RECOMMENDATION_ONLY,
   beats: [
     {
-      pill: "Go with it, and add a $6.0MM quarterly liquidity covenant",
+      pill: "Go with it, add a $6.0MM liquidity covenant",
       say: "Go with the recommendation, but add a minimum liquidity covenant at 6 million tested quarterly on the increase.",
       keys: ["recommend", "go with", "liquidity", "quarterly", "6 million", "$6", "6.0", "covenant", "proceed", "do it", "yes"],
       reply:
@@ -325,7 +328,7 @@ const MODIFY: WorkroomScript = {
       refusal: "hw1003-covenant",
     },
     {
-      pill: "Add the $2.0MM equipment facility, pledge the Mazak",
+      pill: "Add the equipment facility, pledge the Mazak",
       say: "Fine. Add the two million equipment facility for the tooling and pledge the Mazak against it.",
       keys: ["equipment", "mazak", "tooling", "pledge", "facility", "2 million", "$2", "2.0"],
       reply:
@@ -479,8 +482,8 @@ const RENEW_DELTAS: Record<string, WorkroomDelta> = {
     ],
     fields: [
       "LLC_BI__Loan_Covenant__c (junction to the proposed revision of HW1006)",
-      "LLC_BI__Covenant__c a3Bbb000000S0ZlEAK (existing record, not modified)",
-      "LLC_BI__Covenant__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30 (unchanged)",
+      "LLC_BI__Covenant2__c a3Bbb000000S0ZlEAK (existing record, not modified)",
+      "LLC_BI__Covenant2__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30 (unchanged)",
     ],
     caveat:
       "The covenant record is shared between the booked facility and its revision until the renewal books. A threshold change here would move the test on both, which is why the renewal carries the junction and leaves the covenant alone.",
@@ -556,7 +559,7 @@ const RENEW: WorkroomScript = {
   whyCaveat: RECOMMENDATION_ONLY,
   beats: [
     {
-      pill: "Renew at $2.5MM for twelve months, priced to the grid",
+      pill: "Renew at $2.5MM for twelve months",
       say: "Renew the seasonal line at two and a half million for another twelve months and price it at the grid.",
       keys: ["renew", "twelve", "grid", "2.5", "seasonal", "hw1006", "yes", "go with", "proceed"],
       reply:
@@ -636,10 +639,10 @@ const CREATE_PACKAGE_DELTAS: Record<string, WorkroomDelta> = {
       ["Written as", "Operator ≥, threshold 6,000,000, next evaluation 2026-09-30, junctioned to the new member."],
     ],
     fields: [
-      "LLC_BI__Covenant__c.Acnpex_Operator__c = >=",
-      "LLC_BI__Covenant__c.Acnpex_Threshold_Value__c = 6000000",
-      "LLC_BI__Covenant__c.Acnpex_Statement_Frequency__c = Not Annual",
-      "LLC_BI__Covenant__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30",
+      "LLC_BI__Covenant2__c.Acnpex_Operator__c = >=",
+      "LLC_BI__Covenant2__c.Acnpex_Threshold_Value__c = 6000000",
+      "LLC_BI__Covenant2__c.Acnpex_Statement_Frequency__c = Not Annual",
+      "LLC_BI__Covenant2__c.LLC_BI__Next_Evaluation_Date__c = 2026-09-30",
       "LLC_BI__Loan_Covenant__c (junction to the new member of a5Fbb000000IHFJEA4)",
     ],
     caveat:
@@ -715,7 +718,7 @@ const CREATE_IN_PACKAGE: WorkroomScript = {
   whyCaveat: RECOMMENDATION_ONLY,
   beats: [
     {
-      pill: "Add the $2.0MM equipment facility, pledge the Mazak",
+      pill: "Add the equipment facility, pledge the Mazak",
       say: "Add the two million equipment facility for the tooling and pledge the Mazak against it.",
       keys: ["equipment", "mazak", "tooling", "pledge", "facility", "2 million", "$2", "2.0", "yes", "go with"],
       reply:
@@ -919,7 +922,7 @@ const CREATE_FROM_ACCOUNT: WorkroomScript = {
   whyCaveat: RECOMMENDATION_ONLY,
   beats: [
     {
-      pill: "Open the package with the $2.0MM equipment facility",
+      pill: "Open the package with the equipment facility",
       say: "Open a package on Holdings and put the two million equipment facility on it.",
       keys: ["open", "package", "equipment", "facility", "2 million", "$2", "2.0", "yes", "go with", "proceed"],
       reply:

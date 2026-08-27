@@ -11,24 +11,7 @@
    from the cockpit's own bundle instead of from here.
    ============================================================================= */
 
-/** One member of the package. Loans are chips at package altitude (law 1). */
-export interface PackageMember {
-  key: string;
-  /** The product, short enough for a chip that shares its row. */
-  short: string;
-  tag: string;
-  product: string;
-  /** Commitment, as the chip prints it. */
-  amount: string;
-  /** The record line, shown on the member card inside the peek. It carries the
-   *  rate and the maturity, which is where the room states them. */
-  detail: string;
-  /** Drawn percentage, for the one member that carries a utilisation meter. */
-  utilisation?: number;
-  available?: string;
-  /** A staged, unbooked showcase member. Renders dashed. */
-  proposed?: boolean;
-}
+import type { HaveRow, PackageMember } from "./types";
 
 /** The package's committed total today, in millions. Every pro-forma figure the
  *  manifest shows is this number plus what has landed in the rail. */
@@ -98,12 +81,6 @@ export const MEMBERS: PackageMember[] = [
 
 /** What the package holds today. Rows are addressed by key so each mode's
  *  source tray can show the ones its own story reads. */
-export interface HaveRow {
-  label: string;
-  value: string;
-  detail: string;
-}
-
 export const HAVE: Record<string, HaveRow> = {
   position: {
     label: "Package position",

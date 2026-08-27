@@ -2,14 +2,16 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion } from "../../data/motion";
-import { CLIENT_EMAIL, GOVERNANCE, HAVE, MEMBERS } from "../../workroom/fixture";
-import { createScriptedEngine, type WorkroomEngine } from "../../workroom/engine";
-import { addEntry, figuresFor, groupEntries, removeEntry } from "../../workroom/manifest";
+import { CLIENT_EMAIL, GOVERNANCE, HAVE } from "../../workroom/fixture";
+import type { WorkroomEngine } from "../../workroom/engine";
+import { addEntry, addressManifest, figuresFor, groupEntries, removeEntry } from "../../workroom/manifest";
 import { vocabularyFor } from "../../workroom/modes";
 import { stepperState } from "../../workroom/stepper";
 import { EMPTY_FIT, fitThread, foldLabel, type FitBlock, type FitState } from "../../workroom/thread";
 import type {
   DraftedReply,
+  HaveRow,
+  PackageMember,
   WorkroomChallenge,
   WorkroomContext,
   WorkroomDelta,
@@ -146,22 +148,24 @@ function SourceIcon({ icon }: { icon: SourceChip["icon"] }) {
   );
 }
 
-function HaveRows({ keys }: { keys: string[] }) {
+function HaveRows({ rows }: { rows: HaveRow[] }) {
   return (
     <>
-      {keys.map((k) => {
-        const row = HAVE[k];
-        if (!row) return null;
-        return (
-          <div className="wk-have-row" key={k}>
-            <div className="wk-l">{row.label}</div>
-            <div className="wk-v">{row.value}</div>
-            <div className="wk-d">{row.detail}</div>
-          </div>
-        );
-      })}
+      {rows.map((row, i) => (
+        <div className="wk-have-row" key={`${row.label}-${i}`}>
+          <div className="wk-l">{row.label}</div>
+          <div className="wk-v">{row.value}</div>
+          <div className="wk-d">{row.detail}</div>
+        </div>
+      ))}
     </>
   );
+}
+
+/** A source chip's rows, whether the engine read them from the org or the shell
+ *  engine addressed them by key in the fixture. */
+function sourceRows(chip: SourceChip): HaveRow[] {
+  return chip.have ?? (chip.rows ?? []).map((k) => HAVE[k]).filter(Boolean);
 }
 
 function OrgMap({ delta, filedNote }: { delta: WorkroomDelta; filedNote?: string }) {
@@ -263,8 +267,17 @@ function flyToManifest(from: Element | null, to: Element | null, land: () => voi
 
 /* -------------------------------------------------------------- the shell */
 
-export function Workroom({ context, onClose }: { context: WorkroomContext; onClose: () => void }) {
-  const engine = useMemo<WorkroomEngine>(() => createScriptedEngine(context), [context]);
+export function Workroom({
+  context,
+  engine,
+  onClose,
+}: {
+  context: WorkroomContext;
+  /** The room talks to ONE interface and never to a script, a tool or a parser.
+   *  Which implementation arrives is WorkroomHost's decision, not the shell's. */
+  engine: WorkroomEngine;
+  onClose: () => void;
+}) {
   const brief = useMemo(() => engine.brief(context), [engine, context]);
   const vocabulary = useMemo(() => vocabularyFor(context), [context]);
   const reduced = prefersReducedMotion();
@@ -275,12 +288,19 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
   const railRef = useRef<HTMLDivElement | null>(null);
 
   const [bootStep, setBootStep] = useState(0);
-  const [phase, setPhase] = useState<"boot" | "entry" | "work" | "filed">("boot");
+  /* THREE PHASES, NOT FOUR (W3, decided 2026-08-27: "MERGE"). The briefing, the
+     suggestion chips and the composer are ONE scene — the chat is protagonist
+     from second one, and there is no "Open the conversation" button between the
+     banker and the room. */
+  const [phase, setPhase] = useState<"boot" | "work" | "filed">("boot");
   const [items, setItems] = useState<ThreadItem[]>([]);
   const [entries, setEntries] = useState<WorkroomDelta[]>([]);
   const [execution, setExecution] = useState<WorkroomExecution | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+  /** The approval is in flight. A second click while the org is working would
+   *  stage a second plan behind the first, and the token is single use. */
+  const [filing, setFiling] = useState(false);
   const [draft, setDraft] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [fit, setFit] = useState<FitState>(EMPTY_FIT);
@@ -318,18 +338,22 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
   /* ---- the arrival scene. The brand glyph carries the load, then the room
           assembles. Under reduced motion the room is simply there. */
   useEffect(() => {
+    const open = () => {
+      setPhase("work");
+      setSuggestion(engine.suggest());
+    };
     if (reduced) {
       setBootStep(brief.loadSteps.length - 1);
-      setPhase("entry");
+      open();
       return;
     }
     const timers = brief.loadSteps.map((_, i) => window.setTimeout(() => setBootStep(i), i * 460));
-    const done = window.setTimeout(() => setPhase("entry"), brief.loadSteps.length * 460 + 320);
+    const done = window.setTimeout(open, brief.loadSteps.length * 460 + 320);
     return () => {
       timers.forEach(clearTimeout);
       clearTimeout(done);
     };
-  }, [brief.loadSteps, reduced]);
+  }, [brief.loadSteps, engine, reduced]);
 
   useEffect(() => {
     if (!toast) return;
@@ -338,11 +362,15 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
   }, [toast, reduced]);
 
   /* ---- derived state. Nothing below is stored twice. */
-  /** The conversation has opened. Until it does the room holds the package and
-   *  the position and NOTHING else (law 3): no spine, no composer, no rail. */
+  /** The room is open for work. Post-merge that is true the moment the boot
+   *  clears: the entry scene IS the conversation. */
   const inConversation = phase === "work" || phase === "filed";
   /** The boot has cleared and the zones may arrive. */
   const assembled = phase !== "boot";
+  /** The briefing has been answered. Until then the position keeps its full
+   *  height — the quiet briefing is the first thing in the room (W5), and law 3
+   *  holds because the scene is still a pin, one sentence and chips. */
+  const started = items.length > 0;
   const openGates = items.reduce((n, item) => (isLive(item) && item.kind !== "reply" ? n + 1 : n), 0);
   const checksArrived = items.filter((i) => i.kind === "challenge").length;
   const checksAcked = items.filter((i) => i.kind === "challenge" && i.acked).length;
@@ -357,11 +385,15 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
     [brief.baselineCommittedMM, brief.baselineMembers, vocabulary.changeWord],
   );
   const figures = useMemo(() => figuresFor(entries, baseline), [entries, baseline]);
+  /** How much of the manifest a deployed tool actually files. An entry that says
+   *  nothing about it is fileable — that is the shell engines, unchanged. */
+  const fileable = entries.filter((e) => e.fileable !== false).length;
+  const handedOff = entries.length - fileable;
   /** What the rail can show. The COUNT above it always states the whole rail,
    *  so a fold never understates what the approval covers. */
   const groups = useMemo(() => groupEntries(entries.slice(railFolded)), [entries, railFolded]);
   const steps = stepperState({
-    conversationOpen: phase !== "boot" && phase !== "entry",
+    conversationOpen: phase !== "boot",
     landed: entries.length,
     composeTarget: brief.composeTarget,
     checksArrived,
@@ -467,6 +499,37 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
         return;
       }
 
+      // W2 — THE RAIL IS ADDRESSABLE IN THE CONVERSATION. "what is staged" and
+      // "drop the rate change" are answered here, before the parser sees them:
+      // they are moves on the manifest, not new amendments, and sending them to
+      // a field parser would produce a chip nobody asked for.
+      const address = addressManifest(trimmed, entries);
+      if (address) {
+        if (address.kind === "remove") {
+          setEntries((prev) => removeEntry(prev, address.entry.id));
+          setToast("Removed from the manifest");
+          push({
+            kind: "agent",
+            id: nextId("agent"),
+            text: `${address.entry.title} on ${address.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
+          });
+          return;
+        }
+        push({
+          kind: "agent",
+          id: nextId("agent"),
+          text:
+            address.kind === "list"
+              ? address.entries.length
+                ? `The manifest holds ${address.entries.length}: ${address.entries
+                    .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
+                    .join("; ")}.`
+                : "Nothing is staged yet. Confirmed changes land in the manifest, grouped."
+              : address.reason,
+        });
+        return;
+      }
+
       const result = await engine.parseIntent(trimmed, context);
       push({ kind: "agent", id: nextId("agent"), text: result.reply });
       if (result.kind === "deltas") {
@@ -486,7 +549,7 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
       setSuggestion(next);
       if (!next) setExhausted(true);
     },
-    [context, engine, openGates, push],
+    [context, engine, entries, openGates, push],
   );
 
   const settleChip = useCallback((blockId: string, chipKey: string, state: ChipState) => {
@@ -537,23 +600,37 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
   }, []);
 
   const approve = useCallback(async () => {
-    const staged = await engine.stagePlan(entries, context);
-    if (!staged.decisionToken) return;
-    const result = await engine.execute({
-      stagingId: staged.stagingId,
-      planHash: staged.planHash,
-      decisionToken: staged.decisionToken,
-      approverUserId: context.approver,
-    });
-    setExecution(result);
-    setPhase("filed");
-    push({ kind: "reply", id: nextId("reply"), reply: result.reply ?? { subject: "", lede: "", body: "" } });
-  }, [context, engine, entries, push]);
-
-  const openConversation = useCallback(() => {
-    setPhase("work");
-    setSuggestion(engine.suggest());
-  }, [engine]);
+    if (filing) return;
+    setFiling(true);
+    try {
+      const staged = await engine.stagePlan(entries, context);
+      if (!staged.decisionToken) {
+        push({
+          kind: "agent",
+          id: nextId("agent"),
+          text: "The staging call came back without a confirmation token, so there is nothing to redeem. Nothing was written.",
+        });
+        return;
+      }
+      const result = await engine.execute({
+        stagingId: staged.stagingId,
+        planHash: staged.planHash,
+        decisionToken: staged.decisionToken,
+        approverUserId: context.approver,
+      });
+      setExecution(result);
+      setPhase("filed");
+      push({ kind: "reply", id: nextId("reply"), reply: result.reply ?? { subject: "", lede: "", body: "" } });
+    } catch (e) {
+      // A REAL ENGINE REFUSES OUT LOUD. The org's precondition, a moved figure,
+      // a manifest that files nothing — each comes back as a sentence in the
+      // conversation with the approval still where the banker left it, rather
+      // than as a dead button or a silent rejection.
+      push({ kind: "agent", id: nextId("agent"), text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setFiling(false);
+    }
+  }, [context, engine, entries, filing, push]);
 
   /* ----------------------------------------------------------- scene bar */
 
@@ -561,11 +638,7 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
   let nextEnabled = false;
   let gateHint = "";
   let onNext: (() => void) | undefined;
-  if (phase === "entry") {
-    nextLabel = "Open the conversation";
-    nextEnabled = true;
-    onNext = openConversation;
-  } else if (phase === "filed") {
+  if (phase === "filed") {
     nextLabel = "Close the workroom";
     nextEnabled = true;
     onNext = onClose;
@@ -602,9 +675,11 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
             <span className="wk-dot" />
             <div className="wk-title">{vocabulary.title}</div>
             <span className="wk-spacer" />
-            {/* The room runs on a SCRIPTED engine and says so. Nothing here
-                reaches a tool, and no plan it stages is the org's. */}
-            <span className="wk-badge">Scripted</span>
+            {/* A SCRIPTED room says so: nothing in it reaches a tool, and no
+                plan it stages is the org's. A wired room shows no badge, which
+                is the only honest way round — the absence of the word is a
+                claim, so it is driven by the engine and not by the mode. */}
+            {engine.scripted && <span className="wk-badge">Scripted</span>}
             <button type="button" className="wk-icobtn" onClick={onClose} aria-label="Close the workroom">
               <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                 <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -662,12 +737,23 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
               {brief.showsMembers && (
                 <div className={`wk-mbar wk-rv ${assembled ? "wk-in" : ""}`} style={{ transitionDelay: "120ms" }}>
                   <div className="wk-mchips">
-                    {MEMBERS.map((m) => (
+                    {brief.members.map((m) => (
                       <button
                         type="button"
                         key={m.key}
+                        /* W4 — a member that is NOT booked renders dashed. Pre-work
+                           display must never read as done work, and a stage the
+                           read does not carry is treated the same way: unknown is
+                           not booked. */
                         className={`wk-mchip ${m.proposed ? "wk-prop" : ""}`}
-                        onClick={(e) => openPeek(e.currentTarget, { kicker: "Members of the package", width: 760, content: <MemberCards /> })}
+                        title={`${m.product} · ${m.tag}`}
+                        onClick={(e) =>
+                          openPeek(e.currentTarget, {
+                            kicker: "Members of the package",
+                            width: 760,
+                            content: <MemberCards members={brief.members} />,
+                          })
+                        }
                       >
                         <b>{m.key}</b>
                         <span className="wk-amt tnum">{m.amount}</span>
@@ -686,7 +772,13 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                     type="button"
                     className="wk-mtoggle"
                     aria-label="Member detail"
-                    onClick={(e) => openPeek(e.currentTarget, { kicker: "Members of the package", width: 760, content: <MemberCards /> })}
+                    onClick={(e) =>
+                      openPeek(e.currentTarget, {
+                        kicker: "Members of the package",
+                        width: 760,
+                        content: <MemberCards members={brief.members} />,
+                      })
+                    }
                   >
                     <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
                       <path d="M1.5 2h8M1.5 5.5h8M1.5 9h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
@@ -700,16 +792,13 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
               <div className="wk-col-l">
                 {/* ==================================== ZONE 2: THE POSITION */}
                 <section
-                  className={`wk-card wk-pos wk-rv ${assembled ? "wk-in" : ""} ${inConversation ? "wk-compact" : ""}`}
+                  className={`wk-card wk-pos wk-rv ${assembled ? "wk-in" : ""} ${started ? "wk-compact" : ""}`}
                   style={{ transitionDelay: "240ms" }}
                 >
                   <div className="wk-card-b">
                     <div className="wk-posrow">
                       <div className="wk-kicker">Position</div>
                       <span className="wk-askpin tnum">{brief.askPin}</span>
-                      <span className="wk-live" style={{ marginLeft: "auto" }}>
-                        09:02
-                      </span>
                     </div>
                     <div className="wk-headline">{brief.position}</div>
                     <div className="wk-posfoot">
@@ -747,7 +836,7 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                               openPeek(e.currentTarget, {
                                 kicker: s.kicker,
                                 width: 440,
-                                content: s.email ? <ClientEmail /> : <HaveRows keys={s.rows ?? []} />,
+                                content: s.email ? <ClientEmail /> : <HaveRows rows={sourceRows(s)} />,
                               })
                             }
                           >
@@ -760,8 +849,12 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                   </div>
                 </section>
 
-                {/* ============================================ THE SPINE */}
-                {inConversation && (
+                {/* ============================================ THE SPINE
+                    IT MEASURES PROGRESS, so it arrives with the first move. On
+                    the merged entry scene (W3) there is no progress yet, and a
+                    spine of four idle stages is four words of decoration in a
+                    room whose opening view is budgeted (law 3). */}
+                {started && (
                   <div className="wk-stepper">
                     {vocabulary.steps.map((label, i) => (
                       <span
@@ -869,7 +962,7 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                         openPeek(e.currentTarget, {
                           kicker: "What the package holds today",
                           width: 460,
-                          content: <HaveRows keys={["position", "revolver", "covenants", "collateral"]} />,
+                          content: <HaveRows rows={brief.have} />,
                         })
                       }
                     >
@@ -912,7 +1005,10 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                         {group.entries.map((delta) => {
                           const filed = filedById.get(delta.id);
                           return (
-                            <div className={`wk-ent ${filed ? "wk-filed" : ""}`} key={delta.id}>
+                            <div
+                              className={`wk-ent ${filed ? "wk-filed" : ""} ${delta.op === "remove" ? "wk-rm" : ""}`}
+                              key={delta.id}
+                            >
                               <div className="wk-ent-row">
                                 <button
                                   type="button"
@@ -973,7 +1069,15 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                             }, one token.`
                           : vocabulary.planTitle}
                       </div>
-                      <div className="wk-s">{figures.planSummary}</div>
+                      <div className="wk-s">
+                        {figures.planSummary}
+                        {handedOff > 0 && (
+                          <>
+                            {" "}
+                            {fileable} of {figures.count} {fileable === 1 ? "files" : "file"}; {handedOff} {handedOff === 1 ? "is" : "are"} handed off.
+                          </>
+                        )}
+                      </div>
                       <button
                         type="button"
                         className="wk-dt"
@@ -993,8 +1097,11 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                       </button>
                     </div>
                     {phase !== "filed" && (
-                      <button type="button" className="wk-approve" onClick={() => void approve()}>
-                        {vocabulary.approveLabel(figures.count)}
+                      /* THE LABEL COUNTS WHAT FILES. A manifest of five where one
+                         files is "approve and file 1 change", never five: the
+                         button must not claim the handoffs. */
+                      <button type="button" className="wk-approve" disabled={filing} onClick={() => void approve()}>
+                        {filing ? "Working…" : vocabulary.approveLabel(fileable)}
                       </button>
                     )}
                     {execution && (
@@ -1004,6 +1111,32 @@ export function Workroom({ context, onClose }: { context: WorkroomContext; onClo
                           <span>{execution.tokenNote}</span>
                         </div>
                         {execution.handoff && <div className="wk-handoff">{execution.handoff}</div>}
+                        {/* WHAT WAS NOT FILED, named. The room stages the whole
+                            ask and files the part a tool covers; the rest leaves
+                            with the banker rather than disappearing. */}
+                        {(execution.handoffs?.length ?? 0) > 0 && (
+                          <button
+                            type="button"
+                            className="wk-dt"
+                            onClick={(e) =>
+                              openPeek(e.currentTarget, {
+                                kicker: "Handed off, not filed",
+                                width: 480,
+                                content: (
+                                  <HaveRows
+                                    rows={execution.handoffs!.map((h) => ({
+                                      label: h.title,
+                                      value: "Not filed",
+                                      detail: [h.reason, h.closes].filter(Boolean).join(" "),
+                                    }))}
+                                  />
+                                ),
+                              })
+                            }
+                          >
+                            {execution.handoffs!.length} handed off, not filed
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -1045,10 +1178,10 @@ function ManifestList({ entries }: { entries: WorkroomDelta[] }) {
   );
 }
 
-function MemberCards() {
+function MemberCards({ members }: { members: PackageMember[] }) {
   return (
     <div className="wk-mgrid">
-      {MEMBERS.map((m) => (
+      {members.map((m) => (
         <div className={`wk-mcard ${m.proposed ? "wk-prop" : ""}`} key={m.key}>
           <span className="wk-tag">{m.tag}</span>
           <div className="wk-k">{m.key}</div>

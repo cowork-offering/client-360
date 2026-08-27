@@ -47,6 +47,35 @@ export const MANIFEST_GROUPS: { id: ManifestGroupId; label: string }[] = [
   { id: "security", label: "Security" },
 ];
 
+/** One member of the package. Loans are chips at package altitude (law 1).
+ *  Shared shape: the shell engine reads it off a fixture and the real engine
+ *  resolves it from the cockpit's bundle, and the strip cannot tell. */
+export interface PackageMember {
+  key: string;
+  /** The product, short enough for a chip that shares its row. */
+  short: string;
+  /** The org's own stage word, or the honest "stage not staged". */
+  tag: string;
+  product: string;
+  /** Commitment, as the chip prints it. */
+  amount: string;
+  /** The record line on the member card inside the peek. */
+  detail: string;
+  /** Drawn percentage, where the read carries both figures. */
+  utilisation?: number;
+  available?: string;
+  /** NOT BOOKED (W4). A proposal member, or one whose stage the read does not
+   *  carry, renders dashed: pre-work display must not read as done work. */
+  proposed?: boolean;
+}
+
+/** One row of a disclosure peek: what the room read, and what it said. */
+export interface HaveRow {
+  label: string;
+  value: string;
+  detail: string;
+}
+
 /** The check that a confirmed change trips, delivered back into the thread as
  *  an agent message with its verdict on the face. Never a separate tab. */
 export interface WorkroomChallenge {
@@ -69,6 +98,16 @@ export interface WorkroomDelta {
   group: ManifestGroupId;
   /** "Term change", "New covenant" — the chip's category badge. */
   kind: string;
+  /**
+   * WHAT IT DOES TO THE ROLL-OVER BASELINE.
+   *
+   * A modification carries the parent's record graph onto the clone, so the
+   * manifest is a DIFF against that baseline rather than a list of items:
+   * everything not named is KEPT, and what is named is changed, added or
+   * removed. A removal is destructive and reads differently everywhere it
+   * appears. Absent means "change", which is what the shell engines stage.
+   */
+  op?: "change" | "add" | "remove";
   /** Which badge colour the kind carries. Absent is the accent default. */
   kindTone?: "new" | "collateral" | "refusal";
   /** The line the arrival toast says on the right. */
@@ -93,6 +132,31 @@ export interface WorkroomDelta {
   challenge?: WorkroomChallenge;
   /** What the filed state shows once execution verifies it by re-query. */
   filed: { recordId: string; verification: string };
+
+  /* ---- WIRING (real engines only; the shell engine leaves all four absent) */
+
+  /** TRUE when a deployed tool actually files this. FALSE is not a failure: it
+   *  is an amendment the room stages for the record and hands off honestly
+   *  (`knowledge/sf-build-v2/wiring-gap-analysis.md`). Absent reads as true, so
+   *  the scripted engines are unaffected. */
+  fileable?: boolean;
+  /** What this contributes to the `stage_*` payload. Present exactly when
+   *  `fileable`; staging never re-parses a sentence it already read. */
+  wire?: { key: string; value: number | string; facilityId: string };
+  /** The figure this was composed against, so execution can prove the read has
+   *  not moved underneath it (the ConfirmGate recompute, applied to the rail). */
+  basis?: { facilityId: string; fieldId: string; before: string };
+  /** Why nothing files it, and what would. Present exactly when NOT fileable. */
+  handoff?: { reason: string; closes?: string };
+  /**
+   * CONNECTED CREATION, NEVER ORPHANS.
+   *
+   * An entry that CREATES a record carries the junction chain that ties it to
+   * the deal — the covenant and its loan attachment, the collateral and its
+   * ownership and pledge rows, the fee and its aggregate. The chain becomes
+   * ordered plan steps, so a create without its junctions cannot be staged.
+   */
+  chainLinks?: Array<{ object: string; via: string; label: string; note?: string }>;
 }
 
 /** An ask the room will not stage, answered with the reason rather than a
@@ -152,13 +216,27 @@ export interface DraftedReply {
   body: string;
 }
 
+/** An amendment the room staged and did NOT file, with the org's reason. The
+ *  filed scene lists these beside what landed: a manifest of five entries where
+ *  one files is "1 filed, 4 handed off", never "5 filed". */
+export interface HandoffEntry {
+  deltaId: string;
+  title: string;
+  reason: string;
+  /** The extension that would close it. Design only — nothing is deployed. */
+  closes?: string;
+}
+
 /** What `execute` gives back. Verified, or it does not come back. */
 export interface WorkroomExecution {
   filed: FiledEntry[];
   /** The single-use token line under the approve button. */
   tokenNote: string;
   /** RENEW: booking runs through the bank's own approval process, and the room
-   *  says so rather than implying it booked. Absent where filing is terminal. */
+   *  says so rather than implying it booked. Absent where filing is terminal.
+   *  MODIFY: the org's own `bookingHandoff` sentence, rendered verbatim. */
   handoff?: string;
+  /** Everything the plan carried but no tool files. */
+  handoffs?: HandoffEntry[];
   reply?: DraftedReply;
 }
