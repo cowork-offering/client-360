@@ -18,19 +18,10 @@
    ============================================================================= */
 
 .wk-root {
-  /* The brand thread. Reserved for the load and progress moments and the
-     approval: the boot glyph, the step spine, the arrival marks, the approve
-     action. Everywhere else the room works in the quieter engagement accent. */
-  --brand: #a100ff;
-  --brand-ink: #ffffff;
-  --brand-wash: rgba(161, 0, 255, 0.1);
-  --shadow-peek: 0 30px 70px -16px rgba(20, 0, 40, 0.38), 0 10px 24px -10px rgba(20, 0, 40, 0.24);
-  /* Strong deceleration, zero overshoot. Weight without bounce. */
-  --ease-spring: cubic-bezier(0.19, 1, 0.3, 1);
-  /* The Accenture wordmark's own family, with a stack that lays out sanely on
-     a host that has never heard of Graphik. */
-  --wk-brand-font: Graphik, -apple-system, "Segoe UI", sans-serif;
-  --wk-gutter: 22px;
+  /* The room's ONE local token: a peek floats higher off the page than any
+     cockpit card, so it carries a deeper drop than --shadow-panel. Brand,
+     accent, easing and the brand family all come from tokens.css. */
+  --shadow-peek: 0 24px 56px -16px rgba(20, 0, 40, 0.3), 0 8px 20px -10px rgba(20, 0, 40, 0.18);
 }
 
 /* Body is not allowed to scroll behind an open room: law 4 is one viewport. */
@@ -38,35 +29,9 @@ body.wk-open {
   overflow: hidden;
 }
 
-/* ------------------------------------------------------- the brand lockup
-   TYPOGRAPHIC, never a drawn chevron. Lowercase wordmark, bold ">" glyph
-   kerned tight onto it. The negative margin scales with the size, which is why
-   it is a variable and not a constant. */
-.wk-lockup {
-  display: inline-flex;
-  align-items: baseline;
-  white-space: nowrap;
-  color: var(--ink);
-}
-.wk-lockup-word {
-  font-family: var(--wk-brand-font);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.wk-lockup-mark {
-  font-family: var(--wk-brand-font);
-  font-weight: 800;
-  color: var(--brand);
-}
-
-/* The ">" alone, as the load / step / arrival motif. */
-.wk-glyph {
-  font-family: var(--wk-brand-font);
-  font-weight: 800;
-  color: var(--brand);
-  line-height: 1;
-  display: inline-block;
-}
+/* The lockup and the ">" motif are app-wide marks: `.c360-lockup` and
+   `.c360-glyph` in tokens.css, with the beat they move to. This file only says
+   what they do INSIDE the room. */
 
 /* ------------------------------------------------------------------ scrim */
 .wk-scrim {
@@ -117,7 +82,7 @@ body.wk-open #root {
   font-size: 13px;
   line-height: 1.45;
   color: var(--ink);
-  animation: wk-room-in 340ms var(--ease-spring) both;
+  animation: wk-room-in 340ms var(--ease-settle) both;
 }
 @keyframes wk-room-in {
   from {
@@ -129,7 +94,15 @@ body.wk-open #root {
     transform: none;
   }
 }
-.wk-room button {
+/* Button reset, at ZERO specificity. `.wk-room button` (0,1,1) outranked every
+   single-class button rule in this file (0,1,0), so `color: inherit` won on
+   EVERY control in the room: the primary action took the bubble's body ink
+   instead of white, the scene-bar action took it instead of inverse, the
+   disclosure pills took whatever prose they sat in. That is the wrong-font-
+   colour button in the founder's UAT, and it was not one button — it was all
+   of them. :where() drops the reset to specificity 0 so the designed colour
+   wins, while `font`/`cursor` still land on anything that declares neither. */
+:where(.wk-room button) {
   font: inherit;
   color: inherit;
   cursor: pointer;
@@ -206,7 +179,7 @@ body.wk-open #root {
   display: grid;
   place-items: center;
   background: var(--surface);
-  transition: opacity 420ms var(--ease-out), transform 460ms var(--ease-spring);
+  transition: opacity 420ms var(--ease-out), transform 460ms var(--ease-settle);
 }
 .wk-boot.wk-gone {
   opacity: 0;
@@ -220,21 +193,14 @@ body.wk-open #root {
   gap: 13px;
   transform: translateY(-4vh);
 }
+/* The boot glyph runs the app's signature beat (tokens.css) — the same rhythm
+   the cockpit boots on and the step spine advances on. Its period IS the
+   interval this room advances its load lines on, so the mark and the words it
+   is loading move as one thing. */
 .wk-boot-glyph {
   font-size: 46px;
-  filter: drop-shadow(0 8px 22px rgba(161, 0, 255, 0.3));
-  animation: wk-breathe 2400ms ease-in-out 200ms infinite;
-}
-@keyframes wk-breathe {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: translate3d(2px, -2px, 0) scale(1.035);
-    opacity: 1;
-  }
+  filter: drop-shadow(0 8px 22px rgba(161, 0, 255, 0.28));
+  animation: c360-beat var(--beat) infinite;
 }
 .wk-boot-label {
   font-size: 12.6px;
@@ -254,7 +220,7 @@ body.wk-open #root {
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(90deg, var(--brand), #c36bff);
+  background: linear-gradient(90deg, var(--brand), var(--accent-quiet));
   transition: width 460ms var(--ease-out);
 }
 .wk-boot-sub {
@@ -435,9 +401,21 @@ body.wk-open #root {
 .wk-mchip:hover {
   border-color: var(--crumb-sep);
 }
+/* W4 — A PROPOSAL IS NOT WORK YET. A booked member sits on a raised white chip
+   with full-strength figures. A proposal is HOLLOW: no card under it, a dashed
+   edge, and its label and figure both in muted ink, so the eye reads "not yet"
+   before it reads the number. The founder's UAT read the old dashed-border-only
+   treatment as done work, because the figure was as loud as a booked one. */
 .wk-mchip.wk-prop {
   border-style: dashed;
+  border-color: var(--crumb-sep);
+  background: none;
   color: var(--ink-muted);
+}
+.wk-mchip.wk-prop b,
+.wk-mchip.wk-prop .wk-amt {
+  color: var(--ink-muted);
+  font-weight: 700;
 }
 .wk-mchip.wk-named {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -461,7 +439,7 @@ body.wk-open #root {
   }
 }
 .wk-mchip.wk-fresh {
-  animation: wk-chipin 320ms var(--ease-spring) both;
+  animation: wk-chipin 320ms var(--ease-settle) both;
 }
 .wk-mtoggle {
   flex: 0 0 auto;
@@ -519,9 +497,16 @@ body.wk-open #root {
   margin-top: 2px;
   line-height: 1.45;
 }
+/* Same law as the chip: a proposal is hollow, and its figure is quiet. */
 .wk-mcard.wk-prop {
   border-style: dashed;
-  background: var(--surface-overlay);
+  border-color: var(--crumb-sep);
+  background: none;
+  box-shadow: none;
+}
+.wk-mcard.wk-prop .wk-a,
+.wk-mcard.wk-prop .wk-k {
+  color: var(--ink-muted);
 }
 .wk-mcard .wk-tag {
   position: absolute;
@@ -563,7 +548,7 @@ body.wk-open #root {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 430px;
-  transition: grid-template-columns 420ms var(--ease-spring);
+  transition: grid-template-columns 420ms var(--ease-settle);
 }
 .wk-body[data-mode="entry"] .wk-grid {
   grid-template-columns: minmax(0, 1fr) 0px;
@@ -576,7 +561,7 @@ body.wk-open #root {
   flex-direction: column;
   gap: 10px;
   max-width: 1600px;
-  transition: max-width 420ms var(--ease-spring);
+  transition: max-width 420ms var(--ease-settle);
 }
 /* At entry the position is the only thing in the room, so it sits in the middle
    of it. The space around it is the point, not a gap. */
@@ -586,6 +571,26 @@ body.wk-open #root {
   justify-content: center;
   padding-bottom: 60px;
 }
+/* THE ENTRY IS ONE SENTENCE, SET LIKE ONE. The room is large and the position
+   is the only thing in it, so at entry the card is set at reading scale — the
+   space around it then reads as composition rather than as a half-loaded
+   screen. It shrinks back to a pinned line the moment the conversation opens
+   (.wk-pos.wk-compact, below). */
+.wk-body[data-mode="entry"] .wk-pos .wk-card-b {
+  padding: 19px 23px 20px;
+}
+.wk-body[data-mode="entry"] .wk-headline {
+  font-size: 21px;
+  line-height: 1.34;
+  letter-spacing: -0.018em;
+}
+.wk-body[data-mode="entry"] .wk-posrow {
+  margin-bottom: 9px;
+}
+.wk-body[data-mode="entry"] .wk-posfoot {
+  margin-top: 16px;
+}
+
 /* At entry the room holds the package and the position and nothing else. The
    composer is the conversation's affordance, so it arrives with it. */
 .wk-body[data-mode="entry"] .wk-composer,
@@ -628,7 +633,7 @@ body.wk-open #root {
 .wk-rv.wk-in {
   opacity: 1;
   transform: none;
-  transition: opacity 260ms var(--ease-spring), transform 300ms var(--ease-spring);
+  transition: opacity 260ms var(--ease-settle), transform 300ms var(--ease-settle);
 }
 
 /* --------------------------------------------- the disclosure primitive
@@ -674,7 +679,7 @@ body.wk-open #root {
   max-height: calc(100vh - 96px);
   display: flex;
   flex-direction: column;
-  animation: wk-peek-in 210ms var(--ease-spring) both;
+  animation: wk-peek-in 210ms var(--ease-settle) both;
 }
 @keyframes wk-peek-in {
   from {
@@ -902,7 +907,7 @@ body.wk-open #root {
   color: var(--ink-faint);
   transition: color var(--dur-mid) var(--ease-out);
 }
-.wk-stg .wk-glyph {
+.wk-stg .c360-glyph {
   font-size: 12px;
   color: var(--crumb-sep);
   flex: 0 0 auto;
@@ -911,25 +916,16 @@ body.wk-open #root {
 .wk-stg.wk-on {
   color: var(--brand);
 }
-.wk-stg.wk-on .wk-glyph {
+/* The stage the room is ON is the one that beats. Everything before it has
+   settled and everything after it is still grey. */
+.wk-stg.wk-on .c360-glyph {
   color: var(--brand);
-  animation: wk-glyph-step 1700ms var(--ease-out) infinite;
-}
-@keyframes wk-glyph-step {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: translate3d(0, 0, 0);
-  }
-  45% {
-    opacity: 1;
-    transform: translate3d(2px, 0, 0);
-  }
+  animation: c360-beat var(--beat) infinite;
 }
 .wk-stg.wk-done {
   color: var(--ink-muted);
 }
-.wk-stg.wk-done .wk-glyph {
+.wk-stg.wk-done .c360-glyph {
   color: var(--brand);
   opacity: 0.75;
 }
@@ -953,7 +949,7 @@ body.wk-open #root {
 .wk-stepper .wk-rail i {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, var(--brand), #c36bff);
+  background: linear-gradient(90deg, var(--brand), var(--accent-quiet));
   transition: width 460ms var(--ease-out);
 }
 
@@ -994,7 +990,7 @@ body.wk-open #root {
 .wk-foldline:hover {
   color: var(--brand);
 }
-.wk-foldline .wk-glyph {
+.wk-foldline .c360-glyph {
   font-size: 11px;
   opacity: 0.7;
 }
@@ -1004,7 +1000,7 @@ body.wk-open #root {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  animation: wk-msgin 240ms var(--ease-spring) both;
+  animation: wk-msgin 240ms var(--ease-settle) both;
 }
 @keyframes wk-msgin {
   from {
@@ -1132,7 +1128,7 @@ body.wk-open #root {
   padding: 5px 12px;
   font-size: 11.2px;
   font-weight: 600;
-  animation: wk-chipin 300ms var(--ease-spring) both;
+  animation: wk-chipin 300ms var(--ease-settle) both;
   transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
     transform 90ms var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -1160,7 +1156,7 @@ body.wk-open #root {
   background: var(--surface-raised);
   box-shadow: var(--shadow-card);
   padding: 9px 12px;
-  animation: wk-chipin 300ms var(--ease-spring) both;
+  animation: wk-chipin 300ms var(--ease-settle) both;
 }
 @keyframes wk-chipin {
   from {
@@ -1253,7 +1249,8 @@ body.wk-open #root {
 .wk-btn-p {
   background: var(--accent);
   color: var(--accent-ink);
-  box-shadow: 0 4px 14px -6px rgba(107, 28, 196, 0.7), inset 0 1px 0 var(--gloss);
+  box-shadow: 0 3px 10px -5px color-mix(in srgb, var(--accent) 60%, transparent),
+    inset 0 1px 0 var(--gloss);
 }
 .wk-btn-p:hover {
   filter: brightness(1.05);
@@ -1311,7 +1308,7 @@ body.wk-open #root {
   color: var(--positive);
   font-weight: 700;
   padding: 2px;
-  animation: wk-chipin 260ms var(--ease-spring) both;
+  animation: wk-chipin 260ms var(--ease-settle) both;
 }
 .wk-receipt .wk-what {
   color: var(--ink-muted);
@@ -1477,7 +1474,7 @@ body.wk-open #root {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  padding: 10px 16px 12px;
+  padding: 8px 15px 10px;
   position: relative;
 }
 
@@ -1520,7 +1517,7 @@ body.wk-open #root {
 }
 
 .wk-grp {
-  margin-bottom: 7px;
+  margin-bottom: 5px;
   animation: wk-opendown 240ms var(--ease-out) both;
 }
 @keyframes wk-opendown {
@@ -1537,7 +1534,7 @@ body.wk-open #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   line-height: 1.2;
 }
 .wk-grp > .wk-kicker .wk-rule {
@@ -1553,7 +1550,7 @@ body.wk-open #root {
   background: var(--surface-raised);
   overflow: hidden;
   box-shadow: var(--shadow-card);
-  animation: wk-entland 320ms var(--ease-spring) both, wk-entpulse 1500ms var(--ease-out) 300ms both;
+  animation: wk-entland 320ms var(--ease-settle) both, wk-entpulse 1500ms var(--ease-out) 300ms both;
 }
 .wk-ent:first-child {
   margin-top: 0;
@@ -1598,7 +1595,7 @@ body.wk-open #root {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding: 6px 7px 7px 11px;
+  padding: 5px 7px 6px 11px;
 }
 .wk-ent-t {
   flex: 1 1 auto;
@@ -1719,7 +1716,7 @@ body.wk-open #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 11px;
+  padding: 4px 11px;
   background: var(--positive-bg);
   border-top: 1px solid color-mix(in srgb, var(--positive) 18%, transparent);
   animation: wk-opendown 220ms var(--ease-out) both;
@@ -1748,7 +1745,7 @@ body.wk-open #root {
   align-items: center;
   gap: 7px;
   background: var(--prose-deep);
-  color: #fff;
+  color: var(--ink-inverse);
   border-radius: 999px;
   padding: 6px 13px;
   font-size: 11.4px;
@@ -1757,7 +1754,8 @@ body.wk-open #root {
   animation: wk-toast 2200ms var(--ease-out) both;
   z-index: 5;
 }
-.wk-landtoast .wk-glyph {
+.wk-landtoast .c360-glyph {
+  animation: c360-glyph-in var(--beat-in) var(--ease-settle) both;
   font-size: 13px;
 }
 @keyframes wk-toast {
@@ -1787,7 +1785,7 @@ body.wk-open #root {
   background: var(--frost-bar);
   backdrop-filter: blur(10px);
   padding: 11px 16px 13px;
-  animation: wk-opendown 260ms var(--ease-spring) both;
+  animation: wk-opendown 260ms var(--ease-settle) both;
 }
 .wk-plan {
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
@@ -1825,7 +1823,8 @@ body.wk-open #root {
   background: var(--brand);
   color: var(--brand-ink);
   border: none;
-  box-shadow: 0 8px 22px -8px rgba(161, 0, 255, 0.65), inset 0 1px 0 var(--gloss);
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--brand) 55%, transparent),
+    inset 0 1px 0 var(--gloss);
   transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out);
 }
 .wk-approve:hover {
@@ -1888,7 +1887,7 @@ body.wk-open #root {
   font-weight: 800;
   border: none;
   background: var(--fill-strong);
-  color: #fff;
+  color: var(--ink-inverse);
   transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast) var(--ease-out);
 }
@@ -1896,8 +1895,13 @@ body.wk-open #root {
   transform: translate3d(0, -1px, 0);
   filter: brightness(1.15);
 }
+/* A gate that is CLOSED still has to be readable. The old 0.35 opacity dimmed
+   the label into the fill and left the banker guessing what the next move even
+   was; the closed state now says its own name in quiet ink on a quiet ground. */
 .wk-next:disabled {
-  opacity: 0.35;
+  background: var(--wash-2);
+  color: var(--ink-label);
+  box-shadow: none;
   pointer-events: none;
 }
 
@@ -1979,7 +1983,7 @@ body.wk-open #root {
   .wk-amb span,
   .wk-live::before,
   .wk-boot-glyph,
-  .wk-stg.wk-on .wk-glyph {
+  .wk-stg.wk-on .c360-glyph {
     animation: none !important;
   }
   body.wk-open #root {

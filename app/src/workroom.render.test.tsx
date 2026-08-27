@@ -239,10 +239,10 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
 describe("law 7 — the mark is typographic", () => {
   it("draws the lockup as a wordmark plus a kerned glyph, not an SVG", () => {
     const room = open("modify");
-    const lockup = room.querySelector(".wk-lockup")!;
+    const lockup = room.querySelector(".c360-lockup")!;
     expect(lockup.querySelector("svg")).toBeNull();
-    expect(lockup.querySelector(".wk-lockup-word")!.textContent).toBe("accenture");
-    const mark = lockup.querySelector<HTMLElement>(".wk-lockup-mark")!;
+    expect(lockup.querySelector(".c360-lockup-word")!.textContent).toBe("accenture");
+    const mark = lockup.querySelector<HTMLElement>(".c360-lockup-mark")!;
     expect(mark.textContent).toBe(">");
     // Tight-kerned onto the wordmark: negative, and scaled to the size.
     expect(Number.parseFloat(mark.style.marginLeft)).toBeLessThan(0);
@@ -252,12 +252,12 @@ describe("law 7 — the mark is typographic", () => {
     const room = open("modify");
     click(room.querySelector(".wk-pill")!);
     await settle();
-    for (const glyph of room.querySelectorAll(".wk-glyph")) {
+    for (const glyph of room.querySelectorAll(".c360-glyph")) {
       expect(glyph.textContent).toBe(">");
       expect(glyph.querySelector("svg")).toBeNull();
     }
     // The step spine is glyph-led in every stage.
-    expect(room.querySelectorAll(".wk-stg .wk-glyph")).toHaveLength(4);
+    expect(room.querySelectorAll(".wk-stg .c360-glyph")).toHaveLength(4);
   });
 });
 

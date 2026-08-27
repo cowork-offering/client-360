@@ -19,7 +19,7 @@ import type {
   WorkroomRefusal,
 } from "../../workroom/types";
 import type { SourceChip } from "../../workroom/scripts";
-import { BrandGlyph, BrandLockup } from "./BrandMark";
+import { BrandGlyph, BrandLockup } from "../brand";
 import { Peek, usePeek } from "./Peek";
 import { measureWith, readMetrics, realOverflow, type FitCache } from "./threadFit";
 import "../../styles/workroom.css";
@@ -234,7 +234,8 @@ function flyToManifest(from: Element | null, to: Element | null, land: () => voi
   const puck = document.createElement("div");
   puck.style.cssText =
     "position:fixed;width:10px;height:10px;border-radius:50%;background:var(--accent);" +
-    "box-shadow:0 0 0 4px rgba(107,28,196,.10),0 4px 10px -2px rgba(107,28,196,.5);z-index:120;pointer-events:none";
+    "box-shadow:0 0 0 4px var(--accent-wash),0 4px 10px -2px color-mix(in srgb,var(--accent) 50%,transparent);" +
+    "z-index:120;pointer-events:none";
   const x0 = a.right - 22;
   const y0 = a.top + 16;
   puck.style.left = `${x0}px`;

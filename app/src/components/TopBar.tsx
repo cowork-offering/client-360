@@ -1,6 +1,6 @@
 import { useApp } from "../state/appState";
 import { fmtDate } from "../data/format";
-import { AccentureWordmark } from "./brand";
+import { BrandLockup } from "./brand";
 
 export function TopBar() {
   const { data } = useApp();
@@ -21,7 +21,9 @@ export function TopBar() {
         boxShadow: "var(--nav-shadow)",
       }}
     >
-      <AccentureWordmark />
+      {/* Default size (13.5) is the founder's canonical point on the kern
+          curve, and matches the cap height the retired SVG rendered at. */}
+      <BrandLockup />
       <span className="h-[22px] w-px" style={{ background: "var(--border-strong)" }} />
       <span className="text-[15px] font-bold tracking-tight text-ink">Commercial Credit 360</span>
 

@@ -258,7 +258,7 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
         {entries.length === 0 ? (
           <EmptyState
             title="No recorded activity in this view"
-            body="This relationship carries no activity entries in the current snapshot. Recorded events, concluded analyses and client requests appear here as they arrive."
+            body="Recorded events, concluded analyses and client requests land here."
           />
         ) : (
           <div>
