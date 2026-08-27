@@ -36,6 +36,10 @@ export interface ModeVocabulary {
   approveHint: string;
   /** The word the filed state uses for what just happened. */
   filedWord: string;
+  /** WHAT THE AGENT OFFERS once a confirm has landed. Every settled move ends
+   *  with the next one on the table, in the mode's own words, so the room never
+   *  goes quiet after the banker has just done something. */
+  nextMove: string;
 }
 
 const COMMON_STEPS: [string, string, string] = ["Understand", "Compose", "Checks"];
@@ -51,6 +55,7 @@ const VOCABULARY: Record<WorkroomMode, ModeVocabulary> = {
     approveLabel: (n) => `Approve and file ${n} ${n === 1 ? "change" : "changes"}`,
     approveHint: "Approve to file the plan",
     filedWord: "Filed",
+    nextMove: "Anything else on this facility, or shall I stage it?",
   },
   renew: {
     title: "Renewal Workroom",
@@ -62,6 +67,7 @@ const VOCABULARY: Record<WorkroomMode, ModeVocabulary> = {
     approveLabel: (n) => `Approve and submit ${n} ${n === 1 ? "term" : "terms"}`,
     approveHint: "Approve to submit the renewal plan",
     filedWord: "Submitted",
+    nextMove: "Anything else on this renewal, or shall I put it up?",
   },
   create: {
     title: "New Facility Workroom",
@@ -73,6 +79,7 @@ const VOCABULARY: Record<WorkroomMode, ModeVocabulary> = {
     approveLabel: (n) => `File ${n} ${n === 1 ? "record" : "records"}`,
     approveHint: "File to write the package",
     filedWord: "Filed",
+    nextMove: "Anything else in this package, or shall I file it?",
   },
 };
 

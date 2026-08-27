@@ -51,6 +51,11 @@ export const MANIFEST_GROUPS: { id: ManifestGroupId; label: string }[] = [
  *  Shared shape: the shell engine reads it off a fixture and the real engine
  *  resolves it from the cockpit's bundle, and the strip cannot tell. */
 export interface PackageMember {
+  /** THE MEMBER'S OWN IDENTITY, and the only thing that tells two of the same
+   *  product apart. `key` is the product word and legitimately repeats across a
+   *  deal with two lines of credit, so a click, a React key or an engine lookup
+   *  resolves on this and never on the label. */
+  id: string;
   key: string;
   /** The product, short enough for a chip that shares its row. */
   short: string;
@@ -157,6 +162,20 @@ export interface WorkroomDelta {
    * ordered plan steps, so a create without its junctions cannot be staged.
    */
   chainLinks?: Array<{ object: string; via: string; label: string; note?: string }>;
+}
+
+/**
+ * THE CONSEQUENCE OF A CONFIRM.
+ *
+ * A chip that lands in the manifest and says nothing is the failure this type
+ * exists to make impossible: the shell knows a chip moved, the ENGINE knows what
+ * it did to the package, so the engine is the one that answers. `reply` is not
+ * optional — a confirm is never silent — and `challenge` carries the check the
+ * new figures trip where the read carries enough to run one.
+ */
+export interface WorkroomAcknowledgement {
+  reply: string;
+  challenge?: WorkroomChallenge;
 }
 
 /** An ask the room will not stage, answered with the reason rather than a

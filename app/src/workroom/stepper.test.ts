@@ -66,6 +66,25 @@ describe("the step spine", () => {
     expect(s.stages[3]).toBe("on");
   });
 
+  it("settles Compose once the manifest is ready to approve, short of the target", () => {
+    // The target is what the room EXPECTS to compose, never a quota. A banker
+    // who staged the one change they came in for and can file it is done
+    // composing; a spine reading "Compose 1/3" beside a live Approve told them
+    // they were two moves short of something already on the table.
+    const s = at({ conversationOpen: true, landed: 1, composeTarget: 3, approvalOpen: true });
+    expect(s.stages[1]).toBe("done");
+    expect(s.composeCount).toBeNull();
+    expect(s.stages[3]).toBe("on");
+  });
+
+  it("keeps Compose open while the manifest is still empty", () => {
+    // Nothing staged is nothing to approve, so an empty rail never settles the
+    // step by claiming an approval that cannot be open.
+    const s = at({ conversationOpen: true, landed: 0, composeTarget: 3, approvalOpen: true });
+    expect(s.stages[1]).toBe("on");
+    expect(s.composeCount).toBe("0/3");
+  });
+
   it("carries the rail to full only when the plan has run", () => {
     const open = at({ conversationOpen: true, landed: 4, checksArrived: 2, checksAcked: 2, approvalOpen: true });
     expect(open.railPercent).toBe(75);

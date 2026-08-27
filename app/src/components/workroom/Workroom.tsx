@@ -3,7 +3,7 @@ import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion } from "../../data/motion";
 import { CLIENT_EMAIL, GOVERNANCE, HAVE } from "../../workroom/fixture";
-import type { WorkroomEngine } from "../../workroom/engine";
+import type { PackageChoice, WorkroomEngine, WorkroomSuggestion } from "../../workroom/engine";
 import { addEntry, addressManifest, figuresFor, groupEntries, removeEntry } from "../../workroom/manifest";
 import { vocabularyFor } from "../../workroom/modes";
 import { stepperState } from "../../workroom/stepper";
@@ -60,6 +60,21 @@ type ThreadItem =
   | { kind: "chips"; id: string; chips: ChipModel[] }
   | { kind: "challenge"; id: string; challenge: WorkroomChallenge; acked: boolean }
   | { kind: "reply"; id: string; reply: DraftedReply };
+
+/**
+ * THE COMPOSED BEAT.
+ *
+ * An answer that snaps in the same frame as the question reads as a lookup; one
+ * that arrives after a held beat of the brand glyph reads as a room composing an
+ * answer. It is the deck-studio rhythm and it uses the deck-studio vocabulary:
+ * ONE motion per event, the ">" filling with ink (tokens.css `c360-beat`), and
+ * `--beat`'s own 460ms as the floor so nothing here invents a second tempo.
+ *
+ * A FLOOR, NOT A DELAY. The room waits for the slower of the engine and the
+ * beat, so a wired parse that takes two seconds is not made to take two and a
+ * half. Under reduced motion the floor is zero and the answer is simply there.
+ */
+const COMPOSE_FLOOR_MS = 460;
 
 /** How much room has to open up before the rail relaxes a fold. Wider than one
  *  step, so tightening and relaxing cannot chase each other. */
@@ -272,12 +287,18 @@ export function Workroom({
   context,
   engine,
   onClose,
+  onAnchor,
 }: {
   context: WorkroomContext;
   /** The room talks to ONE interface and never to a script, a tool or a parser.
    *  Which implementation arrives is WorkroomHost's decision, not the shell's. */
   engine: WorkroomEngine;
   onClose: () => void;
+  /** The banker chose which package to work in. The room does not anchor itself:
+   *  it is REOPENED on the chosen package, which rebuilds the engine and the
+   *  manifest with it, so nothing composed against one package can survive into
+   *  a plan against another. */
+  onAnchor?: (choice: PackageChoice) => void;
 }) {
   const brief = useMemo(() => engine.brief(context), [engine, context]);
   const vocabulary = useMemo(() => vocabularyFor(context), [context]);
@@ -297,8 +318,12 @@ export function Workroom({
   const [items, setItems] = useState<ThreadItem[]>([]);
   const [entries, setEntries] = useState<WorkroomDelta[]>([]);
   const [execution, setExecution] = useState<WorkroomExecution | null>(null);
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [exhausted, setExhausted] = useState(false);
+  const [suggestion, setSuggestion] = useState<WorkroomSuggestion | null>(null);
+  /** The room is composing an answer. It drives the thinking beat, and it holds
+   *  the approval closed: an approve bar that appears for one frame between a
+   *  confirm landing and the check it trips is an approval offered before the
+   *  room has finished answering. */
+  const [thinking, setThinking] = useState(false);
   /** The approval is in flight. A second click while the org is working would
    *  stage a second plan behind the first, and the token is single use. */
   const [filing, setFiling] = useState(false);
@@ -375,7 +400,15 @@ export function Workroom({
   const openGates = items.reduce((n, item) => (isLive(item) && item.kind !== "reply" ? n + 1 : n), 0);
   const checksArrived = items.filter((i) => i.kind === "challenge").length;
   const checksAcked = items.filter((i) => i.kind === "challenge" && i.acked).length;
-  const approvalOpen = phase === "work" && exhausted && openGates === 0 && entries.length > 0;
+  /**
+   * THE APPROVAL IS OPEN WHEN THERE IS SOMETHING TO APPROVE and nothing is
+   * waiting on the banker. It used to also require the suggestions to be SPENT,
+   * which meant a banker who confirmed the one change they came in for could not
+   * file it until they had worked through every other move the engine could
+   * think of — the manifest filled, the approve bar never came, and the room
+   * read as a dead end. The suggestions are an offer, never a gate.
+   */
+  const approvalOpen = phase === "work" && !thinking && openGates === 0 && entries.length > 0;
 
   const baseline = useMemo(
     () => ({
@@ -482,21 +515,41 @@ export function Workroom({
   /* ------------------------------------------------------------ the moves */
 
   const push = useCallback((item: ThreadItem) => setItems((prev) => [...prev, item]), []);
+  const agent = useCallback((text: string) => push({ kind: "agent", id: nextId("agent"), text }), [push]);
 
+  /** Hold the composed beat, then let the answer settle in. Zero under reduced
+   *  motion, so a test and a banker who asked for stillness both get the answer
+   *  on the same tick. */
+  const beat = useCallback(
+    (started: number) =>
+      new Promise<void>((resolve) => {
+        const left = reduced ? 0 : Math.max(0, COMPOSE_FLOOR_MS - (Date.now() - started));
+        if (!left) {
+          resolve();
+          return;
+        }
+        window.setTimeout(resolve, left);
+      }),
+    [reduced],
+  );
+
+  /**
+   * The banker said something.
+   *
+   * `heard` is what the engine parses; `said` is what the thread shows. They
+   * differ for a suggestion pill, whose label is banker grammar and whose
+   * instruction has to be precise enough to resolve one member out of six.
+   */
   const say = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
+    async (heard: string, said?: string) => {
+      const trimmed = heard.trim();
       if (!trimmed) return;
-      push({ kind: "banker", id: nextId("banker"), text: trimmed });
+      push({ kind: "banker", id: nextId("banker"), text: (said ?? heard).trim() });
 
       // ONE DECISION PER VIEW (law 2). While a gate is open the room does not
       // take a new instruction; it says so rather than quietly queueing one.
       if (openGates > 0) {
-        push({
-          kind: "agent",
-          id: nextId("agent"),
-          text: "One decision at a time. The open cards above, or the approve button under the manifest, carry the next move.",
-        });
+        agent("One decision at a time. The open cards above, or the approve button under the manifest, carry the next move.");
         return;
       }
 
@@ -509,48 +562,79 @@ export function Workroom({
         if (address.kind === "remove") {
           setEntries((prev) => removeEntry(prev, address.entry.id));
           setToast("Removed from the manifest");
-          push({
-            kind: "agent",
-            id: nextId("agent"),
-            text: `${address.entry.title} on ${address.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
-          });
+          agent(
+            `${address.entry.title} on ${address.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
+          );
           return;
         }
-        push({
-          kind: "agent",
-          id: nextId("agent"),
-          text:
-            address.kind === "list"
-              ? address.entries.length
-                ? `The manifest holds ${address.entries.length}: ${address.entries
-                    .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
-                    .join("; ")}.`
-                : "Nothing is staged yet. Confirmed changes land in the manifest, grouped."
-              : address.reason,
-        });
+        agent(
+          address.kind === "list"
+            ? address.entries.length
+              ? `The manifest holds ${address.entries.length}: ${address.entries
+                  .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
+                  .join("; ")}.`
+              : "Nothing is staged yet. Confirmed changes land in the manifest, grouped."
+            : address.reason,
+        );
         return;
       }
 
-      const result = await engine.parseIntent(trimmed, context);
-      push({ kind: "agent", id: nextId("agent"), text: result.reply });
-      if (result.kind === "deltas") {
-        push({
-          kind: "chips",
-          id: nextId("chips"),
-          chips: result.deltas.map((d) => ({ key: nextId("chip"), delta: d, state: "open" as ChipState })),
-        });
-      } else if (result.kind === "refusal") {
-        push({
-          kind: "chips",
-          id: nextId("chips"),
-          chips: [{ key: nextId("chip"), refusal: result.refusal, state: "open" as ChipState }],
-        });
+      // THE COMPOSED BEAT. The glyph fills while the engine reads the line — and
+      // on a wired room the engine may be waiting on the gateway, so this is
+      // also the only thing standing between the banker and a blank pause.
+      const started = Date.now();
+      setThinking(true);
+      try {
+        const result = await engine.parseIntent(trimmed, context);
+        await beat(started);
+        // The reply and the chips it puts on the table land TOGETHER. Pushed
+        // separately they are two renders, and the fit pass runs against a
+        // thread that never existed.
+        const answer: ThreadItem[] = [{ kind: "agent", id: nextId("agent"), text: result.reply }];
+        const chips: ChipModel[] =
+          result.kind === "deltas"
+            ? result.deltas.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
+            : result.kind === "refusal"
+              ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
+              : [];
+        if (chips.length) answer.push({ kind: "chips", id: nextId("chips"), chips });
+        setItems((prev) => [...prev, ...answer]);
+        setSuggestion(engine.suggest());
+      } finally {
+        setThinking(false);
       }
-      const next = engine.suggest();
-      setSuggestion(next);
-      if (!next) setExhausted(true);
     },
-    [context, engine, entries, openGates, push],
+    [agent, beat, context, engine, entries, openGates, push],
+  );
+
+  /**
+   * The banker picked a member off the package strip.
+   *
+   * The strip is the room's list of what is eligible, so it is also the room's
+   * way in. Where the engine has a read behind that member it answers and the
+   * conversation continues on it; where it does not — the shell engines, whose
+   * strip is a fixture — the member detail opens instead, which is the honest
+   * answer rather than a question the engine could not then take an answer to.
+   */
+  const pickMember = useCallback(
+    async (member: PackageMember, fallback: () => void) => {
+      const result = engine.pick(member.id);
+      if (!result) {
+        fallback();
+        return;
+      }
+      push({ kind: "banker", id: nextId("banker"), text: member.key });
+      const started = Date.now();
+      setThinking(true);
+      try {
+        await beat(started);
+        agent(result.reply);
+        setSuggestion(engine.suggest());
+      } finally {
+        setThinking(false);
+      }
+    },
+    [agent, beat, engine, push],
   );
 
   const settleChip = useCallback((blockId: string, chipKey: string, state: ChipState) => {
@@ -563,37 +647,74 @@ export function Workroom({
     );
   }, []);
 
+  /**
+   * THE CONFIRM, AND ITS CONSEQUENCE.
+   *
+   * The failure this closes, reproduced headless before it was fixed: the entry
+   * landed in the rail, the chip collapsed to a receipt, and the room said
+   * NOTHING. No acknowledgement, no check, no next move, and — because the
+   * approval used to wait on the suggestions running out — no way to file what
+   * had just been staged. A banker cannot tell a room that is thinking from a
+   * room that is broken, and this one was neither: it was finished.
+   *
+   * So a confirm now lands as ONE event. The puck's travel is its beat; at the
+   * end of it the entry, the receipt, the agent's answer and any check the new
+   * figures trip all arrive in a single commit. One motion, one settle, and no
+   * frame in between where the approve bar could flicker on and off again.
+   */
   const confirmChip = useCallback(
-    (blockId: string, chip: ChipModel, from: Element | null) => {
-      const delta = chip.delta;
-      if (!delta) {
-        settleChip(blockId, chip.key, "confirmed");
-        return;
-      }
+    (blockId: string, chipKey: string, delta: WorkroomDelta, from: Element | null) => {
+      setThinking(true);
       flyToManifest(from, manifestCountRef.current, () => {
-        setEntries((prev) => addEntry(prev, delta));
-        settleChip(blockId, chip.key, "confirmed");
+        const staged = addEntry(entries, delta);
+        const { reply, challenge } = engine.acknowledge(delta, staged);
+        setEntries(staged);
+        settleChip(blockId, chipKey, "confirmed");
         setToast(delta.badge);
-        // CHECKS COME TO YOU. The check a confirm trips arrives back in the
-        // conversation the moment it becomes true, never in a separate tab.
-        if (delta.challenge) {
-          const challenge = delta.challenge;
-          window.setTimeout(
-            () => push({ kind: "challenge", id: nextId("check"), challenge, acked: false }),
-            reduced ? 0 : 520,
-          );
-        }
+        setItems((prev) => [
+          ...prev,
+          { kind: "agent", id: nextId("agent"), text: reply },
+          // CHECKS COME TO YOU. The check a confirm trips arrives back in the
+          // conversation the moment it becomes true, never in a separate tab.
+          ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), challenge, acked: false }] : []),
+        ]);
+        setSuggestion(engine.suggest());
+        setThinking(false);
       });
     },
-    [push, reduced, settleChip],
+    [engine, entries, settleChip],
+  );
+
+  /**
+   * SETTLING A CHIP WITHOUT STAGING IT is a decision too, so it gets an answer.
+   *
+   * A discarded proposal LEAVES — there is nothing left to read on it. A refusal
+   * that has been understood STAYS, settled: its reason is the answer and taking
+   * it off the screen would take the answer with it.
+   */
+  const settleOpenChip = useCallback(
+    (blockId: string, chip: ChipModel) => {
+      if (chip.delta) {
+        settleChip(blockId, chip.key, "discarded");
+        agent(
+          `Dropped. ${chip.delta.title} on ${chip.delta.target} is not staged and the package has not moved. ${vocabulary.nextMove}`,
+        );
+      } else {
+        settleChip(blockId, chip.key, "confirmed");
+        agent(`That one stays off the manifest, for the reason above. ${vocabulary.nextMove}`);
+      }
+      setSuggestion(engine.suggest());
+    },
+    [agent, engine, settleChip, vocabulary.nextMove],
   );
 
   const drop = useCallback(
-    (deltaId: string) => {
-      setEntries((prev) => removeEntry(prev, deltaId));
+    (delta: WorkroomDelta) => {
+      setEntries((prev) => removeEntry(prev, delta.id));
       setToast("Removed from the manifest");
+      agent(`${delta.title} on ${delta.target} is out of the manifest. The package reads as it did before it landed.`);
     },
-    [],
+    [agent],
   );
 
   const acknowledge = useCallback((id: string) => {
@@ -606,11 +727,7 @@ export function Workroom({
     try {
       const staged = await engine.stagePlan(entries, context);
       if (!staged.decisionToken) {
-        push({
-          kind: "agent",
-          id: nextId("agent"),
-          text: "The staging call came back without a confirmation token, so there is nothing to redeem. Nothing was written.",
-        });
+        agent("The staging call came back without a confirmation token, so there is nothing to redeem. Nothing was written.");
         return;
       }
       const result = await engine.execute({
@@ -627,11 +744,11 @@ export function Workroom({
       // a manifest that files nothing — each comes back as a sentence in the
       // conversation with the approval still where the banker left it, rather
       // than as a dead button or a silent rejection.
-      push({ kind: "agent", id: nextId("agent"), text: e instanceof Error ? e.message : String(e) });
+      agent(e instanceof Error ? e.message : String(e));
     } finally {
       setFiling(false);
     }
-  }, [context, engine, entries, filing, push]);
+  }, [agent, context, engine, entries, filing, push]);
 
   /* ----------------------------------------------------------- scene bar */
 
@@ -648,11 +765,18 @@ export function Workroom({
     nextLabel = "Continue";
     if (openGates > 0) {
       gateHint = checksArrived > checksAcked ? "Acknowledge the checks to continue" : "Settle the open cards to continue";
-    } else if (approvalOpen) {
-      gateHint = vocabulary.approveHint;
-    } else if (suggestion) {
-      nextEnabled = true;
-      onNext = () => void say(suggestion);
+    } else if (thinking) {
+      gateHint = "Reading that";
+    } else {
+      // THE OFFER AND THE GATE ARE DIFFERENT THINGS. A suggestion still on the
+      // table keeps Continue live even once the approval has opened, because
+      // composing more and filing what is already staged are both legitimate
+      // next moves and the room must not pick one for the banker.
+      if (suggestion) {
+        nextEnabled = true;
+        onNext = () => void say(suggestion.say, suggestion.label);
+      }
+      gateHint = approvalOpen ? vocabulary.approveHint : "";
     }
   }
 
@@ -691,7 +815,7 @@ export function Workroom({
           {phase === "boot" && (
             <div className="wk-boot" aria-hidden="true">
               <div className="wk-boot-inner">
-                <BrandGlyph className="wk-boot-glyph" />
+                <BrandGlyph className="wk-boot-glyph c360-beat" />
                 <div className="wk-boot-label">{brief.loadSteps[bootStep]}</div>
                 <div className="wk-boot-bar">
                   <i style={{ width: `${Math.round(((bootStep + 1) / brief.loadSteps.length) * 100)}%` }} />
@@ -714,7 +838,10 @@ export function Workroom({
                   there is nothing to digest until it is ready. */}
               <div className={`wk-pkg-top wk-rv ${assembled ? "wk-in" : ""}`}>
                 <div>
-                  <div className="wk-kicker">Product package</div>
+                  {/* ONE WORD. The heading under it names the package, so a
+                      two-word kicker saying "product package" above it spent
+                      law 3's budget restating the noun that follows it. */}
+                  <div className="wk-kicker">Package</div>
                   <h2>{brief.packageName}</h2>
                 </div>
                 <div className="wk-agg">
@@ -735,26 +862,63 @@ export function Workroom({
                   </div>
                 </div>
               </div>
+              {/* ================== THE CHOICE, when there is one to make.
+                  A relationship carrying more than one package picks the one to
+                  work in before anything else: the credit action anchors on ONE
+                  package and that anchor is the governance boundary, so one
+                  session is one package is one plan under one approval. A
+                  relationship with a single package never sees this. */}
+              {brief.packageChoices.length > 0 && (
+                <div className={`wk-mbar wk-rv ${assembled ? "wk-in" : ""}`} style={{ transitionDelay: "120ms" }}>
+                  <div className="wk-mchips">
+                    {brief.packageChoices.map((choice) => (
+                      <button
+                        type="button"
+                        key={choice.id}
+                        className={`wk-mchip wk-pkgpick ${choice.eligible ? "" : "wk-prop"}`}
+                        title={choice.eligible ? choice.figure : choice.reason}
+                        disabled={!choice.eligible}
+                        onClick={() => onAnchor?.(choice)}
+                      >
+                        <b>{choice.label}</b>
+                        <span className="wk-amt tnum">{choice.figure}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {brief.showsMembers && (
                 <div className={`wk-mbar wk-rv ${assembled ? "wk-in" : ""}`} style={{ transitionDelay: "120ms" }}>
                   <div className="wk-mchips">
                     {brief.members.map((m) => (
                       <button
                         type="button"
-                        key={m.key}
+                        /* The org's loan id, because two members of one package
+                           legitimately share a product word and a label cannot
+                           tell them apart. */
+                        key={m.id}
                         /* W4 — a member that is NOT booked renders dashed. Pre-work
                            display must never read as done work, and a stage the
                            read does not carry is treated the same way: unknown is
                            not booked. */
                         className={`wk-mchip ${m.proposed ? "wk-prop" : ""}`}
                         title={`${m.product} · ${m.tag}`}
-                        onClick={(e) =>
-                          openPeek(e.currentTarget, {
-                            kicker: "Members of the package",
-                            width: 760,
-                            content: <MemberCards members={brief.members} />,
-                          })
-                        }
+                        /* THE STRIP IS THE WAY IN. It is the room's own list of
+                           what is eligible, so clicking a member starts the
+                           conversation on it. Where the engine has no read behind
+                           the strip to talk about, the member detail opens
+                           instead — which is what the shell engines do. */
+                        onClick={(e) => {
+                          const anchor = e.currentTarget;
+                          void pickMember(m, () =>
+                            openPeek(anchor, {
+                              kicker: "Members of the package",
+                              width: 760,
+                              content: <MemberCards members={brief.members} />,
+                            }),
+                          );
+                        }}
                       >
                         <b>{m.key}</b>
                         <span className="wk-amt tnum">{m.amount}</span>
@@ -797,11 +961,19 @@ export function Workroom({
                   style={{ transitionDelay: "240ms" }}
                 >
                   <div className="wk-card-b">
-                    <div className="wk-posrow">
-                      <div className="wk-kicker">Position</div>
-                      <span className="wk-askpin tnum">{brief.askPin}</span>
+                    {brief.askPin && (
+                      <div className="wk-posrow">
+                        <span className="wk-askpin tnum">{brief.askPin}</span>
+                      </div>
+                    )}
+                    {/* THE ROOM OPENS BY NAME. The greeting is a real read or it
+                        is absent; it is never a label, which is why the kicker
+                        that used to say "Position" here is gone — the sentence
+                        introduces itself now. */}
+                    <div className="wk-headline">
+                      {brief.greeting && <span className="wk-greet">{brief.greeting} </span>}
+                      {brief.position}
                     </div>
-                    <div className="wk-headline">{brief.position}</div>
                     <div className="wk-posfoot">
                       <button
                         type="button"
@@ -862,7 +1034,10 @@ export function Workroom({
                         key={label}
                         className={`wk-stg ${steps.stages[i] === "on" ? "wk-on" : steps.stages[i] === "done" ? "wk-done" : ""}`}
                       >
-                        <BrandGlyph />
+                        {/* The stage the room is ON is the one that fills. The
+                            class carries the ink gradient the keyframes animate;
+                            the animation on its own has nothing to move. */}
+                        <BrandGlyph className={steps.stages[i] === "on" ? "c360-beat" : ""} />
                         {label}
                         {i === 1 && steps.composeCount && <span className="wk-cnt">{steps.composeCount}</span>}
                       </span>
@@ -900,16 +1075,30 @@ export function Workroom({
                       filedWord={vocabulary.filedWord}
                       onOpenPeek={openPeek}
                       onConfirm={confirmChip}
-                      onDiscard={settleChip}
+                      onDiscard={settleOpenChip}
                       onAcknowledge={acknowledge}
                     />
                   ))}
+                  {/* THE ROOM IS COMPOSING. One beat, the app's own: the ">"
+                      fills with ink and nothing else is offered to read. It is
+                      the same mark that carries the boot and the step spine, so
+                      the room gains a rhythm rather than a second vocabulary. */}
+                  {thinking && (
+                    <div className="wk-blk" data-live="1">
+                      <div className="wk-msg wk-agent">
+                        <div className="wk-who">Workroom agent</div>
+                        <div className="wk-bub wk-think" role="status" aria-label="Composing an answer">
+                          <BrandGlyph className="c360-beat" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </section>
 
-                {phase === "work" && suggestion && openGates === 0 && (
+                {phase === "work" && suggestion && openGates === 0 && !thinking && (
                   <div className="wk-sugg">
-                    <button type="button" className="wk-pill" onClick={() => void say(suggestion)}>
-                      {suggestion}
+                    <button type="button" className="wk-pill" onClick={() => void say(suggestion.say, suggestion.label)}>
+                      {suggestion.label}
                     </button>
                   </div>
                 )}
@@ -1038,7 +1227,7 @@ export function Workroom({
                                     className="wk-ent-x"
                                     aria-label={`Remove ${delta.title} from the manifest`}
                                     title="Remove. To change it, say it again in the chat."
-                                    onClick={() => drop(delta.id)}
+                                    onClick={() => drop(delta)}
                                   >
                                     <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
                                       <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -1265,8 +1454,8 @@ function ThreadBlock({
   entries: WorkroomDelta[];
   filedWord: string;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
-  onConfirm: (blockId: string, chip: ChipModel, from: Element | null) => void;
-  onDiscard: (blockId: string, chipKey: string, state: ChipState) => void;
+  onConfirm: (blockId: string, chipKey: string, delta: WorkroomDelta, from: Element | null) => void;
+  onDiscard: (blockId: string, chip: ChipModel) => void;
   onAcknowledge: (id: string) => void;
 }) {
   const live = isLive(item) ? "1" : "0";
@@ -1311,7 +1500,7 @@ function ThreadBlock({
                   key={chip.key}
                   chip={chip}
                   onOpenPeek={onOpenPeek}
-                  onUnderstood={() => onDiscard(item.id, chip.key, "confirmed")}
+                  onUnderstood={() => onDiscard(item.id, chip)}
                 />
               );
             }
@@ -1333,8 +1522,8 @@ function ThreadBlock({
                 key={chip.key}
                 delta={delta}
                 onOpenPeek={onOpenPeek}
-                onConfirm={(from) => onConfirm(item.id, chip, from)}
-                onDiscard={() => onDiscard(item.id, chip.key, "discarded")}
+                onConfirm={(from) => onConfirm(item.id, chip.key, delta, from)}
+                onDiscard={() => onDiscard(item.id, chip)}
               />
             );
           })}

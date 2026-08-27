@@ -3,7 +3,7 @@ import { resolveBundle } from "../../actions/registry";
 import { useApp } from "../../state/appState";
 import { createScriptedEngine, type WorkroomEngine } from "../../workroom/engine";
 import { createModifyEngine } from "../../workroom/modifyEngine";
-import { closeWorkroom, useWorkroom } from "../../workroom/openWorkroom";
+import { closeWorkroom, openWorkroom, useWorkroom } from "../../workroom/openWorkroom";
 import { Workroom } from "./Workroom";
 
 /** The one mount. Anything, anywhere, calls `openWorkroom(context)` and the
@@ -39,13 +39,16 @@ export function WorkroomHost() {
 
   if (!context || !engine) return null;
   // Keyed on the context so switching modes or packages rebuilds the room and
-  // its engine rather than carrying one storyline's state into another.
+  // its engine rather than carrying one storyline's state into another. The
+  // PACKAGE is part of that key because one session is one package is one plan:
+  // a manifest composed against one package must not survive into another.
   return (
     <Workroom
-      key={`${context.mode}-${context.door}-${context.accountId}`}
+      key={`${context.mode}-${context.door}-${context.accountId}-${context.productPackageId ?? "none"}`}
       context={context}
       engine={engine}
       onClose={closeWorkroom}
+      onAnchor={(choice) => openWorkroom({ ...context, productPackageId: choice.id, packageName: choice.label })}
     />
   );
 }
