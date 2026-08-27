@@ -313,29 +313,40 @@ body {
   display: inline-block;
 }
 
+/* Deck-studio loading law (founder, 2026-08-27): the ">" FILLS with brand ink,
+   it never travels. The glyph stands still; color rises through it left-to-right
+   like ink filling the stroke, holds full, then drains for the next beat. */
 @keyframes c360-beat {
   0% {
-    opacity: 0.55;
-    transform: translate3d(0, 0, 0) scale(1);
+    background-position: 100% 0;
     animation-timing-function: var(--ease-out);
   }
-  28% {
-    opacity: 1;
-    transform: translate3d(0, -1px, 0) scale(1.06);
-    animation-timing-function: var(--ease-out);
-  }
-  58% {
-    opacity: 1;
-    transform: translate3d(3px, 0, 0) scale(1);
+  55% {
+    background-position: 0 0;
     animation-timing-function: var(--ease-settle);
   }
+  78% {
+    background-position: 0 0;
+  }
   100% {
-    opacity: 0.55;
-    transform: translate3d(0, 0, 0) scale(1);
+    background-position: 100% 0;
   }
 }
 .c360-beat {
-  animation: c360-beat var(--beat) infinite;
+  background-image: linear-gradient(
+    90deg,
+    var(--brand) 0%,
+    var(--brand) 50%,
+    var(--ink-faint) 50%,
+    var(--ink-faint) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--brand); /* fallback if background-clip:text is unsupported */
+  animation: c360-beat calc(var(--beat) * 2) infinite;
 }
 
 /* The same glyph ARRIVING once rather than beating: it comes in along its own
@@ -786,6 +797,8 @@ body {
   .c360-pulse,
   .c360-beat {
     animation: none !important;
+    /* The still glyph reads FILLED, never half-inked. */
+    background-position: 0 0 !important;
   }
   /* Slides and reveals become instant: the content is there, the movement is
      not. Duration alone would still animate opacity from 0 for a frame. */
