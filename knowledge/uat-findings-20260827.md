@@ -16,8 +16,8 @@ The chat must speak about what is staged and accept amendments conversationally 
 rail's ×). Deepens remove-and-re-say: staged items are addressable in conversation.
 
 ## W3 — Suggestions at entry; merge composer with entry point? [d3a10e95]
-Composer should give suggestions; consider merging composer with the entry scene. ONE design
-decision to make before wiring the entry (ask Fabian or propose one option).
+DECIDED (Fabian, 2026-08-27): MERGE. One scene — the personal briefing with suggestion chips IS
+the entry, input right there, no "Open the conversation" button. Chat is protagonist from second one.
 
 ## W4 — Package strip shows PROP $3.0MM as if confirmed [2f5089a8]
 It is Hartwell's real Proposal facility (showcase), but pre-work display reads as done work.
@@ -36,6 +36,7 @@ Subtle, elegant VISUALS over text. Everywhere. Current copy too technical. Polis
 - Two spots read "vibecoded" (flagged elements).
 - More interactivity in flagged sections.
 - 1a4b73af: pre-commit state display, likely static-mock artifact; re-check after wiring.
+- Rail folding at 4 entries: DECIDED right treatment (Fabian, 2026-08-27). Keep fold + peek.
 
 ## Acceptance bar [67fb52ec — replied in thread]
 65% today → Apple-grade, uncluttered, cinematic typographic ">" loading, zero vibecoded feel.
