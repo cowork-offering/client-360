@@ -33,6 +33,83 @@ export function removeEntry(entries: WorkroomDelta[], deltaId: string): Workroom
   return entries.filter((e) => e.id !== deltaId);
 }
 
+/* ------------------------------------------------- the rail, from the chat
+   W2: "the chat must speak about what is staged and accept amendments
+   conversationally (not only the rail's ×)". Two moves and no more, because
+   they are the two the rail itself offers: say what is in there, and take
+   something out of it. AMENDING is deliberately not a third move — the room's
+   answer to "make it 19 instead" is to remove the entry and say it again, so
+   that every entry in the rail is one the parser produced from one sentence.  */
+
+export type ManifestAddress =
+  | { kind: "list"; entries: WorkroomDelta[] }
+  | { kind: "remove"; entry: WorkroomDelta }
+  /** Understood as a rail command, but it names nothing that is in there. */
+  | { kind: "miss"; reason: string }
+  /** Not a rail command at all. The line belongs to the parser. */
+  | null;
+
+const LIST_PHRASES = [
+  "what is staged",
+  "what's staged",
+  "what have we staged",
+  "what is in the manifest",
+  "what's in the manifest",
+  "read the manifest",
+  "show the manifest",
+  "what is on the modification",
+  "what have i confirmed",
+];
+
+const REMOVE_PHRASES = ["remove", "drop", "take out", "take off", "undo", "forget", "cancel", "delete", "scrap"];
+
+/** Does this line address something already in the rail? */
+export function addressManifest(text: string, entries: WorkroomDelta[]): ManifestAddress {
+  const lower = text.toLowerCase().trim();
+  if (!lower) return null;
+
+  if (LIST_PHRASES.some((p) => lower.includes(p))) return { kind: "list", entries };
+
+  const removal = REMOVE_PHRASES.find((p) => new RegExp(`(^|\\W)${p}(\\W|$)`).test(lower));
+  if (!removal) return null;
+  if (!entries.length) return { kind: "miss", reason: "Nothing is staged yet, so there is nothing to take out." };
+
+  // Match on the words the RAIL shows — the entry's own title, its target and
+  // the member it names — so the banker removes a thing by what they can see.
+  const scored = entries
+    .map((e) => {
+      const tokens = [e.title, e.target, e.kind, e.after, e.before]
+        .join(" ")
+        .toLowerCase()
+        .split(/[^a-z0-9$.%]+/)
+        .filter((w) => w.length > 2);
+      const hits = new Set(tokens.filter((t) => lower.includes(t))).size;
+      return { entry: e, hits };
+    })
+    .filter((s) => s.hits > 0)
+    .sort((a, b) => b.hits - a.hits);
+
+  if (!scored.length) {
+    return {
+      kind: "miss",
+      reason: `Nothing in the manifest matches that. It holds ${entries.map((e) => e.title.toLowerCase()).join(", ")}.`,
+    };
+  }
+  // A TIE IS AN AMBIGUITY, not a coin toss: taking the wrong entry out of a
+  // change set the banker is about to sign is the one mistake that must not be
+  // made quietly.
+  if (scored.length > 1 && scored[0].hits === scored[1].hits) {
+    return {
+      kind: "miss",
+      reason: `That could be ${scored
+        .filter((s) => s.hits === scored[0].hits)
+        .map((s) => `${s.entry.title} on ${s.entry.target}`)
+        .join(" or ")}. Name one.`,
+    };
+  }
+  return { kind: "remove", entry: scored[0].entry };
+}
+
 /** The rail grouped the way a credit committee reads it. Empty groups do not
  *  render, so the rail grows a heading only when it has something under it. */
 export function groupEntries(entries: WorkroomDelta[]): { id: ManifestGroupId; label: string; entries: WorkroomDelta[] }[] {

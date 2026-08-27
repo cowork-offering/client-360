@@ -1,8 +1,11 @@
 import type { PlanStep, StagedOutput } from "../actions/stagedPlan";
+import { HAVE, MEMBERS } from "./fixture";
 import { vocabularyFor } from "./modes";
 import { scriptFor, type SourceChip, type WhyRow, type WorkroomScript } from "./scripts";
 import type {
+  HaveRow,
   IntentResult,
+  PackageMember,
   StagedWorkroomPlan,
   WorkroomApproval,
   WorkroomContext,
@@ -52,10 +55,19 @@ export interface WorkroomBrief {
   whyCaveat: string;
   /** What the Compose step counts up to. */
   composeTarget: number;
+  /** The package strip's member chips. A real engine resolves these from the
+   *  cockpit's bundle; the shell engine hands back the fixture. */
+  members: PackageMember[];
+  /** "What the package holds today", as the room actually read it. */
+  have: HaveRow[];
 }
 
 export interface WorkroomEngine {
   readonly mode: WorkroomMode;
+  /** TRUE while the room runs on a storyline and reaches no tool. The header
+   *  badge is driven by this and by nothing else, so an engine cannot quietly
+   *  stop being scripted without the room saying so. */
+  readonly scripted: boolean;
   brief(context: WorkroomContext): WorkroomBrief;
   suggest(): string | null;
   parseIntent(text: string, context: WorkroomContext): Promise<IntentResult>;
@@ -129,9 +141,12 @@ export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "do
 
   return {
     mode: script.mode,
+    scripted: true,
 
     brief() {
       return {
+        members: script.showsMembers ? MEMBERS : [],
+        have: ["position", "revolver", "covenants", "collateral"].map((k) => HAVE[k]).filter(Boolean),
         packageName: script.packageName,
         baselineCommittedMM: script.baselineCommittedMM,
         baselineMembers: script.baselineMembers,

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom } from "./components/workroom/Workroom";
+import { createScriptedEngine } from "./workroom/engine";
 import { doorFor } from "./workroom/modes";
 import type { WorkroomContext, WorkroomMode } from "./workroom/types";
 
@@ -50,8 +51,12 @@ function open(mode: WorkroomMode, packageId?: string | null) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  const context = contextFor(mode, packageId);
   act(() => {
-    root!.render(<Workroom context={contextFor(mode, packageId)} onClose={() => {}} />);
+    // THE SHELL, ON A SHELL ENGINE. Which engine a mode gets is WorkroomHost's
+    // decision; what is proved here is the ROOM, so the storyline engine is
+    // handed in directly rather than resolved from an app provider.
+    root!.render(<Workroom context={context} engine={createScriptedEngine(context)} onClose={() => {}} />);
   });
   return document.querySelector<HTMLElement>(".wk-room")!;
 }
@@ -103,11 +108,17 @@ describe("law 3 — the opening view is under sixty words", () => {
     expect(visibleWords(open("create", null)).length).toBeLessThan(60);
   });
 
-  it("says the position ONCE, and nothing else is offered to read", () => {
+  it("says the position ONCE, and the conversation is already open under it", () => {
     const room = open("modify");
     expect(room.querySelectorAll(".wk-headline")).toHaveLength(1);
-    // The composer and the spine belong to the conversation and arrive with it.
-    expect(room.querySelector(".wk-composer")).toBeNull();
+    // W3, decided 2026-08-27: ONE scene. The briefing, the suggestion and the
+    // composer arrive together, and there is no button between the banker and
+    // the room. Law 3 still holds — the count above proves it.
+    expect(room.querySelector(".wk-composer")).toBeTruthy();
+    expect(room.querySelector(".wk-sugg")).toBeTruthy();
+    expect(buttons().some((b) => /Open the conversation/.test(b.textContent ?? ""))).toBe(false);
+    // The spine measures PROGRESS and there is none yet, so it stays out of the
+    // opening view rather than spending four of law 3's sixty words on it.
     expect(room.querySelector(".wk-stepper")).toBeNull();
   });
 });
@@ -131,7 +142,10 @@ describe("one shell, three modes", () => {
       ["create", "File"],
     ] as [WorkroomMode, string][]) {
       const room = open(mode);
-      click(byText(/^Open the conversation$/));
+      // The spine measures progress, so it arrives with the first move rather
+      // than sitting idle on the entry scene (law 3's word budget).
+      click(room.querySelector(".wk-pill")!);
+      await settle();
       const spine = [...room.querySelectorAll(".wk-stg")].map((s) => s.textContent);
       expect(spine.at(-1)).toContain(step);
       act(() => root?.unmount());
@@ -152,7 +166,6 @@ describe("one shell, three modes", () => {
 describe("law 8 — the manifest starts empty and the arrival is the signature", () => {
   it("stages nothing until a confirm lands", () => {
     const room = open("modify");
-    click(byText(/^Open the conversation$/));
     expect(room.querySelector(".wk-empty")).toBeTruthy();
     expect(room.querySelector(".wk-ent")).toBeNull();
     expect(room.querySelector(".wk-man-h")!.textContent).toContain("Nothing staged");
@@ -160,8 +173,7 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
 
   it("walks the package figures forward on a confirm and back on a removal", async () => {
     const room = open("modify");
-    click(byText(/^Open the conversation$/));
-    click(byText(/quarterly liquidity covenant/));
+    click(byText(/liquidity covenant/));
     await settle();
 
     // Two proposed changes, nothing written, nothing in the rail yet.
@@ -194,8 +206,7 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
 
   it("brings the check back into the conversation the moment the confirm trips it", async () => {
     const room = open("modify");
-    click(byText(/^Open the conversation$/));
-    click(byText(/quarterly liquidity covenant/));
+    click(byText(/liquidity covenant/));
     await settle();
     click(buttons().find((b) => b.textContent === "Confirm"));
     await settle();
@@ -210,8 +221,7 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
 
   it("takes one decision at a time and says so rather than queueing a second", async () => {
     const room = open("modify");
-    click(byText(/^Open the conversation$/));
-    click(byText(/quarterly liquidity covenant/));
+    click(byText(/liquidity covenant/));
     await settle();
 
     const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
@@ -240,7 +250,8 @@ describe("law 7 — the mark is typographic", () => {
 
   it("carries the load, step and arrival motif on the same glyph", async () => {
     const room = open("modify");
-    click(byText(/^Open the conversation$/));
+    click(room.querySelector(".wk-pill")!);
+    await settle();
     for (const glyph of room.querySelectorAll(".wk-glyph")) {
       expect(glyph.textContent).toBe(">");
       expect(glyph.querySelector("svg")).toBeNull();
@@ -284,10 +295,9 @@ describe("law 5 — nothing in the room scrolls", () => {
 describe("the closing beat", () => {
   it("files every entry with the org id that proves it, and drafts the reply", async () => {
     const room = open("modify");
-    click(byText(/^Open the conversation$/));
 
     // The whole storyline: two beats of changes, a refusal, then the rest.
-    click(byText(/quarterly liquidity covenant/));
+    click(byText(/liquidity covenant/));
     await settle();
     for (const b of buttons().filter((x) => x.textContent === "Confirm")) {
       click(b);
@@ -320,8 +330,7 @@ describe("the closing beat", () => {
 
   it("RENEW says booking runs through the bank's own approval process", async () => {
     const room = open("renew");
-    click(byText(/^Open the conversation$/));
-    click(byText(/priced to the grid/));
+    click(byText(/Renew at \$2.5MM/));
     await settle();
     for (const b of buttons().filter((x) => x.textContent === "Confirm")) {
       click(b);

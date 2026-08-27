@@ -105,6 +105,29 @@ export function shortFacilityName(name: string | null | undefined, relationship?
   return rest ? rest[1].trim() : full;
 }
 
+/**
+ * THE PRODUCT, out of the org's own loan name.
+ *
+ * `Facility.productType` is `LLC_BI__Product_Type__c` — "Real Estate" or
+ * "Non-Real Estate", a regulatory classification, not what anyone calls the
+ * facility. The PRODUCT ("Line of Credit", "Equipment", "Construction") reaches
+ * the cockpit only inside the name, because nCino's before-save flow rebuilds
+ * every loan name as `<Borrower> - <Product> - <$Amount>`.
+ *
+ * So the product is the middle segment: strip the relationship prefix, then
+ * drop a trailing money segment. Anything that does not fit the convention
+ * falls back to the whole short label and then to the classification, because
+ * an unrecognised name is not a licence to invent a product.
+ */
+export function facilityProduct(f: Facility, relationship?: string | null): string {
+  const short = shortFacilityLabel(f, relationship).trim();
+  if (short) {
+    const cut = short.replace(/\s*[-–—]\s*\$[\d,.]+\s*$/, "").trim();
+    if (cut) return cut;
+  }
+  return (f.productType ?? "").trim() || facilityLabel(f);
+}
+
 export interface BookedAvailability {
   available: boolean;
   reason?: string;
