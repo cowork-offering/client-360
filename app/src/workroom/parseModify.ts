@@ -78,6 +78,17 @@ export interface ParseContext {
   relationship: string;
   /** Entities already on the deal, for resolving "remove Elena". */
   entities: LegalEntity[];
+  /**
+   * THE MEMBER THE BANKER IS STANDING ON.
+   *
+   * Set when they picked one off the package strip. It is a default, never an
+   * override: a line that NAMES a member always resolves to what it named, and
+   * the focus only answers the question "which one?" for a line that names
+   * none. Without it, picking a facility and then saying "take it to twenty
+   * million" would be answered with "which member?" about the member just
+   * clicked, which is the room forgetting what the banker did one turn ago.
+   */
+  focus?: Facility | null;
 }
 
 /* ------------------------------------------------------------------- money */
@@ -256,6 +267,14 @@ function namedFacilities(lower: string, ctx: ParseContext): NameMatch {
   };
 }
 
+/** WHICH MEMBERS A LINE NAMED, for a refusal that can say what it DID read.
+ *  "I could not read an amendment in that" is a true answer and a useless one;
+ *  "I read the Line of Credit, but not what should change on it" is the same
+ *  refusal with the half that landed named. */
+export function membersNamedIn(text: string, ctx: ParseContext): Facility[] {
+  return namedFacilities(text.toLowerCase(), ctx).facilities;
+}
+
 /** The org's own `LLC_BI__Product__c` picklist, and what bankers call each one. */
 const PRODUCT_ALIASES: Record<string, string[]> = {
   "Line of Credit": ["revolver", "revolving line", "revolving facility", "operating line", "working capital line", "the line", "loc", "rcf"],
@@ -344,6 +363,8 @@ function resolveTarget(
     }
     return { facilities: bookable };
   }
+  const focused = ctx.focus && ctx.booked.find((b) => b.loanId === ctx.focus!.loanId);
+  if (focused) return { facilities: [focused] };
   if (ctx.booked.length === 1) return { facilities: ctx.booked };
   if (ctx.booked.length === 0) {
     return {
@@ -466,16 +487,23 @@ function readValue(
  * THE ONE INFERENCE, and it is over a CLOSED SET.
  *
  * Of the four changes the modification tool carries, exactly one is money. So a
- * line that names a MEMBER and moves a figure "to" something has only one field
- * it can mean, and reading it as the commitment is a deduction rather than a
- * guess. Both halves are required: without a named member, "take it to twenty
- * million" names nothing, and without the "to" there is no move — a figure on
- * its own is a fact about the deal, not an instruction.
+ * line that ESTABLISHES a member and moves a figure "to" something has only one
+ * field it can mean, and reading it as the commitment is a deduction rather than
+ * a guess. Both halves are required: without a member the line names nothing,
+ * and without the "to" there is no move — a figure on its own is a fact about
+ * the deal, not an instruction.
+ *
+ * A member is established by being NAMED, or by having been picked off the
+ * package strip one turn ago. "Take it to twenty million" is a complete
+ * instruction when the banker has just clicked the facility it refers to, and a
+ * room that answered it with "which member?" would be a room asking about the
+ * thing the banker had pointed at.
  */
 function inferAmount(lower: string, ctx: ParseContext): ParseOutcome | null {
   const named = namedFacilities(lower, ctx).facilities;
-  if (!named.length) return null;
-  const scrubbed = scrubIdentity(lower, named, ctx.relationship).toLowerCase();
+  const established = named.length ? named : ctx.focus ? [ctx.focus] : [];
+  if (!established.length) return null;
+  const scrubbed = scrubIdentity(lower, established, ctx.relationship).toLowerCase();
   const to = scrubbed.lastIndexOf(" to ");
   if (to < 0) return null;
   const target = moneyTokens(scrubbed).find((t) => t.index > to);

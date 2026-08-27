@@ -2,11 +2,13 @@ import type { PlanStep, StagedOutput } from "../actions/stagedPlan";
 import { HAVE, MEMBERS } from "./fixture";
 import { vocabularyFor } from "./modes";
 import { scriptFor, type SourceChip, type WhyRow, type WorkroomScript } from "./scripts";
+import { greetingFor } from "./viewer";
 import type {
   HaveRow,
   IntentResult,
   PackageMember,
   StagedWorkroomPlan,
+  WorkroomAcknowledgement,
   WorkroomApproval,
   WorkroomContext,
   WorkroomDelta,
@@ -26,25 +28,65 @@ import type {
                    strip holds, and what the agent read to say it.
      suggest     — the next natural move, offered as a pill. Null when the room
                    is waiting on the banker rather than on a new instruction.
+     pick        — the banker chose a member off the package strip. The engine
+                   answers with what can change on it. Null where the engine has
+                   no read behind the strip to talk about.
      parseIntent — natural language in, PROPOSED deltas out. Or an honest
                    refusal. Or "I did not understand that". Never a fake parse.
+     acknowledge — a chip landed. What that DID, in banker language, and the
+                   check the new figures trip. Never silence.
      stagePlan   — the confirmed deltas become ONE immutable plan. Zero DML.
      execute     — the token is redeemed and the plan runs. Verified, or it does
                    not come back.
+
+   EVERY BANKER MOVE HAS A CONVERSATIONAL CONSEQUENCE, and the two calls that
+   guarantee it are `pick` and `acknowledge`. A room whose engine answers the
+   first four and goes quiet on a confirm is a room that files in silence, which
+   is the one thing a change set under one approval may never do.
 
    THE SCRIPTED ENGINE below implements all five off a storyline. It is a shell
    engine and says so: it writes nothing, it reaches no tool, and its plan hash
    is a local digest rather than the org's. The real engines replace it whole.
    ============================================================================= */
 
+/**
+ * ONE PACKAGE, and the choice that anchors it.
+ *
+ * A modification's credit action is anchored on ONE product package, so one
+ * session is one package is one plan is one approval — that anchor IS the
+ * governance boundary, and a manifest that blurred two packages would be a
+ * change set no single approval could honestly cover. A relationship carrying
+ * more than one package therefore CHOOSES rather than defaulting to whichever
+ * one the read happened to list first.
+ */
+export interface PackageChoice {
+  id: string;
+  label: string;
+  /** "$46.0MM committed · 6 members", as the chip prints it. */
+  figure: string;
+  /** False where no member of it can carry a credit action. Rendered hollow. */
+  eligible: boolean;
+  /** The one line reason. Present exactly when NOT eligible. */
+  reason?: string;
+}
+
 /** What "read the room" gives back: everything the entry scene renders from. */
 export interface WorkroomBrief {
+  /** "Hey Fabian." — the viewer, resolved from what the read already carries.
+   *  EMPTY where nothing names them, because a room that greets a record id is
+   *  worse than a room that opens without a greeting. */
+  greeting: string;
   packageName: string;
   /** The package's committed total today, in millions. */
   baselineCommittedMM: number;
   baselineMembers: number;
   /** False when there is no package yet, and so no member chips to draw. */
   showsMembers: boolean;
+  /** THE PACKAGES TO CHOOSE BETWEEN, when the room was opened at relationship
+   *  altitude on a relationship carrying more than one. EMPTY once the room is
+   *  anchored — a selection beat over a list of one is a click that decides
+   *  nothing, and the single-package case must never see it. */
+  packageChoices: PackageChoice[];
   covenantFigure: string;
   loadSteps: string[];
   askPin: string;
@@ -62,6 +104,28 @@ export interface WorkroomBrief {
   have: HaveRow[];
 }
 
+/**
+ * THE NEXT MOVE, OFFERED.
+ *
+ * Two strings, because the pill a banker READS and the instruction the parser
+ * HEARS are not the same sentence and pretending they are cost a live UAT. The
+ * org names a loan `<Borrower> - <Product> - <$Amount>`, so an instruction
+ * precise enough to name one member of six carries that member's CURRENT
+ * commitment inside it — and a pill built from that instruction read
+ * "Increase the Line of Credit - $15,000,000.00", which a banker parses as
+ * "increase BY fifteen million".
+ *
+ *   label — banker grammar. A current figure appears as context, never in the
+ *           position where a target belongs.
+ *   say   — the instruction, scoped precisely enough to resolve one member, sent
+ *           back through `parseIntent` exactly as a typed line is. A suggestion
+ *           can never do something the banker could not have said themselves.
+ */
+export interface WorkroomSuggestion {
+  label: string;
+  say: string;
+}
+
 export interface WorkroomEngine {
   readonly mode: WorkroomMode;
   /** TRUE while the room runs on a storyline and reaches no tool. The header
@@ -69,8 +133,16 @@ export interface WorkroomEngine {
    *  stop being scripted without the room saying so. */
   readonly scripted: boolean;
   brief(context: WorkroomContext): WorkroomBrief;
-  suggest(): string | null;
+  suggest(): WorkroomSuggestion | null;
+  /** The banker clicked a member on the package strip. Null means the engine has
+   *  nothing to say about that member and the shell should open the member
+   *  detail instead — which is the shell engines, whose strip is a fixture with
+   *  no facilities behind it to focus a conversation on. */
+  pick(memberId: string): IntentResult | null;
   parseIntent(text: string, context: WorkroomContext): Promise<IntentResult>;
+  /** What a landed chip DID. `staged` is the manifest INCLUDING `delta`, so a
+   *  check can reason over the whole change set rather than one entry. */
+  acknowledge(delta: WorkroomDelta, staged: WorkroomDelta[]): WorkroomAcknowledgement;
   stagePlan(deltas: WorkroomDelta[], context: WorkroomContext): Promise<StagedWorkroomPlan>;
   execute(approval: WorkroomApproval): Promise<WorkroomExecution>;
 }
@@ -115,7 +187,7 @@ function planSteps(deltas: WorkroomDelta[]): PlanStep[] {
  * and the plan it last staged. Both are conversation state, not domain state —
  * the room writes nothing, so there is nothing else to hold.
  */
-export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "door">): WorkroomEngine {
+export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "door" | "approver">): WorkroomEngine {
   const script: WorkroomScript = scriptFor(context.mode, context.door);
   const vocabulary = vocabularyFor(context);
   let beatIndex = 0;
@@ -145,6 +217,10 @@ export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "do
 
     brief() {
       return {
+        greeting: greetingFor(context.approver),
+        // The storyline stands on ONE package by construction, so there is
+        // never a choice to offer here.
+        packageChoices: [],
         members: script.showsMembers ? MEMBERS : [],
         have: ["position", "revolver", "covenants", "collateral"].map((k) => HAVE[k]).filter(Boolean),
         packageName: script.packageName,
@@ -163,7 +239,24 @@ export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "do
     },
 
     suggest() {
-      return nextBeat()?.pill ?? null;
+      const pill = nextBeat()?.pill;
+      // The storyline's pill IS the line its beat matches on, so what the banker
+      // reads and what the parser hears are the same sentence here.
+      return pill ? { label: pill, say: pill } : null;
+    },
+
+    // THE STRIP IS A FIXTURE HERE, not a read: there are no facilities behind
+    // these members to focus a conversation on, and the parse runs on storyline
+    // rails that a member pick could not join. The shell opens the member detail
+    // instead, which is the honest answer rather than a question this engine
+    // could not then take an answer to.
+    pick: () => null,
+
+    acknowledge(delta) {
+      return {
+        reply: `${delta.title} on ${delta.target} is in the manifest: ${delta.before} → ${delta.after}. ${vocabulary.nextMove}`,
+        challenge: delta.challenge,
+      };
     },
 
     async parseIntent(text) {

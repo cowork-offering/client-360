@@ -9,21 +9,26 @@ import {
   type ToolOutcome,
 } from "../channel/writeTools";
 import { assertNoRecordIds, type PlanStep, type StagedOutput } from "../actions/stagedPlan";
+import { packageRecords } from "../actions/schemas";
 import { validatePlan } from "../actions/transitionAllowlist";
 import { bookedFacilities, facilityProduct, facilityStagesStaged, shortFacilityLabel } from "../data/facilityStage";
 import { fmtDate, fmtMoney } from "../data/format";
 import { isActiveFacility } from "../data/worklist";
 import type { BorrowerBundle, C360Data, Covenant, Facility } from "../data/contract";
-import type { WorkroomBrief, WorkroomEngine } from "./engine";
+import type { PackageChoice, WorkroomBrief, WorkroomEngine, WorkroomSuggestion } from "./engine";
 import { catalogSummary, chainFor, isFileable, type CatalogField, type WireKey } from "./fieldCatalog";
-import { parseAnswer, parseModify, type Amendment, type ParseContext, type ParsedValue } from "./parseModify";
+import { vocabularyFor } from "./modes";
+import { membersNamedIn, parseAnswer, parseModify, type Amendment, type ParseContext, type ParsedValue } from "./parseModify";
+import { greetingFor } from "./viewer";
 import type { SourceChip, WhyRow } from "./scripts";
 import type {
   HaveRow,
   IntentResult,
   PackageMember,
   StagedWorkroomPlan,
+  WorkroomAcknowledgement,
   WorkroomApproval,
+  WorkroomChallenge,
   WorkroomContext,
   WorkroomDelta,
   WorkroomExecution,
@@ -63,6 +68,11 @@ export class WorkroomRefusalError extends Error {}
 
 const RATIONALE_PREFIX = "Modification Workroom";
 
+/** How long the gateway assist may hold the conversation open. Past this the
+ *  deterministic miss is the answer, because a room with nothing on screen is
+ *  worse than a room that says it could not read the line. */
+const RESTATE_TIMEOUT_MS = 12_000;
+
 /* ------------------------------------------------------------------ figures */
 
 const MM = (n: number) => n / 1_000_000;
@@ -81,6 +91,35 @@ function packageMembers(bundle: BorrowerBundle | null, packageId: string | null)
   // an empty package: it is a read that cannot place them, and the room shows
   // what it has rather than an empty strip.
   return on.length ? on : all;
+}
+
+/**
+ * EVERY PACKAGE ON THE RELATIONSHIP, with what it holds and whether it can be
+ * worked on at all. Eligibility is the same rule the org enforces — a credit
+ * action runs against a booked, open member — so a package whose members are all
+ * still in review is offered hollow with its own stages as the reason rather
+ * than silently omitted.
+ */
+function packageChoices(bundle: BorrowerBundle | null): PackageChoice[] {
+  const facilities = (bundle?.exposure?.facilities ?? []).filter(isActiveFacility);
+  const booked = new Set(bookedFacilities(bundle).map((f) => f.loanId));
+  return packageRecords(bundle).map((pkg) => {
+    const on = facilities.filter((f) => f.productPackageId === pkg.id);
+    const committed = on.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
+    const canCarry = on.filter((f) => booked.has(f.loanId));
+    const stages = [...new Set(on.map((f) => (f.stage ?? "").trim()).filter(Boolean))];
+    return {
+      id: pkg.id,
+      label: pkg.label,
+      figure: `${fmtMoney(committed)} committed · ${on.length} ${on.length === 1 ? "member" : "members"}`,
+      eligible: canCarry.length > 0,
+      reason: canCarry.length
+        ? undefined
+        : stages.length
+          ? `All members are at ${stages.join(", ")}, and a credit action only runs against a booked one.`
+          : "No member of this package carries a stage in this read, so a booked one cannot be confirmed.",
+    };
+  });
 }
 
 function packageCovenantRows(bundle: BorrowerBundle | null, members: Facility[]): Covenant[] {
@@ -121,6 +160,9 @@ function toPackageMember(f: Facility, relationship: string, staged: boolean): Pa
   // sixty words per member. The whole name is on the member card in the peek.
   const label = facilityProduct(f, relationship);
   return {
+    // The org's own loan id. Two members can share a product word, so a click
+    // and a React key resolve on this and never on the label beside it.
+    id: f.loanId ?? label,
     key: label,
     short: label,
     tag,
@@ -192,10 +234,15 @@ const WIRE_VALUE: Record<WireKey, (v: ParsedValue) => number | string | null> = 
   requestedMaturityDate: (v) => (v.kind === "date" ? v.iso : null),
 };
 
-function toDelta(a: Amendment, relationship: string, seq: number): WorkroomDelta {
+function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): WorkroomDelta {
   const { field, facility, value, op } = a;
+  // THE TARGET IS A DISPLAY NAME, and it has to be, because the org names a loan
+  // `<Borrower> - <Product> - <$Amount>`: using it here printed the member's
+  // CURRENT commitment on the chip directly above "$15M → $20M", which is a live
+  // figure sitting where a delta belongs. Nothing that resolves a record reads
+  // this — the wire carries `facility.loanId`.
   const target = facility
-    ? shortFacilityLabel(facility, relationship) || facility.loanId || "the facility"
+    ? name(facility)
     : field.category === "party"
       ? (a.party ?? "the borrowing structure")
       : "the product package";
@@ -325,7 +372,17 @@ const defaultDeps: Required<Omit<ModifyEngineDeps, "restate">> & Pick<ModifyEngi
       "Reply with the rewritten instruction and nothing else. If it is not an amendment to a loan or a package, reply NONE.\n" +
       `Words: ${vocabulary.join(", ")}\nInstruction: ${line}`;
     try {
-      const res = await callTool(SERVERS.gateway, TOOLS.llm, { prompt }, { read: true });
+      // A GATEWAY THAT NEVER ANSWERS IS SILENCE, and silence is the one thing
+      // this room may not do. The deterministic parse has already missed, so
+      // this call is the assist and not the answer: it gets a bounded slice of
+      // the banker's attention and then the honest miss is returned. Without
+      // the bound a read retry can hold the conversation open indefinitely with
+      // nothing on screen, which is a wired-only failure the headless run cannot
+      // reach and the live one did.
+      const res = await Promise.race([
+        callTool(SERVERS.gateway, TOOLS.llm, { prompt }, { read: true }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("the gateway did not answer in time")), RESTATE_TIMEOUT_MS)),
+      ]);
       const text = unwrapLlm(res.payload).text.trim();
       return !text || /^none$/i.test(text) ? null : text;
     } catch {
@@ -344,9 +401,23 @@ export function createModifyEngine(args: {
 }): WorkroomEngine {
   const { context, data, bundle } = args;
   const deps = { ...defaultDeps, ...args.deps };
+  const vocabulary = vocabularyFor(context);
 
   const relationship = (bundle?.snapshot?.name ?? context.accountName ?? "").trim();
-  const members = packageMembers(bundle, context.productPackageId);
+
+  /* ------------------------------------------------------ the anchor
+
+     ONE SESSION IS ONE PACKAGE (founder, 2026-08-27). The credit action anchors
+     on one product package and that anchor is the governance boundary, so a
+     relationship carrying more than one CHOOSES instead of defaulting to
+     whichever the read listed first. Until it is chosen the room holds: no
+     members, no suggestion, no plan — a blurred strip would be the first step
+     toward a manifest no single approval could honestly cover.               */
+
+  const choices = packageChoices(bundle);
+  const unanchored = !context.productPackageId && choices.length > 1;
+
+  const members = unanchored ? [] : packageMembers(bundle, context.productPackageId);
   const stagesStaged = facilityStagesStaged(bundle);
   const booked = bookedFacilities(bundle).filter((f) => members.some((m) => m.loanId === f.loanId));
   const covenants = packageCovenantRows(bundle, members);
@@ -356,10 +427,32 @@ export function createModifyEngine(args: {
   const committed = members.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
   const request = (bundle?.requests ?? [])[0];
 
-  const parseContext: ParseContext = { facilities: members, booked, relationship, entities };
+  /**
+   * THE MEMBER, NAMED FOR A SENTENCE.
+   *
+   * The org's loan name carries that member's current commitment inside it, so
+   * putting it in prose or on a chip prints a live figure everywhere the member
+   * is mentioned — including directly beside the delta that is about to move it.
+   * The PRODUCT is the name. The amount comes back only where the package holds
+   * two of the same product and the figure is the thing that tells them apart.
+   */
+  function memberName(f: Facility): string {
+    const product = facilityProduct(f, relationship);
+    const twins = members.filter((m) => facilityProduct(m, relationship) === product).length > 1;
+    return twins && typeof f.committed === "number" ? `${product} (${fmtMoney(f.committed)})` : product;
+  }
+
+  /** The member the banker picked off the strip. A default for a line that names
+   *  none; never an override for one that does. */
+  let focus: Facility | null = null;
+  const parseContext = (): ParseContext => ({ facilities: members, booked, relationship, entities, focus });
 
   const suggestions = buildSuggestions();
   let suggestionIndex = 0;
+  /** TRUE while the room is waiting on an answer to its own question. Offering an
+   *  unrelated next move under a pending question is what made the pill jump to
+   *  a covenant while the room was asking for a commitment figure. */
+  let asked = false;
   let staged: StagedWorkroomPlan | null = null;
   let stagedDeltas: WorkroomDelta[] = [];
   /** The stage key, reused by the execute pair — that pairing is what the proven
@@ -383,20 +476,40 @@ export function createModifyEngine(args: {
     return null;
   }
 
-  function buildSuggestions(): string[] {
-    const out: string[] = [];
+  function buildSuggestions(): WorkroomSuggestion[] {
+    // NOTHING TO SUGGEST UNTIL THE ROOM IS ANCHORED. A move offered across two
+    // packages is a move that cannot be staged.
+    if (unanchored) return [];
+    const out: WorkroomSuggestion[] = [];
     const target = askFacility() ?? booked[0] ?? null;
 
-    // 1. THE CLIENT'S OWN ASK, where the read carries one. It is the natural
-    //    first move and it is fileable.
-    if (request?.ask?.to && target) {
-      out.push(`Increase the ${shortFacilityLabel(target, relationship)} to ${fmtMoney(request.ask.to)}`);
-    } else if (target) {
-      // NO ASK, NO FIGURE. With a client request the pill carries the client's
-      // own number; without one the room will not invent a target commitment
-      // to make a pill clickable. It names the member and the field, the parse
-      // asks what it should become, and the banker's answer is the number.
-      out.push(`Increase the ${shortFacilityLabel(target, relationship)}`);
+    /* A CURRENT FIGURE MUST NEVER SIT WHERE A DELTA BELONGS (founder, live UAT).
+       nCino's loan name carries the member's COMMITTED amount, so a pill built
+       on the full label read "Increase the Line of Credit - $15,000,000.00" —
+       which parses in a banker's head as "increase BY fifteen million", and made
+       the room's next question ("what should it become?") look like it was
+       asking twice for a number it had already offered. So the pill names the
+       PRODUCT, states the current figure as context where there is no target,
+       and prints a figure in the delta position only when that figure is a real
+       target the client actually asked for. */
+    if (target) {
+      // The SAY is scoped on the member's full org name, which is the only
+      // string that resolves one member out of six. The LABEL never carries it.
+      const identity = shortFacilityLabel(target, relationship);
+      const product = facilityProduct(target, relationship);
+      out.push(
+        request?.ask?.to
+          ? // The client's own number. This one IS a delta, so it reads as one.
+            { label: `Take the ${product} to ${fmtMoney(request.ask.to)}`, say: `increase the ${identity} to ${request.ask.to}` }
+          : // NO ASK, NO FIGURE. The room will not invent a target commitment to
+            // make a pill clickable: the label states what the member reads
+            // today, the parse asks what it should become, and the banker's
+            // answer is the number.
+            {
+              label: `${product}${typeof target.committed === "number" ? ` · ${fmtMoney(target.committed)} committed` : ""}`,
+              say: `change the commitment on the ${identity}`,
+            },
+      );
     }
 
     // 2. THE THINNEST COVENANT, where one is staged. It composes as a covenant
@@ -405,7 +518,8 @@ export function createModifyEngine(args: {
       .filter((c) => typeof c.thresholdValue === "number" && typeof c.actualValue === "number")
       .sort((a, b) => Math.abs((a.actualValue ?? 0) - (a.thresholdValue ?? 0)) - Math.abs((b.actualValue ?? 0) - (b.thresholdValue ?? 0)))[0];
     if (thin?.covenantType) {
-      out.push(`Add a covenant on the ${thin.covenantType.toLowerCase()} test`);
+      const line = `Add a covenant on the ${thin.covenantType.toLowerCase()} test`;
+      out.push({ label: line, say: line });
     }
 
     // 3. THE BORROWING STRUCTURE, FROM THE HOUSEHOLD FIRST (founder directive
@@ -417,8 +531,11 @@ export function createModifyEngine(args: {
     //    open rather than asking an open question.
     const related = household().find((h) => !h.onDeal);
     const guarantor = entities.find((e) => (e.borrowerType ?? "").toLowerCase().includes("guarantor"));
-    if (related) out.push(`Add ${related.name} as a guarantor`);
-    else if (guarantor?.accountName) out.push(`Add ${guarantor.accountName} as a guarantor`);
+    const name = related?.name ?? guarantor?.accountName;
+    if (name) {
+      const line = `Add ${name} as a guarantor`;
+      out.push({ label: line, say: line });
+    }
 
     return out;
   }
@@ -651,7 +768,24 @@ export function createModifyEngine(args: {
     return rows;
   }
 
+  /**
+   * THE ONE SENTENCE, AT PACKAGE ALTITUDE (law 1, applied to the conversation).
+   *
+   * The founder's reading of this room: the product package total is what
+   * counts, the members are where the money sits, and it rolls up. So the
+   * opening sentence leads on how much of the PACKAGE is open to work and the
+   * members are the mechanism, not the story. The shell prefixes the greeting;
+   * everything here is the fact.
+   *
+   * It is also budgeted. Law 3 gives the whole opening view sixty words and the
+   * strip above already prints the committed total once, so this says it in the
+   * one place it changes the reading — how much of that total a credit action
+   * can actually reach — and nowhere else.
+   */
   function position(): string {
+    if (unanchored) {
+      return `${choices.length} packages on this relationship. Pick the one to work in: a modification is anchored on one package, and one package is one plan under one approval.`;
+    }
     const target = askFacility() ?? booked[0] ?? members[0] ?? null;
     // NOTHING BOOKED IS THE HEADLINE when it is true: a client ask the room
     // cannot act on is the second fact, not the first.
@@ -659,16 +793,20 @@ export function createModifyEngine(args: {
       return `This package holds ${members.length} ${members.length === 1 ? "member" : "members"} and none of them is booked, so there is nothing here a credit action can modify.`;
     }
     if (request?.ask?.to && target) {
-      const drawn = pct(target.outstanding, target.committed);
-      return `The client has asked to take ${shortFacilityLabel(target, relationship) || "the facility"} from ${fmtMoney(request.ask.from ?? target.committed)} to ${fmtMoney(request.ask.to)}${drawn !== null ? `, on a line ${drawn}% drawn` : ""}.`;
+      // THE CLIENT'S ASK, CLOSED AT PACKAGE ALTITUDE: what it does to the total
+      // is the fact the strip cannot show, and it is the fact that decides.
+      const after = typeof target.committed === "number" ? committed - target.committed + request.ask.to : null;
+      return `The client has asked to take the ${facilityProduct(target, relationship)} to ${fmtMoney(request.ask.to)}${
+        after !== null ? `, which moves the package to ${fmtMoney(after)}` : ""
+      }.`;
     }
-    // THE STRIP ALREADY SAYS the member count and the committed total, so the
-    // one sentence in the room says what the strip cannot: how much of the
-    // package a credit action can actually reach.
     if (booked.length === members.length) {
-      return `Every member is booked and open to a modification.`;
+      return members.length === 1
+        ? `The one member is booked, so the whole ${fmtMoney(committed)} is open. Pick it.`
+        : `All ${members.length} members are booked: the whole ${fmtMoney(committed)} is open. Pick one.`;
     }
-    return `${booked.length} of ${members.length} members are booked and open to a modification; the rest cannot carry a credit action.`;
+    const reachable = booked.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
+    return `${fmtMoney(reachable)} of ${fmtMoney(committed)} is open: ${booked.length} of ${members.length} members are booked. Pick one.`;
   }
 
   function brief(): WorkroomBrief {
@@ -676,6 +814,12 @@ export function createModifyEngine(args: {
       (c) => (c.latestComplianceStatus ?? c.covenantStatus ?? "").toLowerCase() === "compliant",
     ).length;
     return {
+      // The assembler's own session user first, then whoever the room was
+      // opened on. No third candidate: the relationship's name is the BORROWER,
+      // and greeting the banker by their client's name is worse than not
+      // greeting them at all.
+      greeting: greetingFor(data.meta?.user, context.approver),
+      packageChoices: unanchored ? choices : [],
       packageName: context.packageName,
       baselineCommittedMM: MM(committed),
       baselineMembers: members.length,
@@ -759,8 +903,26 @@ export function createModifyEngine(args: {
 
   /* ------------------------------------------------------------ parseIntent */
 
+  /**
+   * THE QUESTION, WITH TODAY'S FIGURE BESIDE IT.
+   *
+   * "What should commitment amount become?" on its own reads as a second ask for
+   * a number the room appeared to have already offered — which is exactly how it
+   * read in the live UAT, because the pill it followed carried the member's
+   * current commitment in its name. Stating the current value as CONTEXT, in the
+   * question rather than in the pill, is where that figure belongs: it is what
+   * the field reads today, not what it is being moved to.
+   *
+   * The parser cannot do this itself. It resolves fields, not the bundle.
+   */
+  function withCurrent(question: string, awaiting?: { field: CatalogField; facility: Facility | null }): string {
+    if (!awaiting?.facility) return question;
+    const today = currentValue(awaiting.field, awaiting.facility);
+    return today.startsWith("not ") || today.includes("not staged") ? question : `${question} Today it reads ${today}.`;
+  }
+
   function toResult(outcome: ReturnType<typeof parseModify>, seq: number, said: string): IntentResult | null {
-    if (outcome.kind === "clarify") return { kind: "unparsed", reply: outcome.question };
+    if (outcome.kind === "clarify") return { kind: "unparsed", reply: withCurrent(outcome.question, outcome.awaiting) };
     if (outcome.kind === "none") return null;
 
     // A refusal beats a chip: an ask that belongs to another credit action is
@@ -783,10 +945,16 @@ export function createModifyEngine(args: {
       if (question) return { kind: "unparsed", reply: question };
     }
 
-    const deltas = outcome.amendments.map((a, i) => toDelta(a, relationship, seq + i));
+    const deltas = outcome.amendments.map((a, i) => toDelta(a, seq + i, memberName));
     const fileable = deltas.filter((d) => d.fileable).length;
     const handed = deltas.length - fileable;
+    // A PRODUCT WORD IS A SELECTION, and a selection the banker did not count is
+    // a change set they did not mean to sign. "The line of credit" on a deal with
+    // two of them legitimately lands on both, so the reply SAYS both rather than
+    // reporting a count and leaving the spread to be discovered in the rail.
+    const targets = [...new Set(deltas.map((d) => d.target))];
     const reply = [
+      targets.length > 1 ? `That names a product this package carries ${targets.length} of, so it lands on all of them: ${targets.join(", ")}.` : null,
       fileable ? `${fileable} of these ${deltas.length === 1 ? "goes" : "go"} on the clone.` : null,
       handed
         ? `${handed} ${handed === 1 ? "is" : "are"} staged for the record and handed off: no tool files ${handed === 1 ? "it" : "them"} today, and I will not pretend otherwise.`
@@ -801,7 +969,37 @@ export function createModifyEngine(args: {
   /** The question the room last asked, so the next line can answer it. */
   let awaiting: { field: CatalogField; facility: Facility | null } | null = null;
 
+  /**
+   * WHAT THE ANSWER DID TO THE ROOM'S OWN STATE.
+   *
+   * A QUESTION spends nothing: the room is still on the same move, so the
+   * suggestion it was going to offer is still the right one and is simply held
+   * back until the question is answered. Advancing the pill on a question is
+   * what put "add a covenant on the accounts receivable test" under "what should
+   * the commitment become" — two unrelated moves offered at once, with the
+   * scene-bar Continue wired to the wrong one.
+   */
+  function settle(result: IntentResult): IntentResult {
+    asked = result.kind === "unparsed";
+    if (!asked) {
+      deltaSeq += 8;
+      suggestionIndex = Math.min(suggestionIndex + 1, suggestions.length);
+    }
+    return result;
+  }
+
   async function parseIntent(text: string): Promise<IntentResult> {
+    // NOT UNTIL THE ROOM IS ANCHORED. An amendment across two packages is one no
+    // single credit action can carry, so it is refused before it is parsed
+    // rather than staged into a plan that could never file.
+    if (unanchored) {
+      asked = true;
+      return {
+        kind: "unparsed",
+        reply: `This relationship carries ${choices.length} packages and a modification is anchored on one of them. Pick the package above and I will work inside it.`,
+      };
+    }
+
     // AN ANSWER TO THE LAST QUESTION comes first: "$20,000,000" is a complete
     // reply to "what should the commitment become", and reading it as a new
     // instruction would lose both the field and the member.
@@ -811,26 +1009,21 @@ export function createModifyEngine(args: {
         const result = toResult(answered, deltaSeq, text);
         if (result) {
           awaiting = answered.kind === "clarify" ? (answered.awaiting ?? awaiting) : null;
-          if (result.kind === "deltas") deltaSeq += 8;
-          return result;
+          return settle(result);
         }
       }
     }
 
-    const parsed = parseModify(text, parseContext);
+    const parsed = parseModify(text, parseContext());
     awaiting = parsed.kind === "clarify" ? (parsed.awaiting ?? null) : null;
     const direct = toResult(parsed, deltaSeq, text);
-    if (direct) {
-      deltaSeq += 8;
-      suggestionIndex = Math.min(suggestionIndex + 1, suggestions.length);
-      return direct;
-    }
+    if (direct) return settle(direct);
 
     // THE ASSIST, and its whole job is vocabulary. It restates the line in the
     // catalog's words and the deterministic parser reads THAT; nothing the
     // gateway says becomes a chip without passing the same validation.
     if (deps.restate && deps.available()) {
-      const vocabulary = [...new Set(brief().members.map((m) => m.short))].concat(
+      const words = [...new Set(brief().members.map((m) => m.short))].concat(
         "commitment",
         "interest rate",
         "maturity date",
@@ -840,21 +1033,140 @@ export function createModifyEngine(args: {
         "guarantor",
         "fee",
       );
-      const restated = await deps.restate(text, vocabulary);
+      const restated = await deps.restate(text, words);
       if (restated) {
-        const second = toResult(parseModify(restated, parseContext), deltaSeq, restated);
-        if (second) {
-          deltaSeq += 8;
-          suggestionIndex = Math.min(suggestionIndex + 1, suggestions.length);
-          return second;
-        }
+        const second = toResult(parseModify(restated, parseContext()), deltaSeq, restated);
+        if (second) return settle(second);
       }
     }
 
+    // A REFUSAL NAMES WHAT IT COULD NOT MAP. Reaching here means the catalog
+    // matched no field and no amount could be inferred, so the only half that
+    // can have landed is the member — and saying which one landed is the
+    // difference between a refusal the banker can answer and a dead end.
+    const named = membersNamedIn(text, parseContext());
+    const scope =
+      "Commitment, rate, maturity and term file on the clone; covenants, collateral, entities and fees I stage and hand off with the reason.";
+    asked = true;
     return {
       kind: "unparsed",
-      reply:
-        "I could not read an amendment in that. Name the member and what should change — commitment, rate, maturity or term file on the clone; covenants, collateral, entities and fees I will stage and hand off honestly.",
+      reply: named.length
+        ? `I read the ${named.map(memberName).join(" and the ")}, but not what should change on ${named.length === 1 ? "it" : "them"}. ${scope}`
+        : `I could not map that onto this package: it names no member I hold and no field I file. Name one of the members above and what should change on it. ${scope}`,
+    };
+  }
+
+  /* ----------------------------------------------------- picking a member
+
+     The package strip is the room's list of what is eligible, so it has to be
+     the room's way IN. A chip that only opens a read-only card is a list of
+     things the banker can look at; a chip that starts the conversation on that
+     member is a list of things they can work on, which is what the strip is
+     actually showing.                                                        */
+
+  function pick(memberId: string): IntentResult | null {
+    const facility = members.find((f) => (f.loanId ?? "") === memberId) ?? null;
+    if (!facility) return null;
+    const label = facilityProduct(facility, relationship) || memberId;
+
+    if (!booked.some((b) => b.loanId === facility.loanId)) {
+      // NOT ELIGIBLE IS AN ANSWER, and the org's own stage is the reason. The
+      // strip draws this member hollow; clicking it says why in words.
+      focus = null;
+      asked = false;
+      const stage = (facility.stage ?? "").trim();
+      return {
+        kind: "unparsed",
+        reply: `${label} is ${stage ? `at ${stage}` : "carrying no stage in this read"}, and a credit action only runs against a booked facility. There is nothing on it I can modify here.`,
+      };
+    }
+
+    focus = facility;
+    awaiting = null;
+    asked = true;
+    const held = [
+      typeof facility.committed === "number" ? `${fmtMoney(facility.committed)} committed` : null,
+      typeof facility.outstanding === "number" ? `${fmtMoney(facility.outstanding)} drawn` : null,
+      facility.maturityDate ? `matures ${fmtDate(facility.maturityDate)}` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    return {
+      kind: "unparsed",
+      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity and term file on the clone; covenants, collateral, entities and fees I stage and hand off with the reason.`,
+    };
+  }
+
+  /* ------------------------------------------------- the confirm's answer */
+
+  /**
+   * THE CHECK AN INCREASE TRIPS, on the org's own collateral figures.
+   *
+   * It does NOT re-derive the org's coverage ratio. That ratio is the org's
+   * computation over the DISTINCT pool against what is drawn, and a commitment
+   * change moves neither — `why()` already promises the cockpit never re-derives
+   * it. What a commitment change moves is the FULLY DRAWN position, so that is
+   * the figure the check states, named as this cockpit's arithmetic and printed
+   * beside the org's own ratio so the two can never be read as the same number.
+   *
+   * It runs over the WHOLE manifest, so a second increase re-states the check on
+   * the combined figure rather than on its own delta.
+   */
+  function coverageCheck(delta: WorkroomDelta, staged: WorkroomDelta[]): WorkroomChallenge | undefined {
+    if (!delta.committedDeltaMM || delta.committedDeltaMM <= 0) return undefined;
+    const lendable = bundle?.exposure?.totalUniqueCollateralLendableValue;
+    if (typeof lendable !== "number" || lendable <= 0 || committed <= 0) return undefined;
+
+    const addedMM = staged.reduce((sum, d) => sum + (d.committedDeltaMM ?? 0), 0);
+    const after = committed + addedMM * 1_000_000;
+    if (after <= 0) return undefined;
+    const was = lendable / committed;
+    const now = lendable / after;
+    const drawn = bundle?.exposure?.totalOutstanding;
+    const orgRatio = bundle?.exposure?.coverageRatio;
+
+    return {
+      id: `coverage:${after}`,
+      verdict: now >= 1 ? "Coverage holds" : "Coverage thins",
+      tone: now >= 1 ? "ok" : "warn",
+      kicker: "Derived here from the org's collateral pool",
+      line: `Committed goes to ${fmtMoney(after)} against ${fmtMoney(lendable)} of lendable collateral. Fully drawn, the pool covers ${now.toFixed(2)}x of the commitment, from ${was.toFixed(2)}x.`,
+      rows: [
+        ["Lendable collateral, distinct pool", fmtMoney(lendable)],
+        ["Committed today", fmtMoney(committed)],
+        ["Committed with this manifest", fmtMoney(after), "key"],
+        ["Coverage if fully drawn", `${was.toFixed(2)}x → ${now.toFixed(2)}x`, "sum"],
+      ],
+      say:
+        typeof orgRatio === "number" && typeof drawn === "number"
+          ? `The org's own coverage is ${orgRatio.toFixed(2)}x, computed over the distinct pool against the ${fmtMoney(drawn)} drawn today, and a commitment change does not move it. The figure above is this cockpit's arithmetic on the fully drawn position and is not the org's ratio.`
+          : "The figure above is this cockpit's arithmetic over the org's lendable pool on a fully drawn position. It is not the org's own coverage ratio.",
+    };
+  }
+
+  /**
+   * WHAT A LANDED CHIP DID TO THE PACKAGE.
+   *
+   * Founder verbatim: the package amount is what counts, the loans are where the
+   * money is, and it rolls up. An acknowledgement that only names the member
+   * reports a row moving in a rail — which is why the loop read as dead even
+   * when something had genuinely happened. Every confirm therefore closes on the
+   * package figure, moved or held.
+   */
+  function packageMove(staged: WorkroomDelta[]): string {
+    const addedMM = staged.reduce((sum, d) => sum + (d.committedDeltaMM ?? 0), 0);
+    return addedMM
+      ? `That takes the package from ${fmtMoney(committed)} to ${fmtMoney(committed + addedMM * 1_000_000)}.`
+      : `The package total holds at ${fmtMoney(committed)}.`;
+  }
+
+  function acknowledge(delta: WorkroomDelta, staged: WorkroomDelta[]): WorkroomAcknowledgement {
+    const landed = delta.fileable
+      ? `${delta.title} on ${delta.target}: ${delta.before} → ${delta.after}, staged on the clone.`
+      : `${delta.title} on ${delta.target} is on the manifest for the record. ${delta.handoff?.reason ?? "No tool files it today."}`;
+    return {
+      reply: `${landed} ${packageMove(staged)} ${vocabulary.nextMove}`,
+      challenge: coverageCheck(delta, staged),
     };
   }
 
@@ -1090,9 +1402,13 @@ export function createModifyEngine(args: {
       handoff: result.bookingHandoff,
       handoffs,
       reply: {
-        subject: `${relationship || context.accountName}: modification staged`,
+        subject: `${context.packageName}: modification staged`,
         lede: result.outcome,
         body: [
+          // THE CLOSE IS AT PACKAGE ALTITUDE, like the open. What the banker
+          // signed is a movement of the package total; the member rows below are
+          // how it got there.
+          packageMove(stagedDeltas),
           `${filed.length} ${filed.length === 1 ? "change" : "changes"} filed against the modification of ${context.packageName}.`,
           ...filed.map((f) => `- ${stagedDeltas.find((d) => d.id === f.deltaId)?.title}: ${f.verification}`),
           handoffs.length
@@ -1111,8 +1427,13 @@ export function createModifyEngine(args: {
     mode: "modify",
     scripted: false,
     brief,
-    suggest: () => suggestions[suggestionIndex] ?? null,
+    // A PENDING QUESTION SUPPRESSES THE NEXT MOVE. Offering an unrelated
+    // suggestion under an open question puts two moves on the table at once and
+    // wires the scene bar to the wrong one.
+    suggest: () => (asked ? null : (suggestions[suggestionIndex] ?? null)),
+    pick,
     parseIntent,
+    acknowledge,
     stagePlan,
     execute,
   };

@@ -38,7 +38,12 @@ export interface StepperView {
 export function stepperState(input: StepperInputs): StepperView {
   const understand: StageState = input.conversationOpen ? "done" : "on";
 
-  const composeSettled = input.landed >= input.composeTarget;
+  // COMPOSING IS DONE WHEN THE BANKER IS DONE COMPOSING, not when they have used
+  // up every move the engine could think of. The target is what the room EXPECTS
+  // to compose; a manifest that is ready to approve is a manifest that has been
+  // composed, and a spine reading "Compose 1/3" beside a live Approve step told
+  // the banker they were two moves short of something already on the table.
+  const composeSettled = input.landed >= input.composeTarget || input.filed || (input.approvalOpen && input.landed > 0);
   const compose: StageState = !input.conversationOpen ? "idle" : composeSettled ? "done" : "on";
 
   // A CHECK IS SETTLED WHEN EVERY ONE THAT ARRIVED HAS BEEN ACKNOWLEDGED. The

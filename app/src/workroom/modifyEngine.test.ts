@@ -274,14 +274,43 @@ describe("the modify engine reads the real package", () => {
     delete noAsk.requests;
     const engine = createModifyEngine({ context, data, bundle: noAsk, deps: deps() });
     const pill = engine.suggest()!;
-    expect(pill).toMatch(/^Increase the Line of Credit - \$15,000,000\.00$/);
-    expect(pill).not.toMatch(/to \$/);
+    // A CURRENT FIGURE NEVER SITS WHERE A DELTA BELONGS. The org names a loan
+    // "<Borrower> - <Product> - <$Amount>", so a pill built on that name read
+    // "Increase the Line of Credit - $15,000,000.00" — which a banker parses as
+    // "increase BY fifteen million", and which then made the room's own
+    // question look like a second ask for a number it had already offered.
+    expect(pill.label).toBe("Line of Credit · $15M committed");
+    expect(pill.label).not.toMatch(/increase/i);
+    // The instruction behind it still names the member precisely enough to
+    // resolve one of six, and asks rather than inventing a target.
+    expect(pill.say).toBe("change the commitment on the Line of Credit - $15,000,000.00");
   });
 
-  it("leads on the client's own ask where the read carries one", () => {
+  it("asks for the target once, with today's figure as context rather than as the ask", async () => {
+    const noAsk = bundleWith();
+    delete noAsk.requests;
+    const engine = createModifyEngine({ context, data, bundle: noAsk, deps: deps() });
+    const asked = await engine.parseIntent(engine.suggest()!.say, context);
+    expect(asked.kind).toBe("unparsed");
+    if (asked.kind !== "unparsed") return;
+    expect(asked.reply).toMatch(/what should commitment amount become/i);
+    expect(asked.reply).toContain("Today it reads $15M");
+    // AND THE PILL HOLDS while the question is open. Offering an unrelated next
+    // move under a pending question puts two moves on the table at once.
+    expect(engine.suggest()).toBeNull();
+  });
+
+  it("leads on the client's own ask where the read carries one, and closes it at package altitude", () => {
     const { engine } = engineOn();
-    expect(engine.brief(context).askPin).toContain("$20M");
-    expect(engine.suggest()).toMatch(/Increase the Line of Credit - \$15,000,000\.00 to \$20M/);
+    const brief = engine.brief(context);
+    expect(brief.askPin).toContain("$20M");
+    // The pill carries the CLIENT's number, which is a real target and so reads
+    // as one. The member is named by product, never by the name that prints its
+    // current commitment.
+    expect(engine.suggest()!.label).toBe("Take the Line of Credit to $20M");
+    // Founder law: the loans are where the money is, the package is what counts,
+    // and it rolls up. So the one sentence closes on the package total.
+    expect(brief.position).toContain("moves the package to $31M");
   });
 
   it("states plainly when nothing on the package is booked", () => {
@@ -300,6 +329,26 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(delta.before).toBe("$15M");
     expect(delta.after).toBe("$20M");
     expect(delta.fields).toEqual(["LLC_BI__Loan__c.LLC_BI__Amount__c"]);
+  });
+
+  it("NEVER prints a member's current figure beside the delta that moves it", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    // The chip renders `target` directly above `before → after`. Carrying the
+    // org's loan name there put "$15,000,000.00" one line above "$15M → $20M" —
+    // the same figure twice, in two different roles, one of them wrong.
+    expect(delta.target).toBe("Line of Credit");
+    expect(delta.target).not.toMatch(/\$/);
+    expect(`${delta.before} → ${delta.after}`).toBe("$15M → $20M");
+  });
+
+  it("tells two members of the same product apart by the figure that separates them", async () => {
+    // Two lines of credit: the product alone names neither, so the commitment
+    // comes back — as an identifier this time, which is what it actually is.
+    const second: Facility = { ...line, loanId: "a4Zbb0000027SECOND", name: "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00", committed: 2_500_000 };
+    const engine = createModifyEngine({ context, data, bundle: bundleWith([line, equipment, second]), deps: deps() });
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    expect(delta.target).toBe("Line of Credit ($15M)");
   });
 
   it("names LLC_BI__InterestRate__c for a rate change, and never the field that does not exist", async () => {
@@ -351,7 +400,23 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     const result = await engine.parseIntent("what is the weather in Kokomo", context);
     expect(result.kind).toBe("unparsed");
     if (result.kind !== "unparsed") return;
-    expect(result.reply).toMatch(/could not read an amendment/i);
+    expect(result.reply).toMatch(/could not map that onto this package/i);
+    expect(result.reply).toMatch(/commitment, rate, maturity and term file on the clone/i);
+  });
+
+  it("names the half of the line it DID read, so the refusal can be answered", async () => {
+    const { engine } = engineOn();
+    // A member the room holds, and nothing it can do to it. "I could not read an
+    // amendment in that" is true and useless; naming what landed is the
+    // difference between a question and a dead end.
+    const result = await engine.parseIntent("have a look at the line of credit - $15,000,000.00", context);
+    expect(result.kind).toBe("unparsed");
+    if (result.kind !== "unparsed") return;
+    // Named by PRODUCT. The org's loan name prints that member's current
+    // commitment inside it, and a live figure has no business appearing every
+    // time the member is mentioned.
+    expect(result.reply).toContain("I read the Line of Credit, but not what should change on it");
+    expect(result.reply).not.toContain("$15,000,000.00");
   });
 
   it("lets the gateway RESTATE a line, and validates the restatement itself", async () => {
@@ -369,6 +434,223 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     const restate = vi.fn().mockResolvedValue("do something clever");
     const { engine } = engineOn({ restate });
     expect((await engine.parseIntent("hmm", context)).kind).toBe("unparsed");
+  });
+});
+
+/* =============================================================================
+   THE CONFIRM'S ANSWER.
+
+   Founder verbatim, live UAT 2026-08-27: "the overall PP Amount is what
+   counts... the loans in there is where obviously the money is and that rolls up
+   to the PP". An acknowledgement that names only the member reports a row moving
+   in a rail, which is why the loop read as dead even when something had happened.
+   Every confirm closes on the package figure.
+   ============================================================================= */
+
+describe("acknowledge tells the banker what the confirm did to the PACKAGE", () => {
+  it("restates a member change as its package consequence", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const { reply } = engine.acknowledge(delta, [delta]);
+    expect(reply).toContain("$15M → $20M");
+    // 26.0 committed today, +5.0 on the line.
+    expect(reply).toContain("That takes the package from $26M to $31M.");
+    expect(reply).toContain("Anything else on this facility, or shall I stage it?");
+    // The member is named by PRODUCT. `delta.target` is the org's loan name and
+    // prints that member's current commitment inside it, which is the reading
+    // that made a pill say "Increase the Line of Credit - $15,000,000.00".
+    expect(reply).toContain("Commitment amount on Line of Credit:");
+  });
+
+  it("says the package HELD where an entry moves no money", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "add Hartwell Logistics LLC as a guarantor");
+    const { reply } = engine.acknowledge(delta, [delta]);
+    expect(reply).toContain("The package total holds at $26M.");
+    expect(reply).toContain("on the manifest for the record");
+  });
+
+  it("adds up the whole manifest rather than the last entry", async () => {
+    const { engine } = engineOn();
+    const [first] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const [second] = await confirm(engine, "take the equipment - $8,000,000.00 to $10,000,000");
+    const { reply } = engine.acknowledge(second, [first, second]);
+    expect(reply).toContain("from $26M to $33M");
+  });
+});
+
+describe("the check a confirm trips, on the org's own collateral", () => {
+  it("fires on an increase and states the fully drawn position", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const { challenge } = engine.acknowledge(delta, [delta]);
+    expect(challenge).toBeTruthy();
+    // $34.6MM lendable against $31MM committed still covers it.
+    expect(challenge!.verdict).toBe("Coverage holds");
+    expect(challenge!.tone).toBe("ok");
+    expect(challenge!.line).toContain("$34.60M of lendable collateral");
+    expect(challenge!.line).toContain("1.12x");
+  });
+
+  it("warns when the pool no longer covers the commitment", async () => {
+    const thin = bundleWith();
+    thin.exposure!.totalUniqueCollateralLendableValue = 20_000_000;
+    const engine = createModifyEngine({ context, data, bundle: thin, deps: deps() });
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const { challenge } = engine.acknowledge(delta, [delta]);
+    expect(challenge!.verdict).toBe("Coverage thins");
+    expect(challenge!.tone).toBe("warn");
+  });
+
+  it("NEVER re-derives the org's own coverage ratio, and says which is which", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const { challenge } = engine.acknowledge(delta, [delta]);
+    // The org computes 1.13x over the distinct pool against what is DRAWN. A
+    // commitment change does not move that, so the check reports it verbatim and
+    // labels its own arithmetic as its own.
+    expect(challenge!.say).toContain("1.13x");
+    expect(challenge!.say).toContain("$31.03M drawn");
+    expect(challenge!.say).toMatch(/is not the org's ratio/);
+    expect(challenge!.kicker).toBe("Derived here from the org's collateral pool");
+  });
+
+  it("does not re-trip on an entry that moves no commitment", async () => {
+    const { engine } = engineOn();
+    const [money] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const [rate] = await confirm(engine, "move the rate on the line of credit - $15,000,000.00 to 8.1%");
+    expect(engine.acknowledge(rate, [money, rate]).challenge).toBeUndefined();
+  });
+
+  it("stays quiet where the read carries no collateral pool to check against", async () => {
+    const blind = bundleWith();
+    delete blind.exposure!.totalUniqueCollateralLendableValue;
+    const engine = createModifyEngine({ context, data, bundle: blind, deps: deps() });
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const ack = engine.acknowledge(delta, [delta]);
+    expect(ack.challenge).toBeUndefined();
+    // Quiet about the CHECK is not quiet about the confirm.
+    expect(ack.reply).toContain("takes the package");
+  });
+});
+
+describe("picking a member off the package strip", () => {
+  it("opens the ask-what-changes beat and remembers the member", async () => {
+    const { engine } = engineOn();
+    const picked = engine.pick(LINE_ID)!;
+    expect(picked.kind).toBe("unparsed");
+    if (picked.kind !== "unparsed") return;
+    expect(picked.reply).toContain("$15M committed");
+    expect(picked.reply).toMatch(/what should change on it/i);
+
+    // AND THE NEXT LINE DOES NOT HAVE TO NAME IT AGAIN. Without the focus this
+    // package of three answers "which member?" about the member just clicked.
+    const result = await engine.parseIntent("take it to $20,000,000", context);
+    expect(result.kind).toBe("deltas");
+    if (result.kind !== "deltas") return;
+    expect(result.deltas).toHaveLength(1);
+    expect(result.deltas[0].wire).toEqual({ key: "requestedAmount", value: 20_000_000, facilityId: LINE_ID });
+  });
+
+  it("a named member still beats the one that was picked", async () => {
+    const { engine } = engineOn();
+    engine.pick(LINE_ID);
+    const result = await engine.parseIntent("take the equipment - $8,000,000.00 to $10,000,000", context);
+    expect(result.kind).toBe("deltas");
+    if (result.kind !== "deltas") return;
+    expect(result.deltas[0].wire!.facilityId).toBe(EQUIPMENT_ID);
+  });
+
+  it("says WHY a member that is not booked cannot be worked on", () => {
+    const { engine } = engineOn();
+    const picked = engine.pick(PROPOSAL_ID)!;
+    expect(picked.kind).toBe("unparsed");
+    if (picked.kind !== "unparsed") return;
+    expect(picked.reply).toContain("at Proposal");
+    expect(picked.reply).toMatch(/only runs against a booked facility/);
+  });
+
+  it("holds the suggestion back while its own question is open", () => {
+    const { engine } = engineOn();
+    expect(engine.suggest()).toBeTruthy();
+    engine.pick(LINE_ID);
+    expect(engine.suggest()).toBeNull();
+  });
+
+  it("hands the member back to the shell where it holds no such member", () => {
+    expect(engineOn().engine.pick("a4Zbb00000NOTMINE")).toBeNull();
+  });
+});
+
+/* =============================================================================
+   ONE SESSION IS ONE PACKAGE IS ONE PLAN IS ONE APPROVAL.
+
+   The credit action anchors on ONE product package and that anchor is the
+   governance boundary, so a relationship carrying several chooses rather than
+   defaulting to whichever the read listed first. The baked Hartwell relationship
+   holds one package, so the multi-package branch is constructed here.
+   ============================================================================= */
+
+describe("a relationship carrying more than one package", () => {
+  const SECOND_ID = "a5Fbb000000SECOND";
+  const other: Facility = {
+    loanId: "a4Zbb0000027OTHER",
+    name: "Hartwell Precision Manufacturing LLC - Term - $9,000,000.00",
+    productType: "Term",
+    productPackageId: SECOND_ID,
+    stage: "Booked",
+    status: "Active",
+    committed: 9_000_000,
+  };
+  const inReview: Facility = { ...other, loanId: "a4Zbb0000027REVIEW", stage: "Final Review" };
+
+  const twoPackages = (second: Facility) => {
+    const b = bundleWith([line, equipment, proposal, second]);
+    b.snapshot!.productPackageId = PACKAGE_ID;
+    return b;
+  };
+  /** Relationship altitude: no package named, so the room must ask. */
+  const loose = { ...context, productPackageId: null, packageName: "Hartwell Precision Manufacturing LLC · 2 packages" };
+
+  it("offers every package with its own total, and does not pick one", () => {
+    const engine = createModifyEngine({ context: loose, data, bundle: twoPackages(other), deps: deps() });
+    const brief = engine.brief(loose);
+    expect(brief.packageChoices).toHaveLength(2);
+    expect(brief.packageChoices.every((c) => c.eligible)).toBe(true);
+    expect(brief.packageChoices.map((c) => c.figure)).toEqual(["$26M committed · 3 members", "$9M committed · 1 member"]);
+    // The strip holds NOTHING until one is chosen: members drawn across two
+    // packages would be the first step toward a manifest no single approval
+    // could honestly cover.
+    expect(brief.showsMembers).toBe(false);
+    expect(brief.members).toHaveLength(0);
+    expect(brief.position).toMatch(/one package is one plan under one approval/);
+  });
+
+  it("draws a package with nothing booked as ineligible, with the org's reason", () => {
+    const engine = createModifyEngine({ context: loose, data, bundle: twoPackages(inReview), deps: deps() });
+    const second = engine.brief(loose).packageChoices.find((c) => c.id === SECOND_ID)!;
+    expect(second.eligible).toBe(false);
+    expect(second.reason).toContain("Final Review");
+  });
+
+  it("refuses to compose anything until one is anchored", async () => {
+    const engine = createModifyEngine({ context: loose, data, bundle: twoPackages(other), deps: deps() });
+    expect(engine.suggest()).toBeNull();
+    const result = await engine.parseIntent("increase the line of credit - $15,000,000.00 to $20,000,000", loose);
+    expect(result.kind).toBe("unparsed");
+    if (result.kind !== "unparsed") return;
+    expect(result.reply).toMatch(/anchored on one of them/i);
+  });
+
+  it("works normally once the banker has anchored it", () => {
+    const anchored = { ...loose, productPackageId: PACKAGE_ID };
+    const brief = createModifyEngine({ context: anchored, data, bundle: twoPackages(other), deps: deps() }).brief(anchored);
+    expect(brief.packageChoices).toHaveLength(0);
+    expect(brief.baselineMembers).toBe(3);
+  });
+
+  it("NEVER shows a selection beat on a relationship with one package", () => {
+    expect(engineOn().engine.brief(context).packageChoices).toHaveLength(0);
   });
 });
 

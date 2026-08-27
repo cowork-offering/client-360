@@ -37,6 +37,13 @@ export function workroomModeFor(actionId: string): WorkroomMode | null {
  * `packageRecords`, so the room and the tickets can never disagree about which
  * package a banker is standing in. No package on the account is a fact, not a
  * failure: it is the `account` door of create.
+ *
+ * MORE THAN ONE PACKAGE IS ALSO A FACT, and it is the one this used to lose.
+ * Taking `packages[0]` silently anchored the whole session — one plan, one
+ * approval, one credit action — on whichever package the read happened to list
+ * first. A relationship carrying several is now opened UNANCHORED and the room
+ * asks; `productPackageId` names one where the caller already knows it, which is
+ * both the single-package case and the banker's own choice coming back in.
  */
 export function workroomContextFor(args: {
   mode: WorkroomMode;
@@ -44,9 +51,12 @@ export function workroomContextFor(args: {
   bundle: BorrowerBundle | null;
   accountId: string;
   accountName: string;
+  /** The package the caller is already standing in, where there is one. */
+  productPackageId?: string | null;
 }): WorkroomContext {
   const packages = packageRecords(args.bundle);
-  const pkg = packages[0] ?? null;
+  const named = args.productPackageId ? packages.find((p) => p.id === args.productPackageId) : null;
+  const pkg = named ?? (packages.length === 1 ? packages[0] : null);
   const productPackageId = pkg?.id ?? null;
   return {
     mode: args.mode,
@@ -54,7 +64,8 @@ export function workroomContextFor(args: {
     accountId: args.accountId,
     accountName: args.accountName,
     productPackageId,
-    packageName: pkg?.label ?? `${args.accountName} · no package yet`,
+    packageName:
+      pkg?.label ?? (packages.length > 1 ? `${args.accountName} · ${packages.length} packages` : `${args.accountName} · no package yet`),
     approver: args.data.meta?.user ?? "the signed-in banker",
   };
 }

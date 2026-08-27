@@ -13,13 +13,20 @@
 
 import type { HaveRow, PackageMember } from "./types";
 
+/* THE CHIP SAYS THE PRODUCT, and the RECORD ID is held on `id` where a click
+   and a React key can resolve on it. Printing "HW1001" on the face of a member
+   chip put a record id in the room's opening view, which is exactly the reading
+   the founder called hardcoded; the id is still here, it is simply no longer
+   what a banker is asked to read. */
+
 /** The package's committed total today, in millions. Every pro-forma figure the
  *  manifest shows is this number plus what has landed in the rail. */
 export const COMMITTED_MM = 46.0;
 
 export const MEMBERS: PackageMember[] = [
   {
-    key: "HW1001",
+    id: "HW1001",
+    key: "Revolver",
     short: "Revolver",
     tag: "Booked",
     product: "Revolving line of credit",
@@ -29,7 +36,8 @@ export const MEMBERS: PackageMember[] = [
     available: "$5.8MM available",
   },
   {
-    key: "HW1002",
+    id: "HW1002",
+    key: "Equipment",
     short: "Equipment",
     tag: "Booked",
     product: "Equipment",
@@ -37,7 +45,8 @@ export const MEMBERS: PackageMember[] = [
     detail: "$5.9MM outstanding · 6.85% fixed",
   },
   {
-    key: "HW1003",
+    id: "HW1003",
+    key: "Construction",
     short: "Construction",
     tag: "Booked",
     product: "Construction",
@@ -45,7 +54,8 @@ export const MEMBERS: PackageMember[] = [
     detail: "$7.35MM outstanding · grade 5",
   },
   {
-    key: "HW1004",
+    id: "HW1004",
+    key: "Purchase",
     short: "Purchase",
     tag: "Booked",
     product: "Purchase",
@@ -53,7 +63,8 @@ export const MEMBERS: PackageMember[] = [
     detail: "$4.42MM outstanding · 6.25% fixed",
   },
   {
-    key: "HW1005",
+    id: "HW1005",
+    key: "Equipment",
     short: "Equipment",
     tag: "Booked",
     product: "Equipment",
@@ -61,7 +72,8 @@ export const MEMBERS: PackageMember[] = [
     detail: "$3.01MM outstanding · 7.35% fixed",
   },
   {
-    key: "HW1006",
+    id: "HW1006",
+    key: "Seasonal",
     short: "Seasonal",
     tag: "Booked",
     product: "Seasonal line of credit",
@@ -69,7 +81,8 @@ export const MEMBERS: PackageMember[] = [
     detail: "$1.15MM outstanding · SOFR+300, 7.85% · matures 2026-06-30",
   },
   {
-    key: "PROP",
+    id: "HW1007",
+    key: "Equipment",
     short: "Equipment",
     tag: "Proposal",
     product: "Equipment",

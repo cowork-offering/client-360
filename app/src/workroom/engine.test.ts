@@ -68,7 +68,9 @@ describe("the workroom engine, per mode", () => {
     const engine = createScriptedEngine(context);
     const script = scriptFor("modify", "package");
     for (const beat of script.beats) {
-      expect(engine.suggest()).toBe(beat.pill);
+      // The storyline's pill IS the line its beat matches on, so a banker who
+      // clicks it and a banker who types it reach the same beat.
+      expect(engine.suggest()).toEqual({ label: beat.pill, say: beat.pill });
       await engine.parseIntent(beat.say, context);
     }
     expect(engine.suggest()).toBeNull();

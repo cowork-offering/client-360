@@ -197,10 +197,14 @@ body.wk-open #root {
    the cockpit boots on and the step spine advances on. Its period IS the
    interval this room advances its load lines on, so the mark and the words it
    is loading move as one thing. */
+/* THE ANIMATION LIVES ON `.c360-beat` (tokens.css), which is what carries the
+   ink gradient the keyframes move. Declaring the animation here without that
+   class animated a background this element did not have, so the deck-studio
+   fill ran on a glyph that could not show it. Size and glow are this room's;
+   the beat is the app's. */
 .wk-boot-glyph {
   font-size: 46px;
   filter: drop-shadow(0 8px 22px rgba(161, 0, 255, 0.28));
-  animation: c360-beat var(--beat) infinite;
 }
 .wk-boot-label {
   font-size: 12.6px;
@@ -400,6 +404,26 @@ body.wk-open #root {
 }
 .wk-mchip:hover {
   border-color: var(--crumb-sep);
+}
+/* THE STRIP IS THE WAY IN, so an eligible member reads as a thing you can act
+   on rather than a label you can read. Cursor and accent edge on hover only —
+   a resting affordance loud enough to compete with the position sentence would
+   spend the opening view's attention on the mechanism instead of the story. */
+.wk-mchip:not(:disabled) {
+  cursor: pointer;
+}
+.wk-mchip:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--ink-body-strong);
+}
+/* A PACKAGE CHOICE is the same chip at package altitude: it carries a name and
+   a total rather than a product and an amount, so it is allowed to be wider. */
+.wk-mchip.wk-pkgpick {
+  padding: 5px 11px;
+  gap: 7px;
+}
+.wk-mchip.wk-pkgpick:disabled {
+  cursor: not-allowed;
 }
 /* W4 — A PROPOSAL IS NOT WORK YET. A booked member sits on a raised white chip
    with full-strength figures. A proposal is HOLLOW: no card under it, a dashed
@@ -812,6 +836,28 @@ body.wk-open #root {
   letter-spacing: -0.012em;
   color: var(--prose-deep);
 }
+/* THE ROOM OPENS BY NAME. The greeting leads the position sentence at the same
+   size and weight — it is the agent speaking, not a label on the agent — and it
+   carries the brand ink so the first thing read in the room is the first thing
+   the room's mark is made of. Absent entirely where nothing names the viewer. */
+.wk-greet {
+  color: var(--brand);
+}
+
+/* THE ROOM COMPOSING. One bubble, one glyph, the app's own fill beat and no
+   words: a room that writes "thinking..." is a room performing thought. The
+   bubble holds the height of a one-line message so the answer settles into the
+   space the beat was already occupying rather than pushing the thread down. */
+.wk-bub.wk-think {
+  display: inline-flex;
+  align-items: center;
+  min-height: 17px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  font-size: 15px;
+  line-height: 1;
+}
+
 .wk-posfoot {
   margin-top: 11px;
   display: flex;
@@ -920,7 +966,6 @@ body.wk-open #root {
    settled and everything after it is still grey. */
 .wk-stg.wk-on .c360-glyph {
   color: var(--brand);
-  animation: c360-beat var(--beat) infinite;
 }
 .wk-stg.wk-done {
   color: var(--ink-muted);
@@ -1982,8 +2027,7 @@ body.wk-open #root {
   /* An infinite loop at 0.001s is a strobe. These stop outright. */
   .wk-amb span,
   .wk-live::before,
-  .wk-boot-glyph,
-  .wk-stg.wk-on .c360-glyph {
+  .wk-room .c360-beat {
     animation: none !important;
   }
   body.wk-open #root {

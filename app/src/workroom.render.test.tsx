@@ -6,8 +6,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom } from "./components/workroom/Workroom";
 import { createScriptedEngine } from "./workroom/engine";
+import { createModifyEngine } from "./workroom/modifyEngine";
 import { doorFor } from "./workroom/modes";
+import { workroomContextFor } from "./workroom/openWorkroom";
+import type { C360Data } from "./data/contract";
 import type { WorkroomContext, WorkroomMode } from "./workroom/types";
+import live from "../../artifact/live-data.json";
 
 /* =============================================================================
    THE WORKROOM SHELL, HELD TO THE EIGHT LAWS.
@@ -108,6 +112,32 @@ describe("law 3 — the opening view is under sixty words", () => {
     expect(visibleWords(open("create", null)).length).toBeLessThan(60);
   });
 
+  it("opens by NAME, and the greeting fits inside the budget", () => {
+    const room = open("modify");
+    // The room was opened on "fabian.goetzens@accenture.com.bankinggpt", which
+    // is an identity the assembler stamps rather than a name anyone types. The
+    // greeting is a real read out of it or it is nothing.
+    expect(room.querySelector(".wk-greet")!.textContent).toBe("Hey Fabian. ");
+    expect(room.querySelector(".wk-headline")!.textContent).toMatch(/^Hey Fabian\. \S/);
+    expect(visibleWords(room).length).toBeLessThan(60);
+  });
+
+  it("greets nobody rather than greeting a record id", () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    // The two things that are NOT a name: the org's own user id, and the
+    // placeholder the context falls back to when there is no identity at all.
+    for (const approver of ["005bb00000ftouDAAQ", "the signed-in banker"]) {
+      const context = { ...contextFor("modify"), approver };
+      act(() => {
+        root!.render(<Workroom context={context} engine={createScriptedEngine(context)} onClose={() => {}} />);
+      });
+      expect(document.querySelector(".wk-greet")).toBeNull();
+      expect(document.querySelector(".wk-headline")!.textContent).not.toMatch(/hey/i);
+    }
+  });
+
   it("says the position ONCE, and the conversation is already open under it", () => {
     const room = open("modify");
     expect(room.querySelectorAll(".wk-headline")).toHaveLength(1);
@@ -120,6 +150,82 @@ describe("law 3 — the opening view is under sixty words", () => {
     // The spine measures PROGRESS and there is none yet, so it stays out of the
     // opening view rather than spending four of law 3's sixty words on it.
     expect(room.querySelector(".wk-stepper")).toBeNull();
+  });
+});
+
+/**
+ * THE ROOM THE FOUNDER IS ACTUALLY IN.
+ *
+ * Every law-3 test above runs the SHELL engine on a seven-member fixture, which
+ * is the room's own storyline and not the room a banker opens. The wired room
+ * derives its strip, its position sentence and its suggestion from a real
+ * bundle, and its word count moves with what that bundle holds — so the budget
+ * is measured there too, or it is only guarded where nobody is standing.
+ */
+describe("law 3 — the WIRED room, on the baked relationship", () => {
+  const data = live as unknown as C360Data;
+  /** Hartwell: six booked members on one package, no client request staged. */
+  const accountId = "001bb00001I7FPNAA3";
+
+  function openWired() {
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  it("holds the sixty-word budget with the greeting in it", () => {
+    expect(visibleWords(openWired()).length).toBeLessThan(60);
+  });
+
+  it("opens by name and leads on what the PACKAGE can carry", () => {
+    const room = openWired();
+    const headline = room.querySelector(".wk-headline")!.textContent ?? "";
+    expect(headline).toContain("Hey Fabian.");
+    // Founder law 1, applied to the conversation: the package total is the
+    // story and the members are the mechanism.
+    expect(headline).toContain("All 6 members are booked");
+    expect(headline).toContain("$46M is open");
+    expect(headline).toMatch(/Pick one\.$/);
+  });
+
+  it("offers every eligible member as something to click, not something to read", () => {
+    const chips = [...openWired().querySelectorAll<HTMLButtonElement>(".wk-mchip")];
+    expect(chips).toHaveLength(6);
+    expect(chips.every((c) => !c.disabled)).toBe(true);
+    // The chip says the PRODUCT. A record id on the face of a member chip is
+    // what the founder's UAT read as hardcoded.
+    expect(chips.map((c) => c.querySelector("b")!.textContent)).toEqual([
+      "Line of Credit",
+      "Construction",
+      "Equipment",
+      "Purchase",
+      "Equipment",
+      "Line of Credit",
+    ]);
+  });
+
+  it("names the pill in banker grammar, with today's figure as context", () => {
+    // NOT "Increase the Line of Credit - $15,000,000.00", which reads as
+    // "increase BY fifteen million" — the exact ambiguity the live UAT hit.
+    expect(openWired().querySelector(".wk-pill")!.textContent).toBe("Line of Credit · $15M committed");
   });
 });
 
@@ -233,6 +339,107 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
     click(room.querySelector(".wk-send")!);
     await settle();
     expect(room.textContent).toContain("One decision at a time");
+  });
+});
+
+/* =============================================================================
+   THE CONVERSATION LOOP.
+
+   Reproduced headless on 2026-08-27, before any of this existed: the banker
+   confirmed a chip, the entry landed in the rail, the chip collapsed to a
+   receipt — and the room said NOTHING. No acknowledgement, no check, no next
+   move, and no approval either, because the approve bar waited on the engine's
+   suggestions running out. The manifest filled and the room went quiet, which a
+   banker reads as broken rather than as finished.
+
+   Every test below is that failure, held closed.
+   ============================================================================= */
+
+describe("no move the banker makes is answered with silence", () => {
+  /** The storyline's first beat, confirmed. Two chips arrive; this settles one. */
+  async function confirmFirstChip() {
+    const room = open("modify");
+    click(byText(/liquidity covenant/));
+    await settle();
+    const before = room.querySelectorAll(".wk-msg").length;
+    click(buttons().find((b) => b.textContent === "Confirm"));
+    await settle();
+    return { room, before };
+  }
+
+  it("SPEAKS when a chip lands, naming what it did", async () => {
+    const { room, before } = await confirmFirstChip();
+    // The entry is in the rail AND the room said so. The rail moving on its own
+    // is the bug: a manifest that grows in silence reads as nothing happening.
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(1);
+    expect(room.querySelectorAll(".wk-msg").length).toBeGreaterThan(before);
+    const bubbles = [...room.querySelectorAll(".wk-agent .wk-bub")].map((n) => n.textContent ?? "");
+    expect(bubbles.some((t) => /in the manifest/.test(t))).toBe(true);
+    // And it ends on the next move rather than trailing off.
+    expect(bubbles.some((t) => /Anything else on this facility, or shall I stage it\?/.test(t))).toBe(true);
+  });
+
+  it("advances the stepper visibly on the same confirm", async () => {
+    const { room } = await confirmFirstChip();
+    expect(room.querySelector(".wk-stepper")).toBeTruthy();
+    expect([...room.querySelectorAll(".wk-stg")][1].textContent).toContain("1/");
+    // The beat's second chip is still open, so the room holds the next move back
+    // and SAYS why rather than offering two decisions at once (law 2).
+    expect(room.querySelector(".wk-pill")).toBeNull();
+    expect(room.querySelector(".wk-gatehint")!.textContent).toMatch(/Acknowledge the checks|Settle the open cards/);
+  });
+
+  it("opens the approval on a staged manifest, NOT on the suggestions running out", async () => {
+    const room = open("modify");
+    click(byText(/liquidity covenant/));
+    await settle();
+    for (const b of buttons().filter((x) => x.textContent === "Confirm")) {
+      click(b);
+      await settle();
+    }
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+
+    // Two entries staged, nothing waiting on the banker — so the approval is the
+    // open move, even though the engine still has moves left to suggest.
+    expect(room.querySelectorAll(".wk-ent").length).toBeGreaterThan(0);
+    expect(room.querySelector(".wk-pill")).toBeTruthy();
+    expect(byText(/^Approve and file /)).toBeTruthy();
+    // Both are legitimate next moves, so the room offers both rather than
+    // choosing for the banker.
+    expect(room.querySelector(".wk-next")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("answers a discard, because declining a change is a decision too", async () => {
+    const room = open("modify");
+    click(byText(/liquidity covenant/));
+    await settle();
+    const before = room.querySelectorAll(".wk-msg").length;
+    click(buttons().find((b) => b.textContent === "Discard"));
+    await settle();
+    expect(room.querySelectorAll(".wk-msg").length).toBeGreaterThan(before);
+    expect(room.textContent).toContain("the package has not moved");
+    expect(room.querySelector(".wk-ent")).toBeNull();
+  });
+
+  it("answers a refusal being understood, and leaves the reason on screen", async () => {
+    const room = open("modify");
+    click(byText(/liquidity covenant/));
+    await settle();
+    for (const b of buttons().filter((x) => x.textContent === "Confirm")) {
+      click(b);
+      await settle();
+    }
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    click(byText(/construction loan too/));
+    await settle();
+    const reason = room.querySelector(".wk-refuse .wk-quote")!.textContent;
+    click(byText(/^Understood$/));
+    await settle();
+    expect(room.textContent).toContain("stays off the manifest");
+    // Settled, not vanished: the refusal's reason IS the answer, so taking the
+    // chip off the screen would take the answer with it.
+    expect(room.querySelector(".wk-refuse .wk-quote")!.textContent).toBe(reason);
   });
 });
 
