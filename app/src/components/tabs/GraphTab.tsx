@@ -8,7 +8,7 @@ const EXPLAIN =
 
 function OwnershipTree({ owners, borrowerName, sector }: { owners: Connection[]; borrowerName: string; sector: string }) {
   if (!owners.length) {
-    return <EmptyState title="No ownership edges on file" body="The Connection graph returned no ownership relationships for this account." />;
+    return <EmptyState title="No ownership edges on file" body="No ownership relationships on file for this account." />;
   }
   const railInset = +(50 / owners.length).toFixed(2);
   const boxes = owners.map((o, i) => {

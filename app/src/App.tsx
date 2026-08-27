@@ -3,6 +3,7 @@ import type { C360Data } from "./data/contract";
 import { loadC360 } from "./data/load";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { BrandGlyph } from "./components/brand";
 
 type LoadState = { status: "loading" } | { status: "ready"; data: C360Data } | { status: "empty" };
 
@@ -20,9 +21,7 @@ export function App() {
     };
   }, []);
 
-  if (ls.status === "loading") {
-    return <CenterNote title="Loading cockpit…" body="Reading the injected relationship data." />;
-  }
+  if (ls.status === "loading") return <Boot />;
   if (ls.status === "empty") {
     return (
       <CenterNote
@@ -35,6 +34,21 @@ export function App() {
     <AppProvider data={ls.data}>
       <AppShell />
     </AppProvider>
+  );
+}
+
+/** THE APP BOOT. The same scene the workroom opens with, at app altitude: the
+ *  mark carries the load on the app's one beat, and there is nothing to read.
+ *  The line it replaced ("Reading the injected relationship data") described
+ *  the machinery to someone who had not asked. */
+function Boot() {
+  return (
+    <div className="c360-boot">
+      <div className="c360-boot-inner">
+        <BrandGlyph className="c360-boot-glyph c360-beat" />
+        <div className="c360-boot-sub">Commercial Credit 360</div>
+      </div>
+    </div>
   );
 }
 

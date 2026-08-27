@@ -1,42 +1,68 @@
 /* =============================================================================
    Customer 360 cockpit — design tokens.
-   LIGHT, like-for-like with the legacy Accenture reference artifact (SPEC §12
-   A24). Tokens stay SEMANTIC (same names as before); values are the legacy
-   light palette. Status inks are the legacy AA-tuned S/T maps. All components
-   consume tokens — zero hardcoded colors (mirrors the LWC rule).
-   Contrast verified in scripts/contrast-check.mjs.
+
+   LIGHT ONLY. There is no dark path in this app and this file does not invent
+   one. Tokens stay SEMANTIC (names unchanged since A24); every component
+   consumes them and hardcodes nothing (mirrors the LWC rule). Contrast is
+   verified in scripts/contrast-check.mjs, which mirrors the values below.
+
+   PALETTE: "Violet Dusk Linen" adapted (founder pick, 2026-08-27). The theme's
+   FEEL is taken — linen-soft near-white surfaces, dusk-tinted neutral greys
+   rather than pure greys, -0.01em tracking, one soft shadow model
+   (0.05 opacity / 10px blur / 4px y), quiet violet — but the theme's own
+   #846feb is NOT transplanted. Its saturation model is applied to ACCENTURE's
+   hue instead: #A100FF pulled to 60% saturation for every interactive state,
+   with the raw brand violet reserved for the mark and the approval moment.
    ============================================================================= */
 
 :root {
   color-scheme: light;
 
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  /* Graphik is the engagement's brand family. No webfont ships with this
+     artifact, so the stack falls to the host's system face — which on the demo
+     machines is SF, the closest thing to Graphik's neutral grotesque. */
+  --font-sans: Graphik, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    ui-sans-serif, system-ui, sans-serif;
+  /* The mark's own family. Held apart from --font-sans on purpose: the brand
+     lockup must not follow a body-type change. */
+  --font-brand: Graphik, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Surfaces. */
-  --surface: #f4f3f8; /* page (solid fallback under the radial gradient) */
+  /* Surfaces — linen. Near-white with a violet cast rather than a grey one, so
+     the accent sits ON the page rather than against it. */
+  --surface: #f6f6fb; /* page (solid fallback under the radial gradient) */
   --surface-raised: #ffffff; /* cards */
-  --surface-overlay: #f6f5fa; /* wash */
-  --wash-2: #f1f0f6;
-  --row-divider: #f1f0f5;
-  --border: #eceaf2;
-  --border-strong: #e4e1ec;
+  --surface-overlay: #f7f7fc; /* wash */
+  --wash-2: #f1f1f8;
+  --row-divider: #f0f0f7;
+  --border: #e9e9f4;
+  --border-strong: #dedeee;
 
-  /* Ink. */
-  --ink: #1a1a1a;
-  --ink-muted: #6e6b7b;
-  --ink-label: #8a8794;
-  --ink-body: #56535f;
-  --ink-body-strong: #3f3d4a;
-  /* Legacy kicker/caption ink was #a5a2ae; nudged one step darker so 11px
-     supplementary text clears WCAG AA (>=3:1) while reading identical. */
-  --ink-faint: #8f8c99;
+  /* Ink — dusk-tinted neutrals, never pure grey. */
+  --ink: #1a1b25;
+  --ink-muted: #63637e;
+  --ink-label: #82829d;
+  --ink-body: #53536b;
+  --ink-body-strong: #3b3b52;
+  /* Supplementary 11px text. Kept at >=3:1 on every ground it renders on. */
+  --ink-faint: #8a8aa4;
 
-  /* Accent — the legacy engagement accent (meta.accent default). */
-  --accent: #6b1cc4;
+  /* ------------------------------------------------------------------ brand
+     THE MARK'S OWN VIOLET, raw, at full strength. Reserved for the typographic
+     ">" glyph and the single approval moment. Using it for ordinary UI is what
+     made the earlier pass read loud; --accent below is the working tone. */
+  --brand: #a100ff;
+  --brand-ink: #ffffff;
+  --brand-wash: rgba(161, 0, 255, 0.1);
+
+  /* Accent — #A100FF's hue (278) calmed to 60% saturation. Every interactive
+     state, every chip, every focus ring reads from this and nothing else. */
+  --accent: #822db4;
   --accent-ink: #ffffff;
-  --accent-wash: rgba(107, 28, 196, 0.1);
+  --accent-wash: rgba(130, 45, 180, 0.1);
+  /* The accent at rest: meter fills, a step already walked. Held at >=3:1 on
+     both card and page so it can carry a graphic mark, not just decoration. */
+  --accent-quiet: #a766cc;
 
   /* Status — legacy S (ink) + T (tint) maps. */
   --positive: #047857;
@@ -45,9 +71,9 @@
   --warning-bg: #fbf2e7;
   --critical: #991b1b;
   --critical-bg: #fbecec;
-  --info: #6b1cc4;
-  --neutral-fg: #56535f;
-  --neutral-bg: #f1f0f6;
+  --info: #822db4;
+  --neutral-fg: #53536b;
+  --neutral-bg: #f1f1f8;
 
   /* Reason-code chips — derived from the legacy status palette (not invented). */
   /* CLIENT_REQUEST leads the severity order but is not a RISK state — it is
@@ -73,26 +99,26 @@
   --chip-recently-modified-fg: var(--neutral-fg);
 
   /* Structural / chart neutrals — tokenised so components carry zero literals. */
-  --fill-strong: #36323f; /* drawn bar, avatar */
+  --fill-strong: #33324a; /* drawn bar, avatar, the scene-bar action */
   --ink-inverse: #ffffff;
-  --divider-soft: #edecf2;
-  --crumb-sep: #d2cfda;
-  --tree-line: #cdc9db;
-  --scroll-thumb: #d8d5e2;
-  --prose-deep: #2e2640;
+  --divider-soft: #eeeef6;
+  --crumb-sep: #d3d3e4;
+  --tree-line: #cfcfe2;
+  --scroll-thumb: #dadae8;
+  --prose-deep: #2b2a3f;
   --warning-prose: #5a4423;
-  --chart-bar-1: #c7c2d4; /* revenue */
-  --chart-bar-2: #4a4754; /* EBITDA */
+  --chart-bar-1: #c9c7dc; /* revenue */
+  --chart-bar-2: #474659; /* EBITDA */
   --ambient-2: #2f7fd0; /* second ambient bloom */
-  --gloss: rgba(255, 255, 255, 0.3); /* inset highlight on the primary action */
-  --frost-nav: rgba(244, 243, 248, 0.72); /* sticky top nav */
+  --gloss: rgba(255, 255, 255, 0.28); /* inset highlight on the primary action */
+  --frost-nav: rgba(246, 246, 251, 0.72); /* sticky top nav */
   --frost-bar: rgba(255, 255, 255, 0.82); /* sticky verdict bar */
-  --frost-shadow: 0 1px 0 rgba(20, 0, 40, 0.06), 0 10px 30px -18px rgba(20, 0, 40, 0.25);
-  --nav-shadow: 0 1px 0 rgba(20, 0, 40, 0.07);
+  --frost-shadow: 0 1px 0 rgba(20, 0, 40, 0.05), 0 8px 24px -18px rgba(20, 0, 40, 0.2);
+  --nav-shadow: 0 1px 0 rgba(20, 0, 40, 0.06);
   --scrim: rgba(20, 0, 40, 0.18);
-  --shadow-node: 0 1px 2px rgba(26, 10, 54, 0.06); /* ownership-tree owner box */
-  --shadow-panel: 0 24px 60px -12px rgba(20, 0, 40, 0.3), 0 8px 20px -8px rgba(20, 0, 40, 0.2);
-  --shadow-borrower: 0 10px 26px -8px rgba(107, 28, 196, 0.42); /* borrower node */
+  --shadow-node: 0 1px 2px rgba(26, 10, 54, 0.05); /* ownership-tree owner box */
+  --shadow-panel: 0 20px 48px -14px rgba(20, 0, 40, 0.24), 0 6px 16px -8px rgba(20, 0, 40, 0.14);
+  --shadow-borrower: 0 8px 20px -8px rgba(130, 45, 180, 0.34); /* borrower node */
 
   /* ---------------------------------------------------------------- z-scale
      ONE overlay scale (A31.1). Every floating surface reads from this — never
@@ -109,16 +135,17 @@
      owns them, never on the page. */
   --z-sheet: 110;
 
-  /* User-driven activity (A31.3) — violet, distinct from the accent used for
-     inbound client requests and from the neutral system tone. */
-  --user-tone: #6038ea;
-  --user-tone-wash: rgba(96, 56, 234, 0.1);
+  /* User-driven activity (A31.3) — a BLUER violet than the accent, so "you did
+     this" never reads as "the system flagged this". */
+  --user-tone: #5f49c9;
+  --user-tone-wash: rgba(95, 73, 201, 0.1);
 
-  --radius: 14px;
-  --radius-sm: 9px;
-  --shadow-raised: 0 1px 2px rgba(26, 10, 54, 0.05), 0 6px 20px rgba(26, 10, 54, 0.045);
-  --shadow-card: 0 1px 2px rgba(26, 10, 54, 0.05), 0 6px 22px rgba(26, 10, 54, 0.05);
-  --shadow-card-hover: 0 2px 4px rgba(26, 10, 54, 0.06), 0 14px 34px rgba(26, 10, 54, 0.1);
+  --radius: 12px;
+  /* ONE shadow model, the theme's: a hairline plus one soft 10px drop at 0.05.
+     Nothing in this app carries a second, heavier shadow of its own. */
+  --shadow-raised: 0 1px 2px rgba(26, 10, 54, 0.04), 0 4px 10px rgba(26, 10, 54, 0.05);
+  --shadow-card: 0 1px 2px rgba(26, 10, 54, 0.04), 0 4px 10px rgba(26, 10, 54, 0.05);
+  --shadow-card-hover: 0 1px 2px rgba(26, 10, 54, 0.05), 0 10px 24px -6px rgba(26, 10, 54, 0.1);
 
   /* Layout scale (A25.3) — ONE container width + ONE gutter, consumed by every
      screen so cards share exact edges. Never hand-roll a page margin. */
@@ -130,9 +157,24 @@
   --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
   /* Weighty, not bouncy: the zone thumb carries mass and settles. */
   --ease-weight: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Strong deceleration, zero overshoot — what a thing does when it ARRIVES. */
+  --ease-settle: cubic-bezier(0.19, 1, 0.3, 1);
   --dur-fast: 130ms;
   --dur-mid: 260ms;
   --dur-dial: 640ms;
+
+  /* ------------------------------------------------- the signature beat
+     THE ">" IS THE ONLY LOADING MOTIF IN THIS APP. One cadence carries it
+     everywhere it appears — app boot, workroom boot, the step spine, an
+     arrival — so the reader learns a single rhythm instead of four.
+
+     ONE BEAT = pulse (lift + brighten, --ease-out) then slide (2px along the
+     glyph's own direction) then settle back (--ease-settle). 460ms, which is
+     also the interval the workroom advances its load lines on, so the glyph
+     and the words it is loading move as one thing. */
+  --beat: 460ms;
+  --beat-in: 220ms; /* a glyph arriving for the first time */
+  --tracking: -0.01em;
 }
 
 * {
@@ -147,11 +189,12 @@ body,
 
 body {
   margin: 0;
-  background: radial-gradient(135% 85% at 50% -12%, #fbfafe 0%, #f4f3f8 44%);
+  background: radial-gradient(135% 85% at 50% -12%, #fbfbff 0%, #f6f6fb 46%);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.45;
+  letter-spacing: var(--tracking);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-variant-numeric: tabular-nums;
@@ -183,10 +226,24 @@ body {
   font-weight: 800;
 }
 
+/* THE RING FOLLOWS THE SHAPE. `border-radius: 3px` here did not round the
+   outline — it OVERWROTE the focused element's own radius, so opening the
+   Client Actions panel squared an 18px card into a hard-cornered violet
+   rectangle that sat off its own edges. An outline already follows the
+   element's border-radius; the element's shape is not the focus ring's to
+   change. */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 3px;
+}
+
+/* A dialog shell takes focus so the keyboard lands INSIDE it (C5's trap), but
+   it is a destination, not a control: it never operates on click or Enter, so
+   it does not wear a control's ring. The panel opened with a full-height violet
+   frame drawn around it, which is loud and says nothing true. Its focusable
+   children keep their rings, and the trap is untouched. */
+[role="dialog"][tabindex="-1"]:focus-visible {
+  outline: none;
 }
 
 ::-webkit-scrollbar {
@@ -216,6 +273,113 @@ body {
   margin: 0 auto;
   padding-left: var(--gutter);
   padding-right: var(--gutter);
+}
+
+/* ------------------------------------------------- THE ">" CHOREOGRAPHY
+   The Accenture mark is TYPOGRAPHIC (founder directive): a lowercase wordmark
+   with a bold ">" kerned onto it, never a drawn SVG chevron. The ">" alone is
+   this app's ONLY loading, stepping and arrival motif, and it moves to one
+   beat wherever it appears — the app boot, the workroom boot, the step spine,
+   an entry landing in the manifest.
+
+   THE BEAT (--beat, 460ms): pulse, slide, settle.
+     0-28%   PULSE   lifts 1px and brightens to full          --ease-out
+     28-58%  SLIDE   travels 3px along its own direction      --ease-out
+     58-100% SETTLE  falls back to rest and dims              --ease-settle
+   Nothing loops faster than this and nothing else in the app pulses. */
+
+.c360-lockup {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.c360-lockup-word {
+  font-family: var(--font-brand);
+  font-weight: 600;
+  letter-spacing: var(--tracking);
+}
+.c360-lockup-mark {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.c360-glyph {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1;
+  display: inline-block;
+}
+
+@keyframes c360-beat {
+  0% {
+    opacity: 0.55;
+    transform: translate3d(0, 0, 0) scale(1);
+    animation-timing-function: var(--ease-out);
+  }
+  28% {
+    opacity: 1;
+    transform: translate3d(0, -1px, 0) scale(1.06);
+    animation-timing-function: var(--ease-out);
+  }
+  58% {
+    opacity: 1;
+    transform: translate3d(3px, 0, 0) scale(1);
+    animation-timing-function: var(--ease-settle);
+  }
+  100% {
+    opacity: 0.55;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+.c360-beat {
+  animation: c360-beat var(--beat) infinite;
+}
+
+/* The same glyph ARRIVING once rather than beating: it comes in along its own
+   direction and settles. Used wherever a ">" marks something that just landed. */
+@keyframes c360-glyph-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-4px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.c360-glyph-in {
+  animation: c360-glyph-in var(--beat-in) var(--ease-settle) both;
+}
+
+/* THE APP BOOT. The same scene the workroom opens with, at app altitude: the
+   mark carries the load and nothing else is offered to read. */
+.c360-boot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--surface);
+}
+.c360-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  transform: translateY(-4vh);
+}
+.c360-boot-glyph {
+  font-size: 46px;
+  filter: drop-shadow(0 8px 22px rgba(161, 0, 255, 0.28));
+}
+.c360-boot-sub {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink-faint);
 }
 
 /* ---------------------------------------------------------------- motion
@@ -426,6 +590,17 @@ body {
   animation: c360-pulse 1600ms var(--ease-out) both;
 }
 
+/* A DATA ROW IS READ, NOT OPENED. Covenants, collateral and facilities answer
+   the pointer so the eye can track across a wide row — and with a wash ONLY.
+   The inset accent bar below belongs to .c360-row, which is clickable; putting
+   it on a row that opens nothing would promise a click that never comes. */
+.c360-datarow {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.c360-datarow:hover {
+  background: var(--surface-overlay);
+}
+
 /* Row hover — tint + a whisper of inset travel, no layout shift. */
 .c360-row {
   transition:
@@ -605,9 +780,11 @@ body {
   .c360-ambient-a,
   .c360-ambient-b,
   /* A spinner at 0.001s is a strobe, and a pulse the viewer asked not to see is
-     still motion. Both stop entirely rather than run fast. */
+     still motion. Both stop entirely rather than run fast. The brand beat is
+     the same case: the glyph stays, at full strength, and does not move. */
   .c360-sync-spin,
-  .c360-pulse {
+  .c360-pulse,
+  .c360-beat {
     animation: none !important;
   }
   /* Slides and reveals become instant: the content is there, the movement is

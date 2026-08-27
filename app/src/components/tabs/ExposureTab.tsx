@@ -202,11 +202,37 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
             </span>
             <ToneChip tone={covTone}>{covStatus}</ToneChip>
           </div>
-          <div className="mt-3.5 text-[12.5px] leading-relaxed text-ink-muted" style={{ textWrap: "pretty" as never }}>
-            {uniqueLendable !== null
-              ? `Lendable ${fmtMoney(uniqueLendable)}${uniqueCount !== null ? ` across ${uniqueCount} collateral ${uniqueCount === 1 ? "record" : "records"}` : ""} / Drawn ${fmtMoney(drawn)}`
-              : "The source read does not carry a relationship coverage ratio."}
-          </div>
+          {/* THE RATIO, SHOWN. Two figures divided by each other read as a
+              sentence; as one bar against its own ceiling they read at a
+              glance, which is what a coverage number is for. The sentence that
+              used to carry both figures is now the caption under the bar. */}
+          {uniqueLendable !== null && uniqueLendable > 0 ? (
+            <div className="mt-4">
+              <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--wash-2)" }}>
+                <div
+                  className="c360-meter-x h-full w-full rounded-full"
+                  style={{
+                    transform: `scaleX(${Math.min(1, drawn / uniqueLendable)})`,
+                    background: STATUS[covTone].fg,
+                  }}
+                />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between gap-4 text-[11px] text-ink-label">
+                <span>
+                  Drawn <span className="tnum font-semibold text-ink-body">{fmtMoney(drawn)}</span>
+                </span>
+                <span>
+                  Lendable <span className="tnum font-semibold text-ink-body">{fmtMoney(uniqueLendable)}</span>
+                  {uniqueCount !== null &&
+                    ` across ${uniqueCount} collateral ${uniqueCount === 1 ? "record" : "records"}`}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3.5 text-[12.5px] leading-relaxed text-ink-muted">
+              The source read does not carry a relationship coverage ratio.
+            </div>
+          )}
           {/* A relationship can clear its floor while facilities under it do not.
               Saying so is the whole point of a per-facility ratio. */}
           {shortfallFacs.length > 0 && (
@@ -235,7 +261,7 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
             {records.map((r, i) => (
               <div
                 key={r.collateralId ?? i}
-                className="c360-row-in grid items-center gap-3 border-t border-divider px-6 py-3 text-[13px]"
+                className="c360-row-in c360-datarow grid items-center gap-3 border-t border-divider px-6 py-3 text-[13px]"
                 style={{ gridTemplateColumns: COL_COLS, animationDelay: staggerDelay(i) }}
               >
                 <span className="font-bold">{r.displayName}</span>
@@ -279,7 +305,7 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
           return (
             <div
               key={f.loanId ?? i}
-              className="c360-row-in border-t border-divider px-6 py-3"
+              className="c360-row-in c360-datarow border-t border-divider px-6 py-3"
               style={{ animationDelay: staggerDelay(i) }}
             >
               <div className="grid items-center gap-3 text-[13px]" style={{ gridTemplateColumns: FAC_COLS }}>

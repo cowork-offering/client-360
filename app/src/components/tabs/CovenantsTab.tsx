@@ -128,7 +128,7 @@ function CovenantRow({
   return (
     <div
       data-cov-row
-      className="c360-row-in grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
+      className="c360-row-in c360-datarow grid items-center gap-3.5 border-t border-divider px-6 py-3.5 text-[13px]"
       style={{ gridTemplateColumns: COV_COLS, animationDelay: staggerDelay(index) }}
     >
       <span className="font-semibold">{cov.covenantType ?? "Covenant"}</span>
@@ -231,7 +231,7 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
         <StatCell label="Risk rating" value={grade != null ? `Grade ${grade}` : "—"} sub="nCino primary" />
         <StatDivider />
         <div className="min-w-[220px] flex-1">
-          <GapChip title="PD · Last rated · Migration not wired v1" provenance="Lives in Snowflake, not this artifact" />
+          <GapChip title="Probability of default · not in this view" provenance="Held in the risk warehouse" />
         </div>
       </StatStrip>
 

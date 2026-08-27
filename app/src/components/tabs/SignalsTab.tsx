@@ -138,7 +138,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
               );
             })
           ) : (
-            <EmptyState title="No structural signals" body="No modification clustering, renewal, guarantor-distress, covenant-breach or covenant-exception signals on file." />
+            <EmptyState title="No structural signals" body="Nothing structural is moving on this relationship." />
           )}
         </Card>
 

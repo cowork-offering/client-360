@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useApp } from "../state/appState";
 import { STATUS, type Tone } from "../data/finance";
-import { AccentureCaretWatermark } from "./brand";
+import { AccentureCaretWatermark, BrandGlyph } from "./brand";
 
 /** Single page container — one max-width, one gutter (A25.3). */
 export function PageContainer({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -99,17 +99,16 @@ export function GapChip({ title, provenance }: { title: string; provenance?: str
   );
 }
 
+/** An empty state is a QUIET VISUAL, not a paragraph. The mark stands in for
+ *  the grey circle-with-a-line that used to sit here — the same ">" that
+ *  carries every other pause in this app — and the body is one line under a
+ *  short title. Nothing here explains the machinery. */
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2.5 px-6 py-9 text-center">
-      <div className="flex h-[46px] w-[46px] items-center justify-center rounded-full bg-wash-2 text-ink-faint">
-        <svg width="22" height="22" viewBox="0 0 22 22">
-          <circle cx="11" cy="11" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <path d="M6.5 11h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </div>
+    <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+      <BrandGlyph className="mb-1 text-[34px] leading-none opacity-20" />
       <div className="text-[14px] font-bold text-ink-body-strong">{title}</div>
-      <div className="max-w-[420px] text-[12.5px] leading-relaxed text-ink-label">{body}</div>
+      <div className="max-w-[380px] text-[12.5px] leading-relaxed text-ink-label">{body}</div>
     </div>
   );
 }

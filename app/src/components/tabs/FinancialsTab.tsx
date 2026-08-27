@@ -77,7 +77,7 @@ export function FinancialsTab({ bundle }: { bundle: BorrowerBundle }) {
         <SectionHead kicker="Financials" explain={EXPLAIN} />
         <EmptyState
           title="Boom spread not fetched this session"
-          body="The financial spread is served by the Boom MCP (boom_get_spread / boom_get_ratios). It was not fetched for this render — ask to generate the spread to populate this tab."
+          body="Ask for the spread and it fills in."
         />
       </Card>
     );
