@@ -510,10 +510,15 @@ body {
 }
 
 /* Action rows in the Client Actions panel. */
-.c360-action-row {
+/* The workroom rows are the same affordance on a different surface, so they
+   share the behaviour and carry their own class: the registry's own row count
+   is a contract, and a workroom entry is not a registry action. */
+.c360-action-row,
+.c360-workroom-row {
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-.c360-action-row:hover:not(:disabled) {
+.c360-action-row:hover:not(:disabled),
+.c360-workroom-row:hover:not(:disabled) {
   background: var(--surface-overlay);
 }
 

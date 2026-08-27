@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useApp } from "../state/appState";
-import { ACTIONS, CATEGORY_ORDER, renderPrompt, type ActionIcon, type ClientAction } from "../actions/registry";
+import { ACTIONS, ACTIONS_BY_ID, CATEGORY_ORDER, renderPrompt, type ActionIcon, type ClientAction } from "../actions/registry";
 import { newRequestId } from "../channel/adapter";
 import { mcpAvailable, type McpFailure } from "../channel/mcp";
 import { executeAction } from "../actions/execute";
@@ -16,6 +16,7 @@ import {
   type OnboardingAction,
 } from "../actions/onboardingActions";
 import { OnboardingTicket } from "./OnboardingTicket";
+import { openWorkroom, workroomContextFor, workroomModeFor } from "../workroom/openWorkroom";
 
 /** The case behind the open workspace, or null when the open relationship is
  *  booked. DERIVED every render, on the same rule AppShell mounts the shell
@@ -39,6 +40,7 @@ function ActionRow({
   onClick,
   status,
   detail,
+  rowClass = "c360-action-row",
 }: {
   icon: ActionIcon;
   label: string;
@@ -48,6 +50,9 @@ function ActionRow({
   onClick: () => void;
   status?: ReactNode;
   detail?: ReactNode;
+  /** The row's own class. Defaults to the registry's, which the panel's row
+   *  count is asserted against; the workroom entries carry their own. */
+  rowClass?: string;
 }) {
   return (
     <button
@@ -55,7 +60,7 @@ function ActionRow({
       disabled={!available}
       aria-disabled={!available}
       onClick={onClick}
-      className="c360-action-row flex w-full items-start gap-3 border-b border-divider px-4 py-3 text-left disabled:cursor-not-allowed"
+      className={`${rowClass} flex w-full items-start gap-3 border-b border-divider px-4 py-3 text-left disabled:cursor-not-allowed`}
     >
       <span
         className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-[9px]"
@@ -121,6 +126,68 @@ function OnboardingRows({ kase }: { kase: OnboardingCase }) {
       })}
       {ticket && <OnboardingTicket action={ticket} kase={kase} onClose={() => setTicket(null)} />}
     </>
+  );
+}
+
+/**
+ * THE WORKROOM ROWS.
+ *
+ * Three registry actions are being rebuilt as workroom work — reshaping a
+ * package, renewing what is maturing, composing something new — and each opens
+ * the room in its own mode with the package context already resolved. They sit
+ * in their own section ABOVE the registry rather than replacing those rows,
+ * because the wired tickets still file real records and the room does not yet.
+ * When it does, the registry rows retire and this section becomes the surface.
+ *
+ * AVAILABILITY comes from the registry action each row shadows, so a package
+ * the org will not let a banker modify does not offer a workroom for it either.
+ */
+const WORKROOM_ROWS: { actionId: string; label: string; description: string }[] = [
+  {
+    actionId: "loan-modification",
+    label: "Reshape this package",
+    description: "Talk the change into shape. Confirmed changes stack in one manifest under one approval.",
+  },
+  {
+    actionId: "renewal",
+    label: "Renew what is maturing",
+    description: "Compose the renewal terms. Booking runs through nCino's own Submit for Approval process.",
+  },
+  {
+    actionId: "new-facility-request",
+    label: "Compose something new",
+    description: "A facility inside this package, or a package of its own, from the account's collateral and structure.",
+  },
+];
+
+function WorkroomRows({ accountId, accountName }: { accountId: string; accountName: string }) {
+  const { data } = useApp();
+  return (
+    <section>
+      <div className="kicker px-4 pb-1 pt-3">Workroom</div>
+      {WORKROOM_ROWS.map((row) => {
+        const action = ACTIONS_BY_ID[row.actionId];
+        const mode = workroomModeFor(row.actionId);
+        if (!action || !mode) return null;
+        const { available, reason } = action.availability(data, accountId);
+        return (
+          <ActionRow
+            key={row.actionId}
+            icon={action.icon}
+            label={row.label}
+            description={row.description}
+            available={available}
+            reason={reason}
+            rowClass="c360-workroom-row"
+            onClick={() =>
+              openWorkroom(
+                workroomContextFor({ mode, data, bundle: resolveBundle(data, accountId), accountId, accountName }),
+              )
+            }
+          />
+        );
+      })}
+    </section>
   );
 }
 
@@ -213,6 +280,8 @@ export function ActionsPanelBody() {
           Open a relationship or an onboarding case from the worklist to run actions against it.
         </div>
       )}
+
+      {accountId && <WorkroomRows accountId={accountId} accountName={accountName} />}
 
       {CATEGORY_ORDER.map((category) => {
         const rows = ACTIONS.filter((a) => a.category === category);

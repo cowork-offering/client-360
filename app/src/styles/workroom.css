@@ -1,0 +1,1984 @@
+/* =============================================================================
+   THE WORKROOM, PIXEL FOR PIXEL.
+
+   Ported from the founder-blessed mock design/workroom-mock/index.html (v2.2,
+   commit 511b01e). Palette, type, radii, shadows and motion come from
+   tokens.css; only what the cockpit does not already define is declared here.
+
+   NAMESPACE. Every class is `wk-` prefixed and nothing here is a bare utility
+   name. The cockpit ships Tailwind, which owns `.grid`, `.border`, `.card` and
+   a hundred more; a mock class landing on one of those would style the whole
+   app from inside an overlay.
+
+   THE ROOM DOES NOT SCROLL (law 5). Nothing in this file may add `overflow:
+   auto` inside the room. Every disclosure opens as `.wk-peek`, which floats
+   OVER the layout and therefore cannot push a pane past its own height, and the
+   thread folds settled turns instead of sliding. An inline drawer anywhere in
+   here re-breaks law 5 and the fit pass cannot rescue a pane it does not own.
+   ============================================================================= */
+
+.wk-root {
+  /* The brand thread. Reserved for the load and progress moments and the
+     approval: the boot glyph, the step spine, the arrival marks, the approve
+     action. Everywhere else the room works in the quieter engagement accent. */
+  --brand: #a100ff;
+  --brand-ink: #ffffff;
+  --brand-wash: rgba(161, 0, 255, 0.1);
+  --shadow-peek: 0 30px 70px -16px rgba(20, 0, 40, 0.38), 0 10px 24px -10px rgba(20, 0, 40, 0.24);
+  /* Strong deceleration, zero overshoot. Weight without bounce. */
+  --ease-spring: cubic-bezier(0.19, 1, 0.3, 1);
+  /* The Accenture wordmark's own family, with a stack that lays out sanely on
+     a host that has never heard of Graphik. */
+  --wk-brand-font: Graphik, -apple-system, "Segoe UI", sans-serif;
+  --wk-gutter: 22px;
+}
+
+/* Body is not allowed to scroll behind an open room: law 4 is one viewport. */
+body.wk-open {
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------- the brand lockup
+   TYPOGRAPHIC, never a drawn chevron. Lowercase wordmark, bold ">" glyph
+   kerned tight onto it. The negative margin scales with the size, which is why
+   it is a variable and not a constant. */
+.wk-lockup {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.wk-lockup-word {
+  font-family: var(--wk-brand-font);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.wk-lockup-mark {
+  font-family: var(--wk-brand-font);
+  font-weight: 800;
+  color: var(--brand);
+}
+
+/* The ">" alone, as the load / step / arrival motif. */
+.wk-glyph {
+  font-family: var(--wk-brand-font);
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1;
+  display: inline-block;
+}
+
+/* ------------------------------------------------------------------ scrim */
+.wk-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 0, 40, 0.28);
+  z-index: 99;
+  animation: wk-fade 300ms var(--ease-out) both;
+}
+@keyframes wk-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* THE COCKPIT DIMS BEHIND. The room is an overlay ON something, not a page.
+   BLUR AND FADE ONLY, no scale. The mock pushed its cockpit back with a 1.2%
+   scale, which it could afford because its cockpit was a fixed inset:0 prop.
+   Ours is the real page: scaling it pushes 5px past the viewport and hands the
+   page a scrollbar, which is law 4 broken by a decoration (found headless at
+   1440x900 under reduced motion). */
+body.wk-open #root {
+  filter: blur(3px) saturate(0.85);
+  opacity: 0.85;
+  transition: filter 320ms var(--ease-out), opacity 320ms var(--ease-out);
+}
+
+/* ------------------------------------------------------------------- room */
+.wk-room {
+  position: fixed;
+  z-index: 100;
+  top: 26px;
+  left: 26px;
+  right: 26px;
+  bottom: 26px;
+  max-width: 1420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-panel), 0 0 0 1px rgba(20, 0, 40, 0.06);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  animation: wk-room-in 340ms var(--ease-spring) both;
+}
+@keyframes wk-room-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-room button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.wk-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.wk-head {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px 10px;
+  background: var(--frost-bar);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.wk-head .wk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 4px var(--brand-wash);
+}
+.wk-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+.wk-head .wk-spacer {
+  margin-left: auto;
+}
+.wk-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.wk-icobtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+  transition: all var(--dur-fast) var(--ease-out);
+  padding: 0;
+}
+.wk-icobtn:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+  background: var(--surface-overlay);
+}
+
+/* ------------------------------------------------------------------- boot
+   Arrival is a scene of its own: the brand glyph carries the load moments, one
+   line at a time, and only then does the room assemble. */
+.wk-boot {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  transition: opacity 420ms var(--ease-out), transform 460ms var(--ease-spring);
+}
+.wk-boot.wk-gone {
+  opacity: 0;
+  transform: scale(1.015);
+  pointer-events: none;
+}
+.wk-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 13px;
+  transform: translateY(-4vh);
+}
+.wk-boot-glyph {
+  font-size: 46px;
+  filter: drop-shadow(0 8px 22px rgba(161, 0, 255, 0.3));
+  animation: wk-breathe 2400ms ease-in-out 200ms infinite;
+}
+@keyframes wk-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate3d(2px, -2px, 0) scale(1.035);
+    opacity: 1;
+  }
+}
+.wk-boot-label {
+  font-size: 12.6px;
+  font-weight: 600;
+  color: var(--ink-body);
+  min-height: 18px;
+  transition: opacity 180ms var(--ease-out);
+}
+.wk-boot-bar {
+  width: 224px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--wash-2);
+  overflow: hidden;
+}
+.wk-boot-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--brand), #c36bff);
+  transition: width 460ms var(--ease-out);
+}
+.wk-boot-sub {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ink-faint);
+  margin-top: 3px;
+}
+
+.wk-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ============================================== ZONE 1: THE PACKAGE
+   The story altitude. Name, one aggregate strip, and the members as a single
+   row of chips that never slides: they share the width. */
+.wk-pkg {
+  flex: 0 0 auto;
+  padding: 11px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-overlay);
+  position: relative;
+  overflow: hidden;
+}
+.wk-amb {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.wk-amb span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(60px);
+}
+.wk-amb .wk-a {
+  width: 36%;
+  height: 260%;
+  top: -80%;
+  left: 6%;
+  background: var(--accent);
+  opacity: 0.05;
+  animation: wk-drift-a 28s ease-in-out infinite alternate;
+}
+.wk-amb .wk-b {
+  width: 30%;
+  height: 240%;
+  top: -70%;
+  right: 8%;
+  background: var(--ambient-2);
+  opacity: 0.035;
+  animation: wk-drift-b 34s ease-in-out infinite alternate;
+}
+@keyframes wk-drift-a {
+  from {
+    transform: translate3d(-4%, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6%, 3%, 0) scale(1.12);
+  }
+}
+@keyframes wk-drift-b {
+  from {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+  }
+  to {
+    transform: translate3d(-5%, -2%, 0) scale(1);
+  }
+}
+.wk-pkg-top {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+.wk-pkg h2 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.012em;
+}
+.wk-agg {
+  margin-left: auto;
+  display: flex;
+  gap: 20px;
+  text-align: right;
+}
+.wk-agg .wk-l {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: block;
+}
+.wk-agg .wk-v {
+  font-size: 14px;
+  font-weight: 800;
+  margin-top: 1px;
+  display: block;
+  border-radius: 5px;
+}
+.wk-agg .wk-n {
+  font-size: 10px;
+  color: var(--ink-label);
+  display: block;
+}
+.wk-agg .wk-n.wk-pro {
+  color: var(--accent);
+}
+.wk-agg .wk-thin .wk-n {
+  color: var(--warning);
+}
+/* A live aggregate figure lights where it sits when a landed change moves it. */
+.wk-agg .wk-v.wk-bump {
+  animation: wk-aggbump 1100ms var(--ease-out) both;
+}
+@keyframes wk-aggbump {
+  0% {
+    background: var(--accent-wash);
+    box-shadow: 0 0 0 4px var(--accent-wash);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* Law 5. The member row never scrolls sideways: the chips share the row and
+   shrink, and the detail that used to sit in a sliding card rail is a peek. */
+.wk-mbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+.wk-mchips {
+  display: flex;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.wk-mchip {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  padding: 4px 9px;
+  font-size: 10.8px;
+  color: var(--ink-body);
+  white-space: nowrap;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.wk-mchip b {
+  font-weight: 800;
+  color: var(--ink-body-strong);
+  font-size: 10.2px;
+  letter-spacing: 0.02em;
+}
+.wk-mchip .wk-amt {
+  font-weight: 700;
+  color: var(--ink-body-strong);
+}
+.wk-mchip:hover {
+  border-color: var(--crumb-sep);
+}
+.wk-mchip.wk-prop {
+  border-style: dashed;
+  color: var(--ink-muted);
+}
+.wk-mchip.wk-named {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+  color: var(--accent);
+  animation: wk-named 1400ms var(--ease-out) both;
+}
+.wk-mchip.wk-named b,
+.wk-mchip.wk-named .wk-amt {
+  color: var(--accent);
+}
+@keyframes wk-named {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-wash);
+  }
+  25% {
+    box-shadow: 0 0 0 5px var(--accent-wash);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.wk-mchip.wk-fresh {
+  animation: wk-chipin 320ms var(--ease-spring) both;
+}
+.wk-mtoggle {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-mtoggle:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* The member cards live in a peek, four across, so opening them can never take
+   height from the conversation. */
+.wk-mgrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+}
+.wk-mcard {
+  border-radius: 11px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  padding: 9px 11px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+}
+.wk-mcard .wk-k {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: var(--ink-faint);
+}
+.wk-mcard .wk-p {
+  font-size: 11.6px;
+  font-weight: 700;
+  margin-top: 2px;
+  color: var(--ink-body-strong);
+}
+.wk-mcard .wk-a {
+  font-size: 13.5px;
+  font-weight: 800;
+  margin-top: 3px;
+}
+.wk-mcard .wk-o {
+  font-size: 10.4px;
+  color: var(--ink-label);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.wk-mcard.wk-prop {
+  border-style: dashed;
+  background: var(--surface-overlay);
+}
+.wk-mcard .wk-tag {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.wk-meter {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--wash-2);
+  margin-top: 8px;
+  overflow: hidden;
+}
+.wk-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width var(--dur-dial) var(--ease-weight);
+}
+.wk-mcard .wk-util {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.4px;
+  color: var(--ink-label);
+  margin-top: 5px;
+}
+
+/* --------------------------------------------------------------- main grid
+   Entry mode gives the whole room to the position; the manifest rail opens
+   when the conversation does. Neither column scrolls, in any mode. */
+.wk-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  transition: grid-template-columns 420ms var(--ease-spring);
+}
+.wk-body[data-mode="entry"] .wk-grid {
+  grid-template-columns: minmax(0, 1fr) 0px;
+}
+.wk-col-l {
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 16px 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1600px;
+  transition: max-width 420ms var(--ease-spring);
+}
+/* At entry the position is the only thing in the room, so it sits in the middle
+   of it. The space around it is the point, not a gap. */
+.wk-body[data-mode="entry"] .wk-col-l {
+  max-width: 860px;
+  margin: 0 auto;
+  justify-content: center;
+  padding-bottom: 60px;
+}
+/* At entry the room holds the package and the position and nothing else. The
+   composer is the conversation's affordance, so it arrives with it. */
+.wk-body[data-mode="entry"] .wk-composer,
+.wk-body[data-mode="entry"] .wk-sugg,
+.wk-body[data-mode="entry"] .wk-stepper {
+  display: none;
+}
+.wk-body[data-mode="entry"] .wk-thread {
+  flex: 0 0 auto;
+}
+.wk-col-r {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--surface-raised);
+  overflow: hidden;
+  transition: opacity 280ms var(--ease-out) 140ms;
+}
+.wk-body[data-mode="entry"] .wk-col-r {
+  opacity: 0;
+  pointer-events: none;
+  border-left-color: transparent;
+}
+
+.wk-card {
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.wk-card-b {
+  padding: 12px 15px 13px;
+}
+
+.wk-rv {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0);
+}
+.wk-rv.wk-in {
+  opacity: 1;
+  transform: none;
+  transition: opacity 260ms var(--ease-spring), transform 300ms var(--ease-spring);
+}
+
+/* --------------------------------------------- the disclosure primitive
+   ONE trigger shape for every peek in the room. */
+.wk-dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-dt:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* ======================================================= THE PEEK
+   Law 5's structural answer. Every disclosure floats over the room instead of
+   growing inside it, so no pane can ever be pushed past its own height. */
+.wk-peek {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+}
+.wk-peek-bd {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 0, 40, 0.2);
+  animation: wk-fade 180ms var(--ease-out) both;
+}
+.wk-peek-card {
+  position: fixed;
+  border-radius: 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-peek), 0 0 0 1px rgba(20, 0, 40, 0.07);
+  overflow: hidden;
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  animation: wk-peek-in 210ms var(--ease-spring) both;
+}
+@keyframes wk-peek-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-peek-h {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 9px;
+  border-bottom: 1px solid var(--row-divider);
+}
+.wk-peek-h .wk-kicker {
+  color: var(--accent);
+}
+.wk-peek-x {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--ink-faint);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-peek-x:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+.wk-peek-b {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px 14px 14px;
+  overflow: hidden;
+}
+.wk-prose {
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--ink-body);
+  white-space: pre-line;
+}
+.wk-prov {
+  font-size: 10.8px;
+  color: var(--ink-label);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.wk-hl {
+  background: var(--accent-wash);
+  color: var(--prose-deep);
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 0 3px;
+  animation: wk-hlpop 900ms var(--ease-out) both;
+}
+@keyframes wk-hlpop {
+  0% {
+    background: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  35% {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    box-shadow: 0 0 0 4px var(--accent-wash);
+  }
+  100% {
+    background: var(--accent-wash);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.wk-tick {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--positive-bg);
+  color: var(--positive);
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 900;
+  flex: 0 0 auto;
+  /* The tick's own line box, pinned. A 900-weight glyph in a fallback face
+     carries an ascent taller than the 14px well it sits in, and that few pixels
+     of scrollable overflow propagates all the way up to the thread, where the
+     fit pass then measures a pane it cannot account for. */
+  line-height: 14px;
+  overflow: hidden;
+}
+
+/* ============================================== ZONE 2: THE POSITION
+   The one thing to read on arrival. The ask sits on it as a pin, the client's
+   own words are a source chip, and everything that justifies it is a peek. */
+.wk-pos {
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 4%, var(--surface-raised)),
+    var(--surface-raised) 62%
+  );
+  flex: 0 0 auto;
+}
+.wk-posrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 6px;
+}
+.wk-askpin {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.wk-headline {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.38;
+  letter-spacing: -0.012em;
+  color: var(--prose-deep);
+}
+.wk-posfoot {
+  margin-top: 11px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: nowrap;
+}
+/* Once the conversation opens, the position shrinks to one pinned line so the
+   room belongs to the chat. Nothing is lost: Why and the sources stay. */
+.wk-pos.wk-compact {
+  background: var(--surface-raised);
+}
+.wk-pos.wk-compact .wk-card-b {
+  padding: 8px 13px;
+}
+.wk-pos.wk-compact .wk-posrow {
+  display: none;
+}
+.wk-pos.wk-compact .wk-headline {
+  font-size: 12.2px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wk-pos.wk-compact .wk-posfoot {
+  margin-top: 7px;
+}
+.wk-pos.wk-compact .wk-srclabel {
+  display: none;
+}
+.wk-pos.wk-compact .wk-srcchip {
+  padding: 4px 7px;
+}
+
+/* ------------------------------------------------------- the source tray
+   Used, not displayed. What the agent read is a row of icon chips; the content
+   peeks. The client email never sits in the layout as quoted text. */
+.wk-srctray {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+}
+.wk-srcchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  font-size: 10.8px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-srcchip svg {
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.wk-srcchip:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.wk-srcchip:hover svg {
+  color: var(--accent);
+}
+
+/* ==================================================== THE STEP SPINE
+   Carried by the brand glyph. A quiet skeleton under a conversation, never a
+   wizard: NOTHING here is clickable, every advance comes from something the
+   banker said or confirmed. */
+.wk-stepper {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+}
+.wk-stg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  transition: color var(--dur-mid) var(--ease-out);
+}
+.wk-stg .wk-glyph {
+  font-size: 12px;
+  color: var(--crumb-sep);
+  flex: 0 0 auto;
+  transition: color var(--dur-mid) var(--ease-out);
+}
+.wk-stg.wk-on {
+  color: var(--brand);
+}
+.wk-stg.wk-on .wk-glyph {
+  color: var(--brand);
+  animation: wk-glyph-step 1700ms var(--ease-out) infinite;
+}
+@keyframes wk-glyph-step {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translate3d(0, 0, 0);
+  }
+  45% {
+    opacity: 1;
+    transform: translate3d(2px, 0, 0);
+  }
+}
+.wk-stg.wk-done {
+  color: var(--ink-muted);
+}
+.wk-stg.wk-done .wk-glyph {
+  color: var(--brand);
+  opacity: 0.75;
+}
+.wk-stg .wk-cnt {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--brand);
+  background: var(--brand-wash);
+  border-radius: 999px;
+  padding: 1px 6px;
+  letter-spacing: 0.03em;
+}
+.wk-stepper .wk-rail {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border-strong);
+  margin-left: 6px;
+  position: relative;
+  overflow: hidden;
+}
+.wk-stepper .wk-rail i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--brand), #c36bff);
+  transition: width 460ms var(--ease-out);
+}
+
+/* ================================================ ZONE 3: CONVERSATION
+   The protagonist: the largest surface in the room. It never scrolls. What is
+   settled folds behind a chevron line, the way a desk clears. */
+.wk-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 9px;
+  overflow: hidden;
+}
+.wk-blk {
+  flex: 0 0 auto;
+}
+.wk-blk.wk-folded {
+  display: none;
+}
+.wk-foldline {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 2px 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.wk-foldline:hover {
+  color: var(--brand);
+}
+.wk-foldline .wk-glyph {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.wk-msg {
+  max-width: 86%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  animation: wk-msgin 240ms var(--ease-spring) both;
+}
+@keyframes wk-msgin {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 7px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-who {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+/* An integer line height so a clamp can never leave half a line showing. */
+.wk-bub {
+  border-radius: 13px;
+  padding: 9px 12px;
+  font-size: 12.6px;
+  line-height: 20px;
+}
+.wk-msg.wk-banker {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.wk-msg.wk-banker .wk-bub {
+  background: var(--user-tone-wash);
+  color: var(--prose-deep);
+  border: 1px solid color-mix(in srgb, var(--user-tone) 16%, transparent);
+  border-bottom-right-radius: 5px;
+}
+.wk-msg.wk-agent .wk-bub {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--ink-body);
+  border-bottom-left-radius: 5px;
+  box-shadow: var(--shadow-card);
+}
+/* The fit pass clamps prose before it ever folds a whole block. A clamped
+   bubble is never lost: it opens in full as a peek. */
+.wk-bub.wk-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+.wk-bub.wk-c3 {
+  -webkit-line-clamp: 3;
+  max-height: 78px;
+}
+.wk-bub.wk-c2 {
+  -webkit-line-clamp: 2;
+  max-height: 58px;
+}
+.wk-composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  padding: 9px 12px;
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    opacity var(--dur-mid) var(--ease-out);
+}
+.wk-composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 0 3px var(--accent-wash), var(--shadow-card);
+}
+.wk-composer .wk-txt {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  min-height: 18px;
+  font-size: 12.6px;
+  color: var(--ink-body-strong);
+  outline: none;
+  caret-color: var(--accent);
+}
+.wk-composer .wk-txt::placeholder {
+  color: var(--ink-faint);
+}
+.wk-composer .wk-send {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: none;
+  background: var(--wash-2);
+  color: var(--ink-faint);
+  display: grid;
+  place-items: center;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-composer:focus-within .wk-send {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.wk-composer.wk-off {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Suggested utterances, the next natural move, tap to say it. */
+.wk-sugg {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.wk-sugg:empty {
+  display: none;
+}
+.wk-pill {
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-raised));
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11.2px;
+  font-weight: 600;
+  animation: wk-chipin 300ms var(--ease-spring) both;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
+    transform 90ms var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.wk-pill:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.wk-pill:active {
+  transform: scale(0.97);
+}
+
+/* ------------------------------------------------------------ delta chips
+   The decision is on the face. The validation is a peek. A confirmed chip does
+   not stay: it collapses to a one line receipt, because the thing itself has
+   moved to the manifest. */
+.wk-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wk-chip {
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  padding: 9px 12px;
+  animation: wk-chipin 300ms var(--ease-spring) both;
+}
+@keyframes wk-chipin {
+  from {
+    opacity: 0;
+    transform: translate3d(-10px, 0, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-chip .wk-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wk-kind {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.wk-kind.wk-new {
+  background: var(--positive-bg);
+  color: var(--positive);
+}
+.wk-kind.wk-collateral {
+  background: var(--neutral-bg);
+  color: var(--neutral-fg);
+}
+.wk-kind.wk-refusal {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.wk-tgt {
+  font-size: 10.6px;
+  color: var(--ink-label);
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wk-chip .wk-line {
+  margin-top: 6px;
+  font-size: 12.4px;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.wk-fld {
+  font-weight: 700;
+  color: var(--ink-body-strong);
+}
+.wk-was {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--crumb-sep);
+}
+.wk-arw {
+  color: var(--ink-faint);
+}
+.wk-now {
+  font-weight: 800;
+  color: var(--prose-deep);
+}
+.wk-acts {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+}
+.wk-btn {
+  border-radius: 9px;
+  padding: 5px 11px;
+  font-size: 11.2px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: transform 90ms var(--ease-out), background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out);
+}
+.wk-btn:active {
+  transform: scale(0.97);
+}
+.wk-btn-p {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 4px 14px -6px rgba(107, 28, 196, 0.7), inset 0 1px 0 var(--gloss);
+}
+.wk-btn-p:hover {
+  filter: brightness(1.05);
+  transform: translate3d(0, -1px, 0);
+}
+.wk-btn-g {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  color: var(--ink-muted);
+}
+.wk-btn-g:hover {
+  border-color: var(--crumb-sep);
+  color: var(--ink-body-strong);
+}
+.wk-btn-i {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--ink-faint);
+  font-size: 10px;
+  font-weight: 900;
+  margin-left: auto;
+}
+.wk-btn-i:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.wk-chip.wk-refuse {
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+  background: var(--warning-bg);
+}
+.wk-chip.wk-refuse .wk-quote {
+  margin-top: 7px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid color-mix(in srgb, var(--warning) 18%, transparent);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+}
+
+/* The receipt a confirmed chip leaves behind. One line, because the change is
+   now on the right hand side of the room. */
+.wk-receipt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.4px;
+  color: var(--positive);
+  font-weight: 700;
+  padding: 2px;
+  animation: wk-chipin 260ms var(--ease-spring) both;
+}
+.wk-receipt .wk-what {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.wk-receipt.wk-removed {
+  color: var(--ink-faint);
+}
+.wk-receipt.wk-removed .wk-tick {
+  background: var(--wash-2);
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------- challenge as an agent message */
+.wk-vhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wk-vchip {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 9px;
+  background: var(--positive-bg);
+  color: var(--positive);
+  flex: 0 0 auto;
+}
+.wk-vchip.wk-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.wk-vk {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wk-vtxt {
+  margin-top: 6px;
+  font-size: 12.4px;
+  line-height: 1.5;
+  color: var(--ink-body);
+}
+.wk-vact {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wk-acked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.2px;
+  font-weight: 700;
+  color: var(--positive);
+}
+.wk-math {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.wk-mrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 11px;
+  font-size: 11.6px;
+  border-top: 1px solid var(--row-divider);
+}
+.wk-mrow:first-child {
+  border-top: none;
+}
+.wk-mrow .wk-l {
+  color: var(--ink-body);
+}
+.wk-mrow .wk-v {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--ink-body-strong);
+}
+.wk-mrow.wk-sum {
+  background: var(--surface-overlay);
+  font-weight: 700;
+}
+.wk-mrow.wk-sum .wk-l {
+  color: var(--ink-body-strong);
+}
+.wk-mrow.wk-key .wk-v {
+  color: var(--accent);
+}
+.wk-saynote {
+  margin-top: 9px;
+  font-size: 11.4px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.wk-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--positive);
+}
+.wk-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--positive);
+  animation: wk-pip 1600ms ease-in-out infinite;
+}
+@keyframes wk-pip {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ================================================== ZONE 4: THE MANIFEST
+   Changes to the PACKAGE, grouped the way a credit committee reads them.
+   Starts empty. Items arrive here, and the approval sits underneath them. */
+.wk-man-h {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+.wk-man-h .wk-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.wk-man-h .wk-c {
+  font-size: 11.4px;
+  color: var(--ink-label);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-man-h .wk-row .wk-dt {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.wk-man-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 10px 16px 12px;
+  position: relative;
+}
+
+.wk-have-row {
+  padding: 9px 0;
+  border-top: 1px solid var(--row-divider);
+}
+.wk-have-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.wk-have-row .wk-l {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.wk-have-row .wk-v {
+  font-size: 12.2px;
+  font-weight: 700;
+  color: var(--ink-body-strong);
+  margin-top: 2px;
+}
+.wk-have-row .wk-d {
+  font-size: 11.2px;
+  color: var(--ink-muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.wk-empty {
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 11.6px;
+  background: var(--surface-overlay);
+}
+
+.wk-grp {
+  margin-bottom: 7px;
+  animation: wk-opendown 240ms var(--ease-out) both;
+}
+@keyframes wk-opendown {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -5px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-grp > .wk-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+.wk-grp > .wk-kicker .wk-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.wk-ent {
+  margin-top: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-raised);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  animation: wk-entland 320ms var(--ease-spring) both, wk-entpulse 1500ms var(--ease-out) 300ms both;
+}
+.wk-ent:first-child {
+  margin-top: 0;
+}
+@keyframes wk-entland {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes wk-entpulse {
+  0% {
+    box-shadow: 0 0 0 3px var(--brand-wash), var(--shadow-card);
+    border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent, var(--shadow-card);
+    border-color: var(--border-strong);
+  }
+}
+.wk-ent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 7px 7px 11px;
+}
+.wk-ent-t {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0;
+}
+.wk-ent .wk-ttl {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-body-strong);
+  line-height: 1.25;
+}
+.wk-ent .wk-tgt {
+  font-size: 10.2px;
+  line-height: 1.25;
+  color: var(--ink-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 0;
+}
+.wk-ent .wk-delta {
+  margin-top: 2px;
+  font-size: 11.4px;
+  line-height: 1.3;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wk-ent .wk-delta .wk-now {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wk-ent-x {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink-faint);
+  display: grid;
+  place-items: center;
+  opacity: 0.45;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-ent-row:hover .wk-ent-x {
+  opacity: 1;
+}
+.wk-ent-x:hover {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+  background: var(--warning-bg);
+}
+.wk-mapbox {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-overlay);
+  padding: 9px 11px;
+}
+.wk-mapbox .wk-h {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.wk-mapbox .wk-r {
+  display: flex;
+  gap: 10px;
+  font-size: 11.4px;
+  margin-top: 5px;
+}
+.wk-mapbox .wk-r .wk-k {
+  color: var(--ink-label);
+  flex: 0 0 92px;
+}
+.wk-mapbox .wk-r .wk-v {
+  color: var(--ink-body-strong);
+  font-weight: 600;
+}
+.wk-fields {
+  margin-top: 8px;
+  border-top: 1px dashed var(--border-strong);
+  padding-top: 7px;
+}
+.wk-fields code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.4px;
+  color: var(--ink-muted);
+  padding: 1px 0;
+  word-break: break-all;
+}
+.wk-cav {
+  margin-top: 9px;
+  font-size: 11.2px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+  background: var(--warning-bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.wk-ent.wk-filed {
+  border-color: color-mix(in srgb, var(--positive) 26%, transparent);
+}
+.wk-filedbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px;
+  background: var(--positive-bg);
+  border-top: 1px solid color-mix(in srgb, var(--positive) 18%, transparent);
+  animation: wk-opendown 220ms var(--ease-out) both;
+}
+.wk-filedbar .wk-st {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--positive);
+}
+.wk-filedbar .wk-id {
+  font-family: var(--font-mono);
+  font-size: 10.2px;
+  color: var(--ink-body-strong);
+  margin-left: auto;
+}
+
+/* The signature moment: the arrival mark, in the brand glyph. */
+.wk-landtoast {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--prose-deep);
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 11.4px;
+  font-weight: 700;
+  box-shadow: 0 10px 26px -10px rgba(20, 0, 40, 0.6);
+  animation: wk-toast 2200ms var(--ease-out) both;
+  z-index: 5;
+}
+.wk-landtoast .wk-glyph {
+  font-size: 13px;
+}
+@keyframes wk-toast {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  78% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+/* ------------------------------------------------------------ approve bar
+   Under the manifest rail. You sign what is stacked above it. */
+.wk-man-f {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  background: var(--frost-bar);
+  backdrop-filter: blur(10px);
+  padding: 11px 16px 13px;
+  animation: wk-opendown 260ms var(--ease-spring) both;
+}
+.wk-plan {
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 11px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 5%, var(--surface-raised)),
+    var(--surface-raised)
+  );
+  padding: 9px 12px;
+}
+.wk-plan .wk-t {
+  font-size: 11.8px;
+  font-weight: 800;
+  color: var(--prose-deep);
+  line-height: 1.35;
+}
+.wk-plan .wk-s {
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.wk-plan .wk-dt {
+  margin-top: 7px;
+}
+/* The approval is the brand moment: the one full strength use of the mark. */
+.wk-approve {
+  margin-top: 9px;
+  width: 100%;
+  border-radius: 11px;
+  padding: 10px 14px;
+  font-size: 12.6px;
+  font-weight: 800;
+  background: var(--brand);
+  color: var(--brand-ink);
+  border: none;
+  box-shadow: 0 8px 22px -8px rgba(161, 0, 255, 0.65), inset 0 1px 0 var(--gloss);
+  transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out);
+}
+.wk-approve:hover {
+  transform: translate3d(0, -1px, 0);
+  filter: brightness(1.05);
+}
+.wk-approve:active {
+  transform: scale(0.99);
+}
+.wk-approve:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  filter: none;
+}
+.wk-tokline {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.8px;
+  color: var(--positive);
+  font-weight: 700;
+  line-height: 1.4;
+  animation: wk-opendown 220ms var(--ease-out) both;
+}
+.wk-handoff {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+  background: var(--warning-bg);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* -------------------------------------------------------------- scene bar */
+.wk-scenebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--frost-bar);
+  backdrop-filter: blur(10px);
+}
+.wk-scenebar .wk-sp {
+  margin-left: auto;
+}
+.wk-gatehint {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.wk-next {
+  border-radius: 10px;
+  padding: 7px 15px;
+  font-size: 12px;
+  font-weight: 800;
+  border: none;
+  background: var(--fill-strong);
+  color: #fff;
+  transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.wk-next:hover {
+  transform: translate3d(0, -1px, 0);
+  filter: brightness(1.15);
+}
+.wk-next:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ reply */
+.wk-reply {
+  border: 1px solid color-mix(in srgb, var(--positive) 24%, transparent);
+  background: linear-gradient(180deg, var(--positive-bg), var(--surface-raised) 55%);
+}
+.wk-reply .wk-subj {
+  font-size: 12.2px;
+  font-weight: 800;
+  color: var(--prose-deep);
+}
+.wk-reply .wk-lede {
+  font-size: 11.8px;
+  line-height: 1.5;
+  color: var(--ink-body);
+  margin-top: 5px;
+}
+.wk-reply .wk-ft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+.wk-replybody {
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--ink-body);
+  white-space: pre-wrap;
+}
+
+/* Below the two column threshold the workroom becomes one continuous page.
+   ACCEPTED, and stated so nobody reads it as a bug: the narrow branch keeps a
+   page-level scroll BY DESIGN and is not held to law 5. */
+@media (max-width: 1180px) {
+  .wk-grid,
+  .wk-body[data-mode="entry"] .wk-grid {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .wk-col-l,
+  .wk-col-r,
+  .wk-man-body {
+    overflow: visible;
+    min-height: auto;
+  }
+  .wk-thread {
+    overflow: visible;
+    justify-content: flex-start;
+  }
+  .wk-body[data-mode="entry"] .wk-col-l {
+    max-width: none;
+  }
+  .wk-col-r {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .wk-body[data-mode="entry"] .wk-col-r {
+    display: none;
+  }
+  .wk-room {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-root *,
+  .wk-room * {
+    transition-duration: 0.001s !important;
+    animation-duration: 0.001s !important;
+    animation-delay: 0s !important;
+  }
+  /* An infinite loop at 0.001s is a strobe. These stop outright. */
+  .wk-amb span,
+  .wk-live::before,
+  .wk-boot-glyph,
+  .wk-stg.wk-on .wk-glyph {
+    animation: none !important;
+  }
+  body.wk-open #root {
+    transition: none !important;
+  }
+}
+
+/* THE RAIL'S OWN FIT. Same discipline as the thread: tighten first — the
+   before/after line goes, the title and target stay — then fold the oldest
+   entries behind a line that opens the whole manifest as a peek. The count
+   above the rail always states the whole rail, so a fold never understates
+   what the approval covers. */
+.wk-man-body.wk-dense .wk-ent .wk-delta {
+  display: none;
+}
+.wk-railfold {
+  margin-bottom: 7px;
+}

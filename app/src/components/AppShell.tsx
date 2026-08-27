@@ -9,6 +9,7 @@ import { findOnboardingCase } from "../data/onboarding";
 import { ChatFab } from "./ChatFab";
 import { CommandPalette } from "./CommandPalette";
 import { EmptyState, PageContainer } from "./ui";
+import { WorkroomHost } from "./workroom/WorkroomHost";
 
 export function AppShell() {
   const { data, state, worklist } = useApp();
@@ -70,6 +71,10 @@ export function AppShell() {
       </div>
       <ChatFab />
       <CommandPalette />
+      {/* The workroom is a FULL-SURFACE overlay over the cockpit, so it mounts
+          at the shell rather than inside the panel that opened it: closing that
+          panel must not take the room down with it. */}
+      <WorkroomHost />
     </div>
   );
 }
