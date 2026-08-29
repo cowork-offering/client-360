@@ -104,7 +104,12 @@ const MAGNITUDE: Record<string, number> = {
   billion: 1e9,
 };
 
-interface Scalar {
+/* THE SCALAR READERS ARE SHARED, and deliberately so. `parseCreate` reads the
+   same money, the same months and the same dates out of a banker's line, and a
+   second implementation of "is 20 twenty million or twenty dollars" is a second
+   place for the answer to drift. Exported: `Scalar`, `moneyTokens`,
+   `monthTokens`, `DateRead`, `readDate`. Everything else here stays private. */
+export interface Scalar {
   value: number;
   text: string;
   index: number;
@@ -112,7 +117,7 @@ interface Scalar {
 
 /** Money tokens, with position. A magnitude suffix or a `$` is REQUIRED, or the
  *  number has to be written out in full — see the module note on bare numbers. */
-function moneyTokens(lower: string): Scalar[] {
+export function moneyTokens(lower: string): Scalar[] {
   const out: Scalar[] = [];
   const re = /(\$\s*)?(\d[\d,]*(?:\.\d+)?)\s*(mm|million|millions|bn|billion|k|m|b)?\b/g;
   for (let m = re.exec(lower); m; m = re.exec(lower)) {
@@ -142,7 +147,7 @@ function percentTokens(lower: string): Scalar[] {
   return out.sort((a, b) => a.index - b.index);
 }
 
-function monthTokens(lower: string): Scalar[] {
+export function monthTokens(lower: string): Scalar[] {
   const out: Scalar[] = [];
   const months = /(\d+)\s*(?:months?|mos?\b)/g;
   for (let m = months.exec(lower); m; m = months.exec(lower)) {
@@ -164,14 +169,14 @@ const MONTH_NAMES = [
 
 const iso2 = (n: number) => String(n).padStart(2, "0");
 
-interface DateRead {
+export interface DateRead {
   iso?: string;
   text: string;
   /** A month and a year with no day. Refused, with the reason. */
   dayMissing?: true;
 }
 
-function readDate(lower: string): DateRead | null {
+export function readDate(lower: string): DateRead | null {
   const isoMatch = lower.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   if (isoMatch) return { iso: isoMatch[0], text: isoMatch[0] };
 

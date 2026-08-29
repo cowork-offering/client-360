@@ -185,6 +185,77 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     refusedFields: [],
     refusedOperations: ["any status transition", "case closure"],
   },
+
+  /* ---- THE THREE `stage_new_facility` PLANS ON, and this mirror did not know
+     about any of them. The Loan policy above covered `write_loan` and the one
+     stage hop, and the other three write steps in the org's own observed plan
+     — `create_package`, `write_involvement`, `write_loan_purpose` — landed on
+     objects with no policy, which reads as "not on the transition allowlist".
+     That is the wrong sentence twice over: it says the plan is malformed when
+     the plan is the org's, and it would refuse every real creation at the
+     confirm gate. Mirrored below from `C360WriteGuard`'s own CREATE_STATES,
+     FORBIDDEN_FIELDS and CREATE_ONLY sets, which is the fence the deployed tool
+     actually passes through.                                                  */
+
+  "LLC_BI__Product_Package__c": {
+    object: "LLC_BI__Product_Package__c",
+    label: "credit package",
+    // The account door of a creation: the plan makes the package before the
+    // facility, exactly as nCino's own wizard does. It never updates one.
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [],
+    transitions: [],
+    refusedFields: [
+      { field: "RecordTypeId", reason: "real packages in this org have none, and only Master is available to the running profile anyway" },
+      { field: "LLC_BI__Stage__c", reason: "the package's own stage belongs to the org's package automation" },
+      { field: "LLC_BI__Status__c", reason: "the package's own status belongs to the org's package automation" },
+    ],
+    refusedOperations: ["updates of any kind", "deletion"],
+  },
+
+  "LLC_BI__Legal_Entities__c": {
+    object: "LLC_BI__Legal_Entities__c",
+    label: "borrowing structure row",
+    // ONE row, and it is the borrower's at 100 percent ownership. A facility
+    // insert creates none on its own, so without it the facility would have no
+    // borrowing structure at all.
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [{ field: "LLC_BI__Borrower_Type__c", value: "Borrower" }],
+    transitions: [],
+    refusedFields: [
+      { field: "LLC_BI__Is_Borrower__c", reason: "formula derived from Borrower_Type" },
+      { field: "LLC_BI__Is_Guarantor__c", reason: "formula derived from Borrower_Type" },
+      { field: "LLC_BI__Is_CoBorrower__c", reason: "formula derived from Borrower_Type" },
+      { field: "LLC_BI__Is_Grantor__c", reason: "formula derived from Borrower_Type" },
+      { field: "LLC_BI__Is_Related_Entity__c", reason: "formula derived from Borrower_Type" },
+      {
+        field: "LLC_BI__Contingent_Amount__c",
+        reason: "mutually exclusive with Ownership on one row, and the validation rule's only escape tests for a Household role this org does not have",
+      },
+    ],
+    refusedOperations: ["updates of any kind", "a second involvement row: the tool files the borrower's and nothing else"],
+  },
+
+  "LLC_BI__Loan_Detail__c": {
+    object: "LLC_BI__Loan_Detail__c",
+    label: "loan detail",
+    // NEVER CREATED BY US. nCino creates it in an after-commit flow of its own,
+    // which is the whole reason execution is two invocations. The one field the
+    // resume writes is the primary loan purpose.
+    mayCreate: false,
+    mayUpdate: true,
+    createStates: [],
+    transitions: [],
+    refusedFields: [
+      { field: "LLC_BI__Application_Method__c", reason: "the org defaults it on the record it creates" },
+    ],
+    refusedOperations: [
+      "creation by us: the org's own after-commit flow owns it",
+      "any write other than the primary loan purpose the resume sets",
+    ],
+  },
 };
 
 /* ------------------------------------------------------------- validation */
