@@ -12,6 +12,7 @@ import type {
   DraftedReply,
   HaveRow,
   PackageMember,
+  WorkroomAdvisory,
   WorkroomChallenge,
   WorkroomContext,
   WorkroomDelta,
@@ -57,7 +58,10 @@ interface ChipModel {
 type ThreadItem =
   | { kind: "banker"; id: string; text: string }
   | { kind: "agent"; id: string; text: string }
-  | { kind: "chips"; id: string; chips: ChipModel[] }
+  /** THE ADVICE TRAVELS WITH THE CHIPS IT IS ABOUT. It is not a block of its
+   *  own: an advisory that could fold away while the change it warns about
+   *  stayed on screen would be worse than no advisory. */
+  | { kind: "chips"; id: string; chips: ChipModel[]; advisories?: WorkroomAdvisory[] }
   | { kind: "challenge"; id: string; challenge: WorkroomChallenge; acked: boolean }
   | { kind: "reply"; id: string; reply: DraftedReply };
 
@@ -541,14 +545,17 @@ export function Workroom({
    * instruction has to be precise enough to resolve one member out of six.
    */
   const say = useCallback(
-    async (heard: string, said?: string) => {
+    async (heard: string, said?: string, opts?: { settled?: boolean }) => {
       const trimmed = heard.trim();
       if (!trimmed) return;
       push({ kind: "banker", id: nextId("banker"), text: (said ?? heard).trim() });
 
       // ONE DECISION PER VIEW (law 2). While a gate is open the room does not
       // take a new instruction; it says so rather than quietly queueing one.
-      if (openGates > 0) {
+      // `settled` is the one exception and it is not a loophole: taking an
+      // advisory's resolution settles the cards it is about IN THE SAME
+      // GESTURE, so there is still exactly one decision on the table.
+      if (openGates > 0 && !opts?.settled) {
         agent("One decision at a time. The open cards above, or the approve button under the manifest, carry the next move.");
         return;
       }
@@ -597,7 +604,14 @@ export function Workroom({
             : result.kind === "refusal"
               ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
               : [];
-        if (chips.length) answer.push({ kind: "chips", id: nextId("chips"), chips });
+        if (chips.length) {
+          answer.push({
+            kind: "chips",
+            id: nextId("chips"),
+            chips,
+            advisories: result.kind === "deltas" ? result.advisories : undefined,
+          });
+        }
         setItems((prev) => [...prev, ...answer]);
         setSuggestion(engine.suggest());
       } finally {
@@ -706,6 +720,30 @@ export function Workroom({
       setSuggestion(engine.suggest());
     },
     [agent, engine, settleChip, vocabulary.nextMove],
+  );
+
+  /**
+   * THE BANKER TOOK THE ADVICE.
+   *
+   * An advisory never blocked the change it warned about, so taking its
+   * resolution has to REPLACE that change rather than sit beside it: the open
+   * cards in the block are settled by the same gesture, and the resolution goes
+   * back through the parser exactly as a typed line does. An advisory can
+   * therefore do nothing the banker could not have said themselves.
+   */
+  const takeAdvice = useCallback(
+    (blockId: string, advisory: WorkroomAdvisory) => {
+      if (!advisory.resolution) return;
+      setItems((prev) =>
+        prev.map((item) =>
+          item.kind === "chips" && item.id === blockId
+            ? { ...item, chips: item.chips.map((c) => (c.state === "open" ? { ...c, state: "discarded" as ChipState } : c)) }
+            : item,
+        ),
+      );
+      void say(advisory.resolution.say, advisory.resolution.label, { settled: true });
+    },
+    [say],
   );
 
   const drop = useCallback(
@@ -1077,6 +1115,7 @@ export function Workroom({
                       onConfirm={confirmChip}
                       onDiscard={settleOpenChip}
                       onAcknowledge={acknowledge}
+                      onTakeAdvice={takeAdvice}
                     />
                   ))}
                   {/* THE ROOM IS COMPOSING. One beat, the app's own: the ">"
@@ -1448,6 +1487,7 @@ function ThreadBlock({
   onConfirm,
   onDiscard,
   onAcknowledge,
+  onTakeAdvice,
 }: {
   item: ThreadItem;
   clamp: FitState["clamped"];
@@ -1457,6 +1497,7 @@ function ThreadBlock({
   onConfirm: (blockId: string, chipKey: string, delta: WorkroomDelta, from: Element | null) => void;
   onDiscard: (blockId: string, chip: ChipModel) => void;
   onAcknowledge: (id: string) => void;
+  onTakeAdvice: (blockId: string, advisory: WorkroomAdvisory) => void;
 }) {
   const live = isLive(item) ? "1" : "0";
 
@@ -1489,8 +1530,28 @@ function ThreadBlock({
   }
 
   if (item.kind === "chips") {
+    const open = item.chips.some((c) => c.state === "open");
     return (
       <div className="wk-blk" data-block={item.id} data-live={live}>
+        {/* ADVICE COMES BEFORE THE DECISION, and it stops being advice once the
+            decision is made — a settled block keeps the chips' receipts and
+            drops the counsel that was about them. It is never a gate: the
+            Confirm below is live whether it is read or not. */}
+        {open && (item.advisories?.length ?? 0) > 0 && (
+          <div className="wk-advice-set">
+            {item.advisories!.map((advisory) => (
+              <div className="wk-advice" key={advisory.id} data-rule={advisory.rule}>
+                <div className="wk-advice-k">Before you confirm</div>
+                <div className="wk-advice-t">{advisory.line}</div>
+                {advisory.resolution && (
+                  <button type="button" className="wk-advice-b" onClick={() => onTakeAdvice(item.id, advisory)}>
+                    {advisory.resolution.label}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="wk-chips">
           {item.chips.map((chip) => {
             if (chip.state === "discarded") return null;
@@ -1545,6 +1606,9 @@ function ThreadBlock({
               <span className="wk-vk">{item.challenge.kicker}</span>
             </div>
             <div className="wk-vtxt">{item.challenge.line}</div>
+            {/* WHY THIS CHECK MATTERS HERE. The figures above are what moved;
+                this is the one sentence that says why they moved that way. */}
+            {item.challenge.why && <div className="wk-vwhy">{item.challenge.why}</div>}
             <div className="wk-vact">
               {item.acked ? (
                 <span className="wk-acked">
@@ -1699,6 +1763,9 @@ function RefusalChip({
       <div className="wk-line">
         <span className="wk-fld">{refusal.title}</span>
       </div>
+      {/* THE BANKER'S READING LEADS. Why the answer is no and what would work,
+          then the org's own account of its constraint as the quote it is. */}
+      {refusal.why && <div className="wk-refuse-why">{refusal.why}</div>}
       <div className="wk-quote">{refusal.reason}</div>
       {!settled && (
         <div className="wk-acts">
