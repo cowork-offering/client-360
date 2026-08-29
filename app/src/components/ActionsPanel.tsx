@@ -8,29 +8,10 @@ import { resolveBundle } from "../actions/registry";
 import { ActionGlyph } from "./ActionIcon";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 import { ActionPanel } from "./ActionPanel";
-import { findOnboardingCase, type OnboardingCase } from "../data/onboarding";
-import {
-  ONBOARDING_ACTIONS,
-  ONBOARDING_CATEGORY_ORDER,
-  onboardingAvailability,
-  type OnboardingAction,
-} from "../actions/onboardingActions";
-import { OnboardingTicket } from "./OnboardingTicket";
 import { openWorkroom, workroomContextFor, workroomModeFor } from "../workroom/openWorkroom";
 
-/** The case behind the open workspace, or null when the open relationship is
- *  booked. DERIVED every render, on the same rule AppShell mounts the shell
- *  with (BUILD-SPEC-V1 §6.3), so the panel and the workspace can never disagree
- *  about which lifecycle the banker is in. */
-export function useOpenOnboardingCase(): OnboardingCase | null {
-  const { data, state } = useApp();
-  const kase = state.view === "account" && state.accountId ? findOnboardingCase(data, state.accountId) : null;
-  return kase && kase.stage !== "Complete" ? kase : null;
-}
-
 /** One row of the actions panel — the product's single action grammar: glyph,
- *  label, description, and either a run or an open. Both lifecycles render
- *  through this, which is the point: a banker cannot tell the surfaces apart. */
+ *  label, description, and either a run or an open. */
 function ActionRow({
   icon,
   label,
@@ -91,41 +72,6 @@ function ActionRow({
         )}
       </span>
     </button>
-  );
-}
-
-/** The onboarding half of the panel. Same rows, same categories, same "opens
- *  the ticket" affordance — every onboarding action has a panel, so nothing
- *  here fires directly and the ticket owns the confirm gesture. */
-function OnboardingRows({ kase }: { kase: OnboardingCase }) {
-  const [ticket, setTicket] = useState<OnboardingAction | null>(null);
-  return (
-    <>
-      {ONBOARDING_CATEGORY_ORDER.map((category) => {
-        const rows = ONBOARDING_ACTIONS.filter((a) => a.category === category);
-        if (!rows.length) return null;
-        return (
-          <section key={category}>
-            <div className="kicker px-4 pb-1 pt-3">{category}</div>
-            {rows.map((action) => {
-              const { available, reason } = onboardingAvailability(action, kase);
-              return (
-                <ActionRow
-                  key={action.id}
-                  icon={action.icon}
-                  label={action.label}
-                  description={action.description}
-                  available={available}
-                  reason={reason}
-                  onClick={() => setTicket(action)}
-                />
-              );
-            })}
-          </section>
-        );
-      })}
-      {ticket && <OnboardingTicket action={ticket} kase={kase} onClose={() => setTicket(null)} />}
-    </>
   );
 }
 
@@ -203,7 +149,6 @@ export function ActionsPanelBody() {
   const [fallback, setFallback] = useState<{ prompt: string } | null>(null);
   // A33.1.1 entry point 1 of 3.
   const [panelActionId, setPanelActionId] = useState<string | null>(null);
-  const kase = useOpenOnboardingCase();
 
   const accountId = state.view === "account" ? state.accountId : null;
   const account = accountId ? data.portfolio.accounts.find((a) => a.accountId === accountId) : null;
@@ -262,22 +207,11 @@ export function ActionsPanelBody() {
     }
   }
 
-  // A case that is not booked yet has its OWN actions, in this same panel. The
-  // credit registry is not merely unavailable here — none of it applies to a
-  // relationship with no rating, no exposure and no facilities.
-  if (kase) {
-    return (
-      <div className="py-1">
-        <OnboardingRows kase={kase} />
-      </div>
-    );
-  }
-
   return (
     <div className="py-1">
       {!accountId && (
         <div className="mx-3 my-2 rounded-md border border-dashed border-border bg-surface px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-muted">
-          Open a relationship or an onboarding case from the worklist to run actions against it.
+          Open a relationship from the worklist to run actions against it.
         </div>
       )}
 

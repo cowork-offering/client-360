@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useApp, ACCOUNT_TABS, ONBOARDING_TABS } from "../state/appState";
+import { useApp, ACCOUNT_TABS } from "../state/appState";
 import { FloatingPanel } from "./FloatingPanel";
 import { ChatPanelBody } from "./ChatPanel";
-import { ActionsPanelBody, useOpenOnboardingCase } from "./ActionsPanel";
+import { ActionsPanelBody } from "./ActionsPanel";
 import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 
 /** Count of SERVER (agent-authored) messages only — the unread watermark basis.
@@ -40,19 +40,13 @@ export function ChatFab() {
     if (open && state.seenServerCount !== serverCount) dispatch({ type: "SET_SEEN", count: serverCount });
   }, [open, serverCount, state.seenServerCount, dispatch]);
 
-  // An onboarding case reads from ITS OWN name and tab set. Falling through to
-  // the booked lookup would subtitle the panel with a tab that is not mounted.
-  const kase = useOpenOnboardingCase();
   const account =
     state.view === "account" && state.accountId
       ? data.portfolio.accounts.find((a) => a.accountId === state.accountId)
       : null;
-  const tabLabel = kase
-    ? (ONBOARDING_TABS.find((t) => t.id === state.onboardingTab)?.label ?? null)
-    : state.view === "account"
-      ? (ACCOUNT_TABS.find((t) => t.id === state.tab)?.label ?? null)
-      : "Worklist";
-  const subtitle = `${kase ? kase.name : account ? account.name : "Whole book"}${tabLabel ? ` · ${tabLabel}` : ""}`;
+  const tabLabel =
+    state.view === "account" ? (ACCOUNT_TABS.find((t) => t.id === state.tab)?.label ?? null) : "Worklist";
+  const subtitle = `${account ? account.name : "Whole book"}${tabLabel ? ` · ${tabLabel}` : ""}`;
 
   return (
     <>
@@ -70,7 +64,7 @@ export function ChatFab() {
 
       {state.panel === "actions" && (
         <FloatingPanel
-          title={kase ? "Onboarding Actions" : "Client Actions"}
+          title="Client Actions"
           subtitle={subtitle}
           variant="sheet"
           returnFocusTo={() => document.getElementById(ACTIONS_TRIGGER_ID)}

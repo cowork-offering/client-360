@@ -10,7 +10,6 @@ import type { AgentChannel } from "../channel/adapter";
 import { createChannel, formatProbe, probeChannels } from "../channel/adapter";
 import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, C360Data, Worklist } from "../data/contract";
 import { deriveWorklist } from "../data/worklist";
-import { onboardingCases } from "../data/onboarding";
 import { loadUi, saveUi, type PersistedUi } from "./persist";
 import { dataVersionOf, loadOverlays, type AccountOverlay } from "./syncOverlay";
 
@@ -28,46 +27,6 @@ export const ACCOUNT_TABS = [
 
 export type AccountTab = (typeof ACCOUNT_TABS)[number]["id"];
 
-/** The lifecycle-keyed tab set for a relationship that is not booked yet
- *  (BUILD-SPEC-V1 §6.3). Process is FIRST for the same reason Activity is first
- *  on a booked account: where the case stands comes before its detail. */
-export const ONBOARDING_TABS = [
-  { id: "process", label: "Process" },
-  { id: "parties", label: "Parties" },
-  { id: "documents", label: "Documents" },
-  { id: "screening", label: "Screening" },
-  { id: "attestation", label: "Attestation" },
-] as const;
-
-export type OnboardingTab = (typeof ONBOARDING_TABS)[number]["id"];
-
-/** Which zone of the book the worklist is showing. The zone is a VIEW filter,
- *  never a property of a relationship: whether a case is in onboarding is
- *  derived from its stage every render (§6.3). */
-export type Zone = "book" | "onboarding";
-
-/**
- * What each zone is CALLED, once.
- *
- * The switcher, the list header, the breadcrumb and the empty states all read
- * from here, so a rename lands everywhere or nowhere. The set caps are the name
- * (founder, 2026-07-29), and `.zone-name` supplies only the tracking and weight
- * that keep caps from shouting.
- *
- * `ZONE_SPOKEN` is the same name as words. Some screen readers spell a
- * capitalised string letter by letter, so anything that ANNOUNCES a zone reads
- * from here while everything that DRAWS one reads from ZONE_NAME.
- */
-export const ZONE_NAME: Record<Zone, string> = {
-  book: "CLIENT OVERVIEW",
-  onboarding: "KYC & ONBOARDING",
-};
-
-export const ZONE_SPOKEN: Record<Zone, string> = {
-  book: "Client overview",
-  onboarding: "KYC and onboarding",
-};
-
 /** Session-local echo of a message. Mirrors AiMessage's A12 vocabulary so the
  *  merge in ChatPanel is type-identical (F7). */
 export interface LocalMessage {
@@ -84,12 +43,6 @@ export interface ViewState {
   view: "home" | "account";
   accountId: string | null;
   tab: AccountTab;
-  /** Which L1 zone the worklist shows. Book by default. */
-  zone: Zone;
-  /** The onboarding tab, held separately from `tab` so a banker who moves
-   *  between a booked account and an onboarding case does not have either
-   *  selection overwritten by the other's tab set. */
-  onboardingTab: OnboardingTab;
   /** Floating panel state — chat and actions are mutually exclusive (A27). */
   panel: PanelKind;
   draft: string;
@@ -118,8 +71,6 @@ type Action =
   | { type: "OPEN_ACCOUNT"; accountId: string }
   | { type: "GO_HOME" }
   | { type: "SET_TAB"; tab: AccountTab }
-  | { type: "SET_ZONE"; zone: Zone }
-  | { type: "SET_ONBOARDING_TAB"; tab: OnboardingTab }
   | { type: "SET_PANEL"; panel: PanelKind }
   | { type: "SET_SEEN"; count: number }
   | { type: "LOG_ACTION"; accountId: string; actionLabel: string }
@@ -139,8 +90,6 @@ const initial: ViewState = {
   view: "home",
   accountId: null,
   tab: "activity",
-  zone: "book",
-  onboardingTab: "process",
   panel: "none",
   draft: "",
   localMessages: [],
@@ -164,10 +113,6 @@ function reducer(state: ViewState, action: Action): ViewState {
       return { ...state, view: "home", panel: state.panel === "actions" ? "none" : state.panel };
     case "SET_TAB":
       return { ...state, tab: action.tab };
-    case "SET_ZONE":
-      return state.zone === action.zone ? state : { ...state, zone: action.zone };
-    case "SET_ONBOARDING_TAB":
-      return { ...state, onboardingTab: action.tab };
     case "SET_PANEL":
       return { ...state, panel: action.panel };
     case "LOG_ACTION": {
@@ -288,8 +233,6 @@ function reducer(state: ViewState, action: Action): ViewState {
         panel: action.ui.panel ?? state.panel,
         draft: action.ui.draft ?? state.draft,
         seenServerCount: action.ui.seenServerCount ?? state.seenServerCount,
-        zone: (action.ui.zone as Zone) ?? state.zone,
-        onboardingTab: (action.ui.onboardingTab as OnboardingTab) ?? state.onboardingTab,
       };
     default:
       return state;
@@ -311,14 +254,9 @@ const AppContext = createContext<AppContextValue | null>(null);
  *  back to a safe home view rather than an empty workspace. */
 function sanitizeRestore(ui: PersistedUi, data: C360Data): Partial<PersistedUi> {
   const knownTabs = new Set(ACCOUNT_TABS.map((t) => t.id));
-  const knownOnboardingTabs = new Set(ONBOARDING_TABS.map((t) => t.id));
   const staged = new Set([
     ...Object.keys(data.borrowers ?? {}),
     ...(data.borrower?.snapshot?.accountId ? [data.borrower.snapshot.accountId] : []),
-    // An onboarding case is staged too: it has no bundle by design, and
-    // bouncing it home on restore would be the blank workspace A16 exists to
-    // prevent.
-    ...onboardingCases(data).map((c) => c.accountId),
   ]);
   const tab = knownTabs.has(ui.tab as AccountTab) ? ui.tab : "activity";
   const accountOk = !!ui.accountId && staged.has(ui.accountId);
@@ -329,8 +267,6 @@ function sanitizeRestore(ui: PersistedUi, data: C360Data): Partial<PersistedUi> 
     panel: ui.panel === "chat" || ui.panel === "actions" ? ui.panel : "none",
     draft: ui.draft,
     seenServerCount: typeof ui.seenServerCount === "number" ? ui.seenServerCount : 0,
-    zone: ui.zone === "onboarding" ? "onboarding" : "book",
-    onboardingTab: knownOnboardingTabs.has(ui.onboardingTab as OnboardingTab) ? ui.onboardingTab : "process",
   };
 }
 
@@ -385,20 +321,8 @@ export function AppProvider({ data, children }: { data: C360Data; children: Reac
       panel: state.panel,
       draft: state.draft,
       seenServerCount: state.seenServerCount,
-      zone: state.zone,
-      onboardingTab: state.onboardingTab,
     });
-  }, [
-    anchor,
-    state.view,
-    state.accountId,
-    state.tab,
-    state.panel,
-    state.draft,
-    state.seenServerCount,
-    state.zone,
-    state.onboardingTab,
-  ]);
+  }, [anchor, state.view, state.accountId, state.tab, state.panel, state.draft, state.seenServerCount]);
 
   const value = useMemo<AppContextValue>(
     () => ({ data, worklist, channel, state, dispatch }),

@@ -75,11 +75,6 @@ const HERO: Record<string, string> = {
   // it: the verdict is per covenant and lives on the covenant row itself.
   "loan-modification": "newCommitment",
   renewal: "newMaturityDate",
-  // Onboarding tickets, same grammar: the one value that carries the decision.
-  // Attestation has none — what carries it is the typed basis, not a picklist.
-  "advance-stage": "nextStage",
-  "record-screening": "screeningType",
-  "attach-document": "documentType",
 };
 
 export function buildTicket(actionId: string, schema: PanelSchema, briefing: Briefing): TicketLayout {

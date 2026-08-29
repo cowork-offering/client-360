@@ -356,8 +356,8 @@ const STEPS: Array<{ id: Phase; label: string }> = [
   { id: "tracker", label: "Execution" },
 ];
 
-/** The same stepper the onboarding ticket walks. Exported rather than copied:
- *  one ceremony, one chrome, whatever the write seam behind it. */
+/** The ticket stepper. Exported rather than copied: one ceremony, one chrome,
+ *  whatever the write seam behind it. */
 export function Stepper({
   phase,
   steps = STEPS,

@@ -13,7 +13,7 @@ credit-memo-pattern policy layer; full KYC stage/approve loop; **C360 is the fla
 | Aug 22 (Sat) | Road to Success shared | this document, v2 |
 | Aug 24 (Mon) | Kickoff with support (Alexis, Jon, Jordan?, Noland on arrival) | support split agreed (below) |
 | Aug 21-24 | WS0.5 Apex action wave | tools refined on proven mechanics |
-| Aug 23-27 | WS1 KYC loop | G1 |
+| ~~Aug 23-27~~ | ~~WS1 KYC loop~~ — REMOVED from scope 2026-08-27 | ~~G1~~ |
 | Aug 21-29 | WS2 gateway + ledger + policy pack (Jon) | G2 |
 | Aug 27 - Sep 1 | WS3 Cowork natural chat | G3 |
 | **Sep 1** | **Internal feature freeze** | from here: fixes, polish, rehearsal only |
@@ -110,19 +110,16 @@ rehearsed on Hartwell through our own tools. Decision surfaced to Fabian: execut
 UNHELD in the cockpit (org guards intact) since the email fence was relaxed; re-hold is one line if wanted.
 Evidence: EVIDENCE-SEPT4.md + ws05-side-findings*.md.
 
-### WS1 — KYC loop · DOWNGRADED TO STRETCH (Fabian, 2026-08-25): C360 core is the priority, KYC is
-nice-to-have. Build only if time remains after G3 and rehearsals. Kept ready: gateway reconnected,
-read envelopes observed 2026-08-25 (get_customer, get_customer360 incl. two hidden-required quirks,
-demo personas DemoHappy/DemoPep/DemoSanctions/DemoHighRisk found). G1 is no longer a gate on the
-critical path; the cockpit KYC zone keeps its honest self-gating display.
+### WS1 — KYC loop · REMOVED (Fabian, 2026-08-27)
+**Decision of record: KYC is removed from Customer 360 scope entirely. C360 core only.** This
+supersedes the 2026-08-25 downgrade-to-stretch — the lane is not deferred, it is out of scope, and
+G1 is struck as a gate. Executed 2026-08-27 on branch `remove-kyc`: the cockpit's KYC & Onboarding
+zone, its five tabs, the onboarding write-action flow and the new-onboarding wizard are deleted, and
+the plugin now routes any KYC ask as out of scope rather than as "coming later".
 
-### WS1-original (for reference) — KYC full stage/approve loop · Archy
-The cockpit KYC & Onboarding zone goes from display to workable. The IDB gateway staging tools
-already exist as connector tools (get_customer360, stage/approve address + name change, sanctions,
-adverse media, service requests, change audit). Work: wire the zone to live calls on BOTH surfaces,
-same governed stage→approve pattern as the nCino side, observed envelopes before any pinned shape
-(the law). Honest empties where the staging env is thin.
-**G1 pass = a KYC change staged and approved live from the cockpit, both surfaces, envelope archived.**
+Deliberately kept: the never-claim guards (the cockpit and the agent still refuse to render a KYC
+cleared state, because no source exists), and the archived gateway KYC read observations under
+`knowledge/sf-build-v2/gateway/` — evidence of what was probed on 2026-08-25, not a live plan.
 
 ### WS2 — Gateway + policy layer (Aug 21-29) · Jon/Banksy · GATE G2
 Bake C360 into the IDB gateway the credit-memo way:

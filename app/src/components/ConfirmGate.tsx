@@ -26,9 +26,6 @@ import {
 import { mcpAvailable } from "../channel/mcp";
 import { STEP_TYPE_LABEL } from "../actions/tracker";
 import { resolveBundle } from "../actions/registry";
-import { PENDING_DEPLOYMENT, PLAN_PREVIEW_BANNER } from "../actions/onboardingTicket";
-import { OnboardingGateCard } from "./OnboardingGate";
-import type { OnboardingAction } from "../actions/onboardingActions";
 
 /* =============================================================================
    THE CONFIRM GATE (A33.3.1)
@@ -111,12 +108,10 @@ export function ConfirmGate({
   actionId,
   simulated,
   idempotencyKey,
-  pendingGate,
   liveStoredAt,
   liveSections,
   asOf,
   onRestage,
-  onGateDismiss,
   onConfirmed,
   onBack,
 }: {
@@ -126,16 +121,11 @@ export function ConfirmGate({
   simulated: boolean;
   /** Stable across the stage/execute pair and across resume. */
   idempotencyKey?: string;
-  /** ONBOARDING ONLY. The action whose staging tool is not deployed yet. When
-   *  present the ceremony is identical up to the point of filing, and where the
-   *  decision token would be redeemed the banker meets the honest gate instead
-   *  of a confirm gesture. Nothing is minted, nothing is sent. */
-  pendingGate?: OnboardingAction;
   /** THE READ THE PANEL IS ON, threaded so the gate recomputes against the same
    *  one the cards were computed from. Without these the gate recomputed on the
    *  BAKED bundle while the plan carried live-merged figures, which reported a
    *  move backwards to stale numbers on every synced ticket. Absent means the
-   *  surface never synced, which is the onboarding and test case. */
+   *  surface never synced, which is the test case. */
   liveStoredAt?: number | null;
   liveSections?: string[];
   /** The instant that read is quoted at. Defaults to the baked assembly time. */
@@ -143,8 +133,6 @@ export function ConfirmGate({
   /** Re-runs the staging call on the current data with the same inputs and
    *  replaces this plan. The only way out of a blocked gate; never executes. */
   onRestage?: () => void;
-  /** Closes the whole ticket from the terminal gate card. */
-  onGateDismiss?: () => void;
   onConfirmed: (token: DecisionToken, executed?: ExecuteResult) => void;
   onBack: () => void;
 }) {
@@ -172,14 +160,7 @@ export function ConfirmGate({
   const rechecked = useMemo(() => isRecheckOnly(recompute()), [recompute]);
 
   // A33.3.1 — the plan must be allowlisted before a gesture is offered at all.
-  //
-  // ONBOARDING EXCEPTION, and it is narrow: the allowlist is a mirror of what
-  // each DEPLOYED tool may do, and the onboarding objects have no deployed tool
-  // and therefore no declared policy. Running the mirror against them would
-  // report "not on the allowlist" — true, and the wrong sentence: it reads as a
-  // malformed plan when the fact is that no tool exists. The gate below says
-  // that fact plainly, and no gesture is offered either way.
-  const violations = useMemo(() => (pendingGate ? [] : validatePlan(plan.steps)), [plan.steps, pendingGate]);
+  const violations = useMemo(() => validatePlan(plan.steps), [plan.steps]);
   // A33.5.3 — a staged plan carrying a record id means something already wrote.
   const idLeaks = useMemo(() => assertNoRecordIds(plan), [plan]);
 
@@ -294,9 +275,9 @@ export function ConfirmGate({
 
   return (
     <div className="flex flex-col">
-      {(simulated || pendingGate) && (
+      {simulated && (
         <div className="border-b border-divider px-5 py-2 text-[11px] font-semibold" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>
-          {pendingGate ? PLAN_PREVIEW_BANNER : SIMULATION_BANNER}
+          {SIMULATION_BANNER}
         </div>
       )}
 
@@ -563,37 +544,9 @@ export function ConfirmGate({
         </div>
       )}
 
-      {/* Where the org's staging identity would render. There is no tool to mint
-          one, so each line says so rather than carrying a value that looks real. */}
-      {pendingGate && (
-        <div className="border-b border-divider px-5 py-3">
-          <div className="kicker mb-1.5">Staging identity</div>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11.5px]">
-            {[
-              ["Staging id", plan.stagingId],
-              ["Plan hash", plan.planHash],
-              ["Decision token", PENDING_DEPLOYMENT],
-            ].map(([k, v]) => (
-              <span key={k} className="contents">
-                <dt className="text-ink-muted">{k}</dt>
-                <dd className="font-medium text-ink-faint">{v}</dd>
-              </span>
-            ))}
-          </dl>
-        </div>
-      )}
-
       <div className="px-5 py-4">
         <p className="text-[11.5px] leading-relaxed text-ink-muted">{CLOSING_LINE}</p>
       </div>
-
-      {/* THE HONEST BOUNDARY, at the exact point where filing would happen. The
-          banker has walked the whole ceremony; this is where it stops. */}
-      {pendingGate && (
-        <div className="border-t border-divider px-5 py-4">
-          <OnboardingGateCard action={pendingGate} onDismiss={onGateDismiss ?? onBack} />
-        </div>
-      )}
 
       <div className="flex items-center gap-2 border-t border-divider px-5 py-3">
         <button
@@ -604,7 +557,6 @@ export function ConfirmGate({
           Back
         </button>
         <div className="flex-1" />
-        {pendingGate ? null : (
         <button
           type="button"
           // A blocked gate with a re-stage affordance offers ONE way forward.
@@ -617,7 +569,6 @@ export function ConfirmGate({
         >
           {held ? "Filing is on hold" : executing ? "Working…" : drift ? "Confirm the new figures" : simulated ? "Confirm" : "Confirm and file"}
         </button>
-        )}
       </div>
     </div>
   );
