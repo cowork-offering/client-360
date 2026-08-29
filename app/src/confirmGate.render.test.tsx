@@ -217,8 +217,8 @@ describe("a moved figure blocks, and the block has a way out", () => {
   });
 
   it("keeps blocking without a re-stage affordance, rather than pretending", () => {
-    // Surfaces that cannot re-stage (onboarding, the batch previews) keep the
-    // old copy and the old gesture. Nothing there silently gained a way out.
+    // Surfaces that cannot re-stage (the batch previews) keep the old copy and
+    // the old gesture. Nothing there silently gained a way out.
     render(
       <ConfirmGate plan={planOver(movedValue())} actionId={ACTION} simulated onConfirmed={() => {}} onBack={() => {}} />,
     );

@@ -4,7 +4,7 @@
 The Customer 360 relationship cockpit for commercial bankers: a worklist-first React cockpit
 rendered as a Cowork artifact, driven by the org-hosted Customer 360 Salesforce MCP server
 (24 tools: 9 reads plus 7 governed stage/execute write pairs and one stage-only renewal) and,
-optionally, Microsoft 365 (client email intake) and the IDB Gateway (Boom financials, KYC tools).
+optionally, Microsoft 365 (client email intake) and the IDB Gateway (Boom financials).
 The agent fetches data through connectors, the assembler bakes it into the bundled template, the
 artifact renders. The agent and the guided skills are the natural-chat front door over the same
 tools.
@@ -16,7 +16,7 @@ Register these connectors for the user BEFORE invoking the skill:
    UserRole (nCino credit actions refuse users without one), and the nCino credit-action
    permissions of a lender. Any new demo identity needs all three checked before it drives a write.
 2. Microsoft 365 (optional): mail search for client-request intake. Skipped silently if absent.
-3. IDB Gateway (optional): Boom spreads and KYC tools. Honest gap states if absent.
+3. IDB Gateway (optional): Boom spreads. Honest gap states if absent.
 
 ## 3. Install
 Add the `cowork-offering/cowork-plugins` marketplace, install `client-360`. The plugin lives in
@@ -39,12 +39,10 @@ execute behind the decision token, verify by re-query) and the fences.
 | `collateral-valuation` | package-anchored `stage_collateral_valuation`: `items[]` capped at 20, `valuationDate` required | "value the collateral", "the appraisal came in", "the field exam is back" |
 | `relationship-actions` | service request, annual review, risk rating review, new facility (two execute invocations), renewal (stage only) | "raise a service request", "run the annual review", "review the risk rating", "structure a new facility", "start the renewal" |
 
-### Not yet wired, and routed honestly
-- **KYC skills land after gateway envelope observation, WS1.** The IDB Gateway staging tools
-  (`get_customer360`, stage/approve address and name change, sanctions, adverse media, service
-  requests, change audit) exist as connector tools, but no envelope has been observed for them from
-  this plugin, so no shape is pinned and no skill ships. The agent says so and stops. Never render a
-  KYC cleared state: no source exists.
+### Out of scope and not wired, routed honestly
+- **KYC and onboarding are OUT OF SCOPE** (founder decision, 2026-08-27). Customer 360 covers the
+  booked book only. No KYC skill ships and none is planned; the agent says so and offers the live
+  credit surfaces instead. Never render a KYC cleared state: no source exists.
 - **Policy assessment is WS2** (IDB gateway, decision ledger and policy pack, gate G2). The agent
   names it and offers the live alternatives rather than citing a policy it has not read.
 - **Credit memo and spreading are a call-out** to the credit-memo plugin, never rebuilt here.

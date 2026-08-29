@@ -162,9 +162,9 @@ export function TechnicalToggle({
 }
 
 /* -------------------------------------------------------------- stat strip
-   The row of headline figures that opens a tab. ONE definition, so Exposure,
-   Covenants and the four onboarding tabs cannot drift apart, and so the row is
-   a row: the strip lives INSIDE the card body, never as classes on the shell.
+   The row of headline figures that opens a tab. ONE definition, so Exposure and
+   Covenants cannot drift apart, and so the row is a row: the strip lives INSIDE
+   the card body, never as classes on the shell.
 
    Cells are top-aligned and stretch to the tallest, which puts every label on
    one baseline and every figure on the next, and lets a divider run the full

@@ -3,23 +3,13 @@ import { TopBar } from "./TopBar";
 import { KpiBand } from "./KpiBand";
 import { Worklist } from "./Worklist";
 import { AccountWorkspace } from "./AccountWorkspace";
-import { OnboardingWorkspace } from "./OnboardingWorkspace";
-import { OnboardingList, ZoneToggle } from "./OnboardingList";
-import { findOnboardingCase } from "../data/onboarding";
 import { ChatFab } from "./ChatFab";
 import { CommandPalette } from "./CommandPalette";
 import { EmptyState, PageContainer } from "./ui";
 import { WorkroomHost } from "./workroom/WorkroomHost";
 
 export function AppShell() {
-  const { data, state, worklist } = useApp();
-  // Lifecycle is DERIVED, never stored (BUILD-SPEC-V1 §6.3): the shell asks the
-  // data whether this relationship is still being onboarded, every render. When
-  // its stage reaches Complete it stops being an onboarding case here, leaves
-  // the pipeline zone, and the classic tab set mounts with nothing else changed.
-  const kase =
-    state.view === "account" && state.accountId ? findOnboardingCase(data, state.accountId) : null;
-  const inOnboarding = kase !== null && kase.stage !== "Complete";
+  const { data, state } = useApp();
   const staged =
     state.view === "account" && state.accountId
       ? (data.borrowers ?? {})[state.accountId] ??
@@ -39,24 +29,11 @@ export function AppShell() {
             <div className="min-h-0 flex-1 overflow-auto">
               <PageContainer className="flex flex-col py-6">
                 <div className="flex flex-col" style={{ gap: "var(--stack)" }}>
-                  <ZoneToggle bookCount={worklist.accountIds.length} />
-                  {/* Keyed on the zone so the incoming list mounts fresh: it
-                      rises as it fades, and its rows replay their stagger. */}
-                  <div key={state.zone} className="c360-zone-in flex flex-col" style={{ gap: "var(--stack)" }}>
-                    {state.zone === "onboarding" ? (
-                      <OnboardingList />
-                    ) : (
-                      <>
-                        <KpiBand />
-                        <Worklist />
-                      </>
-                    )}
-                  </div>
+                  <KpiBand />
+                  <Worklist />
                 </div>
               </PageContainer>
             </div>
-          ) : inOnboarding && kase ? (
-            <OnboardingWorkspace kase={kase} />
           ) : bundle ? (
             <AccountWorkspace bundle={bundle} />
           ) : (

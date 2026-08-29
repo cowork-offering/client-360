@@ -155,7 +155,7 @@
 
   /* Motion scale (A25.4) — short, decelerating, banking-sober. */
   --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
-  /* Weighty, not bouncy: the zone thumb carries mass and settles. */
+  /* Weighty, not bouncy: what carries mass and settles. */
   --ease-weight: cubic-bezier(0.32, 0.72, 0, 1);
   /* Strong deceleration, zero overshoot — what a thing does when it ARRIVES. */
   --ease-settle: cubic-bezier(0.19, 1, 0.3, 1);
@@ -214,17 +214,6 @@ body {
   color: var(--ink-faint);
 }
 
-/* ZONE NAME — the kicker's tracked caps carried up to title weight.
-   A zone is a PLACE, and a place reads as a set-caps sign rather than a
-   sentence. Size is left to the caller (a switcher segment and a list header
-   are not the same size); the tracking and the caps are the constant, which is
-   what stops all-caps from reading as shouting. Colour is untouched, so every
-   contrast pair stays exactly the one already verified. */
-.zone-name {
-  text-transform: uppercase;
-  letter-spacing: 0.085em;
-  font-weight: 800;
-}
 
 /* THE RING FOLLOWS THE SHAPE. `border-radius: 3px` here did not round the
    outline — it OVERWROTE the focused element's own radius, so opening the
@@ -438,33 +427,6 @@ body {
   animation: c360-fade 140ms var(--ease-out) both;
 }
 
-/* ZONE SWITCHER. The thumb is the only thing that moves — the segments hold
-   their box, so nothing reflows and the label colours cross-fade under it. */
-.c360-zone-thumb {
-  transition: transform 230ms var(--ease-weight);
-  will-change: transform;
-}
-.c360-zone-label {
-  transition:
-    color var(--dur-mid) var(--ease-out),
-    opacity var(--dur-mid) var(--ease-out);
-}
-
-/* The zone swap itself: the incoming list rises as it fades, and its rows
-   stagger in behind it because the wrapper remounts on the zone key. */
-@keyframes c360-zone-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 10px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-.c360-zone-in {
-  animation: c360-zone-in 240ms var(--ease-out) both;
-}
 
 /* Chat drawer slide. */
 .c360-drawer-in {
@@ -804,15 +766,8 @@ body {
      not. Duration alone would still animate opacity from 0 for a frame. */
   .c360-step-in,
   .c360-row-land,
-  .c360-sheet-in,
-  /* The zone swap is a slide the viewer asked not to see. The list appears. */
-  .c360-zone-in {
+  .c360-sheet-in {
     animation: none !important;
-  }
-  /* The thumb jumps rather than glides: 0.001s on a transform is still a
-     transform, and the segmented control reads fine as an instant swap. */
-  .c360-zone-thumb {
-    transition: none !important;
   }
   .c360-hover-lift:hover {
     transform: none !important;
