@@ -9,7 +9,7 @@ import { createScriptedEngine } from "./workroom/engine";
 import { createModifyEngine } from "./workroom/modifyEngine";
 import { doorFor } from "./workroom/modes";
 import { workroomContextFor } from "./workroom/openWorkroom";
-import type { C360Data } from "./data/contract";
+import type { BorrowerBundle, C360Data } from "./data/contract";
 import type { WorkroomContext, WorkroomMode } from "./workroom/types";
 import live from "../../artifact/live-data.json";
 
@@ -560,5 +560,206 @@ describe("the closing beat", () => {
     expect(room.querySelector(".wk-handoff")!.textContent).toContain("Submit for Approval");
     expect(room.querySelector(".wk-handoff")!.textContent).toContain("does not book the facility");
     expect(room.querySelector(".wk-filedbar .wk-st")!.textContent).toBe("Submitted");
+  });
+});
+
+/* =============================================================================
+   THE ROOM EXPLAINS ITSELF, AND ADVISES BEFORE IT STAGES.
+
+   Founder verdict 2026-08-29: the room "feels almost more like guided template
+   still, no explanation" — "it can explain also concise in the flow what and why
+   it is needed."
+
+   The copy is proved in `workroom/explain.test.ts` and the rules in
+   `workroom/modifyEngine.test.ts`. What is proved HERE is the reading: advice
+   looks like advice and not like a verdict, it never becomes a gate, and taking
+   it replaces the change it was about rather than piling a second one on top.
+   ============================================================================= */
+
+describe("tier-1 advice, in the room", () => {
+  const ADVICE_PACKAGE = "a5Fbb000000ADVICE";
+
+  /** A read built for the rules rather than borrowed from the baked
+   *  relationship, so what the advice says is a property of the room and not of
+   *  whatever Hartwell happens to hold this week. One booked member, drawn
+   *  $9.2MM, with the client's own $20MM ask on the file. */
+  function adviceBundle(over: Partial<BorrowerBundle["exposure"]> = {}) {
+    return {
+      snapshot: {
+        accountId: "001bb00001DLtRMAA1",
+        name: "Hartwell Precision Manufacturing LLC",
+        productPackageId: ADVICE_PACKAGE,
+      },
+      exposure: {
+        totalCommitted: 15_000_000,
+        totalOutstanding: 9_200_000,
+        facilities: [
+          {
+            loanId: "a4Zbb000000ADVICE",
+            name: "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
+            productType: "Line of Credit",
+            productPackageId: ADVICE_PACKAGE,
+            stage: "Booked",
+            status: "Active",
+            committed: 15_000_000,
+            outstanding: 9_200_000,
+          },
+        ],
+        ...over,
+      },
+      requests: [{ id: "r1", ask: { type: "facility_increase", from: 15_000_000, to: 20_000_000 } }],
+    } as unknown as BorrowerBundle;
+  }
+
+  function openAdvice() {
+    const context = contextFor("modify", ADVICE_PACKAGE);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data: live as unknown as C360Data, bundle: adviceBundle() })}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  /** Say a line the way a banker does: pick the member off the strip, then talk
+   *  about it. The strip IS the way in, so the room already knows which one. */
+  async function askForEightMillion(room: HTMLElement) {
+    click(room.querySelector(".wk-mchip")!);
+    await settle();
+    const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input, "take it to $8,000,000");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click(room.querySelector(".wk-send")!);
+    await settle();
+  }
+
+  it("says the thing a credit officer would say across the desk, on this read's own figures", async () => {
+    const room = openAdvice();
+    await askForEightMillion(room);
+    const advice = room.querySelector(".wk-advice")!;
+    expect(advice.textContent).toContain("$9.20M is already drawn on the Line of Credit");
+    expect(advice.textContent).toContain("a limit of $8M does not work as stated");
+    expect(advice.getAttribute("data-rule")).toBe("commitment-below-outstanding");
+  });
+
+  it("is ADVICE, not a verdict: no verdict chip, no acknowledgement, no gate", async () => {
+    const room = openAdvice();
+    await askForEightMillion(room);
+    // A check carries a coloured verdict chip and an Acknowledge button because
+    // it IS a gate. This carries neither, and it sits above a live Confirm.
+    expect(room.querySelector(".wk-advice .wk-vchip")).toBeNull();
+    expect(byText(/^Acknowledge$/)).toBeUndefined();
+    expect(room.querySelector(".wk-advice")!.contains(byText(/^Confirm$/)!)).toBe(false);
+    expect(buttons().find((b) => b.textContent === "Confirm")!.disabled).toBe(false);
+  });
+
+  it("lets the banker proceed anyway, which is what never blocking means", async () => {
+    const room = openAdvice();
+    await askForEightMillion(room);
+    click(buttons().find((b) => b.textContent === "Confirm"));
+    await settle();
+    // Staged, and the approval is open — with the advice never acknowledged.
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(1);
+    expect(byText(/^Approve and file 1 change$/)).toBeTruthy();
+  });
+
+  it("stops being advice once the decision is made", async () => {
+    const room = openAdvice();
+    await askForEightMillion(room);
+    expect(room.querySelector(".wk-advice")).toBeTruthy();
+    click(buttons().find((b) => b.textContent === "Confirm"));
+    await settle();
+    expect(room.querySelector(".wk-advice")).toBeNull();
+    expect(room.querySelector(".wk-receipt")).toBeTruthy();
+  });
+
+  it("REPLACES the change when the resolution is taken, rather than stacking a second one", async () => {
+    const room = openAdvice();
+    await askForEightMillion(room);
+    click(room.querySelector(".wk-advice-b")!);
+    await settle();
+
+    // The proposal the advice was about is gone — settled by the same gesture,
+    // so law 2 holds and there is still exactly one decision on the table.
+    const chips = [...room.querySelectorAll(".wk-chip")];
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toContain("$20M");
+    expect(chips[0].textContent).not.toContain("$8M");
+    // And the room did not answer it with "one decision at a time".
+    expect(room.textContent).not.toContain("One decision at a time");
+    // The banker's own line is in the thread, in the words they clicked.
+    expect(room.textContent).toContain("Make it $20M, the client's own ask");
+  });
+
+  it("holds the sixty-word budget: nothing here reaches the opening view", () => {
+    expect(visibleWords(openAdvice()).length).toBeLessThan(60);
+    expect(document.querySelector(".wk-advice")).toBeNull();
+  });
+});
+
+describe("the WIRED room says why, at the beats that carry a decision", () => {
+  const data = live as unknown as C360Data;
+  const accountId = "001bb00001I7FPNAA3";
+
+  function openWired() {
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom context={context} engine={createModifyEngine({ context, data, bundle })} onClose={() => {}} />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  async function type(room: HTMLElement, line: string) {
+    const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input, line);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    click(room.querySelector(".wk-send")!);
+    await settle();
+  }
+
+  it("puts the reason under the check's own figures, quietly", async () => {
+    const room = openWired();
+    click(room.querySelector(".wk-mchip")!);
+    await settle();
+    await type(room, "take it to $20,000,000");
+    click(buttons().find((b) => b.textContent === "Confirm"));
+    await settle();
+
+    const why = room.querySelector(".wk-vwhy")!;
+    expect(why.textContent).toContain("does not grow with the commitment");
+    // It is the reason BEHIND the verdict, so it sits under the figures rather
+    // than competing with them.
+    expect(room.querySelector(".wk-vtxt")!.compareDocumentPosition(why) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("leads a refusal with the way through it, and keeps the org's own words as the quote", async () => {
+    const room = openWired();
+    await type(room, "waive the covenant on the Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00");
+    const refusal = room.querySelector(".wk-refuse")!;
+    expect(refusal.querySelector(".wk-refuse-why")!.textContent).toContain("Open the covenant review");
+    expect(refusal.querySelector(".wk-quote")!.textContent).toMatch(/founder-gated/);
+    // The banker's reading comes FIRST; the org's account is the quote below it.
+    const why = refusal.querySelector(".wk-refuse-why")!;
+    const quote = refusal.querySelector(".wk-quote")!;
+    expect(why.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

@@ -16,6 +16,17 @@ import { fmtDate, fmtMoney } from "../data/format";
 import { isActiveFacility } from "../data/worklist";
 import type { BorrowerBundle, C360Data, Covenant, Facility } from "../data/contract";
 import type { PackageChoice, WorkroomBrief, WorkroomEngine, WorkroomSuggestion } from "./engine";
+import { runAdvisories } from "./advisory";
+import {
+  NO_CONNECTOR_REFUSAL,
+  NO_PACKAGE_REFUSAL,
+  nothingFilesRefusal,
+  whyAsked,
+  whyChecked,
+  whyHandoff,
+  whyProposed,
+  whyRefused,
+} from "./explain";
 import { catalogSummary, chainFor, isFileable, type CatalogField, type WireKey } from "./fieldCatalog";
 import { vocabularyFor } from "./modes";
 import { membersNamedIn, parseAnswer, parseModify, type Amendment, type ParseContext, type ParsedValue } from "./parseModify";
@@ -27,6 +38,7 @@ import type {
   PackageMember,
   StagedWorkroomPlan,
   WorkroomAcknowledgement,
+  WorkroomAdvisory,
   WorkroomApproval,
   WorkroomChallenge,
   WorkroomContext,
@@ -319,25 +331,23 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
 /** Asks that are real, understood, and NOT this room's to file — each with the
  *  org's own reason. A refusal is an answer; a fabricated chip is not. */
 function refusalFor(field: CatalogField): WorkroomRefusal | null {
-  if (field.id === "covenant.complianceStatus" || field.id === "collateral.valuation") {
-    return {
-      id: field.id,
-      target: field.label,
-      title: `${field.label} is its own credit action`,
-      reason: field.gap ?? "",
-      detail: `${field.gap ?? ""} ${field.closes ?? ""}`.trim(),
-    };
-  }
-  if (field.id === "loan.stage" || field.id === "package.stage") {
-    return {
-      id: field.id,
-      target: field.label,
-      title: "Booking is nCino's own approval run",
-      reason: field.gap ?? "",
-      detail: `${field.gap ?? ""} ${field.closes ?? ""}`.trim(),
-    };
-  }
-  return null;
+  const title =
+    field.id === "covenant.complianceStatus" || field.id === "collateral.valuation"
+      ? `${field.label} is its own credit action`
+      : field.id === "loan.stage" || field.id === "package.stage"
+        ? "Booking is nCino's own approval run"
+        : null;
+  if (!title) return null;
+  const why = whyRefused(field.id);
+  return {
+    id: field.id,
+    target: field.label,
+    title,
+    reason: field.gap ?? "",
+    why,
+    // The banker's reading first, then the org's own account of its constraint.
+    detail: [why, field.gap, field.closes].filter(Boolean).join(" "),
+  };
 }
 
 /* ---------------------------------------------------------------- the engine */
@@ -355,6 +365,10 @@ export interface ModifyEngineDeps {
   restate?: (line: string, vocabulary: string[]) => Promise<string | null>;
   available?: () => boolean;
   newKey?: () => string;
+  /** Today, as an ISO date. The advisory rule about maturities compares against
+   *  it, and a rule whose answer depends on the machine's clock is a rule that
+   *  cannot be tested. */
+  today?: () => string;
 }
 
 const defaultDeps: Required<Omit<ModifyEngineDeps, "restate">> & Pick<ModifyEngineDeps, "restate"> = {
@@ -362,6 +376,7 @@ const defaultDeps: Required<Omit<ModifyEngineDeps, "restate">> & Pick<ModifyEngi
   execute: (payload) => executeAction("loan-modification", payload),
   available: mcpAvailable,
   newKey: newRequestId,
+  today: () => new Date().toISOString().slice(0, 10),
   restate: async (line, vocabulary) => {
     // ONE call, lean payload, and the answer is a SENTENCE rather than a
     // structure: the artifact-to-connector bridge burns on machine-shaped
@@ -885,6 +900,12 @@ export function createModifyEngine(args: {
    */
   function duplicateQuestion(a: Amendment, said: string): string | null {
     if (a.op !== "add" || !a.field.associationScope) return null;
+    // PARTIES ARE THE ADVISORY'S (Tier-1 rule 6). Blocking a party add on a name
+    // already involved prevented no duplicate — an involvement row is a handoff
+    // on this org, so nothing was ever going to be written twice — while costing
+    // the banker the record of the ask. The rule says the role they already hold
+    // and offers the role change, and the banker proceeds either way.
+    if (a.field.associationScope === "parties") return null;
     const lower = said.toLowerCase();
     if (DELIBERATE_SECOND.test(lower)) return null;
 
@@ -916,9 +937,14 @@ export function createModifyEngine(args: {
    * The parser cannot do this itself. It resolves fields, not the bundle.
    */
   function withCurrent(question: string, awaiting?: { field: CatalogField; facility: Facility | null }): string {
-    if (!awaiting?.facility) return question;
-    const today = currentValue(awaiting.field, awaiting.facility);
-    return today.startsWith("not ") || today.includes("not staged") ? question : `${question} Today it reads ${today}.`;
+    if (!awaiting) return question;
+    const today = awaiting.facility ? currentValue(awaiting.field, awaiting.facility) : "";
+    const reads = today && !today.startsWith("not ") && !today.includes("not staged") ? ` Today it reads ${today}.` : "";
+    // AND WHY THE ROOM IS ASKING. A question with today's figure beside it says
+    // what the field holds; it does not say what the answer is FOR, and a banker
+    // who cannot see that is being walked through a form rather than talked to.
+    const why = whyAsked(awaiting.field, { committed, lendable: bundle?.exposure?.totalUniqueCollateralLendableValue });
+    return `${question}${reads}${why ? ` ${why}` : ""}`;
   }
 
   function toResult(outcome: ReturnType<typeof parseModify>, seq: number, said: string): IntentResult | null {
@@ -926,13 +952,15 @@ export function createModifyEngine(args: {
     if (outcome.kind === "none") return null;
 
     // A refusal beats a chip: an ask that belongs to another credit action is
-    // answered with the reason rather than staged into this plan.
+    // answered with the reason rather than staged into this plan. And a refusal
+    // that only says no is a dead end, so the WHY and the route out travel with
+    // it into the conversation.
     for (const a of outcome.amendments) {
       const refusal = refusalFor(a.field);
       if (refusal) {
         return {
           kind: "refusal",
-          reply: `That one is not mine to file. ${refusal.title}.`,
+          reply: `That one is not mine to file. ${refusal.title}. ${refusal.why ?? ""}`.trim(),
           refusal,
         };
       }
@@ -947,6 +975,7 @@ export function createModifyEngine(args: {
 
     const deltas = outcome.amendments.map((a, i) => toDelta(a, seq + i, memberName));
     const fileable = deltas.filter((d) => d.fileable).length;
+    const firstHandoff = deltas.find((d) => !d.fileable);
     const handed = deltas.length - fileable;
     // A PRODUCT WORD IS A SELECTION, and a selection the banker did not count is
     // a change set they did not mean to sign. "The line of credit" on a deal with
@@ -956,13 +985,47 @@ export function createModifyEngine(args: {
     const reply = [
       targets.length > 1 ? `That names a product this package carries ${targets.length} of, so it lands on all of them: ${targets.join(", ")}.` : null,
       fileable ? `${fileable} of these ${deltas.length === 1 ? "goes" : "go"} on the clone.` : null,
-      handed
-        ? `${handed} ${handed === 1 ? "is" : "are"} staged for the record and handed off: no tool files ${handed === 1 ? "it" : "them"} today, and I will not pretend otherwise.`
-        : null,
+      // WHAT CONFIRMING WILL ACTUALLY DO, once, in the beat where the decision
+      // is being asked for. A banker who has not seen this room has no way to
+      // know the booked facility is untouched, and that is the fact that makes
+      // the Confirm safe to press.
+      whyProposed(deltas) || null,
+      handed ? `${handed} ${handed === 1 ? "is" : "are"} recorded rather than filed.` : null,
+      // ONE reason, for the first of them. A line that produces two handoffs
+      // almost always produces two of a kind, and every entry gets its own
+      // reason again when it is confirmed. Two here would be the lecture.
+      firstHandoff ? whyHandoff(firstHandoff) : null,
     ]
       .filter(Boolean)
       .join(" ");
-    return { kind: "deltas", reply: reply || "Here is what that becomes.", deltas };
+    return {
+      kind: "deltas",
+      reply: reply || "Here is what that becomes.",
+      deltas,
+      // THE SENSE-CHECKS, BEFORE ANYTHING IS STAGED. They inform and suggest;
+      // the chips above arrive open either way, because the org's guards do the
+      // blocking and this room does not.
+      advisories: advise(outcome.amendments, deltas, said),
+    };
+  }
+
+  /** The Tier-1 rules, run over what the parse just produced. Everything they
+   *  read is the room's own state — the members, the covenants, the involvement
+   *  rows, the org's pool and its own ratio. */
+  function advise(amendments: Amendment[], deltas: WorkroomDelta[], said: string): WorkroomAdvisory[] {
+    return runAdvisories({
+      proposals: amendments.map((amendment, i) => ({ amendment, delta: deltas[i] })),
+      said,
+      covenants,
+      entities,
+      committed,
+      lendable: bundle?.exposure?.totalUniqueCollateralLendableValue,
+      orgCoverageRatio: bundle?.exposure?.coverageRatio ?? undefined,
+      clientAskTo: request?.ask?.to,
+      today: deps.today(),
+      memberName,
+      identity: (f) => shortFacilityLabel(f, relationship),
+    });
   }
 
   let deltaSeq = 0;
@@ -1131,6 +1194,10 @@ export function createModifyEngine(args: {
       tone: now >= 1 ? "ok" : "warn",
       kicker: "Derived here from the org's collateral pool",
       line: `Committed goes to ${fmtMoney(after)} against ${fmtMoney(lendable)} of lendable collateral. Fully drawn, the pool covers ${now.toFixed(2)}x of the commitment, from ${was.toFixed(2)}x.`,
+      // WHY THIS CHECK, ON THIS PACKAGE. The ratio on its own is a number the
+      // banker has to take on trust; the gap between a fixed pool and a moving
+      // commitment is the reason it moved at all.
+      why: whyChecked({ lendable, covers: now >= 1 }),
       rows: [
         ["Lendable collateral, distinct pool", fmtMoney(lendable)],
         ["Committed today", fmtMoney(committed)],
@@ -1161,9 +1228,13 @@ export function createModifyEngine(args: {
   }
 
   function acknowledge(delta: WorkroomDelta, staged: WorkroomDelta[]): WorkroomAcknowledgement {
+    // A HANDOFF ANSWERS IN CREDIT LANGUAGE. The org's own sentence — the guard,
+    // the object, the allowlist — is kept verbatim on the chip's map and on the
+    // filed handoff list, where a banker went looking for it. In the flow it is
+    // the reason a credit officer would give.
     const landed = delta.fileable
       ? `${delta.title} on ${delta.target}: ${delta.before} → ${delta.after}, staged on the clone.`
-      : `${delta.title} on ${delta.target} is on the manifest for the record. ${delta.handoff?.reason ?? "No tool files it today."}`;
+      : `${delta.title} on ${delta.target} is on the manifest for the record. ${whyHandoff(delta)}`;
     return {
       reply: `${landed} ${packageMove(staged)} ${vocabulary.nextMove}`,
       challenge: coverageCheck(delta, staged),
@@ -1251,24 +1322,17 @@ export function createModifyEngine(args: {
   }
 
   async function stagePlan(deltas: WorkroomDelta[]): Promise<StagedWorkroomPlan> {
-    if (!deps.available()) {
-      throw new WorkroomRefusalError(
-        "This view has no connector, so there is no org to stage against. Nothing here is simulated: the plan is the org's or there is no plan.",
-      );
-    }
-    if (!context.productPackageId) {
-      throw new WorkroomRefusalError(
-        "A modification is anchored on the product package, and this relationship stages none. There is nothing to modify.",
-      );
-    }
+    // EVERY WALL EXPLAINS ITSELF. The refusal stands — a plan is the org's or
+    // there is no plan — and it says what went wrong in the banker's terms with
+    // one thing they can do about it.
+    if (!deps.available()) throw new WorkroomRefusalError(NO_CONNECTOR_REFUSAL);
+    if (!context.productPackageId) throw new WorkroomRefusalError(NO_PACKAGE_REFUSAL);
 
     const fileable = deltas.filter((d) => d.fileable && d.wire);
     const handed = deltas.filter((d) => !d.fileable);
     if (!fileable.length) {
       throw new WorkroomRefusalError(
-        handed.length
-          ? `Nothing in this manifest files. All ${handed.length} ${handed.length === 1 ? "entry needs" : "entries need"} a tool that is not deployed, and staging a plan with no change is a plan that does nothing. Add a commitment, rate, maturity or term change, or take the handoff list to the person who can action it.`
-          : "Nothing is staged, so there is no plan to build.",
+        handed.length ? nothingFilesRefusal(handed.length) : "Nothing is staged, so there is no plan to build.",
       );
     }
 

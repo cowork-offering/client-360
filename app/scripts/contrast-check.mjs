@@ -119,6 +119,19 @@ const checks = [
   ["security pledge ink / overlay", hex("#53536b"), OVERLAY, 4.5],
   ["security figures / overlay", hex("#63637e"), OVERLAY, 4.5],
   ["security description / overlay", hex("#8a8aa4"), OVERLAY, 3.0],
+
+  // Workroom Tier-1 advice. It is deliberately QUIET — a neutral wash rather
+  // than a verdict tint — so it is the one place a legibility floor is easiest
+  // to lose. The advice line is body text and is held to 4.5; its kicker is a
+  // label and to 3.
+  ["advisory line / wash-2", hex("#53536b"), hex("#f1f1f8"), 4.5],
+  ["advisory kicker / wash-2", hex("#82829d"), hex("#f1f1f8"), 3.0],
+  ["advisory action ink / card", hex("#3b3b52"), WHITE, 4.5],
+  ["advisory action hover ink / card", accent, WHITE, 4.5],
+  // The refusal's banker-language reading sits on the warning tint.
+  ["refusal why / warning tint", hex("#5a4423"), hex("#fbf2e7"), 4.5],
+  // The check's "why" line, one step quieter than its verdict text.
+  ["check why / card", hex("#63637e"), WHITE, 4.5],
 ];
 
 let fail = 0;

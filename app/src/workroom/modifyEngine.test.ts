@@ -790,7 +790,10 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
   it("refuses to stage with no connector, rather than simulating a plan", async () => {
     const { engine } = engineOn({ available: () => false });
     const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
-    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/no connector/i);
+    // The refusal STANDS — a plan is the org's or there is no plan — and it now
+    // says so in the banker's own terms rather than reporting a missing part.
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/not connected to the bank's systems/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/nothing here is ever simulated/);
   });
 });
 
@@ -883,5 +886,300 @@ describe("execute redeems the token and reports what the org read back", () => {
     expect(result.tokenNote).toMatch(/replayed, nothing was written twice/);
     // The clone is still named, because a replay names what already exists.
     expect(result.filed[0].recordId).toBe("a4Zbb000002Br6HEAS");
+  });
+});
+
+/* =============================================================================
+   THE EXPLANATION LAYER, IN THE FLOW.
+
+   Founder verdict 2026-08-29: the room "feels almost more like guided template
+   still, no explanation" — "it can explain also concise in the flow what and why
+   it is needed."
+
+   The copy itself is proved in `explain.test.ts`. What is proved HERE is that
+   every beat of a real conversation carries it, composed against the figures
+   this package actually reads: the ask, the proposal, the check, the handoff and
+   the refusal. A beat that goes quiet is the failure.
+   ============================================================================= */
+
+describe("every beat says WHY, on this package's own figures", () => {
+  it("asks for a figure AND says what the figure decides", async () => {
+    const noAsk = bundleWith();
+    delete noAsk.requests;
+    const engine = createModifyEngine({ context, data, bundle: noAsk, deps: deps() });
+    const asked = await engine.parseIntent(engine.suggest()!.say, context);
+    expect(asked.kind).toBe("unparsed");
+    if (asked.kind !== "unparsed") return;
+    // Today's figure, then what the answer is FOR — the package total and the
+    // pool it is covered by, both read off this bundle.
+    expect(asked.reply).toContain("Today it reads $15M");
+    expect(asked.reply).toContain("the $26M package total");
+    expect(asked.reply).toContain("$34.60M pledged pool");
+  });
+
+  it("says what confirming DOES before the banker confirms it", async () => {
+    const { engine } = engineOn();
+    const result = await engine.parseIntent("increase the line of credit - $15,000,000.00 to $20,000,000", context);
+    expect(result.kind).toBe("deltas");
+    if (result.kind !== "deltas") return;
+    expect(result.reply).toContain("clone of Line of Credit");
+    expect(result.reply).toContain("booked facility stays exactly as it is");
+  });
+
+  it("explains a handoff in credit language, never in the org's own schema", async () => {
+    const { engine } = engineOn();
+    const result = await engine.parseIntent("add a covenant on minimum liquidity for the equipment - $8,000,000.00", context);
+    expect(result.kind).toBe("deltas");
+    if (result.kind !== "deltas") return;
+    expect(result.reply).toContain("2 connected writes");
+    expect(result.reply).toContain("nothing is silently dropped");
+    // The org's own sentence is still carried, verbatim — on the entry, where a
+    // banker who wants it goes looking. It is not the answer in the room.
+    expect(result.reply).not.toMatch(/LLC_BI__|allowlist|C360WriteGuard/);
+    expect(result.deltas[0].handoff?.reason).toMatch(/C360WriteGuard/);
+  });
+
+  it("carries the same reading into the confirm's answer", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "add Hartwell Logistics LLC as a guarantor");
+    const { reply } = engine.acknowledge(delta, [delta]);
+    expect(reply).toContain("on the manifest for the record");
+    expect(reply).toContain("not deployed here yet");
+    expect(reply).not.toMatch(/LLC_BI__|allowlist/);
+  });
+
+  it("says why the coverage check moved the way it did", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const { challenge } = engine.acknowledge(delta, [delta]);
+    expect(challenge!.why).toContain("does not grow with the commitment");
+    expect(challenge!.why).toContain("$34.60M");
+  });
+
+  it("refuses with the reason AND the way through it", async () => {
+    const { engine } = engineOn();
+    const result = await engine.parseIntent("waive the covenant on the line of credit - $15,000,000.00", context);
+    expect(result.kind).toBe("refusal");
+    if (result.kind !== "refusal") return;
+    expect(result.reply).toContain("cannot be pulled back");
+    expect(result.reply).toContain("Open the covenant review");
+    // The org's own account is still the quote on the chip, unparaphrased.
+    expect(result.refusal.reason).toMatch(/founder-gated/);
+    expect(result.refusal.why).toBe(
+      "Filing a compliance status makes the bank send its own approval notice to a named person, and that cannot be pulled back — so it is taken deliberately rather than as a side effect of a term change. Open the covenant review on this package and file it there.",
+    );
+  });
+
+  it("explains a disconnected view rather than reporting a fault", async () => {
+    const { engine } = engineOn({ available: () => false });
+    const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/not connected to the bank's systems/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/accept the connection prompt/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/Sync control/);
+  });
+
+  it("explains a manifest that files nothing, with both ways out", async () => {
+    const { engine } = engineOn();
+    const deltas = await confirm(engine, "add a covenant on minimum liquidity for the equipment - $8,000,000.00");
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/Add a commitment, rate, maturity or term change/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/person who can action it/);
+  });
+});
+
+/* =============================================================================
+   TIER-1 ADVISORIES.
+
+   Deterministic sense-checks that speak up BEFORE staging, off the figures the
+   engine already holds. They NEVER block — the chips still arrive open and the
+   org's guards still do the blocking — so every rule below is proved twice: on
+   the read that trips it, and on the read that must leave it silent.
+   ============================================================================= */
+
+async function propose(engine: ReturnType<typeof createModifyEngine>, said: string) {
+  const result = await engine.parseIntent(said, context);
+  if (result.kind !== "deltas") throw new Error(`${said} → ${result.kind}: ${result.reply}`);
+  return result;
+}
+
+const ruleIds = (result: { advisories?: Array<{ rule: string }> }) => (result.advisories ?? []).map((a) => a.rule);
+
+describe("advisory 1 — a limit under what is already drawn", () => {
+  it("speaks up, and offers the client's own ask as the figure that works", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "take the line of credit - $15,000,000.00 to $8,000,000");
+    const advice = result.advisories!.find((a) => a.rule === "commitment-below-outstanding")!;
+    expect(advice.line).toBe(
+      "$9.20M is already drawn on the Line of Credit, so a limit of $8M does not work as stated. The balance comes down first, or the figure is not the one you meant.",
+    );
+    expect(advice.resolution!.label).toBe("Make it $20M, the client's own ask");
+    // AND IT DOES NOT BLOCK. The chip the banker asked for is still on the table.
+    expect(result.deltas[0].wire).toEqual({ key: "requestedAmount", value: 8_000_000, facilityId: LINE_ID });
+  });
+
+  it("says nothing when the limit clears the balance", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "take the line of credit - $15,000,000.00 to $20,000,000");
+    expect(ruleIds(result)).not.toContain("commitment-below-outstanding");
+  });
+
+  it("offers no figure it cannot stand behind where the read stages no client ask", async () => {
+    const noAsk = bundleWith();
+    delete noAsk.requests;
+    const engine = createModifyEngine({ context, data, bundle: noAsk, deps: deps() });
+    const result = await propose(engine, "take the line of credit - $15,000,000.00 to $8,000,000");
+    const advice = result.advisories!.find((a) => a.rule === "commitment-below-outstanding")!;
+    expect(advice.resolution).toBeUndefined();
+  });
+});
+
+describe("advisory 2 — something of this kind is already on the facility", () => {
+  it("names what the clone already carries, and offers the amend", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00");
+    const advice = result.advisories!.find((a) => a.rule === "amend-or-add")!;
+    expect(advice.line).toContain("already carries 1 covenant — Accounts Receivable");
+    expect(advice.line).toContain("stages a new one beside it");
+    expect(advice.resolution!.label).toBe("Change the Accounts Receivable test instead");
+  });
+
+  it("says nothing on a member that carries none", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "add a covenant on minimum liquidity for the equipment - $8,000,000.00");
+    expect(ruleIds(result)).not.toContain("amend-or-add");
+  });
+});
+
+describe("advisory 3 — a maturity that cannot stand", () => {
+  const AUG29 = () => "2026-08-29";
+
+  it("catches a date behind today", async () => {
+    const { engine } = engineOn({ today: AUG29 });
+    const result = await propose(engine, "push the maturity on the line of credit - $15,000,000.00 to 2020-01-15");
+    const advice = result.advisories!.find((a) => a.rule === "maturity-out-of-order")!;
+    expect(advice.line).toContain("Jan 15, 2020 is behind today");
+    expect(advice.line).toContain("would file already matured");
+  });
+
+  it("catches a maturity that lands before a test the facility still owes", async () => {
+    const owing = bundleWith();
+    // The junction the Line of Credit carries, given the due date the org holds.
+    owing.covenants!.covenants!.push({
+      covenantId: "a3Bbb000000S0bNEAS",
+      covenantType: "Accounts Receivable",
+      nextEvaluationDate: "2027-09-30",
+    });
+    const engine = createModifyEngine({ context, data, bundle: owing, deps: { ...deps(), today: AUG29 } });
+    const result = await propose(engine, "push the maturity on the line of credit - $15,000,000.00 to 2027-06-30");
+    const advice = result.advisories!.find((a) => a.rule === "maturity-out-of-order")!;
+    expect(advice.line).toContain("Accounts Receivable test");
+    expect(advice.line).toContain("mature owing a test nobody can take");
+    expect(advice.resolution!.say).toContain("to 2027-09-30");
+  });
+
+  it("says nothing about a maturity ahead of today with no test behind it", async () => {
+    const { engine } = engineOn({ today: AUG29 });
+    const result = await propose(engine, "push the maturity on the line of credit - $15,000,000.00 to 2029-03-15");
+    expect(ruleIds(result)).not.toContain("maturity-out-of-order");
+  });
+});
+
+describe("advisory 4 — a covenant threshold that would never bind", () => {
+  it("measures the proposed level against the actual the read carries", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "set the fixed charge coverage threshold on the line of credit - $15,000,000.00 to 1.00");
+    const advice = result.advisories!.find((a) => a.rule === "covenant-never-binds")!;
+    expect(advice.line).toBe(
+      "Fixed Charge Coverage reads 1.22 today against a 1.15 floor. At 1 it only bites once the ratio falls 18%, so on the numbers this read carries it would not bind at all.",
+    );
+  });
+
+  it("says nothing when the threshold is being TIGHTENED", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "set the fixed charge coverage threshold on the line of credit - $15,000,000.00 to 1.30");
+    expect(ruleIds(result)).not.toContain("covenant-never-binds");
+  });
+
+  it("says nothing where the line names no covenant it could be about", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "set the threshold on the line of credit - $15,000,000.00 to 1.00");
+    expect(ruleIds(result)).not.toContain("covenant-never-binds");
+  });
+});
+
+describe("advisory 5 — a release that takes the cover under the org's own ratio", () => {
+  it("names the pledge, the pool and both ratios, and says which is the org's", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "release the pledge COL-000762 on the line of credit - $15,000,000.00");
+    const advice = result.advisories!.find((a) => a.rule === "release-thins-cover")!;
+    expect(advice.line).toBe(
+      "Releasing COL-000762 takes $8M out of the $34.60M pledged pool, leaving 1.02x against the $26M committed — under the 1.13x the org reads on this relationship today.",
+    );
+  });
+
+  it("says nothing about a release the pool absorbs", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "release the pledge COL-000763 on the line of credit - $15,000,000.00");
+    expect(ruleIds(result)).not.toContain("release-thins-cover");
+  });
+
+  it("says nothing where the read carries no collateral pool to reason over", async () => {
+    const blind = bundleWith();
+    delete blind.exposure!.totalUniqueCollateralLendableValue;
+    const engine = createModifyEngine({ context, data, bundle: blind, deps: deps() });
+    const result = await propose(engine, "release the pledge COL-000762 on the line of credit - $15,000,000.00");
+    expect(ruleIds(result)).not.toContain("release-thins-cover");
+  });
+});
+
+describe("advisory 6 — an entity already involved on the package", () => {
+  it("offers the role change where the line asks for a role they do not hold", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "add Elena Hartwell as a guarantor");
+    const advice = result.advisories!.find((a) => a.rule === "entity-already-involved")!;
+    expect(advice.line).toContain("Elena Hartwell is already a limited guarantor on this package");
+    expect(advice.resolution!.label).toBe("Change the role to guarantor instead");
+    expect(advice.resolution!.say).toBe("change the role of Elena Hartwell to guarantor");
+  });
+
+  it("says a duplicate is a duplicate where the role is the one they already hold", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "add James Hartwell as a guarantor");
+    const advice = result.advisories!.find((a) => a.rule === "entity-already-involved")!;
+    expect(advice.line).toContain("stages a second involvement for the same name");
+    expect(advice.resolution).toBeUndefined();
+  });
+
+  it("says nothing about an entity that is genuinely new to the deal", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "add Hartwell Logistics LLC as a guarantor");
+    expect(ruleIds(result)).not.toContain("entity-already-involved");
+  });
+});
+
+describe("what an advisory is NOT", () => {
+  it("never removes the change it warns about, so the banker can still proceed", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "take the line of credit - $15,000,000.00 to $8,000,000");
+    expect(result.advisories!.length).toBeGreaterThan(0);
+    expect(result.deltas).toHaveLength(1);
+    const staged = await engine.stagePlan(result.deltas, context);
+    // The org staged it. The advisory informed; it did not gate.
+    expect(staged.planHash).toBe(STAGE_RESULT.planHash);
+  });
+
+  it("every resolution is a line the banker could have typed, and the parser reads it back", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "take the line of credit - $15,000,000.00 to $8,000,000");
+    const say = result.advisories!.find((a) => a.rule === "commitment-below-outstanding")!.resolution!.say;
+    const taken = await engine.parseIntent(say, context);
+    expect(taken.kind).toBe("deltas");
+    if (taken.kind !== "deltas") return;
+    expect(taken.deltas[0].wire).toEqual({ key: "requestedAmount", value: 20_000_000, facilityId: LINE_ID });
+  });
+
+  it("stays silent on a clean change, rather than finding something to say", async () => {
+    const { engine } = engineOn();
+    const result = await propose(engine, "move the rate on the line of credit - $15,000,000.00 to 8.1%");
+    expect(result.advisories ?? []).toHaveLength(0);
   });
 });

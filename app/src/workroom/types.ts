@@ -90,10 +90,40 @@ export interface WorkroomChallenge {
   /** The provenance line beside the verdict chip. */
   kicker: string;
   line: string;
+  /**
+   * WHY THIS CHECK MATTERS HERE — one sentence, under the figures.
+   *
+   * A verdict with no reason is a number a banker has to take on trust. Absent
+   * where the engine has nothing state-derived to add, which is what the shell
+   * engines leave.
+   */
+  why?: string;
   /** The arithmetic, opened as a peek. `[label, value, rowClass?]`. */
   rows: [string, string, string?][];
   /** What the banker can say about it, in the agent's own words. */
   say: string;
+}
+
+/**
+ * A TIER-1 ADVISORY: a sense-check that speaks up BEFORE staging.
+ *
+ * It is ADVICE, not a verdict, and the distinction is load-bearing everywhere.
+ * The org's guards do the blocking — the write allowlist, the drift recompute,
+ * the single-use token — so an advisory never gates a chip, never waits to be
+ * acknowledged, and never removes the change the banker asked for. It says the
+ * thing a credit officer would say across the desk, and the banker decides.
+ *
+ * `resolution` is the better move where the read carries one, phrased as a line
+ * the banker could have typed themselves: it goes back through the same parser,
+ * so an advisory can do nothing the banker could not.
+ */
+export interface WorkroomAdvisory {
+  id: string;
+  /** Which rule fired, for tests and for the audit of what the room noticed. */
+  rule: string;
+  /** The advice. One or two sentences, banker language, derived from the read. */
+  line: string;
+  resolution?: { label: string; say: string };
 }
 
 /** ONE proposed change: a delta chip in the thread, a manifest entry once it is
@@ -184,8 +214,17 @@ export interface WorkroomRefusal {
   id: string;
   target: string;
   title: string;
-  /** The org's reason, in banker language. */
+  /** The org's own account of its own constraint, verbatim. Rendered as the
+   *  quote it is, never paraphrased. */
   reason: string;
+  /**
+   * WHY, AND WHAT WOULD WORK — in credit language, above the quote.
+   *
+   * A refusal with no route out is a dead end, and the org's own sentence is
+   * the wrong thing to lead with: it explains the constraint to an engineer,
+   * not the way forward to a banker. Absent on the shell engines.
+   */
+  why?: string;
   /** The longer account, opened as a peek. */
   detail: string;
 }
@@ -193,7 +232,14 @@ export interface WorkroomRefusal {
 /** What `parseIntent` gives back. Three outcomes and no fourth: deltas the
  *  banker can confirm, an honest refusal, or "I did not understand that". */
 export type IntentResult =
-  | { kind: "deltas"; reply: string; deltas: WorkroomDelta[] }
+  | {
+      kind: "deltas";
+      reply: string;
+      deltas: WorkroomDelta[];
+      /** What the room noticed about these deltas before anything is staged.
+       *  Never a gate: the chips arrive open either way. */
+      advisories?: WorkroomAdvisory[];
+    }
   | { kind: "refusal"; reply: string; refusal: WorkroomRefusal }
   | { kind: "unparsed"; reply: string };
 
