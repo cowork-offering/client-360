@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { resolveBundle } from "../../actions/registry";
 import { useApp } from "../../state/appState";
-import { createScriptedEngine, type WorkroomEngine } from "../../workroom/engine";
+import { createCreateEngine } from "../../workroom/createEngine";
+import { type WorkroomEngine } from "../../workroom/engine";
 import { createModifyEngine } from "../../workroom/modifyEngine";
+import { createRenewEngine } from "../../workroom/renewEngine";
 import { closeWorkroom, openWorkroom, useWorkroom } from "../../workroom/openWorkroom";
 import { Workroom } from "./Workroom";
 
@@ -30,11 +32,22 @@ export function WorkroomHost() {
     return baked && patch ? { ...baked, ...patch } : baked;
   }, [data, state.livePatches, accountId]);
 
+  /* ALL THREE MODES ARE WIRED. There is no scripted fallback left here: a room
+     that reached a storyline when a mode was unrecognised would be a room that
+     could quietly stop being real, and the `scripted` badge is the only thing
+     the banker has to tell the two apart. The three engines take the same
+     arguments and hand back the same seam. */
   const engine = useMemo<WorkroomEngine | null>(() => {
     if (!context) return null;
-    return context.mode === "modify"
-      ? createModifyEngine({ context, data, bundle })
-      : createScriptedEngine(context);
+    const args = { context, data, bundle };
+    switch (context.mode) {
+      case "renew":
+        return createRenewEngine(args);
+      case "create":
+        return createCreateEngine(args);
+      default:
+        return createModifyEngine(args);
+    }
   }, [context, data, bundle]);
 
   if (!context || !engine) return null;
