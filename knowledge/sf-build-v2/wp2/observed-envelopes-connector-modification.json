@@ -1,0 +1,18 @@
+{
+ "_provenance": {
+  "captured": "2026-08-29",
+  "org": "bankinggpt (accenture-d8 sandbox, 00DDz000001qeO2MAI)",
+  "surface": "claude.ai MCP connector 'Customer 360' (server b8a97df4), tools stage_loan_modification / execute_loan_modification - THE COCKPIT'S OWN TRANSPORT, first ever run on this path",
+  "runningUser": "005bb00000ftouDAAQ (fabian.goetzens@accenture.com.bankinggpt, role Commercial Banking Manager) - connector identity == probe identity == approver",
+  "data": "THROWAWAY, tree-deleted after capture, residue zero. Account 001bb00001L4I3OAAV ZZ-CPROOF Borrower, package a5Fbb000000IxPpEAK, parent a4Zbb000002GofdEAC (Booked/Open, $1M, lookupKey ZZCPROOF1). Clone a4Zbb000002GohFEAS ($1.25M applied, Qualification, ZZCPROOF1_M1), junctions RL-00000207 (rev 0 anchor) + RL-00000208 (rev 1). Staging row a8abb00001NlKSMAA3 deleted.",
+  "verdict": "CONNECTOR PROOF GATE CLOSED. Envelope shape identical to the REST Actions API observations (observed-envelopes-execute-loan-modification.json): same inputs array wrapping, same outputValues.result shape, same warnings/steps/verification detail. Tool naming = MCP ToolNames (stage_loan_modification), plain, no prefix. Independent org-side verification via REST confirmed clone/junctions/parent-untouched before cleanup."
+ },
+ "stage_request": {
+  "inputs": [{"idempotencyKey": "ZZ-CPROOF-MOD-1", "productPackageId": "a5Fbb000000IxPpEAK", "facilityIds": ["a4Zbb000002GofdEAC"], "rationale": "Connector proof: first stage_loan_modification through the claude.ai MCP connector, throwaway fixture.", "requestedAmount": 1250000}]
+ },
+ "stage_response_key_fields": {"ok": true, "stagingId": "a8abb00001NlKSMAA3", "planHash": "5607c6625fb78b9eaca745cbc6a0e3c81dd89bfb5e0f93237114970cf0b434fb", "executionHeld": false, "heldReason": null, "facilityCount": 1, "steps": ["credit_action_0", "verify_clone_0", "apply_changes_0", "observe_side_effects", "held_execution"]},
+ "execute_request": {
+  "inputs": [{"idempotencyKey": "ZZ-CPROOF-MOD-1", "stagingId": "a8abb00001NlKSMAA3", "planHash": "5607c66... (full hash in stage_response)", "decisionToken": "(single-use, consumed)", "approverUserId": "005bb00000ftouDAAQ"}]
+ },
+ "execute_response_key_fields": {"terminalState": "success", "cloneLoanId": "a4Zbb000002GohFEAS", "cloneStage": "Qualification", "cloneLookupKey": "ZZCPROOF1_M1", "appliedChanges": "Amount reads back at 1250000.00", "junctionName": "RL-00000208", "revisionNumber": 1, "parentUnchanged": true, "replayed": false}
+}
