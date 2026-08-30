@@ -106,7 +106,26 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
   const [fresh, setFresh] = useState(false);
   const lastSweepStartedAt = useRef(0);
 
-  if (!mcpAvailable()) return null;
+  if (!mcpAvailable()) {
+    // DIAGNOSTIC, not decoration: name WHICH layer is missing so a viewer can
+    // read the code out loud. R0 = no Claude runtime at all (static hosting,
+    // e.g. the /s/ share). R1 = Claude runtime present but the connector
+    // capability was not granted to this view (consent missing or withheld).
+    const hasClaude = typeof window !== "undefined" && (window as { claude?: unknown }).claude !== undefined;
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]"
+        style={{ background: "var(--neutral-bg)", color: "var(--ink-muted)", border: "1px solid var(--border)" }}
+        title={
+          hasClaude
+            ? "This view has a Claude runtime but no bank connection was granted. Reload the page and accept the connection prompt."
+            : "This copy is static hosting with no Claude runtime; live sync can never run here. Open the claude.ai artifact instead."
+        }
+      >
+        offline · {hasClaude ? "R1 no grant" : "R0 no runtime"}
+      </span>
+    );
+  }
 
   const storedAt = state.liveStoredAt[accountId];
 
