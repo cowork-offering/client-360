@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The org calling itself. Deployed 2026-08-30 for the callout probe that established the MCP
+  dispatcher context CAN reach the network; kept because the relay architecture rests on that fact
+  and a future probe should not need a fresh deploy to re-establish it.
+-->
+<RemoteSiteSetting xmlns="http://soap.sforce.com/2006/04/metadata">
+    <disableProtocolSecurity>false</disableProtocolSecurity>
+    <isActive>true</isActive>
+    <url>https://accenture-d8--bankinggpt.sandbox.my.salesforce.com</url>
+</RemoteSiteSetting>

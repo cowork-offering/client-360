@@ -20,6 +20,14 @@
  *    theRealCreditActionEngineEitherRunsOrSaysWhyItDidNot runs with NO stub, so the truth about the
  *    real bean in a test context is recorded rather than assumed.
  *
+ * 3. Since 2026-08-30 the class has TWO legs, and this file exercises both. The inline leg is what
+ *    every test above the relay section drives, and it is unchanged: those requests set
+ *    inlineExecution explicitly, exactly as the relayed inner call does. The relay leg is what the
+ *    MCP dispatcher actually reaches, and it is tested against a scripted HttpCalloutMock, because
+ *    the thing worth proving here is not that HTTP works: it is that the outer leg refuses a bad
+ *    token before it costs a round trip, WRITES NOTHING on the way out, hands the inner answer back
+ *    unedited, and leaves the banker's single-use confirmation intact whenever the hop fails.
+ *
  * Every method arms the shared-sandbox callout mock first: 24 org-local CDC triggers enqueue an
  * EventBridge callout on every DML these fixtures perform, and a test context refuses an unmocked one.
  */
@@ -27,10 +35,24 @@
 private class StageExecuteLoanModificationTest {
 
     private static final String PARENT_KEY = 'ZZMODTEST1';
+    private static final String RELAY_URL = 'https://bot.connectry.io/c360-relay/relay';
+    private static final String RELAY_SECRET = 'ZZ-TEST-SECRET-NOT-A-REAL-ONE';
+    private static final String PATH_SELF = 'self';
+    private static final String PATH_BOX = 'box';
 
     @TestSetup
     static void makeFixture() {
         C360TestFixture.armCalloutMock();
+
+        // The relay leg reads this out of the application cache. It is set up here rather than in
+        // each method so the relay tests perform NO DML of their own: a callout in a transaction
+        // that has already written is refused by the platform, and that rule is the whole reason
+        // the outer leg is read-only.
+        cm_Relay_Config__c cfg = cm_Relay_Config__c.getOrgDefaults();
+        cfg.cm_Relay_URL__c = RELAY_URL;
+        cfg.cm_Shared_Secret__c = RELAY_SECRET;
+        insert cfg;
+
         Account a = new Account(Name = 'ZZ-MOD-TEST Borrower');
         insert a;
 
@@ -106,7 +128,15 @@ private class StageExecuteLoanModificationTest {
             (r.error.orgError == null ? '' : ' :: org said: ' + r.error.orgError);
     }
 
+    /** An inline request: the shape the relay's inner leg sends, and what every engine test drives. */
     private static ExecuteLoanModification.Request execReq(String k, StageLoanModification.StageResult staged) {
+        ExecuteLoanModification.Request e = relayReq(k, staged);
+        e.inlineExecution = true;
+        return e;
+    }
+
+    /** The shape the MCP dispatcher sends: no inlineExecution, so the call is relayed. */
+    private static ExecuteLoanModification.Request relayReq(String k, StageLoanModification.StageResult staged) {
         ExecuteLoanModification.Request e = new ExecuteLoanModification.Request();
         e.idempotencyKey = k;
         e.stagingId = staged.stagingId;
@@ -453,7 +483,346 @@ private class StageExecuteLoanModificationTest {
             'The staging record is the authority on what happened, including when it failed'
         );
     }
+    // -------------------------------------------------------------------------------------------
+    // The relay leg, and its two doors.
+    //
+    // Page.getContent() cannot be called from a test method at all, so the session mint is reached
+    // through the same kind of seam the credit-action engine uses. What is tested here is the
+    // DOOR ORDER and the safety rules around it, which is the part that can be got wrong quietly.
+    // -------------------------------------------------------------------------------------------
 
+    private static final String SELF_URL =
+        URL.getOrgDomainUrl().toExternalForm() + '/services/data/v61.0/actions/custom/apex/ExecuteLoanModification';
+    private static final String FAKE_SID = '00DDz000001qeO2!AQEAQFAKEsessionFORtestsONLY';
+
+    /** A session mint that works. */
+    private class GoodSession implements ExecuteLoanModification.SessionSource {
+        public String sessionId() {
+            return FAKE_SID;
+        }
+    }
+
+    /** A session mint that does not, which is the whole reason a second door exists. */
+    private class DeadSession implements ExecuteLoanModification.SessionSource {
+        public String sessionId() {
+            throw new CalloutException('getContent is not supported in this context');
+        }
+    }
+
+    /**
+     * Scripts both doors independently and records what each was sent.
+     *
+     * It answers anything that is NEITHER door the way C360TestFixture.NoopCalloutMock does, because
+     * only one mock can be armed at a time and the CDC shield still has to hold underneath.
+     */
+    private class DoorMock implements HttpCalloutMock {
+        Integer selfStatus = 200;
+        String selfBody;
+        Boolean selfThrows = false;
+        Integer boxStatus = 200;
+        String boxBody;
+        Boolean boxThrows = false;
+        HttpRequest sawSelf;
+        HttpRequest sawBox;
+
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse r = new HttpResponse();
+            if (req.getEndpoint() == SELF_URL) {
+                sawSelf = req;
+                if (selfThrows) {
+                    throw new CalloutException('Read timed out');
+                }
+                r.setStatusCode(selfStatus);
+                r.setBody(selfBody);
+                return r;
+            }
+            if (req.getEndpoint() == RELAY_URL) {
+                sawBox = req;
+                if (boxThrows) {
+                    throw new CalloutException('Unable to tunnel through proxy');
+                }
+                r.setStatusCode(boxStatus);
+                r.setBody(boxBody);
+                return r;
+            }
+            r.setStatusCode(200);
+            r.setBody('{}');
+            return r;
+        }
+    }
+
+    /** What the REST Actions API puts around an invocable's own answer. */
+    private static String envelope(Object outputValues, Boolean isSuccess, Object errors) {
+        return JSON.serialize(new List<Object>{
+            new Map<String, Object>{
+                'actionName' => 'ExecuteLoanModification',
+                'errors' => errors,
+                'isSuccess' => isSuccess,
+                'outputValues' => outputValues
+            }
+        });
+    }
+
+    /** A plausible inner success: enough of the real shape to prove the passthrough is faithful. */
+    private static ExecuteLoanModification.Response innerSuccess(Id parentId) {
+        ExecuteLoanModification.FacilityResult f = new ExecuteLoanModification.FacilityResult();
+        f.facilityId = parentId;
+        f.facilityName = 'LP-INNER-PARENT';
+        f.cloneLoanId = C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType);
+        f.cloneName = 'LP-INNER-CLONE';
+        f.cloneStage = 'Qualification';
+        f.junctionId = C360Wave2Fixture.fakeId(LLC_BI__LoanRenewal__c.SObjectType);
+        f.junctionName = 'RL-00000999';
+        f.revisionNumber = 1;
+        f.parentUnchanged = true;
+        f.verification = 'the clone reads back with Is_Modification true';
+
+        ExecuteLoanModification.StepResult s = new ExecuteLoanModification.StepResult();
+        s.id = 'credit_action_0';
+        s.type = 'write';
+        s.label = 'Run the credit action';
+        s.state = C360Plan.STATE_VERIFIED;
+        s.detail = 'nCino created the modification facility.';
+
+        ExecuteLoanModification.ExecuteResult r = new ExecuteLoanModification.ExecuteResult();
+        r.cloneLoanId = f.cloneLoanId;
+        r.recordName = f.cloneName;
+        r.anchorName = f.facilityName;
+        r.terminalState = C360Plan.TERMINAL_SUCCESS;
+        r.facilities = new List<ExecuteLoanModification.FacilityResult>{ f };
+        r.facilityCount = 1;
+        r.steps = new List<ExecuteLoanModification.StepResult>{ s };
+        r.replayed = false;
+        r.outcome = 'Modification LP-INNER-CLONE created from LP-INNER-PARENT.';
+
+        ExecuteLoanModification.Response answer = new ExecuteLoanModification.Response();
+        answer.ok = true;
+        answer.result = r;
+        return answer;
+    }
+
+    /** Arms both seams and returns the mock, so each test says only what it is actually varying. */
+    private static DoorMock doors(ExecuteLoanModification.SessionSource sess, Id parentId) {
+        ExecuteLoanModification.sessionOverride = sess;
+        DoorMock m = new DoorMock();
+        m.selfBody = envelope(innerSuccess(parentId), true, null);
+        m.boxBody = envelope(innerSuccess(parentId), true, null);
+        Test.setMock(HttpCalloutMock.class, m);
+        return m;
+    }
+
+    private static Datetime consumedAt(Id stagingId) {
+        return [SELECT cm_Token_Consumed_At__c FROM cm_Action_Staging__c WHERE Id = :stagingId].cm_Token_Consumed_At__c;
+    }
+
+    @IsTest
+    static void theSelfDoorCarriesTheSessionAndTheBoxIsNeverTouched() {
+        C360TestFixture.armCalloutMock();
+        String k = key('selfok');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        Integer dmlBefore = Limits.getDmlStatements();
+        ExecuteLoanModification.Response done = execute(relayReq(k, staged.result));
+        Integer dmlAfter = Limits.getDmlStatements();
+
+        // The org called itself, with the session the page minted.
+        System.assertNotEquals(null, m.sawSelf, 'A call without inlineExecution tries the org itself first');
+        System.assertEquals('Bearer ' + FAKE_SID, m.sawSelf.getHeader('Authorization'),
+            'The Visualforce session IS the credential: hosted MCP runs on a JWT that UserInfo.getSessionId cannot use');
+        System.assertEquals(null, m.sawBox, 'The external relay is a fallback, not a first choice');
+        System.assertEquals(PATH_SELF, done.result.relayPath, 'And the answer says which door carried it');
+
+        // The inner leg is told to execute inline, which is also what stops it relaying again.
+        Map<String, Object> sent = (Map<String, Object>) JSON.deserializeUntyped(m.sawSelf.getBody());
+        Map<String, Object> input = (Map<String, Object>) ((List<Object>) sent.get('inputs'))[0];
+        System.assertEquals(true, input.get('inlineExecution'), 'The recursion guard IS the inline flag on the inner call');
+        System.assertEquals(staged.result.decisionToken, input.get('decisionToken'), 'The inner leg needs the token to burn it');
+        System.assertEquals(k, input.get('idempotencyKey'));
+
+        // The outer leg wrote nothing. Apex forbids DML before a callout, and a hop that never lands
+        // has to be retryable.
+        System.assertEquals(dmlBefore, dmlAfter, 'The relay leg performs no DML at all');
+        System.assertEquals(null, consumedAt(staged.result.stagingId),
+            'The OUTER leg never burns the token: the inner one does, inside the transaction that works');
+        System.assertEquals(0, cloneCount(), 'And it certainly writes no facility');
+
+        // The answer is the inner leg's answer.
+        System.assertEquals(true, done.ok, 'The inner leg succeeded, so this call succeeded');
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState);
+        System.assertEquals(1, done.result.facilityCount);
+        System.assertEquals('LP-INNER-CLONE', done.result.facilities[0].cloneName, 'Nested results survive the round trip intact');
+        System.assertEquals(1, done.result.facilities[0].revisionNumber, 'Including the chain revision the banker is shown');
+        System.assertEquals('credit_action_0', done.result.steps[0].id, 'And the tracker steps, which the panel renders');
+    }
+
+    @IsTest
+    static void aSessionTheOrgRefusesFallsThroughToTheBoxRelay() {
+        C360TestFixture.armCalloutMock();
+        String k = key('self401');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        m.selfStatus = 401;
+        m.selfBody = '[{"message":"Session expired or invalid","errorCode":"INVALID_SESSION_ID"}]';
+        ExecuteLoanModification.Response done = execute(relayReq(k, staged.result));
+
+        System.assertNotEquals(null, m.sawSelf, 'The self door is still tried first');
+        System.assertNotEquals(null, m.sawBox, 'A 401 proves nothing ran, so the next door is safe to try');
+        System.assertEquals(RELAY_SECRET, m.sawBox.getHeader('x-c360-relay-secret'),
+            'The relay refuses anything unsigned, so an unsigned hop is a broken hop');
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(PATH_BOX, done.result.relayPath, 'The answer names the door that actually carried it');
+        System.assertEquals(null, consumedAt(staged.result.stagingId), 'And the outer leg still burned nothing');
+    }
+
+    @IsTest
+    static void aSessionThatCannotBeMintedFallsThroughToTheBoxRelay() {
+        C360TestFixture.armCalloutMock();
+        String k = key('nosession');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new DeadSession(), parent().Id);
+        ExecuteLoanModification.Response done = execute(relayReq(k, staged.result));
+
+        System.assertEquals(null, m.sawSelf, 'With no session there is nothing to send, so nothing is sent');
+        System.assertNotEquals(null, m.sawBox, 'Which is exactly the case the box relay exists for');
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(PATH_BOX, done.result.relayPath);
+    }
+
+    @IsTest
+    static void aDoorThatAnswersNon200IsReportedRatherThanRetriedThroughTheOther() {
+        C360TestFixture.armCalloutMock();
+        String k = key('self500');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        m.selfStatus = 500;
+        m.selfBody = '[{"message":"An unexpected error occurred","errorCode":"UNKNOWN_EXCEPTION"}]';
+        ExecuteLoanModification.Response res = execute(relayReq(k, staged.result));
+
+        System.assertEquals(null, m.sawBox,
+            'A 500 landed on something that COULD have executed. Trying the other door would be a second run, not a retry');
+        System.assertEquals(false, res.ok);
+        System.assertEquals('ORG_UNAVAILABLE', res.error.code, 'The path failed. The org rejected nothing and neither did we');
+        System.assertEquals(true, res.error.resumable, 'The token fence makes a retry safe even here');
+        System.assert(res.error.orgError.contains('500'), 'The refusal carries what the door actually said: ' + res.error.orgError);
+        System.assertEquals(null, consumedAt(staged.result.stagingId));
+        System.assertEquals(0, cloneCount());
+    }
+
+    @IsTest
+    static void bothDoorsDownLeavesTheTokenGoodForARetryAndSaysWhyEach() {
+        C360TestFixture.armCalloutMock();
+        String k = key('alldown');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        m.selfThrows = true;
+        m.boxThrows = true;
+        ExecuteLoanModification.Response res = execute(relayReq(k, staged.result));
+
+        System.assertEquals(false, res.ok);
+        System.assertEquals('ORG_UNAVAILABLE', res.error.code);
+        System.assertEquals(true, res.error.resumable);
+        System.assert(res.error.message.contains('has not been used'),
+            'The banker is told plainly the confirmation still stands: ' + res.error.message);
+        System.assert(res.error.orgError.contains('self:') && res.error.orgError.contains('box:'),
+            'Both doors report why they did not carry it: ' + res.error.orgError);
+        System.assertEquals(null, consumedAt(staged.result.stagingId), 'And the confirmation does still stand');
+        System.assertEquals(0, cloneCount());
+    }
+
+    @IsTest
+    static void anOrgRefusalOnTheInnerLegIsReportedAsTheOrgs() {
+        C360TestFixture.armCalloutMock();
+        String k = key('relayfault');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        m.selfBody = envelope(null, false, JSON.serialize(new List<Object>{
+            new Map<String, Object>{ 'statusCode' => 'INVALID_TYPE', 'message' => 'sObject type LLC_BI__Loan__c is not supported' }
+        }));
+        ExecuteLoanModification.Response res = execute(relayReq(k, staged.result));
+
+        System.assertEquals(false, res.ok, 'A 200 carrying isSuccess false is still a refusal');
+        System.assertEquals('ORG_REJECTED_WRITE', res.error.code, 'The org said no, so it is reported as the org\'s');
+        System.assert(res.error.orgError.contains('INVALID_TYPE'), 'With the org\'s own words: ' + res.error.orgError);
+        System.assertEquals(null, m.sawBox, 'An answer is an answer: the other door is not a second opinion');
+    }
+
+    @IsTest
+    static void theRelayLegRefusesABadTokenBeforeItCostsARoundTrip() {
+        C360TestFixture.armCalloutMock();
+        String k = key('relaybadtoken');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        ExecuteLoanModification.Request e = relayReq(k, staged.result);
+        e.decisionToken = 'not-the-token-the-banker-was-given';
+        ExecuteLoanModification.Response res = execute(e);
+
+        System.assertEquals(false, res.ok);
+        System.assertEquals('TOKEN_REFUSED', res.error.code, 'The token gate is enforced on the OUTER leg too, not only inside');
+        System.assertEquals(null, m.sawSelf, 'A refused call must never reach a door');
+        System.assertEquals(null, m.sawBox);
+        System.assertEquals(null, consumedAt(staged.result.stagingId));
+    }
+
+    @IsTest
+    static void aRelayedReplayReportsThePriorRunWithoutHopping() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('relayreplay');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Response first = execute(execReq(k, staged.result));
+        System.assertEquals(true, first.ok, 'first execute should succeed: ' + whyExec(first));
+        System.assertEquals(null, first.result.relayPath, 'An inline run went through no door at all');
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        ExecuteLoanModification.Response again = execute(relayReq(k, staged.result));
+
+        System.assertEquals(true, again.ok, 'A replay is a successful invocation on either leg');
+        System.assertEquals(true, again.result.replayed);
+        System.assertEquals(first.result.cloneLoanId, again.result.cloneLoanId, 'It reports the prior clone');
+        System.assertEquals(null, m.sawSelf, 'And answers it locally: a known key is not worth a round trip');
+        System.assertEquals(null, m.sawBox);
+        System.assertEquals(1, cloneCount(), 'One key, one modification, whichever leg asked');
+    }
     /**
      * The one test that runs the REAL bean. It cannot assert success, because a managed-package
      * credit action inside a test context is not something this suite controls, and a green assertion

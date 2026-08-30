@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Renders nothing but a session id, and exists for exactly one reason.
+
+  The Salesforce-hosted MCP runtime authenticates with a JWT access token, and Apex's
+  UserInfo.getSessionId() is documented as unusable under one. That is what leaves the dispatcher
+  context unable to authenticate a call back into its own org. A page render mints an OPAQUE UI
+  session id instead of reading one off the running request, and Page.getContent() is treated as a
+  callout (API 34+), so it can only be used on a leg that has performed no DML - which the relay leg
+  has not, by design.
+-->
+<ApexPage xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>67.0</apiVersion>
+    <availableInTouch>false</availableInTouch>
+    <confirmationTokenRequired>false</confirmationTokenRequired>
+    <description>Session-id carrier for the Customer 360 execution relay. Never linked, never navigated to by a human.</description>
+    <label>C360 Relay Session</label>
+</ApexPage>

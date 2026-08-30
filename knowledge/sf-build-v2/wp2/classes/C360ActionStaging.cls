@@ -121,6 +121,35 @@ public with sharing class C360ActionStaging {
         String decisionToken,
         Id approverUserId
     ) {
+        cm_Action_Staging__c rec = assertClaimable(stagingId, planHash, decisionToken, approverUserId);
+        rec.cm_Token_Consumed_At__c = System.now();
+        rec.cm_Approver_User__c = approverUserId;
+        rec.cm_Status__c = 'Executing';
+        update as user rec;
+        return rec;
+    }
+
+    /**
+     * The same preconditions as claimForExecute, WITHOUT consuming the token or writing anything.
+     *
+     * A caller that cannot host the execution itself (the MCP dispatcher context, which relays into
+     * a REST transaction) has to refuse a bad token before it goes anywhere, and must leave a good
+     * one unburned: a relay that never arrives has to be retryable, and Apex forbids DML before a
+     * callout regardless. The leg that actually executes calls claimForExecute and burns it there.
+     *
+     * @param stagingId The handle returned by stage_*.
+     * @param planHash The hash the banker confirmed.
+     * @param decisionToken The single-use token minted at stage time.
+     * @param approverUserId The named human bound to the token. Must be the running identity.
+     * @return The staging record, untouched.
+     * @throws StagingException on any precondition failure.
+     */
+    public static cm_Action_Staging__c assertClaimable(
+        Id stagingId,
+        String planHash,
+        String decisionToken,
+        Id approverUserId
+    ) {
         if (String.isBlank(decisionToken)) {
             throw new StagingException('decisionToken is required. No execute_* runs without one (A33.5.4).');
         }
@@ -160,11 +189,6 @@ public with sharing class C360ActionStaging {
         if (rec.cm_Decision_Token_Hash__c != tokenDigest(decisionToken, planHash, approverUserId)) {
             throw new StagingException('decisionToken is not valid for this stagingId, planHash and approver (A33.5.4).');
         }
-
-        rec.cm_Token_Consumed_At__c = System.now();
-        rec.cm_Approver_User__c = approverUserId;
-        rec.cm_Status__c = 'Executing';
-        update as user rec;
         return rec;
     }
 
