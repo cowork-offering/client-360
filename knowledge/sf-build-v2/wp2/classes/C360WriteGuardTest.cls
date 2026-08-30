@@ -431,12 +431,16 @@ private class C360WriteGuardTest {
     }
 
     @IsTest
-    static void involvementIsCreatedAsBorrowerOnly() {
+    static void involvementRolesAreTheBorrowingStructureSetAndNothingElse() {
         C360TestFixture.armCalloutMock();
-        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE,
-            new Map<String, Object>{ 'LLC_BI__Borrower_Type__c' => 'Borrower', 'LLC_BI__Ownership__c' => 100 });
+        // The borrowing-structure amendment arm (2026-08-30): the full role set files. Every one of
+        // these is a role Hartwell's own involvement rows carry live.
+        for (String role : new List<String>{ 'Borrower', 'Co-Borrower', 'Guarantor', 'Limited Guarantor', 'Related Entity' }) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE,
+                new Map<String, Object>{ 'LLC_BI__Borrower_Type__c' => role, 'LLC_BI__Ownership__c' => 100 });
+        }
 
-        for (String role : new List<String>{ 'Guarantor', 'Co-Borrower', 'Grantor', 'Related Entity' }) {
+        for (String role : new List<String>{ 'Grantor', 'Contractor', 'Trustee' }) {
             Boolean refused = false;
             try {
                 C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE,
@@ -444,7 +448,7 @@ private class C360WriteGuardTest {
             } catch (C360WriteGuard.GuardException e) {
                 refused = true;
             }
-            System.assertEquals(true, refused, 'This wave creates the Borrower row only. Tried: ' + role);
+            System.assertEquals(true, refused, 'Grantor and Contractor are collateral and construction semantics, not borrowing structure. Tried: ' + role);
         }
     }
 

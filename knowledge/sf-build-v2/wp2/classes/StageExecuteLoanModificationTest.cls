@@ -546,6 +546,87 @@ private class StageExecuteLoanModificationTest {
     }
 
     @IsTest
+    static void aGuarantorAddIsAuthoredOnTheCloneAndARemoveIsACarryExclusion() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('borrstr');
+
+        // The structure today: one guarantor the banker will REMOVE, and a fresh
+        // entity they will ADD as Limited Guarantor.
+        Account oldGuarantor = new Account(Name = 'ZZ-MOD-TEST Old Guarantor');
+        Account newGuarantor = new Account(Name = 'ZZ-MOD-TEST New Guarantor');
+        insert new List<Account>{ oldGuarantor, newGuarantor };
+        LLC_BI__Legal_Entities__c existing = new LLC_BI__Legal_Entities__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Product_Package__c = pkg().Id,
+            LLC_BI__Account__c = oldGuarantor.Id,
+            LLC_BI__Borrower_Type__c = 'Guarantor',
+            LLC_BI__Ownership__c = 100
+        );
+        insert existing;
+
+        StageLoanModification.Request r = stageReq(k);
+        r.involvementChangesJson = '[' +
+            '{"op":"remove","accountName":"ZZ-MOD-TEST Old Guarantor"},' +
+            '{"op":"add","role":"Limited Guarantor","accountName":"ZZ-MOD-TEST New Guarantor","ownership":50}' +
+        ']';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('borrowing-structure'),
+            'The banker confirms a plan that NAMES the structure changes: ' + staged.result.summary);
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(2, done.result.involvements.size());
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        System.assertEquals(0, [
+            SELECT COUNT() FROM LLC_BI__Legal_Entities__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Account__c = :oldGuarantor.Id
+        ], 'The removed guarantor never travels to the clone: a carry exclusion, not a delete');
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE Id = :existing.Id
+        ], 'And the booked parent keeps its row untouched');
+
+        List<LLC_BI__Legal_Entities__c> added = [
+            SELECT LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c, LLC_BI__Product_Package__c
+            FROM LLC_BI__Legal_Entities__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Account__c = :newGuarantor.Id
+        ];
+        System.assertEquals(1, added.size(), 'The added entity reads back on the clone');
+        System.assertEquals('Limited Guarantor', added[0].LLC_BI__Borrower_Type__c,
+            'With the ROLE the amendment named — beyond what the creation wave could ever author');
+        System.assertEquals(50, added[0].LLC_BI__Ownership__c);
+        System.assertEquals(done.result.outputPackageId, String.valueOf(added[0].LLC_BI__Product_Package__c),
+            'Anchored on the NEW package version');
+
+        for (ExecuteLoanModification.InvolvementResult ir : done.result.involvements) {
+            System.assert(ir.verification != null && !ir.verification.startsWith('Not proven'),
+                'Each change is proven by re-query: ' + JSON.serialize(done.result.involvements));
+        }
+    }
+
+    @IsTest
+    static void removingAnEntityThatIsNotInvolvedIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('badremove'));
+        r.involvementChangesJson = '[{"op":"remove","accountName":"ZZ-MOD-TEST Nobody"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'Removing what is not there cannot be staged');
+        System.assert(res.error.message.contains('is not involved on'),
+            'And the refusal says so in structure language: ' + res.error.message);
+    }
+
+    @IsTest
     static void aCovenantAddWithAnUnknownTypeIsRefusedAtStageTime() {
         C360TestFixture.armCalloutMock();
         StageLoanModification.Request r = stageReq(key('badcov'));

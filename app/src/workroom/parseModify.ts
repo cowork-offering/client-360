@@ -47,6 +47,10 @@ export interface Amendment {
   value: ParsedValue | null;
   /** The entity named, for a party amendment. */
   party?: string;
+  /** The borrowing-structure role the line names, for a party amendment. */
+  role?: string;
+  /** Ownership percentage, when the line states one for a party add. */
+  ownership?: number;
   /** The banker's own word for the field, so a reply can quote it back. */
   matched: string;
   /**
@@ -336,6 +340,23 @@ function readParty(text: string, ctx: ParseContext): string | undefined {
   // A role word is not a name: "add a guarantor" names nobody.
   if (!candidate || /^(a|an|the|borrower|guarantor|co-borrower|entity)$/i.test(candidate)) return undefined;
   return candidate;
+}
+
+/** The borrowing-structure role the line names. Longest match first, so
+ *  "limited guarantor" never reads as "guarantor". */
+function readRole(lower: string): string | undefined {
+  if (/\blimited guarantor\b/.test(lower)) return "Limited Guarantor";
+  if (/\bco[- ]?borrower\b/.test(lower)) return "Co-Borrower";
+  if (/\brelated entity\b/.test(lower)) return "Related Entity";
+  if (/\bguarantor\b/.test(lower)) return "Guarantor";
+  if (/\bborrower\b/.test(lower)) return "Borrower";
+  return undefined;
+}
+
+/** Ownership, when the line states it: "at 40% ownership", "owns 25%". */
+function readOwnership(lower: string): number | undefined {
+  const m = /(\d+(?:\.\d+)?)\s*%\s*(?:ownership|owner|stake)?/.exec(lower);
+  return m ? Number(m[1]) : undefined;
 }
 
 /* ------------------------------------------------------------------- parse */
@@ -666,7 +687,15 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
     // question. Everything else needs a member before it needs a value.
     const memberScoped = field.category !== "party" && field.category !== "package";
     if (memberScoped && "question" in target) return { kind: "clarify", question: target.question };
-    const facilities = memberScoped && "facilities" in target ? target.facilities : [null];
+    // A party amendment is deal-scoped by default, BUT a line that NAMES a member
+    // binds to it — that is what makes the involvement change fileable, because
+    // the org anchors every involvement row on one loan.
+    const facilities =
+      memberScoped && "facilities" in target
+        ? target.facilities
+        : field.category === "party" && "facilities" in target && target.facilities.length
+          ? target.facilities
+          : [null];
 
     // Values are read from the line WITHOUT the member's own name in it.
     const scrubbed = scrubIdentity(trimmed, facilities, ctx.relationship);
@@ -679,7 +708,9 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
       if (field.category === "party" && !party) {
         return { kind: "clarify", question: "Which entity? Name it and I will stage the involvement." };
       }
-      amendments.push({ field, facility, value: read.value, party, matched: match.matched, op: operationFor(field, lower) });
+      const role = field.category === "party" ? readRole(scrubbedLower) : undefined;
+      const ownership = field.category === "party" ? readOwnership(scrubbedLower) : undefined;
+      amendments.push({ field, facility, value: read.value, party, role, ownership, matched: match.matched, op: operationFor(field, lower) });
     }
   }
 

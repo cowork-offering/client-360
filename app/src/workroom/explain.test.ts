@@ -175,7 +175,7 @@ describe("beat 4 — why an entry is recorded rather than filed", () => {
   it("reads a removal as a removal, in each of the three places one can happen", () => {
     for (const group of ["covenants", "security", "structure"] as const) {
       const why = whyHandoff(delta({ group, op: "remove", fileable: false }));
-      expect(why).toMatch(/off the facility|Releasing a pledge|take an involvement off/);
+      expect(why).toMatch(/off the facility|Releasing a pledge|CARRY EXCLUSION/);
       speaksCredit(why);
     }
   });

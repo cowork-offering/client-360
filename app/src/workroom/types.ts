@@ -183,6 +183,10 @@ export interface WorkroomDelta {
    *  that member's CLONE on the new package version. Present exactly when the
    *  delta is a fileable covenant add; `wire` stays absent on such a delta. */
   covenantWire?: { typeName: string; threshold: number; operator: string; frequency: string; facilityId: string };
+  /** A BORROWING-STRUCTURE amendment's contribution (2026-08-30): an add is
+   *  authored on the member's clone, a remove is a CARRY EXCLUSION — the parent
+   *  keeps its row, the clone starts without it, nothing is deleted. */
+  involvementWire?: { op: "add" | "remove"; role?: string; accountName: string; ownership?: number; facilityId: string };
   /** The figure this was composed against, so execution can prove the read has
    *  not moved underneath it (the ConfirmGate recompute, applied to the rail). */
   basis?: { facilityId: string; fieldId: string; before: string };

@@ -64,6 +64,20 @@ global with sharing class StageLoanModification {
         global Decimal requestedTermMonths;
         @InvocableVariable(label='Covenant Adds JSON' description='Optional. JSON list of net-new covenants to create and attach: [{"typeName" or "typeId", "threshold", "operator" (< <= = >= >), "frequency"?, "effectiveDate"? (YYYY-MM-DD), "targetLoanId"?}]. Each is created Pending/Active on the borrower account and attached to the CLONE of the targeted facility on the new package version, never to the booked parent. targetLoanId may be omitted when exactly one facility is selected.')
         global String covenantAddsJson;
+        @InvocableVariable(label='Involvement Changes JSON' description='Optional. JSON list of borrowing-structure amendments: [{"op" (add|remove), "role" (Borrower|Co-Borrower|Guarantor|Limited Guarantor|Related Entity), "accountId" or "accountName", "ownership"?, "targetLoanId"?}]. An ADD authors the involvement on the CLONE of the targeted facility on the new package version. A REMOVE is a carry exclusion: the parent keeps its row and the clone starts without it — nothing is ever deleted. targetLoanId may be omitted when exactly one facility is selected.')
+        global String involvementChangesJson;
+    }
+
+    /** One parsed borrowing-structure amendment, resolved against the org. */
+    public class InvolvementChange {
+        public String op;
+        public String role;
+        public Id accountId;
+        public String accountName;
+        public Decimal ownership;
+        public Id targetLoanId;
+        /** The involvement row a REMOVE excludes from the carry, resolved at stage time. */
+        public Id sourceRowId;
     }
 
     /** One parsed net-new covenant, resolved against the org's own type catalog. */
@@ -214,8 +228,8 @@ global with sharing class StageLoanModification {
             throw new ToolException('rationale is required. It feeds the audit ledger.');
         }
         if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
-            req.requestedTermMonths == null && String.isBlank(req.covenantAddsJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, or a covenant add.');
+            req.requestedTermMonths == null && String.isBlank(req.covenantAddsJson) && String.isBlank(req.involvementChangesJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, or a borrowing-structure change.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -247,6 +261,7 @@ global with sharing class StageLoanModification {
 
         List<String> covenantWarnings = new List<String>();
         List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, covenantWarnings);
+        List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, covenantWarnings);
 
         Integer n = facilities.size();
         Integer carryover = 0;
@@ -382,6 +397,50 @@ global with sharing class StageLoanModification {
             );
         }
         resolved.put('covenantAddCount', covenantAdds.size());
+
+        // Borrowing-structure amendments. An ADD is authored on the clone; a REMOVE is a carry
+        // exclusion — the roll-over diff made literal: everything not named is KEPT, and what is
+        // named as removed simply never reaches the new version. Nothing is deleted anywhere.
+        for (Integer i = 0; i < involvementChanges.size(); i++) {
+            InvolvementChange ic = involvementChanges[i];
+            String s2 = String.valueOf(i);
+            resolved.put('involvement' + s2 + '.op', ic.op);
+            resolved.put('involvement' + s2 + '.role', ic.role);
+            resolved.put('involvement' + s2 + '.accountId', String.valueOf(ic.accountId));
+            resolved.put('involvement' + s2 + '.accountName', ic.accountName);
+            resolved.put('involvement' + s2 + '.ownership', ic.ownership);
+            resolved.put('involvement' + s2 + '.targetLoanId', String.valueOf(ic.targetLoanId));
+            resolved.put('involvement' + s2 + '.sourceRowId', ic.sourceRowId == null ? null : String.valueOf(ic.sourceRowId));
+            String targetName2 = facilityById.get(ic.targetLoanId).Name;
+            if (ic.op == 'add') {
+                steps.add(
+                    new C360Plan.Step('involvement_change_' + s2, C360Plan.TYPE_WRITE,
+                        'Add ' + ic.accountName + ' as ' + ic.role + ' on the clone of ' + targetName2 +
+                        (ic.ownership == null ? '' : ' at ' + String.valueOf(ic.ownership) + '% ownership'))
+                        .onObject('LLC_BI__Legal_Entities__c', new List<String>{
+                            'LLC_BI__Account__c', 'LLC_BI__Borrower_Type__c', 'LLC_BI__Ownership__c'
+                        })
+                        .provenBy('SELECT Id FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Account__c = :accountId')
+                );
+            } else {
+                steps.add(
+                    new C360Plan.Step('involvement_change_' + s2, C360Plan.TYPE_WRITE,
+                        'Carry the structure of ' + targetName2 + ' WITHOUT ' + ic.accountName + ' (' + ic.role +
+                        '): the booked facility keeps its row, the clone starts without it, nothing is deleted')
+                        .onObject('LLC_BI__Legal_Entities__c', new List<String>{ 'carry exclusion — the replica is simply not written' })
+                        .provenBy('SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Account__c = :accountId')
+                );
+            }
+            steps.add(
+                new C360Plan.Step('involvement_verify_' + s2, C360Plan.TYPE_VERIFICATION,
+                    ic.op == 'add'
+                        ? 'Re-read the involvement on the clone of ' + targetName2
+                        : 'Prove the clone of ' + targetName2 + ' carries no row for ' + ic.accountName + ' and the parent still does')
+                    .onObject('LLC_BI__Legal_Entities__c', new List<String>{ 'Id' })
+                    .provenBy('re-query on the clone and the parent')
+            );
+        }
+        resolved.put('involvementChangeCount', involvementChanges.size());
         steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'Stage-driven email alerts and memo status changes the org may run')
                 .wakes(new List<String>{ 'nCino Commercial - Loan After Save' })
@@ -413,6 +472,13 @@ global with sharing class StageLoanModification {
                   '. The carry replicates the junction, not the covenant, and nCino\'s own guidance says a business process must decide what happens to each one.'
         };
         warnings.addAll(covenantWarnings);
+        if (!involvementChanges.isEmpty()) {
+            warnings.add(
+                'Borrowing-structure removes are CARRY EXCLUSIONS, never deletes: the booked facility keeps its involvement ' +
+                'rows untouched, and the named row simply does not travel to the new version. The structure binds when the ' +
+                'bank\'s own approval books that version.'
+            );
+        }
         if (!covenantAdds.isEmpty()) {
             warnings.add(
                 'Net-new covenants are created Pending and Active on the borrower account and attached to the CLONE only. ' +
@@ -452,6 +518,9 @@ global with sharing class StageLoanModification {
             (covenantAdds.isEmpty() ? '' : String.valueOf(covenantAdds.size()) + ' net-new covenant' +
                 (covenantAdds.size() == 1 ? ' is' : 's are') + ' created on the borrower and attached to the ' +
                 (covenantAdds.size() == 1 ? 'clone' : 'clones') + ', born Pending and Active. ') +
+            (involvementChanges.isEmpty() ? '' : String.valueOf(involvementChanges.size()) + ' borrowing-structure ' +
+                (involvementChanges.size() == 1 ? 'change lands' : 'changes land') + ' on the new version: adds are authored on the ' +
+                'clone, removes are carry exclusions — the booked facilities keep every row they have today. ') +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -605,6 +674,167 @@ global with sharing class StageLoanModification {
             }
         }
         return out;
+    }
+
+    /** The borrowing-structure roles the amendment arm may file. Grantor and Contractor stay out:
+     *  collateral and construction semantics, not borrowing structure. */
+    private static final Set<String> INVOLVEMENT_ROLES = new Set<String>{
+        'Borrower', 'Co-Borrower', 'Guarantor', 'Limited Guarantor', 'Related Entity'
+    };
+
+    /**
+     * Parses and RESOLVES the borrowing-structure amendments. An ADD resolves its account against
+     * the org (by id, or by exact name — ambiguity refused with the candidate ids) and warns when
+     * that account is already involved on the target. A REMOVE resolves the EXACT involvement row
+     * it excludes from the carry, at stage time, so the banker confirms a named row rather than a
+     * description — and an account involved under two roles is refused until the role settles it.
+     */
+    private static List<InvolvementChange> parseInvolvementChanges(Request req, List<LLC_BI__Loan__c> facilities, List<String> warnings) {
+        List<InvolvementChange> out = new List<InvolvementChange>();
+        if (String.isBlank(req.involvementChangesJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.involvementChangesJson);
+        } catch (Exception e) {
+            throw new ToolException('involvementChangesJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            InvolvementChange ic = new InvolvementChange();
+            ic.op = m.get('op') == null ? null : String.valueOf(m.get('op')).trim().toLowerCase();
+            ic.role = m.get('role') == null ? null : String.valueOf(m.get('role')).trim();
+            ic.accountId = C360Plan.asId(m.get('accountId'));
+            ic.accountName = m.get('accountName') == null ? null : String.valueOf(m.get('accountName')).trim();
+            ic.ownership = C360Plan.asDecimal(m.get('ownership'));
+            ic.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (ic.op != 'add' && ic.op != 'remove') {
+                throw new ToolException('Each borrowing-structure change carries op "add" or "remove". Supplied: ' + ic.op + '.');
+            }
+            if (ic.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each borrowing-structure change when more than one facility is selected.');
+                }
+                ic.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(ic.targetLoanId)) {
+                throw new ToolException(
+                    'A borrowing-structure change targets facility ' + ic.targetLoanId + ', which is not one of the selected facilities.'
+                );
+            }
+            if (ic.op == 'add') {
+                if (String.isBlank(ic.role) || !INVOLVEMENT_ROLES.contains(ic.role)) {
+                    List<String> ok = new List<String>(INVOLVEMENT_ROLES);
+                    ok.sort();
+                    throw new ToolException('An involvement ADD names its role, one of: ' + String.join(ok, ', ') + '. Supplied: ' + ic.role + '.');
+                }
+                resolveAccount(ic);
+                for (LLC_BI__Legal_Entities__c e : [
+                    SELECT Id, LLC_BI__Borrower_Type__c FROM LLC_BI__Legal_Entities__c
+                    WHERE LLC_BI__Loan__c = :ic.targetLoanId AND LLC_BI__Account__c = :ic.accountId
+                    WITH USER_MODE
+                ]) {
+                    warnings.add(
+                        ic.accountName + ' is ALREADY involved on ' + byId.get(ic.targetLoanId).Name + ' as ' +
+                        e.LLC_BI__Borrower_Type__c + ', and the carry will bring that row onto the clone. This plan adds a ' +
+                        ic.role + ' row BESIDE it only because the banker confirms it knowingly.'
+                    );
+                }
+            } else {
+                resolveRemoval(ic, byId.get(ic.targetLoanId).Name);
+            }
+            out.add(ic);
+        }
+        return out;
+    }
+
+    /** Resolves an ADD's account by id or exact name; ambiguity and absence are both refused. */
+    private static void resolveAccount(InvolvementChange ic) {
+        if (ic.accountId != null) {
+            List<Account> a = [SELECT Id, Name FROM Account WHERE Id = :ic.accountId WITH USER_MODE LIMIT 1];
+            if (a.isEmpty()) {
+                throw new ToolException('No account exists with id ' + ic.accountId + '.');
+            }
+            ic.accountName = a[0].Name;
+            return;
+        }
+        if (String.isBlank(ic.accountName)) {
+            throw new ToolException('Each involvement ADD names its entity: accountId or accountName.');
+        }
+        List<Account> matches = [SELECT Id, Name FROM Account WHERE Name = :ic.accountName WITH USER_MODE LIMIT 5];
+        if (matches.isEmpty()) {
+            throw new ToolException(
+                'No account named "' + ic.accountName + '" exists in this org. The name must match exactly; ' +
+                'create the account first if the entity is genuinely new to the bank.'
+            );
+        }
+        if (matches.size() > 1) {
+            List<String> ids = new List<String>();
+            for (Account a : matches) {
+                ids.add(String.valueOf(a.Id));
+            }
+            throw new ToolException(
+                'This org carries ' + matches.size() + ' accounts named "' + ic.accountName +
+                '". Supply accountId to settle which one: ' + String.join(ids, ', ') + '.'
+            );
+        }
+        ic.accountId = matches[0].Id;
+        ic.accountName = matches[0].Name;
+    }
+
+    /** Resolves the EXACT involvement row a REMOVE excludes, on the target parent. */
+    private static void resolveRemoval(InvolvementChange ic, String targetName) {
+        List<LLC_BI__Legal_Entities__c> rows;
+        if (ic.accountId != null) {
+            rows = [
+                SELECT Id, LLC_BI__Account__c, LLC_BI__Account__r.Name, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c
+                FROM LLC_BI__Legal_Entities__c
+                WHERE LLC_BI__Loan__c = :ic.targetLoanId AND LLC_BI__Account__c = :ic.accountId
+                WITH USER_MODE
+            ];
+        } else if (String.isNotBlank(ic.accountName)) {
+            rows = [
+                SELECT Id, LLC_BI__Account__c, LLC_BI__Account__r.Name, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c
+                FROM LLC_BI__Legal_Entities__c
+                WHERE LLC_BI__Loan__c = :ic.targetLoanId AND LLC_BI__Account__r.Name = :ic.accountName
+                WITH USER_MODE
+            ];
+        } else {
+            throw new ToolException('Each involvement REMOVE names its entity: accountId or accountName.');
+        }
+        if (String.isNotBlank(ic.role)) {
+            List<LLC_BI__Legal_Entities__c> narrowed = new List<LLC_BI__Legal_Entities__c>();
+            for (LLC_BI__Legal_Entities__c r : rows) {
+                if (r.LLC_BI__Borrower_Type__c == ic.role) {
+                    narrowed.add(r);
+                }
+            }
+            rows = narrowed;
+        }
+        if (rows.isEmpty()) {
+            throw new ToolException(
+                (ic.accountName != null ? ic.accountName : String.valueOf(ic.accountId)) +
+                (String.isBlank(ic.role) ? '' : ' (' + ic.role + ')') +
+                ' is not involved on ' + targetName + ', so there is nothing to remove. The structure the clone starts from is the parent\'s own.'
+            );
+        }
+        if (rows.size() > 1) {
+            List<String> roles = new List<String>();
+            for (LLC_BI__Legal_Entities__c r : rows) {
+                roles.add(r.LLC_BI__Borrower_Type__c);
+            }
+            throw new ToolException(
+                rows[0].LLC_BI__Account__r.Name + ' is involved on ' + targetName + ' under ' + rows.size() +
+                ' roles (' + String.join(roles, ', ') + '). Name the role so exactly one row is excluded.'
+            );
+        }
+        ic.sourceRowId = rows[0].Id;
+        ic.accountId = rows[0].LLC_BI__Account__c;
+        ic.accountName = rows[0].LLC_BI__Account__r.Name;
+        ic.role = rows[0].LLC_BI__Borrower_Type__c;
+        ic.ownership = rows[0].LLC_BI__Ownership__c;
     }
 
     /** Resolves the covenant type by id or exact name against the org's own catalog. */

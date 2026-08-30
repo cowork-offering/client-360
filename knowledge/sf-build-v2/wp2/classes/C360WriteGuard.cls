@@ -76,44 +76,50 @@ public with sharing class C360WriteGuard {
      * carry exactly the listed value; an empty map means the object has no state fence on
      * create, only the forbidden-field list below.
      */
-    private static final Map<String, Map<String, String>> CREATE_STATES = new Map<String, Map<String, String>>{
-        OBJ_CASE => new Map<String, String>{ 'Status' => 'New' },
-        OBJ_REVIEW => new Map<String, String>{ 'LLC_BI__Status__c' => 'In Progress' },
-        OBJ_VALUATION => new Map<String, String>(),
+    private static final Map<String, Map<String, Set<String>>> CREATE_STATES = new Map<String, Map<String, Set<String>>>{
+        OBJ_CASE => new Map<String, Set<String>>{ 'Status' => new Set<String>{ 'New' } },
+        OBJ_REVIEW => new Map<String, Set<String>>{ 'LLC_BI__Status__c' => new Set<String>{ 'In Progress' } },
+        OBJ_VALUATION => new Map<String, Set<String>>(),
         // Probe 5: a six-field payload at Qualification/Open passed 21 validation rules.
-        OBJ_LOAN => new Map<String, String>{
-            'LLC_BI__Stage__c' => 'Qualification',
-            'LLC_BI__Status__c' => 'Open',
-            'LLC_BI__isRenewal__c' => 'false',
-            'LLC_BI__Is_Modification__c' => 'false'
+        OBJ_LOAN => new Map<String, Set<String>>{
+            'LLC_BI__Stage__c' => new Set<String>{ 'Qualification' },
+            'LLC_BI__Status__c' => new Set<String>{ 'Open' },
+            'LLC_BI__isRenewal__c' => new Set<String>{ 'false' },
+            'LLC_BI__Is_Modification__c' => new Set<String>{ 'false' }
         },
         // Probe 4: status defaults to 'Not Approved', which reads as a DECISION rather than as an
         // absent value. Worse than Review's null, so the create state is mandatory here.
-        OBJ_RISK_RATING => new Map<String, String>{ 'LLC_BI__Status__c' => 'In Review' },
+        OBJ_RISK_RATING => new Map<String, Set<String>>{ 'LLC_BI__Status__c' => new Set<String>{ 'In Review' } },
         // Package creation is name and account only. Live SOQL over this org: all 12 most recent
         // packages carry a NULL RecordTypeId, including the ones nCino's own wizard created, and
         // 516 of 518 follow the "<Account> - <M/D/YYYY> - PP" convention. We match the org rather
         // than inventing a shape, and we set no stage or status: PPCacheCreation and
         // ProductPackageBaselineCaptureTrigger own what happens next and swallow their own failures.
-        OBJ_PRODUCT_PACKAGE => new Map<String, String>(),
-        // Borrowing structure. This wave creates the Borrower row only; the fuller role set arrives
-        // with the borrowing-structure UI. The role IS the flag on this object: there is no
-        // primary-borrower boolean, and the Is_* fields are formulas derived from Borrower_Type.
-        OBJ_INVOLVEMENT => new Map<String, String>{ 'LLC_BI__Borrower_Type__c' => 'Borrower' },
+        OBJ_PRODUCT_PACKAGE => new Map<String, Set<String>>(),
+        // Borrowing structure. The creation wave files the Borrower row; the modification arm
+        // (2026-08-30) amends the fuller structure — guarantors, co-borrowers, related entities —
+        // always on a CLONE, never on a booked facility. Grantor and Contractor stay refused:
+        // they are collateral and construction semantics, not borrowing structure. The role IS
+        // the flag on this object: the Is_* fields are formulas derived from Borrower_Type.
+        OBJ_INVOLVEMENT => new Map<String, Set<String>>{
+            'LLC_BI__Borrower_Type__c' => new Set<String>{
+                'Borrower', 'Co-Borrower', 'Guarantor', 'Limited Guarantor', 'Related Entity'
+            }
+        },
         // Net-new covenant (2026-08-30). SAFE by live probe: inserting a Covenant2 plus its loan
         // junction mints NO compliance row, starts NO approval and sends NO email — the
         // unrecallable acnpex approval fires on COMPLIANCE create only, and nothing auto-mints
         // one from a covenant insert. A new covenant is born Pending (not yet evaluated) and
         // Active; the org's own review cycle owns every status after that.
-        OBJ_COVENANT => new Map<String, String>{
-            'LLC_BI__Covenant_Status__c' => 'Pending',
-            'LLC_BI__Active__c' => 'true'
+        OBJ_COVENANT => new Map<String, Set<String>>{
+            'LLC_BI__Covenant_Status__c' => new Set<String>{ 'Pending' },
+            'LLC_BI__Active__c' => new Set<String>{ 'true' }
         },
         // The attach of a NET-NEW covenant to a facility. Doctrine: the caller may attach only a
         // covenant this same transaction created, and only to a modification clone this same
         // transaction created — never to a booked facility. The gate fences the object; the
         // caller owns that scoping, exactly as with OP_CARRY.
-        OBJ_LOAN_COVENANT => new Map<String, String>()
+        OBJ_LOAN_COVENANT => new Map<String, Set<String>>()
     };
 
     /**
@@ -268,14 +274,16 @@ public with sharing class C360WriteGuard {
             }
         }
 
-        Map<String, String> required = CREATE_STATES.get(objectApiName);
+        Map<String, Set<String>> required = CREATE_STATES.get(objectApiName);
         for (String stateField : required.keySet()) {
             Object supplied = values.get(stateField);
-            String allowed = required.get(stateField);
-            if (supplied == null || String.valueOf(supplied) != allowed) {
+            Set<String> allowed = required.get(stateField);
+            if (supplied == null || !allowed.contains(String.valueOf(supplied))) {
+                List<String> ok = new List<String>(allowed);
+                ok.sort();
                 throw new GuardException(
-                    'Refused: ' + objectApiName + ' may be created only with ' + stateField + ' = \'' + allowed +
-                    '\' (A33.3.1). Supplied: ' + String.valueOf(supplied) + '.'
+                    'Refused: ' + objectApiName + ' may be created only with ' + stateField + ' in [' + String.join(ok, ', ') +
+                    '] (A33.3.1). Supplied: ' + String.valueOf(supplied) + '.'
                 );
             }
         }

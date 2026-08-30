@@ -125,7 +125,7 @@ export function whyHandoff(delta: WorkroomDelta): string {
   const steps = links > 1 ? ` in ${links} connected writes` : "";
   switch (handoffKind(delta)) {
     case "covenant-add":
-      return `Creating a covenant means writing it and attaching it to the modification${steps}, and no deployed write reaches that yet — it rides the plan as a handoff so nothing is silently dropped.`;
+      return `Creating a covenant means writing it and attaching it to the modification${steps}. A mapped type with a stated threshold files directly; this one the room could not settle against the org's own catalog, so it rides the plan as a handoff and nothing is silently dropped.`;
     case "covenant-remove":
       return "Taking a covenant off the facility means deleting the attachment outright, which nothing in this room may do — it rides the plan as a handoff, with the reason.";
     case "covenant-change":
@@ -135,9 +135,9 @@ export function whyHandoff(delta: WorkroomDelta): string {
     case "collateral-remove":
       return "Releasing a pledge is a change on the pledge itself, and no deployed write reaches it yet — it rides the plan as a handoff, with the reason.";
     case "party-add":
-      return "Putting an entity on the modification is a write that is not deployed here yet — it rides the plan as a handoff and leaves with you rather than being dropped.";
+      return "Putting an entity on the modification files when the line names the member and the role; this one did not, so it rides the plan as a handoff and leaves with you rather than being dropped.";
     case "party-remove":
-      return "Nothing in this room may take an involvement off a deal — it rides the plan as a handoff for whoever can action it.";
+      return "Taking an entity off files as a CARRY EXCLUSION when the line names the member — the booked facility keeps its row, the clone starts without it. This line did not name one, so it rides the plan as a handoff.";
     case "fee":
       return "This org holds no fee records at all and nothing writes one, so it rides the plan as a handoff rather than a figure that would look filed.";
     case "pricing":

@@ -401,15 +401,43 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(delta.handoff?.reason).toMatch(/re-counted live/);
   });
 
-  it("stages a borrower add and a borrower remove, both as handoffs (W1)", async () => {
+  it("stages a structure change WITHOUT a member as a handoff, and WITH one as a filing delta (W1)", async () => {
     const { engine } = engineOn();
+    // No member named: the org anchors every involvement row on one loan, so
+    // this cannot file — it travels as an honest handoff.
     const [add] = await confirm(engine, "add Hartwell Logistics LLC as a guarantor");
     expect(add.fileable).toBe(false);
     expect(add.target).toBe("Hartwell Logistics LLC");
+    expect(add.handoff?.reason).toMatch(/names the MEMBER/);
 
     const [remove] = await confirm(engine, "remove the guarantor Elena Hartwell");
     expect(remove.fileable).toBe(false);
-    expect(remove.handoff?.reason).toMatch(/refuses OP_DELETE/);
+    expect(remove.handoff?.reason).toMatch(/names the member/);
+
+    // Member named: the add authors the row on the CLONE, the remove is a
+    // CARRY EXCLUSION resolved by the org at stage time.
+    const [filedAdd] = await confirm(engine, "add Hartwell Logistics LLC as a limited guarantor on the line of credit - $15,000,000.00");
+    expect(filedAdd.fileable).toBe(true);
+    expect(filedAdd.involvementWire).toMatchObject({ op: "add", role: "Limited Guarantor", accountName: "Hartwell Logistics LLC", facilityId: LINE_ID });
+
+    const [filedRemove] = await confirm(engine, "remove the guarantor Elena Hartwell from the line of credit - $15,000,000.00");
+    expect(filedRemove.fileable).toBe(true);
+    expect(filedRemove.involvementWire).toMatchObject({ op: "remove", accountName: "Elena Hartwell", facilityId: LINE_ID });
+    expect(filedRemove.filed.recordId).toBe("a carry exclusion writes nothing");
+  });
+
+  it("sends structure changes on the wire as involvementChangesJson", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "add Hartwell Logistics LLC as a limited guarantor on the line of credit - $15,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const changes = JSON.parse(payload.involvementChangesJson);
+    expect(changes).toEqual([
+      { op: "add", role: "Limited Guarantor", accountName: "Hartwell Logistics LLC", ownership: undefined, targetLoanId: LINE_ID },
+    ]);
+    expect(payload.facilityIds).toEqual([LINE_ID]);
   });
 
   it("REFUSES an ask that belongs to another credit action rather than staging it", async () => {
@@ -971,7 +999,7 @@ describe("every beat says WHY, on this package's own figures", () => {
     const [delta] = await confirm(engine, "add Hartwell Logistics LLC as a guarantor");
     const { reply } = engine.acknowledge(delta, [delta]);
     expect(reply).toContain("on the manifest for the record");
-    expect(reply).toContain("not deployed here yet");
+    expect(reply).toContain("names the member and the role");
     expect(reply).not.toMatch(/LLC_BI__|allowlist/);
   });
 

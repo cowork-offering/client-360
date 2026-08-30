@@ -610,6 +610,11 @@ export interface StagePayloads {
      *  of the targeted facility on the new package version. Counts toward the
      *  tool's at-least-one-change rule. */
     covenantAddsJson?: string | null;
+    /** BORROWING-STRUCTURE amendments (2026-08-30), JSON-encoded:
+     *  [{op (add|remove), role?, accountId? or accountName, ownership?, targetLoanId?}].
+     *  Adds are authored on the CLONE with the new package anchor; removes are
+     *  CARRY EXCLUSIONS — the parent keeps its row, nothing is deleted. */
+    involvementChangesJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;

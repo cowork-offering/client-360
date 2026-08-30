@@ -183,6 +183,22 @@ global with sharing class ExecuteLoanModification {
         global String outcome;
     }
 
+    /** One borrowing-structure amendment this run landed on the new version. */
+    global class InvolvementResult {
+        @InvocableVariable(label='Op')
+        global String op;
+        @InvocableVariable(label='Account Name')
+        global String accountName;
+        @InvocableVariable(label='Role')
+        global String role;
+        @InvocableVariable(label='Clone Loan Id')
+        global String cloneLoanId;
+        @InvocableVariable(label='Record Id' description='The involvement row created on the clone. Null on a remove: a carry exclusion writes nothing.')
+        global String recordId;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     /** One net-new covenant this run created and attached to a clone. */
     global class CovenantResult {
         @InvocableVariable(label='Covenant Id')
@@ -220,6 +236,8 @@ global with sharing class ExecuteLoanModification {
         global Integer membersRolled;
         @InvocableVariable(label='Covenants' description='One entry per net-new covenant this run created and attached to a clone.')
         global List<CovenantResult> covenants;
+        @InvocableVariable(label='Involvements' description='One entry per borrowing-structure amendment: adds authored on the clone, removes carried out as exclusions.')
+        global List<InvolvementResult> involvements;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -662,6 +680,8 @@ global with sharing class ExecuteLoanModification {
         // steps rather than leaving them dangling as pending.
         Decimal covAddCountRaw = C360Plan.asDecimal(v.get('covenantAddCount'));
         Integer covenantAddCount = covAddCountRaw == null ? 0 : Integer.valueOf(covAddCountRaw);
+        Decimal invCountRaw = C360Plan.asDecimal(v.get('involvementChangeCount'));
+        Integer involvementChangeCount = invCountRaw == null ? 0 : Integer.valueOf(invCountRaw);
 
         // The staged roll list. nCino package methodology: the credit action versions the WHOLE
         // package, so the plan carries every eligible member, not just the selected ones. The
@@ -732,6 +752,10 @@ global with sharing class ExecuteLoanModification {
                 C360Plan.setState(steps, 'covenant_attach_' + ci, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'covenant_verify_' + ci, C360Plan.STATE_SKIPPED, null);
             }
+            for (Integer ii = 0; ii < involvementChangeCount; ii++) {
+                C360Plan.setState(steps, 'involvement_change_' + ii, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'involvement_verify_' + ii, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
@@ -757,6 +781,10 @@ global with sharing class ExecuteLoanModification {
                 C360Plan.setState(steps, 'covenant_create_' + ci, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'covenant_attach_' + ci, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'covenant_verify_' + ci, C360Plan.STATE_SKIPPED, null);
+            }
+            for (Integer ii = 0; ii < involvementChangeCount; ii++) {
+                C360Plan.setState(steps, 'involvement_change_' + ii, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'involvement_verify_' + ii, C360Plan.STATE_SKIPPED, null);
             }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
@@ -861,7 +889,18 @@ global with sharing class ExecuteLoanModification {
         for (Id parentId : newestByParent.keySet()) {
             cloneByParent.put(parentId, newestByParent.get(parentId).LLC_BI__RenewalLoanId__c);
         }
-        String carryReport = carryJunctionGraph(rollMembers, cloneByParent, newPkgId);
+        // The staged REMOVES become carry exclusions: those source rows never travel to the new
+        // version. This is the roll-over diff made literal — nothing is deleted anywhere.
+        Set<Id> excludedInvolvementIds = new Set<Id>();
+        for (Integer i = 0; i < involvementChangeCount; i++) {
+            if (String.valueOf(v.get('involvement' + i + '.op')) == 'remove') {
+                Id srcId = C360Plan.asId(v.get('involvement' + i + '.sourceRowId'));
+                if (srcId != null) {
+                    excludedInvolvementIds.add(srcId);
+                }
+            }
+        }
+        String carryReport = carryJunctionGraph(rollMembers, cloneByParent, newPkgId, excludedInvolvementIds);
         C360Plan.setState(
             steps,
             'carry_junctions',
@@ -1029,6 +1068,90 @@ global with sharing class ExecuteLoanModification {
             );
         }
 
+        // ---- Borrowing-structure amendments (plan values involvement{i}.*). ADDS are authored on
+        // the clone with the new package anchor; REMOVES were already carried out as exclusions in
+        // carryJunctionGraph and are PROVEN here by absence on the clone and presence on the parent.
+        List<InvolvementResult> involvementResults = new List<InvolvementResult>();
+        for (Integer i = 0; i < involvementChangeCount; i++) {
+            String vs = String.valueOf(i);
+            InvolvementResult ir = new InvolvementResult();
+            ir.op = String.valueOf(v.get('involvement' + vs + '.op'));
+            ir.role = String.valueOf(v.get('involvement' + vs + '.role'));
+            ir.accountName = String.valueOf(v.get('involvement' + vs + '.accountName'));
+            involvementResults.add(ir);
+
+            Id invAccountId = C360Plan.asId(v.get('involvement' + vs + '.accountId'));
+            Decimal invOwnership = C360Plan.asDecimal(v.get('involvement' + vs + '.ownership'));
+            Id invTargetParent = C360Plan.asId(v.get('involvement' + vs + '.targetLoanId'));
+            Id invSourceRowId = C360Plan.asId(v.get('involvement' + vs + '.sourceRowId'));
+            LLC_BI__LoanRenewal__c invJunction = newestByParent.get(invTargetParent);
+            Id invCloneId = invJunction == null ? null : invJunction.LLC_BI__RenewalLoanId__c;
+
+            if (invCloneId == null || invAccountId == null) {
+                String invWhy = invCloneId == null
+                    ? 'No modification clone could be read for the facility this change targets, so nothing was done.'
+                    : 'The staged change is incomplete (no resolved account), so nothing was done. Re-stage the action.';
+                C360Plan.setState(steps, 'involvement_change_' + vs, C360Plan.STATE_FAILED, invWhy);
+                C360Plan.setState(steps, 'involvement_verify_' + vs, C360Plan.STATE_FAILED, invWhy);
+                ir.verification = invWhy;
+                continue;
+            }
+            ir.cloneLoanId = invCloneId;
+
+            if (ir.op == 'add') {
+                Map<String, Object> invFields = new Map<String, Object>{
+                    'LLC_BI__Loan__c' => invCloneId,
+                    'LLC_BI__Product_Package__c' => newPkgId,
+                    'LLC_BI__Account__c' => invAccountId,
+                    'LLC_BI__Borrower_Type__c' => ir.role,
+                    'LLC_BI__Ownership__c' => invOwnership
+                };
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE, invFields);
+                LLC_BI__Legal_Entities__c row = new LLC_BI__Legal_Entities__c(
+                    LLC_BI__Loan__c = invCloneId,
+                    LLC_BI__Product_Package__c = newPkgId,
+                    LLC_BI__Account__c = invAccountId,
+                    LLC_BI__Borrower_Type__c = ir.role,
+                    LLC_BI__Ownership__c = invOwnership
+                );
+                insert as user row;
+                ir.recordId = row.Id;
+                C360Plan.setState(steps, 'involvement_change_' + vs, C360Plan.STATE_VERIFIED,
+                    'Involvement ' + row.Id + ' created: ' + ir.accountName + ' as ' + ir.role + ' on clone ' + invCloneId + '.');
+
+                Integer backAdd = [
+                    SELECT COUNT() FROM LLC_BI__Legal_Entities__c
+                    WHERE LLC_BI__Loan__c = :invCloneId AND LLC_BI__Account__c = :invAccountId
+                          AND LLC_BI__Borrower_Type__c = :ir.role
+                    WITH USER_MODE
+                ];
+                ir.verification = backAdd >= 1
+                    ? ir.accountName + ' reads back as ' + ir.role + ' on the clone.'
+                    : 'The involvement did not read back on the clone after creation.';
+                C360Plan.setState(steps, 'involvement_verify_' + vs,
+                    backAdd >= 1 ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, ir.verification);
+            } else {
+                Integer onClone = [
+                    SELECT COUNT() FROM LLC_BI__Legal_Entities__c
+                    WHERE LLC_BI__Loan__c = :invCloneId AND LLC_BI__Account__c = :invAccountId
+                          AND LLC_BI__Borrower_Type__c = :ir.role
+                    WITH USER_MODE
+                ];
+                Integer onParent = invSourceRowId == null ? 0 : [
+                    SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE Id = :invSourceRowId WITH USER_MODE
+                ];
+                Boolean removeProven = onClone == 0 && onParent == 1;
+                C360Plan.setState(steps, 'involvement_change_' + vs,
+                    removeProven ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                    'The carry ran without row ' + invSourceRowId + ' (' + ir.accountName + ' as ' + ir.role + '). Nothing was deleted.');
+                ir.verification = removeProven
+                    ? 'The clone carries no ' + ir.role + ' row for ' + ir.accountName + ', and the parent still carries its own.'
+                    : 'Not proven: the clone reads ' + onClone + ' matching rows and the parent source row count is ' + onParent + '.';
+                C360Plan.setState(steps, 'involvement_verify_' + vs,
+                    removeProven ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, ir.verification);
+            }
+        }
+
         // Re-read everything the plan claims: the clones after the change, and the parents, which this
         // tool must not have moved at all.
         Map<Id, LLC_BI__Loan__c> clonesAfter = new Map<Id, LLC_BI__Loan__c>(readLoans(cloneIds));
@@ -1136,6 +1259,7 @@ global with sharing class ExecuteLoanModification {
         out.newPackageName = newPkgName;
         out.membersRolled = rollMembers.size();
         out.covenants = covenantResults;
+        out.involvements = involvementResults;
         out.terminalState = terminal;
         out.steps = toWireSteps(steps);
         out.bookingHandoff = BOOKING_HANDOFF;
@@ -1145,7 +1269,9 @@ global with sharing class ExecuteLoanModification {
         out.outcome = 'New package version ' + (newPkgName == null ? String.valueOf(newPkgId) : newPkgName) +
             ' created: ' + rollMembers.size() + ' members rolled, ' + results.size() + ' modified' +
             (covenantResults.isEmpty() ? '' : ', ' + covenantResults.size() + ' net-new covenant' +
-                (covenantResults.size() == 1 ? '' : 's') + ' attached to the clone' + (covenantResults.size() == 1 ? '' : 's')) + '. ' +
+                (covenantResults.size() == 1 ? '' : 's') + ' attached to the clone' + (covenantResults.size() == 1 ? '' : 's')) +
+            (involvementResults.isEmpty() ? '' : ', ' + involvementResults.size() + ' borrowing-structure change' +
+                (involvementResults.size() == 1 ? '' : 's') + ' on the new version') + '. ' +
             (results.size() == 1
                 ? results[0].outcome
                 : 'See each facility for its clone and what was applied.') +
@@ -1278,7 +1404,7 @@ global with sharing class ExecuteLoanModification {
      *
      * @return 'CARRIED <detail>' when every replica read back by count; a plain detail otherwise.
      */
-    private static String carryJunctionGraph(List<Id> parents, Map<Id, Id> cloneByParent, Id newPkgId) {
+    private static String carryJunctionGraph(List<Id> parents, Map<Id, Id> cloneByParent, Id newPkgId, Set<Id> excludedInvolvementIds) {
         List<LLC_BI__Loan_Covenant__c> covCopies = new List<LLC_BI__Loan_Covenant__c>();
         for (LLC_BI__Loan_Covenant__c j : [
             SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__c
@@ -1358,7 +1484,7 @@ global with sharing class ExecuteLoanModification {
 
         List<LLC_BI__Legal_Entities__c> invCopies = new List<LLC_BI__Legal_Entities__c>();
         for (LLC_BI__Legal_Entities__c e : [
-            SELECT LLC_BI__Loan__c, LLC_BI__Account__c, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c,
+            SELECT Id, LLC_BI__Loan__c, LLC_BI__Account__c, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c,
                    LLC_BI__Relationship_Type__c, LLC_BI__Entity_Type__c, LLC_BI__Order__c,
                    LLC_BI__Contingent_Type__c, LLC_BI__Guarantee_Effective_Date__c,
                    LLC_BI__Guarantee_End_Date__c, LLC_BI__Guarantee_Limit__c, LLC_BI__Guaranty_Amount__c
@@ -1366,6 +1492,10 @@ global with sharing class ExecuteLoanModification {
         ]) {
             Id cloneId = cloneByParent.get(e.LLC_BI__Loan__c);
             if (cloneId == null) {
+                continue;
+            }
+            // A staged remove: the row is named in the plan and simply not replicated.
+            if (excludedInvolvementIds.contains(e.Id)) {
                 continue;
             }
             invCopies.add(new LLC_BI__Legal_Entities__c(

@@ -88,9 +88,10 @@ export interface CatalogField {
   /** Present ⇒ THIS FILES. Absent ⇒ manifest and honest handoff only. */
   wireKey?: WireKey;
   /** A RECORD wire: the entry files as a structured record rather than a scalar.
-   *  "covenantAdd" is the only one — stage_loan_modification's covenantAddsJson
-   *  (2026-08-30), created on the borrower and attached to the clone. */
-  recordWire?: "covenantAdd";
+   *  "covenantAdd" rides stage_loan_modification's covenantAddsJson; an
+   *  "involvementChange" rides involvementChangesJson (adds authored on the
+   *  clone, removes as carry exclusions). Both 2026-08-30. */
+  recordWire?: "covenantAdd" | "involvementChange";
   /** Why nothing files it. Required whenever `wireKey` is absent. */
   gap?: string;
   /** What would close the gap. Design only — nothing here is deployed. */
@@ -622,9 +623,9 @@ const COLLATERAL_FIELDS: CatalogField[] = [
  *  still a gap, because the only path to it is bound to a loan that
  *  execute_new_facility just created. */
 const PARTY_NO_TOOL =
-  "LLC_BI__Legal_Entities__c is on the write guard, but create-only and reachable only inside execute_new_facility, bound to the facility that call creates. No tool anchors an involvement row on an existing package or on a modification clone.";
+  "An involvement change files when the line names the MEMBER and (for an add) the ROLE. This one did not, so it travels as a handoff rather than a guess about where the structure lands.";
 const PARTY_FIX =
-  "A parties[] block on the modification pair, creating involvement rows against the CLONE; the guard's create state widens from the single Borrower role to the org's real seven-value role set, keeping the Is_*__c formulas and Contingent Amount forbidden.";
+  "Name the member and the role: \"add Hartwell Logistics LLC as a guarantor on the Line of Credit\" files; adds are authored on the clone, removes are carry exclusions the parent never feels.";
 
 const PARTY_FIELDS: CatalogField[] = [
   {
@@ -636,6 +637,10 @@ const PARTY_FIELDS: CatalogField[] = [
     category: "party",
     group: "structure",
     source: "live-verified",
+    // FILES since 2026-08-30 when the line names the member and the role:
+    // involvementChangesJson authors the row on the CLONE with the new package
+    // anchor, under the guard's widened five-role birth state.
+    recordWire: "involvementChange",
     gap: PARTY_NO_TOOL,
     closes: PARTY_FIX,
     associationScope: "parties",
@@ -652,7 +657,8 @@ const PARTY_FIELDS: CatalogField[] = [
     synonyms: [
       "add a borrower", "add borrower", "add a guarantor", "add guarantor",
       "as a guarantor", "as guarantor", "as a borrower", "as borrower",
-      "as a co-borrower", "as co-borrower", "as a related entity",
+      "as a co-borrower", "as co-borrower", "as a related entity", "as related entity",
+      "as a limited guarantor", "as limited guarantor", "add a limited guarantor",
       "bring in", "add the entity", "add a co-borrower",
     ],
   },
@@ -665,8 +671,13 @@ const PARTY_FIELDS: CatalogField[] = [
     category: "party",
     group: "structure",
     source: "live-verified",
-    gap: "C360WriteGuard refuses OP_DELETE on every object, unconditionally, and involvement is create-only so it cannot be deactivated by update either — the Is_*__c flags are formulas, so there is no soft-delete field to set.",
-    closes: "The highest-risk extension on the list: either a delete allowlist scoped to involvement rows on a clone the same run created (never on a booked parent), or a deactivation field. The describe offers two candidates a design would have to rule on — LLC_BI__Guarantee_End_Date__c and the Exclude_From_* flags — neither of which is a removal.",
+    // FILES since 2026-08-30 when the line names the member: the remove is a
+    // CARRY EXCLUSION — the named row simply never travels to the new package
+    // version. The booked parent keeps every row it has today; nothing is
+    // deleted anywhere, which is what dissolved the old delete-allowlist risk.
+    recordWire: "involvementChange",
+    gap: "A removal files when the line names the member it comes off; without the member it travels as a handoff.",
+    closes: "Name the member: \"remove Hartwell Logistics LLC from the Line of Credit\" files as a carry exclusion.",
     synonyms: ["remove the borrower", "remove borrower", "remove the guarantor", "remove guarantor", "release the guarantor", "drop the guarantor", "take off", "release from the guaranty"],
   },
   {
