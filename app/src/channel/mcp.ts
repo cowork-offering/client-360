@@ -36,12 +36,50 @@ interface McpNamespace {
   invalidate(server?: string, tool?: string, input?: unknown): Promise<void>;
 }
 
+/* RUNTIME CONTRACT SHIFT (observed live 2026-08-29, probe on the 0.2.31 line):
+   the platform stopped pre-injecting `window.claude.mcp`. The runtime now
+   exposes ONLY `window.claude.use(name)`, which resolves the capability
+   namespace asynchronously — same members (callTool/listTools/invalidate/
+   watchTool), new acquisition. `acquireMcp()` below handles BOTH generations:
+   a pre-injected `.mcp` (older runtimes, and every test that stubs it) wins
+   immediately; otherwise `use("mcp")` is awaited once and stashed. main.tsx
+   awaits acquisition before first render so the synchronous `mcpAvailable()`
+   gate keeps its meaning everywhere downstream. */
+
+type ClaudeRoot = { mcp?: McpNamespace; use?: (name: string) => Promise<McpNamespace | null> };
+
+let acquired: McpNamespace | undefined;
+let acquisition: Promise<void> | undefined;
+
+export function acquireMcp(timeoutMs = 4000): Promise<void> {
+  if (acquisition) return acquisition;
+  acquisition = (async () => {
+    if (typeof window === "undefined") return;
+    const root = (window as unknown as { claude?: ClaudeRoot }).claude;
+    if (!root) return;
+    if (root.mcp) {
+      acquired = root.mcp;
+      return;
+    }
+    if (typeof root.use !== "function") return;
+    try {
+      const ns = await Promise.race([
+        root.use("mcp"),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+      ]);
+      if (ns && typeof ns.callTool === "function") acquired = ns;
+    } catch {
+      // Unavailable is a state, not an error: the offline chip renders.
+    }
+  })();
+  return acquisition;
+}
+
 function mcp(): McpNamespace | undefined {
+  if (acquired) return acquired;
   if (typeof window === "undefined") return undefined;
-  // The canonical availability gate — the MEMBER, not the root. It cannot
-  // throw, and it is the only check valid on every runtime generation.
-  // Never feature-detect by probing with a call.
-  return (window as unknown as { claude?: { mcp?: McpNamespace } }).claude?.mcp;
+  // Older runtimes (and tests) pre-inject the member; honor it synchronously.
+  return (window as unknown as { claude?: ClaudeRoot }).claude?.mcp;
 }
 
 export function mcpAvailable(): boolean {
