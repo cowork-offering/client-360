@@ -88,7 +88,16 @@ private class StageExecuteLoanModificationTest {
     }
 
     private static LLC_BI__Product_Package__c pkg() {
-        return [SELECT Id, Name FROM LLC_BI__Product_Package__c WHERE LLC_BI__Account__c = :borrower().Id LIMIT 1];
+        // Through the parent loan, not by name or LIMIT 1 over the account: the org rewrites package
+        // names on save just as it rewrites loan names, and the versioning stub mints a SECOND
+        // package for this borrower, so an unordered LIMIT 1 would nondeterministically hand back
+        // the wrong one. The parent loan's package field is the one anchor the org never rewrites.
+        LLC_BI__Loan__c p = [
+            SELECT LLC_BI__Product_Package__c FROM LLC_BI__Loan__c
+            WHERE LLC_BI__Account__c = :borrower().Id AND LLC_BI__lookupKey__c = :PARENT_KEY
+            LIMIT 1
+        ];
+        return [SELECT Id, Name FROM LLC_BI__Product_Package__c WHERE Id = :p.LLC_BI__Product_Package__c];
     }
 
     /** The parent, found through the relationship: the org rewrites loan names on save. */
@@ -169,11 +178,21 @@ private class StageExecuteLoanModificationTest {
                 WHERE Id IN :facilityIds
             ];
 
+            // Package versioning, as observed live 2026-08-30 (shape probe, rolled back): the engine
+            // mints a NEW package and clones every facility it was handed onto it. It names the
+            // version itself with a blank account prefix, which the stub reproduces so this suite
+            // proves the caller's Name repair.
+            LLC_BI__Product_Package__c version = new LLC_BI__Product_Package__c(
+                Name = '- 8/30/2026 - PP',
+                LLC_BI__Account__c = parents[0].LLC_BI__Account__c
+            );
+            insert version;
+
             List<LLC_BI__Loan__c> clones = new List<LLC_BI__Loan__c>();
             for (LLC_BI__Loan__c p : parents) {
                 clones.add(new LLC_BI__Loan__c(
                     LLC_BI__Account__c = p.LLC_BI__Account__c,
-                    LLC_BI__Product_Package__c = p.LLC_BI__Product_Package__c,
+                    LLC_BI__Product_Package__c = version.Id,
                     LLC_BI__Stage__c = 'Qualification',
                     LLC_BI__Status__c = 'Open',
                     LLC_BI__lookupKey__c = p.LLC_BI__lookupKey__c + '_M1',
@@ -214,7 +233,7 @@ private class StageExecuteLoanModificationTest {
 
             ExecuteLoanModification.EngineResult out = new ExecuteLoanModification.EngineResult();
             out.success = true;
-            out.outputPackageId = packageId;
+            out.outputPackageId = version.Id;
             return out;
         }
     }
@@ -275,9 +294,20 @@ private class StageExecuteLoanModificationTest {
             FROM LLC_BI__Loan__c WHERE Id = :done.result.cloneLoanId
         ];
         System.assertEquals(true, clone.LLC_BI__Is_Modification__c, 'A modification clone carries the flag or it is an original loan');
-        System.assertEquals(pkg().Id, clone.LLC_BI__Product_Package__c, 'The clone stays on the deal anchor');
+        System.assertNotEquals(pkg().Id, clone.LLC_BI__Product_Package__c, 'Package methodology: the clone sits on the NEW version, never the source package');
+        System.assertEquals(done.result.outputPackageId, String.valueOf(clone.LLC_BI__Product_Package__c), 'And the tool names that new version as its output package');
         System.assertEquals('Qualification', clone.LLC_BI__Stage__c, 'This tool never moves the clone stage');
         System.assertEquals(1500000, clone.LLC_BI__Amount__c, 'The staged change lands on the CLONE');
+
+        // The versioning contract, read back from the org: the new package exists, carries every
+        // rolled member, and its engine-blank name was repaired to the org convention.
+        LLC_BI__Product_Package__c versionPkg = [
+            SELECT Id, Name FROM LLC_BI__Product_Package__c WHERE Id = :done.result.outputPackageId
+        ];
+        System.assertEquals('ZZ-MOD-TEST Borrower - 8/30/2026 - PP', versionPkg.Name,
+            'The blank account prefix is repaired to the org\'s "<Account> - <date> - PP" convention');
+        System.assertEquals(versionPkg.Name, done.result.newPackageName, 'And the result reports the repaired name');
+        System.assertEquals(1, done.result.membersRolled, 'The fixture package holds one eligible member, so one rolls');
 
         // The parent, untouched.
         LLC_BI__Loan__c after = parent();
@@ -308,6 +338,150 @@ private class StageExecuteLoanModificationTest {
             }
         }
         System.assertEquals(true, sawHandoffVerified, 'The handoff step is settled and names what the human still has to do');
+
+        Boolean sawRollVerified = false;
+        Boolean sawPackageVerified = false;
+        for (ExecuteLoanModification.StepResult s : done.result.steps) {
+            if (s.id == 'roll_package') {
+                sawRollVerified = s.state == C360Plan.STATE_VERIFIED;
+            }
+            if (s.id == 'verify_package') {
+                sawPackageVerified = s.state == C360Plan.STATE_VERIFIED && s.detail.contains('1 of 1');
+            }
+        }
+        System.assertEquals(true, sawRollVerified, 'The package roll is its own verified step: ' + JSON.serialize(done.result.steps));
+        System.assertEquals(true, sawPackageVerified, 'And the new version is proven to carry every rolled member: ' + JSON.serialize(done.result.steps));
+    }
+
+    @IsTest
+    static void membershipThatMovesBetweenStageAndExecuteRefusesTheRun() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('drift');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        // A colleague books another facility onto the package after the banker confirmed the plan.
+        // The confirmed roll is no longer the package, so the run must refuse rather than version a
+        // shape nobody signed off.
+        insert new LLC_BI__Loan__c(
+            LLC_BI__Account__c = borrower().Id,
+            LLC_BI__Product_Package__c = pkg().Id,
+            LLC_BI__Stage__c = 'Booked',
+            LLC_BI__Status__c = 'Open',
+            LLC_BI__lookupKey__c = 'ZZMODDRIFT1',
+            LLC_BI__Amount__c = 250000,
+            LLC_BI__Product_Line__c = 'Commercial',
+            LLC_BI__Product_Type__c = 'Term Loan',
+            LLC_BI__Product__c = 'Equipment',
+            LLC_BI__isRenewal__c = false,
+            LLC_BI__Is_Modification__c = false
+        );
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+
+        System.assertEquals(false, done.ok, 'A moved membership refuses the run');
+        System.assert(done.error.message.contains('membership moved'),
+            'And says exactly why: ' + done.error.message);
+        System.assertEquals(0, cloneCount(), 'Nothing was written');
+    }
+
+    @IsTest
+    static void theJunctionGraphCarriesOntoTheCloneAndTheParentKeepsItsOwn() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('carry');
+
+        LLC_BI__Covenant2__c cov = new LLC_BI__Covenant2__c(LLC_BI__Account__c = borrower().Id);
+        insert cov;
+        insert new LLC_BI__Loan_Covenant__c(LLC_BI__Loan__c = before.Id, LLC_BI__Covenant2__c = cov.Id);
+        Account guarantor = new Account(Name = 'ZZ-MOD-TEST Guarantor');
+        insert guarantor;
+        insert new LLC_BI__Legal_Entities__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Product_Package__c = pkg().Id,
+            LLC_BI__Account__c = guarantor.Id,
+            LLC_BI__Borrower_Type__c = 'Guarantor',
+            LLC_BI__Ownership__c = 50
+        );
+        // The org's collateral VR demands an advance rate on the type before a collateral may exist.
+        LLC_BI__Collateral_Type__c colType = new LLC_BI__Collateral_Type__c(
+            Name = 'ZZ-MOD-TEST Equipment',
+            LLC_BI__Advance_Rate__c = 80
+        );
+        insert colType;
+        LLC_BI__Collateral__c collateral = new LLC_BI__Collateral__c(
+            LLC_BI__Collateral_Type__c = colType.Id,
+            LLC_BI__Description__c = 'ZZ-MOD-TEST equipment'
+        );
+        insert collateral;
+        LLC_BI__Loan_Collateral_Aggregate__c parentAgg = new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'ZZ-MOD-TEST Aggregate');
+        insert parentAgg;
+        insert new LLC_BI__Loan_Collateral2__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Collateral__c = collateral.Id,
+            LLC_BI__Loan_Collateral_Aggregate__c = parentAgg.Id,
+            LLC_BI__Lien_Position__c = '1st',
+            LLC_BI__Is_Primary__c = true,
+            LLC_BI__Amount_Pledged__c = 750000
+        );
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        List<LLC_BI__Loan_Covenant__c> covOnClone = [
+            SELECT LLC_BI__Covenant2__c FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId
+        ];
+        System.assertEquals(1, covOnClone.size(), 'The covenant junction carries onto the clone');
+        System.assertEquals(cov.Id, covOnClone[0].LLC_BI__Covenant2__c, 'It points at the SAME covenant, never a copy of the covenant itself');
+
+        List<LLC_BI__Legal_Entities__c> invOnClone = [
+            SELECT LLC_BI__Account__c, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c, LLC_BI__Product_Package__c
+            FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c = :cloneId
+        ];
+        System.assertEquals(1, invOnClone.size(), 'The involvement carries onto the clone');
+        System.assertEquals('Guarantor', invOnClone[0].LLC_BI__Borrower_Type__c, 'With its role COPIED, which the create arm alone could never author');
+        System.assertEquals(50, invOnClone[0].LLC_BI__Ownership__c);
+        System.assertEquals(done.result.outputPackageId, String.valueOf(invOnClone[0].LLC_BI__Product_Package__c),
+            'And re-anchored on the NEW package version');
+
+        List<LLC_BI__Loan_Collateral2__c> pledgeOnClone = [
+            SELECT LLC_BI__Collateral__c, LLC_BI__Loan_Collateral_Aggregate__c, LLC_BI__Lien_Position__c,
+                   LLC_BI__Is_Primary__c, LLC_BI__Amount_Pledged__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :cloneId
+        ];
+        System.assertEquals(1, pledgeOnClone.size(), 'The collateral pledge carries onto the clone');
+        System.assertEquals(collateral.Id, pledgeOnClone[0].LLC_BI__Collateral__c, 'It pledges the SAME collateral');
+        System.assertNotEquals(parentAgg.Id, pledgeOnClone[0].LLC_BI__Loan_Collateral_Aggregate__c,
+            'On a FRESH aggregate shell: reusing the parent aggregate would cross the versions in the rollups');
+        System.assertEquals('1st', pledgeOnClone[0].LLC_BI__Lien_Position__c);
+        System.assertEquals(750000, pledgeOnClone[0].LLC_BI__Amount_Pledged__c);
+
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :before.Id],
+            'The parent keeps its own junction');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c = :before.Id],
+            'And its own involvement');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :before.Id],
+            'And its own pledge on its own aggregate');
+
+        Boolean sawCarry = false;
+        for (ExecuteLoanModification.StepResult s : done.result.steps) {
+            if (s.id == 'carry_junctions') {
+                sawCarry = s.state == C360Plan.STATE_VERIFIED && s.detail.contains('1 of 1 covenant junctions');
+            }
+        }
+        System.assertEquals(true, sawCarry, 'The carry is its own verified, counted step: ' + JSON.serialize(done.result.steps));
     }
 
     @IsTest

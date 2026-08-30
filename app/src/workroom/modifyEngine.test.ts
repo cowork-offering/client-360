@@ -923,7 +923,7 @@ describe("every beat says WHY, on this package's own figures", () => {
     expect(result.kind).toBe("deltas");
     if (result.kind !== "deltas") return;
     expect(result.reply).toContain("clone of Line of Credit");
-    expect(result.reply).toContain("booked facility stays exactly as it is");
+    expect(result.reply).toContain("booked facilities and the current package stay exactly as they are");
   });
 
   it("explains a handoff in credit language, never in the org's own schema", async () => {

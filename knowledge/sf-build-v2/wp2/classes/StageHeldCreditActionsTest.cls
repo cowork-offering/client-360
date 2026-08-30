@@ -490,8 +490,9 @@ private class StageHeldCreditActionsTest {
         System.assertEquals(String.valueOf(C360Wave2Fixture.existingPackage().Id), res.result.productPackageId,
             'The plan is anchored on the package it was given');
 
-        // Three per-facility steps each, then the shared observed and handoff descriptors.
-        System.assertEquals(3 * 3 + 2, res.result.steps.size(), 'Per-facility typed steps, not one shared write');
+        // The package roll, three per-facility steps each, the package verification, then the shared
+        // observed and handoff descriptors.
+        System.assertEquals(3 * 3 + 5, res.result.steps.size(), 'Per-facility typed steps, not one shared write');
         System.assertEquals(C360Plan.TYPE_HANDOFF, res.result.steps[res.result.steps.size() - 1].type);
         for (Integer i = 0; i < 3; i++) {
             StageLoanModification.PlannedFacility pf = res.result.facilities[i];
@@ -551,7 +552,7 @@ private class StageHeldCreditActionsTest {
         System.assertEquals(true, mr.ok, 'The pre-facilityIds shape still works unchanged: ' + whyMod(mr));
         System.assertEquals(1, mr.result.facilityCount);
         System.assertEquals(String.valueOf(C360Wave2Fixture.existingLoan().Id), mr.result.facilities[0].facilityId);
-        System.assertEquals(1 * 3 + 2, mr.result.steps.size());
+        System.assertEquals(1 * 3 + 5, mr.result.steps.size());
         System.assertEquals(true, rr.ok, whyRen(rr));
         System.assertEquals(1, rr.result.facilityCount);
         System.assertEquals(2, [SELECT COUNT() FROM cm_Action_Staging__c], 'One staging row per call, on either shape');

@@ -180,8 +180,12 @@ global with sharing class ExecuteLoanModification {
         global String anchorName;
         @InvocableVariable(label='Product Package Id' description='The deal anchor the credit action ran against.')
         global String productPackageId;
-        @InvocableVariable(label='Output Package Id' description='The package nCino reported the output on. Observed equal to the source package for a modification.')
+        @InvocableVariable(label='Output Package Id' description='The NEW package version nCino created. Package methodology: a modification versions the whole package, so this is never the source package.')
         global String outputPackageId;
+        @InvocableVariable(label='New Package Name' description='The name of the new package version, after the org-convention repair when the engine left the account prefix blank.')
+        global String newPackageName;
+        @InvocableVariable(label='Members Rolled' description='How many package members the credit action rolled into the new version, the modified ones included.')
+        global Integer membersRolled;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -217,7 +221,7 @@ global with sharing class ExecuteLoanModification {
      */
     @InvocableMethod(
         label='execute_loan_modification'
-        description='Execute a plan staged by stage_loan_modification, behind the single-use decision token. Invokes nCino\'s credit action on the product package, verifies the modification clone and its chain junction row by re-query, applies the staged changes to the CLONE only, and leaves the parent facility untouched. Booking the clone still requires nCino\'s Submit for Approval.'
+        description='Execute a plan staged by stage_loan_modification, behind the single-use decision token. Invokes nCino\'s credit action as a PACKAGE VERSIONING move: all eligible members roll into a new package, the staged changes land on the selected clones only, and every original loan and the current package stay untouched. Verifies the new package, each clone and its chain junction row by re-query. Booking the new version still requires nCino\'s Submit for Approval.'
     )
     global static List<Response> run(List<Request> requests) {
         List<Response> out = new List<Response>();
@@ -620,30 +624,97 @@ global with sharing class ExecuteLoanModification {
         }
         Map<Id, LLC_BI__Loan__c> beforeById = new Map<Id, LLC_BI__Loan__c>(before);
 
+        // The staged roll list. nCino package methodology: the credit action versions the WHOLE
+        // package, so the plan carries every eligible member, not just the selected ones. The
+        // membership was computed and hashed at stage time; it is re-derived here (resume
+        // precondition A33.3.3) and a mismatch refuses the run, because a package whose membership
+        // moved between staging and execution is not the package the banker confirmed.
+        List<Id> rollMembers = new List<Id>();
+        String rollCsv = v.get('rollMemberIds') == null ? null : String.valueOf(v.get('rollMemberIds'));
+        if (String.isNotBlank(rollCsv)) {
+            for (String rid : rollCsv.split(',')) {
+                Id asId = C360Plan.asId(rid.trim());
+                if (asId != null) {
+                    rollMembers.add(asId);
+                }
+            }
+        }
+        if (rollMembers.isEmpty()) {
+            String detail = 'This plan was staged before the package-versioning wave and carries no roll list. ' +
+                'Re-stage the action: a modification rolls the whole package, and the banker confirms that shape at stage time.';
+            C360Plan.markRefused(steps, detail);
+            C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
+            throw new ToolException(detail);
+        }
+        Set<Id> rollSet = new Set<Id>(rollMembers);
+        Set<Id> nowEligible = new Set<Id>();
+        for (LLC_BI__Loan__c m : [
+            SELECT Id FROM LLC_BI__Loan__c
+            WHERE LLC_BI__Product_Package__c = :packageId
+              AND LLC_BI__Stage__c = 'Booked' AND LLC_BI__Status__c = 'Open'
+            WITH USER_MODE
+        ]) {
+            nowEligible.add(m.Id);
+        }
+        if (!nowEligible.equals(rollSet)) {
+            String detail = 'The package membership moved between staging and execution: the plan rolls ' +
+                rollSet.size() + ' members but the package now holds ' + nowEligible.size() +
+                ' eligible members. Re-stage the action so the banker confirms the package as it stands now.';
+            C360Plan.markRefused(steps, detail);
+            C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
+            throw new ToolException(detail);
+        }
+
         // Everything on the chain before we act, so a pre-existing modification is never mistaken for
         // the one this run produced. Revision 0 is a self-referential anchor row (ACTIONS-DESIGN 1.4),
-        // and some of these facilities may already carry earlier revisions.
+        // and any of the rolled members may already carry earlier revisions.
         Set<Id> junctionsBefore = new Set<Id>();
         for (LLC_BI__LoanRenewal__c j : [
-            SELECT Id FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c IN :parents WITH USER_MODE
+            SELECT Id FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c IN :rollMembers WITH USER_MODE
         ]) {
             junctionsBefore.add(j.Id);
         }
 
-        EngineResult engineResult = engine().modify(packageId, parents);
+        EngineResult engineResult = engine().modify(packageId, rollMembers);
         if (engineResult.success != true) {
             String why = engineResult.failureReasons == null || engineResult.failureReasons.isEmpty()
                 ? 'The engine returned no failure reason.'
                 : String.join(engineResult.failureReasons, ' | ');
+            C360Plan.setState(steps, 'roll_package', C360Plan.STATE_FAILED, 'nCino refused the credit action: ' + why);
             for (Integer i = 0; i < n; i++) {
                 C360Plan.setState(steps, 'credit_action_' + i, C360Plan.STATE_FAILED, 'nCino refused the credit action: ' + why);
                 C360Plan.setState(steps, 'verify_clone_' + i, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'apply_changes_' + i, C360Plan.STATE_SKIPPED, null);
             }
+            C360Plan.setState(steps, 'verify_package', C360Plan.STATE_SKIPPED, null);
+            C360Plan.setState(steps, 'carry_junctions', C360Plan.STATE_SKIPPED, null);
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
         }
+
+        // The versioning contract: the engine must have minted a NEW package. A result that points
+        // back at the source package is the old single-loan anchoring, which the package methodology
+        // forbids, and nothing downstream may pretend otherwise.
+        Id newPkgId = String.isBlank(engineResult.outputPackageId) ? null : (Id) engineResult.outputPackageId;
+        if (newPkgId == null || newPkgId == packageId) {
+            String why = newPkgId == null
+                ? 'The engine reported success but named no output package, so the new version cannot be verified.'
+                : 'The engine reported the SOURCE package as its output instead of a new version. The clones, if any, are anchored wrongly.';
+            C360Plan.setState(steps, 'roll_package', C360Plan.STATE_FILED_UNVERIFIED, why);
+            for (Integer i = 0; i < n; i++) {
+                C360Plan.setState(steps, 'credit_action_' + i, C360Plan.STATE_FILED_UNVERIFIED, why);
+                C360Plan.setState(steps, 'verify_clone_' + i, C360Plan.STATE_FAILED, why);
+                C360Plan.setState(steps, 'apply_changes_' + i, C360Plan.STATE_SKIPPED, null);
+            }
+            C360Plan.setState(steps, 'verify_package', C360Plan.STATE_FAILED, why);
+            C360Plan.setState(steps, 'carry_junctions', C360Plan.STATE_SKIPPED, null);
+            C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
+            C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
+            throw new EngineException(why);
+        }
+        C360Plan.setState(steps, 'roll_package', C360Plan.STATE_VERIFIED,
+            'nCino created package version ' + newPkgId + ' from one credit action over ' + rollMembers.size() + ' members.');
 
         // Map clone to parent through the chain, never through "the newest loan on the package": two
         // facilities modified in one call would race, and a duplicate produced by failed background
@@ -653,7 +724,7 @@ global with sharing class ExecuteLoanModification {
             SELECT Id, Name, LLC_BI__ParentLoanId__c, LLC_BI__RenewalLoanId__c,
                    LLC_BI__RevisionNumber__c, LLC_BI__RevisionStatus__c
             FROM LLC_BI__LoanRenewal__c
-            WHERE LLC_BI__ParentLoanId__c IN :parents
+            WHERE LLC_BI__ParentLoanId__c IN :rollMembers
             WITH USER_MODE
         ]) {
             if (junctionsBefore.contains(j.Id)) {
@@ -673,6 +744,81 @@ global with sharing class ExecuteLoanModification {
             cloneIds.add(j.LLC_BI__RenewalLoanId__c);
         }
         Map<Id, LLC_BI__Loan__c> clones = new Map<Id, LLC_BI__Loan__c>(readLoans(cloneIds));
+
+        // Package-level verification: the new version exists and carries a clone for EVERY rolled
+        // member. The junction graphs are copied by nCino's own queueable jobs after this transaction
+        // commits, so they are reported as queued in observe_side_effects, never claimed here.
+        List<LLC_BI__Product_Package__c> newPkgRows = [
+            SELECT Id, Name, LLC_BI__Account__c FROM LLC_BI__Product_Package__c WHERE Id = :newPkgId WITH USER_MODE LIMIT 1
+        ];
+        Integer clonesOnNew = [
+            SELECT COUNT() FROM LLC_BI__Loan__c WHERE LLC_BI__Product_Package__c = :newPkgId WITH USER_MODE
+        ];
+        String newPkgName = newPkgRows.isEmpty() ? null : newPkgRows[0].Name;
+
+        // The engine names the version itself and hangs it on NO account (verified live 2026-08-30:
+        // the created package carries a null LLC_BI__Account__c, which is also why its name prefix
+        // comes out blank as "- 8/30/2026 - PP"). The org's own convention is "<Account> - <M/D/YYYY>
+        // - PP" (516 of 518 packages), so both are repaired here and anything else is left exactly
+        // as the engine wrote it.
+        if (!newPkgRows.isEmpty()) {
+            List<Account> acct = [
+                SELECT Name FROM Account WHERE Id = :before[0].LLC_BI__Account__c WITH USER_MODE LIMIT 1
+            ];
+            Boolean nameNeedsRepair = newPkgName != null && newPkgName.startsWith('- ')
+                && !acct.isEmpty() && String.isNotBlank(acct[0].Name);
+            Boolean accountNeedsRepair = newPkgRows[0].LLC_BI__Account__c == null;
+            if (nameNeedsRepair || accountNeedsRepair) {
+                LLC_BI__Product_Package__c repair = new LLC_BI__Product_Package__c(Id = newPkgId);
+                Map<String, Object> pkgFields = new Map<String, Object>();
+                if (nameNeedsRepair) {
+                    String repaired = acct[0].Name + ' ' + newPkgName;
+                    if (repaired.length() > 80) {
+                        repaired = repaired.substring(0, 80);
+                    }
+                    repair.Name = repaired;
+                    pkgFields.put('Name', repaired);
+                    newPkgName = repaired;
+                }
+                if (accountNeedsRepair) {
+                    repair.LLC_BI__Account__c = before[0].LLC_BI__Account__c;
+                    pkgFields.put('LLC_BI__Account__c', before[0].LLC_BI__Account__c);
+                }
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRODUCT_PACKAGE, C360WriteGuard.OP_UPDATE, pkgFields);
+                update as user repair;
+            }
+        }
+
+        Boolean packageProven = !newPkgRows.isEmpty() && clonesOnNew == rollMembers.size();
+        C360Plan.setState(
+            steps,
+            'verify_package',
+            packageProven ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+            newPkgRows.isEmpty()
+                ? 'The engine named package ' + newPkgId + ' but it could not be read back.'
+                : 'Package version ' + newPkgName + ' (' + newPkgId + ') reads back with ' + clonesOnNew + ' of ' +
+                  rollMembers.size() + ' rolled members' +
+                  (packageProven ? '.' : ', which is NOT the full roll. Each missing member is reported against its own facility.')
+        );
+
+        // ---- The junction carry. nCino's engine copies NOTHING here: the related-lists copy
+        // configuration only ever fed the retired classic wizard's checklist (verified live
+        // 2026-08-30: all eight defaults flipped on, engine run, zero junction rows landed, no copy
+        // job enqueued). Package methodology requires every member's graph to carry onto the new
+        // version, so this tool composes the carry itself: replicas of the parents' covenant
+        // junctions, collateral pledges (with a fresh per-clone aggregate shell) and borrowing
+        // involvements, retargeted at the clones, synchronous, and verified by count below.
+        Map<Id, Id> cloneByParent = new Map<Id, Id>();
+        for (Id parentId : newestByParent.keySet()) {
+            cloneByParent.put(parentId, newestByParent.get(parentId).LLC_BI__RenewalLoanId__c);
+        }
+        String carryReport = carryJunctionGraph(rollMembers, cloneByParent, newPkgId);
+        C360Plan.setState(
+            steps,
+            'carry_junctions',
+            carryReport.startsWith('CARRIED') ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+            carryReport.removeStart('CARRIED ')
+        );
 
         // The staged changes, exactly as the banker saw them hashed at the confirm gate.
         Decimal requestedAmount = C360Plan.asDecimal(v.get('requestedAmount'));
@@ -777,10 +923,10 @@ global with sharing class ExecuteLoanModification {
             } else {
                 unproven.add('the clone does NOT carry Is_Modification, so nCino may have typed it as an original loan');
             }
-            if (clone.LLC_BI__Product_Package__c == packageId) {
-                proven.add('it sits on the same product package as the parent');
+            if (clone.LLC_BI__Product_Package__c == newPkgId) {
+                proven.add('it sits on the new package version ' + newPkgId);
             } else {
-                unproven.add('it sits on package ' + clone.LLC_BI__Product_Package__c + ', not the anchor package ' + packageId);
+                unproven.add('it sits on package ' + clone.LLC_BI__Product_Package__c + ', not the new package version ' + newPkgId);
             }
             if (revision(junction) >= 1) {
                 proven.add('chain row ' + junction.Name + ' records revision ' + String.valueOf(junction.LLC_BI__RevisionNumber__c));
@@ -811,7 +957,7 @@ global with sharing class ExecuteLoanModification {
                 fr.appliedChanges
             );
 
-            fr.outcome = 'Modification ' + clone.Name + ' created from ' + parentBefore.Name + ' at stage ' +
+            fr.outcome = 'Modification ' + clone.Name + ' created from ' + parentBefore.Name + ' on the new package version at stage ' +
                 clone.LLC_BI__Stage__c + '. ' + fr.appliedChanges + ' The parent was not touched.';
         }
 
@@ -835,15 +981,19 @@ global with sharing class ExecuteLoanModification {
         out.anchorName = results.isEmpty() ? null : results[0].facilityName;
         out.productPackageId = packageId;
         out.outputPackageId = engineResult.outputPackageId;
+        out.newPackageName = newPkgName;
+        out.membersRolled = rollMembers.size();
         out.terminalState = terminal;
         out.steps = toWireSteps(steps);
         out.bookingHandoff = BOOKING_HANDOFF;
         out.facilities = results;
         out.facilityCount = results.size();
         out.replayed = false;
-        out.outcome = (results.size() == 1
+        out.outcome = 'New package version ' + (newPkgName == null ? String.valueOf(newPkgId) : newPkgName) +
+            ' created: ' + rollMembers.size() + ' members rolled, ' + results.size() + ' modified. ' +
+            (results.size() == 1
                 ? results[0].outcome
-                : String.valueOf(results.size()) + ' facilities were modified on this package. See each facility for its clone and what was applied.') +
+                : 'See each facility for its clone and what was applied.') +
             ' ' + BOOKING_HANDOFF;
         return out;
     }
@@ -926,6 +1076,13 @@ global with sharing class ExecuteLoanModification {
                 service.setInputParameter('contextId', String.valueOf(packageId));
                 service.setInputParameter('facilityActions', JSON.serialize(actions));
                 service.setInputParameter('isAsync', false);
+                // Package methodology: the credit action mints the NEXT VERSION of the package, never
+                // an insert into the current one. Shape probe 2026-08-30 (rolled back): with this flag
+                // the engine creates the new package, clones every facility in facilityActions onto it
+                // with _M<n> lookup keys at Qualification/Open, writes the chain rows synchronously and
+                // queues the junction-graph copy. It also names the package itself; a newPackageName
+                // input was observed to be IGNORED, which is why the caller repairs the name after.
+                service.setInputParameter('isNewPackage', true);
                 service.executeService();
 
                 Map<String, Object> params = service.getOutputParameters();
@@ -951,6 +1108,152 @@ global with sharing class ExecuteLoanModification {
             }
             return out;
         }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // The junction carry.
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * Replicates the junction graph of every rolled parent onto its clone: covenant junctions,
+     * collateral pledges (each clone gets a fresh aggregate shell, because aggregates are per-loan
+     * rollup anchors and reusing the parent's would cross the versions), and borrowing involvements
+     * retargeted at the clone and the new package. Values are COPIES of org state, never authored;
+     * the OP_CARRY gate fences the objects and the fields the org derives.
+     *
+     * @return 'CARRIED <detail>' when every replica read back by count; a plain detail otherwise.
+     */
+    private static String carryJunctionGraph(List<Id> parents, Map<Id, Id> cloneByParent, Id newPkgId) {
+        List<LLC_BI__Loan_Covenant__c> covCopies = new List<LLC_BI__Loan_Covenant__c>();
+        for (LLC_BI__Loan_Covenant__c j : [
+            SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__c
+            FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :parents WITH USER_MODE
+        ]) {
+            Id cloneId = cloneByParent.get(j.LLC_BI__Loan__c);
+            if (cloneId == null) {
+                continue;
+            }
+            covCopies.add(new LLC_BI__Loan_Covenant__c(LLC_BI__Loan__c = cloneId, LLC_BI__Covenant2__c = j.LLC_BI__Covenant2__c));
+        }
+        if (!covCopies.isEmpty()) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN_COVENANT, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Covenant2__c' => null });
+            insert as user covCopies;
+        }
+
+        List<LLC_BI__Loan_Collateral2__c> pledgeSources = [
+            SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Lien_Position__c, LLC_BI__Pledged_Status__c,
+                   LLC_BI__Active__c, LLC_BI__Is_Primary__c, LLC_BI__Amount_Pledged__c,
+                   LLC_BI__Advance_Rate_Override__c, LLC_BI__Override_Reason__c, LLC_BI__Start_Date__c,
+                   LLC_BI__End_Date__c, LLC_BI__Is_Excluded__c, LLC_BI__Is_Leased_Asset__c,
+                   LLC_BI__Abundance_of_Caution__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :parents WITH USER_MODE
+        ];
+        Map<Id, LLC_BI__Loan_Collateral_Aggregate__c> aggByClone = new Map<Id, LLC_BI__Loan_Collateral_Aggregate__c>();
+        for (LLC_BI__Loan_Collateral2__c p : pledgeSources) {
+            Id cloneId = cloneByParent.get(p.LLC_BI__Loan__c);
+            if (cloneId == null || aggByClone.containsKey(cloneId)) {
+                continue;
+            }
+            aggByClone.put(cloneId, new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'Collateral Aggregate'));
+        }
+        if (!aggByClone.isEmpty()) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE_AGGREGATE, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{ 'Name' => null });
+            insert as user aggByClone.values();
+        }
+        List<LLC_BI__Loan_Collateral2__c> pledgeCopies = new List<LLC_BI__Loan_Collateral2__c>();
+        for (LLC_BI__Loan_Collateral2__c p : pledgeSources) {
+            Id cloneId = cloneByParent.get(p.LLC_BI__Loan__c);
+            if (cloneId == null) {
+                continue;
+            }
+            pledgeCopies.add(new LLC_BI__Loan_Collateral2__c(
+                LLC_BI__Loan__c = cloneId,
+                LLC_BI__Collateral__c = p.LLC_BI__Collateral__c,
+                LLC_BI__Loan_Collateral_Aggregate__c = aggByClone.get(cloneId).Id,
+                LLC_BI__Lien_Position__c = p.LLC_BI__Lien_Position__c,
+                LLC_BI__Pledged_Status__c = p.LLC_BI__Pledged_Status__c,
+                LLC_BI__Active__c = p.LLC_BI__Active__c,
+                LLC_BI__Is_Primary__c = p.LLC_BI__Is_Primary__c,
+                LLC_BI__Amount_Pledged__c = p.LLC_BI__Amount_Pledged__c,
+                LLC_BI__Advance_Rate_Override__c = p.LLC_BI__Advance_Rate_Override__c,
+                LLC_BI__Override_Reason__c = p.LLC_BI__Override_Reason__c,
+                LLC_BI__Start_Date__c = p.LLC_BI__Start_Date__c,
+                LLC_BI__End_Date__c = p.LLC_BI__End_Date__c,
+                LLC_BI__Is_Excluded__c = p.LLC_BI__Is_Excluded__c,
+                LLC_BI__Is_Leased_Asset__c = p.LLC_BI__Is_Leased_Asset__c,
+                LLC_BI__Abundance_of_Caution__c = p.LLC_BI__Abundance_of_Caution__c
+            ));
+        }
+        if (!pledgeCopies.isEmpty()) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{
+                    'LLC_BI__Loan__c' => null, 'LLC_BI__Collateral__c' => null,
+                    'LLC_BI__Loan_Collateral_Aggregate__c' => null, 'LLC_BI__Lien_Position__c' => null,
+                    'LLC_BI__Pledged_Status__c' => null, 'LLC_BI__Active__c' => null,
+                    'LLC_BI__Is_Primary__c' => null, 'LLC_BI__Amount_Pledged__c' => null,
+                    'LLC_BI__Advance_Rate_Override__c' => null, 'LLC_BI__Override_Reason__c' => null,
+                    'LLC_BI__Start_Date__c' => null, 'LLC_BI__End_Date__c' => null,
+                    'LLC_BI__Is_Excluded__c' => null, 'LLC_BI__Is_Leased_Asset__c' => null,
+                    'LLC_BI__Abundance_of_Caution__c' => null
+                });
+            insert as user pledgeCopies;
+        }
+
+        List<LLC_BI__Legal_Entities__c> invCopies = new List<LLC_BI__Legal_Entities__c>();
+        for (LLC_BI__Legal_Entities__c e : [
+            SELECT LLC_BI__Loan__c, LLC_BI__Account__c, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c,
+                   LLC_BI__Relationship_Type__c, LLC_BI__Entity_Type__c, LLC_BI__Order__c,
+                   LLC_BI__Contingent_Type__c, LLC_BI__Guarantee_Effective_Date__c,
+                   LLC_BI__Guarantee_End_Date__c, LLC_BI__Guarantee_Limit__c, LLC_BI__Guaranty_Amount__c
+            FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :parents WITH USER_MODE
+        ]) {
+            Id cloneId = cloneByParent.get(e.LLC_BI__Loan__c);
+            if (cloneId == null) {
+                continue;
+            }
+            invCopies.add(new LLC_BI__Legal_Entities__c(
+                LLC_BI__Loan__c = cloneId,
+                LLC_BI__Product_Package__c = newPkgId,
+                LLC_BI__Account__c = e.LLC_BI__Account__c,
+                LLC_BI__Borrower_Type__c = e.LLC_BI__Borrower_Type__c,
+                LLC_BI__Ownership__c = e.LLC_BI__Ownership__c,
+                LLC_BI__Relationship_Type__c = e.LLC_BI__Relationship_Type__c,
+                LLC_BI__Entity_Type__c = e.LLC_BI__Entity_Type__c,
+                LLC_BI__Order__c = e.LLC_BI__Order__c,
+                LLC_BI__Contingent_Type__c = e.LLC_BI__Contingent_Type__c,
+                LLC_BI__Guarantee_Effective_Date__c = e.LLC_BI__Guarantee_Effective_Date__c,
+                LLC_BI__Guarantee_End_Date__c = e.LLC_BI__Guarantee_End_Date__c,
+                LLC_BI__Guarantee_Limit__c = e.LLC_BI__Guarantee_Limit__c,
+                LLC_BI__Guaranty_Amount__c = e.LLC_BI__Guaranty_Amount__c
+            ));
+        }
+        if (!invCopies.isEmpty()) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{
+                    'LLC_BI__Loan__c' => null, 'LLC_BI__Product_Package__c' => null,
+                    'LLC_BI__Account__c' => null, 'LLC_BI__Borrower_Type__c' => null,
+                    'LLC_BI__Ownership__c' => null, 'LLC_BI__Relationship_Type__c' => null,
+                    'LLC_BI__Entity_Type__c' => null, 'LLC_BI__Order__c' => null,
+                    'LLC_BI__Contingent_Type__c' => null, 'LLC_BI__Guarantee_Effective_Date__c' => null,
+                    'LLC_BI__Guarantee_End_Date__c' => null, 'LLC_BI__Guarantee_Limit__c' => null,
+                    'LLC_BI__Guaranty_Amount__c' => null
+                });
+            insert as user invCopies;
+        }
+
+        // The proof is the re-read, never the insert result.
+        Set<Id> cloneIds = new Set<Id>(cloneByParent.values());
+        Integer covBack = [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds WITH USER_MODE];
+        Integer plBack = [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :cloneIds WITH USER_MODE];
+        Integer invBack = [SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :cloneIds WITH USER_MODE];
+        Boolean ok = covBack == covCopies.size() && plBack == pledgeCopies.size() && invBack == invCopies.size();
+        String detail = 'The junction graph was carried onto the new version and re-read: ' +
+            covBack + ' of ' + covCopies.size() + ' covenant junctions, ' +
+            plBack + ' of ' + pledgeCopies.size() + ' collateral pledges (on ' + aggByClone.size() + ' fresh aggregates), ' +
+            invBack + ' of ' + invCopies.size() + ' borrowing involvements.';
+        return (ok ? 'CARRIED ' : '') + detail;
     }
 
     // -------------------------------------------------------------------------------------------

@@ -32,6 +32,43 @@ public with sharing class C360WriteGuard {
     public static final String OP_CREATE = 'create';
     public static final String OP_UPDATE = 'update';
     public static final String OP_DELETE = 'delete';
+    /**
+     * The versioning carry (2026-08-30). nCino's credit-action engine copies NO junction rows in
+     * this org: the related-lists copy configuration only ever fed the retired classic wizard's
+     * checklist (verified live: all eight defaults on, engine run, zero rows landed, no copy job
+     * enqueued). Package methodology requires every member's junction graph to carry onto the new
+     * version, so the execute tool composes the carry itself. OP_CARRY exists so that composition
+     * passes THIS gate like every other write, under its own doctrine: it may only REPLICATE rows
+     * that already exist on a version parent, onto a clone the same transaction created, with the
+     * anchor lookups retargeted and nothing else authored.
+     */
+    public static final String OP_CARRY = 'carry';
+
+    public static final String OBJ_LOAN_COVENANT = 'LLC_BI__Loan_Covenant__c';
+    public static final String OBJ_PLEDGE = 'LLC_BI__Loan_Collateral2__c';
+    public static final String OBJ_PLEDGE_AGGREGATE = 'LLC_BI__Loan_Collateral_Aggregate__c';
+
+    /** The junction graph OP_CARRY may replicate, and nothing else. */
+    private static final Set<String> CARRY_OBJECTS = new Set<String>{
+        OBJ_LOAN_COVENANT, OBJ_PLEDGE, OBJ_PLEDGE_AGGREGATE, OBJ_INVOLVEMENT
+    };
+
+    /**
+     * Fields OP_CARRY must never write even as copies: the mutually-exclusive contingent amount
+     * (15v), the formula flags, and every rollup the org derives itself.
+     */
+    private static final Map<String, Set<String>> CARRY_FORBIDDEN = new Map<String, Set<String>>{
+        OBJ_LOAN_COVENANT => new Set<String>(),
+        OBJ_PLEDGE => new Set<String>{
+            'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Collateral_Value__c',
+            'LLC_BI__Total_Pledged_Rollup_Value__c', 'LLC_BI__Total_Pledged_Rollup_Lendable_Value__c'
+        },
+        OBJ_PLEDGE_AGGREGATE => new Set<String>(),
+        OBJ_INVOLVEMENT => new Set<String>{
+            'LLC_BI__Is_Borrower__c', 'LLC_BI__Is_Guarantor__c', 'LLC_BI__Is_CoBorrower__c',
+            'LLC_BI__Is_Grantor__c', 'LLC_BI__Is_Related_Entity__c', 'LLC_BI__Contingent_Amount__c'
+        }
+    };
 
     /**
      * The only states each object may be CREATED with (A33.3.1). A field present here must
@@ -92,7 +129,14 @@ public with sharing class C360WriteGuard {
             // Probe 9 finding 2 proved this hop headlessly; Booked stays unreachable (LV06).
             OBJ_LOAN => new Map<String, Set<String>>{
                 'LLC_BI__Stage__c' => new Set<String>{ 'Proposal' }
-            }
+            },
+            // Package versioning repair (2026-08-30). The credit-action engine names the new package
+            // version itself and was observed to produce a blank account prefix ("- 8/30/2026 - PP",
+            // shape probe, rolled back). The one package update this wave performs is the Name repair
+            // to the org's own "<Account> - <M/D/YYYY> - PP" convention (516 of 518 packages follow
+            // it). RecordTypeId, Stage and Status remain forbidden below; Name is free text, so no
+            // state fence applies.
+            OBJ_PRODUCT_PACKAGE => new Map<String, Set<String>>()
         };
 
     /**
@@ -142,7 +186,7 @@ public with sharing class C360WriteGuard {
      * updates or deletes at all (sub-collateral creation is refused outright), and Review
      * hands off to nCino's Submit for Approval rather than reaching Complete.
      */
-    private static final Set<String> CREATE_ONLY = new Set<String>{ OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT };
+    private static final Set<String> CREATE_ONLY = new Set<String>{ OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_INVOLVEMENT };
 
     /** Every object the fence knows about, in either direction. */
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
@@ -162,6 +206,13 @@ public with sharing class C360WriteGuard {
      *         carries a value the allowlist does not permit.
      */
     public static void assertAllowed(String objectApiName, String operation, Map<String, Object> values) {
+        // The carry has its own object table: junction objects are deliberately NOT in
+        // KNOWN_OBJECTS, because no create/update/delete arm may ever reach them.
+        if (operation == OP_CARRY) {
+            assertCarryAllowed(objectApiName, values);
+            return;
+        }
+
         if (!KNOWN_OBJECTS.contains(objectApiName)) {
             throw new GuardException(
                 'Refused: no transition allowlist exists for ' + objectApiName +
@@ -240,6 +291,32 @@ public with sharing class C360WriteGuard {
                         ' (A33.3.1). Supplied: ' + supplied + '.'
                     );
                 }
+            }
+        }
+    }
+
+    /**
+     * Enforces the carry side of the allowlist: only the junction graph, and never a field the
+     * org derives or forbids. The caller owns the scoping doctrine (replicas of version-parent
+     * rows onto same-transaction clones); this gate owns the object and field fences.
+     *
+     * @param objectApiName The junction object being replicated.
+     * @param values The field values of ONE replica row, keyed by field API name.
+     * @throws GuardException when the object is not carryable or a forbidden field is present.
+     */
+    private static void assertCarryAllowed(String objectApiName, Map<String, Object> values) {
+        if (!CARRY_OBJECTS.contains(objectApiName)) {
+            throw new GuardException(
+                'Refused: ' + objectApiName + ' is not part of the junction graph the versioning carry may replicate.'
+            );
+        }
+        Set<String> forbidden = CARRY_FORBIDDEN.get(objectApiName);
+        for (String f : values.keySet()) {
+            if (forbidden.contains(f)) {
+                throw new GuardException(
+                    'Refused: ' + objectApiName + '.' + f + ' is never written by the carry, even as a copy: ' +
+                    'the org derives or forbids it.'
+                );
             }
         }
     }

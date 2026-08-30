@@ -82,16 +82,18 @@ export function whyAsked(field: CatalogField, ctx: AskContext): string {
 /* ----------------------------------------------------------- 2. proposed */
 
 /** WHAT CONFIRMING WILL ACTUALLY DO. The founder's own reading of a
- *  modification: it stages a clone of the booked loan, and the booked loan is
- *  not touched until the bank's own approval books the clone. A banker who has
- *  never seen this room has no way to know that, and it is the single fact that
- *  makes a confirm safe to make. */
+ *  modification (corrected 2026-08-30 to nCino package methodology): the credit
+ *  action versions the WHOLE package — every eligible member rolls into a new
+ *  package with its junction graph, the named member's clone carries the new
+ *  terms, and nothing that exists today is touched until the bank's own
+ *  approval books the new version. A banker who has never seen this room has
+ *  no way to know that, and it is the single fact that makes a confirm safe. */
 export function whyProposed(deltas: WorkroomDelta[]): string {
   const fileable = deltas.filter((d) => d.fileable !== false);
   if (!fileable.length) return "";
   const targets = [...new Set(fileable.map((d) => d.target))];
   const named = targets.length > 2 ? `${targets.length} members` : targets.join(" and ");
-  return `Confirming stages a clone of ${named} carrying the new terms; the booked facility stays exactly as it is until the bank's own approval books the clone.`;
+  return `Confirming stages the next VERSION of the package: every eligible member rolls into it with its covenants, collateral and borrowers, and the clone of ${named} carries the new terms. The booked facilities and the current package stay exactly as they are until the bank's own approval books the new version.`;
 }
 
 /* ------------------------------------------------------------ 3. checked */

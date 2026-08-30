@@ -628,11 +628,13 @@ export function createModifyEngine(args: {
 
   /* ------------------------------------------------------- roll-over baseline
 
-     A modification does not start from nothing: nCino clones the facility and
-     the clone CARRIES the parent's record graph — its covenant junctions, its
-     collateral pledges, its borrowing structure, its fees, its pricing streams.
-     Every amendment is a delta against that, so the room has to show it, and it
-     has to be honest about the two halves it cannot read.                     */
+     A modification does not start from nothing, and it never versions a loan
+     alone. nCino package methodology: the credit action rolls the WHOLE package
+     into a new version — every Booked/Open member is cloned, the touched one
+     takes the changes, the rest carry unchanged, and each clone's record graph
+     (covenant junctions, collateral pledges, borrowing structure) is carried by
+     the same governed run. Every amendment is a delta against that, so the room
+     has to show it, and it has to be honest about the halves it cannot read.  */
 
   function rollOverRows(): HaveRow[] {
     const target = askFacility() ?? booked[0] ?? null;
@@ -641,17 +643,31 @@ export function createModifyEngine(args: {
     const junctions = target.loanCovenants ?? [];
     const pledges = target.collateral ?? [];
     const parties = entities.filter((e) => !e.loanId || e.loanId === target.loanId);
+    const stayBehind = members.filter((m) => !booked.some((b) => b.loanId === m.loanId));
 
     const rows: HaveRow[] = [
       {
-        label: `What ${name} carries onto the clone`,
+        label: "How the package versions",
+        value:
+          `${booked.length} ${booked.length === 1 ? "member rolls" : "members roll"} into the new package` +
+          (stayBehind.length
+            ? ` · ${stayBehind.length} ${stayBehind.length === 1 ? "stays" : "stay"} on the current version`
+            : ""),
+        detail:
+          "nCino package methodology: a modification versions the whole package, never a loan alone. Every Booked/Open member is cloned onto the new version with its junction graph; only the selected member takes the requested changes. " +
+          (stayBehind.length
+            ? `${stayBehind.map((m) => shortFacilityLabel(m, relationship) || m.loanId).join(", ")} is not Booked/Open and stays behind, named rather than silently skipped.`
+            : "Every member of this package is eligible to roll."),
+      },
+      {
+        label: `What ${name} carries onto its clone`,
         value: [
           `${junctions.length} covenant ${junctions.length === 1 ? "junction" : "junctions"}`,
           `${pledges.length} ${pledges.length === 1 ? "pledge" : "pledges"}`,
           `${parties.length} involvement ${parties.length === 1 ? "row" : "rows"}`,
         ].join(" · "),
         detail:
-          "A modification clones the facility and the clone carries this graph with it. Everything here is KEPT unless the manifest says otherwise, which is why a removal is a change like any other and reads as one.",
+          "The version roll clones the facility and the same governed run carries this graph onto the clone, verified by count. Everything here is KEPT unless the manifest says otherwise, which is why a removal is a change like any other and reads as one.",
       },
     ];
 
@@ -659,7 +675,7 @@ export function createModifyEngine(args: {
       rows.push({
         label: "Covenants on the facility",
         value: junctions.map((j) => j.covenantType ?? j.name ?? "covenant").join(", "),
-        detail: "Loan-level junctions. nCino clones the junction, not the covenant, and its own guidance says a business process must decide what happens to each one.",
+        detail: "Loan-level junctions. The carry replicates the junction, not the covenant, and nCino's own guidance says a business process must decide what happens to each one.",
       });
     }
     if (pledges.length) {

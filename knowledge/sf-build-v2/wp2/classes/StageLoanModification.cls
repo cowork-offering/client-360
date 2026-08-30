@@ -213,12 +213,33 @@ global with sharing class StageLoanModification {
             C360Facilities.validate(readFacilities(selected), selected, packageId, 'Modifications');
         Map<Id, Integer> carryoverByFacility = C360Facilities.covenantCarryover(selected);
 
+        // nCino package methodology (founder correction, 2026-08-30): a modification never versions
+        // a loan alone. The credit action rolls the WHOLE package: every eligible member is cloned
+        // into the next package version, the selected ones then take the requested changes, the rest
+        // carry unchanged. Eligibility mirrors nCino's own wizard rule, observed live on this org:
+        // Booked and Open roll; anything else (a Proposal-stage member, a closed loan) stays on the
+        // current version and is NAMED in the plan rather than silently skipped.
+        List<String> rollIds = new List<String>();
+        List<String> rollNames = new List<String>();
+        List<String> excludedNames = new List<String>();
+        for (LLC_BI__Loan__c m : readPackageMembers(packageId)) {
+            if (m.LLC_BI__Stage__c == 'Booked' && m.LLC_BI__Status__c == 'Open') {
+                rollIds.add(String.valueOf(m.Id));
+                rollNames.add(m.Name);
+            } else {
+                excludedNames.add(m.Name + ' (' + m.LLC_BI__Stage__c + ')');
+            }
+        }
+
         Integer n = facilities.size();
         Integer carryover = 0;
         Map<String, Object> resolved = new Map<String, Object>{
             'productPackageId' => packageId,
             'actionType' => 'Modification',
             'facilityCount' => n,
+            'rollMemberIds' => String.join(rollIds, ','),
+            'rollMemberCount' => rollIds.size(),
+            'excludedMemberCount' => excludedNames.size(),
             'requestedAmount' => req.requestedAmount,
             'requestedMaturityDate' => req.requestedMaturityDate,
             'requestedRate' => req.requestedRate,
@@ -229,6 +250,20 @@ global with sharing class StageLoanModification {
         List<PlannedFacility> planned = new List<PlannedFacility>();
         List<String> facilityNames = new List<String>();
 
+        steps.add(
+            new C360Plan.Step('roll_package', C360Plan.TYPE_WRITE,
+                'Create the next package version: one credit action rolls all ' + String.valueOf(rollIds.size()) +
+                ' eligible members into a new package' +
+                (excludedNames.isEmpty() ? '' : ', leaving ' + String.join(excludedNames, ', ') + ' on the current version'))
+                .onObject('LLC_BI__Product_Package__c', new List<String>{ 'new package version created by nCino' })
+                .wakes(new List<String>{
+                    'nCino clones every rolled member and writes its LLC_BI__LoanRenewal__c chain row synchronously; ' +
+                    'the junction graph does NOT copy itself (verified live 2026-08-30) and is carried by the ' +
+                    'carry_junctions step of this same plan'
+                })
+                .provenBy('SELECT COUNT() FROM LLC_BI__Loan__c WHERE LLC_BI__Product_Package__c = :outputPackageId')
+        );
+
         for (Integer i = 0; i < n; i++) {
             LLC_BI__Loan__c loan = facilities[i];
             String s = String.valueOf(i);
@@ -238,10 +273,10 @@ global with sharing class StageLoanModification {
             resolved.put('facility' + s + '.loanId', String.valueOf(loan.Id));
 
             steps.add(
-                new C360Plan.Step('credit_action_' + s, C360Plan.TYPE_WRITE, 'Invoke the modification credit action on the package for ' + loan.Name)
-                    .onObject('LLC_BI__Loan__c', new List<String>{ 'clone created by nCino' })
+                new C360Plan.Step('credit_action_' + s, C360Plan.TYPE_WRITE, 'Roll ' + loan.Name + ' into the new package version (its clone is the one this plan modifies)')
+                    .onObject('LLC_BI__Loan__c', new List<String>{ 'clone created by nCino on the new package version' })
                     .wakes(new List<String>{
-                        'nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row'
+                        'nCino clones the facility onto the new package, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row'
                     })
                     .provenBy('SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId')
             );
@@ -267,6 +302,28 @@ global with sharing class StageLoanModification {
         }
 
         steps.add(
+            new C360Plan.Step('verify_package', C360Plan.TYPE_VERIFICATION,
+                'Verify the new package version: it exists, it is not the current package, and every rolled member reads back as a clone on it')
+                .onObject('LLC_BI__Product_Package__c', new List<String>{ 'Id', 'Name' })
+                .provenBy('SELECT Id, Name FROM LLC_BI__Product_Package__c WHERE Id = :outputPackageId')
+        );
+
+        // The carry counts, read now so the banker confirms a NUMBERED promise. nCino's engine
+        // copies no junction rows in this org (verified live 2026-08-30), so the execute tool
+        // replicates each member's graph itself and proves the counts by re-query.
+        Integer pledgeCount = [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        Integer involvementCount = [SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        Integer covenantJunctionCount = [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        steps.add(
+            new C360Plan.Step('carry_junctions', C360Plan.TYPE_WRITE,
+                'Carry each rolled member\'s junction graph onto its clone: ' + covenantJunctionCount +
+                ' covenant junction' + (covenantJunctionCount == 1 ? '' : 's') + ', ' + pledgeCount +
+                ' collateral pledge' + (pledgeCount == 1 ? '' : 's') + ', ' + involvementCount +
+                ' borrowing involvement' + (involvementCount == 1 ? '' : 's'))
+                .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'replicas retargeted at the clones, verified by count' })
+                .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
+        );
+        steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'Stage-driven email alerts and memo status changes the org may run')
                 .wakes(new List<String>{ 'nCino Commercial - Loan After Save' })
         );
@@ -282,13 +339,19 @@ global with sharing class StageLoanModification {
             'Execution is available. ' + (n == 1 ? 'This facility is' : 'These facilities are') +
                 ' booked and open, which is what a credit action requires, so execute_loan_modification will run this plan behind the decision token.' +
                 C360Facilities.lookupKeyWarning(facilities),
+            'nCino package methodology: a modification versions the whole package, never a loan alone. Executing this plan creates a ' +
+                'NEW package version holding clones of all ' + String.valueOf(rollIds.size()) + ' eligible members (' +
+                String.join(rollNames, ', ') + '); the current package and every original loan stay exactly as they are.',
+            'nCino\'s engine copies NO junction rows in this org (verified live 2026-08-30: every related-lists copy default ' +
+                'flipped on, engine run, zero rows landed). The execute tool therefore carries each member\'s covenant junctions, ' +
+                'collateral pledges and borrowing involvements onto its clone itself, and proves the counts by re-query.',
             'This plans a modification, NOT an approval. Executing it produces a clone facility at Qualification; BOOKING that clone requires nCino\'s Submit for Approval button, which Loan_Validation_06 enforces with no permission bypass.',
             'The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Execution therefore verifies the clone and its chain row by re-query and claims nothing the org will not read back.',
             'The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.',
             carryover == 0
                 ? 'No loan-level covenants are attached to ' + (n == 1 ? 'this facility' : 'these facilities') + ', so nothing would carry over.'
-                : String.valueOf(carryover) + ' loan-level covenant junction rows would clone onto the new ' + (n == 1 ? 'facility' : 'facilities') +
-                  '. nCino clones the junction, not the covenant, and its own guidance says a business process must decide what happens to each one.'
+                : String.valueOf(carryover) + ' loan-level covenant junction rows carry onto the new ' + (n == 1 ? 'facility' : 'facilities') +
+                  '. The carry replicates the junction, not the covenant, and nCino\'s own guidance says a business process must decide what happens to each one.'
         };
         if (n > 1) {
             warnings.add(
@@ -311,10 +374,14 @@ global with sharing class StageLoanModification {
             'Submit for Approval with real approvers, which Loan_Validation_06 enforces with no permission bypass.';
 
         String summary =
+            'Plans the next VERSION of the package, nCino package methodology: one credit action rolls all ' +
+            String.valueOf(rollIds.size()) + ' eligible members into a new package with their junction graphs. ' +
             (n == 1
-                ? 'Plans a modification of ' + facilityNames[0] + ' on the package.'
-                : 'Plans a modification of ' + n + ' facilities on the package: ' + String.join(facilityNames, ', ') + '.') +
-            ' nCino will clone ' + (n == 1 ? 'the facility' : 'each facility') + ', create the chain junction row and apply the requested changes to the clone. ' +
+                ? facilityNames[0] + ' is the member being modified'
+                : String.valueOf(n) + ' members are being modified: ' + String.join(facilityNames, ', ')) +
+            '; the rest carry unchanged' +
+            (excludedNames.isEmpty() ? '. ' : ', and ' + String.join(excludedNames, ', ') + ' stays on the current version because it is not Booked/Open. ') +
+            'The requested changes are applied to the ' + (n == 1 ? 'clone' : 'clones') + ' only; every original loan and the current package stay untouched. ' +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -387,6 +454,24 @@ global with sharing class StageLoanModification {
             FROM LLC_BI__Loan__c
             WHERE Id IN :facilityIds
             WITH USER_MODE
+        ];
+    }
+
+    /**
+     * Every member of the package, for the roll computation. Honors the same seam as
+     * readFacilities so the plan-shape tests see a consistent package: in the seam world the
+     * injected facilities ARE the package membership.
+     */
+    private static List<LLC_BI__Loan__c> readPackageMembers(Id packageId) {
+        if (seamFacilities != null) {
+            return seamFacilities;
+        }
+        return [
+            SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Status__c
+            FROM LLC_BI__Loan__c
+            WHERE LLC_BI__Product_Package__c = :packageId
+            WITH USER_MODE
+            ORDER BY LLC_BI__Amount__c DESC
         ];
     }
 

@@ -274,6 +274,24 @@ describe("A33.3.1 — the transition allowlist", () => {
       expect(validatePlan(p.steps), `${actionId} violates the allowlist`).toEqual([]);
     }
   });
+
+  it("ACCEPTANCE: the package-versioning modification plan, exactly as the org stages it, passes the mirror", () => {
+    // The live plan shape of stage_loan_modification after the 2026-08-30 package-versioning wave.
+    // This is the regression that nearly burned the acceptance run: the server grew roll_package and
+    // carry_junctions write steps, and a mirror that does not know their objects refuses the whole
+    // plan at the confirm gate.
+    const staged = [
+      { id: "roll_package", type: "write", objectName: "LLC_BI__Product_Package__c", fields: ["new package version created by nCino"] },
+      { id: "credit_action_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["clone created by nCino on the new package version"] },
+      { id: "verify_clone_0", type: "verification", objectName: "LLC_BI__LoanRenewal__c" },
+      { id: "apply_changes_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["LLC_BI__Amount__c", "LLC_BI__Maturity_Date__c", "LLC_BI__InterestRate__c", "LLC_BI__Term_Months__c"] },
+      { id: "verify_package", type: "verification", objectName: "LLC_BI__Product_Package__c" },
+      { id: "carry_junctions", type: "write", objectName: "LLC_BI__Loan_Covenant__c", fields: ["replicas retargeted at the clones, verified by count"] },
+      { id: "observe_side_effects", type: "observed_side_effect" },
+      { id: "held_execution", type: "handoff" },
+    ];
+    expect(validatePlan(staged)).toEqual([]);
+  });
 });
 
 describe("A33.5.3 — staged output is a plan, and only a plan", () => {

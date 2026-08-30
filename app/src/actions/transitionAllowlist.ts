@@ -200,10 +200,14 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
   "LLC_BI__Product_Package__c": {
     object: "LLC_BI__Product_Package__c",
     label: "credit package",
-    // The account door of a creation: the plan makes the package before the
-    // facility, exactly as nCino's own wizard does. It never updates one.
+    // Two doors touch a package. Creation: the account door of a create plan
+    // makes the package before the facility, exactly as nCino's own wizard
+    // does. Versioning (2026-08-30): a modification rolls the whole package
+    // into a NEW one via the credit action, and the execute tool then repairs
+    // what the engine leaves broken on it (a blank-prefixed name, a null
+    // account) — the one update the org-side gate permits.
     mayCreate: true,
-    mayUpdate: false,
+    mayUpdate: true,
     createStates: [],
     transitions: [],
     refusedFields: [
@@ -211,7 +215,24 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
       { field: "LLC_BI__Stage__c", reason: "the package's own stage belongs to the org's package automation" },
       { field: "LLC_BI__Status__c", reason: "the package's own status belongs to the org's package automation" },
     ],
-    refusedOperations: ["updates of any kind", "deletion"],
+    refusedOperations: ["deletion", "any update beyond the versioning name and account repair"],
+  },
+
+  "LLC_BI__Loan_Covenant__c": {
+    object: "LLC_BI__Loan_Covenant__c",
+    label: "covenant junction",
+    // The versioning carry (2026-08-30). nCino's engine copies NO junction rows
+    // in this org (verified live: every related-lists copy default on, engine
+    // run, zero rows landed), so the execute tool replicates each rolled
+    // member's junctions onto its clone and proves the counts by re-query. The
+    // carry may only REPLICATE rows that exist on a version parent; it authors
+    // nothing, which is why no create state is fenced here.
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [],
+    transitions: [],
+    refusedFields: [],
+    refusedOperations: ["updates of any kind: every field on this junction is non-updateable in the org", "deletion"],
   },
 
   "LLC_BI__Legal_Entities__c": {

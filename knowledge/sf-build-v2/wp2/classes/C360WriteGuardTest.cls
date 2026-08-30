@@ -355,17 +355,34 @@ private class C360WriteGuardTest {
     }
 
     @IsTest
-    static void packageTakesNoUpdateAndNoDelete() {
+    static void packageTakesTheNameRepairButNoFencedFieldAndNoDelete() {
         C360TestFixture.armCalloutMock();
-        for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
+
+        // The one permitted update: the versioning Name repair (2026-08-30). The engine names the
+        // new package version itself and can leave the account prefix blank; the caller repairs it
+        // to the org convention, and that repair must pass the gate.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRODUCT_PACKAGE, C360WriteGuard.OP_UPDATE,
+            new Map<String, Object>{ 'Name' => 'ACME - 8/30/2026 - PP' });
+
+        for (String f : new List<String>{ 'RecordTypeId', 'LLC_BI__Stage__c', 'LLC_BI__Status__c' }) {
             Boolean refused = false;
             try {
-                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRODUCT_PACKAGE, op, new Map<String, Object>());
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRODUCT_PACKAGE, C360WriteGuard.OP_UPDATE,
+                    new Map<String, Object>{ f => 'y' });
             } catch (C360WriteGuard.GuardException e) {
                 refused = true;
             }
-            System.assertEquals(true, refused, 'The package is create-only for this tool. Operation: ' + op);
+            System.assertEquals(true, refused,
+                'Record type, stage and status stay the org\'s own, on update as on create. Tried: ' + f);
         }
+
+        Boolean deleteRefused = false;
+        try {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRODUCT_PACKAGE, C360WriteGuard.OP_DELETE, new Map<String, Object>());
+        } catch (C360WriteGuard.GuardException e) {
+            deleteRefused = true;
+        }
+        System.assertEquals(true, deleteRefused, 'No tool of ours ever deletes a package.');
     }
 
     @IsTest

@@ -115,7 +115,7 @@ describe("beat 2 — what confirming will actually do", () => {
   it("says the booked facility is untouched, and names the member it clones", () => {
     const why = whyProposed([delta()]);
     expect(why).toContain("clone of Line of Credit");
-    expect(why).toContain("booked facility stays exactly as it is");
+    expect(why).toContain("booked facilities and the current package stay exactly as they are");
     expect(why).toContain("the bank's own approval");
     speaksCredit(why);
   });
