@@ -453,3 +453,53 @@ RL-00000205/206, both parents untouched. Rolled back complete: 4 junctions + 2 c
 deleted; package 7 loans; parents hasRenewal false. The aggregation-first doctrine is now observed,
 not just designed: the package is the anchor, facilities are member selections, N members ride one
 governed decision.
+
+## PACKAGE VERSIONING — the modification files as the wizard does (2026-08-30, founder correction closed same day)
+
+**The correction.** Fabian, on reviewing the first workroom-filed modification: "the workspace
+basically inserted it into the existing product package and this is i am afraid wrong… when a loan
+of that pp is touched or modified, all loans are getting naturally copied with all their junctions."
+nCino package methodology: a modification NEVER versions a loan alone; the credit action mints the
+next VERSION of the whole package. The wizard makes the banker select every member; it forces no
+field change — the version roll is the whole move, edits happen afterwards inside the opened-up clone.
+
+**Engine facts, all probed live (self-rolling-back executeAnonymous, throw-to-capture):**
+- `isNewPackage=true` on `LLC_BI.InvokableCreditActionXPkg` mints a NEW package and clones every
+  facility in `facilityActions` onto it (`_M1` lookup keys, Qualification/Open, Is_Modification
+  true, chain rows written synchronously). Six loans: 1.8s CPU, 15 queueables — comfortable inline.
+- Per-loan "No Action" is NOT an engine concept: every naming variant is rejected. The wizard-era
+  carry semantics are expressed by sending ALL members as Modification.
+- The engine IGNORES `newPackageName` and creates the package with a NULL account — which is why
+  its name comes out blank-prefixed ("- 8/30/2026 - PP"). Both repaired post-engine by our tool
+  (org convention "<Account> - <M/D/YYYY> - PP", 516 of 518 packages).
+- The engine copies ZERO junction rows. Definitive: all eight
+  `LLC_BI__RelatedListsCopyConfiguration__c` defaults flipped on in a committed live run — zero
+  covenant/pledge/involvement rows landed on the clone and no copy job was enqueued (all queueables
+  were LoanCDC/EventBridge). Those settings only ever fed the RETIRED classic wizard
+  (`LLC_BI.PackageLoanRenewal` VF page, dead since Spring 2024 per its own banner). The carry is
+  the caller's to compose. Settings restored to false.
+- Loans in Proposal stage are ineligible to roll (the classic wizard greyed them; we mirror:
+  Booked/Open roll, the rest are NAMED as staying behind).
+
+**The build (deployed to bankinggpt, 67 Apex tests green; client 1767 tests green):**
+- Stage: roll membership computed + hashed into the plan; steps roll_package / verify_package /
+  carry_junctions with counted promises; summary and warnings narrate the version roll.
+- Execute: all members through the engine, membership drift since staging refused, package
+  name+account repaired, verification retargeted at the NEW package (6 of 6 members), and the
+  junction carry composed in-transaction: covenant junctions, collateral pledges on FRESH per-clone
+  aggregate shells (aggregates are per-loan rollup anchors; reuse would cross versions), borrowing
+  involvements re-anchored on the new package. All verified by re-query count.
+- Guard: new OP_CARRY doorway — replicate-only, junction graph only, org-derived fields fenced.
+- Client mirror trap caught before the founder's click: transitionAllowlist did not know
+  Loan_Covenant / package update, and validatePlan would have refused the new plan shape at the
+  confirm gate. Fixed + regression test pinning the exact live plan shape.
+
+**Acceptance (founder's own workroom click, verified org-side):** clone a4Zbb000002GsEeEAK — LoC
+$15M -> $20M on new package a5Fbb000000IyLtEAK "Hartwell Precision Manufacturing LLC - 8/30/2026 -
+PP", 6 members rolled, 2 covenant junctions + 7 pledges (6 fresh aggregates) + 21 involvements
+carried, parents and current package untouched, staging Completed. Reverted to baseline on request
+(7 members, LoC $15M Booked/Open, 0 chain rows, parent graphs intact) — the demo is repeatable.
+
+**Still open:** StageRenewal carries single-loan semantics and needs the same package-first
+correction before a renewal is filed for real; multi-facility (n>1) selections through the NEW
+versioning path are unit-covered but not yet wire-proven live.
