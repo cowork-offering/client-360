@@ -216,6 +216,8 @@ function valueLabel(value: ParsedValue | null): string {
       return `${value.months} months`;
     case "date":
       return fmtDate(value.iso);
+    case "covenant":
+      return value.text;
     default:
       return value.text;
   }
@@ -277,6 +279,19 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
           return v === null ? undefined : { key: field.wireKey!, value: v, facilityId: facility!.loanId! };
         })()
       : undefined;
+  // A net-new covenant files as a structured record: the resolved catalog type,
+  // the threshold and the operator, targeted at THIS member — the org attaches
+  // it to the member's CLONE on the new package version.
+  const covenantWire =
+    fileable && field.recordWire === "covenantAdd" && value?.kind === "covenant"
+      ? {
+          typeName: value.typeName,
+          threshold: value.threshold,
+          operator: value.operator,
+          frequency: "Quarterly",
+          facilityId: facility!.loanId!,
+        }
+      : undefined;
 
   const committedDeltaMM =
     wire?.key === "requestedAmount" && typeof facility?.committed === "number" && typeof wire.value === "number"
@@ -290,8 +305,8 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     kind: [OP_KIND[op], GROUP_KIND[field.category] ?? "Change"].filter(Boolean).join(" "),
     // A removal is the destructive one, and it carries the refusal tone whether
     // or not a tool files it: the banker must never mistake it for an addition.
-    kindTone: op === "remove" ? "refusal" : wire ? undefined : "refusal",
-    badge: wire ? `${field.label} → ${after}` : `${OP_KIND[op] || "Change"} ${field.label.toLowerCase()} · handed off`,
+    kindTone: op === "remove" ? "refusal" : wire || covenantWire ? undefined : "refusal",
+    badge: wire || covenantWire ? `${field.label} → ${after}` : `${OP_KIND[op] || "Change"} ${field.label.toLowerCase()} · handed off`,
     title: field.label,
     target,
     before,
@@ -305,21 +320,28 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
         "Written as",
         wire
           ? `${field.apiName} on the modification clone. The booked facility is untouched.`
-          : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
+          : covenantWire
+            ? "LLC_BI__Covenant2__c created Pending/Active on the borrower, LLC_BI__Loan_Covenant__c junction attached to the CLONE on the new package version. No compliance row is minted and no approval starts."
+            : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
       ],
     ],
     fields: field.apiName ? [`${field.object}.${field.apiName}`] : [field.object],
-    caveat: wire ? undefined : field.gap,
+    caveat: wire || covenantWire ? undefined : field.gap,
     filed: {
-      recordId: wire ? "assigned by the org on execution" : "not filed",
-      verification: wire ? "Re-queried on the clone after the write" : "Handed off — nothing was written",
+      recordId: wire || covenantWire ? "assigned by the org on execution" : "not filed",
+      verification: wire
+        ? "Re-queried on the clone after the write"
+        : covenantWire
+          ? "Covenant and junction re-queried on the clone after creation"
+          : "Handed off — nothing was written",
     },
-    fileable: Boolean(wire),
+    fileable: Boolean(wire || covenantWire),
     wire,
+    covenantWire,
     // Only a FILEABLE entry carries a basis: drift is the check that a figure
     // reaching the org has not moved, and a handoff sends no figure.
     basis: wire && facility?.loanId ? { facilityId: facility.loanId, fieldId: field.id, before } : undefined,
-    handoff: wire ? undefined : { reason: field.gap ?? "No tool files this today.", closes: field.closes },
+    handoff: wire || covenantWire ? undefined : { reason: field.gap ?? "No tool files this today.", closes: field.closes },
     // The chain a create must carry. Held on the delta so the plan cannot be
     // composed without it: a create with no junctions never becomes steps.
     chainLinks: op === "add" ? chainFor(field) : undefined,
@@ -794,7 +816,7 @@ export function createModifyEngine(args: {
     const summary = catalogSummary();
     rows.push({
       label: "What this room can file",
-      detail: `${summary.fileable} of ${summary.total} indexed amendments file through stage_loan_modification — amount, maturity date, rate and term, applied to the clone. The rest are staged into the manifest and handed off with the reason.`,
+      detail: `${summary.fileable} of ${summary.total} indexed amendments file through stage_loan_modification — amount, maturity date, rate and term applied to the clone, plus net-new covenants created on the borrower and attached to it. The rest are staged into the manifest and handed off with the reason.`,
     });
     return rows;
   }
@@ -1307,7 +1329,7 @@ export function createModifyEngine(args: {
   function wirePayload(fileable: WorkroomDelta[], rationale: string): StagePayloads["loan-modification"] {
     const byKey = new Map<WireKey, Set<number | string>>();
     for (const d of fileable) {
-      if (!d.wire) continue;
+      if (!d.wire) continue; // a covenant delta carries covenantWire instead
       // The delta carries the key as a plain string so `types.ts` stays free of
       // the catalog; this is the one place it is read back as the wire key.
       const key = d.wire.key as WireKey;
@@ -1323,7 +1345,20 @@ export function createModifyEngine(args: {
       }
     }
 
-    const facilityIds = [...new Set(fileable.map((d) => d.wire!.facilityId))];
+    // Every fileable delta anchors the selection: a covenant's target member
+    // must be among the selected facilities or the org refuses the add.
+    const facilityIds = [
+      ...new Set(fileable.map((d) => d.wire?.facilityId ?? d.covenantWire?.facilityId).filter((x): x is string => Boolean(x))),
+    ];
+    const covenantAdds = fileable
+      .filter((d) => d.covenantWire)
+      .map((d) => ({
+        typeName: d.covenantWire!.typeName,
+        threshold: d.covenantWire!.threshold,
+        operator: d.covenantWire!.operator,
+        frequency: d.covenantWire!.frequency,
+        targetLoanId: d.covenantWire!.facilityId,
+      }));
     const one = (key: WireKey) => [...(byKey.get(key) ?? [])][0];
     return {
       idempotencyKey: idempotencyKey!,
@@ -1334,6 +1369,9 @@ export function createModifyEngine(args: {
       requestedMaturityDate: (one("requestedMaturityDate") as string | undefined) ?? null,
       requestedTermMonths: (one("requestedTermMonths") as number | undefined) ?? null,
       requestedRate: (one("requestedRate") as number | undefined) ?? null,
+      // The key exists on the wire ONLY when covenants ride: a null field would
+      // still put the word on every scalar-only payload.
+      ...(covenantAdds.length ? { covenantAddsJson: JSON.stringify(covenantAdds) } : {}),
     };
   }
 
@@ -1344,7 +1382,7 @@ export function createModifyEngine(args: {
     if (!deps.available()) throw new WorkroomRefusalError(NO_CONNECTOR_REFUSAL);
     if (!context.productPackageId) throw new WorkroomRefusalError(NO_PACKAGE_REFUSAL);
 
-    const fileable = deltas.filter((d) => d.fileable && d.wire);
+    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire));
     const handed = deltas.filter((d) => !d.fileable);
     if (!fileable.length) {
       throw new WorkroomRefusalError(
@@ -1449,9 +1487,9 @@ export function createModifyEngine(args: {
     const verified = (result.steps ?? []).filter((s) => s.state === "verified").length;
 
     const filed = stagedDeltas
-      .filter((d) => d.fileable && d.wire)
+      .filter((d) => d.fileable && (d.wire || d.covenantWire))
       .map((d) => {
-        const row = perFacility.get(d.wire!.facilityId);
+        const row = perFacility.get((d.wire?.facilityId ?? d.covenantWire?.facilityId)!);
         const cloneId = row?.cloneLoanId ?? result.cloneLoanId;
         return {
           deltaId: d.id,

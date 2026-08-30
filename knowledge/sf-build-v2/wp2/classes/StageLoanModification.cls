@@ -62,6 +62,19 @@ global with sharing class StageLoanModification {
         global Decimal requestedRate;
         @InvocableVariable(label='Requested Term Months')
         global Decimal requestedTermMonths;
+        @InvocableVariable(label='Covenant Adds JSON' description='Optional. JSON list of net-new covenants to create and attach: [{"typeName" or "typeId", "threshold", "operator" (< <= = >= >), "frequency"?, "effectiveDate"? (YYYY-MM-DD), "targetLoanId"?}]. Each is created Pending/Active on the borrower account and attached to the CLONE of the targeted facility on the new package version, never to the booked parent. targetLoanId may be omitted when exactly one facility is selected.')
+        global String covenantAddsJson;
+    }
+
+    /** One parsed net-new covenant, resolved against the org's own type catalog. */
+    public class CovenantAdd {
+        public Id typeId;
+        public String typeName;
+        public Decimal threshold;
+        public String operator;
+        public String frequency;
+        public Date effectiveDate;
+        public Id targetLoanId;
     }
 
     global class PlanStep {
@@ -200,8 +213,9 @@ global with sharing class StageLoanModification {
         if (String.isBlank(req.rationale)) {
             throw new ToolException('rationale is required. It feeds the audit ledger.');
         }
-        if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null && req.requestedTermMonths == null) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate or term.');
+        if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
+            req.requestedTermMonths == null && String.isBlank(req.covenantAddsJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, or a covenant add.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -230,6 +244,9 @@ global with sharing class StageLoanModification {
                 excludedNames.add(m.Name + ' (' + m.LLC_BI__Stage__c + ')');
             }
         }
+
+        List<String> covenantWarnings = new List<String>();
+        List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, covenantWarnings);
 
         Integer n = facilities.size();
         Integer carryover = 0;
@@ -323,6 +340,48 @@ global with sharing class StageLoanModification {
                 .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'replicas retargeted at the clones, verified by count' })
                 .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
         );
+
+        // Net-new covenants: created on the borrower account, attached to the CLONE of the targeted
+        // member on the new version. SAFE by live probe (2026-08-30): a Covenant2 insert plus its
+        // junction mints no compliance row, starts no approval and sends no email; the unrecallable
+        // acnpex approval fires on COMPLIANCE create only, which this plan never performs.
+        Map<Id, LLC_BI__Loan__c> facilityById = new Map<Id, LLC_BI__Loan__c>(facilities);
+        for (Integer i = 0; i < covenantAdds.size(); i++) {
+            CovenantAdd a = covenantAdds[i];
+            String s = String.valueOf(i);
+            resolved.put('covenantAdd' + s + '.typeId', String.valueOf(a.typeId));
+            resolved.put('covenantAdd' + s + '.typeName', a.typeName);
+            resolved.put('covenantAdd' + s + '.threshold', a.threshold);
+            resolved.put('covenantAdd' + s + '.operator', a.operator);
+            resolved.put('covenantAdd' + s + '.frequency', a.frequency);
+            resolved.put('covenantAdd' + s + '.effectiveDate', a.effectiveDate);
+            resolved.put('covenantAdd' + s + '.targetLoanId', String.valueOf(a.targetLoanId));
+            String targetName = facilityById.get(a.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('covenant_create_' + s, C360Plan.TYPE_WRITE,
+                    'Create net-new covenant on the borrower: ' + a.typeName + ' ' + a.operator + ' ' +
+                    String.valueOf(a.threshold) + ', tested ' + a.frequency + ', effective ' + String.valueOf(a.effectiveDate) +
+                    ', born Pending and Active')
+                    .onObject('LLC_BI__Covenant2__c', new List<String>{
+                        'LLC_BI__Covenant_Type__c', 'LLC_BI__Financial_Indicator_Value__c', 'Financial_Indicator_Operator__c',
+                        'LLC_BI__Frequency__c', 'LLC_BI__Effective_Date__c'
+                    })
+                    .provenBy('SELECT Id, LLC_BI__Financial_Indicator_Value__c FROM LLC_BI__Covenant2__c WHERE Id = :createdId')
+            );
+            steps.add(
+                new C360Plan.Step('covenant_attach_' + s, C360Plan.TYPE_WRITE,
+                    'Attach it to the clone of ' + targetName + ' on the new package version, never to the booked parent')
+                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'LLC_BI__Loan__c', 'LLC_BI__Covenant2__c' })
+                    .provenBy('SELECT Id FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :createdId')
+            );
+            steps.add(
+                new C360Plan.Step('covenant_verify_' + s, C360Plan.TYPE_VERIFICATION,
+                    'Re-read the covenant and its junction on the clone of ' + targetName)
+                    .onObject('LLC_BI__Covenant2__c', new List<String>{ 'Id', 'LLC_BI__Financial_Indicator_Value__c' })
+                    .provenBy('SELECT Id FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :createdId')
+            );
+        }
+        resolved.put('covenantAddCount', covenantAdds.size());
         steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'Stage-driven email alerts and memo status changes the org may run')
                 .wakes(new List<String>{ 'nCino Commercial - Loan After Save' })
@@ -353,6 +412,14 @@ global with sharing class StageLoanModification {
                 : String.valueOf(carryover) + ' loan-level covenant junction rows carry onto the new ' + (n == 1 ? 'facility' : 'facilities') +
                   '. The carry replicates the junction, not the covenant, and nCino\'s own guidance says a business process must decide what happens to each one.'
         };
+        warnings.addAll(covenantWarnings);
+        if (!covenantAdds.isEmpty()) {
+            warnings.add(
+                'Net-new covenants are created Pending and Active on the borrower account and attached to the CLONE only. ' +
+                'No compliance row is minted and no approval starts (probed live 2026-08-30): the org\'s own covenant review ' +
+                'cycle owns the schedule from here, and booking the new version is what makes the covenant bind.'
+            );
+        }
         if (n > 1) {
             warnings.add(
                 'This is one plan over ' + n + ' facilities on the same package, under a single confirmation and a single decision token. ' +
@@ -382,6 +449,9 @@ global with sharing class StageLoanModification {
             '; the rest carry unchanged' +
             (excludedNames.isEmpty() ? '. ' : ', and ' + String.join(excludedNames, ', ') + ' stays on the current version because it is not Booked/Open. ') +
             'The requested changes are applied to the ' + (n == 1 ? 'clone' : 'clones') + ' only; every original loan and the current package stay untouched. ' +
+            (covenantAdds.isEmpty() ? '' : String.valueOf(covenantAdds.size()) + ' net-new covenant' +
+                (covenantAdds.size() == 1 ? ' is' : 's are') + ' created on the borrower and attached to the ' +
+                (covenantAdds.size() == 1 ? 'clone' : 'clones') + ', born Pending and Active. ') +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -455,6 +525,123 @@ global with sharing class StageLoanModification {
             WHERE Id IN :facilityIds
             WITH USER_MODE
         ];
+    }
+
+    /**
+     * Parses and RESOLVES the net-new covenant adds. Everything a banker could get wrong is
+     * settled here, at stage time, against the org's own catalog: the type must exist (by id, or
+     * by exact name — an ambiguous name is refused with the candidate ids, because this org
+     * carries duplicate type names), the operator must be one the org's picklists express, and
+     * the target must be one of the selected facilities. An equivalent covenant already attached
+     * to the target is NAMED as a warning before the banker confirms. Nothing is created here.
+     */
+    private static List<CovenantAdd> parseCovenantAdds(Request req, List<LLC_BI__Loan__c> facilities, List<String> warnings) {
+        List<CovenantAdd> out = new List<CovenantAdd>();
+        if (String.isBlank(req.covenantAddsJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.covenantAddsJson);
+        } catch (Exception e) {
+            throw new ToolException('covenantAddsJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        Set<String> validOps = new Set<String>{ '<', '<=', '=', '>=', '>' };
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            CovenantAdd a = new CovenantAdd();
+            a.typeId = C360Plan.asId(m.get('typeId'));
+            a.typeName = m.get('typeName') == null ? null : String.valueOf(m.get('typeName')).trim();
+            a.threshold = C360Plan.asDecimal(m.get('threshold'));
+            a.operator = m.get('operator') == null ? null : String.valueOf(m.get('operator')).trim();
+            a.frequency = m.get('frequency') == null ? 'Quarterly' : String.valueOf(m.get('frequency')).trim();
+            a.effectiveDate = m.get('effectiveDate') == null ? Date.today() : Date.valueOf(String.valueOf(m.get('effectiveDate')));
+            a.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (a.threshold == null) {
+                throw new ToolException('A covenant add needs a threshold. The threshold IS the covenant; without one there is nothing for a review cycle to test.');
+            }
+            if (a.operator == null || !validOps.contains(a.operator)) {
+                throw new ToolException('A covenant add needs an operator, one of < <= = >= >. Supplied: ' + a.operator + '.');
+            }
+            if (a.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each covenant add when more than one facility is selected.');
+                }
+                a.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(a.targetLoanId)) {
+                throw new ToolException(
+                    'A covenant add targets facility ' + a.targetLoanId + ', which is not one of the selected facilities. ' +
+                    'The covenant attaches to the CLONE of a facility this plan modifies.'
+                );
+            }
+            resolveCovenantType(a);
+            out.add(a);
+        }
+        // The connectedness check, on the PARENTS: the clones do not exist yet, and what the banker
+        // needs to hear is what the facility carries today.
+        Set<Id> targetIds = new Set<Id>();
+        for (CovenantAdd a : out) {
+            targetIds.add(a.targetLoanId);
+        }
+        for (LLC_BI__Loan_Covenant__c j : [
+            SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__c,
+                   LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__r.Name,
+                   LLC_BI__Covenant2__r.LLC_BI__Financial_Indicator_Value__c
+            FROM LLC_BI__Loan_Covenant__c
+            WHERE LLC_BI__Loan__c IN :targetIds
+            WITH USER_MODE
+        ]) {
+            for (CovenantAdd a : out) {
+                if (a.targetLoanId == j.LLC_BI__Loan__c && a.typeId == j.LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__c) {
+                    warnings.add(
+                        byId.get(a.targetLoanId).Name + ' ALREADY carries a ' + a.typeName + ' covenant at ' +
+                        String.valueOf(j.LLC_BI__Covenant2__r.LLC_BI__Financial_Indicator_Value__c) +
+                        ', and the carry will bring it onto the clone. This plan files a SECOND one at ' + a.operator + ' ' +
+                        String.valueOf(a.threshold) + ' only because the banker confirms it knowingly; amending the existing covenant may be the better instrument.'
+                    );
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Resolves the covenant type by id or exact name against the org's own catalog. */
+    private static void resolveCovenantType(CovenantAdd a) {
+        if (a.typeId != null) {
+            List<LLC_BI__Covenant_Type__c> t = [
+                SELECT Id, Name FROM LLC_BI__Covenant_Type__c WHERE Id = :a.typeId WITH USER_MODE LIMIT 1
+            ];
+            if (t.isEmpty()) {
+                throw new ToolException('No covenant type exists with id ' + a.typeId + '.');
+            }
+            a.typeName = t[0].Name;
+            return;
+        }
+        if (String.isBlank(a.typeName)) {
+            throw new ToolException('Each covenant add names its type: typeName or typeId.');
+        }
+        List<LLC_BI__Covenant_Type__c> matches = [
+            SELECT Id, Name FROM LLC_BI__Covenant_Type__c WHERE Name = :a.typeName WITH USER_MODE
+        ];
+        if (matches.isEmpty()) {
+            throw new ToolException(
+                'No covenant type named "' + a.typeName + '" exists in this org\'s catalog. The name must match the catalog exactly.'
+            );
+        }
+        if (matches.size() > 1) {
+            List<String> ids = new List<String>();
+            for (LLC_BI__Covenant_Type__c t : matches) {
+                ids.add(String.valueOf(t.Id));
+            }
+            throw new ToolException(
+                'This org carries ' + matches.size() + ' covenant types named "' + a.typeName +
+                '". Supply typeId to settle which one: ' + String.join(ids, ', ') + '.'
+            );
+        }
+        a.typeId = matches[0].Id;
+        a.typeName = matches[0].Name;
     }
 
     /**

@@ -80,6 +80,20 @@ global with sharing class ExecuteLoanModification {
 
     private static final String ACTION_ID = 'loan-modification';
     private static final String ACTION_TYPE = 'Modification';
+
+    /**
+     * The org's operator picklists, keyed by the symbol the plan carries. Two fields mirror each
+     * other on every covenant in this org: Financial_Indicator_Operator__c spells the words (with
+     * the org's own 'Greater Tan or Equal To' typo, which is the ACTIVE picklist value and must be
+     * written as-is), Acnpex_Operator__c carries the symbol.
+     */
+    private static final Map<String, String> FI_OPERATOR = new Map<String, String>{
+        '<' => 'Less Than',
+        '<=' => 'Less Than or Equal To',
+        '=' => 'Equals',
+        '>=' => 'Greater Tan or Equal To',
+        '>' => 'Greater Than'
+    };
     private static final String BEAN_NAME = 'LLC_BI.InvokableCreditActionXPkg';
     private static final String RELAY_SECRET_HEADER = 'x-c360-relay-secret';
     private static final Integer RELAY_TIMEOUT_MS = 120000;
@@ -169,6 +183,24 @@ global with sharing class ExecuteLoanModification {
         global String outcome;
     }
 
+    /** One net-new covenant this run created and attached to a clone. */
+    global class CovenantResult {
+        @InvocableVariable(label='Covenant Id')
+        global String covenantId;
+        @InvocableVariable(label='Covenant Name' description='The org-assigned auto-number, read back.')
+        global String covenantName;
+        @InvocableVariable(label='Type')
+        global String typeName;
+        @InvocableVariable(label='Threshold')
+        global Decimal threshold;
+        @InvocableVariable(label='Operator')
+        global String operator;
+        @InvocableVariable(label='Clone Loan Id' description='The modification clone the covenant was attached to.')
+        global String cloneLoanId;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     global class ExecuteResult {
         @InvocableVariable(label='Staging Id')
         global String stagingId;
@@ -186,6 +218,8 @@ global with sharing class ExecuteLoanModification {
         global String newPackageName;
         @InvocableVariable(label='Members Rolled' description='How many package members the credit action rolled into the new version, the modified ones included.')
         global Integer membersRolled;
+        @InvocableVariable(label='Covenants' description='One entry per net-new covenant this run created and attached to a clone.')
+        global List<CovenantResult> covenants;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -624,6 +658,11 @@ global with sharing class ExecuteLoanModification {
         }
         Map<Id, LLC_BI__Loan__c> beforeById = new Map<Id, LLC_BI__Loan__c>(before);
 
+        // The staged covenant-add count, read up front so every failure branch can settle those
+        // steps rather than leaving them dangling as pending.
+        Decimal covAddCountRaw = C360Plan.asDecimal(v.get('covenantAddCount'));
+        Integer covenantAddCount = covAddCountRaw == null ? 0 : Integer.valueOf(covAddCountRaw);
+
         // The staged roll list. nCino package methodology: the credit action versions the WHOLE
         // package, so the plan carries every eligible member, not just the selected ones. The
         // membership was computed and hashed at stage time; it is re-derived here (resume
@@ -688,6 +727,11 @@ global with sharing class ExecuteLoanModification {
             }
             C360Plan.setState(steps, 'verify_package', C360Plan.STATE_SKIPPED, null);
             C360Plan.setState(steps, 'carry_junctions', C360Plan.STATE_SKIPPED, null);
+            for (Integer ci = 0; ci < covenantAddCount; ci++) {
+                C360Plan.setState(steps, 'covenant_create_' + ci, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'covenant_attach_' + ci, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'covenant_verify_' + ci, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
@@ -709,6 +753,11 @@ global with sharing class ExecuteLoanModification {
             }
             C360Plan.setState(steps, 'verify_package', C360Plan.STATE_FAILED, why);
             C360Plan.setState(steps, 'carry_junctions', C360Plan.STATE_SKIPPED, null);
+            for (Integer ci = 0; ci < covenantAddCount; ci++) {
+                C360Plan.setState(steps, 'covenant_create_' + ci, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'covenant_attach_' + ci, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'covenant_verify_' + ci, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
             throw new EngineException(why);
@@ -877,6 +926,109 @@ global with sharing class ExecuteLoanModification {
             update as user toUpdate;
         }
 
+        // ---- Net-new covenants (plan values covenantAdd{i}.*). Created on the borrower account,
+        // attached to the CLONE of the targeted member on the new version — never to the booked
+        // parent. Probed safe 2026-08-30: a Covenant2 insert plus its junction mints no compliance
+        // row, starts no approval and sends no email; the org's own review cycle owns the schedule
+        // from here. Each add is created Pending and Active, with the org's mirrored operator and
+        // threshold fields written the way Hartwell's own covenants carry them.
+        List<CovenantResult> covenantResults = new List<CovenantResult>();
+        for (Integer i = 0; i < covenantAddCount; i++) {
+            String cs = String.valueOf(i);
+            CovenantResult cr = new CovenantResult();
+            cr.typeName = String.valueOf(v.get('covenantAdd' + cs + '.typeName'));
+            cr.threshold = C360Plan.asDecimal(v.get('covenantAdd' + cs + '.threshold'));
+            cr.operator = String.valueOf(v.get('covenantAdd' + cs + '.operator'));
+            covenantResults.add(cr);
+
+            Id covTypeId = C360Plan.asId(v.get('covenantAdd' + cs + '.typeId'));
+            String covFrequency = String.valueOf(v.get('covenantAdd' + cs + '.frequency'));
+            Date covEffective = C360Plan.asDate(v.get('covenantAdd' + cs + '.effectiveDate'));
+            Id covTargetParent = C360Plan.asId(v.get('covenantAdd' + cs + '.targetLoanId'));
+            LLC_BI__LoanRenewal__c covTargetJunction = newestByParent.get(covTargetParent);
+            Id covCloneId = covTargetJunction == null ? null : covTargetJunction.LLC_BI__RenewalLoanId__c;
+
+            if (covCloneId == null || covTypeId == null || cr.threshold == null) {
+                String covWhy = covCloneId == null
+                    ? 'No modification clone could be read for the facility this covenant targets, so the covenant was not created.'
+                    : 'The staged covenant add is incomplete (type or threshold missing), so nothing was created. Re-stage the action.';
+                C360Plan.setState(steps, 'covenant_create_' + cs, C360Plan.STATE_FAILED, covWhy);
+                C360Plan.setState(steps, 'covenant_attach_' + cs, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'covenant_verify_' + cs, C360Plan.STATE_FAILED, covWhy);
+                cr.verification = covWhy;
+                continue;
+            }
+
+            Map<String, Object> covFields = new Map<String, Object>{
+                'LLC_BI__Account__c' => before[0].LLC_BI__Account__c,
+                'LLC_BI__Covenant_Type__c' => covTypeId,
+                'LLC_BI__Financial_Indicator_Value__c' => cr.threshold,
+                'Acnpex_Threshold_Value__c' => cr.threshold,
+                'Financial_Indicator_Operator__c' => FI_OPERATOR.get(cr.operator),
+                'Acnpex_Operator__c' => cr.operator,
+                'LLC_BI__Frequency__c' => covFrequency,
+                'LLC_BI__Effective_Date__c' => covEffective,
+                'LLC_BI__Covenant_Status__c' => 'Pending',
+                'LLC_BI__Active__c' => 'true'
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT, C360WriteGuard.OP_CREATE, covFields);
+            LLC_BI__Covenant2__c cov = new LLC_BI__Covenant2__c(
+                LLC_BI__Account__c = before[0].LLC_BI__Account__c,
+                LLC_BI__Covenant_Type__c = covTypeId,
+                LLC_BI__Financial_Indicator_Value__c = cr.threshold,
+                Acnpex_Threshold_Value__c = cr.threshold,
+                Financial_Indicator_Operator__c = FI_OPERATOR.get(cr.operator),
+                Acnpex_Operator__c = cr.operator,
+                LLC_BI__Frequency__c = covFrequency,
+                LLC_BI__Effective_Date__c = covEffective,
+                LLC_BI__Covenant_Status__c = 'Pending',
+                LLC_BI__Active__c = true
+            );
+            insert as user cov;
+            C360Plan.setState(steps, 'covenant_create_' + cs, C360Plan.STATE_VERIFIED,
+                'Covenant ' + cov.Id + ' created: ' + cr.typeName + ' ' + cr.operator + ' ' + String.valueOf(cr.threshold) + '.');
+
+            Map<String, Object> attachFields = new Map<String, Object>{
+                'LLC_BI__Loan__c' => covCloneId,
+                'LLC_BI__Covenant2__c' => cov.Id
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN_COVENANT, C360WriteGuard.OP_CREATE, attachFields);
+            LLC_BI__Loan_Covenant__c attach = new LLC_BI__Loan_Covenant__c(
+                LLC_BI__Loan__c = covCloneId,
+                LLC_BI__Covenant2__c = cov.Id
+            );
+            insert as user attach;
+            C360Plan.setState(steps, 'covenant_attach_' + cs, C360Plan.STATE_VERIFIED,
+                'Junction ' + attach.Id + ' attaches it to clone ' + covCloneId + '.');
+
+            // The proof is the re-read, never the insert result.
+            List<LLC_BI__Covenant2__c> covBack = [
+                SELECT Id, Name, LLC_BI__Financial_Indicator_Value__c, LLC_BI__Covenant_Status__c
+                FROM LLC_BI__Covenant2__c WHERE Id = :cov.Id WITH USER_MODE LIMIT 1
+            ];
+            Integer attachBack = [
+                SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+                WHERE LLC_BI__Loan__c = :covCloneId AND LLC_BI__Covenant2__c = :cov.Id
+                WITH USER_MODE
+            ];
+            Boolean covProven = !covBack.isEmpty()
+                && covBack[0].LLC_BI__Financial_Indicator_Value__c == cr.threshold
+                && attachBack == 1;
+            cr.covenantId = cov.Id;
+            cr.covenantName = covBack.isEmpty() ? null : covBack[0].Name;
+            cr.cloneLoanId = covCloneId;
+            cr.verification = covBack.isEmpty()
+                ? 'The covenant could not be read back after creation.'
+                : 'Covenant ' + covBack[0].Name + ' reads back at ' + String.valueOf(covBack[0].LLC_BI__Financial_Indicator_Value__c) +
+                  ', status ' + covBack[0].LLC_BI__Covenant_Status__c + ', with ' + attachBack + ' junction on the clone.';
+            C360Plan.setState(
+                steps,
+                'covenant_verify_' + cs,
+                covProven ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                cr.verification
+            );
+        }
+
         // Re-read everything the plan claims: the clones after the change, and the parents, which this
         // tool must not have moved at all.
         Map<Id, LLC_BI__Loan__c> clonesAfter = new Map<Id, LLC_BI__Loan__c>(readLoans(cloneIds));
@@ -983,6 +1135,7 @@ global with sharing class ExecuteLoanModification {
         out.outputPackageId = engineResult.outputPackageId;
         out.newPackageName = newPkgName;
         out.membersRolled = rollMembers.size();
+        out.covenants = covenantResults;
         out.terminalState = terminal;
         out.steps = toWireSteps(steps);
         out.bookingHandoff = BOOKING_HANDOFF;
@@ -990,7 +1143,9 @@ global with sharing class ExecuteLoanModification {
         out.facilityCount = results.size();
         out.replayed = false;
         out.outcome = 'New package version ' + (newPkgName == null ? String.valueOf(newPkgId) : newPkgName) +
-            ' created: ' + rollMembers.size() + ' members rolled, ' + results.size() + ' modified. ' +
+            ' created: ' + rollMembers.size() + ' members rolled, ' + results.size() + ' modified' +
+            (covenantResults.isEmpty() ? '' : ', ' + covenantResults.size() + ' net-new covenant' +
+                (covenantResults.size() == 1 ? '' : 's') + ' attached to the clone' + (covenantResults.size() == 1 ? '' : 's')) + '. ' +
             (results.size() == 1
                 ? results[0].outcome
                 : 'See each facility for its clone and what was applied.') +

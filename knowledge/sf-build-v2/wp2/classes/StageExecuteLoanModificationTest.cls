@@ -485,6 +485,84 @@ private class StageExecuteLoanModificationTest {
     }
 
     @IsTest
+    static void aNetNewCovenantIsCreatedPendingAndAttachedToTheCloneOnly() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('newcov');
+
+        insert new LLC_BI__Covenant_Type__c(Name = 'ZZ-MOD-TEST Leverage');
+
+        StageLoanModification.Request r = stageReq(k);
+        r.covenantAddsJson = '[{"typeName":"ZZ-MOD-TEST Leverage","threshold":3.5,"operator":"<=","frequency":"Quarterly"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('net-new covenant'),
+            'The banker confirms a plan that NAMES the covenant it will create: ' + staged.result.summary);
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(1, done.result.covenants.size(), 'One covenant add, one covenant result');
+
+        ExecuteLoanModification.CovenantResult cr = done.result.covenants[0];
+        System.assertNotEquals(null, cr.covenantId, 'The covenant id is the receipt');
+        LLC_BI__Covenant2__c cov = [
+            SELECT Id, LLC_BI__Account__c, LLC_BI__Covenant_Status__c, LLC_BI__Active__c,
+                   LLC_BI__Financial_Indicator_Value__c, Acnpex_Threshold_Value__c,
+                   Financial_Indicator_Operator__c, Acnpex_Operator__c, LLC_BI__Frequency__c
+            FROM LLC_BI__Covenant2__c WHERE Id = :cr.covenantId
+        ];
+        System.assertEquals('Pending', cov.LLC_BI__Covenant_Status__c, 'Born Pending: not yet evaluated is the only honest birth state');
+        System.assertEquals(true, cov.LLC_BI__Active__c);
+        System.assertEquals(3.5, cov.LLC_BI__Financial_Indicator_Value__c);
+        System.assertEquals(3.5, cov.Acnpex_Threshold_Value__c, 'Both threshold fields mirror, the way every covenant in this org carries them');
+        System.assertEquals('Less Than or Equal To', cov.Financial_Indicator_Operator__c);
+        System.assertEquals('<=', cov.Acnpex_Operator__c);
+        System.assertEquals(borrower().Id, cov.LLC_BI__Account__c, 'The covenant lives on the borrower account');
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        System.assertEquals(cloneId, (Id) cr.cloneLoanId, 'The result names the clone it attached to');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :cr.covenantId],
+            'The junction sits on the CLONE');
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :before.Id],
+            'And NEVER on the booked parent');
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Covenant_Compliance2__c WHERE LLC_BI__Covenant__c = :cr.covenantId],
+            'No compliance row was minted, so no approval chain started (the probe finding, held as a permanent assertion)');
+
+        Boolean createOk = false;
+        Boolean attachOk = false;
+        Boolean verifyOk = false;
+        for (ExecuteLoanModification.StepResult s : done.result.steps) {
+            if (s.id == 'covenant_create_0') { createOk = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'covenant_attach_0') { attachOk = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'covenant_verify_0') { verifyOk = s.state == C360Plan.STATE_VERIFIED; }
+        }
+        System.assertEquals(true, createOk && attachOk && verifyOk,
+            'Create, attach and verify are each their own settled step: ' + JSON.serialize(done.result.steps));
+    }
+
+    @IsTest
+    static void aCovenantAddWithAnUnknownTypeIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('badcov'));
+        r.covenantAddsJson = '[{"typeName":"No Such Covenant Type","threshold":2,"operator":">="}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A type the catalog does not carry cannot be staged');
+        System.assert(res.error.message.contains('No covenant type named'),
+            'And the refusal names the catalog rule: ' + res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM cm_Action_Staging__c WHERE cm_Action_Id__c = 'loan-modification' AND cm_Idempotency_Key__c LIKE 'ZZ-MOD-badcov%'],
+            'Nothing was staged');
+    }
+
+    @IsTest
     static void replayReportsThePriorCloneAndWritesNothing() {
         C360TestFixture.armCalloutMock();
         ExecuteLoanModification.engineOverride = new ObservedCloneEngine();

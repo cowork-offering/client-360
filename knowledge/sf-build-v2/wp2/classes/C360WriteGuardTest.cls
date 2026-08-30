@@ -386,6 +386,51 @@ private class C360WriteGuardTest {
     }
 
     @IsTest
+    static void covenantIsBornPendingAndActiveOrNotAtAll() {
+        C360TestFixture.armCalloutMock();
+
+        // The net-new covenant doorway (2026-08-30): Pending and Active are the only birth state.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Covenant_Status__c' => 'Pending', 'LLC_BI__Active__c' => 'true',
+                'LLC_BI__Financial_Indicator_Value__c' => 3.5
+            });
+
+        Boolean statusRefused = false;
+        try {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT, C360WriteGuard.OP_CREATE,
+                new Map<String, Object>{ 'LLC_BI__Covenant_Status__c' => 'Compliant', 'LLC_BI__Active__c' => 'true' });
+        } catch (C360WriteGuard.GuardException e) {
+            statusRefused = true;
+        }
+        System.assertEquals(true, statusRefused, 'A covenant born Compliant would be authored compliance history');
+
+        for (String f : new List<String>{ 'LLC_BI__Breached__c', 'LLC_BI__Last_Evaluation_Value__c', 'LLC_BI__Is_Template__c' }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COVENANT, C360WriteGuard.OP_CREATE,
+                    new Map<String, Object>{ 'LLC_BI__Covenant_Status__c' => 'Pending', 'LLC_BI__Active__c' => 'true', f => 'x' });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'Evaluation outcomes belong to the org\'s review cycle. Tried: ' + f);
+        }
+
+        // The attach doorway: two lookups, no state fence, and never an update or delete.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN_COVENANT, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{ 'LLC_BI__Loan__c' => 'a', 'LLC_BI__Covenant2__c' => 'b' });
+        for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN_COVENANT, op, new Map<String, Object>());
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'Every field on this junction is non-updateable in the org. Operation: ' + op);
+        }
+    }
+
+    @IsTest
     static void involvementIsCreatedAsBorrowerOnly() {
         C360TestFixture.armCalloutMock();
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE,

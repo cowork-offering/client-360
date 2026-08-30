@@ -38,10 +38,15 @@ import type {
    THE RENEWAL ENGINE.
 
    A renewal is not a smaller modification. It is MATURITY-DRIVEN and it is
-   ROLL-OVER: nCino clones the facility, the clone carries the parent's whole
-   record graph — covenant junctions, pledges, borrowing structure — and the new
-   maturity is the thing that makes it a renewal at all. The deployed tool says
-   the same in its own words: `newMaturityDate` is `required=true` on
+   PACKAGE-FIRST (founder correction, 2026-08-30): nCino package methodology
+   never versions a loan alone. The credit action mints the next VERSION of the
+   whole package — every booked, open member is cloned onto it with its record
+   graph (covenant junctions, pledges, borrowing structure; the engine copies no
+   junction rows itself, so the carry is composed and proven by count), the
+   renewed member's clone takes the new maturity, the rest carry unchanged, and
+   anything not booked/open is NAMED as staying behind on the current version.
+   The new maturity is the thing that makes it a renewal at all. The deployed
+   tool says the same in its own words: `newMaturityDate` is `required=true` on
    `StageRenewal.Request` AND re-checked in Apex ("newMaturityDate is required.
    A renewal is maturity-driven."), and the only other change it carries is a
    repricing.
@@ -61,7 +66,9 @@ import type {
 
    Wire shape observed 2026-08-25 on the live org and archived in
    `knowledge/sf-build-v2/wp2/observed-envelopes-facilityIds.json`
-   (`package_anchored_renewal`).
+   (`package_anchored_renewal`). The plan grew the package-versioning steps
+   (roll_package / verify_package / carry_junctions) on 2026-08-30, mirroring
+   StageLoanModification; the envelope keys this file reads are unchanged.
    ============================================================================= */
 
 const RATIONALE_PREFIX = "Renewal Workroom";
@@ -339,7 +346,7 @@ export function createRenewEngine(args: {
         [
           "Written as",
           wire
-            ? `${field.apiName} on the renewal clone. The booked parent is untouched, and nothing is written until nCino books the clone.`
+            ? `${field.apiName} on the renewal clone, on the next package version. The booked parent and the current package are untouched, and nothing is written until nCino books the clone.`
             : "Nothing. No tool files this on a renewal; it travels as a handoff on the staged plan.",
         ],
       ],
@@ -407,7 +414,7 @@ export function createRenewEngine(args: {
           `${parties.length} involvement ${parties.length === 1 ? "row" : "rows"}`,
         ].join(" · "),
         detail:
-          "A renewal clones the facility and the clone carries this graph with it. Everything here is KEPT unless the staged terms say otherwise, which is what makes a renewal a roll-over rather than a rebuild.",
+          "A renewal versions the WHOLE package: every booked member is cloned onto the next package version and each clone carries this graph with it — nCino's engine copies no junction rows itself, so the carry is composed and proven by count. Everything here is KEPT unless the staged terms say otherwise, which is what makes a renewal a roll-over rather than a rebuild.",
       },
     ];
     if (junctions.length) {
@@ -437,7 +444,8 @@ export function createRenewEngine(args: {
       rows.push({
         label: "Who rolls forward onto the clone",
         value: parties.map((e) => `${e.accountName ?? "entity"} (${e.borrowerType ?? "role unstated"})`).join(", "),
-        detail: "The borrowing structure comes with the clone. Changing it on a renewal is a handoff: no tool writes an involvement row here.",
+        detail:
+          "The borrowing structure comes with the clone, re-anchored on the new package version. Changing it on a renewal is a handoff: no tool writes an involvement row here.",
       });
     }
     rows.push({
@@ -541,6 +549,11 @@ export function createRenewEngine(args: {
         label: "The package",
         detail: `${members.length} ${members.length === 1 ? "member" : "members"}, ${fmtMoney(committed)} committed, ${booked.length} booked. A renewal runs against a booked facility; anything else the org refuses outright.`,
       },
+      {
+        label: "How the package versions",
+        detail:
+          "nCino package methodology: a renewal never versions a loan alone. The credit action mints the next version of the whole package — every booked, open member rolls onto it with its junction graph, and anything else is named as staying behind on the current version. The staged plan computes and names that roll.",
+      },
     ];
     if (byMaturity.length) {
       const days = daysBetween(asOf, byMaturity[0].maturityDate);
@@ -578,10 +591,10 @@ export function createRenewEngine(args: {
       return `This package holds ${members.length} ${members.length === 1 ? "member" : "members"} and none of them is booked, so there is nothing here a renewal can run against.`;
     }
     if (maturing.length && lead?.maturityDate) {
-      return `${fmtMoney(maturingCommitted)} matures within ${MATURITY_NEAR_WINDOW_DAYS} days — the ${facilityProduct(lead, relationship)} first, on ${fmtDate(lead.maturityDate)}. A renewal rolls its covenants, security and structure forward. Pick it and name the new maturity.`;
+      return `${fmtMoney(maturingCommitted)} matures within ${MATURITY_NEAR_WINDOW_DAYS} days — the ${facilityProduct(lead, relationship)} first, on ${fmtDate(lead.maturityDate)}. A renewal versions the whole package: every booked member rolls forward with its covenants, security and structure. Pick it and name the new maturity.`;
     }
     if (lead?.maturityDate) {
-      return `Nothing matures inside ${MATURITY_NEAR_WINDOW_DAYS} days. The nearest is the ${facilityProduct(lead, relationship)} on ${fmtDate(lead.maturityDate)}, and renewing it early is a legitimate move: it rolls the whole structure forward.`;
+      return `Nothing matures inside ${MATURITY_NEAR_WINDOW_DAYS} days. The nearest is the ${facilityProduct(lead, relationship)} on ${fmtDate(lead.maturityDate)}, and renewing it early is a legitimate move: it rolls the whole package forward onto the next version.`;
     }
     return `${booked.length} of ${members.length} members are booked and none of them stages a maturity date in this read. A renewal is maturity-driven, so name the member and the date it should run to.`;
   }

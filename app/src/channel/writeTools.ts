@@ -603,6 +603,13 @@ export interface StagePayloads {
     requestedMaturityDate?: string | null;
     requestedTermMonths?: number | null;
     requestedRate?: number | null;
+    /** NET-NEW COVENANTS (2026-08-30). A JSON-encoded list the org resolves
+     *  against its own covenant-type catalog at stage time:
+     *  [{typeName, threshold, operator (< <= = >= >), frequency?, targetLoanId?}].
+     *  Each is created Pending/Active on the borrower and attached to the CLONE
+     *  of the targeted facility on the new package version. Counts toward the
+     *  tool's at-least-one-change rule. */
+    covenantAddsJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;

@@ -87,6 +87,10 @@ export interface CatalogField {
   source: CatalogSource;
   /** Present ⇒ THIS FILES. Absent ⇒ manifest and honest handoff only. */
   wireKey?: WireKey;
+  /** A RECORD wire: the entry files as a structured record rather than a scalar.
+   *  "covenantAdd" is the only one — stage_loan_modification's covenantAddsJson
+   *  (2026-08-30), created on the borrower and attached to the clone. */
+  recordWire?: "covenantAdd";
   /** Why nothing files it. Required whenever `wireKey` is absent. */
   gap?: string;
   /** What would close the gap. Design only — nothing here is deployed. */
@@ -410,8 +414,16 @@ const COVENANT_FIELDS: CatalogField[] = [
     category: "covenant",
     group: "covenants",
     source: "live-verified",
-    gap: "LLC_BI__Covenant2__c is not on C360WriteGuard's allowlist at all, so every write to it is refused before it starts. stage_covenant_review only ever UPDATES an existing compliance row.",
-    closes: "A covenants[] block on the modification pair: create the covenant, then the LLC_BI__Loan_Covenant__c junction to the CLONE, verified by re-query. It must not mint a compliance row — acnpex_covenantApprovalProcess fires on compliance CREATE and sends an unrecallable approval email.",
+    // FILES since 2026-08-30: stage_loan_modification takes covenantAddsJson and the pair creates
+    // the covenant Pending/Active on the borrower, attaches the LLC_BI__Loan_Covenant__c junction
+    // to the CLONE on the new package version, and verifies both by re-query. Probed safe live: no
+    // compliance row is minted and no approval starts, so the unrecallable acnpex approval email
+    // (which fires on compliance CREATE only) is structurally out of reach. The read is exact or it
+    // is a question: the type must land on a uniquely-named catalog entry and the threshold must be
+    // stated; anything looser stays a manifest handoff.
+    recordWire: "covenantAdd",
+    gap: "A covenant type the room's map cannot settle against the org catalog (60 types, several duplicate names) travels as a handoff rather than a guess.",
+    closes: "Nothing structural. The unmapped-type case closes with a picker fed by the live LLC_BI__Covenant_Type__c catalog.",
     associationScope: "loan-covenants",
     chain: [
       { object: "LLC_BI__Covenant2__c", via: "LLC_BI__Account__c", label: "Create the covenant on the relationship", note: "The modern object. Legacy LLC_BI__Covenant__c is empty org-wide and is never written." },
@@ -1007,7 +1019,7 @@ export function catalogField(id: string): CatalogField | undefined {
 export const FILEABLE_FIELDS: CatalogField[] = FIELD_CATALOG.filter((f) => f.wireKey);
 
 export function isFileable(field: CatalogField): boolean {
-  return field.wireKey !== undefined;
+  return field.wireKey !== undefined || field.recordWire !== undefined;
 }
 
 /** Everything a create must write, in order. Empty for a field amendment. */

@@ -287,6 +287,10 @@ describe("A33.3.1 — the transition allowlist", () => {
       { id: "apply_changes_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["LLC_BI__Amount__c", "LLC_BI__Maturity_Date__c", "LLC_BI__InterestRate__c", "LLC_BI__Term_Months__c"] },
       { id: "verify_package", type: "verification", objectName: "LLC_BI__Product_Package__c" },
       { id: "carry_junctions", type: "write", objectName: "LLC_BI__Loan_Covenant__c", fields: ["replicas retargeted at the clones, verified by count"] },
+      // The net-new covenant arm (2026-08-30): create on the borrower, attach to the clone.
+      { id: "covenant_create_0", type: "write", objectName: "LLC_BI__Covenant2__c", fields: ["LLC_BI__Covenant_Type__c", "LLC_BI__Financial_Indicator_Value__c", "Financial_Indicator_Operator__c", "LLC_BI__Frequency__c", "LLC_BI__Effective_Date__c"] },
+      { id: "covenant_attach_0", type: "write", objectName: "LLC_BI__Loan_Covenant__c", fields: ["LLC_BI__Loan__c", "LLC_BI__Covenant2__c"] },
+      { id: "covenant_verify_0", type: "verification", objectName: "LLC_BI__Covenant2__c" },
       { id: "observe_side_effects", type: "observed_side_effect" },
       { id: "held_execution", type: "handoff" },
     ];

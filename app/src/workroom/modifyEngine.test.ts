@@ -359,12 +359,37 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(delta.fields.join()).not.toContain("LLC_BI__Interest_Rate__c");
   });
 
+  it("stages a mapped, thresholded covenant as FILEABLE, targeted at the member's clone", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "add a leverage covenant max 3.5x to the line of credit - $15,000,000.00");
+    expect(delta.fileable).toBe(true);
+    expect(delta.wire).toBeUndefined();
+    expect(delta.covenantWire).toMatchObject({ typeName: "Leverage", threshold: 3.5, operator: "<=", facilityId: LINE_ID });
+    expect(delta.handoff).toBeUndefined();
+    expect(delta.filed.recordId).toBe("assigned by the org on execution");
+  });
+
+  it("sends the covenant add on the wire as covenantAddsJson, anchored on its member", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "add a leverage covenant max 3.5x to the line of credit - $15,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.facilityIds).toEqual([LINE_ID]);
+    const adds = JSON.parse(payload.covenantAddsJson);
+    expect(adds).toEqual([
+      { typeName: "Leverage", threshold: 3.5, operator: "<=", frequency: "Quarterly", targetLoanId: LINE_ID },
+    ]);
+  });
+
   it("stages an out-of-scope amendment as NOT fileable, with the reason on it", async () => {
     const { engine } = engineOn();
-    const [delta] = await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00");
+    const [delta] = await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00");
     expect(delta.fileable).toBe(false);
     expect(delta.wire).toBeUndefined();
-    expect(delta.handoff?.reason).toMatch(/not on C360WriteGuard's allowlist/);
+    expect(delta.handoff?.reason).toMatch(/cannot settle against the org catalog/);
     expect(delta.handoff?.closes).toBeTruthy();
     expect(delta.filed.recordId).toBe("not filed");
   });
@@ -659,7 +684,7 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     const { engine, deps: d } = engineOn();
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00")),
+      ...(await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00")),
     ];
     await engine.stagePlan(deltas, context);
 
@@ -683,7 +708,7 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     const { engine } = engineOn();
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00")),
+      ...(await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00")),
     ];
     const staged = await engine.stagePlan(deltas, context);
     expect(staged.plan.steps.map((s) => s.id)).toEqual([
@@ -746,7 +771,7 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     const { engine } = engineOn();
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00")),
+      ...(await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00")),
     ];
     const staged = await engine.stagePlan(deltas, context);
     expect(validatePlan(staged.plan.steps)).toEqual([]);
@@ -757,7 +782,7 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     const { engine } = engineOn();
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00")),
+      ...(await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00")),
     ];
     const staged = await engine.stagePlan(deltas, context);
     expect(staged.plan.warnings.some((wn) => /handed off rather than filed/.test(wn))).toBe(true);
@@ -765,7 +790,7 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
 
   it("REFUSES a manifest that files nothing rather than staging an empty change", async () => {
     const { engine, deps: d } = engineOn();
-    const deltas = await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00");
+    const deltas = await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00");
     await expect(engine.stagePlan(deltas, context)).rejects.toThrow(WorkroomRefusalError);
     expect(d.stage).not.toHaveBeenCalled();
   });
@@ -802,7 +827,7 @@ describe("execute redeems the token and reports what the org read back", () => {
     const { engine, deps: d } = engineOn(over);
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00")),
+      ...(await confirm(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00")),
     ];
     const staged = await engine.stagePlan(deltas, context);
     return { engine, deps: d, staged, approval: { stagingId: staged.stagingId, planHash: staged.planHash, decisionToken: staged.decisionToken!, approverUserId: context.approver } };
@@ -928,7 +953,7 @@ describe("every beat says WHY, on this package's own figures", () => {
 
   it("explains a handoff in credit language, never in the org's own schema", async () => {
     const { engine } = engineOn();
-    const result = await engine.parseIntent("add a covenant on minimum liquidity for the equipment - $8,000,000.00", context);
+    const result = await engine.parseIntent("add a collateral insurance covenant for the equipment - $8,000,000.00", context);
     expect(result.kind).toBe("deltas");
     if (result.kind !== "deltas") return;
     expect(result.reply).toContain("2 connected writes");
@@ -936,7 +961,9 @@ describe("every beat says WHY, on this package's own figures", () => {
     // The org's own sentence is still carried, verbatim — on the entry, where a
     // banker who wants it goes looking. It is not the answer in the room.
     expect(result.reply).not.toMatch(/LLC_BI__|allowlist|C360WriteGuard/);
-    expect(result.deltas[0].handoff?.reason).toMatch(/C360WriteGuard/);
+    // The truthful mechanism since the covenant arm shipped: an unmapped type is
+    // a catalog-resolution gap, not a guard refusal — and the entry still names it.
+    expect(result.deltas[0].handoff?.reason).toMatch(/org catalog/);
   });
 
   it("carries the same reading into the confirm's answer", async () => {
@@ -980,7 +1007,7 @@ describe("every beat says WHY, on this package's own figures", () => {
 
   it("explains a manifest that files nothing, with both ways out", async () => {
     const { engine } = engineOn();
-    const deltas = await confirm(engine, "add a covenant on minimum liquidity for the equipment - $8,000,000.00");
+    const deltas = await confirm(engine, "add a collateral insurance covenant for the equipment - $8,000,000.00");
     await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/Add a commitment, rate, maturity or term change/);
     await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/person who can action it/);
   });
@@ -1035,7 +1062,7 @@ describe("advisory 1 — a limit under what is already drawn", () => {
 describe("advisory 2 — something of this kind is already on the facility", () => {
   it("names what the clone already carries, and offers the amend", async () => {
     const { engine } = engineOn();
-    const result = await propose(engine, "add a covenant on minimum liquidity for the line of credit - $15,000,000.00");
+    const result = await propose(engine, "add a collateral insurance covenant for the line of credit - $15,000,000.00");
     const advice = result.advisories!.find((a) => a.rule === "amend-or-add")!;
     expect(advice.line).toContain("already carries 1 covenant — Accounts Receivable");
     expect(advice.line).toContain("stages a new one beside it");
@@ -1044,7 +1071,7 @@ describe("advisory 2 — something of this kind is already on the facility", () 
 
   it("says nothing on a member that carries none", async () => {
     const { engine } = engineOn();
-    const result = await propose(engine, "add a covenant on minimum liquidity for the equipment - $8,000,000.00");
+    const result = await propose(engine, "add a collateral insurance covenant for the equipment - $8,000,000.00");
     expect(ruleIds(result)).not.toContain("amend-or-add");
   });
 });

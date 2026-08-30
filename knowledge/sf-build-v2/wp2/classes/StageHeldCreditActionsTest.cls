@@ -528,8 +528,20 @@ private class StageHeldCreditActionsTest {
         System.assertEquals(3, res.result.facilityCount);
         System.assertEquals(1, [SELECT COUNT() FROM cm_Action_Staging__c], 'One call is one staging row');
         System.assertNotEquals(null, res.result.decisionToken);
-        System.assertEquals(3 * 3 + 2, res.result.steps.size());
+        // The package roll, three per-facility steps each, the package verification, the junction
+        // carry, then the shared observed and handoff descriptors — the same package-first shape as
+        // the modification, because both actions version the whole package (2026-08-30 correction).
+        System.assertEquals(3 * 3 + 5, res.result.steps.size());
         System.assertEquals(C360Plan.TYPE_HANDOFF, res.result.steps[res.result.steps.size() - 1].type);
+        System.assertEquals('roll_package', res.result.steps[0].id,
+            'A renewal plan opens on the package version roll, never on a single member');
+
+        Boolean sawRollWarning = false;
+        for (String w : res.result.warnings) {
+            if (w.contains('versions the whole package, never a loan alone')) { sawRollWarning = true; }
+        }
+        System.assertEquals(true, sawRollWarning,
+            'The banker is told the renewal rolls the whole package: ' + res.result.warnings);
 
         Boolean sawThreeOpportunities = false;
         for (String w : res.result.warnings) {
@@ -555,6 +567,8 @@ private class StageHeldCreditActionsTest {
         System.assertEquals(1 * 3 + 5, mr.result.steps.size());
         System.assertEquals(true, rr.ok, whyRen(rr));
         System.assertEquals(1, rr.result.facilityCount);
+        System.assertEquals(1 * 3 + 5, rr.result.steps.size(),
+            'The renewal carries the same package-first step shape as the modification');
         System.assertEquals(2, [SELECT COUNT() FROM cm_Action_Staging__c], 'One staging row per call, on either shape');
     }
 

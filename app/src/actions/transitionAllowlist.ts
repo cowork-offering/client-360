@@ -218,6 +218,28 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     refusedOperations: ["deletion", "any update beyond the versioning name and account repair"],
   },
 
+  "LLC_BI__Covenant2__c": {
+    object: "LLC_BI__Covenant2__c",
+    label: "covenant",
+    // The net-new covenant arm (2026-08-30). Born Pending and Active on the
+    // borrower account, or not at all: any other birth status would be authored
+    // compliance history. Probed safe live: creating one mints no compliance
+    // row, starts no approval and sends no email.
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [
+      { field: "LLC_BI__Covenant_Status__c", value: "Pending" },
+      { field: "LLC_BI__Active__c", value: "true" },
+    ],
+    transitions: [],
+    refusedFields: [
+      { field: "LLC_BI__Breached__c", reason: "evaluation outcome, owned by the org's review cycle" },
+      { field: "LLC_BI__Overdue__c", reason: "evaluation outcome, owned by the org's review cycle" },
+      { field: "LLC_BI__Is_Template__c", reason: "templates are configuration, not credit facts" },
+    ],
+    refusedOperations: ["updates of any kind", "deletion"],
+  },
+
   "LLC_BI__Loan_Covenant__c": {
     object: "LLC_BI__Loan_Covenant__c",
     label: "covenant junction",

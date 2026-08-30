@@ -178,6 +178,11 @@ export interface WorkroomDelta {
   /** What this contributes to the `stage_*` payload. Present exactly when
    *  `fileable`; staging never re-parses a sentence it already read. */
   wire?: { key: string; value: number | string; facilityId: string };
+  /** A NET-NEW COVENANT's contribution (2026-08-30): resolved catalog type,
+   *  threshold and operator, targeted at ONE member — the covenant attaches to
+   *  that member's CLONE on the new package version. Present exactly when the
+   *  delta is a fileable covenant add; `wire` stays absent on such a delta. */
+  covenantWire?: { typeName: string; threshold: number; operator: string; frequency: string; facilityId: string };
   /** The figure this was composed against, so execution can prove the read has
    *  not moved underneath it (the ConfirmGate recompute, applied to the rail). */
   basis?: { facilityId: string; fieldId: string; before: string };

@@ -47,6 +47,7 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_LOAN_COVENANT = 'LLC_BI__Loan_Covenant__c';
     public static final String OBJ_PLEDGE = 'LLC_BI__Loan_Collateral2__c';
     public static final String OBJ_PLEDGE_AGGREGATE = 'LLC_BI__Loan_Collateral_Aggregate__c';
+    public static final String OBJ_COVENANT = 'LLC_BI__Covenant2__c';
 
     /** The junction graph OP_CARRY may replicate, and nothing else. */
     private static final Set<String> CARRY_OBJECTS = new Set<String>{
@@ -98,7 +99,21 @@ public with sharing class C360WriteGuard {
         // Borrowing structure. This wave creates the Borrower row only; the fuller role set arrives
         // with the borrowing-structure UI. The role IS the flag on this object: there is no
         // primary-borrower boolean, and the Is_* fields are formulas derived from Borrower_Type.
-        OBJ_INVOLVEMENT => new Map<String, String>{ 'LLC_BI__Borrower_Type__c' => 'Borrower' }
+        OBJ_INVOLVEMENT => new Map<String, String>{ 'LLC_BI__Borrower_Type__c' => 'Borrower' },
+        // Net-new covenant (2026-08-30). SAFE by live probe: inserting a Covenant2 plus its loan
+        // junction mints NO compliance row, starts NO approval and sends NO email — the
+        // unrecallable acnpex approval fires on COMPLIANCE create only, and nothing auto-mints
+        // one from a covenant insert. A new covenant is born Pending (not yet evaluated) and
+        // Active; the org's own review cycle owns every status after that.
+        OBJ_COVENANT => new Map<String, String>{
+            'LLC_BI__Covenant_Status__c' => 'Pending',
+            'LLC_BI__Active__c' => 'true'
+        },
+        // The attach of a NET-NEW covenant to a facility. Doctrine: the caller may attach only a
+        // covenant this same transaction created, and only to a modification clone this same
+        // transaction created — never to a booked facility. The gate fences the object; the
+        // caller owns that scoping, exactly as with OP_CARRY.
+        OBJ_LOAN_COVENANT => new Map<String, String>()
     };
 
     /**
@@ -177,7 +192,14 @@ public with sharing class C360WriteGuard {
         OBJ_INVOLVEMENT => new Set<String>{
             'LLC_BI__Is_Borrower__c', 'LLC_BI__Is_Guarantor__c', 'LLC_BI__Is_CoBorrower__c',
             'LLC_BI__Is_Grantor__c', 'LLC_BI__Is_Related_Entity__c', 'LLC_BI__Contingent_Amount__c'
-        }
+        },
+        // Evaluation outcomes and breach flags belong to the org's own covenant review cycle; a
+        // tool that could author them could author compliance history. Templates are config.
+        OBJ_COVENANT => new Set<String>{
+            'LLC_BI__Breached__c', 'LLC_BI__Overdue__c', 'LLC_BI__Is_Template__c',
+            'LLC_BI__Last_Evaluation_Date__c', 'LLC_BI__Last_Evaluation_Status__c', 'LLC_BI__Last_Evaluation_Value__c'
+        },
+        OBJ_LOAN_COVENANT => new Set<String>()
     };
 
     /**
@@ -191,7 +213,7 @@ public with sharing class C360WriteGuard {
     /** Every object the fence knows about, in either direction. */
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
-        OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT
+        OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT
     };
 
     /**

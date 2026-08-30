@@ -130,9 +130,11 @@ const STAGE_RESULT = {
   accountId: "001bb00001I7FPNAA3",
   productPackageId: PACKAGE_ID,
   summary:
-    "Plans a renewal of Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 on the package. NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held.",
+    "Plans the next VERSION of the package, nCino package methodology: one credit action rolls all 2 eligible members into a new package with their junction graphs. Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 is the member being renewed; the rest carry unchanged. NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held.",
   warnings: [
     "EXECUTION IS HELD. This facility is booked and open, which is what a credit action requires, but no execute tool ships in this wave.",
+    "nCino package methodology: a renewal versions the whole package, never a loan alone. Executing this plan would create a NEW package version holding clones of all 2 eligible members; the current package and every original loan stay exactly as they are.",
+    "nCino's engine copies NO junction rows in this org (verified live 2026-08-30). Whatever executes this plan must therefore carry each member's covenant junctions, collateral pledges and borrowing involvements onto its clone itself, and prove the counts by re-query.",
     "A renewal auto-creates a new Opportunity and is effectively irreversible once run.",
   ],
   executionHeld: true,
@@ -143,10 +145,16 @@ const STAGE_RESULT = {
   facilities: [
     { facilityId: LINE_ID, facilityName: line.name, creditActionStepId: "credit_action_0", verifyStepId: "verify_clone_0", applyStepId: "apply_changes_0", covenantCarryoverCount: 1 },
   ],
+  // The package-versioning shape (2026-08-30): the roll opens the plan, the
+  // package is verified, and the junction carry is a counted promise — the same
+  // steps StageLoanModification stages, in the renewal's held wave.
   steps: [
-    { id: "credit_action_0", type: "write", label: "Invoke the renewal credit action on the package", objectName: "LLC_BI__Loan__c", fields: ["clone created by nCino"], state: "pending" },
+    { id: "roll_package", type: "write", label: "Create the next package version: one credit action rolls all 2 eligible members into a new package", objectName: "LLC_BI__Product_Package__c", fields: ["new package version created by nCino"], state: "pending" },
+    { id: "credit_action_0", type: "write", label: "Roll the Line of Credit into the new package version (its clone is the one this plan renews)", objectName: "LLC_BI__Loan__c", fields: ["clone created by nCino on the new package version"], state: "pending" },
     { id: "verify_clone_0", type: "verification", label: "Re-query for the new facility and its junction row", objectName: "LLC_BI__LoanRenewal__c", fields: ["LLC_BI__ParentLoanId__c"], state: "pending" },
     { id: "apply_changes_0", type: "write", label: "Apply the requested changes to the new facility", objectName: "LLC_BI__Loan__c", fields: ["LLC_BI__Maturity_Date__c"], state: "pending" },
+    { id: "verify_package", type: "verification", label: "Verify the new package version: it exists, it is not the current package, and every rolled member reads back as a clone on it", objectName: "LLC_BI__Product_Package__c", fields: ["Id", "Name"], state: "pending" },
+    { id: "carry_junctions", type: "write", label: "Carry each rolled member's junction graph onto its clone: 1 covenant junction, 1 collateral pledge, 2 borrowing involvements", objectName: "LLC_BI__Loan_Covenant__c", fields: ["replicas retargeted at the clones, verified by count"], state: "pending" },
     { id: "observe_side_effects", type: "observed_side_effect", label: "A new Opportunity is auto-created on every renewal", state: "pending" },
     { id: "held_execution", type: "handoff", label: "HELD: execution needs an approved facility", state: "pending" },
   ],

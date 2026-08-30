@@ -182,8 +182,28 @@ describe("the deterministic parse", () => {
     expect(out.question).toMatch(/only runs against a booked facility/);
   });
 
+  it("reads a mapped covenant with a threshold as a FILEABLE covenant value", () => {
+    const out = parseModify("add a leverage covenant max 3.5x", single, "Hartwell");
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    const a = out.amendments[0];
+    expect(a.field.id).toBe("covenant.add");
+    expect(a.value?.kind).toBe("covenant");
+    if (a.value?.kind !== "covenant") return;
+    expect(a.value.typeName).toBe("Leverage");
+    expect(a.value.threshold).toBe(3.5);
+    expect(a.value.operator).toBe("<=");
+  });
+
+  it("asks for the threshold when a mapped covenant arrives without one", () => {
+    const out = parseModify("add a leverage covenant", single, "Hartwell");
+    expect(out.kind).toBe("clarify");
+    if (out.kind !== "clarify") return;
+    expect(out.question).toMatch(/threshold/i);
+    expect(out.question).toMatch(/Leverage/);
+  });
+
   it("reads an out-of-scope amendment as an amendment, not as a failure", () => {
-    const out = parseModify("add a covenant on minimum liquidity", single);
+    const out = parseModify("add a collateral insurance covenant", single);
     if (out.kind !== "amendments") throw new Error(out.kind);
     expect(out.amendments[0].field.id).toBe("covenant.add");
     expect(out.amendments[0].field.wireKey).toBeUndefined();

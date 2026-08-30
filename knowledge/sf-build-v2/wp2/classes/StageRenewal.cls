@@ -17,6 +17,19 @@
  * empty carryover list is a real answer and renders as "no loan-level covenants attached", never as
  * blank space.
  *
+ * PACKAGE VERSIONING (founder correction, 2026-08-30, same as StageLoanModification). nCino package
+ * methodology: a credit action NEVER versions a loan alone. It mints the next VERSION of the whole
+ * package: every Booked/Open member is cloned onto the new package with its junction graph, the
+ * selected members then take the renewal terms, the rest carry unchanged, and anything not
+ * Booked/Open is NAMED as staying on the current version rather than silently skipped. The engine
+ * facts behind the plan's promises were probed live on this org (EVIDENCE-SEPT4.md "PACKAGE
+ * VERSIONING"): isNewPackage=true mints the package and clones every facilityAction member; the
+ * engine ignores newPackageName and leaves the account null, so the name and account are repaired
+ * post-engine; and the engine copies ZERO junction rows, so the carry is the caller's to compose
+ * and prove by re-query. Execution of a renewal is still held, so this plan NARRATES that roll —
+ * membership computed and named, carry counts read and promised — and any future execute wave
+ * inherits the plan shape it must honor rather than a single-loan story it must contradict.
+ *
  * PACKAGE-ANCHORED, MULTI-FACILITY (ACTIONS-DESIGN 5.1/5.2 anchor correction, Fabian, 2026-07-25).
  * The anchor is the PRODUCT PACKAGE: nCino's CreditActionSoaXPkg takes the package id plus a list of
  * (booked facility, action) pairs, so a facility is a member selection within the package rather
@@ -201,12 +214,33 @@ global with sharing class StageRenewal {
             C360Facilities.validate(readFacilities(selected), selected, packageId, 'Renewals');
         Map<Id, Integer> carryoverByFacility = C360Facilities.covenantCarryover(selected);
 
+        // nCino package methodology (founder correction, 2026-08-30): a renewal never versions a
+        // loan alone. The credit action rolls the WHOLE package: every eligible member is cloned
+        // into the next package version, the selected ones then take the new maturity, the rest
+        // carry unchanged. Eligibility mirrors nCino's own wizard rule, observed live on this org:
+        // Booked and Open roll; anything else (a Proposal-stage member, a closed loan) stays on the
+        // current version and is NAMED in the plan rather than silently skipped.
+        List<String> rollIds = new List<String>();
+        List<String> rollNames = new List<String>();
+        List<String> excludedNames = new List<String>();
+        for (LLC_BI__Loan__c m : readPackageMembers(packageId)) {
+            if (m.LLC_BI__Stage__c == 'Booked' && m.LLC_BI__Status__c == 'Open') {
+                rollIds.add(String.valueOf(m.Id));
+                rollNames.add(m.Name);
+            } else {
+                excludedNames.add(m.Name + ' (' + m.LLC_BI__Stage__c + ')');
+            }
+        }
+
         Integer n = facilities.size();
         Integer carryover = 0;
         Map<String, Object> resolved = new Map<String, Object>{
             'productPackageId' => packageId,
             'actionType' => 'Renewal',
             'facilityCount' => n,
+            'rollMemberIds' => String.join(rollIds, ','),
+            'rollMemberCount' => rollIds.size(),
+            'excludedMemberCount' => excludedNames.size(),
             'newMaturityDate' => req.newMaturityDate,
             'requestedRate' => req.requestedRate
         };
@@ -214,6 +248,20 @@ global with sharing class StageRenewal {
         List<C360Plan.Step> steps = new List<C360Plan.Step>();
         List<PlannedFacility> planned = new List<PlannedFacility>();
         List<String> facilityNames = new List<String>();
+
+        steps.add(
+            new C360Plan.Step('roll_package', C360Plan.TYPE_WRITE,
+                'Create the next package version: one credit action rolls all ' + String.valueOf(rollIds.size()) +
+                ' eligible members into a new package' +
+                (excludedNames.isEmpty() ? '' : ', leaving ' + String.join(excludedNames, ', ') + ' on the current version'))
+                .onObject('LLC_BI__Product_Package__c', new List<String>{ 'new package version created by nCino' })
+                .wakes(new List<String>{
+                    'nCino clones every rolled member and writes its LLC_BI__LoanRenewal__c chain row synchronously; ' +
+                    'the junction graph does NOT copy itself (verified live 2026-08-30) and is carried by the ' +
+                    'carry_junctions step of this same plan'
+                })
+                .provenBy('SELECT COUNT() FROM LLC_BI__Loan__c WHERE LLC_BI__Product_Package__c = :outputPackageId')
+        );
 
         for (Integer i = 0; i < n; i++) {
             LLC_BI__Loan__c loan = facilities[i];
@@ -224,10 +272,10 @@ global with sharing class StageRenewal {
             resolved.put('facility' + s + '.loanId', String.valueOf(loan.Id));
 
             steps.add(
-                new C360Plan.Step('credit_action_' + s, C360Plan.TYPE_WRITE, 'Invoke the renewal credit action on the package for ' + loan.Name)
-                    .onObject('LLC_BI__Loan__c', new List<String>{ 'clone created by nCino' })
+                new C360Plan.Step('credit_action_' + s, C360Plan.TYPE_WRITE, 'Roll ' + loan.Name + ' into the new package version (its clone is the one this plan renews)')
+                    .onObject('LLC_BI__Loan__c', new List<String>{ 'clone created by nCino on the new package version' })
                     .wakes(new List<String>{
-                        'nCino clones the facility, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row'
+                        'nCino clones the facility onto the new package, sets the loan-type flag and creates the LLC_BI__LoanRenewal__c junction row'
                     })
                     .provenBy('SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId')
             );
@@ -253,6 +301,30 @@ global with sharing class StageRenewal {
         }
 
         steps.add(
+            new C360Plan.Step('verify_package', C360Plan.TYPE_VERIFICATION,
+                'Verify the new package version: it exists, it is not the current package, and every rolled member reads back as a clone on it')
+                .onObject('LLC_BI__Product_Package__c', new List<String>{ 'Id', 'Name' })
+                .provenBy('SELECT Id, Name FROM LLC_BI__Product_Package__c WHERE Id = :outputPackageId')
+        );
+
+        // The carry counts, read now so the banker confirms a NUMBERED promise. nCino's engine
+        // copies no junction rows in this org (verified live 2026-08-30), so whatever executes this
+        // plan must replicate each member's graph itself and prove the counts by re-query. Execution
+        // of a renewal is held, and the counts are still read here: a staged renewal narrates the
+        // same roll a modification performs, so a future execute wave inherits the promise.
+        Integer pledgeCount = [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        Integer involvementCount = [SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        Integer covenantJunctionCount = [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        steps.add(
+            new C360Plan.Step('carry_junctions', C360Plan.TYPE_WRITE,
+                'Carry each rolled member\'s junction graph onto its clone: ' + covenantJunctionCount +
+                ' covenant junction' + (covenantJunctionCount == 1 ? '' : 's') + ', ' + pledgeCount +
+                ' collateral pledge' + (pledgeCount == 1 ? '' : 's') + ', ' + involvementCount +
+                ' borrowing involvement' + (involvementCount == 1 ? '' : 's'))
+                .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'replicas retargeted at the clones, verified by count' })
+                .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
+        );
+        steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'A new Opportunity is auto-created on every renewal')
                 .wakes(new List<String>{ 'nCino renewal automation' })
         );
@@ -265,6 +337,12 @@ global with sharing class StageRenewal {
             'EXECUTION IS HELD. ' + (n == 1 ? 'This facility is' : 'These facilities are') +
                 ' booked and open, which is what a credit action requires, but no execute tool ships in this wave.' +
                 C360Facilities.lookupKeyWarning(facilities),
+            'nCino package methodology: a renewal versions the whole package, never a loan alone. Executing this plan would create a ' +
+                'NEW package version holding clones of all ' + String.valueOf(rollIds.size()) + ' eligible members (' +
+                String.join(rollNames, ', ') + '); the current package and every original loan stay exactly as they are.',
+            'nCino\'s engine copies NO junction rows in this org (verified live 2026-08-30: every related-lists copy default ' +
+                'flipped on, engine run, zero rows landed). Whatever executes this plan must therefore carry each member\'s covenant ' +
+                'junctions, collateral pledges and borrowing involvements onto its clone itself, and prove the counts by re-query.',
             'Booked cannot be reached through the API. Loan_Validation_06 requires nCino\'s Submit for Approval button and carries no permission bypass.',
             'The junction object has no validation rules, no triggers and no flows, so a malformed row would fail silently. Any future execution verifies by re-query only.',
             'The platform is known to produce duplicate modification loans on failed background Apex, so idempotency is enforced by this tool rather than assumed.',
@@ -300,10 +378,14 @@ global with sharing class StageRenewal {
             'Reaching it needs nCino\'s Submit for Approval with real approvers. This plan is staged and persisted so it can be executed once that path exists.';
 
         String summary =
+            'Plans the next VERSION of the package, nCino package methodology: one credit action rolls all ' +
+            String.valueOf(rollIds.size()) + ' eligible members into a new package with their junction graphs. ' +
             (n == 1
-                ? 'Plans a renewal of ' + facilityNames[0] + ' on the package.'
-                : 'Plans a renewal of ' + n + ' facilities on the package: ' + String.join(facilityNames, ', ') + '.') +
-            ' nCino would clone ' + (n == 1 ? 'the facility' : 'each facility') + ', create the chain junction row and apply the requested changes. ' +
+                ? facilityNames[0] + ' is the member being renewed'
+                : String.valueOf(n) + ' members are being renewed: ' + String.join(facilityNames, ', ')) +
+            '; the rest carry unchanged' +
+            (excludedNames.isEmpty() ? '. ' : ', and ' + String.join(excludedNames, ', ') + ' stays on the current version because it is not Booked/Open. ') +
+            'The new maturity applies to the ' + (n == 1 ? 'clone' : 'clones') + ' only; every original loan and the current package stay untouched. ' +
             'NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. ' + heldReason;
 
         String planJson = C360Plan.serializePlan(summary, steps, warnings, provenance, resolved);
@@ -375,6 +457,24 @@ global with sharing class StageRenewal {
             FROM LLC_BI__Loan__c
             WHERE Id IN :facilityIds
             WITH USER_MODE
+        ];
+    }
+
+    /**
+     * Every member of the package, for the roll computation. Honors the same seam as
+     * readFacilities so the plan-shape tests see a consistent package: in the seam world the
+     * injected facilities ARE the package membership.
+     */
+    private static List<LLC_BI__Loan__c> readPackageMembers(Id packageId) {
+        if (seamFacilities != null) {
+            return seamFacilities;
+        }
+        return [
+            SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Status__c
+            FROM LLC_BI__Loan__c
+            WHERE LLC_BI__Product_Package__c = :packageId
+            WITH USER_MODE
+            ORDER BY LLC_BI__Amount__c DESC
         ];
     }
 

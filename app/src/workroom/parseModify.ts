@@ -31,7 +31,11 @@ export type ParsedValue =
   | { kind: "percent"; rate: number; text: string }
   | { kind: "months"; months: number; text: string }
   | { kind: "date"; iso: string; text: string }
-  | { kind: "text"; text: string };
+  | { kind: "text"; text: string }
+  /** A NET-NEW COVENANT, fully resolved: the exact org catalog type name, the
+   *  threshold, and the operator symbol the org's picklists express. Only a
+   *  value this complete files; anything looser stays a question or a handoff. */
+  | { kind: "covenant"; typeName: string; threshold: number; operator: "<" | "<=" | "=" | ">=" | ">"; text: string };
 
 /** One amendment the banker asked for, resolved against the catalog and the
  *  package. `value` is null where the field takes no scalar (a party add, a
@@ -405,6 +409,70 @@ function scrubIdentity(text: string, facilities: Array<Facility | null>, relatio
   return out;
 }
 
+/* ----------------------------------------------------- net-new covenant read
+
+   THE TYPE MAP IS DELIBERATELY PARTIAL. The org's catalog carries 60 covenant
+   types, several with DUPLICATE names ("Minimum Working Capital" twice,
+   "Minimum Times Interest Earned" twice, two distinct DSCR-with-distributions
+   rows); the server refuses an ambiguous name and demands an id. So the room
+   maps only banker vocabulary that lands on a UNIQUELY-NAMED catalog type, and
+   everything else stays a manifest handoff — named, never guessed. */
+
+const COVENANT_TYPE_MAP: Array<{ match: RegExp; typeName: string; defaultOp: "<=" | ">=" }> = [
+  { match: /\bleverage\b/, typeName: "Leverage", defaultOp: "<=" },
+  { match: /\bliquidity\b/, typeName: "Minimum Liquidity", defaultOp: ">=" },
+  { match: /\b(dscr|debt service coverage)\b/, typeName: "Debt Service Coverage of Borrower", defaultOp: ">=" },
+  { match: /\bdebt.to.worth\b/, typeName: "Maximum Debt to Worth", defaultOp: "<=" },
+  { match: /\bcurrent ratio\b/, typeName: "Minimum Current Ratio", defaultOp: ">=" },
+  { match: /\bnet worth\b/, typeName: "Net Worth", defaultOp: ">=" },
+  { match: /\bebitda\b/, typeName: "EBITDA", defaultOp: ">=" },
+  { match: /\bdebt.to.equity\b/, typeName: "Debt to Equity", defaultOp: "<=" },
+  { match: /\bnet profit\b/, typeName: "Net Profit", defaultOp: ">=" },
+];
+
+/**
+ * Reads a net-new covenant out of the line: catalog type, threshold, operator.
+ * Returns null when the type is not one the map can settle (the caller keeps
+ * the honest handoff), and a QUESTION when the type is known but the threshold
+ * is not — the threshold IS the covenant, and the room never picks one.
+ */
+function readCovenant(lower: string): { value: ParsedValue } | { question: string } | null {
+  const mapped = COVENANT_TYPE_MAP.find((m) => m.match.test(lower));
+  if (!mapped) return null;
+
+  // "maximum 3.5x" wording beats the type's own default; the default only
+  // settles a line that states the figure bare.
+  const op: "<" | "<=" | "=" | ">=" | ">" = /\b(max|maximum|no more than|not exceed|not to exceed|under|below|cap|at most)\b/.test(lower)
+    ? "<="
+    : /\b(min|minimum|at least|above|over|floor|no less than)\b/.test(lower)
+      ? ">="
+      : mapped.defaultOp;
+
+  // A ratio covenant reads "3.5x" or "1.25x"; a dollar covenant (liquidity, net
+  // worth, EBITDA) reads money. A bare number is accepted only when an operator
+  // word anchors it — "max 3.5" is a threshold, a lone "3.5" is not.
+  const ratio = /(\d+(?:\.\d+)?)\s*x\b/.exec(lower);
+  const money = moneyTokens(lower).at(-1);
+  const anchored = /(?:max(?:imum)?|min(?:imum)?|at least|at most|under|below|above|over|of|to)\s+(\d+(?:\.\d+)?)(?:\s|$|[.,;])/.exec(lower);
+  const threshold = ratio ? Number(ratio[1]) : money ? money.value : anchored ? Number(anchored[1]) : null;
+  if (threshold === null) {
+    return {
+      question:
+        `What threshold should the ${mapped.typeName} covenant test? The threshold IS the covenant — say it like "maximum 3.5x" or "at least $5,000,000".`,
+    };
+  }
+
+  return {
+    value: {
+      kind: "covenant",
+      typeName: mapped.typeName,
+      threshold,
+      operator: op,
+      text: `${mapped.typeName} ${op} ${ratio ? ratio[1] + "x" : money ? money.text : String(threshold)}`,
+    },
+  };
+}
+
 /** Read the value for ONE catalog field out of the line. */
 function readValue(
   field: CatalogField,
@@ -473,6 +541,15 @@ function readValue(
     const pcts = percentTokens(lower);
     if (pcts.length) return { value: { kind: "percent", rate: pcts.at(-1)!.value, text: pcts.at(-1)!.text } };
     return { value: null };
+  }
+
+  // A net-new covenant files (2026-08-30), so its read is exact or it is a
+  // question: the type must map to the org's own catalog and the threshold must
+  // be stated. A covenant the map does not know falls through to the manifest
+  // handoff below — named, never guessed.
+  if (field.id === "covenant.add") {
+    const cov = readCovenant(lower);
+    if (cov) return cov;
   }
 
   // Everything else is spoken about rather than filed, so a scalar is optional:
