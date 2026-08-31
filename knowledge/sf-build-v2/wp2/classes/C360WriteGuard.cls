@@ -53,8 +53,10 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_PRICING_STREAM = 'LLC_BI__Pricing_Stream__c';
 
     /** The junction graph OP_CARRY may replicate, and nothing else. */
+    // Pricing streams are DELIBERATELY absent: nCino's engine carries them itself on every
+    // credit action (observed live 2026-08-31) and a doorway here produced duplicates.
     private static final Set<String> CARRY_OBJECTS = new Set<String>{
-        OBJ_LOAN_COVENANT, OBJ_PLEDGE, OBJ_PLEDGE_AGGREGATE, OBJ_INVOLVEMENT, OBJ_FEE, OBJ_PRICING_STREAM
+        OBJ_LOAN_COVENANT, OBJ_PLEDGE, OBJ_PLEDGE_AGGREGATE, OBJ_INVOLVEMENT, OBJ_FEE
     };
 
     /**

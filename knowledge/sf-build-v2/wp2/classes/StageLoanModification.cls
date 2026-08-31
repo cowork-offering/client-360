@@ -368,8 +368,8 @@ global with sharing class StageLoanModification {
                 ' covenant junction' + (covenantJunctionCount == 1 ? '' : 's') + ', ' + pledgeCount +
                 ' collateral pledge' + (pledgeCount == 1 ? '' : 's') + ', ' + involvementCount +
                 ' borrowing involvement' + (involvementCount == 1 ? '' : 's') + ', ' + feeCount +
-                ' fee' + (feeCount == 1 ? '' : 's') + ', ' + streamCount +
-                ' pricing stream' + (streamCount == 1 ? '' : 's'))
+                ' fee' + (feeCount == 1 ? '' : 's') + '; ' + streamCount +
+                ' pricing stream' + (streamCount == 1 ? '' : 's') + ' ride nCino\'s own engine carry')
                 .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'replicas retargeted at the clones, verified by count' })
                 .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
         );

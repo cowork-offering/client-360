@@ -497,12 +497,11 @@ private class StageExecuteLoanModificationTest {
         System.assertEquals(1, feeOnClone.size(), 'The fee carries onto the clone: a direct child, no junction (founder correction 08-31)');
         System.assertEquals(25000, feeOnClone[0].LLC_BI__Amount__c);
 
-        List<LLC_BI__Pricing_Stream__c> streamOnClone = [
-            SELECT LLC_BI__Context_Id__c, LLC_BI__Is_Rate_Stream__c FROM LLC_BI__Pricing_Stream__c WHERE LLC_BI__Loan__c = :cloneId
-        ];
-        System.assertEquals(1, streamOnClone.size(), 'The pricing stream header carries too');
-        System.assertEquals(String.valueOf(cloneId), streamOnClone[0].LLC_BI__Context_Id__c,
-            'With Context_Id RE-POINTED at the clone: the recon\'s text-id trap, held as a permanent assertion');
+        // Pricing streams are the ENGINE's own carry (observed live 2026-08-31: our copy
+        // duplicated the engine's), so this suite asserts only that OUR code writes none —
+        // the stub engine copies nothing, and neither may we.
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Pricing_Stream__c WHERE LLC_BI__Loan__c = :cloneId],
+            'The tool itself writes NO stream replica: that is the engine\'s job, and doubling it was the bug');
         System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :before.Id], 'The parent keeps its fee');
         System.assertEquals(String.valueOf(before.Id), [SELECT LLC_BI__Context_Id__c FROM LLC_BI__Pricing_Stream__c WHERE LLC_BI__Loan__c = :before.Id LIMIT 1].LLC_BI__Context_Id__c,
             'And its own stream still points at itself');

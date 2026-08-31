@@ -1559,7 +1559,7 @@ global with sharing class ExecuteLoanModification {
         List<LLC_BI__Loan_Collateral2__c> pledgeSources = new List<LLC_BI__Loan_Collateral2__c>();
         List<LLC_BI__Legal_Entities__c> invCopies = new List<LLC_BI__Legal_Entities__c>();
         List<LLC_BI__Fee__c> feeCopies = new List<LLC_BI__Fee__c>();
-        List<LLC_BI__Pricing_Stream__c> streamCopies = new List<LLC_BI__Pricing_Stream__c>();
+        Integer streamSourceCount = 0;
         Map<Id, LLC_BI__Loan_Collateral_Aggregate__c> aggByClone = new Map<Id, LLC_BI__Loan_Collateral_Aggregate__c>();
 
         for (LLC_BI__Loan__c src : sources) {
@@ -1616,26 +1616,11 @@ global with sharing class ExecuteLoanModification {
                     LLC_BI__Payout_Frequency__c = f.LLC_BI__Payout_Frequency__c
                 ));
             }
-            // Pricing streams: header replicas with TWO re-points (the recon's trap list): the
-            // Loan lookup AND Context_Id, a plain TEXT field holding the loan id that a naive
-            // copy would carry through pointing the clone's stream at the original loan.
-            for (LLC_BI__Pricing_Stream__c ps : src.LLC_BI__Pricing_Streams__r) {
-                streamCopies.add(new LLC_BI__Pricing_Stream__c(
-                    Name = ps.Name,
-                    LLC_BI__Loan__c = cloneId,
-                    LLC_BI__Context_Id__c = String.valueOf(cloneId),
-                    LLC_BI__Period_Type__c = ps.LLC_BI__Period_Type__c,
-                    LLC_BI__Term_Unit__c = ps.LLC_BI__Term_Unit__c,
-                    LLC_BI__Term_Length__c = ps.LLC_BI__Term_Length__c,
-                    LLC_BI__Version__c = ps.LLC_BI__Version__c,
-                    LLC_BI__Sequence__c = ps.LLC_BI__Sequence__c,
-                    LLC_BI__Effective_Date__c = ps.LLC_BI__Effective_Date__c,
-                    LLC_BI__End_Date__c = ps.LLC_BI__End_Date__c,
-                    LLC_BI__Is_Payment_Stream__c = ps.LLC_BI__Is_Payment_Stream__c,
-                    LLC_BI__Is_Rate_Stream__c = ps.LLC_BI__Is_Rate_Stream__c,
-                    LLC_BI__Is_Template__c = ps.LLC_BI__Is_Template__c
-                ));
-            }
+            // Pricing streams are the ONE family nCino's engine carries ITSELF (observed live
+            // 2026-08-31: the engine's replicas landed ten seconds before ours and re-point
+            // Context_Id correctly — our copy was a duplicate and is deliberately gone). The
+            // count is still verified below; the engine owns the write.
+            streamSourceCount += src.LLC_BI__Pricing_Streams__r.size();
         }
 
         if (!covCopies.isEmpty()) {
@@ -1704,12 +1689,6 @@ global with sharing class ExecuteLoanModification {
                 new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Fee_Type__c' => null });
             insert as user feeCopies;
         }
-        if (!streamCopies.isEmpty()) {
-            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRICING_STREAM, C360WriteGuard.OP_CARRY,
-                new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Context_Id__c' => null });
-            insert as user streamCopies;
-        }
-
         // The proof is the re-read, never the insert result — ONE query, five subquery counts.
         Set<Id> cloneIds = new Set<Id>(cloneByParent.values());
         Integer covBack = 0;
@@ -1733,13 +1712,13 @@ global with sharing class ExecuteLoanModification {
             psBack += c.LLC_BI__Pricing_Streams__r.size();
         }
         Boolean ok = covBack == covCopies.size() && plBack == pledgeCopies.size() && invBack == invCopies.size()
-            && feeBack == feeCopies.size() && psBack == streamCopies.size();
+            && feeBack == feeCopies.size();
         String detail = 'The junction graph was carried onto the new version and re-read: ' +
             covBack + ' of ' + covCopies.size() + ' covenant junctions, ' +
             plBack + ' of ' + pledgeCopies.size() + ' collateral pledges (on ' + aggByClone.size() + ' fresh aggregates), ' +
             invBack + ' of ' + invCopies.size() + ' borrowing involvements, ' +
-            feeBack + ' of ' + feeCopies.size() + ' fees, ' +
-            psBack + ' of ' + streamCopies.size() + ' pricing streams (context re-pointed).';
+            feeBack + ' of ' + feeCopies.size() + ' fees. Pricing streams are the engine\'s own carry: ' +
+            psBack + ' of ' + streamSourceCount + ' observed on the clones.';
         return (ok ? 'CARRIED ' : '') + detail;
     }
 
