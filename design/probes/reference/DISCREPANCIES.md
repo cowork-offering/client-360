@@ -111,3 +111,81 @@ chat: FAB opacity 0 / scale .6, panel and pill both at right 44 / bottom 52,
 view, FAB blur 10, Escape restores · live filter + "Nothing matches." · arrows
 traverse visible rows, Enter fires · 12 weave nodes, all 12 drifting, rows clickable
 through · glass census 0 violations.
+
+---
+
+## Surface 5 — the workroom ritual (2026-08-31)
+
+Twenty `workroom.*` leaves differ from the frozen dummy after the mint. Every
+one is accounted for below; none is a fidelity miss. Run: `node probe.mjs
+--target port --serve <built cockpit> --stub-connector --runs 3`.
+
+**Written intent, not the dummy's render (INTENT-OVERRIDES.md #1).** These three
+are expected to differ, in exactly this way — the dummy's wash is dead CSS that
+loses the cascade to `.view.show .anchor`:
+
+| leaf | dummy | port |
+|---|---|---|
+| `closeAndWash.washAnimationName` | `ancup` | `ancwash` |
+| `closeAndWash.washAnimationIsWashKeyframe` | false | **true** |
+| `closeAndWash.washDurationMs` | 450 | **1700** |
+
+**The book is the app's book.** The port serves the injected C360 bundle, so
+Hartwell has six members and $46.0MM committed where the dummy authors three and
+$46.2M; `fmtMoney` also strips a trailing `.00`, and the port's `#ancExpV` holds
+the figure while its unit lives in the sibling `.u` span:
+`ritual.facilityCount` (3 → 6), `ritual.preExposureAnchorText`,
+`ritual.preExposureTotalText`, `ritual.deltaCardText` (WARN),
+`execute.postExposureAnchorText`, `execute.postExposureTotalText`,
+`closeAndWash.valueBefore/AfterNavigation`.
+
+**React unmounts what the dummy hides.** The dummy keeps every `.view` in the
+DOM and toggles `.show`, so `#wlHartAmt` is measurable from the client view. The
+port's landing is unmounted while a client is open, so the worklist amount is
+not a figure that can be watched rolling — it is correct on return, which
+`closeAndWash.executedValueSurvivesNavigation` (**true**) proves:
+`ritual.preWorklistAmountText` (null), `execute.postWorklistAmountText` (null),
+`execute.writeBackChangedAllThree` (false), `numerals.rollingFigureCount` (3 →
+2), `execute.writeBackOdoColumnCount` (6 → 4, two mounted figures rather than
+three). The odometer RECIPE matches exactly: 600ms,
+`cubic-bezier(0.65, 0, 0.35, 1)`, 45ms column stagger, 1.3px mid-roll blur.
+
+**The engine's own state.** The dummy's suggestion chips are authored markup; the
+port's single pill is whatever `engine.suggest()` returns, and after a member
+pick this engine returns none: `ritual.suggestChipFound` (false),
+`suggestChipVisibleAfterFacilitySelect`, `suggestChipProducesDeltaCard`.
+
+**One exchange, not two.** `ritual.stepCount` (2 → 1). The dummy's briefing is a
+second step because its package pick is a click; a single-package book has
+nothing to click, so the greeting, the lookup and the brief are ONE exchange —
+which is rule 31 as written (a step per SEND).
+
+**Sampling window.** `execute.haloBoxSizeStablePx` (3.53 → 58.8). The halo is
+`inset: -4px` on a card that is still CONSTRUCTING through the probe's 900ms
+sample, so the box grows with the rows. It does not ROTATE, which is what trap 3
+gates: `haloBoxTransformIsStatic` **true**, `haloBoxRotationDeg` **0**,
+`haloAngleAnimates` **true** advancing 36deg/900ms on a 9s linear cycle.
+
+### The stand-in connector
+
+`lib/stub-connector.js`, behind `--stub-connector`, and off by default. The room
+refuses to invent a plan — with no connector it says so in a glass notice and
+burns no token, which is the channel-none doctrine and is asserted in the unit
+suite. But the execute-side choreography only exists on the far side of a
+successful write, and it is four acceptance numbers. The stub lives OUTSIDE the
+app and never ships; the artifact's own build fails closed on simulation
+markers.
+
+### Probe changes, and why the dummy baseline did not move
+
+`probes/workroom.mjs` gained three steps, each a NO-OP on the frozen dummy:
+select the exposure pane before summoning the room (the dummy's exposure tab is
+already active); settle any card the suggestion chip left open before typing (the
+dummy's chip routes to `clarify` and leaves nothing open — `suggestChipProducesDeltaCard`
+is `false` in the locked baseline); and settle the candidates a confirm leaves
+behind (the dummy's delta card is single and trips no check). `lib/inject.js`
+gained `P.type()`, which drives an input through the prototype's own value setter
+— identical to the assignment it replaces on a vanilla input, and the only way a
+CONTROLLED React input sees the line at all. Re-running the dummy after these
+edits reproduces `reference/dummy-baseline.json` apart from two timing-jitter
+leaves (`haloBoxSizeStablePx`, `haloAngleAdvancedDeg`).

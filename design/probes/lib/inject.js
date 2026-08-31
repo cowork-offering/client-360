@@ -7,6 +7,22 @@
 
   function el(x) { return typeof x === "string" ? document.querySelector(x) : x; }
 
+  /* SAY A LINE THE WAY A KEYBOARD DOES.
+     A plain `input.value = t` is invisible to React: its value tracker sees the
+     property it set itself and skips the change event, so a CONTROLLED input
+     keeps whatever it had and the send button posts an empty line. Going
+     through the prototype's own setter defeats the tracker. On a vanilla input
+     (the dummy) this is exactly equivalent to the assignment it replaces. */
+  function type(x, text) {
+    var e = el(x);
+    if (!e) return null;
+    var proto = e instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    var setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+    setter.call(e, text);
+    e.dispatchEvent(new Event("input", { bubbles: true }));
+    return e;
+  }
+
   /* "0.52s" | "520ms" | "0s" -> 520 | 0 (ms) */
   function ms(v) {
     if (v == null) return null;
@@ -127,7 +143,7 @@
   }
 
   window.__P = {
-    el: el, ms: ms, msList: msList, px: px, r2: r2, rect: rect, matrix: matrix,
+    el: el, type: type, ms: ms, msList: msList, px: px, r2: r2, rect: rect, matrix: matrix,
     sample: sample, sleep: sleep, until: until, census: census, keyframes: keyframes,
     classOf: classOf,
     all: function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); }

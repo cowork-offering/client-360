@@ -35,6 +35,12 @@ function args(argv) {
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--headed") o.headed = true;
+    // A STAND-IN CONNECTOR, for the port only. The room's execute-side
+    // choreography lives on the far side of a successful write, and the app
+    // itself will never invent one — so the harness supplies an org-shaped
+    // window.claude.mcp from OUTSIDE the app. Off by default; the dummy run
+    // never sees it.
+    else if (a === "--stub-connector") o.stubConnector = true;
     else if (a.startsWith("--")) o[a.slice(2)] = argv[++i];
   }
   o.runs = Number(o.runs) || 1;
@@ -165,6 +171,7 @@ async function main() {
         colorScheme: "light"
       });
       await ctx.addInitScript({ path: path.join(HERE, "lib", "inject.js") });
+      if (o.stubConnector) await ctx.addInitScript({ path: path.join(HERE, "lib", "stub-connector.js") });
       const page = await ctx.newPage();
       const errors = [];
       page.on("pageerror", (e) => errors.push(String(e.message || e)));

@@ -24,6 +24,13 @@ export async function openRoom(page, T) {
     });
     obs.observe(document.body, { childList: true });
 
+    /* THE EXPOSURE PANE IS THE ONE THE WRITE-BACK MOVES, so it is the one on
+       screen when the room opens — a figure that is not mounted cannot be
+       watched rolling. This is a no-op on the frozen dummy, whose exposure tab
+       is already the active one. */
+    var expTab = P.el(S.navTabExposure);
+    if (expTab) { expTab.click(); await P.sleep(500); }
+
     P.el(S.fab).click();
     await P.sleep(600);
     const btn = P.el(S.arcModify);
@@ -109,11 +116,30 @@ export async function ritual(page, T) {
       out.suggestChipProducesDeltaCard = !!P.el(S.workroomDelta);
     }
 
-    // 3b. say what changes, in the banker's own words
+    // 3b. say what changes, in the banker's own words.
+    //
+    // SETTLE ANYTHING THE CHIP LEFT OPEN FIRST. A room that takes ONE decision
+    // at a time will refuse a typed line while a proposal is still on the
+    // table, and refusing is the correct behaviour — so the probe makes the
+    // decision the banker would make rather than measuring the refusal. This
+    // is a NO-OP on the frozen dummy, whose suggest chip routes to the clarify
+    // branch and therefore leaves nothing open (see 3a).
+    const pending = P.el(S.workroomDelta);
+    if (pending) {
+      const settle = Array.prototype.slice
+        .call(document.querySelectorAll("button"))
+        .find((b) => b.textContent.trim() === TX.workroomConfirm);
+      if (settle) { settle.click(); await P.sleep(400); }
+      Array.prototype.slice
+        .call(document.querySelectorAll("button"))
+        .filter((b) => b.textContent.trim() === "Acknowledge")
+        .forEach((b) => b.click());
+      await P.sleep(300);
+    }
+
     const input = P.el(S.workroomInput);
     out.composeInputEnabledAfterFacilitySelect = input ? !input.disabled : null;
-    input.value = TX.workroomIncreaseLine;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    P.type(input, TX.workroomIncreaseLine);
     P.el(S.workroomSend).click();
 
     // 4. the delta card lands with Confirm / Discard
@@ -123,7 +149,24 @@ export async function ritual(page, T) {
     const buttons = Array.prototype.slice.call(delta.querySelectorAll("button"));
     const confirm = buttons.find((b) => b.textContent.trim() === TX.workroomConfirm) || buttons[0];
     confirm.click();
-    await P.sleep(200);
+    await P.sleep(400);
+
+    // ONE DECISION AT A TIME, HONOURED. A room that parses a line into more
+    // than one candidate leaves the ones the banker did not mean OPEN, and it
+    // will not offer the plan while any of them is. So the probe settles the
+    // rest the way a banker would — keep the first, drop the others, take the
+    // checks — before asking for the review chip. NO-OP on the frozen dummy,
+    // whose delta card is single and trips no check.
+    var stray = Array.prototype.slice
+      .call(document.querySelectorAll("button"))
+      .filter(function (b) { return b.textContent.trim() === "Discard"; });
+    stray.forEach(function (b) { b.click(); });
+    await P.sleep(300);
+    Array.prototype.slice
+      .call(document.querySelectorAll("button"))
+      .filter(function (b) { return b.textContent.trim() === "Acknowledge"; })
+      .forEach(function (b) { b.click(); });
+    await P.sleep(300);
 
     // the proposed value rolls in the right lane, with a "was" note
     out.detailLaneOdoColumnCount = P.all(S.workroomDetail + " " + S.odoColumn).length;

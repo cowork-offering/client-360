@@ -89,7 +89,13 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
     );
   }
 
-  const committed = exp.totalCommitted ?? 0;
+  /* WRITE-BACK THROUGH THE GLASS (rule 62), applied ONCE at the source. Every
+     figure on this pane is derived from `committed` — the strip, the drawn
+     percentage, the coverage ratio and the table total — so a delta applied to
+     the total alone would leave the pane disagreeing with itself, and with what
+     the room said out loud while staging it. If the commitment moved, the
+     utilisation and the coverage moved with it. */
+  const committed = (exp.totalCommitted ?? 0) + writeBackMM * 1e6;
   const drawn = exp.totalOutstanding ?? 0;
   const avail = exp.totalAvailable ?? 0;
   const drawnPct = committed > 0 ? Math.round((drawn / committed) * 100) : 0;
@@ -224,7 +230,7 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
                   committed figure forward (rule 62), and simply reads the org's
                   own number the rest of the time. */}
               <td className="r num">
-                <Odo id="tblExpTotal" value={fmtMoney(committed + writeBackMM * 1e6)} />
+                <Odo id="tblExpTotal" value={fmtMoney(committed)} />
               </td>
               <td className="r">{fmtMoney(drawn)}</td>
               <td />

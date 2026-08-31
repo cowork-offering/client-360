@@ -263,9 +263,12 @@
   transform: translateY(-1em);
 }
 .eg-odo.eg-odo-go {
-  animation: eg-odo-blur var(--dur-odo) var(--ease-out);
+  animation: odoblur var(--dur-odo) var(--ease-out);
 }
-@keyframes eg-odo-blur {
+/* The acceptance probe reads this keyframe BY NAME (HANDOVER "Odometer"), so it
+   carries the dummy's own — the same convention viewin / panein / navtabin
+   already follow. */
+@keyframes odoblur {
   0%,
   100% {
     filter: blur(0);

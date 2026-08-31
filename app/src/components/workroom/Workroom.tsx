@@ -153,9 +153,9 @@ function isLive(item: ThreadItem): boolean {
 /** THE AGENT SPEAKS, NEVER PASTES (rule 65). Each word condenses out of the
  *  glass 26ms after the one before it. Whitespace stays as plain text nodes, so
  *  `textContent` is byte-identical to the sentence the engine handed over. */
-function Words({ text }: { text: string }) {
+function Words({ text, offset = 0 }: { text: string; offset?: number }) {
   const parts = useMemo(() => text.split(/(\s+)/).filter((p) => p !== ""), [text]);
-  let n = -1;
+  let n = offset - 1;
   return (
     <>
       {parts.map((part, i) => {
@@ -476,11 +476,14 @@ export function Workroom({
     ];
     setItems(opening);
     const land = () => {
+      // THE LOOKUP ALWAYS COMES BACK WITH A CARD. A relationship carrying
+      // several packages gets the choice; a book with one gets that one,
+      // rendered SELECTED — the room says which package it is standing in
+      // rather than silently assuming the only one it found.
       setItems((prev) => [
         ...prev.filter((i) => i.kind !== "lookup"),
-        choosing
-          ? { kind: "packages" as const, id: nextId("pkgs"), step: 0 }
-          : { kind: "brief" as const, id: nextId("brief"), step: 0 },
+        { kind: "packages" as const, id: nextId("pkgs"), step: 0 },
+        ...(choosing ? [] : [{ kind: "brief" as const, id: nextId("brief"), step: 0 }]),
       ]);
       // A room still waiting for a package to be chosen has nothing to take an
       // instruction about, so the composer stays asleep through that beat.
@@ -949,7 +952,7 @@ export function Workroom({
       // did.
       if (reachedTheOrg(e)) {
         setSealed(true);
-        agent("The filing may have completed despite the error — do not approve again; check the staging record.");
+        agent("The filing may have completed despite the error. Do not approve again; check the staging record.");
       }
     } finally {
       setFiling(false);
@@ -1028,7 +1031,6 @@ export function Workroom({
      gesture. An open gate keeps its step on screen until it is settled. */
   const shows = (g: { step: number; items: ThreadItem[] }) => g.step === liveStep || g.items.some(isLive);
   const hidden = grouped.filter((g) => !shows(g));
-  const shownGroups = histOpen ? grouped : grouped.filter(shows);
   const railEntries = entries.slice(railFolded);
 
   /* The lane never grows past the room: past the visible cap the OLDEST fold
@@ -1037,6 +1039,13 @@ export function Workroom({
     setRailFolded(Math.max(0, entries.length - RAIL_VISIBLE));
   }, [entries.length]);
 
+  /** The card a single-package book shows: the room's own anchor, stated. */
+  const anchoredPackage = {
+    id: context.productPackageId ?? "anchored",
+    label: brief.packageName,
+    figure: `${brief.baselineMembers} members · $${brief.baselineCommittedMM.toFixed(1)}MM committed · ${brief.covenantFigure} covenants`,
+  };
+
   const openingItem = (
     <div className="wk-msg wk-agent" data-who="Agent" key="opening">
       <div className="wk-bub">
@@ -1044,12 +1053,15 @@ export function Workroom({
         {/* THE ROOM OPENS BY NAME. The greeting is a real read or it is absent;
             it is never a label, and it is never a record id. */}
         <div className="wk-headline">
+          {/* The greeting is its own span so the room can be read as opening BY
+              NAME, but the stagger runs straight through it: two <Words> that
+              both start at zero would speak the position over the greeting. */}
           {brief.greeting && (
             <span className="wk-greet">
               <Words text={brief.greeting} />{" "}
             </span>
           )}
-          <Words text={brief.position} />
+          <Words text={brief.position} offset={brief.greeting ? brief.greeting.trim().split(/\s+/).length : 0} />
         </div>
         <div className="wk-posfoot">
           <button
@@ -1095,25 +1107,6 @@ export function Workroom({
               </button>
             ))}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  /* THE BRIEF (rule 30). What the room found, in the sentence the read
-     supports: the package, what it carries, and the members under it as uniform
-     rows. The FIGURES it quotes are the read at the moment of briefing; the
-     live pro-forma state lives in the lane, where a landed change moves it. */
-  const briefItem = (
-    <div className="wk-msg wk-agent" data-who="Agent" key="brief">
-      <div className="wk-bub">
-        <div className="wk-pkgname">
-          <b>{brief.packageName}</b>
-        </div>
-        <div className="wk-brieffig tnum">
-          <Words
-            text={`${brief.baselineMembers} members · $${brief.baselineCommittedMM.toFixed(1)}MM committed · ${brief.covenantFigure} covenants.`}
-          />
         </div>
       </div>
     </div>
@@ -1204,8 +1197,15 @@ export function Workroom({
                 className={`wk-thread ${hidden.length ? "wk-hashist" : ""} ${histOpen ? "wk-masked" : ""}`}
                 ref={threadRef}
               >
-                {shownGroups.map((group) => (
-                  <div className="wk-step" key={`step-${group.step}-${group.items[0].id}`}>
+                {/* THE PAST COLLAPSES, IT DOES NOT UNMOUNT. A step behind the
+                    live exchange keeps its place in the thread and is hidden,
+                    so opening the history is a class change rather than a
+                    re-render of everything the banker already read. */}
+                {grouped.map((group) => (
+                  <div
+                    className={`wk-step ${shows(group) || histOpen ? "" : "wk-gone"}`}
+                    key={`step-${group.step}-${group.items[0].id}`}
+                  >
                     {group.items.map((item) => (
                       <ThreadBlock
                         key={item.id}
@@ -1213,9 +1213,9 @@ export function Workroom({
                         entries={entries}
                         filedWord={vocabulary.filedWord}
                         opening={openingItem}
-                        briefBlock={briefItem}
                         members={membersItem}
                         packages={brief.packageChoices}
+                        anchored={anchoredPackage}
                         lit={lit}
                         onAnchor={onAnchor}
                         onOpenPeek={openPeek}
@@ -1273,7 +1273,15 @@ export function Workroom({
                   open card is a second decision on the table. */}
               <div className="wk-sugg">
                 {awake && suggestion && openGates === 0 && !thinking && phase === "work" && (
-                  <button type="button" className="wk-pill" onClick={() => void say(suggestion.say, suggestion.label)}>
+                  <button
+                    type="button"
+                    className="wk-pill"
+                    /* The pill a banker READS and the instruction the parser
+                       HEARS are not the same sentence; the second one rides
+                       here, where it is inspectable rather than implied. */
+                    data-say={suggestion.say}
+                    onClick={() => void say(suggestion.say, suggestion.label)}
+                  >
                     {suggestion.label}
                   </button>
                 )}
@@ -1547,23 +1555,15 @@ function FlowCard({
           </>
         )}
       </div>
-      <div className="wk-tok tnum">
-        {flow.staging
-          ? `decision token · single use · ${flow.staging.decisionToken?.slice(0, 4)}…${flow.staging.planHash.slice(-4)}`
-          : "staging the plan…"}
-      </div>
-      <div className="wk-acts">
-        <button type="button" className="eg-btn-quiet" onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="wk-approve eg-btn-ink"
-          disabled={!flow.staging?.decisionToken || filing || sealed}
-          onClick={onExecute}
-        >
-          {filing ? "Working…" : sealed ? "Approval closed" : approveLabel}
-        </button>
+      {/* The token and what governs it read together, ABOVE the controls. The
+          action row holds actions only, and the ink Execute is the last thing
+          in the card because it is the last thing that happens. */}
+      <div className="wk-tokrow">
+        <span className="wk-tok tnum">
+          {flow.staging
+            ? `decision token · single use · ${flow.staging.decisionToken?.slice(0, 4)}…${flow.staging.planHash.slice(-4)}`
+            : "staging the plan…"}
+        </span>
         <button
           type="button"
           className="wk-dt"
@@ -1582,6 +1582,19 @@ function FlowCard({
           Governance
         </button>
       </div>
+      <div className="wk-acts">
+        <button type="button" className="eg-btn-quiet" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="wk-approve eg-btn-ink"
+          disabled={!flow.staging?.decisionToken || filing || sealed}
+          onClick={onExecute}
+        >
+          {filing ? "Working…" : sealed ? "Approval closed" : approveLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1593,9 +1606,9 @@ function ThreadBlock({
   entries,
   filedWord,
   opening,
-  briefBlock,
   members,
   packages,
+  anchored,
   lit,
   onAnchor,
   onOpenPeek,
@@ -1609,9 +1622,10 @@ function ThreadBlock({
   entries: WorkroomDelta[];
   filedWord: string;
   opening: ReactNode;
-  briefBlock: ReactNode;
   members: ReactNode;
   packages: PackageChoice[];
+  /** The package the room is already standing in, for the single-package card. */
+  anchored: { id: string; label: string; figure: string };
   lit: boolean;
   onAnchor?: (choice: PackageChoice) => void;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
@@ -1623,14 +1637,10 @@ function ThreadBlock({
 }) {
   if (item.kind === "opening") return <>{opening}</>;
 
-  if (item.kind === "brief") {
-    return (
-      <>
-        {briefBlock}
-        {members}
-      </>
-    );
-  }
+  // THE BRIEF IS THE MEMBERS (rule 30 + rule 36). What the package carries is
+  // stated once, on the card above; saying it again in a bubble would spend
+  // law 3's budget restating the line the banker just read.
+  if (item.kind === "brief") return <>{members}</>;
 
   if (item.kind === "lookup") {
     return (
@@ -1645,22 +1655,28 @@ function ThreadBlock({
   }
 
   if (item.kind === "packages") {
+    // A book with ONE package still shows it, selected: which package the room
+    // is anchored on is part of what the room read, not an assumption.
+    const cards: PackageChoice[] = packages.length
+      ? packages
+      : [{ id: anchored.id, label: anchored.label, figure: anchored.figure, eligible: true }];
+    const choosing = packages.length > 0;
     return (
       <div className="wk-pkgs">
-        {packages.map((choice) => (
+        {cards.map((choice) => (
           <button
             type="button"
             key={choice.id}
-            className="wk-pkg"
-            disabled={!choice.eligible}
+            className={`wk-pkg ${choosing ? "" : "wk-sel"}`}
+            disabled={!choice.eligible || !choosing}
             title={choice.eligible ? choice.figure : choice.reason}
-            onClick={() => onAnchor?.(choice)}
+            onClick={() => choosing && onAnchor?.(choice)}
           >
             <span>
               <b>{choice.label}</b>
               <span>{choice.eligible ? choice.figure : choice.reason}</span>
             </span>
-            {choice.eligible && (
+            {choice.eligible && choosing && (
               <span className="wk-go" aria-hidden="true">
                 →
               </span>
@@ -1913,7 +1929,7 @@ function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
       ))}
       <div className="rc-line" style={{ animationDelay: `${secondLine}ms` }} />
       <div className="rc-f" style={{ animationDelay: `${foot}ms` }}>
-        <span className="wk-ok" style={{ animationDelay: `${foot + DOSSIER_CHECK_MS}ms` }}>
+        <span className="ok" style={{ animationDelay: `${foot + DOSSIER_CHECK_MS}ms` }}>
           ✓
         </span>
         {dossier.footer}

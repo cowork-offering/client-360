@@ -103,7 +103,8 @@
     "toast": "#toast",
     "lensedBodyClass": "lensed",
     "scrolledBodyClass": "scrolled",
-    "onClientBodyClass": "on-client"
+    "onClientBodyClass": "on-client",
+    "navTabExposure": ".icotabs .itab[data-pane=\"exposure\"]"
   },
   "text": {
     "arcLabelAtRest": "Client actions",

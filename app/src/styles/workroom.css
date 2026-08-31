@@ -232,6 +232,9 @@ body.wk-open #root {
   flex-direction: column;
   gap: 32px;
 }
+.wk-step.wk-gone {
+  display: none;
+}
 
 /* the hint that history lives above */
 .wk-hist {
@@ -339,9 +342,9 @@ body.wk-open #root {
 .wk-w {
   opacity: 0;
   filter: blur(4px);
-  animation: wk-word 380ms var(--ease-out) forwards;
+  animation: wkw 380ms var(--ease-out) forwards;
 }
-@keyframes wk-word {
+@keyframes wkw {
   to {
     opacity: 1;
     filter: none;
@@ -352,8 +355,7 @@ body.wk-open #root {
   font-weight: 600;
   color: var(--ink);
 }
-.wk-headline,
-.wk-pkgname {
+.wk-headline {
   font-size: 13px;
   line-height: 1.55;
 }
@@ -373,11 +375,6 @@ body.wk-open #root {
   gap: 7px;
   flex-wrap: wrap;
   margin-top: 10px;
-}
-.wk-brieffig {
-  margin-top: 5px;
-  font-size: 12.5px;
-  color: var(--ink-muted);
 }
 /* THE PACKAGE'S LIVE FIGURES, at the head of the lane. A landed change moves
    them and says what they WERE. */
@@ -500,8 +497,18 @@ body.wk-open #root {
   color: var(--ink-faint);
 }
 .wk-pkg:disabled {
-  opacity: 0.45;
   cursor: default;
+}
+/* An INELIGIBLE package stays visible and reads as unavailable (rule 30). The
+   one a single-package book is already anchored on is not ineligible — it is
+   simply not a choice, so it keeps its full weight and takes the selected
+   wash. */
+.wk-pkg:disabled:not(.wk-sel) {
+  opacity: 0.45;
+}
+.wk-pkg.wk-sel {
+  border-color: var(--accent-hairline);
+  background: var(--accent-tint);
 }
 
 /* ---------------------------------------------------------- facility rows
@@ -932,8 +939,7 @@ body.wk-open #root {
   flex-wrap: wrap;
   padding: 10px 0 8px;
 }
-.wk-sugg:empty,
-.wk-sugg.wk-asleep {
+.wk-sugg:empty {
   display: none;
 }
 .wk-pill {
@@ -1254,6 +1260,13 @@ body.wk-open #root {
   color: var(--ink-muted);
   margin-bottom: 7px;
 }
+.wk-tokrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
 .wk-tok {
   font-size: 10px;
   color: var(--ink-faint);
@@ -1261,7 +1274,6 @@ body.wk-open #root {
   border-radius: 6px;
   display: inline-block;
   padding: 3px 10px;
-  margin-bottom: 12px;
 }
 .wk-flowcard .wk-acts {
   display: flex;
@@ -1522,7 +1534,7 @@ body.wk-open #root {
     transform: none;
   }
 }
-.wk-rescard .wk-ok {
+.wk-rescard .ok {
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -1535,9 +1547,9 @@ body.wk-open #root {
   font-weight: 700;
   flex: none;
   opacity: 0;
-  animation: wk-okpop 500ms var(--ease-settle) forwards;
+  animation: okpop 500ms var(--ease-settle) forwards;
 }
-@keyframes wk-okpop {
+@keyframes okpop {
   0% {
     opacity: 0;
     transform: scale(0.4);
@@ -1580,12 +1592,12 @@ body.wk-open #root {
   filter: blur(14px);
   opacity: 0;
   transition: opacity 1.4s var(--ease-out);
-  animation: wk-aurarot 9s linear infinite;
+  animation: aurarot 9s linear infinite;
 }
 .wk-lit > .aura {
   opacity: 0.38;
 }
-@keyframes wk-aurarot {
+@keyframes aurarot {
   to {
     --aang: 360deg;
   }
@@ -2092,7 +2104,7 @@ body.wk-open #root {
   .wk-rescard .rc-h,
   .wk-rescard .rc-r,
   .wk-rescard .rc-f,
-  .wk-rescard .wk-ok {
+  .wk-rescard .ok {
     opacity: 1;
     filter: none;
   }
