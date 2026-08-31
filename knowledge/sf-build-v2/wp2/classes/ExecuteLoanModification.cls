@@ -863,17 +863,18 @@ global with sharing class ExecuteLoanModification {
         // - PP" (516 of 518 packages), so both are repaired here and anything else is left exactly
         // as the engine wrote it.
         if (!newPkgRows.isEmpty()) {
-            List<Account> acct = [
-                SELECT Name FROM Account WHERE Id = :before[0].LLC_BI__Account__c WITH USER_MODE LIMIT 1
-            ];
+            // The borrower's name rides the facility read (governor fix 2026-08-31: this
+            // transaction shares its query budget with nCino's engine, so nothing here spends a
+            // query on what a relationship field already carries).
+            String borrowerName = before[0].LLC_BI__Account__r == null ? null : before[0].LLC_BI__Account__r.Name;
             Boolean nameNeedsRepair = newPkgName != null && newPkgName.startsWith('- ')
-                && !acct.isEmpty() && String.isNotBlank(acct[0].Name);
+                && String.isNotBlank(borrowerName);
             Boolean accountNeedsRepair = newPkgRows[0].LLC_BI__Account__c == null;
             if (nameNeedsRepair || accountNeedsRepair) {
                 LLC_BI__Product_Package__c repair = new LLC_BI__Product_Package__c(Id = newPkgId);
                 Map<String, Object> pkgFields = new Map<String, Object>();
                 if (nameNeedsRepair) {
-                    String repaired = acct[0].Name + ' ' + newPkgName;
+                    String repaired = borrowerName + ' ' + newPkgName;
                     if (repaired.length() > 80) {
                         repaired = repaired.substring(0, 80);
                     }
@@ -1526,38 +1527,121 @@ global with sharing class ExecuteLoanModification {
      * @return 'CARRIED <detail>' when every replica read back by count; a plain detail otherwise.
      */
     private static String carryJunctionGraph(List<Id> parents, Map<Id, Id> cloneByParent, Id newPkgId, Set<Id> excludedInvolvementIds) {
+        // ONE read for every source row (2026-08-31 governor fix): the versioning transaction
+        // shares its 100-query budget with nCino's engine, and per-object reads blew it at 101 on
+        // the first live run with fees and streams aboard. Parent subqueries collapse five reads
+        // into one here and five count re-reads into one at the bottom.
+        List<LLC_BI__Loan__c> sources = [
+            SELECT Id,
+                (SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__c FROM LLC_BI__Loan_Covenants__r),
+                (SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Lien_Position__c, LLC_BI__Pledged_Status__c,
+                        LLC_BI__Active__c, LLC_BI__Is_Primary__c, LLC_BI__Amount_Pledged__c,
+                        LLC_BI__Advance_Rate_Override__c, LLC_BI__Override_Reason__c, LLC_BI__Start_Date__c,
+                        LLC_BI__End_Date__c, LLC_BI__Is_Excluded__c, LLC_BI__Is_Leased_Asset__c,
+                        LLC_BI__Abundance_of_Caution__c FROM LLC_BI__Loan_Collateral__r),
+                (SELECT Id, LLC_BI__Loan__c, LLC_BI__Account__c, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c,
+                        LLC_BI__Relationship_Type__c, LLC_BI__Entity_Type__c, LLC_BI__Order__c,
+                        LLC_BI__Contingent_Type__c, LLC_BI__Guarantee_Effective_Date__c,
+                        LLC_BI__Guarantee_End_Date__c, LLC_BI__Guarantee_Limit__c, LLC_BI__Guaranty_Amount__c
+                        FROM LLC_BI__Legal_Entities__r),
+                (SELECT LLC_BI__Loan__c, LLC_BI__Record_Type__c, LLC_BI__Fee_Type__c, LLC_BI__Fee_Type_Description__c,
+                        LLC_BI__Calculation_Type__c, LLC_BI__Basis_Source__c, LLC_BI__Percentage__c, LLC_BI__Amount__c,
+                        LLC_BI__Status__c, LLC_BI__Paid_By__c, LLC_BI__Is_Income__c, LLC_BI__Payout_Frequency__c
+                        FROM LLC_BI__Fees__r),
+                (SELECT Name, LLC_BI__Loan__c, LLC_BI__Period_Type__c, LLC_BI__Term_Unit__c, LLC_BI__Term_Length__c,
+                        LLC_BI__Version__c, LLC_BI__Sequence__c, LLC_BI__Effective_Date__c, LLC_BI__End_Date__c,
+                        LLC_BI__Is_Payment_Stream__c, LLC_BI__Is_Rate_Stream__c, LLC_BI__Is_Template__c
+                        FROM LLC_BI__Pricing_Streams__r)
+            FROM LLC_BI__Loan__c WHERE Id IN :parents WITH USER_MODE
+        ];
+
         List<LLC_BI__Loan_Covenant__c> covCopies = new List<LLC_BI__Loan_Covenant__c>();
-        for (LLC_BI__Loan_Covenant__c j : [
-            SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__c
-            FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :parents WITH USER_MODE
-        ]) {
-            Id cloneId = cloneByParent.get(j.LLC_BI__Loan__c);
+        List<LLC_BI__Loan_Collateral2__c> pledgeSources = new List<LLC_BI__Loan_Collateral2__c>();
+        List<LLC_BI__Legal_Entities__c> invCopies = new List<LLC_BI__Legal_Entities__c>();
+        List<LLC_BI__Fee__c> feeCopies = new List<LLC_BI__Fee__c>();
+        List<LLC_BI__Pricing_Stream__c> streamCopies = new List<LLC_BI__Pricing_Stream__c>();
+        Map<Id, LLC_BI__Loan_Collateral_Aggregate__c> aggByClone = new Map<Id, LLC_BI__Loan_Collateral_Aggregate__c>();
+
+        for (LLC_BI__Loan__c src : sources) {
+            Id cloneId = cloneByParent.get(src.Id);
             if (cloneId == null) {
                 continue;
             }
-            covCopies.add(new LLC_BI__Loan_Covenant__c(LLC_BI__Loan__c = cloneId, LLC_BI__Covenant2__c = j.LLC_BI__Covenant2__c));
+            for (LLC_BI__Loan_Covenant__c j : src.LLC_BI__Loan_Covenants__r) {
+                covCopies.add(new LLC_BI__Loan_Covenant__c(LLC_BI__Loan__c = cloneId, LLC_BI__Covenant2__c = j.LLC_BI__Covenant2__c));
+            }
+            for (LLC_BI__Loan_Collateral2__c pl : src.LLC_BI__Loan_Collateral__r) {
+                pledgeSources.add(pl);
+                if (!aggByClone.containsKey(cloneId)) {
+                    aggByClone.put(cloneId, new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'Collateral Aggregate'));
+                }
+            }
+            for (LLC_BI__Legal_Entities__c e : src.LLC_BI__Legal_Entities__r) {
+                // A staged remove: the row is named in the plan and simply not replicated.
+                if (excludedInvolvementIds.contains(e.Id)) {
+                    continue;
+                }
+                invCopies.add(new LLC_BI__Legal_Entities__c(
+                    LLC_BI__Loan__c = cloneId,
+                    LLC_BI__Product_Package__c = newPkgId,
+                    LLC_BI__Account__c = e.LLC_BI__Account__c,
+                    LLC_BI__Borrower_Type__c = e.LLC_BI__Borrower_Type__c,
+                    LLC_BI__Ownership__c = e.LLC_BI__Ownership__c,
+                    LLC_BI__Relationship_Type__c = e.LLC_BI__Relationship_Type__c,
+                    LLC_BI__Entity_Type__c = e.LLC_BI__Entity_Type__c,
+                    LLC_BI__Order__c = e.LLC_BI__Order__c,
+                    LLC_BI__Contingent_Type__c = e.LLC_BI__Contingent_Type__c,
+                    LLC_BI__Guarantee_Effective_Date__c = e.LLC_BI__Guarantee_Effective_Date__c,
+                    LLC_BI__Guarantee_End_Date__c = e.LLC_BI__Guarantee_End_Date__c,
+                    LLC_BI__Guarantee_Limit__c = e.LLC_BI__Guarantee_Limit__c,
+                    LLC_BI__Guaranty_Amount__c = e.LLC_BI__Guaranty_Amount__c
+                ));
+            }
+            // Fees: a direct child, no junction (founder correction 2026-08-31). For percentage
+            // fees the org recomputes Amount from the clone's own commitment, which is exactly
+            // right on a version whose commitment moved.
+            for (LLC_BI__Fee__c f : src.LLC_BI__Fees__r) {
+                feeCopies.add(new LLC_BI__Fee__c(
+                    LLC_BI__Loan__c = cloneId,
+                    LLC_BI__Record_Type__c = f.LLC_BI__Record_Type__c,
+                    LLC_BI__Fee_Type__c = f.LLC_BI__Fee_Type__c,
+                    LLC_BI__Fee_Type_Description__c = f.LLC_BI__Fee_Type_Description__c,
+                    LLC_BI__Calculation_Type__c = f.LLC_BI__Calculation_Type__c,
+                    LLC_BI__Basis_Source__c = f.LLC_BI__Basis_Source__c,
+                    LLC_BI__Percentage__c = f.LLC_BI__Percentage__c,
+                    LLC_BI__Amount__c = f.LLC_BI__Amount__c,
+                    LLC_BI__Status__c = f.LLC_BI__Status__c,
+                    LLC_BI__Paid_By__c = f.LLC_BI__Paid_By__c,
+                    LLC_BI__Is_Income__c = f.LLC_BI__Is_Income__c,
+                    LLC_BI__Payout_Frequency__c = f.LLC_BI__Payout_Frequency__c
+                ));
+            }
+            // Pricing streams: header replicas with TWO re-points (the recon's trap list): the
+            // Loan lookup AND Context_Id, a plain TEXT field holding the loan id that a naive
+            // copy would carry through pointing the clone's stream at the original loan.
+            for (LLC_BI__Pricing_Stream__c ps : src.LLC_BI__Pricing_Streams__r) {
+                streamCopies.add(new LLC_BI__Pricing_Stream__c(
+                    Name = ps.Name,
+                    LLC_BI__Loan__c = cloneId,
+                    LLC_BI__Context_Id__c = String.valueOf(cloneId),
+                    LLC_BI__Period_Type__c = ps.LLC_BI__Period_Type__c,
+                    LLC_BI__Term_Unit__c = ps.LLC_BI__Term_Unit__c,
+                    LLC_BI__Term_Length__c = ps.LLC_BI__Term_Length__c,
+                    LLC_BI__Version__c = ps.LLC_BI__Version__c,
+                    LLC_BI__Sequence__c = ps.LLC_BI__Sequence__c,
+                    LLC_BI__Effective_Date__c = ps.LLC_BI__Effective_Date__c,
+                    LLC_BI__End_Date__c = ps.LLC_BI__End_Date__c,
+                    LLC_BI__Is_Payment_Stream__c = ps.LLC_BI__Is_Payment_Stream__c,
+                    LLC_BI__Is_Rate_Stream__c = ps.LLC_BI__Is_Rate_Stream__c,
+                    LLC_BI__Is_Template__c = ps.LLC_BI__Is_Template__c
+                ));
+            }
         }
+
         if (!covCopies.isEmpty()) {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN_COVENANT, C360WriteGuard.OP_CARRY,
                 new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Covenant2__c' => null });
             insert as user covCopies;
-        }
-
-        List<LLC_BI__Loan_Collateral2__c> pledgeSources = [
-            SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Lien_Position__c, LLC_BI__Pledged_Status__c,
-                   LLC_BI__Active__c, LLC_BI__Is_Primary__c, LLC_BI__Amount_Pledged__c,
-                   LLC_BI__Advance_Rate_Override__c, LLC_BI__Override_Reason__c, LLC_BI__Start_Date__c,
-                   LLC_BI__End_Date__c, LLC_BI__Is_Excluded__c, LLC_BI__Is_Leased_Asset__c,
-                   LLC_BI__Abundance_of_Caution__c
-            FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :parents WITH USER_MODE
-        ];
-        Map<Id, LLC_BI__Loan_Collateral_Aggregate__c> aggByClone = new Map<Id, LLC_BI__Loan_Collateral_Aggregate__c>();
-        for (LLC_BI__Loan_Collateral2__c p : pledgeSources) {
-            Id cloneId = cloneByParent.get(p.LLC_BI__Loan__c);
-            if (cloneId == null || aggByClone.containsKey(cloneId)) {
-                continue;
-            }
-            aggByClone.put(cloneId, new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'Collateral Aggregate'));
         }
         if (!aggByClone.isEmpty()) {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE_AGGREGATE, C360WriteGuard.OP_CARRY,
@@ -1602,39 +1686,6 @@ global with sharing class ExecuteLoanModification {
                 });
             insert as user pledgeCopies;
         }
-
-        List<LLC_BI__Legal_Entities__c> invCopies = new List<LLC_BI__Legal_Entities__c>();
-        for (LLC_BI__Legal_Entities__c e : [
-            SELECT Id, LLC_BI__Loan__c, LLC_BI__Account__c, LLC_BI__Borrower_Type__c, LLC_BI__Ownership__c,
-                   LLC_BI__Relationship_Type__c, LLC_BI__Entity_Type__c, LLC_BI__Order__c,
-                   LLC_BI__Contingent_Type__c, LLC_BI__Guarantee_Effective_Date__c,
-                   LLC_BI__Guarantee_End_Date__c, LLC_BI__Guarantee_Limit__c, LLC_BI__Guaranty_Amount__c
-            FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :parents WITH USER_MODE
-        ]) {
-            Id cloneId = cloneByParent.get(e.LLC_BI__Loan__c);
-            if (cloneId == null) {
-                continue;
-            }
-            // A staged remove: the row is named in the plan and simply not replicated.
-            if (excludedInvolvementIds.contains(e.Id)) {
-                continue;
-            }
-            invCopies.add(new LLC_BI__Legal_Entities__c(
-                LLC_BI__Loan__c = cloneId,
-                LLC_BI__Product_Package__c = newPkgId,
-                LLC_BI__Account__c = e.LLC_BI__Account__c,
-                LLC_BI__Borrower_Type__c = e.LLC_BI__Borrower_Type__c,
-                LLC_BI__Ownership__c = e.LLC_BI__Ownership__c,
-                LLC_BI__Relationship_Type__c = e.LLC_BI__Relationship_Type__c,
-                LLC_BI__Entity_Type__c = e.LLC_BI__Entity_Type__c,
-                LLC_BI__Order__c = e.LLC_BI__Order__c,
-                LLC_BI__Contingent_Type__c = e.LLC_BI__Contingent_Type__c,
-                LLC_BI__Guarantee_Effective_Date__c = e.LLC_BI__Guarantee_Effective_Date__c,
-                LLC_BI__Guarantee_End_Date__c = e.LLC_BI__Guarantee_End_Date__c,
-                LLC_BI__Guarantee_Limit__c = e.LLC_BI__Guarantee_Limit__c,
-                LLC_BI__Guaranty_Amount__c = e.LLC_BI__Guaranty_Amount__c
-            ));
-        }
         if (!invCopies.isEmpty()) {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CARRY,
                 new Map<String, Object>{
@@ -1648,17 +1699,47 @@ global with sharing class ExecuteLoanModification {
                 });
             insert as user invCopies;
         }
+        if (!feeCopies.isEmpty()) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Fee_Type__c' => null });
+            insert as user feeCopies;
+        }
+        if (!streamCopies.isEmpty()) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PRICING_STREAM, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Context_Id__c' => null });
+            insert as user streamCopies;
+        }
 
-        // The proof is the re-read, never the insert result.
+        // The proof is the re-read, never the insert result — ONE query, five subquery counts.
         Set<Id> cloneIds = new Set<Id>(cloneByParent.values());
-        Integer covBack = [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds WITH USER_MODE];
-        Integer plBack = [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :cloneIds WITH USER_MODE];
-        Integer invBack = [SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :cloneIds WITH USER_MODE];
-        Boolean ok = covBack == covCopies.size() && plBack == pledgeCopies.size() && invBack == invCopies.size();
+        Integer covBack = 0;
+        Integer plBack = 0;
+        Integer invBack = 0;
+        Integer feeBack = 0;
+        Integer psBack = 0;
+        for (LLC_BI__Loan__c c : [
+            SELECT Id,
+                (SELECT Id FROM LLC_BI__Loan_Covenants__r),
+                (SELECT Id FROM LLC_BI__Loan_Collateral__r),
+                (SELECT Id FROM LLC_BI__Legal_Entities__r),
+                (SELECT Id FROM LLC_BI__Fees__r),
+                (SELECT Id FROM LLC_BI__Pricing_Streams__r)
+            FROM LLC_BI__Loan__c WHERE Id IN :cloneIds WITH USER_MODE
+        ]) {
+            covBack += c.LLC_BI__Loan_Covenants__r.size();
+            plBack += c.LLC_BI__Loan_Collateral__r.size();
+            invBack += c.LLC_BI__Legal_Entities__r.size();
+            feeBack += c.LLC_BI__Fees__r.size();
+            psBack += c.LLC_BI__Pricing_Streams__r.size();
+        }
+        Boolean ok = covBack == covCopies.size() && plBack == pledgeCopies.size() && invBack == invCopies.size()
+            && feeBack == feeCopies.size() && psBack == streamCopies.size();
         String detail = 'The junction graph was carried onto the new version and re-read: ' +
             covBack + ' of ' + covCopies.size() + ' covenant junctions, ' +
             plBack + ' of ' + pledgeCopies.size() + ' collateral pledges (on ' + aggByClone.size() + ' fresh aggregates), ' +
-            invBack + ' of ' + invCopies.size() + ' borrowing involvements.';
+            invBack + ' of ' + invCopies.size() + ' borrowing involvements, ' +
+            feeBack + ' of ' + feeCopies.size() + ' fees, ' +
+            psBack + ' of ' + streamCopies.size() + ' pricing streams (context re-pointed).';
         return (ok ? 'CARRIED ' : '') + detail;
     }
 
@@ -1681,7 +1762,7 @@ global with sharing class ExecuteLoanModification {
     private static List<LLC_BI__Loan__c> readFacilities(List<Id> facilityIds) {
         return [
             SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Status__c, LLC_BI__lookupKey__c,
-                   LLC_BI__Account__c, LLC_BI__Product_Package__c, LLC_BI__Amount__c,
+                   LLC_BI__Account__c, LLC_BI__Account__r.Name, LLC_BI__Product_Package__c, LLC_BI__Amount__c,
                    LLC_BI__Maturity_Date__c, LLC_BI__Is_Modification__c, LLC_BI__isRenewal__c
             FROM LLC_BI__Loan__c
             WHERE Id IN :facilityIds

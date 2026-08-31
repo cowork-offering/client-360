@@ -304,8 +304,10 @@ private class StageExecuteLoanModificationTest {
         LLC_BI__Product_Package__c versionPkg = [
             SELECT Id, Name FROM LLC_BI__Product_Package__c WHERE Id = :done.result.outputPackageId
         ];
-        System.assertEquals('ZZ-MOD-TEST Borrower - 8/30/2026 - PP', versionPkg.Name,
-            'The blank account prefix is repaired to the org\'s "<Account> - <date> - PP" convention');
+        // Date-agnostic: the org's own automation stamps TODAY'S date into the package name on
+        // insert (observed 2026-08-31, when yesterday's pinned literal rolled over and failed).
+        System.assert(versionPkg.Name.startsWith('ZZ-MOD-TEST Borrower - ') && versionPkg.Name.endsWith(' - PP'),
+            'The blank account prefix is repaired to the org\'s "<Account> - <date> - PP" convention: ' + versionPkg.Name);
         System.assertEquals(versionPkg.Name, done.result.newPackageName, 'And the result reports the repaired name');
         System.assertEquals(1, done.result.membersRolled, 'The fixture package holds one eligible member, so one rolls');
 
@@ -421,6 +423,20 @@ private class StageExecuteLoanModificationTest {
         insert collateral;
         LLC_BI__Loan_Collateral_Aggregate__c parentAgg = new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'ZZ-MOD-TEST Aggregate');
         insert parentAgg;
+        insert new LLC_BI__Fee__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Record_Type__c = 'Fees',
+            LLC_BI__Fee_Type__c = 'Attorney',
+            LLC_BI__Calculation_Type__c = 'Flat Amount',
+            LLC_BI__Amount__c = 25000,
+            LLC_BI__Status__c = 'Active'
+        );
+        insert new LLC_BI__Pricing_Stream__c(
+            Name = 'ZZ-MOD-TEST Stream',
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Context_Id__c = String.valueOf(before.Id),
+            LLC_BI__Is_Rate_Stream__c = true
+        );
         insert new LLC_BI__Loan_Collateral2__c(
             LLC_BI__Loan__c = before.Id,
             LLC_BI__Collateral__c = collateral.Id,
@@ -474,6 +490,22 @@ private class StageExecuteLoanModificationTest {
             'And its own involvement');
         System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :before.Id],
             'And its own pledge on its own aggregate');
+
+        List<LLC_BI__Fee__c> feeOnClone = [
+            SELECT LLC_BI__Fee_Type__c, LLC_BI__Amount__c FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :cloneId
+        ];
+        System.assertEquals(1, feeOnClone.size(), 'The fee carries onto the clone: a direct child, no junction (founder correction 08-31)');
+        System.assertEquals(25000, feeOnClone[0].LLC_BI__Amount__c);
+
+        List<LLC_BI__Pricing_Stream__c> streamOnClone = [
+            SELECT LLC_BI__Context_Id__c, LLC_BI__Is_Rate_Stream__c FROM LLC_BI__Pricing_Stream__c WHERE LLC_BI__Loan__c = :cloneId
+        ];
+        System.assertEquals(1, streamOnClone.size(), 'The pricing stream header carries too');
+        System.assertEquals(String.valueOf(cloneId), streamOnClone[0].LLC_BI__Context_Id__c,
+            'With Context_Id RE-POINTED at the clone: the recon\'s text-id trap, held as a permanent assertion');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :before.Id], 'The parent keeps its fee');
+        System.assertEquals(String.valueOf(before.Id), [SELECT LLC_BI__Context_Id__c FROM LLC_BI__Pricing_Stream__c WHERE LLC_BI__Loan__c = :before.Id LIMIT 1].LLC_BI__Context_Id__c,
+            'And its own stream still points at itself');
 
         Boolean sawCarry = false;
         for (ExecuteLoanModification.StepResult s : done.result.steps) {

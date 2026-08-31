@@ -49,10 +49,12 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_PLEDGE_AGGREGATE = 'LLC_BI__Loan_Collateral_Aggregate__c';
     public static final String OBJ_COVENANT = 'LLC_BI__Covenant2__c';
     public static final String OBJ_ACCOUNT_COVENANT = 'LLC_BI__Account_Covenant__c';
+    public static final String OBJ_FEE = 'LLC_BI__Fee__c';
+    public static final String OBJ_PRICING_STREAM = 'LLC_BI__Pricing_Stream__c';
 
     /** The junction graph OP_CARRY may replicate, and nothing else. */
     private static final Set<String> CARRY_OBJECTS = new Set<String>{
-        OBJ_LOAN_COVENANT, OBJ_PLEDGE, OBJ_PLEDGE_AGGREGATE, OBJ_INVOLVEMENT
+        OBJ_LOAN_COVENANT, OBJ_PLEDGE, OBJ_PLEDGE_AGGREGATE, OBJ_INVOLVEMENT, OBJ_FEE, OBJ_PRICING_STREAM
     };
 
     /**
@@ -69,7 +71,12 @@ public with sharing class C360WriteGuard {
         OBJ_INVOLVEMENT => new Set<String>{
             'LLC_BI__Is_Borrower__c', 'LLC_BI__Is_Guarantor__c', 'LLC_BI__Is_CoBorrower__c',
             'LLC_BI__Is_Grantor__c', 'LLC_BI__Is_Related_Entity__c', 'LLC_BI__Contingent_Amount__c'
-        }
+        },
+        OBJ_FEE => new Set<String>(),
+        // The lookupKey is nCino's own dedupe key: copying one across records risks nCino treating
+        // the replica as the SAME stream. OwnerId defaults to the running user rather than pinning
+        // the clone to the original's owner. (Recon 2026-08-31.)
+        OBJ_PRICING_STREAM => new Set<String>{ 'LLC_BI__lookupKey__c', 'OwnerId' }
     };
 
     /**

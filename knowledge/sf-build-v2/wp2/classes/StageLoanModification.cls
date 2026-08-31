@@ -360,12 +360,16 @@ global with sharing class StageLoanModification {
         Integer pledgeCount = [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
         Integer involvementCount = [SELECT COUNT() FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
         Integer covenantJunctionCount = [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        Integer feeCount = [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
+        Integer streamCount = [SELECT COUNT() FROM LLC_BI__Pricing_Stream__c WHERE LLC_BI__Loan__c IN :rollIds WITH USER_MODE];
         steps.add(
             new C360Plan.Step('carry_junctions', C360Plan.TYPE_WRITE,
                 'Carry each rolled member\'s junction graph onto its clone: ' + covenantJunctionCount +
                 ' covenant junction' + (covenantJunctionCount == 1 ? '' : 's') + ', ' + pledgeCount +
                 ' collateral pledge' + (pledgeCount == 1 ? '' : 's') + ', ' + involvementCount +
-                ' borrowing involvement' + (involvementCount == 1 ? '' : 's'))
+                ' borrowing involvement' + (involvementCount == 1 ? '' : 's') + ', ' + feeCount +
+                ' fee' + (feeCount == 1 ? '' : 's') + ', ' + streamCount +
+                ' pricing stream' + (streamCount == 1 ? '' : 's'))
                 .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'replicas retargeted at the clones, verified by count' })
                 .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
         );
