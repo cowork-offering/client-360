@@ -1066,7 +1066,15 @@ export function createModifyEngine(args: {
   }
 
   function toResult(outcome: ReturnType<typeof parseModify>, seq: number, said: string): IntentResult | null {
-    if (outcome.kind === "clarify") return { kind: "unparsed", reply: withCurrent(outcome.question, outcome.awaiting) };
+    if (outcome.kind === "clarify") {
+      return {
+        kind: "unparsed",
+        reply: withCurrent(outcome.question, outcome.awaiting),
+        // Cap the chip row where the org's list is long; the reply names the
+        // full set either way, and a wall of forty buttons is not a proposal.
+        options: outcome.options?.slice(0, 10).map((v) => ({ label: v, say: v })),
+      };
+    }
     if (outcome.kind === "none") return null;
 
     // A refusal beats a chip: an ask that belongs to another credit action is

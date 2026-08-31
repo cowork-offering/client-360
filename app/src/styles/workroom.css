@@ -1360,6 +1360,38 @@ body.wk-open #root {
   line-height: 1.5;
   color: var(--ink-body);
 }
+/* Clickable answers under an agent question: the org's own legal values. */
+.wk-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 2px 0;
+  max-width: 520px;
+}
+.wk-opt {
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--edge, #d8d4cc);
+  background: var(--card, #fff);
+  color: var(--ink, #24232b);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.wk-opt:hover {
+  border-color: var(--accent, #822db4);
+  color: var(--accent, #822db4);
+}
+.wk-opt:active {
+  transform: translateY(1px);
+}
+.wk-opt:focus-visible {
+  outline: 2px solid var(--accent, #822db4);
+  outline-offset: 1px;
+}
+
 .wk-advice-b {
   margin-top: 7px;
   border-radius: 8px;

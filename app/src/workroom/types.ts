@@ -256,7 +256,15 @@ export type IntentResult =
       advisories?: WorkroomAdvisory[];
     }
   | { kind: "refusal"; reply: string; refusal: WorkroomRefusal }
-  | { kind: "unparsed"; reply: string };
+  | {
+      kind: "unparsed";
+      reply: string;
+      /** CLICKABLE ANSWERS. When the question has a closed set of legal answers
+       *  (an org picklist, the product catalog), they ride the reply as chips:
+       *  clicking one SAYS it, and the said value flows through the same parser
+       *  and the same validation as a typed one. Never a gate, never a form. */
+      options?: Array<{ label: string; say: string }>;
+    };
 
 /**
  * THE STAGED PLAN, AT THE SEAM.

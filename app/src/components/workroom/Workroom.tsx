@@ -57,7 +57,7 @@ interface ChipModel {
 
 type ThreadItem =
   | { kind: "banker"; id: string; text: string }
-  | { kind: "agent"; id: string; text: string }
+  | { kind: "agent"; id: string; text: string; options?: Array<{ label: string; say: string }> }
   /** THE ADVICE TRAVELS WITH THE CHIPS IT IS ABOUT. It is not a block of its
    *  own: an advisory that could fold away while the change it warns about
    *  stayed on screen would be worse than no advisory. */
@@ -597,7 +597,9 @@ export function Workroom({
         // The reply and the chips it puts on the table land TOGETHER. Pushed
         // separately they are two renders, and the fit pass runs against a
         // thread that never existed.
-        const answer: ThreadItem[] = [{ kind: "agent", id: nextId("agent"), text: result.reply }];
+        const answer: ThreadItem[] = [
+          { kind: "agent", id: nextId("agent"), text: result.reply, options: result.kind === "unparsed" ? result.options : undefined },
+        ];
         const chips: ChipModel[] =
           result.kind === "deltas"
             ? result.deltas.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
@@ -1116,6 +1118,7 @@ export function Workroom({
                       onDiscard={settleOpenChip}
                       onAcknowledge={acknowledge}
                       onTakeAdvice={takeAdvice}
+                      onOption={(sayText, label) => void say(sayText, label)}
                     />
                   ))}
                   {/* THE ROOM IS COMPOSING. One beat, the app's own: the ">"
@@ -1488,6 +1491,7 @@ function ThreadBlock({
   onDiscard,
   onAcknowledge,
   onTakeAdvice,
+  onOption,
 }: {
   item: ThreadItem;
   clamp: FitState["clamped"];
@@ -1498,6 +1502,7 @@ function ThreadBlock({
   onDiscard: (blockId: string, chip: ChipModel) => void;
   onAcknowledge: (id: string) => void;
   onTakeAdvice: (blockId: string, advisory: WorkroomAdvisory) => void;
+  onOption: (say: string, label: string) => void;
 }) {
   const live = isLive(item) ? "1" : "0";
 
@@ -1524,6 +1529,19 @@ function ThreadBlock({
           >
             {item.text}
           </div>
+          {/* CLICKABLE ANSWERS. The org's own legal values, offered as chips a
+              banker can tap instead of typing. A tap SAYS the value — it rides
+              the same parser, the same staging and the same validation as a
+              typed answer, so a chip can do nothing a sentence could not. */}
+          {item.kind === "agent" && item.options && item.options.length > 0 && (
+            <div className="wk-opts" data-options={item.id}>
+              {item.options.map((opt) => (
+                <button type="button" className="wk-opt" key={opt.say} onClick={() => onOption(opt.say, opt.label)}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

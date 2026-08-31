@@ -521,10 +521,20 @@ export function createCreateEngine(args: {
    * room the banker has to guess at. A question also suppresses the next
    * suggestion, so there is never a pill and an open question at once.
    */
+  /** The closed answer set for a question, where the org holds one. The product
+   *  catalog is the one every creation starts with; clicking a chip SAYS the
+   *  product and the answer path reads it like a typed one. */
+  function optionsFor(field: CreateField | null): Array<{ label: string; say: string }> | undefined {
+    if (field?.id === "create.product") {
+      return CREATE_PRODUCTS.map((product) => ({ label: product, say: product }));
+    }
+    return undefined;
+  }
+
   function toResult(outcome: CreateOutcome, seq: number): IntentResult | null {
     if (outcome.kind === "clarify") {
       awaiting = outcome.awaiting ?? awaiting;
-      return { kind: "unparsed", reply: outcome.question };
+      return { kind: "unparsed", reply: outcome.question, options: optionsFor(awaiting) };
     }
     if (outcome.kind === "none") return null;
 
@@ -591,6 +601,7 @@ export function createCreateEngine(args: {
       reply: missing.length
         ? `I could not place that on the facility. ${questionFor(missing[0])}`
         : "I could not place that. Product, amount and purpose are all set, so the next move is to file it — or name a term to change.",
+      options: optionsFor(missing[0] ?? null),
     };
   }
 

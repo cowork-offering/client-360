@@ -75,7 +75,15 @@ export type ParseOutcome =
    *  it with the missing fact alone — "$20,000,000" is an answer, and a room
    *  that made the banker restate the whole instruction would not be a
    *  conversation. */
-  | { kind: "clarify"; question: string; awaiting?: { field: CatalogField; facility: Facility | null } }
+  | {
+      kind: "clarify";
+      question: string;
+      awaiting?: { field: CatalogField; facility: Facility | null };
+      /** The closed set of legal answers, where one exists (an org picklist).
+       *  The engine turns these into clickable chips; each click is SAID and
+       *  re-parsed like any typed answer. */
+      options?: string[];
+    }
   | { kind: "none" };
 
 export interface ParseContext {
@@ -502,7 +510,7 @@ function readValue(
   lower: string,
   match: CatalogMatch,
   facility: Facility | null,
-): { value: ParsedValue } | { question: string } | { value: null } {
+): { value: ParsedValue } | { question: string; options?: string[] } | { value: null } {
   if (field.type === "currency") {
     const tokens = moneyTokens(lower);
     if (!tokens.length) {
@@ -593,6 +601,7 @@ function readValue(
     if (isFileable(field)) {
       return {
         question: `${field.label} takes one of the org's own values, and I will not write one it does not hold. The org offers: ${field.values.join(", ")}.`,
+        options: field.values,
       };
     }
   }
@@ -665,7 +674,7 @@ export function parseAnswer(
   const lower = trimmed.toLowerCase();
   const at: CatalogMatch = { field: awaiting.field, matched: "", index: 0 };
   const read = readValue(awaiting.field, trimmed, lower, at, awaiting.facility);
-  if ("question" in read) return { kind: "clarify", question: read.question, awaiting };
+  if ("question" in read) return { kind: "clarify", question: read.question, awaiting, options: read.options };
   if (read.value === null) return null;
   return {
     kind: "amendments",
@@ -779,6 +788,7 @@ function indexFallback(trimmed: string, lower: string, ctx: ParseContext): Parse
       kind: "clarify",
       question: `${field.label} (${field.apiName}) is a field this room can file. ${read.question}`,
       awaiting: { field, facility },
+      options: read.options,
     };
   }
   if (read.value === null) {
@@ -787,6 +797,7 @@ function indexFallback(trimmed: string, lower: string, ctx: ParseContext): Parse
       kind: "clarify",
       question: `${field.label} is a field this room can file (${field.apiName}). What should it become?${offer}`,
       awaiting: { field, facility },
+      options: field.values,
     };
   }
   return {
@@ -841,7 +852,7 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
     for (const facility of facilities) {
       const at: CatalogMatch = { ...match, index: Math.max(0, scrubbedLower.indexOf(match.matched)) };
       const read = readValue(field, scrubbed, scrubbedLower, at, facility);
-      if ("question" in read) return { kind: "clarify", question: read.question, awaiting: { field, facility } };
+      if ("question" in read) return { kind: "clarify", question: read.question, awaiting: { field, facility }, options: read.options };
       const party = field.category === "party" ? readParty(trimmed, ctx) : undefined;
       if (field.category === "party" && !party) {
         return { kind: "clarify", question: "Which entity? Name it and I will stage the involvement." };

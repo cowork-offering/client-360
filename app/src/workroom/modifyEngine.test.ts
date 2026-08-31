@@ -359,6 +359,23 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(delta.fields.join()).not.toContain("LLC_BI__Interest_Rate__c");
   });
 
+  it("offers the org's legal values as CLICKABLE options when a picklist value is wrong", async () => {
+    const { engine } = engineOn();
+    const result = await engine.parseIntent("change the payment schedule to fortnightly on the line of credit - $15,000,000.00", context);
+    expect(result.kind).toBe("unparsed");
+    if (result.kind !== "unparsed") return;
+    expect(result.reply).toContain("The org offers");
+    // The chips ARE the org's list, and each one, clicked, is a complete answer
+    // to the open question through the same parser a typed value rides.
+    expect(result.options?.map((o) => o.label)).toContain("Monthly");
+    expect(result.options?.map((o) => o.say)).toContain("Quarterly");
+
+    const answered = await engine.parseIntent("Monthly", context);
+    expect(answered.kind).toBe("deltas");
+    if (answered.kind !== "deltas") return;
+    expect(answered.deltas[0].fieldWire).toMatchObject({ field: "LLC_BI__Payment_Schedule__c", value: "Monthly" });
+  });
+
   it("stages a mapped, thresholded covenant as FILEABLE, targeted at the member's clone", async () => {
     const { engine } = engineOn();
     const [delta] = await confirm(engine, "add a leverage covenant max 3.5x to the line of credit - $15,000,000.00");
