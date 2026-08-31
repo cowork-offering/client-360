@@ -44,7 +44,8 @@ export function removeEntry(entries: WorkroomDelta[], deltaId: string): Workroom
 export type ManifestAddress =
   | { kind: "list"; entries: WorkroomDelta[] }
   | { kind: "remove"; entry: WorkroomDelta }
-  /** Understood as a rail command, but it names nothing that is in there. */
+  /** A rail command that names MORE THAN ONE entry. Naming none is not a miss:
+   *  it is a line for the parser, and it falls through as null. */
   | { kind: "miss"; reason: string }
   /** Not a rail command at all. The line belongs to the parser. */
   | null;
@@ -63,48 +64,73 @@ const LIST_PHRASES = [
 
 const REMOVE_PHRASES = ["remove", "drop", "take out", "take off", "undo", "forget", "cancel", "delete", "scrap"];
 
-/** Does this line address something already in the rail? */
+/** The banker's own removal verb. It identifies NOTHING: an entry whose title
+ *  begins "Remove a legal entity" would otherwise be named by every removal
+ *  line ever typed. */
+const REMOVE_WORDS = new Set(REMOVE_PHRASES.flatMap((p) => p.split(" ")));
+
+const words = (text: string): string[] =>
+  text
+    .toLowerCase()
+    .split(/[^a-z0-9$.%]+/)
+    .filter((w) => w.length > 2);
+
+/** What the banker reads on the FACE of an entry: what it is, and what kind of
+ *  thing it is. Naming one of these is naming the entry. */
+const identityWords = (e: WorkroomDelta): string[] =>
+  words(`${e.title} ${e.kind}`).filter((w) => !REMOVE_WORDS.has(w));
+
+/** What tells two entries of the SAME identity apart: the member they sit on
+ *  and the figures they move between. A discriminant on its own identifies
+ *  nothing — every amendment to a facility names that facility. */
+const discriminantWords = (e: WorkroomDelta): string[] => words([e.target, e.after, e.before].join(" "));
+
+/**
+ * Does this line address something already in the rail?
+ *
+ * IT CLAIMS A LINE ONLY WHEN THE LINE NAMES AN ENTRY. The defect this closes,
+ * found in a live click-through: "remove the guarantor Hartwell Industrial
+ * Holdings LLC from the line of credit - $15,000,000.00" was claimed here on
+ * the bare word "remove" and answered "Nothing is staged yet, so there is
+ * nothing to take out" — so a borrowing-structure REMOVE, which the parser
+ * files as a carry exclusion, never reached the parser at all. A removal verb
+ * is not a rail command; a removal verb that NAMES an entry is.
+ *
+ * So an empty rail falls through unconditionally, and a rail that holds nothing
+ * the line names falls through too. Both are the parser's lines, not this
+ * function's.
+ */
 export function addressManifest(text: string, entries: WorkroomDelta[]): ManifestAddress {
   const lower = text.toLowerCase().trim();
   if (!lower) return null;
 
   if (LIST_PHRASES.some((p) => lower.includes(p))) return { kind: "list", entries };
 
-  const removal = REMOVE_PHRASES.find((p) => new RegExp(`(^|\\W)${p}(\\W|$)`).test(lower));
-  if (!removal) return null;
-  if (!entries.length) return { kind: "miss", reason: "Nothing is staged yet, so there is nothing to take out." };
+  const removal = REMOVE_PHRASES.some((p) => new RegExp(`(^|\\W)${p}(\\W|$)`).test(lower));
+  if (!removal || !entries.length) return null;
 
-  // Match on the words the RAIL shows — the entry's own title, its target and
-  // the member it names — so the banker removes a thing by what they can see.
+  // Match on the words the RAIL shows, so the banker removes a thing by what
+  // they can see — but on the entry's IDENTITY first. The target only chooses
+  // between entries the line has already named.
   const scored = entries
-    .map((e) => {
-      const tokens = [e.title, e.target, e.kind, e.after, e.before]
-        .join(" ")
-        .toLowerCase()
-        .split(/[^a-z0-9$.%]+/)
-        .filter((w) => w.length > 2);
-      const hits = new Set(tokens.filter((t) => lower.includes(t))).size;
-      return { entry: e, hits };
-    })
-    .filter((s) => s.hits > 0)
-    .sort((a, b) => b.hits - a.hits);
+    .map((e) => ({
+      entry: e,
+      named: new Set(identityWords(e).filter((t) => lower.includes(t))).size,
+      on: new Set(discriminantWords(e).filter((t) => lower.includes(t))).size,
+    }))
+    .filter((s) => s.named > 0)
+    .sort((a, b) => b.named - a.named || b.on - a.on);
 
-  if (!scored.length) {
-    return {
-      kind: "miss",
-      reason: `Nothing in the manifest matches that. It holds ${entries.map((e) => e.title.toLowerCase()).join(", ")}.`,
-    };
-  }
+  if (!scored.length) return null;
+
   // A TIE IS AN AMBIGUITY, not a coin toss: taking the wrong entry out of a
   // change set the banker is about to sign is the one mistake that must not be
   // made quietly.
-  if (scored.length > 1 && scored[0].hits === scored[1].hits) {
+  const tied = scored.filter((s) => s.named === scored[0].named && s.on === scored[0].on);
+  if (tied.length > 1) {
     return {
       kind: "miss",
-      reason: `That could be ${scored
-        .filter((s) => s.hits === scored[0].hits)
-        .map((s) => `${s.entry.title} on ${s.entry.target}`)
-        .join(" or ")}. Name one.`,
+      reason: `That could be ${tied.map((s) => `${s.entry.title} on ${s.entry.target}`).join(" or ")}. Name one.`,
     };
   }
   return { kind: "remove", entry: scored[0].entry };

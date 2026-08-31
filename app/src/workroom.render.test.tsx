@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom } from "./components/workroom/Workroom";
-import { createScriptedEngine } from "./workroom/engine";
+import { clearComposed, createScriptedEngine, type WorkroomEngine } from "./workroom/engine";
 import { createModifyEngine } from "./workroom/modifyEngine";
 import { doorFor } from "./workroom/modes";
 import { workroomContextFor } from "./workroom/openWorkroom";
@@ -37,6 +37,11 @@ afterEach(() => {
   root = null;
   container = null;
   document.body.className = "";
+  // The composed manifest is held in MODULE scope so a close does not lose it,
+  // which means it outlives a test the way it outlives a room. Every test here
+  // opens on the same package: without this, one test's staged entry is the next
+  // test's opening rail.
+  clearComposed();
 });
 
 function contextFor(mode: WorkroomMode, packageId: string | null = "a5Fbb000000IHFJEA4"): WorkroomContext {
@@ -51,18 +56,31 @@ function contextFor(mode: WorkroomMode, packageId: string | null = "a5Fbb000000I
   };
 }
 
-function open(mode: WorkroomMode, packageId?: string | null) {
+function openWith(context: WorkroomContext, engine: WorkroomEngine) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  const context = contextFor(mode, packageId);
   act(() => {
-    // THE SHELL, ON A SHELL ENGINE. Which engine a mode gets is WorkroomHost's
-    // decision; what is proved here is the ROOM, so the storyline engine is
-    // handed in directly rather than resolved from an app provider.
-    root!.render(<Workroom context={context} engine={createScriptedEngine(context)} onClose={() => {}} />);
+    root!.render(<Workroom context={context} engine={engine} onClose={() => {}} />);
   });
   return document.querySelector<HTMLElement>(".wk-room")!;
+}
+
+function open(mode: WorkroomMode, packageId?: string | null) {
+  const context = contextFor(mode, packageId);
+  // THE SHELL, ON A SHELL ENGINE. Which engine a mode gets is WorkroomHost's
+  // decision; what is proved here is the ROOM, so the storyline engine is
+  // handed in directly rather than resolved from an app provider.
+  return openWith(context, createScriptedEngine(context));
+}
+
+/** Close the room the way the banker does. The next `open` builds a fresh mount
+ *  the way reopening the workroom does. */
+function shut() {
+  act(() => root?.unmount());
+  container?.remove();
+  root = null;
+  container = null;
 }
 
 const buttons = () => [...document.body.querySelectorAll("button")];
@@ -75,6 +93,19 @@ const settle = async () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 };
+
+/** Say a line in the composer. React holds the input's value, so the setter has
+ *  to go round it for the change event to carry. */
+async function typeInto(room: HTMLElement, text: string) {
+  const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    setter.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  click(room.querySelector(".wk-send")!);
+  await settle();
+}
 
 /**
  * VISIBLE WORDS (law 3).
@@ -330,14 +361,7 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
     click(byText(/liquidity covenant/));
     await settle();
 
-    const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
-    act(() => {
-      setter.call(input, "and raise the seasonal line too");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    click(room.querySelector(".wk-send")!);
-    await settle();
+    await typeInto(room, "and raise the seasonal line too");
     expect(room.textContent).toContain("One decision at a time");
   });
 });
@@ -633,14 +657,7 @@ describe("tier-1 advice, in the room", () => {
   async function askForEightMillion(room: HTMLElement) {
     click(room.querySelector(".wk-mchip")!);
     await settle();
-    const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
-    act(() => {
-      setter.call(input, "take it to $8,000,000");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    click(room.querySelector(".wk-send")!);
-    await settle();
+    await typeInto(room, "take it to $8,000,000");
   }
 
   it("says the thing a credit officer would say across the desk, on this read's own figures", async () => {
@@ -725,22 +742,11 @@ describe("the WIRED room says why, at the beats that carry a decision", () => {
     return document.querySelector<HTMLElement>(".wk-room")!;
   }
 
-  async function type(room: HTMLElement, line: string) {
-    const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
-    act(() => {
-      setter.call(input, line);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    click(room.querySelector(".wk-send")!);
-    await settle();
-  }
-
   it("puts the reason under the check's own figures, quietly", async () => {
     const room = openWired();
     click(room.querySelector(".wk-mchip")!);
     await settle();
-    await type(room, "take it to $20,000,000");
+    await typeInto(room, "take it to $20,000,000");
     click(buttons().find((b) => b.textContent === "Confirm"));
     await settle();
 
@@ -753,7 +759,7 @@ describe("the WIRED room says why, at the beats that carry a decision", () => {
 
   it("leads a refusal with the way through it, and keeps the org's own words as the quote", async () => {
     const room = openWired();
-    await type(room, "waive the covenant on the Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00");
+    await typeInto(room, "waive the covenant on the Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00");
     const refusal = room.querySelector(".wk-refuse")!;
     expect(refusal.querySelector(".wk-refuse-why")!.textContent).toContain("Open the covenant review");
     expect(refusal.querySelector(".wk-quote")!.textContent).toMatch(/founder-gated/);
@@ -761,5 +767,132 @@ describe("the WIRED room says why, at the beats that carry a decision", () => {
     const why = refusal.querySelector(".wk-refuse-why")!;
     const quote = refusal.querySelector(".wk-quote")!;
     expect(why.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+/* =============================================================================
+   THREE DEFECTS OFF A LIVE CLICK-THROUGH.
+
+   Each one is a place where the room dropped, refused or garbled something the
+   banker had already decided. None of them is in the engine: they are all in
+   what the shell does with what the engine hands back.
+   ============================================================================= */
+
+/** The storyline's first beat, staged: a pill, its chips confirmed. Leaves the
+ *  room with the checks that confirm trips still open. */
+async function stageTheFirstBeat() {
+  click(byText(/liquidity covenant/));
+  await settle();
+  for (const b of buttons().filter((x) => x.textContent === "Confirm")) {
+    click(b);
+    await settle();
+  }
+}
+
+describe("closing the room does not drop the composed manifest", () => {
+  it("picks the manifest up again, and says that it did", async () => {
+    const room = open("modify");
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+    const staged = room.querySelectorAll(".wk-ent").length;
+    expect(staged).toBeGreaterThan(0);
+
+    shut();
+    const reopened = open("modify");
+    await settle();
+
+    // The rail is where the banker left it, and the room says so rather than
+    // presenting it as though it had always been there. (Law 3 is about an
+    // OPENING view; a room picking work back up is not one.)
+    expect(reopened.querySelectorAll(".wk-ent").length).toBe(staged);
+    expect(reopened.textContent).toContain(`Picking up where you left off: ${staged} changes on the manifest.`);
+  });
+
+  it("starts clean on a different package, because the anchor is the boundary", async () => {
+    open("modify");
+    await stageTheFirstBeat();
+    shut();
+
+    const elsewhere = open("modify", "a5Fbb000000IHXXEA4");
+    await settle();
+    expect(elsewhere.querySelector(".wk-ent")).toBeNull();
+    expect(elsewhere.textContent).not.toContain("Picking up where you left off");
+  });
+});
+
+describe("a typed acknowledgment settles the check it is about", () => {
+  it("settles the open checks exactly as the button does, and opens the approval", async () => {
+    const room = open("modify");
+    await stageTheFirstBeat();
+    expect(buttons().some((b) => b.textContent === "Acknowledge")).toBe(true);
+
+    await typeInto(room, "acknowledged, proceed");
+
+    // Settled, and the room did not answer a decision with "one decision at a
+    // time" — which is what it used to do to the banker who typed it.
+    expect(buttons().some((b) => b.textContent === "Acknowledge")).toBe(false);
+    expect(room.textContent).not.toContain("One decision at a time");
+    const agentBubbles = [...room.querySelectorAll(".wk-agent .wk-bub")].map((n) => n.textContent ?? "");
+    expect(agentBubbles.some((t) => /(That check is|Those \d+ checks are) acknowledged\./.test(t))).toBe(true);
+    expect(byText(/^Approve and file /)).toBeTruthy();
+  });
+
+  it("NEVER settles a confirm or a discard from a sentence", async () => {
+    const room = open("modify");
+    click(byText(/liquidity covenant/));
+    await settle();
+
+    await typeInto(room, "acknowledged");
+
+    // What goes on the manifest is chosen by a gesture on the chip and never by
+    // a word in a sentence, so the room holds the line it always held.
+    expect(room.textContent).toContain("One decision at a time");
+    expect(buttons().some((b) => b.textContent === "Confirm")).toBe(true);
+  });
+});
+
+describe("a failed execute is a sentence, and it closes the approval", () => {
+  /** The transport rejects with a plain failure OBJECT, not an Error. This is
+   *  the shape that put "[object Object]" in the thread as the room's whole
+   *  answer to an execute the org had in fact completed. */
+  function roomThatFailsOnExecute() {
+    const context = contextFor("modify");
+    const scripted = createScriptedEngine(context);
+    const engine: WorkroomEngine = {
+      ...scripted,
+      execute: async () => {
+        throw { code: "TOKEN_REFUSED", server: "customer360" };
+      },
+    };
+    return openWith(context, engine);
+  }
+
+  it("says what came back, and never says [object Object]", async () => {
+    const room = roomThatFailsOnExecute();
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+
+    click(byText(/^Approve and file /));
+    await settle();
+
+    expect(room.textContent).not.toContain("[object Object]");
+    expect(room.textContent).toContain("TOKEN_REFUSED");
+  });
+
+  it("does not re-arm a button whose retry would bounce on a burnt token", async () => {
+    const room = roomThatFailsOnExecute();
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+
+    click(byText(/^Approve and file /));
+    await settle();
+
+    expect(room.textContent).toContain("may have completed despite the error");
+    const approve = room.querySelector<HTMLButtonElement>(".wk-approve")!;
+    expect(approve.disabled).toBe(true);
+    expect(approve.textContent).toBe("Approval closed");
   });
 });

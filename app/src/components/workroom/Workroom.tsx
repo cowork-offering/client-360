@@ -3,7 +3,7 @@ import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion } from "../../data/motion";
 import { CLIENT_EMAIL, GOVERNANCE, HAVE } from "../../workroom/fixture";
-import type { PackageChoice, WorkroomEngine, WorkroomSuggestion } from "../../workroom/engine";
+import { readableError, type PackageChoice, type WorkroomEngine, type WorkroomSuggestion } from "../../workroom/engine";
 import { addEntry, addressManifest, figuresFor, groupEntries, removeEntry } from "../../workroom/manifest";
 import { vocabularyFor } from "../../workroom/modes";
 import { stepperState } from "../../workroom/stepper";
@@ -117,6 +117,46 @@ function isLive(item: ThreadItem): boolean {
   if (item.kind === "challenge") return !item.acked;
   if (item.kind === "reply") return true;
   return false;
+}
+
+/* ------------------------------------------------------- typed acknowledgment
+
+   A CHECK IS SETTLED BY THE DECISION, NOT BY THE GESTURE. The Acknowledge
+   button and the word "acknowledged" are the same decision, and a room that
+   answered the typed one with "one decision at a time" was refusing the very
+   decision it had just asked for. Only CHECKS settle this way: a confirm or a
+   discard is the banker choosing what goes on the manifest, and no word in a
+   sentence may make that choice for them.                                    */
+
+const ACKNOWLEDGMENT = /^(acknowledged|acknowledge|accepted|understood|noted|ack)\b[\s,.;:!—-]*/i;
+
+/** Words that mean "carry on" and name no change. A courtesy after an
+ *  acknowledgment has said everything it came to say once the checks settle;
+ *  sending it to the parser would answer it with "I could not read that". */
+const CARRY_ON = ["proceed", "go ahead", "go on", "continue", "carry on", "next", "please", "thanks", "thank you", "ok", "okay"];
+
+/** An acknowledgment, and whatever the banker went on to say after it. Null
+ *  where the line is not one. */
+function readAcknowledgment(text: string): { rest: string } | null {
+  const line = text.trim();
+  const match = ACKNOWLEDGMENT.exec(line);
+  if (!match) return null;
+  const rest = line.slice(match[0].length).trim();
+  return { rest: CARRY_ON.includes(rest.toLowerCase().replace(/[.!,]+$/, "")) ? "" : rest };
+}
+
+/**
+ * Did the plan leave the room before this failed?
+ *
+ * The engine stamps the refusal it raises once the execute call is away; a token
+ * the org reports as already redeemed says so in its own words. Either way the
+ * write may have landed and the approval must not be offered again.
+ */
+function reachedTheOrg(e: unknown): boolean {
+  if ((e as { dispatched?: unknown } | null | undefined)?.dispatched === true) return true;
+  const code = (e as { code?: unknown } | null | undefined)?.code;
+  const text = `${typeof code === "string" ? code : ""} ${readableError(e)}`.toLowerCase();
+  return /token_refused|already been used|already redeemed/.test(text);
 }
 
 /* --------------------------------------------------------------- fragments */
@@ -331,6 +371,12 @@ export function Workroom({
   /** The approval is in flight. A second click while the org is working would
    *  stage a second plan behind the first, and the token is single use. */
   const [filing, setFiling] = useState(false);
+  /** THE APPROVAL IS CLOSED FOR THIS PLAN. The call reached the org and the
+   *  answer did not come back clean, so the token may be spent and the write may
+   *  have landed. A live run had the org succeed after 43 seconds while the room
+   *  re-armed a button whose retry would have bounced on the burnt token; the
+   *  honest move is to stop offering the gesture and say why. */
+  const [sealed, setSealed] = useState(false);
   const [draft, setDraft] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [fit, setFit] = useState<FitState>(EMPTY_FIT);
@@ -371,6 +417,24 @@ export function Workroom({
     const open = () => {
       setPhase("work");
       setSuggestion(engine.suggest());
+      // THE ROOM CLOSED; THE WORK DID NOT. A banker who shut the room to check a
+      // figure on the cockpit behind it used to come back to a blank manifest and
+      // say every change again, because the entries lived in a component that
+      // unmounts. They live in the engine now, against the package they were
+      // composed for, and the room says what it picked up rather than presenting
+      // the rail as if it had always been there.
+      const resumed = engine.resume();
+      if (!resumed.length) return;
+      const [one, many] = vocabulary.changeWord;
+      setEntries(resumed);
+      setItems((prev) => [
+        ...prev,
+        {
+          kind: "agent",
+          id: nextId("agent"),
+          text: `Picking up where you left off: ${resumed.length} ${resumed.length === 1 ? one : many} on the manifest.`,
+        },
+      ]);
     };
     if (reduced) {
       setBootStep(brief.loadSteps.length - 1);
@@ -383,7 +447,16 @@ export function Workroom({
       timers.forEach(clearTimeout);
       clearTimeout(done);
     };
-  }, [brief.loadSteps, engine, reduced]);
+  }, [brief.loadSteps, engine, reduced, vocabulary.changeWord]);
+
+  /* ---- and the room hands it back. Every landing and every removal, so a close
+          at any moment loses nothing. Not once it has FILED: a filed change set
+          is finished, and offering it again as if it were still composing would
+          be a lie the next session would act on. */
+  useEffect(() => {
+    if (phase !== "work") return;
+    engine.hold(entries);
+  }, [engine, entries, phase]);
 
   useEffect(() => {
     if (!toast) return;
@@ -555,16 +628,38 @@ export function Workroom({
       // `settled` is the one exception and it is not a loophole: taking an
       // advisory's resolution settles the cards it is about IN THE SAME
       // GESTURE, so there is still exactly one decision on the table.
+      //
+      // A TYPED ACKNOWLEDGMENT IS THE SECOND. "acknowledged" is the same
+      // decision the Acknowledge button makes, and where the only thing waiting
+      // is a CHECK, the word settles it exactly as the button does — and the
+      // room carries on with whatever the banker said after it. Where a chip is
+      // still open the room still says so: what goes on the manifest is chosen
+      // by a gesture on that chip and never by a word in a sentence.
+      let instruction = trimmed;
       if (openGates > 0 && !opts?.settled) {
-        agent("One decision at a time. The open cards above, or the approve button under the manifest, carry the next move.");
-        return;
+        const ack = readAcknowledgment(trimmed);
+        const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
+        if (!ack || !checks.length || checks.length !== openGates) {
+          agent("One decision at a time. The open cards above, or the approve button under the manifest, carry the next move.");
+          return;
+        }
+        setItems((prev) => prev.map((i) => (i.kind === "challenge" && !i.acked ? { ...i, acked: true } : i)));
+        if (!ack.rest) {
+          agent(
+            `${checks.length === 1 ? "That check is" : `Those ${checks.length} checks are`} acknowledged. ${vocabulary.nextMove}`,
+          );
+          return;
+        }
+        instruction = ack.rest;
       }
 
       // W2 — THE RAIL IS ADDRESSABLE IN THE CONVERSATION. "what is staged" and
       // "drop the rate change" are answered here, before the parser sees them:
       // they are moves on the manifest, not new amendments, and sending them to
-      // a field parser would produce a chip nobody asked for.
-      const address = addressManifest(trimmed, entries);
+      // a field parser would produce a chip nobody asked for. It claims a line
+      // only when the line NAMES an entry: a bare removal verb belongs to the
+      // parser, which is where a borrowing-structure removal files.
+      const address = addressManifest(instruction, entries);
       if (address) {
         if (address.kind === "remove") {
           setEntries((prev) => removeEntry(prev, address.entry.id));
@@ -592,7 +687,7 @@ export function Workroom({
       const started = Date.now();
       setThinking(true);
       try {
-        const result = await engine.parseIntent(trimmed, context);
+        const result = await engine.parseIntent(instruction, context);
         await beat(started);
         // The reply and the chips it puts on the table land TOGETHER. Pushed
         // separately they are two renders, and the fit pass runs against a
@@ -620,7 +715,7 @@ export function Workroom({
         setThinking(false);
       }
     },
-    [agent, beat, context, engine, entries, openGates, push],
+    [agent, beat, context, engine, entries, items, openGates, push, vocabulary.nextMove],
   );
 
   /**
@@ -762,7 +857,7 @@ export function Workroom({
   }, []);
 
   const approve = useCallback(async () => {
-    if (filing) return;
+    if (filing || sealed) return;
     setFiling(true);
     try {
       const staged = await engine.stagePlan(entries, context);
@@ -778,17 +873,32 @@ export function Workroom({
       });
       setExecution(result);
       setPhase("filed");
+      // The change set is finished. Nothing is left to pick up on a reopen, and
+      // the next room on this package starts on an empty rail.
+      engine.release();
       push({ kind: "reply", id: nextId("reply"), reply: result.reply ?? { subject: "", lede: "", body: "" } });
     } catch (e) {
       // A REAL ENGINE REFUSES OUT LOUD. The org's precondition, a moved figure,
       // a manifest that files nothing — each comes back as a sentence in the
       // conversation with the approval still where the banker left it, rather
       // than as a dead button or a silent rejection.
-      agent(e instanceof Error ? e.message : String(e));
+      //
+      // AS A SENTENCE. The transport rejects with a plain failure OBJECT, not an
+      // Error, and `String(that)` is "[object Object]" — which is what a live run
+      // put in the thread as the room's whole answer to a 43-second execute.
+      agent(readableError(e));
+      // AND ONLY WHERE A RETRY IS HONEST. Once the call has reached the org the
+      // token may be spent and the write may have landed, so the room stops
+      // offering the gesture rather than arming a retry that would bounce on a
+      // burnt single-use token and tell the banker nothing about what the org did.
+      if (reachedTheOrg(e)) {
+        setSealed(true);
+        agent("The filing may have completed despite the error — do not approve again; check the staging record.");
+      }
     } finally {
       setFiling(false);
     }
-  }, [agent, context, engine, entries, filing, push]);
+  }, [agent, context, engine, entries, filing, push, sealed]);
 
   /* ----------------------------------------------------------- scene bar */
 
@@ -1332,8 +1442,8 @@ export function Workroom({
                       /* THE LABEL COUNTS WHAT FILES. A manifest of five where one
                          files is "approve and file 1 change", never five: the
                          button must not claim the handoffs. */
-                      <button type="button" className="wk-approve" disabled={filing} onClick={() => void approve()}>
-                        {filing ? "Working…" : vocabulary.approveLabel(fileable)}
+                      <button type="button" className="wk-approve" disabled={filing || sealed} onClick={() => void approve()}>
+                        {filing ? "Working…" : sealed ? "Approval closed" : vocabulary.approveLabel(fileable)}
                       </button>
                     )}
                     {execution && (

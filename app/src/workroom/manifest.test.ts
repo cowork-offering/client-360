@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addEntry, figuresFor, groupEntries, removeEntry, type ManifestBaseline } from "./manifest";
+import { addEntry, addressManifest, figuresFor, groupEntries, removeEntry, type ManifestBaseline } from "./manifest";
 import { scriptFor } from "./scripts";
 import type { WorkroomDelta } from "./types";
 
@@ -104,5 +104,79 @@ describe("the manifest rail", () => {
     const groups = groupEntries(railOf(amount, covenant, facility, pledge));
     expect(groups.map((g) => g.id)).toEqual(["structure", "terms", "covenants", "security"]);
     expect(groupEntries(railOf(amount)).map((g) => g.id)).toEqual(["terms"]);
+  });
+});
+
+/* =============================================================================
+   THE ADDRESSER CLAIMS A LINE ONLY WHEN THE LINE NAMES AN ENTRY.
+
+   The defect these close, found in a live click-through: a borrowing-structure
+   REMOVE — which the parser files as a carry exclusion — was claimed here on
+   the bare word "remove" and answered "Nothing is staged yet, so there is
+   nothing to take out". It never reached the parser at all.
+
+   A removal verb is not a rail command. A removal verb that names something in
+   the rail is.
+   ============================================================================= */
+
+/** The line off the live run. It names a member and a legal entity, and nothing
+ *  the rail was holding. */
+const RELEASE = "remove the guarantor Hartwell Industrial Holdings LLC from the line of credit - $15,000,000.00";
+
+/** A staged rate change, titled the way the field catalog titles it. */
+const rate: WorkroomDelta = {
+  ...amount,
+  id: "rate",
+  badge: "Rate cut to 7.10%",
+  title: "Interest rate",
+  before: "7.60%",
+  after: "7.10%",
+  committedDeltaMM: undefined,
+};
+
+/** The same change, on the other line of the package. */
+const secondRate: WorkroomDelta = { ...rate, id: "rate2", target: "HW1006 · Seasonal line of credit", member: "HW1006" };
+
+describe("the rail is addressable in the conversation (W2)", () => {
+  it("hands a removal back to the parser when the rail is empty", () => {
+    expect(addressManifest(RELEASE, [])).toBeNull();
+    expect(addressManifest("drop the rate change", [])).toBeNull();
+  });
+
+  it("hands a removal back to the parser when the rail holds nothing it names", () => {
+    // The covenant shares no word with the line: plainly not a rail command.
+    expect(addressManifest(RELEASE, [covenant])).toBeNull();
+    // And neither is this one, though the line names the very member the rate
+    // change sits on. A facility is a DISCRIMINANT, not an identity — every
+    // amendment to a facility names that facility, so matching on it is how a
+    // guarantor release came to be answered as a rate removal.
+    expect(addressManifest(RELEASE, [rate])).toBeNull();
+  });
+
+  it("still takes a removal that names what the rail is showing", () => {
+    const address = addressManifest("drop the rate change", [rate, covenant]);
+    expect(address).toEqual({ kind: "remove", entry: rate });
+  });
+
+  it("refuses to guess between two entries the line names equally", () => {
+    const address = addressManifest("drop the rate change", [rate, secondRate]);
+    expect(address?.kind).toBe("miss");
+    if (address?.kind !== "miss") return;
+    expect(address.reason).toContain("Interest rate on HW1001 · Revolving line of credit");
+    expect(address.reason).toContain("Interest rate on HW1006 · Seasonal line of credit");
+  });
+
+  it("lets the member break that tie, because that is what a member is for", () => {
+    expect(addressManifest("drop the rate change on the seasonal line", [rate, secondRate])).toEqual({
+      kind: "remove",
+      entry: secondRate,
+    });
+  });
+
+  it("still answers a question about the rail, staged or empty", () => {
+    expect(addressManifest("what is staged", [rate])).toEqual({ kind: "list", entries: [rate] });
+    expect(addressManifest("what is staged", [])).toEqual({ kind: "list", entries: [] });
+    // And a line that is neither is nobody's but the parser's.
+    expect(addressManifest("increase the line of credit to $20,000,000", [rate])).toBeNull();
   });
 });

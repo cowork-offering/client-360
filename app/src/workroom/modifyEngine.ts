@@ -15,7 +15,16 @@ import { bookedFacilities, facilityProduct, facilityStagesStaged, shortFacilityL
 import { fmtDate, fmtMoney } from "../data/format";
 import { isActiveFacility } from "../data/worklist";
 import type { BorrowerBundle, C360Data, Covenant, Facility } from "../data/contract";
-import type { PackageChoice, WorkroomBrief, WorkroomEngine, WorkroomSuggestion } from "./engine";
+import {
+  holdComposed,
+  readableError,
+  recallComposed,
+  releaseComposed,
+  type PackageChoice,
+  type WorkroomBrief,
+  type WorkroomEngine,
+  type WorkroomSuggestion,
+} from "./engine";
 import { runAdvisories } from "./advisory";
 import {
   NO_CONNECTOR_REFUSAL,
@@ -74,9 +83,27 @@ import type {
    dropped. The plan counts what files; the filed scene says what did not.
    ============================================================================= */
 
-/** Raised where the room cannot honestly proceed. The shell renders the message
- *  into the conversation and leaves the approval where it was. */
-export class WorkroomRefusalError extends Error {}
+/**
+ * Raised where the room cannot honestly proceed. The shell renders the message
+ * into the conversation and leaves the approval where it was.
+ *
+ * EXCEPT WHERE THE PLAN HAD ALREADY LEFT. `dispatched` is true when the execute
+ * call reached the org before the refusal was raised — an org-side error, or a
+ * transport failure on the way back. The token may be spent and the write may
+ * have landed, so the approval must NOT be offered again: a live run had the
+ * org succeed after 43 seconds while the room re-armed a button whose retry
+ * would have bounced on the burnt single-use token. Every refusal raised BEFORE
+ * the call leaves — drift, a missing approver id, a held plan — is safe to
+ * retry and carries the flag false.
+ */
+export class WorkroomRefusalError extends Error {
+  constructor(
+    message: string,
+    readonly dispatched = false,
+  ) {
+    super(message);
+  }
+}
 
 const RATIONALE_PREFIX = "Modification Workroom";
 
@@ -572,9 +599,14 @@ export function createModifyEngine(args: {
   let asked = false;
   let staged: StagedWorkroomPlan | null = null;
   let stagedDeltas: WorkroomDelta[] = [];
+  /** What this package was left composing when the room last closed. Read once,
+   *  at construction: the room asks for it and starts on it. */
+  const held = recallComposed(context.mode, context.productPackageId);
   /** The stage key, reused by the execute pair — that pairing is what the proven
-   *  round trip used, and what makes a replay idempotent rather than a double. */
-  let idempotencyKey: string | null = null;
+   *  round trip used, and what makes a replay idempotent rather than a double.
+   *  It survives a close with the manifest, so reopening and approving files ONE
+   *  credit action, replayed, rather than a second one beside the first. */
+  let idempotencyKey: string | null = held.idempotencyKey;
   const spent = new Set<string>();
 
   /* ------------------------------------------------------------ suggestions */
@@ -1585,14 +1617,24 @@ export function createModifyEngine(args: {
       throw new WorkroomRefusalError("This plan carries no confirmation token from the staging call, so it cannot be executed.");
     }
 
-    const outcome = await deps.execute({
-      idempotencyKey: idempotencyKey ?? staged.stagingId,
-      stagingId: staged.stagingId,
-      planHash: staged.planHash,
-      decisionToken: token,
-      approverUserId,
-    });
-    if (!outcome.ok) throw new WorkroomRefusalError(outcome.error.message);
+    // FROM HERE THE PLAN IS THE ORG'S. Everything below is raised `dispatched`:
+    // the call left the room, so neither a domain error nor a lost answer is
+    // evidence that nothing was written.
+    let outcome: ToolOutcome<ExecuteResult>;
+    try {
+      outcome = await deps.execute({
+        idempotencyKey: idempotencyKey ?? staged.stagingId,
+        stagingId: staged.stagingId,
+        planHash: staged.planHash,
+        decisionToken: token,
+        approverUserId,
+      });
+    } catch (e) {
+      // The transport rejects with a plain failure OBJECT, not an Error. Read it
+      // as a sentence or the room says "[object Object]" and calls it an answer.
+      throw new WorkroomRefusalError(readableError(e), true);
+    }
+    if (!outcome.ok) throw new WorkroomRefusalError(outcome.error.message, true);
     spent.add(approval.decisionToken);
 
     const result = outcome.result;
@@ -1669,5 +1711,8 @@ export function createModifyEngine(args: {
     acknowledge,
     stagePlan,
     execute,
+    resume: () => held.entries,
+    hold: (entries) => holdComposed(context.mode, context.productPackageId, { entries, idempotencyKey }),
+    release: () => releaseComposed(context.mode, context.productPackageId),
   };
 }

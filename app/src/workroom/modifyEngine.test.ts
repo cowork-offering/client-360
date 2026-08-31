@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearComposed } from "./engine";
+import { addressManifest } from "./manifest";
 import { createModifyEngine, WorkroomRefusalError, type ModifyEngineDeps } from "./modifyEngine";
 import { assertNoRecordIds } from "../actions/stagedPlan";
 import { validatePlan } from "../actions/transitionAllowlist";
@@ -31,6 +33,9 @@ const w = window as unknown as W;
 afterEach(() => {
   delete w.claude;
   vi.restoreAllMocks();
+  // The composed manifest is held in MODULE scope so a close does not lose it,
+  // which means it outlives a test the way it outlives a room.
+  clearComposed();
 });
 
 /* ------------------------------------------------------------------ fixture */
@@ -1301,5 +1306,128 @@ describe("what an advisory is NOT", () => {
     const { engine } = engineOn();
     const result = await propose(engine, "move the rate on the line of credit - $15,000,000.00 to 8.1%");
     expect(result.advisories ?? []).toHaveLength(0);
+  });
+});
+
+/* =============================================================================
+   THE SAY PATH'S TWO SEAMS, PROVED AGAINST THE REAL ENGINE.
+
+   Both are defects found in a live click-through of the room, and both live
+   between the shell and the engine rather than inside either.
+   ============================================================================= */
+
+describe("the manifest addresser does not eat a structure removal", () => {
+  /** The line off the live run. The room answered "Nothing is staged yet, so
+   *  there is nothing to take out" and the parser never saw it. */
+  const RELEASE = "remove the guarantor Hartwell Industrial Holdings LLC from the line of credit - $15,000,000.00";
+
+  it("lets the line through to the parser, which files it as a carry exclusion", async () => {
+    const { engine } = engineOn();
+
+    // The shell runs every line past the rail before the parser sees it. An
+    // empty rail must not claim it...
+    expect(addressManifest(RELEASE, [])).toBeNull();
+
+    // ...and neither must a rail holding a change on the very same member. The
+    // facility is what the line SCOPES to, not what it names.
+    const [rate] = await confirm(engine, "move the rate on the line of credit - $15,000,000.00 to 8.1%");
+    expect(addressManifest(RELEASE, [rate])).toBeNull();
+
+    const [release] = await confirm(engine, RELEASE);
+    expect(release.fileable).toBe(true);
+    expect(release.involvementWire).toMatchObject({
+      op: "remove",
+      accountName: "Hartwell Industrial Holdings LLC",
+      facilityId: LINE_ID,
+    });
+    expect(release.filed.recordId).toBe("a carry exclusion writes nothing");
+  });
+});
+
+describe("the composed manifest survives the room closing", () => {
+  it("restores it on the next engine for the same package, and starts another clean", async () => {
+    const { engine } = engineOn();
+    const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    // The shell hands the rail back on every landing, which is what a close then
+    // has nothing to lose.
+    engine.hold(deltas);
+
+    const reopened = createModifyEngine({ context, data, bundle: bundleWith(), deps: deps() });
+    expect(reopened.resume().map((d) => d.id)).toEqual(deltas.map((d) => d.id));
+
+    // ONE SESSION IS ONE PACKAGE. A manifest composed against one package may
+    // never reappear under another: that anchor is the governance boundary.
+    const elsewhere = { ...context, productPackageId: "a5Fbb000000IHXXEA4" };
+    expect(createModifyEngine({ context: elsewhere, data, bundle: bundleWith(), deps: deps() }).resume()).toEqual([]);
+  });
+
+  it("carries the idempotency key with it, so a reopened approval is a REPLAY", async () => {
+    const { engine } = engineOn();
+    const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    await engine.stagePlan(deltas, context);
+    engine.hold(deltas);
+
+    const { engine: reopened, deps: d } = engineOn({ newKey: () => "a-second-key" });
+    await reopened.stagePlan(reopened.resume(), context);
+    expect((d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0].idempotencyKey).toBe("wr-test-key");
+  });
+
+  it("lets go once the plan has filed, because there is nothing left to pick up", async () => {
+    const { engine } = engineOn();
+    const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    engine.hold(deltas);
+    const staged = await engine.stagePlan(deltas, context);
+    await engine.execute({
+      stagingId: staged.stagingId,
+      planHash: staged.planHash,
+      decisionToken: staged.decisionToken!,
+      approverUserId: "Fabian Goetzens",
+    });
+    engine.release();
+    expect(createModifyEngine({ context, data, bundle: bundleWith(), deps: deps() }).resume()).toEqual([]);
+  });
+});
+
+describe("a failed execute never re-arms the approval blindly", () => {
+  it("reads a transport failure OBJECT as a sentence, and marks the plan dispatched", async () => {
+    const { engine } = engineOn({
+      // The transport rejects with a plain failure object, not an Error. This is
+      // the shape that put "[object Object]" in the thread as the room's whole
+      // answer to a 43-second execute.
+      execute: vi.fn().mockRejectedValue({ code: "upstream_error", server: "customer360" }),
+    });
+    const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const staged = await engine.stagePlan(deltas, context);
+    await expect(
+      engine.execute({
+        stagingId: staged.stagingId,
+        planHash: staged.planHash,
+        decisionToken: staged.decisionToken!,
+        approverUserId: "Fabian Goetzens",
+      }),
+    ).rejects.toMatchObject({ dispatched: true });
+
+    const thrown = await engine
+      .execute({
+        stagingId: staged.stagingId,
+        planHash: staged.planHash,
+        decisionToken: staged.decisionToken!,
+        approverUserId: "Fabian Goetzens",
+      })
+      .catch((e: unknown) => e);
+    expect((thrown as Error).message).not.toContain("[object Object]");
+    expect((thrown as Error).message).toContain("upstream_error");
+  });
+
+  it("leaves a refusal raised BEFORE the call safe to retry", async () => {
+    const { engine } = engineOn();
+    const deltas = await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    const staged = await engine.stagePlan(deltas, context);
+    // The org's approver check runs in the room, before anything leaves it.
+    const thrown = await engine
+      .execute({ stagingId: staged.stagingId, planHash: "a different plan", decisionToken: "x", approverUserId: "x" })
+      .catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(WorkroomRefusalError);
+    expect((thrown as WorkroomRefusalError).dispatched).toBe(false);
   });
 });
