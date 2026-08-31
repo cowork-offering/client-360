@@ -1,0 +1,218 @@
+{
+  "source": "https://claude.ai/code/artifact/8c064da8-e8fc-423b-8523-bed869aa9016",
+  "savedAt": "2026-08-31T08:45:44.990Z",
+  "rows": {
+    "A0": {
+      "links": [
+        "https://21st.dev/@suraj-xd/components/liquid-glass",
+        "https://21st.dev/@ravikatiyar162/components/glass-calendar",
+        "https://21st.dev/@moazamtrade/components/glass-real-time-crypto-chart"
+      ],
+      "note": "all of course just design references, not actual content in there "
+    },
+    "A1": {
+      "links": [
+        "https://21st.dev/@victorwelander/components/expandable-tabs",
+        "https://21st.dev/@minhxthanh/components/gradient-menu",
+        "https://21st.dev/@kaif-ui/components/cicular-navigation-bar"
+      ],
+      "note": "should be applicable also in the client itself and ideally workroom etc. the last one could be interesting for the Client Action"
+    },
+    "A2": {
+      "links": [
+        "https://21st.dev/@ddoemonn/components/tabs",
+        "https://21st.dev/@7ovr/components/team-members-data-table",
+        "https://21st.dev/@haydenbleasel/components/data-table"
+      ],
+      "note": ""
+    },
+    "A3": {
+      "links": [
+        "https://21st.dev/@koustubhayadiyala36/components/circular-command-menu",
+        "https://21st.dev/@serafimcloud/components/command-menu",
+        "https://21st.dev/@arhamkhnz/components/radial-menu"
+      ],
+      "note": ""
+    },
+    "B1": {
+      "links": [
+        "https://21st.dev/@dillionverma/components/animated-list",
+        "https://21st.dev/@trophyso/components/achievement-list",
+        "https://21st.dev/@haydenbleasel/components/data-table"
+      ],
+      "note": "The first one could be actually pretty cool in the workroom during the creation of Modifcations or when stuff shows up i.e. borrower or something. "
+    },
+    "B2": {
+      "links": [
+        "https://21st.dev/@prebuiltui/components/badge-tag/order-tracking-badge-neutral",
+        "https://21st.dev/@serafimcloud/components/status-badge",
+        "https://21st.dev/@ln-dev7/components/tags-selector"
+      ],
+      "note": ""
+    },
+    "B3": {
+      "links": [
+        "https://21st.dev/@theshanelevine/components/loading-state",
+        "https://21st.dev/@edwinvakayil/components/status-dot",
+        "https://21st.dev/@preetsuthar17/components/system-status-block"
+      ],
+      "note": ""
+    },
+    "C1": {
+      "links": [
+        "https://21st.dev/@7ovr/components/page-header-2",
+        "https://21st.dev/@kokonutd/components/profile-dropdown"
+      ],
+      "note": ""
+    },
+    "C2": {
+      "links": [
+        "https://21st.dev/@uilayout.contact/components/advanced-stats",
+        "https://21st.dev/@sean0205/components/statistics-card-1",
+        "https://21st.dev/@trophyso/components/points-chart"
+      ],
+      "note": "just some orientations of course also gauge charts or whatever but purposeful and easy. "
+    },
+    "C3": {
+      "links": [
+        "https://21st.dev/@serafimcloud/components/badge-delta/complex",
+        "https://21st.dev/@designali-in/components/gauge/gauge"
+      ],
+      "note": ""
+    },
+    "C4": {
+      "links": [
+        "https://21st.dev/@ravikatiyar162/components/card-25",
+        "https://21st.dev/@badtzx0/components/animated-card",
+        "https://21st.dev/@badtzx0/components/cursor-cards"
+      ],
+      "note": "just some recommendations of course"
+    },
+    "C5": {
+      "links": [
+        "https://21st.dev/@shadcnui-blocks/components/empty-state-04",
+        "https://21st.dev/@lyanchouss/components/skeleton/text-content",
+        "https://21st.dev/@cnippet.dev/components/cnippet-empty/products"
+      ],
+      "note": "just some inspo ideally i like to embed somehow sleek and not too much everywhere the > logo from accenture of course but all really elegant not overpowering. "
+    },
+    "D1": {
+      "links": [
+        "https://21st.dev/@sean0205/components/line-charts-9",
+        "https://21st.dev/@sean0205/components/area-charts-1",
+        "https://21st.dev/@kavikatiyar/components/stats-card"
+      ],
+      "note": ""
+    },
+    "D2": {
+      "links": [
+        "https://21st.dev/@originui/components/table",
+        "https://21st.dev/@felipemenezes098/components/table-17"
+      ],
+      "note": ""
+    },
+    "D3": {
+      "links": [
+        "https://21st.dev/@hero_ui/components/heroui-table/sorting"
+      ],
+      "note": ""
+    },
+    "D4": {
+      "links": [
+        "https://21st.dev/@kokonutd/components/team-invitation",
+        "https://21st.dev/@serafimcloud/components/alert/version-update-alert",
+        "https://21st.dev/@felipemenezes098/components/the-item-one/activity-feed-items"
+      ],
+      "note": ""
+    },
+    "D5": {
+      "links": [
+        "https://21st.dev/@chowlol202/components/modern-timeline",
+        "https://21st.dev/@dillionverma/components/animated-list",
+        "https://21st.dev/@originui/components/dialog/onboardin-dialog"
+      ],
+      "note": ""
+    },
+    "D6": {
+      "links": [
+        "https://21st.dev/@moumensoliman/components/n8n-workflow-block-shadcnui",
+        "https://21st.dev/@dillionverma/components/animated-beam",
+        "https://21st.dev/@componentry/components/circuit-board"
+      ],
+      "note": ""
+    },
+    "D7": {
+      "links": [
+        "https://21st.dev/@reuno-ui/components/joblisting-component"
+      ],
+      "note": ""
+    },
+    "E1": {
+      "links": [
+        "https://21st.dev/@coss.com/components/drawer/inset-variant",
+        "https://21st.dev/@designali-in/components/header-02",
+        "https://21st.dev/@manuarora700/components/sidebar"
+      ],
+      "note": ""
+    },
+    "E2": {
+      "links": [
+        "https://21st.dev/@ddoemonn/components/wizard-steps",
+        "https://21st.dev/@kavikatiyar/components/order-history",
+        "https://21st.dev/@kavikatiyar/components/order-confirmation-card"
+      ],
+      "note": ""
+    },
+    "E3": {
+      "links": [
+        "https://21st.dev/@originui/components/stepper/with-mixed-elements",
+        "https://21st.dev/@sean0205/components/stepper/title-description",
+        "https://21st.dev/@anubra266/components/steps/steps-content"
+      ],
+      "note": ""
+    },
+    "E4": {
+      "links": [
+        "https://21st.dev/@cnippet.dev/components/logout-confirmation-dialog",
+        "https://21st.dev/@shadcn/components/alert-dialog"
+      ],
+      "note": ""
+    },
+    "E5": {
+      "links": [
+        "https://21st.dev/@arunjdass/components/dashboard-sidebar",
+        "https://21st.dev/@preetsuthar17/components/ai-chat-input",
+        "https://21st.dev/@asanshay/components/chat-reasoning"
+      ],
+      "note": ""
+    },
+    "E6": {
+      "links": [
+        "https://21st.dev/@rorogogogo/components/agent-wave-loader",
+        "https://21st.dev/@animbits/components/loaders-skeleton",
+        "https://21st.dev/@zzzzshawn/components/dotm-square-4"
+      ],
+      "note": "it would be great if we could incorporate elegantly our original > icon"
+    },
+    "E7": {
+      "links": [
+        "https://21st.dev/@originui/components/popover/tooltip-like-with-nav",
+        "https://21st.dev/@chetanverma16/components/notification-popover/notification-popover",
+        "https://21st.dev/@cult-ui/components/floating-panel"
+      ],
+      "note": ""
+    },
+    "F1": {
+      "links": [
+        "https://21st.dev/@chetanverma16/components/notification-popover/notification-popover",
+        "https://21st.dev/@elements-/components/conversation-tree",
+        "https://21st.dev/@theshanelevine/components/streaming-text"
+      ],
+      "note": ""
+    },
+    "F2": {
+      "links": [],
+      "note": ""
+    }
+  }
+}
