@@ -1185,6 +1185,12 @@ export function catalogField(id: string): CatalogField | undefined {
 /** The fields a plan can actually send, in wire order. */
 export const FILEABLE_FIELDS: CatalogField[] = FIELD_CATALOG.filter((f) => f.wireKey);
 
+/** EVERYTHING that files, across all waves: the four request-key scalars, the
+ *  record wires (covenants, borrowing structure) and the dynamic field wave.
+ *  FILEABLE_FIELDS above deliberately stays the scalar four — wire-key logic
+ *  depends on it — and this count is what the room's own narration reports. */
+export const FILING_FIELDS: CatalogField[] = FIELD_CATALOG.filter(isFileable);
+
 export function isFileable(field: CatalogField): boolean {
   return field.wireKey !== undefined || field.recordWire !== undefined || field.dynamicField !== undefined;
 }

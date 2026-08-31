@@ -27,7 +27,7 @@ import {
   whyProposed,
   whyRefused,
 } from "./explain";
-import { catalogSummary, chainFor, isFileable, type CatalogField, type WireKey } from "./fieldCatalog";
+import { catalogSummary, chainFor, isFileable, FILING_FIELDS, type CatalogField, type WireKey } from "./fieldCatalog";
 import { vocabularyFor } from "./modes";
 import { membersNamedIn, parseAnswer, parseModify, type Amendment, type ParseContext, type ParsedValue } from "./parseModify";
 import { greetingFor } from "./viewer";
@@ -896,7 +896,7 @@ export function createModifyEngine(args: {
     const summary = catalogSummary();
     rows.push({
       label: "What this room can file",
-      detail: `${summary.fileable} of ${summary.total} indexed amendments file through stage_loan_modification — amount, maturity date, rate and term applied to the clone, plus net-new covenants created on the borrower and attached to it. The rest are staged into the manifest and handed off with the reason.`,
+      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower and borrowing-structure changes, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
     });
     return rows;
   }

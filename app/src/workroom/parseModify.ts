@@ -1,6 +1,7 @@
 import type { Facility, LegalEntity } from "../data/contract";
 import { facilityProduct, shortFacilityLabel } from "../data/facilityStage";
-import { catalogField, isFileable, matchCatalog, type CatalogField, type CatalogMatch } from "./fieldCatalog";
+import { catalogField, isFileable, matchCatalog, type CatalogField, type CatalogMatch, type CatalogType } from "./fieldCatalog";
+import { LOAN_FIELD_INDEX, type IndexedField } from "./fieldIndex.gen";
 
 /** The only money field the modification tool carries. See `inferAmount`. */
 const FILEABLE_AMOUNT = catalogField("loan.amount")!;
@@ -680,6 +681,120 @@ export function parseAnswer(
   };
 }
 
+/* ------------------------------------------------ the live-describe fallback
+
+   THE INDEX PROPOSES WHAT THE CURATED VOCABULARY DOES NOT KNOW. Two hundred
+   and six writable loan fields ride the bundle as a generated snapshot of the
+   org's own describe (fieldIndex.gen.ts). When the synonyms miss, the line is
+   matched against the INDEX's labels: a full-label hit with a readable value
+   becomes a normal amendment through a synthetic catalog entry, and a hit
+   without one becomes the question a colleague would ask, with the org's legal
+   values inside it. Below this tier sits the gateway assist; above it, the
+   curated synonyms; underneath everything, the org re-validates at stage time
+   whatever this file believed.                                                */
+
+const INDEX_TYPE: Record<string, CatalogType> = {
+  currency: "currency",
+  percent: "percent",
+  date: "date",
+  picklist: "picklist",
+  multipicklist: "picklist",
+  double: "number",
+  int: "number",
+  string: "text",
+  textarea: "text",
+};
+
+/** A synthetic catalog entry, minted from one index row. It files through the
+ *  same dynamicField wire as the curated wave and claims nothing the org's
+ *  describe did not say. */
+function indexEntry(row: IndexedField): CatalogField {
+  const [api, label, type, values] = row;
+  return {
+    id: `dyn.${api}`,
+    object: "LLC_BI__Loan__c",
+    apiName: api,
+    label,
+    type: INDEX_TYPE[type] ?? "text",
+    category: "loan-other",
+    group: "terms",
+    source: "live-verified",
+    dynamicField: api,
+    values,
+    synonyms: [label.toLowerCase()],
+  };
+}
+
+const INDEX_STOP = new Set(["the", "and", "loan", "date", "amount", "total", "type", "current"]);
+
+/**
+ * The index tier: EVERY significant token of a field's label must appear in the
+ * line, and at least one of them must be a word that could not match half the
+ * catalog. Longest label wins. A miss returns null and the caller keeps its
+ * "none" — the tier proposes, it never guesses.
+ */
+function indexFallback(trimmed: string, lower: string, ctx: ParseContext): ParseOutcome | null {
+  let best: { row: IndexedField; strength: number } | null = null;
+  for (const row of LOAN_FIELD_INDEX) {
+    const tokens = row[1].toLowerCase().split(/[^a-z0-9/]+/).filter((t) => t.length > 2);
+    const significant = tokens.filter((t) => !INDEX_STOP.has(t));
+    if (!significant.length) continue;
+    const all = tokens.every((t) => INDEX_STOP.has(t) || new RegExp(`(?:^|[^a-z0-9])${t}(?:[^a-z0-9]|$)`).test(lower));
+    const anchor = significant.some((t) => new RegExp(`(?:^|[^a-z0-9])${t}(?:[^a-z0-9]|$)`).test(lower));
+    if (!all || !anchor) continue;
+    const strength = significant.length;
+    if (!best || strength > best.strength) best = { row, strength };
+  }
+  if (!best) return null;
+
+  const field = indexEntry(best.row);
+  const target = resolveTarget(lower, ctx);
+  if ("question" in target) return { kind: "clarify", question: target.question };
+  const facility = target.facilities[0] ?? null;
+  const scrubbed = scrubIdentity(trimmed, target.facilities, ctx.relationship);
+  const scrubbedLower = scrubbed.toLowerCase();
+
+  // Numbers are read here rather than through readValue: the synthetic match
+  // has no position in the line, and a bare figure is acceptable for a plain
+  // number field in a way it never is for money.
+  if (field.type === "number") {
+    const m = /(?:to|at|=)\s+(-?\d+(?:\.\d+)?)/.exec(scrubbedLower) ?? /(-?\d+(?:\.\d+)?)\s*$/.exec(scrubbedLower);
+    if (!m) {
+      return {
+        kind: "clarify",
+        question: `${field.label} is a field this room can file (${field.apiName}). What number should it become?`,
+        awaiting: { field, facility },
+      };
+    }
+    return {
+      kind: "amendments",
+      amendments: [{ field, facility, value: { kind: "text", text: m[1] }, matched: field.label.toLowerCase(), op: "change" }],
+    };
+  }
+
+  const at: CatalogMatch = { field, matched: "", index: 0 };
+  const read = readValue(field, scrubbed, scrubbedLower, at, facility);
+  if ("question" in read) {
+    return {
+      kind: "clarify",
+      question: `${field.label} (${field.apiName}) is a field this room can file. ${read.question}`,
+      awaiting: { field, facility },
+    };
+  }
+  if (read.value === null) {
+    const offer = field.values?.length ? ` The org offers: ${field.values.join(", ")}.` : "";
+    return {
+      kind: "clarify",
+      question: `${field.label} is a field this room can file (${field.apiName}). What should it become?${offer}`,
+      awaiting: { field, facility },
+    };
+  }
+  return {
+    kind: "amendments",
+    amendments: [{ field, facility, value: read.value, matched: field.label.toLowerCase(), op: "change" }],
+  };
+}
+
 /**
  * Read a banker's line into amendments.
  *
@@ -696,7 +811,7 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
   if (!matches.length) {
     const inferred = inferAmount(lower, ctx);
     if (inferred) return inferred;
-    return { kind: "none" };
+    return indexFallback(trimmed, lower, ctx) ?? { kind: "none" };
   }
 
   const target = resolveTarget(lower, ctx);
