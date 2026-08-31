@@ -5,8 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
-import { AccountWorkspace } from "./components/AccountWorkspace";
-import type { BorrowerBundle } from "./data/contract";
 import sample from "../../artifact/sample-data.json";
 
 // React 19 act() environment flag.
@@ -20,6 +18,10 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  // The shell PERSISTS the open view to sessionStorage, so a test that opens a
+  // relationship would otherwise hand the next one an app that boots straight
+  // into the client with no worklist to click.
+  sessionStorage.clear();
 });
 
 function mount(node: React.ReactNode): string {
@@ -69,12 +71,24 @@ describe("AppShell — standalone zero-channel render", () => {
   });
 });
 
-describe("AccountWorkspace — L2 tabs render from the anchor bundle", () => {
-  const anchor = (sample as unknown as C360Data).borrower as BorrowerBundle;
+/* THESE GO THROUGH THE SHELL NOW. DIRECTION-LOCKED rule 11 moved the workspace
+   nav out of the workspace and into the header capsule, so the pane and the
+   control that selects it no longer live in the same component: mounting
+   AccountWorkspace alone renders a client with no way to change tab. The
+   assertions are unchanged — the same anchor bundle, the same panes. */
+describe("the client view — L2 panes render from the anchor bundle", () => {
+  function openAnchor() {
+    render();
+    const row = [...document.body.querySelectorAll('[role="button"]')].find((r) =>
+      r.textContent?.includes("Piedmont Precision"),
+    )!;
+    act(() => row.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  }
 
   it("A30.1 — Activity is the FIRST tab and the default view", () => {
-    const text = mount(<AccountWorkspace bundle={anchor} />);
-    expect(text).toContain("Piedmont Precision"); // verdict bar name
+    openAnchor();
+    const text = container!.textContent ?? "";
+    expect(text).toContain("Piedmont Precision"); // the hero's name
     expect(text).toContain("Activity · audit trail");
     // Newest first: the concluded analysis leads the anchor's timeline.
     expect(text).toContain("Relationship review concluded");
@@ -82,8 +96,8 @@ describe("AccountWorkspace — L2 tabs render from the anchor bundle", () => {
     expect(text).toContain("1 suggested next step");
   });
 
-  it("renders Exposure tab content when selected", () => {
-    mount(<AccountWorkspace bundle={anchor} />);
+  it("renders Exposure pane content when its capsule tab is selected", () => {
+    openAnchor();
     const tab = [...document.body.querySelectorAll("button")].find(
       (b) => b.textContent === "Exposure & Collateral",
     )!;

@@ -1,8 +1,10 @@
-import { useEffect } from "react";
-import { useApp } from "../state/appState";
+import { useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
+import { useApp, ACCOUNT_TABS } from "../state/appState";
 import { mcpAvailable } from "../channel/mcp";
 import { BrandGlyph } from "./brand";
 import { CMDK_OPEN_EVENT } from "./CommandPalette";
+import { TabIcon } from "./TabIcon";
 
 /* =============================================================================
    THE APP HEADER — DIRECTION-LOCKED rule 45.
@@ -14,10 +16,12 @@ import { CMDK_OPEN_EVENT } from "./CommandPalette";
    is retired, and the user's name and snapshot date went with it: the briefing
    kicker carries the date now, and the avatar carries the name.
 
-   THE CAPSULE IS SURFACE 2. It is rendered here, empty and inert, because its
-   RESTING state is the header's business: absolutely centred, invisible on the
-   landing, `display:block` throughout so the nav can breathe in instead of
-   popping. Surface 2 fills it with the seven tabs.
+   THE CAPSULE (rule 11, Surface 2) is the seven workspace tabs, absolutely
+   centred in the bar, visible only on a client. It is rendered on BOTH views —
+   invisible, inert and still `display:block` on the landing — because the nav
+   has to breathe in rather than pop, and a `display:none` capsule has nothing
+   to transition from. Its data source is ACCOUNT_TABS, the same seven panes the
+   workspace has always had, re-skinned as icon tabs.
 
    THE LIVE DOT IS HONEST. The dummy's dot is always green because the dummy has
    nothing behind it. Here it reports the actual connector state: green and
@@ -42,12 +46,31 @@ function useScrolledFlag() {
   }, []);
 }
 
+/** Rule 60, the light: a 90px specular radial follows the cursor across the
+ *  capsule. Hover-gated in CSS; this only feeds it the position. */
+function useSpecular() {
+  const ref = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const cap = ref.current;
+    if (!cap) return;
+    const onMove = (e: PointerEvent) => {
+      const r = cap.getBoundingClientRect();
+      cap.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      cap.style.setProperty("--my", `${e.clientY - r.top}px`);
+    };
+    cap.addEventListener("pointermove", onMove, { passive: true });
+    return () => cap.removeEventListener("pointermove", onMove);
+  }, []);
+  return ref;
+}
+
 export function TopBar() {
-  const { data } = useApp();
+  const { data, state, dispatch } = useApp();
   const user = data.meta?.user ?? "Credit Officer";
   const initials = user.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const live = mcpAvailable();
   useScrolledFlag();
+  const capsule = useSpecular();
 
   return (
     <header className="topbar">
@@ -55,7 +78,33 @@ export function TopBar() {
         <BrandGlyph className="brandmark" label="accenture" />
         <span className="apptitle">Credit 360</span>
         <div className="topnav">
-          <nav className="icotabs" id="tabs" aria-label="Workspace" />
+          <nav className="icotabs" id="tabs" aria-label="Workspace" ref={capsule}>
+            {ACCOUNT_TABS.map((t) => {
+              const active = state.view === "account" && state.tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`itab${active ? " active" : ""}`}
+                  data-pane={t.id}
+                  data-tip={t.label}
+                  aria-current={active ? "page" : undefined}
+                  tabIndex={state.view === "account" ? undefined : -1}
+                  /* THE PANE CHANGES IN THE SAME TICK AS THE PRESS. React's
+                     default sync lane commits in a MICROTASK, so for one turn
+                     of the loop the outgoing pane is still the shown one and
+                     the incoming one does not exist — the tab reads as pressed
+                     before anything under it has moved, and the pane's settle
+                     animation starts a beat late. A tab is a discrete
+                     navigation; it lands now. */
+                  onClick={() => flushSync(() => dispatch({ type: "SET_TAB", tab: t.id }))}
+                >
+                  <TabIcon tab={t.id} />
+                  <span className="lbl">{t.label}</span>
+                </button>
+              );
+            })}
+          </nav>
         </div>
         <span className="spacer" />
         <span
