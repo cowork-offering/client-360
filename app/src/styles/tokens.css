@@ -22,6 +22,7 @@
 
 @import "./electric-glass.css";
 @import "./landing.css";
+@import "./client.css";
 
 :root {
   color-scheme: light;

@@ -6,6 +6,7 @@ import { gradeTone } from "../data/finance";
 import type { ReasonCode } from "../data/contract";
 import { REASON_META } from "./reasons";
 import { CopyPromptDialog } from "./CopyPromptDialog";
+import { flyName } from "./nameFlight";
 
 /* =============================================================================
    THE WORKLIST — the landing's third beat.
@@ -83,9 +84,19 @@ export function Worklist() {
   const rows = useMemo(() => buildWorklistRows(data, worklist), [data, worklist]);
   const [unstaged, setUnstaged] = useState<WorklistRow | null>(null);
 
-  function openRow(r: WorklistRow) {
-    if (r.staged) dispatch({ type: "OPEN_ACCOUNT", accountId: r.accountId });
-    else setUnstaged(r); // A17 — copy-prompt explainer, never an empty workspace
+  /* THE ROW IS THE ONE DOOR IN. Rule 58: nothing teleports, so opening a
+     relationship flies its NAME out of this row and into the hero rather than
+     cutting to it. Every other entry point (the whisper, and the palette when it
+     lands) comes through here rather than dispatching its own navigation, which
+     is also what keeps the unstaged branch from being bypassed. */
+  function openRow(r: WorklistRow, nameEl: HTMLElement | null) {
+    if (!r.staged) {
+      setUnstaged(r); // A17 — copy-prompt explainer, never an empty workspace
+      return;
+    }
+    const open = () => dispatch({ type: "OPEN_ACCOUNT", accountId: r.accountId });
+    if (nameEl) flyName(nameEl, open);
+    else open();
   }
 
   return (
@@ -109,11 +120,11 @@ export function Worklist() {
                 role="button"
                 tabIndex={0}
                 data-open={r.accountId}
-                onClick={() => openRow(r)}
+                onClick={(e) => openRow(r, e.currentTarget.querySelector(".who b"))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    openRow(r);
+                    openRow(r, e.currentTarget.querySelector(".who b"));
                   }
                 }}
                 className="wlrow"

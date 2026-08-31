@@ -14,9 +14,10 @@ import { Weave } from "./Weave";
    the ground clean — no purple bloom on the page; the only ambient violet on
    this surface is the weave, which is sanctioned identity texture.
 
-   The `view show` classes are the mint's view contract (the entry animation and
-   the suppression hook the name flight will need in Surface 2). Only one view
-   is mounted at a time here, so `show` is always on.
+   THE VIEW ELEMENT IS THE SHELL'S. `#view-home` and its `show` class live in
+   AppShell, which owns the view contract for both surfaces: the flight has to
+   write onto the client view before it is shown, so neither view can be a thing
+   its own content renders.
    ============================================================================= */
 
 export function Landing() {
@@ -25,13 +26,13 @@ export function Landing() {
   const bookSize = data.portfolio?.accounts?.length ?? rows.length;
 
   return (
-    <div className="view show" id="view-home">
+    <>
       <Weave />
       <div className="page" style={{ paddingTop: 40, paddingBottom: 100, position: "relative", zIndex: 1 }}>
         <Briefing rows={rows} bookSize={bookSize} generatedAt={data.meta?.generatedAt ?? ""} />
         <KpiBand />
         <Worklist />
       </div>
-    </div>
+    </>
   );
 }

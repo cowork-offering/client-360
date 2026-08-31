@@ -316,16 +316,22 @@ describe("verdict bar (A27.4 / A28)", () => {
     expect(cell.textContent).not.toContain("Credit Decisioning");
   });
 
-  it("founder feedback — Client Actions sits on the stat-strip row, not the nav", () => {
+  /* SURFACE 2 moved the row this used to name. DIRECTION-LOCKED rule 8 made the
+     identity its own glass hero, so the stat strip is now `.anchors` inside that
+     hero and the two triggers ride the NAME row above it — the anchor cascade is
+     an nth-child sequence and a control inside it would eat a beat of it. The
+     founder call this test exists for is unchanged and still asserted: ONE
+     trigger, never in the header (that centre belongs to the nav capsule, rule
+     11), on the hero's own row beside Sync. */
+  it("founder feedback — Client Actions sits in the hero beside Sync, not the nav", () => {
     mount();
     click(openAnchor());
     const triggers = [...document.querySelectorAll("#c360-client-actions-trigger")];
     expect(triggers).toHaveLength(1);
     expect(triggers[0].closest("header")).toBeNull();
-    // Shares the strip row container with the stat cells. Since WP7 it sits in
-    // the trigger group alongside Sync, which is still on that same row.
-    const cell = container!.querySelector('[title="nCino risk rating"]')!;
-    const strip = cell.parentElement!;
-    expect(triggers[0].parentElement!.parentElement).toBe(strip);
+    expect(triggers[0].closest(".hero")).toBeTruthy();
+    // Sync shares the trigger group. Without a channel it renders its offline
+    // diagnostic in that same slot, so the group carries two children either way.
+    expect(triggers[0].parentElement!.children).toHaveLength(2);
   });
 });

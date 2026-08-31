@@ -1,6 +1,6 @@
 {
   "target": "port",
-  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through. Filled for SURFACE 1 (the landing + the app header) as of the mint-landing wave: the weave, the worklist rows, the KPI band, the whisper, the header and its hidden capsule. Everything below that belongs to a later surface still carries the dummy's value and will fail until that surface is minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, not the dummy's three authored clients, so the client rows name the port's real accounts.",
+  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through - and clients[].id is one of them, because it becomes the report key client.perClient.<id>. Filled through SURFACE 2 (the landing, the app header, the nav capsule, the client hero, the name flight). Everything below that still carries the dummy's value and will fail until its surface is minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, not the dummy's three authored clients, so the three client SLOTS point at the port's real accounts - two of which carry the mint's own names. Slot 3 has no Meridian to point at and takes the book's distressed relationship instead. heroName, ringTargetAttrPx and ringEndOffsetPx therefore differ from the baseline by design; nameMatchesExpected and ringHitsExpectedTarget are the leaves that actually gate 'every row opens ITS client, and the ring draws ITS grade'.",
   "viewport": {
     "width": 1360,
     "height": 900
@@ -25,8 +25,8 @@
     "weaveNodes": "#hweaveG g",
     "worklistRow": ".wlrow",
     "worklistRowName": ".who b",
-    "worklistHartwellAmount": "[data-open=\"001bb00001DLtRMAA1\"] .amt b",
-    "rowHartwell": "[data-open=\"001SAMPLE0000STRL\"]",
+    "worklistHartwellAmount": "[data-open=\"001bb00001I7FPNAA3\"] .amt b",
+    "rowHartwell": "[data-open=\"001bb00001I7FPNAA3\"]",
     "rowPiedmont": "[data-open=\"001bb00001DLtRMAA1\"]",
     "rowMeridian": "[data-open=\"001SAMPLE0000BRWT\"]",
     "heroName": ".acct-name",
@@ -109,7 +109,7 @@
     "arcLabelAtRest": "Client actions",
     "cmdkBackToWorklist": "Back to worklist",
     "cmdkNoMatch": "Nothing matches.",
-    "heroNameHartwell": "Sterling Fabrication Co.",
+    "heroNameHartwell": "Hartwell Precision Manufacturing LLC",
     "heroNamePiedmont": "Piedmont Precision Components, Inc.",
     "heroNameMeridian": "Brightwater Foods Group",
     "workroomIncreaseLine": "Increase the revolver to $19M",
@@ -117,7 +117,7 @@
     "workroomExecute": "Execute write"
   },
   "keyframes": {
-    "viewEntry": "eg-viewin",
+    "viewEntry": "viewin",
     "paneEntry": "panein",
     "navTabEntry": "navtabin",
     "odoBlur": "odoblur",
@@ -128,22 +128,22 @@
   },
   "clients": [
     {
-      "id": "sterling",
-      "row": "[data-open=\"001SAMPLE0000STRL\"]",
-      "name": "Sterling Fabrication Co.",
-      "ringTargetOffsetPx": 41.8
+      "id": "hartwell",
+      "row": "[data-open=\"001bb00001I7FPNAA3\"]",
+      "name": "Hartwell Precision Manufacturing LLC",
+      "ringTargetOffsetPx": 59.7
     },
     {
       "id": "piedmont",
       "row": "[data-open=\"001bb00001DLtRMAA1\"]",
       "name": "Piedmont Precision Components, Inc.",
-      "ringTargetOffsetPx": 74.6
+      "ringTargetOffsetPx": 44.8
     },
     {
-      "id": "brightwater",
+      "id": "meridian",
       "row": "[data-open=\"001SAMPLE0000BRWT\"]",
       "name": "Brightwater Foods Group",
-      "ringTargetOffsetPx": 14.9
+      "ringTargetOffsetPx": 29.9
     }
   ]
 }

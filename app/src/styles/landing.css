@@ -151,15 +151,28 @@ body.on-client .topnav {
   transition-delay: 0.12s;
 }
 
-/* ----------------------------------------------------------------- the view */
+/* ----------------------------------------------------------------- the view
+   Both views are mounted at all times and one of them is `show`: the name
+   flight has to be able to add its suppression class to the client view BEFORE
+   that view is shown, and trap 2 has to be able to clear it only once the view
+   is hidden again. Neither is possible against a view that does not exist yet.
+
+   `.view.noanim.show` is trap 2 spelled out. `.view.noanim` alone is (0,2,0)
+   and LOSES the specificity tie to `.view.show`, so it silently does nothing —
+   the suppressor has to carry both classes to outrank the show rule. */
 .view {
   position: relative;
   z-index: 1;
+  display: none;
 }
 .view.show {
-  animation: eg-viewin 0.32s var(--ease-out) both;
+  display: block;
+  animation: viewin 0.32s var(--ease-out) both;
 }
-@keyframes eg-viewin {
+.view.noanim.show {
+  animation: none;
+}
+@keyframes viewin {
   from {
     opacity: 0;
     transform: translateY(8px);

@@ -85,12 +85,14 @@ export function Whisper({ row }: { row: WorklistRow | undefined }) {
         className="wbody"
         onClick={() => {
           setShown(false);
-          // TODO(Surface 2): this is a plain navigate. The mint has the whisper
-          // RIDE THE NAME FLIGHT into the hero (rule 58) — the ghost that
-          // carries the client name from the row into the client header. The
-          // flight is Surface 2's to build; when it lands, this becomes the same
-          // entry point a worklist row uses, not a second way in.
-          dispatch({ type: "OPEN_ACCOUNT", accountId: row.accountId });
+          /* THE WHISPER RIDES THE FLIGHT (rule 58). It clicks the row it is
+             talking about rather than navigating on its own, so the client name
+             flies out of that row exactly as it does when the banker clicks it,
+             and the whisper stays one way IN rather than a second way in. If the
+             row is not on screen the navigation still has to happen. */
+          const rowEl = document.querySelector<HTMLElement>(`[data-open="${CSS.escape(row.accountId)}"]`);
+          if (rowEl) rowEl.click();
+          else dispatch({ type: "OPEN_ACCOUNT", accountId: row.accountId });
         }}
       >
         <BrandGlyph />
