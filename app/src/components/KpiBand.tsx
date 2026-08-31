@@ -1,9 +1,21 @@
 import { useApp } from "../state/appState";
 import { fmtMoney, fmtPct } from "../data/format";
-import { useCountUp, staggerDelay } from "../data/motion";
+import { useCountUp } from "../data/motion";
 import { mcpAvailable } from "../channel/mcp";
 import { useLivePortfolio } from "../channel/useLivePortfolio";
 import { fmtRelative } from "../data/format";
+
+/* =============================================================================
+   THE KPI BAND — the landing's second beat.
+
+   Rule 13 is HARD: no sparklines, no mini-meter spines, on clients or on KPI
+   cells. The figures carry it, and the only colour in the band is the purple
+   UNIT (rule: purple discipline — units, deltas, the active dot, one chart
+   line, the primary execute; nothing else).
+
+   The cells are unchanged data: the same seven figures off the same live-or-
+   staged portfolio read. This wave re-skins the presentation only.
+   ============================================================================= */
 
 type Tone = "neutral" | "warning" | "critical";
 
@@ -17,31 +29,28 @@ interface Kpi {
   tone?: Tone;
 }
 
-const toneColor: Record<Tone, string> = {
-  neutral: "var(--ink)",
-  warning: "var(--warning)",
-  critical: "var(--critical)",
-};
-
 const asCount = (n: number) => String(Math.round(n));
+
+/** Split the trailing unit off a formatted figure so it can take the purple.
+ *  "$81M" -> ["$81", "M"], "72.9%" -> ["72.9", "%"], "4" -> ["4", ""]. */
+function splitUnit(s: string): [string, string] {
+  const m = /^(.*?)([MBK%×]|days)$/.exec(s);
+  return m ? [m[1], m[2]] : [s, ""];
+}
 
 /** One cell — counts its figure up on mount (A25.4). Resolves to the final
  *  value immediately under reduced motion / jsdom (see data/motion.ts). */
-function KpiCell({ kpi, index }: { kpi: Kpi; index: number }) {
+function KpiCell({ kpi }: { kpi: Kpi }) {
   const animated = useCountUp(kpi.raw ?? 0);
+  const [figure, unit] = kpi.raw == null ? ["—", ""] : splitUnit(kpi.format(animated));
   return (
-    <div
-      className="c360-row-in min-w-[150px] flex-1 px-5 py-4"
-      style={{
-        borderLeft: index === 0 ? "none" : "1px solid var(--divider-soft)",
-        animationDelay: staggerDelay(index, 28),
-      }}
-    >
-      <div className="text-[11px] font-semibold leading-tight text-ink-label">{kpi.label}</div>
-      <div className="tnum mt-1 text-[26px] font-extrabold leading-none tracking-tight" style={{ color: toneColor[kpi.tone ?? "neutral"] }}>
-        {kpi.raw == null ? "—" : kpi.format(animated)}
+    <div className="kpi">
+      <div className="l">{kpi.label}</div>
+      <div className={`v${kpi.tone === "warning" ? " warn" : kpi.tone === "critical" ? " bad" : ""}`}>
+        {figure}
+        {unit && <span className="u">{unit}</span>}
       </div>
-      <div className="mt-1.5 text-[11.5px] leading-tight text-ink-muted">{kpi.sub}</div>
+      <div className="s">{kpi.sub}</div>
     </div>
   );
 }
@@ -73,10 +82,13 @@ export function KpiBand() {
   const maturities = (sig?.maturitiesSoon ?? []).length;
 
   const kpis: Kpi[] = [
-    { label: "Managed exposure", raw: committed, format: fmtMoney, sub: `Committed · ${acctCount} rel.` },
+    { label: "Managed exposure", raw: committed, format: fmtMoney, sub: `Committed · ${acctCount} relationships` },
     { label: "Drawn balance", raw: drawn, format: fmtMoney, sub: "Across the book" },
     { label: "Utilization", raw: util, format: (n) => fmtPct(n), sub: "Drawn / committed" },
-    { label: "Relationships", raw: acctCount, format: asCount, sub: "Accounts in book" },
+    /* THE RELATIONSHIPS CELL IS GONE, and no figure went with it: it was
+       `accountCount`, which the Managed exposure cell already states underneath
+       itself. Seven cells across the mint's 1180px measure wrapped their own
+       labels; six read. A cell that repeats its neighbour is the one to cut. */
     {
       label: "Needs action",
       raw: worklist.accountIds.length,
@@ -104,16 +116,14 @@ export function KpiBand() {
   ];
 
   return (
-    <div className="overflow-hidden rounded-[14px] bg-raised" style={{ boxShadow: "var(--shadow-card)" }}>
-      <div className="flex flex-wrap">
-        {kpis.map((k, i) => (
-          <KpiCell key={k.label} kpi={k} index={i} />
-        ))}
-      </div>
+    <div className="card kpis num" id="kpiband">
+      {kpis.map((k) => (
+        <KpiCell key={k.label} kpi={k} />
+      ))}
       {(live.storedAt != null || live.failure) && (
-        <div className="flex items-center gap-2 border-t border-divider px-5 py-1.5 text-[10.5px]">
+        <div className="kpi-live">
           {live.storedAt != null && (
-            <span className="text-ink-faint">
+            <span style={{ color: "var(--ink-faint)" }}>
               Live book data as of {fmtRelative(new Date(live.storedAt).toISOString(), data.meta?.generatedAt ?? "")}
             </span>
           )}
