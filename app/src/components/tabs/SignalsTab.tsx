@@ -1,10 +1,10 @@
 import type { BorrowerBundle } from "../../data/contract";
 import { aggregateGuarantorSignals } from "../../data/graphAggregate";
 import { fmtDate } from "../../data/format";
-import { arc, fmtCovThreshold, fmtCovVal, STATUS, type Tone } from "../../data/finance";
+import { arc, fmtCovThreshold, fmtCovVal } from "../../data/finance";
 import { classifyCovenant } from "../../domain/covenantStatus";
-import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
-import { staggerDelay, useEnterTransition } from "../../data/motion";
+import { useEnterTransition } from "../../data/motion";
+import { EmptyPane, Note, Pane, PaneCard, SecHead, Status, type StatusTone } from "./paneKit";
 
 const EXPLAIN =
   "Explain the early-warning signals here and the nearest maturity.";
@@ -21,9 +21,23 @@ interface Ews {
   date: string;
 }
 
-function sevTone(s: Severity): Tone {
-  return s === "Critical" ? "red" : s === "Watch" ? "amber" : "neutral";
-}
+/** The feed icon says the severity before the words do: a bang on the warning
+ *  wash, a bang on the critical wash, a calendar on the accent wash. */
+const SEV_ICON: Record<Severity, "b" | "w" | "a"> = { Critical: "b", Watch: "w", Info: "a" };
+const SEV_WORD: Record<Severity, StatusTone> = { Critical: "bad", Watch: "warn", Info: "mut" };
+
+const CAL = (
+  <svg
+    viewBox="0 0 16 16"
+    width="13"
+    height="13"
+    style={{ stroke: "currentColor", fill: "none", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round" }}
+    aria-hidden="true"
+  >
+    <rect x="2" y="3" width="12" height="11" rx="2" />
+    <path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4" />
+  </svg>
+);
 
 export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
   const entered = useEnterTransition();
@@ -39,7 +53,11 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
     ews.push({
       title: "Loan modification" + (mods.length > 1 ? `s (${mods.length})` : ""),
       severity: sig.modificationClusterFlag ? "Watch" : "Info",
-      body: (sig.modificationClusterFlag ? "Modification cluster — a pattern, not a single accommodation. " : "") + "Most recent: " + modType + (eff ? ` (${fmtDate(eff)})` : ""),
+      body:
+        (sig.modificationClusterFlag ? "Modification cluster: a pattern, not a single accommodation. " : "") +
+        "Most recent: " +
+        modType +
+        (eff ? ` (${fmtDate(eff)})` : ""),
       date: eff ? fmtDate(eff) : "",
     });
   }
@@ -62,7 +80,11 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
     ews.push({
       title: "Renewal in progress",
       severity: "Info",
-      body: "Revision " + (r.revisionNumber ?? "—") + " · " + (r.revisionStatus ?? "") + (r.hasActiveRenewalLoan ? " · active renewal loan" : ""),
+      // Joined from the parts that exist. Concatenating a blank revisionStatus
+      // left a dangling separator on screen ("Revision 2 · ").
+      body: ["Revision " + (r.revisionNumber ?? "—"), r.revisionStatus, r.hasActiveRenewalLoan ? "active renewal loan" : null]
+        .filter(Boolean)
+        .join(" · "),
       date: "",
     });
   }
@@ -95,114 +117,107 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
   const mw = sig.maturityWatch ?? [];
   let nearest: { daysUntilMaturity?: number; name?: string; maturityDate?: string } | null = null;
   for (const m of mw) {
-    if (m.daysUntilMaturity != null && (nearest === null || m.daysUntilMaturity < (nearest.daysUntilMaturity ?? Infinity))) nearest = m;
+    if (m.daysUntilMaturity != null && (nearest === null || m.daysUntilMaturity < (nearest.daysUntilMaturity ?? Infinity)))
+      nearest = m;
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      <SectionHead kicker="Structural Signals" explain={EXPLAIN} />
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <Card className="px-6 py-5">
-          <div className="kicker mb-4">Early-warning signals</div>
-          {ews.length ? (
-            ews.map((e, i) => {
-              const tone = sevTone(e.severity);
-              const dot = e.severity === "Critical" ? STATUS.red.fg : e.severity === "Watch" ? STATUS.amber.fg : "var(--ink-label)";
-              return (
-                <div key={i} className="c360-row-in flex gap-3.5" style={{ animationDelay: staggerDelay(i) }}>
-                  {/* rail — dot on the title's optical centre, connector below */}
-                  <div className="flex w-2.5 flex-none flex-col items-center">
-                    <span
-                      className="mt-[5px] h-2.5 w-2.5 flex-none rounded-full"
-                      style={{ background: dot, boxShadow: `0 0 0 3px ${STATUS[tone].bg}` }}
-                    />
-                    {i < ews.length - 1 && <span className="my-1 w-px flex-1" style={{ background: "var(--border)" }} />}
-                  </div>
-                  <div className="min-w-0 flex-1 pb-4 last:pb-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                      <span className="text-[13px] font-bold">{e.title}</span>
-                      {/* Severity is a status fact: coloured text, not a pill. */}
-                      <span
-                        className="text-[10px] font-bold uppercase tracking-[0.08em]"
-                        style={{ color: STATUS[tone].fg }}
-                      >
-                        {e.severity}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-[12.5px] leading-relaxed text-ink-body-strong" style={{ textWrap: "pretty" as never }}>
-                      {e.body}
-                    </div>
-                    {e.date && <div className="mt-1 text-[11px] text-ink-faint">{e.date}</div>}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <EmptyState title="No structural signals" body="Nothing structural is moving on this relationship." />
-          )}
-        </Card>
+  const days = nearest?.daysUntilMaturity ?? null;
+  const clockColor = days == null ? "var(--ink-faint)" : days < 45 ? "var(--critical)" : days < 120 ? "var(--warning)" : "var(--positive)";
+  const clockArc = arc(days == null ? 0 : Math.max(0, Math.min(100, Math.round((1 - days / MATURITY_WINDOW_DAYS) * 100))), 52);
 
-        {/* Renewal clock. The dial is the one thing on this surface that earns
-            being centred — it is radial. Everything around it (kicker, verdict
-            line, window caption) is left-aligned on the card's own margin, so
-            the panel no longer reads as a ragged centred column. */}
-        <Card className="px-6 py-5">
-          <div className="kicker">Renewal clock</div>
-          {nearest && nearest.daysUntilMaturity != null ? (
-            (() => {
-              const days = nearest.daysUntilMaturity!;
-              const arcPct = Math.max(0, Math.min(100, Math.round((1 - days / MATURITY_WINDOW_DAYS) * 100)));
-              const a = arc(arcPct, 52);
-              const tone: Tone = days < 45 ? "red" : days < 120 ? "amber" : "green";
-              return (
-                <>
-                  <div className="flex flex-1 items-center justify-center py-5">
-                    <div className="relative h-[142px] w-[142px]">
-                      <svg
-                        width="142"
-                        height="142"
-                        viewBox="0 0 130 130"
-                        style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }}
-                      >
-                        <circle cx="65" cy="65" r="52" fill="none" stroke="var(--border)" strokeWidth="9" />
-                        <circle
-                          className="c360-dial"
-                          cx="65"
-                          cy="65"
-                          r="52"
-                          fill="none"
-                          stroke={STATUS[tone].fg}
-                          strokeWidth="9"
-                          strokeLinecap="round"
-                          strokeDasharray={a.c}
-                          strokeDashoffset={entered ? a.off : a.c}
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="tnum text-[30px] font-extrabold leading-none tracking-tight" style={{ color: STATUS[tone].fg }}>
-                          {days}
-                        </span>
-                        <span className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint">days</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-[13px] leading-relaxed text-ink-body-strong" style={{ textWrap: "pretty" as never }}>
-                    {nearest.name ?? "Facility"} matures {fmtDate(nearest.maturityDate)}.
-                  </div>
-                  <div className="mt-2 border-t border-divider pt-2.5 text-[11px] text-ink-faint">
-                    Against a {MATURITY_WINDOW_DAYS}-day watch window.
-                  </div>
-                </>
-              );
-            })()
-          ) : (
-            <div className="flex flex-1 items-center justify-center">
-              <EmptyState title="No maturities in window" body="No facilities maturing within the watch window (270 days)." />
+  return (
+    <Pane id="signals">
+      <SecHead kicker="Early warning" sub="Structural signals" explain={EXPLAIN} />
+
+      {ews.length ? (
+        <div>
+          {ews.map((e, i) => (
+            <div className="feeditem" key={i}>
+              <div className={`ic ${SEV_ICON[e.severity]}`}>{e.severity === "Info" ? CAL : "!"}</div>
+              <div className="tx">
+                <b>{e.title}</b>
+                <span>{e.body}</span>
+              </div>
+              {/* The right column carries WHEN, exactly as the dummy's feed
+                  does. With no date on the record it carries the severity
+                  instead, as the status word the icon tint already implies. */}
+              <span className="when">
+                {e.date || <Status tone={SEV_WORD[e.severity]}>{e.severity}</Status>}
+              </span>
             </div>
-          )}
-        </Card>
-      </div>
-      <NoteCaption note={sig.note} />
-    </div>
+          ))}
+        </div>
+      ) : (
+        <PaneCard>
+          <EmptyPane title="No structural signals" body="Nothing structural is moving on this relationship." />
+        </PaneCard>
+      )}
+
+      {/* Renewal clock. The dial is the one thing on this surface that earns
+          being centred, because it is radial; everything around it is left
+          aligned on the card's own margin. It is an instrument, not a banner,
+          so it takes an instrument's width and lets the page breathe beside
+          it. */}
+      <PaneCard style={{ maxWidth: 380 }}>
+        <div className="kicker">Renewal clock</div>
+        {days != null ? (
+          <>
+            <div style={{ display: "flex", justifyContent: "center", padding: "18px 0 20px" }}>
+              <div style={{ position: "relative", width: 142, height: 142 }}>
+                <svg
+                  width="142"
+                  height="142"
+                  viewBox="0 0 130 130"
+                  style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }}
+                  aria-hidden="true"
+                >
+                  <circle cx="65" cy="65" r="52" fill="none" stroke="var(--border)" strokeWidth="9" />
+                  <circle
+                    className="c360-dial"
+                    cx="65"
+                    cy="65"
+                    r="52"
+                    fill="none"
+                    stroke={clockColor}
+                    strokeWidth="9"
+                    strokeLinecap="round"
+                    strokeDasharray={clockArc.c}
+                    strokeDashoffset={entered ? clockArc.off : clockArc.c}
+                  />
+                </svg>
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <span className="num" style={{ fontSize: 30, fontWeight: 600, lineHeight: 1, color: clockColor }}>
+                    {days}
+                  </span>
+                  <span className="kicker" style={{ marginTop: 6 }}>
+                    days
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--ink)", textWrap: "pretty" }}>
+              {nearest?.name ?? "Facility"} matures {fmtDate(nearest?.maturityDate)}.
+            </p>
+            <div className="note">Against a {MATURITY_WINDOW_DAYS}-day watch window.</div>
+          </>
+        ) : (
+          <EmptyPane
+            title="No maturities in window"
+            body={`No facilities maturing within the watch window (${MATURITY_WINDOW_DAYS} days).`}
+          />
+        )}
+      </PaneCard>
+
+      <Note note={sig.note} />
+    </Pane>
   );
 }

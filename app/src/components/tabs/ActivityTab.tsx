@@ -4,107 +4,31 @@ import { fmtDate, fmtRelative } from "../../data/format";
 import { accountKey, useApp } from "../../state/appState";
 import { historyActivityEntry, mergeTrail } from "../../actions/executedActivity";
 import { staggerDelay } from "../../data/motion";
-import { Card, SectionHead, EmptyState, NoteCaption } from "../ui";
 import { ActivityDetailModal } from "../ActivityDetailModal";
+import { EmptyPane, Note, Pane, PaneCard, SecHead } from "./paneKit";
 
 const EXPLAIN =
   "Walk me through this activity: what came in, what was concluded, what is next.";
 
-/** Per-kind presentation. Static map (A20) — no interpolated classes. */
-const KIND_META: Record<ActivityKind, { label: string; tone: "accent" | "neutral" | "user"; icon: React.ReactNode }> = {
-  ACTION_TRIGGERED: {
-    label: "You",
-    tone: "user",
-    icon: (
-      <>
-        <circle cx="9" cy="6.2" r="3" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <path d="M3.6 15.2a5.4 5.4 0 0110.8 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      </>
-    ),
-  },
+/* THE AUDIT TRAIL IS PORCELAIN (rule 48): a fading spine, 9px dots with a white
+   halo so the line passes behind them, and the latest entry as solid ink with
+   its own aura. It carries no icon rail — the dot IS the marker, and a column
+   of 30px tinted circles beside it was the "pill soup" the system bans. What
+   the kinds still decide is the WORD beside a title and whether an entry is
+   user-originated, which is a fact about who acted, not decoration. */
+const KIND_META: Record<ActivityKind, { label: string; tone: "accent" | "neutral" | "user" }> = {
+  ACTION_TRIGGERED: { label: "You", tone: "user" },
   // A30.4 — both execution kinds are USER-ORIGINATED and carry the user tone,
   // exactly like ACTION_TRIGGERED. A write the banker attempted and lost is
   // still a thing the banker did.
-  ACTION_EXECUTED: {
-    label: "You · filed",
-    tone: "user",
-    icon: (
-      <>
-        <path d="M4.2 3.4h6.3l3.3 3.3v7.9a1 1 0 01-1 1H4.2a1 1 0 01-1-1V4.4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-        <path d="M6.2 10.2l1.9 1.9 3.5-4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      </>
-    ),
-  },
-  ACTION_EXECUTION_FAILED: {
-    label: "You · not filed",
-    tone: "user",
-    icon: (
-      <>
-        <path d="M9 3.2l6 10.4H3L9 3.2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-        <path d="M9 7.3v3.1M9 12.2v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      </>
-    ),
-  },
-  ACTION_STAGED: {
-    label: "You · staged",
-    tone: "user",
-    icon: (
-      <>
-        <path d="M4.2 3.4h6.3l3.3 3.3v7.9a1 1 0 01-1 1H4.2a1 1 0 01-1-1V4.4a1 1 0 011-1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-        <path d="M6.4 10.6h5.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-      </>
-    ),
-  },
-  REQUEST_RECEIVED: {
-    label: "Client request",
-    tone: "accent",
-    icon: (
-      <>
-        <path d="M2.5 5.2h13v9h-13z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-        <path d="M2.5 5.6l6.5 4.6 6.5-4.6" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      </>
-    ),
-  },
-  ANALYSIS_CONCLUDED: {
-    label: "Analysis",
-    tone: "neutral",
-    icon: (
-      <>
-        <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <path d="M11.7 11.7l3.4 3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M5.9 8.1l1.6 1.6 3-3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      </>
-    ),
-  },
-  COVENANT_EVALUATED: {
-    label: "Covenant",
-    tone: "neutral",
-    icon: (
-      <>
-        <path d="M9 2.4l5.2 2.3v3.9c0 3-2.2 5.5-5.2 6.4-3-.9-5.2-3.4-5.2-6.4V4.7z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-        <path d="M6.8 8.7l1.6 1.6 2.9-3.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      </>
-    ),
-  },
-  FACILITY_MODIFIED: {
-    label: "Facility",
-    tone: "neutral",
-    icon: (
-      <>
-        <path d="M11.6 3.2l2.4 2.4-7.6 7.6-3.1.7.7-3.1z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      </>
-    ),
-  },
-  RENDER_AUDIT: {
-    label: "Audit",
-    tone: "neutral",
-    icon: (
-      <>
-        <rect x="3" y="2.6" width="12" height="12.8" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-        <path d="M6 6.4h6M6 9h6M6 11.6h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      </>
-    ),
-  },
+  ACTION_EXECUTED: { label: "You · filed", tone: "user" },
+  ACTION_EXECUTION_FAILED: { label: "You · not filed", tone: "user" },
+  ACTION_STAGED: { label: "You · staged", tone: "user" },
+  REQUEST_RECEIVED: { label: "Client request", tone: "accent" },
+  ANALYSIS_CONCLUDED: { label: "Analysis", tone: "neutral" },
+  COVENANT_EVALUATED: { label: "Covenant", tone: "neutral" },
+  FACILITY_MODIFIED: { label: "Facility", tone: "neutral" },
+  RENDER_AUDIT: { label: "Audit", tone: "neutral" },
 };
 
 /** Source citation. NO fake links: without a webLink the id renders as plain
@@ -113,122 +37,77 @@ export function ReferenceCitation({ reference }: { reference?: ActivityEntry["re
   if (!reference?.id && !reference?.label) return null;
   const text = reference.label ?? reference.id!;
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-faint">
-      <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true" className="flex-none">
+    <span className="cite">
+      <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true" style={{ flex: "none" }}>
         <path d="M6.5 9.5a3 3 0 004.2 0l2.1-2.1a3 3 0 10-4.2-4.2l-.7.7" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
         <path d="M9.5 6.5a3 3 0 00-4.2 0L3.2 8.6a3 3 0 104.2 4.2l.7-.7" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       </svg>
-      {(reference.source ?? reference.kind) && (
-        <span className="font-semibold">{reference.source ?? reference.kind}</span>
-      )}
-      <span className="font-mono">{text}</span>
+      {(reference.source ?? reference.kind) && <b style={{ fontWeight: 600 }}>{reference.source ?? reference.kind}</b>}
+      <span style={{ fontFamily: "var(--font-mono)" }}>{text}</span>
     </span>
   );
 }
 
-function TimelineRow({
+/** One entry on the trail. The row is a button because it opens the detail
+ *  modal; it wears no box for that, only the dot and the pointer. */
+function TrailEntry({
   entry,
   index,
-  isLast,
   generatedAt,
   onOpen,
 }: {
   entry: ActivityEntry;
   index: number;
-  isLast: boolean;
   generatedAt: string;
   onOpen: () => void;
 }) {
   const meta = KIND_META[entry.kind] ?? KIND_META.RENDER_AUDIT;
   const isRequest = entry.kind === "REQUEST_RECEIVED";
   const isUser = meta.tone === "user";
-  // Three distinct visual identities: inbound client (accent), user-driven
-  // (violet), system/record (neutral) — A31.3.
-  const markerBg = isRequest ? "var(--accent-wash)" : isUser ? "var(--user-tone-wash)" : "var(--wash-2)";
-  const markerFg = isRequest ? "var(--accent)" : isUser ? "var(--user-tone)" : "var(--ink-muted)";
-  const rule = isRequest ? "var(--accent)" : isUser ? "var(--user-tone)" : null;
+  const steps = entry.detail?.nextSteps?.length ?? 0;
 
   return (
-    <div className="c360-row-in relative flex gap-3.5" style={{ animationDelay: staggerDelay(index) }}>
-      {/* Rail */}
-      <div className="flex flex-none flex-col items-center">
-        <span
-          className="flex h-9 w-9 items-center justify-center rounded-full"
-          style={{ background: markerBg, color: markerFg }}
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-            {meta.icon}
-          </svg>
-        </span>
-        {!isLast && <span className="my-1 w-px flex-1" style={{ background: "var(--border)" }} />}
-      </div>
-
-      {/* Card */}
-      <button
-        type="button"
-        // A30.4 — user-originated entries are marked as such, not merely tinted.
-        data-origin={isUser ? "user" : "system"}
-        onClick={onOpen}
-        className={`c360-action-row mb-3 flex-1 rounded-[10px] border border-border bg-raised px-4 py-3 text-left${isUser ? " c360-activity-user" : ""}`}
-        style={rule ? { borderLeft: `3px solid ${rule}` } : undefined}
-      >
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="text-[13.5px] font-bold text-ink">{entry.title}</span>
-          {isRequest && (
-            <span
-              className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
-              style={{ background: "var(--chip-client-request-bg)", color: "var(--chip-client-request-fg)" }}
-            >
-              {meta.label}
-            </span>
-          )}
-          <span className="ml-auto text-[11px] text-ink-faint" title={fmtDate(entry.ts)}>
-            {isUser && !entry.orgConfirmed ? (
-              <span style={{ color: "var(--user-tone)" }} className="font-semibold">
-                {entry.actor ?? "You"} · just now
-              </span>
-            ) : (
-              fmtRelative(entry.ts, generatedAt)
-            )}
+    <button
+      type="button"
+      // A30.4 — user-originated entries are marked as such, not merely tinted.
+      data-origin={isUser ? "user" : "system"}
+      onClick={onOpen}
+      // The latest entry is the hot one: solid ink dot with a 7px aura.
+      className={`tli${index === 0 ? " hot" : ""}${isUser ? " c360-activity-user" : ""}`}
+      style={{ animationDelay: staggerDelay(index, 70, 420) }}
+    >
+      <b>{entry.title}</b>
+      <span className="m" title={fmtDate(entry.ts)}>
+        {isUser && !entry.orgConfirmed
+          ? `${entry.actor ?? "You"} · just now`
+          : fmtRelative(entry.ts, generatedAt)}
+      </span>
+      {isRequest && <span className="m">{meta.label}</span>}
+      {entry.summary && <span className="d">{entry.summary}</span>}
+      <span className="meta">
+        {/* Session echo and org record are different claims and look it: one
+            says "this page just did that", the other says "the system of
+            record holds it". */}
+        {entry.orgConfirmed ? (
+          <span data-origin-detail="org" className="tag rec">
+            On record in nCino
           </span>
-        </span>
-        {entry.summary && (
-          <span className="mt-1 block text-[12.5px] leading-relaxed text-ink-body">{entry.summary}</span>
+        ) : (
+          entry.sessionLocal &&
+          isUser && (
+            <span data-origin-detail="session" className="tag ses">
+              This session
+            </span>
+          )
         )}
-        <span className="mt-2 flex flex-wrap items-center gap-3">
-          {/* Session echo and org record are different claims and look it: one
-              says "this page just did that", the other says "the system of
-              record holds it". */}
-          {entry.orgConfirmed ? (
-            <span
-              data-origin-detail="org"
-              className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
-              style={{ background: "var(--positive-bg)", color: "var(--positive)" }}
-            >
-              On record in nCino
-            </span>
-          ) : (
-            entry.sessionLocal &&
-            isUser && (
-              <span
-                data-origin-detail="session"
-                className="rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide"
-                style={{ background: "var(--wash-2)", color: "var(--ink-muted)" }}
-              >
-                This session
-              </span>
-            )
-          )}
-          <ReferenceCitation reference={entry.reference} />
-          {(entry.detail?.nextSteps?.length ?? 0) > 0 && (
-            <span className="text-[11px] font-semibold" style={{ color: "var(--accent)" }}>
-              {entry.detail!.nextSteps!.length} suggested next step
-              {entry.detail!.nextSteps!.length > 1 ? "s" : ""} →
-            </span>
-          )}
-        </span>
-      </button>
-    </div>
+        <ReferenceCitation reference={entry.reference} />
+        {steps > 0 && (
+          <span className="next">
+            {steps} suggested next step{steps > 1 ? "s" : ""} →
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -251,34 +130,38 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
   const open = entries.find((e) => e.id === openId) ?? null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <SectionHead kicker="Activity · audit trail" explain={EXPLAIN} />
-
-      <Card hover={false} className="px-5 py-5">
+    <Pane id="activity">
+      <PaneCard>
+        <SecHead kicker="Audit trail" sub="Activity" explain={EXPLAIN} />
         {entries.length === 0 ? (
-          <EmptyState
+          <EmptyPane
             title="No recorded activity in this view"
             body="Recorded events, concluded analyses and client requests land here."
           />
         ) : (
-          <div>
+          <div className="tl">
             {entries.map((e, i) => (
-              <TimelineRow
+              <TrailEntry
                 key={e.id}
                 entry={e}
                 index={i}
-                isLast={i === entries.length - 1}
                 generatedAt={generatedAt}
                 onOpen={() => setOpenId(e.id)}
               />
             ))}
           </div>
         )}
-      </Card>
+      </PaneCard>
 
-      <NoteCaption note={entries.length ? "Timestamps are shown relative to this render. Source references cite the originating record; links appear once the mail intake is wired." : undefined} />
+      <Note
+        note={
+          entries.length
+            ? "Timestamps are shown relative to this render. Source references cite the originating record; links appear once the mail intake is wired."
+            : undefined
+        }
+      />
 
       {open && <ActivityDetailModal entry={open} bundle={bundle} onClose={() => setOpenId(null)} />}
-    </div>
+    </Pane>
   );
 }
