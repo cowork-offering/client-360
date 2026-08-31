@@ -187,6 +187,12 @@ export interface WorkroomDelta {
    *  authored on the member's clone, a remove is a CARRY EXCLUSION — the parent
    *  keeps its row, the clone starts without it, nothing is deleted. */
   involvementWire?: { op: "add" | "remove"; role?: string; accountName: string; ownership?: number; facilityId: string };
+  /** A CURATED LOAN FIELD's contribution (2026-08-31): the field wave rides
+   *  `fieldChangesJson`, and the ORG resolves the name against its own live
+   *  describe at stage time rather than trusting a name shipped in this client.
+   *  `value` is what travels; `display` is the banker's reading of it, so the
+   *  chip and the wire can never drift apart. */
+  fieldWire?: { field: string; label: string; value: string | number | boolean; display: string; facilityId: string };
   /** The figure this was composed against, so execution can prove the read has
    *  not moved underneath it (the ConfirmGate recompute, applied to the rail). */
   basis?: { facilityId: string; fieldId: string; before: string };

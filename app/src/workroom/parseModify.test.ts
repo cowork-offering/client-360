@@ -209,6 +209,26 @@ describe("the deterministic parse", () => {
     expect(out.amendments[0].field.wireKey).toBeUndefined();
   });
 
+  it("reads a picklist as the ORG's own value, not as the banker's word for it", () => {
+    const out = parseModify("change the payment schedule to monthly", single);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    const schedule = out.amendments.find((a) => a.field.id === "loan.paymentSchedule")!;
+    expect(schedule.field.dynamicField).toBe("LLC_BI__Payment_Schedule__c");
+    // The banker said "monthly" in lower case; what travels is the value the org
+    // holds, because the org validates against its own active values.
+    expect(schedule.value).toEqual({ kind: "text", text: "Monthly" });
+  });
+
+  it("REFUSES a picklist value this org does not hold, and names every one it does", () => {
+    const out = parseModify("change the payment schedule to fortnightly", single);
+    expect(out.kind).toBe("clarify");
+    if (out.kind !== "clarify") return;
+    expect(out.question).toMatch(/The org offers/);
+    expect(out.question).toMatch(/Bi-Monthly/);
+    // Never the banker's word back as though it were legal.
+    expect(out.question).not.toMatch(/fortnightly/i);
+  });
+
   it("resolves a party already on the deal, and keeps an unknown name verbatim", () => {
     const known = parseModify("remove Elena Hartwell from the guaranty", single);
     if (known.kind !== "amendments") throw new Error(known.kind);
