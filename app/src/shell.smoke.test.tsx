@@ -66,7 +66,8 @@ describe("AppShell — standalone zero-channel render", () => {
     render();
     const mark = document.body.querySelector('[aria-label="accenture"]');
     expect(mark, "the brand mark must carry the accenture name").toBeTruthy();
-    expect(mark!.textContent).toBe(">");
+    // 2026-08-31 founder lock: the mark is the ORIGINAL vector (path8760), not a typed ">".
+    expect(mark!.querySelector("svg path"), "the mark renders the official vector").toBeTruthy();
     expect(document.body.textContent).not.toMatch(/Connectry/i); // devpersonal wall still bans Connectry
   });
 });
