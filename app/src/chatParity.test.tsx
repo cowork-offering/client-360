@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { resetModalStack } from "./components/modalStack";
 import { ACTIONS_BY_ID } from "./actions/registry";
 import sample from "../../artifact/sample-data.json";
@@ -78,6 +79,7 @@ function mount() {
     root!.render(
       <AppProvider data={DATA}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -110,11 +112,14 @@ function panelChips(): HTMLButtonElement[] {
     .filter((b) => b.hasAttribute("title") && Object.values(ACTIONS_BY_ID).some((a) => a.hasPanel && a.label === b.textContent?.trim()));
 }
 
+/** The sheet has no UI trigger since 2026-08-31 (the > FAB arc owns client
+ *  actions); its rows are entered through the app's own SET_PANEL, which is
+ *  what the retired button dispatched. The PARITY under test is unchanged. */
 async function stageViaClientActions(label: string) {
   const staged = installMcp();
   mount();
   openAccount();
-  click(byText(/Client Actions/)!);
+  act(() => dispatchOpenSheet());
   click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) => b.textContent?.includes(label))!);
   click(byText(/Review the plan/)!);
   await flush();

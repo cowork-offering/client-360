@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { ACCOUNT_TABS } from "./state/appState";
 import { resetModalStack } from "./components/modalStack";
 import { readAnchors } from "./data/contract";
@@ -60,6 +61,7 @@ function mount(data: C360Data) {
     root!.render(
       <AppProvider data={data}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -252,8 +254,7 @@ describe("the founder's button, on the real bundle", () => {
   it("offers Loan Modification and Renewal on Hartwell's booked facilities", () => {
     mount(data);
     openAccount("Hartwell Precision Manufacturing LLC");
-    const trigger = [...container!.querySelectorAll("button")].find((b) => /Client Actions/.test(b.textContent ?? ""))!;
-    click(trigger);
+    act(() => dispatchOpenSheet());
     for (const label of ["Loan Modification", "Renewal"]) {
       const row = [...document.querySelectorAll('[role="dialog"]')]
         .flatMap((d) => [...d.querySelectorAll("button")])
@@ -266,8 +267,7 @@ describe("the founder's button, on the real bundle", () => {
   it("still greys them on Piedmont, and says the facilities are at Final Review", () => {
     mount(data);
     openAccount("Piedmont Precision Components, Inc.");
-    const trigger = [...container!.querySelectorAll("button")].find((b) => /Client Actions/.test(b.textContent ?? ""))!;
-    click(trigger);
+    act(() => dispatchOpenSheet());
     const row = [...document.querySelectorAll('[role="dialog"]')]
       .flatMap((d) => [...d.querySelectorAll("button")])
       .find((b) => b.textContent?.includes("Loan Modification"))!;
@@ -452,7 +452,7 @@ describe("a client email proposes its action (founder: when is the action coming
     await syncWithMail(mail);
     vi.useRealTimers();
 
-    click([...container!.querySelectorAll("button")].find((b) => /Client Actions/.test(b.textContent ?? ""))!);
+    act(() => dispatchOpenSheet());
     const row = [...document.querySelectorAll('[role="dialog"]')]
       .flatMap((d) => [...d.querySelectorAll("button")])
       .find((b) => b.textContent?.includes("Loan Modification"))!;

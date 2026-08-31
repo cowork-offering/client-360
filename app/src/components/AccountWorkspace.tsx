@@ -4,7 +4,6 @@ import { readAnchors, type Anchor, type BorrowerBundle } from "../data/contract"
 import { STATUS } from "../data/finance";
 import { gradeColor } from "./RiskGrade";
 import { PackageStageChip } from "./PackageStage";
-import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { TabContent } from "./tabs";
 import { SyncButton } from "./SyncSweep";
 import { prefersReducedMotion } from "../data/motion";
@@ -233,22 +232,11 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
           <div className="acct-name-row">
             <span className="acct-name">{name}</span>
             <PackageStageChip snapshot={snap} />
-            {/* Sync is secondary; Client Actions keeps the accent. Both are on
-                loan from the FAB arc, which claims them in Surface 4. */}
+            {/* The Client Actions button is RETIRED (founder call, 2026-08-31
+                night): the > FAB arc owns client actions now, full stop. Sync
+                stays as the hero's one quiet secondary control. */}
             <span className="hero-controls">
               <SyncButton accountId={snap.accountId} accountName={name} bundle={bundle} />
-              <button
-                id={ACTIONS_TRIGGER_ID}
-                type="button"
-                onClick={() => dispatch({ type: "SET_PANEL", panel: state.panel === "actions" ? "none" : "actions" })}
-                aria-expanded={state.panel === "actions"}
-                className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
-              >
-                <svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true">
-                  <path d="M3 5.4h12M3 9h12M3 12.6h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                Client Actions
-              </button>
             </span>
           </div>
           {bundle.verdict && <p className="verdict">{bundle.verdict}</p>}

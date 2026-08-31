@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { Workroom } from "./components/workroom/Workroom";
+import { Workroom, neutralAsk, smartAsk, type RouterQuestion } from "./components/workroom/Workroom";
+import type { SmartOpening } from "./components/workroom/route";
 import { clearComposed, createScriptedEngine, type WorkroomEngine } from "./workroom/engine";
 import { NO_CONNECTOR_REFUSAL } from "./workroom/explain";
 import { createModifyEngine } from "./workroom/modifyEngine";
@@ -1060,5 +1061,236 @@ describe("the executed commitment delta leaves the room", () => {
     expect(room.querySelector(".wk-rescard")).toBeTruthy();
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBeGreaterThan(0);
+  });
+});
+
+/* =============================================================================
+   THE UNIFIED ROUTER — ONE ROOM, THREE ROUTES.
+
+   The founder's consolidation (2026-08-31): the room can be opened WITHOUT a
+   route and its first question decides which engine takes the session. What is
+   proved here is the ROOM's half of that — the question in the greeting slot,
+   the chips, the free text that binds implicitly, and the discipline that stops
+   a bound room quietly changing engine under a composed manifest.
+
+   THE ENGINES ARE UNTOUCHED BY ALL OF IT. Every test below runs the same
+   scripted engine every other test in this file runs; the router is a prop.
+   ============================================================================= */
+
+/** A signal the deal actually made, shaped as `smartOpeningFor` returns it. */
+const MATURITY_SIGNAL: SmartOpening = {
+  line: "The $15M Line of Credit matures in 47 days. Start the renewal?",
+  route: "renew",
+  yesLabel: "Start the renewal",
+  memberId: "HW1001",
+};
+
+function openRouted(opts: {
+  question: RouterQuestion | null;
+  say?: string | null;
+  mode?: WorkroomMode;
+  preselectMemberId?: string | null;
+}) {
+  const bound: Array<{ route: WorkroomMode; memberId?: string | null; say?: string }> = [];
+  const restarts: Array<{ route: WorkroomMode; say: string }> = [];
+  const context = contextFor(opts.mode ?? "modify");
+  // A second room in the same test is a second MOUNT, and `.wk-room` is found
+  // in document order — so the previous one has to go, or every query below
+  // silently reads the room the test already finished with.
+  shut();
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root!.render(
+      <Workroom
+        context={context}
+        engine={createScriptedEngine(context)}
+        router={{
+          question: opts.question,
+          say: opts.say ?? null,
+          preselectMemberId: opts.preselectMemberId ?? null,
+          onBind: (route, o) => bound.push({ route, memberId: o?.memberId, say: o?.say }),
+          onRestart: (route, say) => restarts.push({ route, say }),
+        }}
+        onClose={() => {}}
+      />,
+    );
+  });
+  return { room: document.querySelector<HTMLElement>(".wk-room")!, bound, restarts };
+}
+
+const routeChips = (room: HTMLElement) =>
+  [...room.querySelectorAll<HTMLButtonElement>(".wk-headline ~ .wk-opts .wk-opt")].map((b) => b.textContent);
+const clickChip = (room: HTMLElement, label: string) =>
+  click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => b.textContent === label));
+
+describe("the router — the room's first question", () => {
+  it("opens on the deal signal, with the yes and the way out of it", () => {
+    const { room } = openRouted({ question: smartAsk(MATURITY_SIGNAL) });
+    // The insight is the engine's own sentence and it sits in the greeting slot
+    // (rule 30), not in a modal of its own.
+    expect(room.querySelector(".wk-headline")!.textContent).toBe(
+      "Hey Fabian. The $15M Line of Credit matures in 47 days. Start the renewal?",
+    );
+    expect(routeChips(room)).toEqual(["Start the renewal", "Something else"]);
+    // The room has no mode to name until the banker names one.
+    expect(room.querySelector(".wk-title")!.textContent).toBe("Facility Actions");
+    expect(room.getAttribute("aria-label")).toBe("Facility Actions");
+  });
+
+  it("opens on the neutral three-way when the data made no suggestion", () => {
+    const { room } = openRouted({ question: neutralAsk() });
+    const headline = room.querySelector(".wk-headline")!.textContent ?? "";
+    expect(headline).toBe(
+      "Hey Fabian. What are we doing with this relationship - modifying, renewing, or structuring something new?",
+    );
+    expect(routeChips(room)).toEqual(["Modify", "Renew", "New facility"]);
+  });
+
+  it("NEVER fabricates a suggestion: the neutral opening names no facility and no figure", () => {
+    // The channel-none doctrine, in the greeting slot. A room with nothing to
+    // lead on asks; it does not invent a renewal to propose.
+    const { room } = openRouted({ question: neutralAsk() });
+    const headline = room.querySelector(".wk-headline")!.textContent ?? "";
+    expect(headline).not.toMatch(/\$/);
+    expect(headline).not.toMatch(/matures|drawn to|due in/);
+    expect(routeChips(room)).not.toContain("Start the renewal");
+  });
+
+  it("holds the opening view under sixty words with the question in it (law 3)", () => {
+    expect(visibleWords(openRouted({ question: smartAsk(MATURITY_SIGNAL) }).room).length).toBeLessThan(60);
+    expect(visibleWords(openRouted({ question: neutralAsk() }).room).length).toBeLessThan(60);
+  });
+
+  it("offers no NEXT move while the route is still open", () => {
+    // A suggestion pill beside the three chips would be a fourth chip answering
+    // a different question.
+    const { room } = openRouted({ question: neutralAsk() });
+    expect(room.querySelector(".wk-sugg .wk-pill")).toBeNull();
+    // And it is there again the moment the route is bound.
+    expect(openRouted({ question: null }).room.querySelector(".wk-sugg .wk-pill")).toBeTruthy();
+  });
+
+  for (const [label, route] of [
+    ["Modify", "modify"],
+    ["Renew", "renew"],
+    ["New facility", "create"],
+  ] as Array<[string, WorkroomMode]>) {
+    it(`binds ${route} when the ${label} chip is taken, and the question retires`, () => {
+      const { room, bound } = openRouted({ question: neutralAsk() });
+      clickChip(room, label);
+      expect(bound).toEqual([{ route, memberId: null, say: undefined }]);
+      expect(routeChips(room)).toEqual([]);
+      // The room states its position again, now that it knows which room it is.
+      expect(room.querySelector(".wk-headline")!.textContent).not.toContain("What are we doing");
+    });
+  }
+
+  it("binds the suggested route AND the facility the insight named", () => {
+    const { room, bound } = openRouted({ question: smartAsk(MATURITY_SIGNAL) });
+    clickChip(room, "Start the renewal");
+    expect(bound).toEqual([{ route: "renew", memberId: "HW1001", say: undefined }]);
+  });
+
+  it("falls through to the neutral three-way on Something else, binding nothing", () => {
+    const { room, bound } = openRouted({ question: smartAsk(MATURITY_SIGNAL) });
+    clickChip(room, "Something else");
+    expect(bound).toEqual([]);
+    expect(routeChips(room)).toEqual(["Modify", "Renew", "New facility"]);
+    expect(room.querySelector(".wk-headline")!.textContent).toContain("What are we doing with this relationship");
+  });
+
+  it("binds implicitly on a typed line, and carries the line into the bound room", async () => {
+    const { room, bound } = openRouted({ question: smartAsk(MATURITY_SIGNAL) });
+    await typeInto(room, "increase the LoC to 20M");
+    // The line named a change to what exists, so it is a modification — and it
+    // is handed on to be SAID, not echoed and dropped.
+    expect(bound).toEqual([{ route: "modify", memberId: undefined, say: "increase the LoC to 20M" }]);
+    expect(routeChips(room)).toEqual([]);
+  });
+
+  it("says the line the binding carried, through the parser, once the room is bound", async () => {
+    // The bound room's own half of the same gesture: the engine hears it.
+    const { room } = openRouted({ question: null, say: "increase the liquidity covenant headroom" });
+    await settle();
+    expect([...room.querySelectorAll(".wk-msg.wk-banker")].map((m) => m.textContent)).toContain(
+      "increase the liquidity covenant headroom",
+    );
+  });
+
+  it("asks again rather than guessing, on a line that names no route", async () => {
+    const { room, bound } = openRouted({ question: neutralAsk() });
+    await typeInto(room, "who is the relationship manager");
+    expect(bound).toEqual([]);
+    // The chips are still on screen: the room refused and kept the reason.
+    expect(routeChips(room)).toEqual(["Modify", "Renew", "New facility"]);
+    expect(room.textContent).toContain("I can take a modification, a renewal or a new facility from here.");
+  });
+
+  it("opens the lane on the member the binding preselected", () => {
+    const { room } = openRouted({ question: null, preselectMemberId: "HW1001" });
+    expect(room.querySelector(".wk-detail .wk-dh")!.textContent).toContain("Revolver");
+  });
+});
+
+describe("the router — route binding is final per plan", () => {
+  it("rebuilds the room on the other route while nothing is staged", async () => {
+    const { room, restarts } = openRouted({ question: null });
+    await typeInto(room, "actually let's renew instead");
+    expect(restarts).toEqual([{ route: "renew", say: "actually let's renew instead" }]);
+  });
+
+  it("does NOT reroute on the current route's own grammar", async () => {
+    // A modification legitimately says "increase the commitment". Reading that
+    // as a request to leave the room would take the banker out mid-sentence.
+    const { room, restarts } = openRouted({ question: null });
+    await typeInto(room, "increase the commitment to $20M");
+    expect(restarts).toEqual([]);
+  });
+
+  it("refuses the swap once the manifest holds something, and offers the discard", async () => {
+    const { room, restarts } = openRouted({ question: null });
+    click(byText(/liquidity covenant/));
+    await settle();
+    for (const b of buttons().filter((x) => x.textContent === "Confirm")) {
+      click(b);
+      await settle();
+    }
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+    expect(room.querySelectorAll(".wk-ent").length).toBeGreaterThan(0);
+
+    await typeInto(room, "actually let's renew instead");
+    // No silent engine swap: the room says why and puts the discard on the table.
+    expect(restarts).toEqual([]);
+    expect(room.textContent).toContain("the room is locked to it");
+    const discard = [...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) =>
+      /Discard and start the renewal/.test(b.textContent ?? ""),
+    )!;
+    expect(discard).toBeTruthy();
+
+    click(discard);
+    await settle();
+    // Taking it is explicit, and it clears the manifest before it rebuilds.
+    expect(restarts).toEqual([{ route: "renew", say: "actually let's renew instead" }]);
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
+  });
+});
+
+describe("the router — the room claims no mode until it has one", () => {
+  it("names neither the mode nor the change set while the route is open", () => {
+    const { room } = openRouted({ question: neutralAsk() });
+    expect(room.querySelector(".wk-title")!.textContent).toBe("Facility Actions");
+    // "This modification" over an empty rail, in a room still asking which of
+    // the three this is, would answer its own question in the lane.
+    expect(room.querySelector(".wk-kicker")!.textContent).toBe("This package");
+    expect(room.querySelector(".wk-col-r")!.getAttribute("aria-label")).toBe("This package");
+  });
+
+  it("takes the mode's own words the moment the route is bound", () => {
+    const { room } = openRouted({ question: null });
+    expect(room.querySelector(".wk-title")!.textContent).toBe("Modification");
+    expect(room.querySelector(".wk-kicker")!.textContent).toBe("This modification");
   });
 });

@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import sample from "../../artifact/sample-data.json";
@@ -50,6 +51,7 @@ function mount(data: C360Data = sample as unknown as C360Data): HTMLDivElement {
     root!.render(
       <AppProvider data={data}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -123,11 +125,17 @@ describe("chat FAB (A27.1)", () => {
   });
 });
 
+/* THE SHEET LOST ITS TRIGGER, NOT ITS MACHINERY (founder call, 2026-08-31
+   night): the > FAB arc owns client actions and the hero's button is retired.
+   Every test below still exercises the sheet's own behaviour — it is entered
+   through the app's own reducer, the same SET_PANEL the button dispatched. */
+const openSheet = () => act(() => dispatchOpenSheet());
+
 describe("Client Actions panel (A27.4)", () => {
-  it("opens from the account's quiet trigger", () => {
+  it("renders every registry action for the open relationship", () => {
     mount();
     click(openAnchor());
-    click(byText(/Client Actions/)!);
+    openSheet();
     const panel = document.querySelector('[role="dialog"]')!;
     expect(panel.textContent).toContain("Client Actions");
     expect(panel.textContent).toContain("Draft Credit Memo");
@@ -137,7 +145,7 @@ describe("Client Actions panel (A27.4)", () => {
   it("groups actions by the four categories", () => {
     mount();
     click(openAnchor());
-    click(byText(/Client Actions/)!);
+    openSheet();
     const text = document.querySelector('[role="dialog"]')!.textContent ?? "";
     for (const c of ["Analyze", "Originate", "Service", "Risk"]) expect(text).toContain(c);
   });
@@ -145,22 +153,26 @@ describe("Client Actions panel (A27.4)", () => {
   it("lists all ten actions on an account", () => {
     mount();
     click(openAnchor());
-    click(byText(/Client Actions/)!);
+    openSheet();
     const panel = document.querySelector('[role="dialog"]')!;
     const rows = [...panel.querySelectorAll("button")].filter((b) => b.className.includes("c360-action-row"));
     expect(rows).toHaveLength(10);
   });
 
-  it("founder feedback — has NO trigger on home at all", () => {
+  it("founder feedback — has NO trigger anywhere, on home or on a client", () => {
     mount();
     expect(document.getElementById("c360-client-actions-trigger")).toBeNull();
     expect(byText(/Client Actions/)).toBeUndefined();
+    click(openAnchor());
+    // Retired 2026-08-31: the hero button is gone and the arc is the way in.
+    expect(document.getElementById("c360-client-actions-trigger")).toBeNull();
+    expect(byText(/^Client Actions$/)).toBeUndefined();
   });
 
   it("founder feedback — force-closes when navigating back to home", () => {
     mount();
     click(openAnchor());
-    click(byText(/Client Actions/)!);
+    openSheet();
     expect(document.querySelector('[role="dialog"]')).toBeTruthy();
     click(byText(/^← Worklist$|Worklist/)!);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -173,7 +185,7 @@ describe("Client Actions panel (A27.4)", () => {
     // SURFACE 4, rule 50: on a client the mark carries the action arc, so it
     // announces itself as "Client actions" rather than as the chat.
     expect(byLabel(/Client actions/)).toBeTruthy();
-    click(byText(/Client Actions/)!);
+    openSheet();
     expect(byLabel(/Client actions/)).toBeUndefined(); // the mark stands down
     press("Escape");
     expect(byLabel(/Client actions/)).toBeTruthy(); // and returns
@@ -184,7 +196,7 @@ describe("Client Actions panel (A27.4)", () => {
     (window as unknown as { sendPrompt: unknown }).sendPrompt = sendPrompt;
     mount();
     click(openAnchor());
-    click(byText(/Client Actions/)!);
+    openSheet();
 
     const memo = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("Draft Credit Memo"),
@@ -203,7 +215,7 @@ describe("Client Actions panel (A27.4)", () => {
   it("closes on Escape", () => {
     mount();
     click(openAnchor());
-    click(byText(/Client Actions/)!);
+    openSheet();
     press("Escape");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -216,7 +228,7 @@ describe("CopyPromptDialog explainer variant (founder bug 2026-07-25)", () => {
   it("staged account + no channel ⇒ the no-channel variant, NOT the unstaged one", () => {
     mount(); // no window.sendPrompt in this env
     click(openAnchor()); // Piedmont IS staged
-    click(byText(/Client Actions/)!);
+    openSheet();
     // A non-panel action: wave 2 gave New Facility Request a ticket, so the
     // copy-prompt fallback is now demonstrated on one that still narrates.
     const btn = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
@@ -325,15 +337,21 @@ describe("verdict bar (A27.4 / A28)", () => {
      founder call this test exists for is unchanged and still asserted: ONE
      trigger, never in the header (that centre belongs to the nav capsule, rule
      11), on the hero's own row beside Sync. */
-  it("founder feedback — Client Actions sits in the hero beside Sync, not the nav", () => {
+  /* The founder call this test was written for — ONE trigger, in the hero and
+     never in the header — was SUPERSEDED on 2026-08-31: the Client Actions
+     button is retired outright and the > FAB arc owns client actions. What is
+     asserted now is that new reality, and that Sync is what is left of the
+     hero's control group. */
+  it("founder feedback — the hero carries Sync alone, and no Client Actions button", () => {
     mount();
     click(openAnchor());
-    const triggers = [...document.querySelectorAll("#c360-client-actions-trigger")];
-    expect(triggers).toHaveLength(1);
-    expect(triggers[0].closest("header")).toBeNull();
-    expect(triggers[0].closest(".hero")).toBeTruthy();
-    // Sync shares the trigger group. Without a channel it renders its offline
-    // diagnostic in that same slot, so the group carries two children either way.
-    expect(triggers[0].parentElement!.children).toHaveLength(2);
+    expect(document.querySelectorAll("#c360-client-actions-trigger")).toHaveLength(0);
+    const controls = container!.querySelector(".hero-controls")!;
+    expect(controls).toBeTruthy();
+    expect(controls.closest("header")).toBeNull();
+    expect(controls.closest(".hero")).toBeTruthy();
+    // Sync is what is left. Without a channel it renders its offline diagnostic
+    // in that same slot, so the group carries exactly one child either way.
+    expect(controls.children).toHaveLength(1);
   });
 });

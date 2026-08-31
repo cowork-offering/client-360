@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { BorrowerBundle, C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { deriveWorklist } from "./data/worklist";
 import { suggestActions } from "./actions/suggest";
 import { collectNextSteps, resolveNextSteps } from "./actions/nextSteps";
@@ -58,6 +59,7 @@ function mount(): HTMLDivElement {
     root!.render(
       <AppProvider data={DATA}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -299,7 +301,7 @@ describe("A31.3 — ACTION_TRIGGERED session activity", () => {
     (window as unknown as { sendPrompt: unknown }).sendPrompt = sendPrompt;
     mount();
     click(openRow("Sterling Fabrication"));
-    click(byText(/Client Actions/)!);
+    act(() => dispatchOpenSheet());
     // Use a NON-panel action: panel-backed actions open the Action Panel
     // instead of firing, and nothing is triggered until the confirm gesture.
     // Wave 2 gave five more actions tickets, so this is now Draft Credit Memo.

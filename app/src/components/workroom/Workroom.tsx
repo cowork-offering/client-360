@@ -17,6 +17,7 @@ import type {
   WorkroomContext,
   WorkroomDelta,
   WorkroomExecution,
+  WorkroomMode,
   WorkroomRefusal,
 } from "../../workroom/types";
 import type { SourceChip } from "../../workroom/scripts";
@@ -25,6 +26,15 @@ import { odoRoll } from "../Odometer";
 import { Peek, usePeek } from "./Peek";
 import { GooFilter, LiquidMark } from "./Liquid";
 import { TypeIcon, iconForDelta, iconForMember, type IconKind } from "./TypeIcon";
+import {
+  NEUTRAL_QUESTION,
+  ROUTE_CHIPS,
+  ROUTE_WORD,
+  SOMETHING_ELSE,
+  readRouteIntent,
+  readRouteSwitch,
+  type SmartOpening,
+} from "./route";
 import "../../styles/workroom.css";
 
 /* =============================================================================
@@ -83,9 +93,58 @@ interface DossierModel {
   handoffs?: Array<{ title: string; reason: string; closes?: string }>;
 }
 
+/* ------------------------------------------------------------- the router
+
+   ONE ROOM, THREE ROUTES (founder, 2026-08-31). The room can be opened WITHOUT
+   a route — the FAB's Facility Actions satellite does exactly that — and its
+   first question decides which engine takes the session. The question rides in
+   the greeting slot (rule 30), never in a modal, and it retires the moment a
+   route is bound whether a chip or a typed line bound it.
+
+   The shell owns the QUESTION. The caller owns the CONSEQUENCE: `onBind` and
+   `onRestart` rebuild the room on the chosen engine, because the room cannot
+   swap its own engine mid-session and must never look as if it had. */
+
+export interface RouterQuestion {
+  /** The sentence in the greeting slot. The smart opening's is the deal signal
+   *  verbatim; the neutral one names the three routes. */
+  line: string;
+  chips: RouteOption[];
+}
+
+export interface RouteOption {
+  label: string;
+  /** Null on "Something else": it answers nothing and falls through to the
+   *  neutral three-way rather than binding a route the banker did not pick. */
+  route: WorkroomMode | null;
+  memberId?: string | null;
+}
+
+export interface WorkroomRouter {
+  /** The question to open on. Null where the caller already bound a route. */
+  question: RouterQuestion | null;
+  /** A line that bound the route and still has to be ACTED ON. A banker who
+   *  typed "renew the revolver" asked for something; the bound room says it
+   *  through the parser rather than echoing it and dropping it. */
+  say: string | null;
+  /** The member the binding preselected, where the signal named one. */
+  preselectMemberId?: string | null;
+  onBind: (route: WorkroomMode, opts?: { say?: string; memberId?: string | null }) => void;
+  /** The banker asked for a different route with a manifest already staged and
+   *  then took the discard. The room is REBUILT, never quietly re-engined. */
+  onRestart: (route: WorkroomMode, say: string) => void;
+}
+
 type ThreadItem = { id: string; step: number } & (
   | { kind: "banker"; text: string }
-  | { kind: "agent"; text: string; options?: Array<{ label: string; say: string }> }
+  | {
+      kind: "agent";
+      text: string;
+      options?: Array<{ label: string; say: string }>;
+      /** The explicit restart offered when a cross-route line lands on a staged
+       *  manifest. Never a silent engine swap. */
+      restart?: { route: WorkroomMode; label: string; say: string };
+    }
   /** The opening read: the greeting, the position, the ask it arrived on, and
    *  what the room read to say it. One bubble, because it is one sentence. */
   | { kind: "opening" }
@@ -142,6 +201,29 @@ type NewItem = DistOmit<ThreadItem, "step">;
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
+
+/** The neutral three-way, built once. It is what "Something else" falls through
+ *  to and what a room with no data signal opens on. */
+const NEUTRAL_ASK: RouterQuestion = {
+  line: NEUTRAL_QUESTION,
+  chips: ROUTE_CHIPS.map((c) => ({ label: c.label, route: c.route })),
+};
+
+/** The neutral three-way. NO DATA SIGNAL OPENS ON THIS, never on a fabricated
+ *  suggestion — the channel-none doctrine, applied to the greeting slot. */
+export const neutralAsk = (): RouterQuestion => NEUTRAL_ASK;
+
+/** The question a deal signal opens on: the insight the engine derived, the yes
+ *  it implies, and the way out of it. */
+export function smartAsk(opening: SmartOpening): RouterQuestion {
+  return {
+    line: opening.line,
+    chips: [
+      { label: opening.yesLabel, route: opening.route, memberId: opening.memberId },
+      { label: SOMETHING_ELSE, route: null },
+    ],
+  };
+}
 
 /** A block is LIVE while something in it is still waiting on the banker. */
 function isLive(item: ThreadItem): boolean {
@@ -384,11 +466,17 @@ function ClientEmail() {
 export function Workroom({
   context,
   engine,
+  router,
   onClose,
   onAnchor,
   onExecuted,
 }: {
   context: WorkroomContext;
+  /** Present only for the UNIFIED entry, where the room was opened on a
+   *  relationship rather than on a route. Absent for every caller that already
+   *  named a mode — the command palette, a deep link, a render test — and the
+   *  room then behaves exactly as it always has. */
+  router?: WorkroomRouter;
   /** The room talks to ONE interface and never to a script, a tool or a parser.
    *  Which implementation arrives is WorkroomHost's decision, not the shell's. */
   engine: WorkroomEngine;
@@ -409,13 +497,30 @@ export function Workroom({
   const brief = useMemo(() => engine.brief(context), [engine, context]);
   const vocabulary = useMemo(() => vocabularyFor(context), [context]);
   const reduced = prefersReducedMotion();
+
+  /** THE ROUTE IS STILL OPEN. Non-null while the room is asking which of the
+   *  three this is; the answer clears it and nothing puts it back. */
+  const [ask, setAsk] = useState<RouterQuestion | null>(() => router?.question ?? null);
+
   /** Rule 44: the bar carries ONE word. The room's own name minus the noun the
-   *  room already is; the app bar carries the brand. */
-  const roomWord = vocabulary.title.replace(/\s*Workroom$/i, "");
+   *  room already is; the app bar carries the brand. An UNBOUND room has no
+   *  mode to name yet, and naming the provisional one would be a claim about a
+   *  decision the banker has not made. */
+  const title = ask ? "Facility Actions" : vocabulary.title;
+  const roomWord = title.replace(/\s*Workroom$/i, "");
+  /** The lane's kicker. It names the change set, and an unbound room does not
+   *  know yet what kind of change set this is — "This modification" over an
+   *  empty rail in a room still asking would answer its own question. */
+  const manifestHeading = ask ? "This package" : vocabulary.manifestHeading;
 
   const roomRef = useRef<HTMLDivElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
+  /** The router, reachable from the ritual effect without putting a prop object
+   *  that is rebuilt on every parent render into that effect's deps — which
+   *  would restart the ritual mid-conversation. */
+  const routerRef = useRef(router);
+  routerRef.current = router;
 
   const [items, setItems] = useState<ThreadItem[]>([]);
   const [step, setStep] = useState(0);
@@ -497,6 +602,12 @@ export function Workroom({
       if (!resumed.length) return;
       const [one, many] = vocabulary.changeWord;
       setEntries(resumed);
+      // A MANIFEST THAT SURVIVED THE LAST CLOSE HAS ALREADY BOUND THE ROUTE.
+      // Rule 4: once anything is staged the room is locked to that engine, so
+      // asking which route this is over a rail that is already full would be
+      // offering a decision that was made in the previous session.
+      setAsk(null);
+      routerRef.current?.onBind(context.mode);
       setItems((prev) => [
         ...prev,
         {
@@ -513,7 +624,7 @@ export function Workroom({
     }
     const t = window.setTimeout(land, LOOKUP_MS);
     return () => clearTimeout(t);
-  }, [brief.packageChoices.length, engine, reduced, vocabulary.changeWord]);
+  }, [brief.packageChoices.length, context.mode, engine, reduced, vocabulary.changeWord]);
 
   /* ---- and the room hands the manifest back. Every landing and every removal,
           so a close at any moment loses nothing. Not once it has FILED. */
@@ -608,6 +719,33 @@ export function Workroom({
     async (heard: string, said?: string, opts?: { settled?: boolean }) => {
       const trimmed = heard.trim();
       if (!trimmed || !awake) return;
+
+      /* FREE TEXT ALWAYS WINS (founder, 2026-08-31). While the route is open the
+         line does not go to the engine — it decides WHICH engine hears it. A
+         line that names no route is answered by the question again, because
+         guessing here would pick an engine on the banker's behalf. */
+      if (ask && router) {
+        const route = readRouteIntent(trimmed);
+        if (route) {
+          setAsk(null);
+          router.onBind(route, { say: trimmed });
+          return;
+        }
+        const mine = step + 1;
+        setStep(mine);
+        setItems((prev) => [
+          ...prev,
+          { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() },
+          {
+            kind: "agent",
+            id: nextId("agent"),
+            step: mine,
+            text: "I can take a modification, a renewal or a new facility from here. Pick one above, or say which of the three this is.",
+          },
+        ]);
+        return;
+      }
+
       const mine = step + 1;
       setStep(mine);
       setHistOpen(false);
@@ -645,6 +783,39 @@ export function Workroom({
           return;
         }
         instruction = ack.rest;
+      }
+
+      /* ROUTE BINDING IS FINAL PER PLAN (rule 4, founder 2026-08-31).
+         "Actually let's renew instead" is a real thing a banker says, and it
+         means two different things either side of the first confirm. On an EMPTY
+         manifest nothing has been composed against this engine, so the room is
+         simply rebuilt on the other one. Once anything is staged the plan hash
+         and the single-use token are the governance boundary — a silent engine
+         swap under a composed manifest would carry one route's changes into
+         another route's approval — so the room refuses out loud and offers the
+         discard as the explicit gesture it is. */
+      const switchTo = router ? readRouteSwitch(instruction, context.mode) : null;
+      if (switchTo && router) {
+        if (!entries.length) {
+          router.onRestart(switchTo, instruction);
+          return;
+        }
+        const [one, many] = vocabulary.changeWord;
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${entries.length} ${entries.length === 1 ? one : many} ${
+            entries.length === 1 ? "is" : "are"
+          } staged on this ${ROUTE_WORD[context.mode]}, so the room is locked to it. Starting a ${
+            ROUTE_WORD[switchTo]
+          } means discarding the manifest and opening a fresh room.`,
+          restart: {
+            route: switchTo,
+            label: `Discard and start the ${ROUTE_WORD[switchTo]}`,
+            say: instruction,
+          },
+        });
+        return;
       }
 
       // THE LANE IS ADDRESSABLE IN THE CONVERSATION. "what is staged" and "drop
@@ -720,8 +891,56 @@ export function Workroom({
         setThinking(false);
       }
     },
-    [awake, beat, context, engine, entries, items, openGates, step, vocabulary.nextMove],
+    [ask, awake, beat, context, engine, entries, items, openGates, router, step, vocabulary.changeWord, vocabulary.nextMove],
   );
+
+  /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it
+   *  falls through to the neutral three-way, which is the whole point of
+   *  offering a suggestion rather than assuming one. */
+  const chooseRoute = useCallback(
+    (option: RouteOption) => {
+      if (!router) return;
+      if (!option.route) {
+        setAsk(NEUTRAL_ASK);
+        return;
+      }
+      setAsk(null);
+      router.onBind(option.route, { memberId: option.memberId ?? null });
+    },
+    [router],
+  );
+
+  /** The banker took the discard and asked for the other route. The hold is what
+   *  survives a close, so a restart that left it behind would resume the
+   *  discarded manifest in the next room. */
+  const restartRoute = useCallback(
+    (restart: { route: WorkroomMode; say: string }) => {
+      if (!router) return;
+      engine.release();
+      setEntries([]);
+      router.onRestart(restart.route, restart.say);
+    },
+    [engine, router],
+  );
+
+  /* ---- THE LINE THAT BOUND THE ROUTE IS STILL AN INSTRUCTION. It is said once
+          the bound room is awake, through the parser, exactly as if the banker
+          had typed it into this room in the first place. */
+  const saidRef = useRef<string | null>(null);
+  useEffect(() => {
+    const line = router?.say ?? null;
+    if (!awake || ask || !line || saidRef.current === line) return;
+    saidRef.current = line;
+    void say(line);
+  }, [ask, awake, router?.say, say]);
+
+  /* ---- and the member the signal named is the one the lane opens on. */
+  useEffect(() => {
+    const id = router?.preselectMemberId;
+    if (!id || !awake || focused) return;
+    const member = brief.members.find((m) => m.id === id);
+    if (member) setFocused(member);
+  }, [awake, brief.members, focused, router?.preselectMemberId]);
 
   /**
    * The banker picked a member off the package strip.
@@ -1029,7 +1248,12 @@ export function Workroom({
      at a time — so a room that refused a new instruction BECAUSE a card is open
      and then hid that card would have refused and hidden the reason in the same
      gesture. An open gate keeps its step on screen until it is settled. */
-  const shows = (g: { step: number; items: ThreadItem[] }) => g.step === liveStep || g.items.some(isLive);
+  /* AND A ROOM STILL ASKING WHICH ROUTE THIS IS KEEPS THE QUESTION ON SCREEN.
+     The question lives in the greeting slot at step 0; a line the room could
+     not read as a route starts a step of its own, and collapsing step 0 behind
+     it would hide the three chips in the same gesture that said "pick one". */
+  const shows = (g: { step: number; items: ThreadItem[] }) =>
+    g.step === liveStep || g.items.some(isLive) || (!!ask && g.step === 0);
   const hidden = grouped.filter((g) => !shows(g));
   const railEntries = entries.slice(railFolded);
 
@@ -1061,8 +1285,25 @@ export function Workroom({
               <Words text={brief.greeting} />{" "}
             </span>
           )}
-          <Words text={brief.position} offset={brief.greeting ? brief.greeting.trim().split(/\s+/).length : 0} />
+          {/* THE FIRST QUESTION ROUTES. While the route is open this slot
+              carries the question instead of the position — the position is
+              what the room says once it knows which room it is. */}
+          <Words
+            text={ask ? ask.line : brief.position}
+            offset={brief.greeting ? brief.greeting.trim().split(/\s+/).length : 0}
+          />
         </div>
+        {/* The routes, in the room's own option-pill style. A chip does nothing
+            a typed line could not: both land in `readRouteIntent`'s answer. */}
+        {ask && (
+          <div className="wk-opts">
+            {ask.chips.map((chip) => (
+              <button type="button" className="wk-opt" key={chip.label} onClick={() => chooseRoute(chip)}>
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="wk-posfoot">
           <button
             type="button"
@@ -1156,7 +1397,7 @@ export function Workroom({
           className="wk-room eg-glass eg-glass-workroom"
           role="dialog"
           aria-modal="true"
-          aria-label={vocabulary.title}
+          aria-label={title}
         >
           {/* ONE SLIM LINE (rule 44): the mark, one word, four dots, close. */}
           <header className="wk-head">
@@ -1224,6 +1465,7 @@ export function Workroom({
                         onAcknowledge={acknowledge}
                         onTakeAdvice={takeAdvice}
                         onOption={(sayText, label) => void say(sayText, label)}
+                        onRestartRoute={restartRoute}
                       />
                     ))}
                     {/* THE REVIEW CHIP, in the live exchange. It is the only way
@@ -1272,7 +1514,9 @@ export function Workroom({
                   entirely while a gate is open: a next move offered beside an
                   open card is a second decision on the table. */}
               <div className="wk-sugg">
-                {awake && suggestion && openGates === 0 && !thinking && phase === "work" && (
+                {/* A next move offered while the ROUTE is still open would be a
+                    fourth chip answering a different question. */}
+                {awake && suggestion && !ask && openGates === 0 && !thinking && phase === "work" && (
                   <button
                     type="button"
                     className="wk-pill"
@@ -1296,9 +1540,11 @@ export function Workroom({
                   placeholder={
                     phase === "filed"
                       ? `${vocabulary.filedWord}. The workroom holds.`
-                      : awake
-                        ? "Say what changes on this package."
-                        : "Reading the package…"
+                      : !awake
+                        ? "Reading the package…"
+                        : ask
+                          ? "Say what we are doing, or pick one above."
+                          : "Say what changes on this package."
                   }
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => {
@@ -1336,7 +1582,7 @@ export function Workroom({
           </div>
 
           {/* ============================= THE RIGHT LANE: detail, then manifest */}
-          <aside className="wk-col-r" aria-label={vocabulary.manifestHeading}>
+          <aside className="wk-col-r" aria-label={manifestHeading}>
             {/* THE PACKAGE'S LIVE FIGURES. They belong beside the manifest that
                 moves them, not inside a briefing bubble that collapses with its
                 step — a pro-forma total the banker cannot see while composing
@@ -1385,7 +1631,7 @@ export function Workroom({
             )}
 
             <div className="wk-man-h">
-              <span className="wk-kicker">{vocabulary.manifestHeading}</span>
+              <span className="wk-kicker">{manifestHeading}</span>
               <span className="wk-c">{figures.countLine}</span>
               <button
                 type="button"
@@ -1617,6 +1863,7 @@ function ThreadBlock({
   onAcknowledge,
   onTakeAdvice,
   onOption,
+  onRestartRoute,
 }: {
   item: ThreadItem;
   entries: WorkroomDelta[];
@@ -1634,6 +1881,7 @@ function ThreadBlock({
   onAcknowledge: (id: string) => void;
   onTakeAdvice: (blockId: string, advisory: WorkroomAdvisory) => void;
   onOption: (say: string, label: string) => void;
+  onRestartRoute: (restart: { route: WorkroomMode; say: string }) => void;
 }) {
   if (item.kind === "opening") return <>{opening}</>;
 
@@ -1716,6 +1964,20 @@ function ThreadBlock({
                   {opt.label}
                 </button>
               ))}
+            </div>
+          )}
+          {/* THE EXPLICIT RESTART. It is a chip and not an ink button on
+              purpose: discarding a composed manifest is the banker's decision
+              to make, never the one the room leans on. */}
+          {item.kind === "agent" && item.restart && (
+            <div className="wk-opts">
+              <button
+                type="button"
+                className="wk-opt"
+                onClick={() => onRestartRoute({ route: item.restart!.route, say: item.restart!.say })}
+              >
+                {item.restart.label}
+              </button>
             </div>
           )}
         </div>

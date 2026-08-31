@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { resetModalStack } from "./components/modalStack";
 import sample from "../../artifact/sample-data.json";
 
@@ -107,6 +108,7 @@ function mount(data: C360Data) {
     root!.render(
       <AppProvider data={data}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -173,7 +175,7 @@ describe("the durable trail from the org", () => {
     click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
 
     // File it in this session first: the echo renders instantly.
-    click(byText(/Client Actions/)!);
+    act(() => dispatchOpenSheet());
     click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) => b.textContent?.includes("Collateral Valuation"))!);
     click(byText(/Review the plan/)!);
     await act(async () => {
@@ -234,7 +236,7 @@ describe("an executed action is VISIBLE in the Activity tab (live defect 2026-07
     // no account selected wrote under "" and the entry became unreadable.
     mount(data);
     click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
-    click(byText(/Client Actions/)!);
+    act(() => dispatchOpenSheet());
     click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) => b.textContent?.includes("Collateral Valuation"))!);
     click(byText(/Review the plan/)!);
     await flush();
@@ -252,7 +254,7 @@ describe("an executed action is VISIBLE in the Activity tab (live defect 2026-07
     installMcp();
     mount(liveData());
     click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
-    click(byText(/Client Actions/)!);
+    act(() => dispatchOpenSheet());
     click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) => b.textContent?.includes("Collateral Valuation"))!);
 
     click(byText(/Review the plan/)!);

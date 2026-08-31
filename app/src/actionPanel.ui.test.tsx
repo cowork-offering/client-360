@@ -6,6 +6,9 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
+import { ACTIONS_BY_ID } from "./actions/registry";
+import { closeActionTicket, openActionTicket } from "./components/actionTicket";
 import { CHALLENGE_PANEL_INTRO } from "./components/ActionPanel";
 import { vi } from "vitest";
 import sample from "../../artifact/sample-data.json";
@@ -23,6 +26,9 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  // The ticket seam is a MODULE store, so it outlives a test the way it
+  // outlives a view. One test's open ticket must not be the next test's.
+  closeActionTicket();
   try {
     sessionStorage.clear();
     // The sync overlay persists to localStorage by design; one test's sync must
@@ -73,6 +79,7 @@ function mount(meta?: Record<string, unknown>, booked = false): HTMLDivElement {
     root!.render(
       <AppProvider data={data}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -106,7 +113,23 @@ const expandAllFields = () => {
   if (toggle && toggle.getAttribute("aria-expanded") !== "true") click(toggle);
 };
 
-/** Open an account, its Client Actions sheet, then a panel-backed action row. */
+/**
+ * Open an account, then the action's ticket.
+ *
+ * THE ENTRY CHANGED, THE MACHINERY DID NOT (founder call, 2026-08-31 night).
+ * The Client Actions sheet has no UI trigger any more, so the two actions the
+ * arc carries are entered through their satellite — the real gesture a banker
+ * makes — and every other action through `openActionTicket`, which is the SAME
+ * module seam the arc's shared handler calls when a satellite names an action.
+ * Neither is a test-only door: both are the product's own paths.
+ */
+const ARC_SATELLITE: Record<string, RegExp> = {
+  "Annual Review": /^Annual review$/,
+  "Covenant Review": /^Covenant review$/,
+};
+
+const idForLabel = (label: string) => Object.values(ACTIONS_BY_ID).find((a) => a.label === label)!.id;
+
 function openActionPanel(
   actionLabel: string,
   account = "Sterling Fabrication",
@@ -115,15 +138,30 @@ function openActionPanel(
 ) {
   mount(meta, booked);
   click(openRow(account));
-  click(byText(/Client Actions/)!);
-  const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
-    b.textContent?.includes(actionLabel),
-  )!;
-  click(row);
+  const satellite = ARC_SATELLITE[actionLabel];
+  if (satellite) {
+    click(byLabel(/Client actions/)!);
+    click(byLabel(satellite)!);
+    return;
+  }
+  act(() => openActionTicket(idForLabel(actionLabel)));
 }
 
 describe("A33.1.1 — one modal, three entry points", () => {
-  it("opens from a Client Actions row", () => {
+  /* THE ROW IS GONE; THE MODAL IS NOT (founder call, 2026-08-31 night). Entry
+     point 1 is the arc now — its own satellite for the two actions it carries,
+     and `openActionTicket` for the rest, which is the same seam the satellite
+     handler calls. The contract this describe block exists for is unchanged:
+     one modal, whichever door opened it. */
+  it("opens from the arc's own satellite", () => {
+    mount();
+    click(openRow("Sterling Fabrication"));
+    click(byLabel(/Client actions/)!);
+    click(byLabel(/^Annual review$/)!);
+    expect(panel("Annual Review")).toBeTruthy();
+  });
+
+  it("opens from the ticket seam the arc's handler calls", () => {
     openActionPanel("Create Service Request");
     expect(panel("Create Service Request")).toBeTruthy();
   });
@@ -152,12 +190,11 @@ describe("A33.1.1 — one modal, three entry points", () => {
   });
 
   it("renders the SAME schema whichever entry point opened it", () => {
-    // Entry point 1: the Client Actions row.
+    // Entry point 1: the arc's ticket seam.
     openActionPanel("Collateral Valuation");
     expandAllFields();
     const fromRow = panel("Collateral Valuation")!.textContent ?? "";
     press("Escape"); // closes the Action Panel
-    press("Escape"); // closes the Client Actions sheet
 
     // Entry point 2: the activity next-step button, same mount.
     click(byText(/Headroom analysis concluded/)!);
@@ -624,14 +661,12 @@ describe("wave 2 — the five new tickets", () => {
       root!.render(
         <AppProvider data={data}>
           <AppShell />
+          <AppEntry />
         </AppProvider>,
       );
     });
     click(openRow("Sterling Fabrication"));
-    click(byText(/Client Actions/)!);
-    click([...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Loan Modification"),
-    )!);
+    act(() => openActionTicket("loan-modification"));
     const review = byText(/Review the plan/);
     if (review && !review.hasAttribute("disabled")) {
       click(review);
@@ -837,7 +872,7 @@ describe("wave 2 — the five new tickets", () => {
   it.each(["Loan Modification", "Renewal"])("withholds %s when nothing is booked, with the reason", (label) => {
     mount();
     click(openRow("Sterling Fabrication"));
-    click(byText(/Client Actions/)!);
+    act(() => dispatchOpenSheet());
     const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
       b.textContent?.includes(label),
     )!;
@@ -1662,7 +1697,6 @@ describe("an executed action lands in the Activity trail (A30)", () => {
     click(byText(/Confirm and file/)!);
     await flush();
     press("Escape"); // close the panel
-    press("Escape"); // close the Client Actions sheet
     return document.body.textContent ?? "";
   }
 
@@ -1829,14 +1863,12 @@ describe("no staged plan can survive a republish", () => {
     openActionPanel("Annual Review", "Sterling Fabrication", { userId: APPROVER_ID });
     click(byText(/Review the plan/)!);
     await flush();
-    // One Escape closes the panel only (A31.1): the Client Actions sheet it was
-    // opened from is still there to reopen it from.
+    // Escape closes the panel (A31.1), and the arc it was opened from is still
+    // there to reopen it from.
     press("Escape");
     expect(panel("Annual Review")).toBeNull();
-    const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("Annual Review"),
-    )!;
-    click(row);
+    click(byLabel(/Client actions/)!);
+    click(byLabel(/^Annual review$/)!);
     // Reopened on the briefing, with no plan to step forward to.
     expect(byText(/Back to the plan/)).toBeUndefined();
     expect(byText(/Review the plan/)).toBeTruthy();
