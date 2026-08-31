@@ -500,6 +500,15 @@ PP", 6 members rolled, 2 covenant junctions + 7 pledges (6 fresh aggregates) + 2
 carried, parents and current package untouched, staging Completed. Reverted to baseline on request
 (7 members, LoC $15M Booked/Open, 0 chain rows, parent graphs intact) — the demo is repeatable.
 
-**Still open:** StageRenewal carries single-loan semantics and needs the same package-first
-correction before a renewal is filed for real; multi-facility (n>1) selections through the NEW
-versioning path are unit-covered but not yet wire-proven live.
+**Closed 2026-08-30 (same day):** StageRenewal now stages the same package-first roll (renewal
+flavor: actionType Renewal, maturity-led). Roll membership computed and named (Booked/Open roll,
+excluded members named with their stage), roll_package / verify_package / carry_junctions steps
+with counted promises, summary and warnings narrate the version roll, plan shape 3n+5 mirroring
+the modification. Execution stays held — no execute class ships — so the staged plan is narration
+a future execute wave inherits, not a write path. Deployed to bankinggpt (StageHeldCreditActionsTest,
+24 tests green); renewEngine.ts narration and its observed-envelope mock are package-first too, and
+the allowlist mirror accepts the new renewal plan shape (client 1767 green).
+
+**Still open:** multi-facility (n>1) selections through the NEW versioning path are unit-covered
+but not yet wire-proven live; a renewal has never been staged live against the new plan shape
+(the shape is seam-tested org-side, mirror-tested client-side).
