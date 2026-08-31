@@ -1,0 +1,232 @@
+/* =============================================================================
+   SURFACE 6 — THE CMDK LENS (DIRECTION-LOCKED rule 63, 70.2, 46, 47).
+
+   THE PALETTE IS A LENS, NOT A POPUP. Opening it does not drop a scrim over the
+   cockpit; it pushes the cockpit OUT OF FOCUS. `body.lensed` takes the top bar
+   and the active view into depth of field (blur 14px, saturate .92, scale .988
+   over .45s), blurs the FAB, and the glass field rises out of that softness.
+   The backdrop dim is almost nothing — rgba(16,4,30,.10) — because the depth of
+   field is doing the work. Escape snaps the world back.
+
+   THE DIM IS THE ONE INTENT OVERRIDE. The frozen dummy RENDERS .14 (a later
+   rule wins; the .10 rule is dead CSS). Per design/probes/reference/
+   INTENT-OVERRIDES.md #3 the port ships the WRITTEN intent, .10, which is
+   already spelled in tokens.css as --scrim. The cmdk dim leaf is therefore
+   expected to differ from the dummy baseline, in exactly this direction.
+
+   SCOPING. Everything is under .cmdk-wrap / .cmdk except the lens itself, which
+   by definition has to reach the chrome it defocuses. Those three selectors
+   (.topbar, the active view, #fab) touch no component file: the lens is a
+   material applied from here, so Surface 1's header, Surface 2's workspace and
+   Surface 4's FAB stay unedited.
+
+   REDUCED MOTION KILLS THE DOF ENTIRELY — not just its animation. A blurred,
+   shrunken cockpit is not a "reduced" version of the effect, it is the effect
+   with the transition removed, so the media query below unsets the filter and
+   the transform rather than leaving a static blur on screen.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- the lens body
+   The transition lives on the elements AT REST so the world defocuses AND
+   refocuses; a transition declared only under body.lensed animates one way and
+   snaps back the other.
+
+   THE PROPERTY LISTS ARE RESTATED, NOT EXTENDED, because CSS has no way to
+   append to `transition`. .topbar carries box-shadow .4s from landing.css
+   (rule 70.5 / INTENT-OVERRIDES #2) and #fab carries transform + box-shadow at
+   --dur-fast from .c360-fab; both are repeated here so adding the lens does not
+   quietly take them away. They read their timings from the same tokens, so only
+   the property list is duplicated, never a number. */
+.topbar,
+.view.show,
+main > :not(.view) {
+  transition:
+    filter 0.45s var(--ease-out),
+    transform 0.5s var(--ease-spring),
+    opacity 0.3s var(--ease-out),
+    box-shadow 0.4s var(--ease-out);
+}
+#fab {
+  transition:
+    filter 0.45s var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+/* THE ACTIVE VIEW, WHICHEVER SURFACE OWNS IT. `.view.show` is the landing (and
+   the client workspace once Surface 2 gives it the same hook); `main > :not
+   (.view)` is whatever else is currently mounted as the app's one content
+   region. The second selector retires itself the moment the first one covers
+   the client view — it cannot match an element that has become a `.view`. */
+body.lensed .topbar,
+body.lensed .view.show,
+body.lensed main > :not(.view) {
+  filter: blur(14px) saturate(0.92);
+  /* THE SCALE IS DELIBERATELY BEATABLE. `.view.show` carries `animation:
+     eg-viewin ... both`, and a filled animation outranks any normal
+     declaration however specific — so a view whose entry animation has run and
+     is still filling defocuses but does not shrink. That is exactly what the
+     frozen dummy does (landing view: scale 1; client view: scale .988, because
+     the name flight's `noanim` has taken its entry animation off), and the
+     dummy wins. Forcing it with !important would be a fourth intent override
+     and there are only three (design/probes/reference/INTENT-OVERRIDES.md);
+     killing the animation instead restarts it the moment the lens lifts, which
+     is HANDOVER §4 trap 2. */
+  transform: scale(0.988);
+}
+body.lensed #fab {
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.lensed .topbar,
+  body.lensed .view.show,
+  body.lensed main > :not(.view),
+  body.lensed #fab {
+    filter: none;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------- the backdrop
+   THE WRAP IS ALWAYS IN THE DOM and `show` is what opens it; the field inside
+   it mounts with the palette (CommandPalette.tsx says why). */
+.cmdk-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-palette);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  background: var(--scrim);
+}
+.cmdk-wrap.show {
+  display: flex;
+}
+
+/* ------------------------------------------------------------- the glass field
+   Cut from the one sheet (rule 71): .eg-glass + .eg-glass-panel carry the blur
+   38 / saturate 1.9 body, the dark outer hairline and the triple inner rim, so
+   the glass census passes by construction. Only the palette's own tint — the
+   dummy's violet bloom off the top-right corner — is written here. */
+.cmdk {
+  --eg-tint:
+    radial-gradient(360px 160px at 90% -12%, rgba(161, 0, 255, 0.07) 0%, transparent 60%),
+    rgba(255, 255, 255, 0.55);
+  width: min(560px, 92vw);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.cmdk-wrap.show .cmdk {
+  animation: eg-cmdkin 0.42s var(--ease-spring) both;
+}
+@keyframes eg-cmdkin {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* FOCUS IS THE PILL'S JOB (rule 47). The input goes quiet and the field takes
+   the ring via :focus-within — a rectangle drawn inside a 16px-radius shell is
+   the bug that rule exists for. The rim is restated ahead of the ring so the
+   glass keeps its three insets while focused; a bare `box-shadow: ... ring`
+   here would strip the material and fail the census. */
+.cmdk:focus-within {
+  border-color: rgba(0, 0, 0, 0.16);
+  box-shadow: var(--glass-rim), var(--eg-drop), 0 0 0 3px var(--focus-ring-soft);
+}
+.cmdk input:focus-visible {
+  outline: none;
+}
+
+.cmdk .inrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--glass-hairline);
+}
+.cmdk input {
+  flex: 1;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--ink-strong);
+}
+.cmdk .res {
+  padding: 5px;
+}
+
+/* --------------------------------------------------------------- the results
+   Rule 46, the mark census: the palette's only glyph is the SEARCH glyph in the
+   field. The brand mark never appears in a cmdk row. */
+.cmdk .r {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: calc(100% - 8px);
+  padding: 10px 14px;
+  margin: 2px 4px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.cmdk .r:hover,
+.cmdk .r.sel {
+  background: rgba(255, 255, 255, 0.85);
+}
+.cmdk .r .act {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+.cmdk .r.sel .act {
+  color: var(--accent);
+}
+.cmdk .r.hid {
+  display: none;
+}
+
+/* THE QUIET NO-RESULTS ROW (rule 68.4). Silence is not an answer: a filter that
+   matches nothing says so, and says what would match. */
+.cmdk .nores {
+  display: none;
+  padding: 16px 18px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+.cmdk .nores.on {
+  display: block;
+}
+
+/* THE ROWS MATERIALIZE, they do not appear. 60ms apart off a .10s base, driven
+   by the row's own index so the cascade fits however many commands the book
+   actually offers — the dummy's three are a floor, not the contract. */
+.cmdk-wrap.show .r {
+  opacity: 0;
+  animation: eg-cmdkrowin 0.35s var(--ease-out) forwards;
+  animation-delay: calc(0.1s + var(--i, 0) * 0.06s);
+}
+@keyframes eg-cmdkrowin {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
