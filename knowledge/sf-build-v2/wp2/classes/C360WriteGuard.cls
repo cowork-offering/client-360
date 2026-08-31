@@ -48,6 +48,7 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_PLEDGE = 'LLC_BI__Loan_Collateral2__c';
     public static final String OBJ_PLEDGE_AGGREGATE = 'LLC_BI__Loan_Collateral_Aggregate__c';
     public static final String OBJ_COVENANT = 'LLC_BI__Covenant2__c';
+    public static final String OBJ_ACCOUNT_COVENANT = 'LLC_BI__Account_Covenant__c';
 
     /** The junction graph OP_CARRY may replicate, and nothing else. */
     private static final Set<String> CARRY_OBJECTS = new Set<String>{
@@ -119,7 +120,11 @@ public with sharing class C360WriteGuard {
         // covenant this same transaction created, and only to a modification clone this same
         // transaction created — never to a booked facility. The gate fences the object; the
         // caller owns that scoping, exactly as with OP_CARRY.
-        OBJ_LOAN_COVENANT => new Map<String, Set<String>>()
+        OBJ_LOAN_COVENANT => new Map<String, Set<String>>(),
+        // The account association nCino's own UI mints beside every covenant (founder correction,
+        // 2026-08-31): a covenant belongs to the borrower as well as to the facility, and 140 such
+        // rows exist in this org on other relationships. Two required lookups, nothing else.
+        OBJ_ACCOUNT_COVENANT => new Map<String, Set<String>>()
     };
 
     /**
@@ -205,7 +210,8 @@ public with sharing class C360WriteGuard {
             'LLC_BI__Breached__c', 'LLC_BI__Overdue__c', 'LLC_BI__Is_Template__c',
             'LLC_BI__Last_Evaluation_Date__c', 'LLC_BI__Last_Evaluation_Status__c', 'LLC_BI__Last_Evaluation_Value__c'
         },
-        OBJ_LOAN_COVENANT => new Set<String>()
+        OBJ_LOAN_COVENANT => new Set<String>(),
+        OBJ_ACCOUNT_COVENANT => new Set<String>()
     };
 
     /**
@@ -219,7 +225,7 @@ public with sharing class C360WriteGuard {
     /** Every object the fence knows about, in either direction. */
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
-        OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT
+        OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT
     };
 
     /**

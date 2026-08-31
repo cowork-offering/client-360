@@ -66,6 +66,18 @@ global with sharing class StageLoanModification {
         global String covenantAddsJson;
         @InvocableVariable(label='Involvement Changes JSON' description='Optional. JSON list of borrowing-structure amendments: [{"op" (add|remove), "role" (Borrower|Co-Borrower|Guarantor|Limited Guarantor|Related Entity), "accountId" or "accountName", "ownership"?, "targetLoanId"?}]. An ADD authors the involvement on the CLONE of the targeted facility on the new package version. A REMOVE is a carry exclusion: the parent keeps its row and the clone starts without it — nothing is ever deleted. targetLoanId may be omitted when exactly one facility is selected.')
         global String involvementChangesJson;
+        @InvocableVariable(label='Field Changes JSON' description='Optional. THE FIELD WAVE: JSON list of loan-field amendments applied to the CLONE: [{"field" (API name or exact field label), "value", "targetLoanId"?}]. The field must be updateable and non-formula per the org\'s own describe, outside the doctrine deny-list (stage, status, the four scalar keys, anchoring lookups). Values are coerced by the field\'s own type; a picklist value is validated against the org\'s active values and a refusal carries the legal list. targetLoanId may be omitted when exactly one facility is selected.')
+        global String fieldChangesJson;
+    }
+
+    /** One parsed field-wave amendment, resolved against the org's own describe. */
+    public class FieldChange {
+        public String fieldName;
+        public String fieldLabel;
+        public String fieldType;
+        /** The coerced value, re-serialized for the plan. */
+        public String valueJson;
+        public Id targetLoanId;
     }
 
     /** One parsed borrowing-structure amendment, resolved against the org. */
@@ -228,8 +240,9 @@ global with sharing class StageLoanModification {
             throw new ToolException('rationale is required. It feeds the audit ledger.');
         }
         if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
-            req.requestedTermMonths == null && String.isBlank(req.covenantAddsJson) && String.isBlank(req.involvementChangesJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, or a borrowing-structure change.');
+            req.requestedTermMonths == null && String.isBlank(req.covenantAddsJson) && String.isBlank(req.involvementChangesJson) &&
+            String.isBlank(req.fieldChangesJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, or a field change.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -262,6 +275,7 @@ global with sharing class StageLoanModification {
         List<String> covenantWarnings = new List<String>();
         List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, covenantWarnings);
         List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, covenantWarnings);
+        List<FieldChange> fieldChanges = parseFieldChanges(req, facilities);
 
         Integer n = facilities.size();
         Integer carryover = 0;
@@ -385,8 +399,8 @@ global with sharing class StageLoanModification {
             );
             steps.add(
                 new C360Plan.Step('covenant_attach_' + s, C360Plan.TYPE_WRITE,
-                    'Attach it to the clone of ' + targetName + ' on the new package version, never to the booked parent')
-                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'LLC_BI__Loan__c', 'LLC_BI__Covenant2__c' })
+                    'Attach it to the clone of ' + targetName + ' on the new package version (never to the booked parent), and associate it to the borrower account the way nCino\'s own UI does')
+                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'LLC_BI__Loan__c', 'LLC_BI__Covenant2__c', 'LLC_BI__Account_Covenant__c: LLC_BI__Account__c + LLC_BI__Covenant2__c' })
                     .provenBy('SELECT Id FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :createdId')
             );
             steps.add(
@@ -441,6 +455,28 @@ global with sharing class StageLoanModification {
             );
         }
         resolved.put('involvementChangeCount', involvementChanges.size());
+
+        // The field wave: any field the org's own describe says is writable, outside the deny-list,
+        // applied to the clone with the same discipline as the four scalars. The banker's sentence
+        // was resolved to an API name and a typed value HERE, at stage time, so the confirm gate
+        // hashes exactly what will be written.
+        for (Integer i = 0; i < fieldChanges.size(); i++) {
+            FieldChange fc = fieldChanges[i];
+            String s3 = String.valueOf(i);
+            resolved.put('fieldChange' + s3 + '.field', fc.fieldName);
+            resolved.put('fieldChange' + s3 + '.label', fc.fieldLabel);
+            resolved.put('fieldChange' + s3 + '.type', fc.fieldType);
+            resolved.put('fieldChange' + s3 + '.valueJson', fc.valueJson);
+            resolved.put('fieldChange' + s3 + '.targetLoanId', String.valueOf(fc.targetLoanId));
+            String targetName3 = facilityById.get(fc.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('field_change_' + s3, C360Plan.TYPE_WRITE,
+                    'Set ' + fc.fieldLabel + ' (' + fc.fieldName + ') to ' + displayValue(fc) + ' on the clone of ' + targetName3)
+                    .onObject('LLC_BI__Loan__c', new List<String>{ fc.fieldName })
+                    .provenBy('SELECT ' + fc.fieldName + ' FROM LLC_BI__Loan__c WHERE Id = :cloneId')
+            );
+        }
+        resolved.put('fieldChangeCount', fieldChanges.size());
         steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'Stage-driven email alerts and memo status changes the org may run')
                 .wakes(new List<String>{ 'nCino Commercial - Loan After Save' })
@@ -521,6 +557,9 @@ global with sharing class StageLoanModification {
             (involvementChanges.isEmpty() ? '' : String.valueOf(involvementChanges.size()) + ' borrowing-structure ' +
                 (involvementChanges.size() == 1 ? 'change lands' : 'changes land') + ' on the new version: adds are authored on the ' +
                 'clone, removes are carry exclusions — the booked facilities keep every row they have today. ') +
+            (fieldChanges.isEmpty() ? '' : String.valueOf(fieldChanges.size()) + ' field ' +
+                (fieldChanges.size() == 1 ? 'change is' : 'changes are') + ' applied to the clone, each resolved against the ' +
+                'org\'s own describe and named with its value in the plan. ') +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -674,6 +713,143 @@ global with sharing class StageLoanModification {
             }
         }
         return out;
+    }
+
+    /**
+     * THE FIELD-WAVE DENY LIST. Everything else the describe says is writable and non-formula on
+     * the Loan may file onto the clone. Four kinds of field stay out, each for a named reason:
+     * the four scalars (they have their own request keys and drift baselines), stage and status
+     * (the guard owns the one legal hop), the anchoring lookups (a re-anchored clone is a corrupted
+     * version), and the versioning flags the engine itself owns.
+     */
+    private static final Set<String> FIELD_WAVE_DENY = new Set<String>{
+        'llc_bi__amount__c', 'llc_bi__maturity_date__c', 'llc_bi__interestrate__c', 'llc_bi__term_months__c',
+        'llc_bi__stage__c', 'llc_bi__status__c',
+        'llc_bi__account__c', 'llc_bi__product_package__c', 'llc_bi__parentloan__c',
+        'llc_bi__originalparentloan__c', 'llc_bi__highest__c', 'llc_bi__lookupkey__c',
+        'llc_bi__isrenewal__c', 'llc_bi__is_modification__c', 'llc_bi__is_no_action_placeholder__c',
+        'llc_bi__is_original_inactive_loan__c', 'ownerid', 'recordtypeid', 'currencyisocode'
+    };
+
+    /**
+     * Parses and RESOLVES the field wave against the org's OWN describe: the field must exist on
+     * Loan (by API name or exact label, case-insensitive), be updateable and non-formula, and sit
+     * outside the deny-list. The value is coerced by the field's own type, and a picklist value is
+     * validated against the org's active values — a refusal carries the legal list, so the caller
+     * can correct itself with the org's vocabulary rather than guessing again.
+     */
+    private static List<FieldChange> parseFieldChanges(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<FieldChange> out = new List<FieldChange>();
+        if (String.isBlank(req.fieldChangesJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.fieldChangesJson);
+        } catch (Exception e) {
+            throw new ToolException('fieldChangesJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        Map<String, Schema.SObjectField> fieldMap = Schema.SObjectType.LLC_BI__Loan__c.fields.getMap();
+        // Labels resolve too: the banker's word for a field is its label, not its API name.
+        Map<String, String> byLabel = new Map<String, String>();
+        for (String key : fieldMap.keySet()) {
+            Schema.DescribeFieldResult dfr = fieldMap.get(key).getDescribe();
+            byLabel.put(dfr.getLabel().toLowerCase(), dfr.getName());
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            String rawField = m.get('field') == null ? null : String.valueOf(m.get('field')).trim();
+            if (String.isBlank(rawField)) {
+                throw new ToolException('Each field change names its field: the API name or the exact field label.');
+            }
+            String apiName = fieldMap.containsKey(rawField.toLowerCase())
+                ? fieldMap.get(rawField.toLowerCase()).getDescribe().getName()
+                : byLabel.get(rawField.toLowerCase());
+            if (apiName == null) {
+                throw new ToolException('No field named "' + rawField + '" exists on the facility in this org, by API name or by label.');
+            }
+            if (FIELD_WAVE_DENY.contains(apiName.toLowerCase())) {
+                throw new ToolException(
+                    apiName + ' is outside the field wave: the four scalars ride their own request keys, and stage, ' +
+                    'status, anchors and versioning flags belong to the org and the engine.'
+                );
+            }
+            Schema.DescribeFieldResult dfr = fieldMap.get(apiName.toLowerCase()).getDescribe();
+            if (!dfr.isUpdateable() || dfr.isCalculated() || dfr.isAutoNumber()) {
+                throw new ToolException(apiName + ' is not writable in this org (formula, rollup or system-owned). The describe is the authority.');
+            }
+            FieldChange fc = new FieldChange();
+            fc.fieldName = apiName;
+            fc.fieldLabel = dfr.getLabel();
+            fc.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (fc.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each field change when more than one facility is selected.');
+                }
+                fc.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(fc.targetLoanId)) {
+                throw new ToolException('A field change targets facility ' + fc.targetLoanId + ', which is not one of the selected facilities.');
+            }
+            coerceFieldValue(fc, dfr, m.get('value'));
+            out.add(fc);
+        }
+        return out;
+    }
+
+    /** Coerces the supplied value into the field's own type and validates picklists. */
+    private static void coerceFieldValue(FieldChange fc, Schema.DescribeFieldResult dfr, Object supplied) {
+        if (supplied == null) {
+            throw new ToolException(fc.fieldName + ' needs a value. Clearing a field is not a change this wave files.');
+        }
+        Schema.DisplayType t = dfr.getType();
+        fc.fieldType = String.valueOf(t);
+        String sv = String.valueOf(supplied).trim();
+        if (t == Schema.DisplayType.CURRENCY || t == Schema.DisplayType.DOUBLE || t == Schema.DisplayType.PERCENT || t == Schema.DisplayType.INTEGER) {
+            Decimal d;
+            try { d = Decimal.valueOf(sv.replace(',', '')); } catch (Exception e) {
+                throw new ToolException(fc.fieldName + ' is a number (' + fc.fieldType + '); "' + sv + '" is not one.');
+            }
+            fc.valueJson = JSON.serialize(d);
+        } else if (t == Schema.DisplayType.DATE) {
+            try { fc.valueJson = JSON.serialize(Date.valueOf(sv)); } catch (Exception e) {
+                throw new ToolException(fc.fieldName + ' is a date; supply YYYY-MM-DD. Got "' + sv + '".');
+            }
+        } else if (t == Schema.DisplayType.BOOLEAN) {
+            if (sv.toLowerCase() != 'true' && sv.toLowerCase() != 'false') {
+                throw new ToolException(fc.fieldName + ' is a checkbox; supply true or false. Got "' + sv + '".');
+            }
+            fc.valueJson = sv.toLowerCase();
+        } else if (t == Schema.DisplayType.PICKLIST || t == Schema.DisplayType.MULTIPICKLIST) {
+            List<String> legal = new List<String>();
+            String matched;
+            for (Schema.PicklistEntry pe : dfr.getPicklistValues()) {
+                if (!pe.isActive()) { continue; }
+                legal.add(pe.getValue());
+                if (pe.getValue().toLowerCase() == sv.toLowerCase() || pe.getLabel().toLowerCase() == sv.toLowerCase()) {
+                    matched = pe.getValue();
+                }
+            }
+            if (matched == null) {
+                throw new ToolException(
+                    '"' + sv + '" is not a legal value for ' + fc.fieldName + '. The org offers: ' + String.join(legal, ', ') + '.'
+                );
+            }
+            fc.valueJson = JSON.serialize(matched);
+        } else if (t == Schema.DisplayType.STRING || t == Schema.DisplayType.TEXTAREA || t == Schema.DisplayType.URL || t == Schema.DisplayType.EMAIL || t == Schema.DisplayType.PHONE) {
+            fc.valueJson = JSON.serialize(sv);
+        } else if (t == Schema.DisplayType.REFERENCE) {
+            throw new ToolException(fc.fieldName + ' is a lookup. Re-anchoring records is not a field change; use the arm that owns that relationship.');
+        } else {
+            throw new ToolException(fc.fieldName + ' is a ' + fc.fieldType + ' field, which this wave does not coerce yet.');
+        }
+    }
+
+    /** The staged value as the banker should read it in the plan step. */
+    private static String displayValue(FieldChange fc) {
+        Object v = JSON.deserializeUntyped(fc.valueJson);
+        return String.valueOf(v);
     }
 
     /** The borrowing-structure roles the amendment arm may file. Grantor and Contractor stay out:

@@ -533,7 +533,10 @@ const COLLATERAL_FIELDS: CatalogField[] = [
     closes: PLEDGE_FIX,
     associationScope: "pledges",
     chain: [
-      { object: "LLC_BI__Collateral__c", via: "LLC_BI__Account__c", label: "Create the asset, or resolve the one the borrower already owns" },
+      // The asset has NO account lookup in this org (live describe): the borrower connection IS the
+      // ownership junction below. The asset itself needs its collateral type, whose org VR demands
+      // an advance rate on the type.
+      { object: "LLC_BI__Collateral__c", via: "LLC_BI__Collateral_Type__c", label: "Create the asset, or resolve the one the borrower already owns" },
       { object: "LLC_BI__Account_Collateral__c", via: "LLC_BI__Collateral__c + Account", label: "Record who owns it and on what authority" },
       {
         object: "LLC_BI__Loan_Collateral2__c",

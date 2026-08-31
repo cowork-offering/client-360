@@ -532,6 +532,8 @@ private class StageExecuteLoanModificationTest {
             'And NEVER on the booked parent');
         System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Covenant_Compliance2__c WHERE LLC_BI__Covenant__c = :cr.covenantId],
             'No compliance row was minted, so no approval chain started (the probe finding, held as a permanent assertion)');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Account_Covenant__c WHERE LLC_BI__Covenant2__c = :cr.covenantId AND LLC_BI__Account__c = :borrower().Id],
+            'The account association nCino\'s own UI mints beside a covenant exists too (founder correction 2026-08-31)');
 
         Boolean createOk = false;
         Boolean attachOk = false;
@@ -624,6 +626,70 @@ private class StageExecuteLoanModificationTest {
         System.assertEquals(false, res.ok, 'Removing what is not there cannot be staged');
         System.assert(res.error.message.contains('is not involved on'),
             'And the refusal says so in structure language: ' + res.error.message);
+    }
+
+    @IsTest
+    static void theFieldWaveResolvesAgainstTheDescribeAndLandsOnTheClone() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('fieldwave');
+
+        StageLoanModification.Request r = stageReq(k);
+        // By API name and by LABEL, deliberately one of each: the banker's word for a field is its
+        // label, and the stage resolves both against the org's own describe.
+        r.fieldChangesJson = '[' +
+            '{"field":"LLC_BI__Payment_Schedule__c","value":"monthly"},' +
+            '{"field":"Amortized Term (Months)","value":240}' +
+        ']';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        Boolean namedInPlan = false;
+        for (StageLoanModification.PlanStep ps : staged.result.steps) {
+            if (ps.id == 'field_change_0') {
+                namedInPlan = ps.label.contains('Payment Schedule') && ps.label.contains('Monthly');
+            }
+        }
+        System.assertEquals(true, namedInPlan, 'The plan names the field, by label, with the ORG\'s cased value: ' + JSON.serialize(staged.result.steps));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(2, done.result.fieldChanges.size());
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        LLC_BI__Loan__c clone = [
+            SELECT LLC_BI__Payment_Schedule__c, LLC_BI__Amortized_Term_Months__c
+            FROM LLC_BI__Loan__c WHERE Id = :cloneId
+        ];
+        System.assertEquals('Monthly', clone.LLC_BI__Payment_Schedule__c,
+            'The picklist landed in the org\'s own casing, resolved from the banker\'s lowercase');
+        System.assertEquals(240, clone.LLC_BI__Amortized_Term_Months__c, 'The label-addressed number landed');
+
+        LLC_BI__Loan__c after = parent();
+        System.assertEquals(before.LLC_BI__Amount__c, after.LLC_BI__Amount__c, 'The parent is untouched, as everywhere');
+    }
+
+    @IsTest
+    static void theFieldWaveRefusesWhatTheDescribeOrTheDoctrineForbids() {
+        C360TestFixture.armCalloutMock();
+
+        StageLoanModification.Request r1 = stageReq(key('fw-deny'));
+        r1.fieldChangesJson = '[{"field":"LLC_BI__Stage__c","value":"Booked"}]';
+        Test.startTest();
+        StageLoanModification.Response res1 = stage(r1);
+        StageLoanModification.Request r2 = stageReq(key('fw-pick'));
+        r2.fieldChangesJson = '[{"field":"LLC_BI__Payment_Schedule__c","value":"Fortnightly"}]';
+        StageLoanModification.Response res2 = stage(r2);
+        Test.stopTest();
+
+        System.assertEquals(false, res1.ok, 'Stage is outside the field wave');
+        System.assert(res1.error.message.contains('outside the field wave'), res1.error.message);
+        System.assertEquals(false, res2.ok, 'An illegal picklist value is refused');
+        System.assert(res2.error.message.contains('The org offers:'), 'And the refusal carries the org\'s legal list: ' + res2.error.message);
     }
 
     @IsTest

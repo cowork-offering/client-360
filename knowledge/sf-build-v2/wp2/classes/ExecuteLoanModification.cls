@@ -183,6 +183,20 @@ global with sharing class ExecuteLoanModification {
         global String outcome;
     }
 
+    /** One field-wave change this run applied to a clone. */
+    global class FieldChangeResult {
+        @InvocableVariable(label='Field')
+        global String field;
+        @InvocableVariable(label='Label')
+        global String label;
+        @InvocableVariable(label='Value')
+        global String value;
+        @InvocableVariable(label='Clone Loan Id')
+        global String cloneLoanId;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     /** One borrowing-structure amendment this run landed on the new version. */
     global class InvolvementResult {
         @InvocableVariable(label='Op')
@@ -238,6 +252,8 @@ global with sharing class ExecuteLoanModification {
         global List<CovenantResult> covenants;
         @InvocableVariable(label='Involvements' description='One entry per borrowing-structure amendment: adds authored on the clone, removes carried out as exclusions.')
         global List<InvolvementResult> involvements;
+        @InvocableVariable(label='Field Changes' description='One entry per field-wave change, each re-read off the clone after the write.')
+        global List<FieldChangeResult> fieldChanges;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -682,6 +698,8 @@ global with sharing class ExecuteLoanModification {
         Integer covenantAddCount = covAddCountRaw == null ? 0 : Integer.valueOf(covAddCountRaw);
         Decimal invCountRaw = C360Plan.asDecimal(v.get('involvementChangeCount'));
         Integer involvementChangeCount = invCountRaw == null ? 0 : Integer.valueOf(invCountRaw);
+        Decimal fcCountRaw = C360Plan.asDecimal(v.get('fieldChangeCount'));
+        Integer fieldChangeCount = fcCountRaw == null ? 0 : Integer.valueOf(fcCountRaw);
 
         // The staged roll list. nCino package methodology: the credit action versions the WHOLE
         // package, so the plan carries every eligible member, not just the selected ones. The
@@ -756,6 +774,9 @@ global with sharing class ExecuteLoanModification {
                 C360Plan.setState(steps, 'involvement_change_' + ii, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'involvement_verify_' + ii, C360Plan.STATE_SKIPPED, null);
             }
+            for (Integer fi = 0; fi < fieldChangeCount; fi++) {
+                C360Plan.setState(steps, 'field_change_' + fi, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
@@ -785,6 +806,9 @@ global with sharing class ExecuteLoanModification {
             for (Integer ii = 0; ii < involvementChangeCount; ii++) {
                 C360Plan.setState(steps, 'involvement_change_' + ii, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'involvement_verify_' + ii, C360Plan.STATE_SKIPPED, null);
+            }
+            for (Integer fi = 0; fi < fieldChangeCount; fi++) {
+                C360Plan.setState(steps, 'field_change_' + fi, C360Plan.STATE_SKIPPED, null);
             }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
@@ -908,6 +932,21 @@ global with sharing class ExecuteLoanModification {
             carryReport.removeStart('CARRIED ')
         );
 
+        // The field wave, grouped by target: each staged change carries the API name, the coerced
+        // value and the type, resolved against the org's describe at stage time and hashed with the
+        // plan. Applied to the clone in the SAME update as the scalars, behind the same guard.
+        Map<Id, List<Integer>> fieldChangesByTarget = new Map<Id, List<Integer>>();
+        for (Integer i = 0; i < fieldChangeCount; i++) {
+            Id t = C360Plan.asId(v.get('fieldChange' + i + '.targetLoanId'));
+            if (t == null) {
+                continue;
+            }
+            if (!fieldChangesByTarget.containsKey(t)) {
+                fieldChangesByTarget.put(t, new List<Integer>());
+            }
+            fieldChangesByTarget.get(t).add(i);
+        }
+
         // The staged changes, exactly as the banker saw them hashed at the confirm gate.
         Decimal requestedAmount = C360Plan.asDecimal(v.get('requestedAmount'));
         Date requestedMaturity = C360Plan.asDate(v.get('requestedMaturityDate'));
@@ -953,6 +992,17 @@ global with sharing class ExecuteLoanModification {
             if (requestedTerm != null) {
                 fields.LLC_BI__Term_Months__c = requestedTerm;
                 writeFields.put('LLC_BI__Term_Months__c', requestedTerm);
+            }
+            // The field wave lands in the SAME clone update: dynamic puts of values the stage
+            // already coerced against the describe, so nothing here re-interprets a banker's words.
+            for (Integer fci : fieldChangesByTarget.containsKey(parentId) ? fieldChangesByTarget.get(parentId) : new List<Integer>()) {
+                String fcField = String.valueOf(v.get('fieldChange' + fci + '.field'));
+                Object fcValue = coerceStagedFieldValue(
+                    String.valueOf(v.get('fieldChange' + fci + '.type')),
+                    String.valueOf(v.get('fieldChange' + fci + '.valueJson'))
+                );
+                fields.put(fcField, fcValue);
+                writeFields.put(fcField, fcValue);
             }
             // The fence still runs even though no stage field is present: it is the single gate every
             // domain write in this package passes through, and it is what refuses a forbidden field
@@ -1037,8 +1087,23 @@ global with sharing class ExecuteLoanModification {
                 LLC_BI__Covenant2__c = cov.Id
             );
             insert as user attach;
+
+            // The account association nCino's own UI mints beside every covenant (founder
+            // correction, 2026-08-31): the covenant belongs to the borrower as well as to the
+            // facility, and a covenant without its Account Covenant row is invisible where the
+            // bank looks for it at relationship level.
+            Map<String, Object> acctCovFields = new Map<String, Object>{
+                'LLC_BI__Covenant2__c' => cov.Id,
+                'LLC_BI__Account__c' => before[0].LLC_BI__Account__c
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_ACCOUNT_COVENANT, C360WriteGuard.OP_CREATE, acctCovFields);
+            LLC_BI__Account_Covenant__c acctCov = new LLC_BI__Account_Covenant__c(
+                LLC_BI__Covenant2__c = cov.Id,
+                LLC_BI__Account__c = before[0].LLC_BI__Account__c
+            );
+            insert as user acctCov;
             C360Plan.setState(steps, 'covenant_attach_' + cs, C360Plan.STATE_VERIFIED,
-                'Junction ' + attach.Id + ' attaches it to clone ' + covCloneId + '.');
+                'Junction ' + attach.Id + ' attaches it to clone ' + covCloneId + '; account association ' + acctCov.Id + ' anchors it on the borrower.');
 
             // The proof is the re-read, never the insert result.
             List<LLC_BI__Covenant2__c> covBack = [
@@ -1050,16 +1115,23 @@ global with sharing class ExecuteLoanModification {
                 WHERE LLC_BI__Loan__c = :covCloneId AND LLC_BI__Covenant2__c = :cov.Id
                 WITH USER_MODE
             ];
+            Integer acctBack = [
+                SELECT COUNT() FROM LLC_BI__Account_Covenant__c
+                WHERE LLC_BI__Account__c = :before[0].LLC_BI__Account__c AND LLC_BI__Covenant2__c = :cov.Id
+                WITH USER_MODE
+            ];
             Boolean covProven = !covBack.isEmpty()
                 && covBack[0].LLC_BI__Financial_Indicator_Value__c == cr.threshold
-                && attachBack == 1;
+                && attachBack == 1
+                && acctBack == 1;
             cr.covenantId = cov.Id;
             cr.covenantName = covBack.isEmpty() ? null : covBack[0].Name;
             cr.cloneLoanId = covCloneId;
             cr.verification = covBack.isEmpty()
                 ? 'The covenant could not be read back after creation.'
                 : 'Covenant ' + covBack[0].Name + ' reads back at ' + String.valueOf(covBack[0].LLC_BI__Financial_Indicator_Value__c) +
-                  ', status ' + covBack[0].LLC_BI__Covenant_Status__c + ', with ' + attachBack + ' junction on the clone.';
+                  ', status ' + covBack[0].LLC_BI__Covenant_Status__c + ', with ' + attachBack + ' junction on the clone and ' +
+                  acctBack + ' account association on the borrower.';
             C360Plan.setState(
                 steps,
                 'covenant_verify_' + cs,
@@ -1156,6 +1228,52 @@ global with sharing class ExecuteLoanModification {
         // tool must not have moved at all.
         Map<Id, LLC_BI__Loan__c> clonesAfter = new Map<Id, LLC_BI__Loan__c>(readLoans(cloneIds));
         Map<Id, LLC_BI__Loan__c> parentsAfter = new Map<Id, LLC_BI__Loan__c>(readLoans(new Set<Id>(parents)));
+
+        // The field wave, verified: one dynamic re-read of exactly the changed fields, compared
+        // value by value. The proof is the read-back, never the update result.
+        List<FieldChangeResult> fieldChangeResults = new List<FieldChangeResult>();
+        if (fieldChangeCount > 0) {
+            Set<String> changedFields = new Set<String>();
+            for (Integer i = 0; i < fieldChangeCount; i++) {
+                changedFields.add(String.valueOf(v.get('fieldChange' + i + '.field')));
+            }
+            Map<Id, SObject> dynamicClones = new Map<Id, SObject>();
+            if (!cloneIds.isEmpty()) {
+                String dynQuery = 'SELECT Id, ' + String.join(new List<String>(changedFields), ', ') +
+                    ' FROM LLC_BI__Loan__c WHERE Id IN :cloneIds WITH USER_MODE';
+                for (SObject row : Database.query(dynQuery)) {
+                    dynamicClones.put((Id) row.get('Id'), row);
+                }
+            }
+            for (Integer i = 0; i < fieldChangeCount; i++) {
+                String fi = String.valueOf(i);
+                FieldChangeResult fcr = new FieldChangeResult();
+                fcr.field = String.valueOf(v.get('fieldChange' + fi + '.field'));
+                fcr.label = String.valueOf(v.get('fieldChange' + fi + '.label'));
+                Object expected = coerceStagedFieldValue(
+                    String.valueOf(v.get('fieldChange' + fi + '.type')),
+                    String.valueOf(v.get('fieldChange' + fi + '.valueJson'))
+                );
+                fcr.value = String.valueOf(expected);
+                Id fcTargetParent = C360Plan.asId(v.get('fieldChange' + fi + '.targetLoanId'));
+                LLC_BI__LoanRenewal__c fcJunction = newestByParent.get(fcTargetParent);
+                Id fcCloneId = fcJunction == null ? null : fcJunction.LLC_BI__RenewalLoanId__c;
+                fieldChangeResults.add(fcr);
+                if (fcCloneId == null || !dynamicClones.containsKey(fcCloneId)) {
+                    fcr.verification = 'No clone could be read back for the facility this change targets.';
+                    C360Plan.setState(steps, 'field_change_' + fi, C360Plan.STATE_FAILED, fcr.verification);
+                    continue;
+                }
+                fcr.cloneLoanId = fcCloneId;
+                Object actual = dynamicClones.get(fcCloneId).get(fcr.field);
+                Boolean landed = actual == expected || String.valueOf(actual) == String.valueOf(expected);
+                fcr.verification = landed
+                    ? fcr.label + ' reads back at ' + String.valueOf(actual) + ' on the clone.'
+                    : fcr.label + ' did not land: staged ' + String.valueOf(expected) + ', reads back ' + String.valueOf(actual) + '.';
+                C360Plan.setState(steps, 'field_change_' + fi,
+                    landed ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, fcr.verification);
+            }
+        }
 
         List<FacilityResult> results = new List<FacilityResult>();
         Id firstCloneId = null;
@@ -1260,6 +1378,7 @@ global with sharing class ExecuteLoanModification {
         out.membersRolled = rollMembers.size();
         out.covenants = covenantResults;
         out.involvements = involvementResults;
+        out.fieldChanges = fieldChangeResults;
         out.terminalState = terminal;
         out.steps = toWireSteps(steps);
         out.bookingHandoff = BOOKING_HANDOFF;
@@ -1271,7 +1390,9 @@ global with sharing class ExecuteLoanModification {
             (covenantResults.isEmpty() ? '' : ', ' + covenantResults.size() + ' net-new covenant' +
                 (covenantResults.size() == 1 ? '' : 's') + ' attached to the clone' + (covenantResults.size() == 1 ? '' : 's')) +
             (involvementResults.isEmpty() ? '' : ', ' + involvementResults.size() + ' borrowing-structure change' +
-                (involvementResults.size() == 1 ? '' : 's') + ' on the new version') + '. ' +
+                (involvementResults.size() == 1 ? '' : 's') + ' on the new version') +
+            (fieldChangeResults.isEmpty() ? '' : ', ' + fieldChangeResults.size() + ' field change' +
+                (fieldChangeResults.size() == 1 ? '' : 's') + ' on the clone' + (fieldChangeResults.size() == 1 ? '' : 's')) + '. ' +
             (results.size() == 1
                 ? results[0].outcome
                 : 'See each facility for its clone and what was applied.') +
@@ -1577,6 +1698,23 @@ global with sharing class ExecuteLoanModification {
             WHERE Id IN :loanIds
             WITH USER_MODE
         ];
+    }
+
+    /**
+     * Rehydrates a staged field-wave value from the plan. The stage already coerced and validated
+     * it against the describe; this only turns the serialized form back into the platform type.
+     */
+    private static Object coerceStagedFieldValue(String fieldType, String valueJson) {
+        if (fieldType == 'CURRENCY' || fieldType == 'DOUBLE' || fieldType == 'PERCENT' || fieldType == 'INTEGER') {
+            return (Decimal) JSON.deserialize(valueJson, Decimal.class);
+        }
+        if (fieldType == 'DATE') {
+            return (Date) JSON.deserialize(valueJson, Date.class);
+        }
+        if (fieldType == 'BOOLEAN') {
+            return valueJson == 'true';
+        }
+        return (String) JSON.deserialize(valueJson, String.class);
     }
 
     /** The org-assigned name of an already-created facility, so a replay stamps the same label. */

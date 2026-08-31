@@ -1,0 +1,2430 @@
+{
+ "LLC_BI__Loan__c": [
+  {
+   "name": "OwnerId",
+   "label": "Owner ID",
+   "type": "reference",
+   "referenceTo": [
+    "Group",
+    "User"
+   ]
+  },
+  {
+   "name": "Name",
+   "label": "Loan Name",
+   "type": "string"
+  },
+  {
+   "name": "CurrencyIsoCode",
+   "label": "Currency ISO Code",
+   "type": "picklist",
+   "values": [
+    "GBP",
+    "EUR",
+    "USD"
+   ]
+  },
+  {
+   "name": "RecordTypeId",
+   "label": "Record Type ID",
+   "type": "reference",
+   "referenceTo": [
+    "RecordType"
+   ]
+  },
+  {
+   "name": "LLC_BI__Balloon_Product_Structure__c",
+   "label": "Balloon Product Structure",
+   "type": "picklist",
+   "values": [
+    "Balloon Amount",
+    "Balloon Term"
+   ]
+  },
+  {
+   "name": "LLC_BI__Borrower_State__c",
+   "label": "Borrower State",
+   "type": "picklist",
+   "values": [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "DC",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY"
+   ]
+  },
+  {
+   "name": "LLC_BI__CRA_Action_Taken__c",
+   "label": "Action Taken",
+   "type": "picklist",
+   "values": [
+    "1 - Loan Originated",
+    "2 - Loan Purchased By Your Institution"
+   ]
+  },
+  {
+   "name": "LLC_BI__CRA_Affiliate__c",
+   "label": "Affiliate Code",
+   "type": "picklist",
+   "values": [
+    "1 - Action taken at this institution",
+    "2 - Action taken at an affiliate"
+   ]
+  },
+  {
+   "name": "LLC_BI__CRA_Revenue__c",
+   "label": "Revenue Code",
+   "type": "picklist",
+   "values": [
+    "1 - Less than or equal to $1 million",
+    "2 - Greater than $1 million",
+    "3 - Not Known"
+   ]
+  },
+  {
+   "name": "LLC_BI__CRA_Type_Code__c",
+   "label": "Loan Type",
+   "type": "picklist",
+   "values": [
+    "Small business",
+    "Small farm",
+    "Other secured lines of credit - small business",
+    "Home equity",
+    "Motor vehicle",
+    "Credit card",
+    "Other secured consumer loans",
+    "Other unsecured consumer loans",
+    "Other loan data"
+   ]
+  },
+  {
+   "name": "LLC_BI__Disbursement_Description__c",
+   "label": "Disbursement Description",
+   "type": "picklist",
+   "values": [
+    "Account",
+    "Check",
+    "Lender",
+    "Payable",
+    "PayOff",
+    "Other",
+    "NonLoan"
+   ]
+  },
+  {
+   "name": "LLC_BI__Financed_Fee_Calculations__c",
+   "label": "Financed Fee Calculations",
+   "type": "picklist",
+   "values": [
+    "Manual Calculation",
+    "Add to Loan Amount",
+    "Subtract From Loan Amount"
+   ]
+  },
+  {
+   "name": "LLC_BI__Governing_Law_State__c",
+   "label": "Governing Law State",
+   "type": "picklist",
+   "values": [
+    "AK",
+    "AL",
+    "AR",
+    "AZ",
+    "CA",
+    "CO",
+    "CT",
+    "DC",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "IA",
+    "ID",
+    "IL",
+    "IN",
+    "KS",
+    "KY",
+    "LA",
+    "MA",
+    "MD",
+    "ME",
+    "MI",
+    "MN",
+    "MO",
+    "MS",
+    "MT",
+    "NC",
+    "ND",
+    "NE",
+    "NH",
+    "NJ",
+    "NM",
+    "NV",
+    "NY",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VA",
+    "VT",
+    "WA",
+    "WI",
+    "WV",
+    "WY"
+   ]
+  },
+  {
+   "name": "LLC_BI__HMDA_Record_Type__c",
+   "label": "HMDA Record Type",
+   "type": "picklist",
+   "values": [
+    "HMDA-Effective-2017",
+    "HMDA-Effective-2018"
+   ]
+  },
+  {
+   "name": "LLC_BI__Index__c",
+   "label": "Index",
+   "type": "picklist",
+   "values": [
+    "ARM",
+    "Fixed",
+    "LIBOR",
+    "Treasury Constant Maturity - 1 Year +",
+    "Treasury Constant Maturity - 2 Year +",
+    "Treasury Constant Maturity - 3 Year +",
+    "Treasury Constant Maturity - 5 Year +",
+    "Treasury Constant Maturity - 7 Year +",
+    "Treasury Constant Maturity - 10 Year +",
+    "WSJ Prime",
+    "Treasury Constant Maturity - 1 Year %2B"
+   ]
+  },
+  {
+   "name": "LLC_BI__Interest_Accrual_Method__c",
+   "label": "Interest Accrual Method",
+   "type": "picklist",
+   "values": [
+    "30_360",
+    "30_365",
+    "Actual_360",
+    "Actual_365",
+    "Actual_Actual",
+    "True360_360",
+    "True360_365",
+    "True360_DaysPerPeriod",
+    "UnitPeriod_365.25",
+    "True360_365.25",
+    "True365_360",
+    "True365_365",
+    "Midnight_366",
+    "Actual_365.25",
+    "UnitPeriod_DaysPerPeriod",
+    "UnitPeriod_360_Simple",
+    "UnitPeriod_365_Simple",
+    "UnitPeriod_DaysPerPeriod_Simple",
+    "UnitPeriod_True360_360_Simple",
+    "UnitPeriod_True360_365_Simple",
+    "UnitPeriod_True360_DaysPerPeriod_Simple",
+    "UnitPeriod_FederalCalendar_Simple",
+    "UnitPeriod_365.25_Simple",
+    "UnitPeriod_True360_365.25_Simple",
+    "True365_360_Simple",
+    "Actual_365_Simple",
+    "True365_365_Simple",
+    "Actual_Actual_Simple",
+    "Midnight_366_Simple",
+    "Actual_365.25_Simple",
+    "UnitPeriod_VARDPY_Simple",
+    "UnitPeriod_True360_DaysPerPeriod",
+    "UnitPeriod_FederalCalendar",
+    "UnitPeriod_VARDPY"
+   ]
+  },
+  {
+   "name": "LLC_BI__Interest_Rate_Adjustment_Frequency__c",
+   "label": "Interest Rate Adjustment Frequency",
+   "type": "picklist",
+   "values": [
+    "Daily",
+    "Monthly",
+    "Quarterly",
+    "Biannual",
+    "Annual",
+    "Every Two Years",
+    "Every Three Years",
+    "Every Five Years",
+    "Other"
+   ]
+  },
+  {
+   "name": "LLC_BI__LeadSource__c",
+   "label": "Lead Source",
+   "type": "picklist",
+   "values": [
+    "Advertisement",
+    "Association",
+    "Broker",
+    "Current Customer",
+    "Direct Call",
+    "Email Campaign",
+    "Employee Referral",
+    "Industry Professional",
+    "Magazine",
+    "Other",
+    "Prior Origination",
+    "Trade Show",
+    "Web",
+    "Wholesaler",
+    "Word of Mouth"
+   ]
+  },
+  {
+   "name": "LLC_BI__Legal_Firm__c",
+   "label": "Legal Firm",
+   "type": "picklist",
+   "values": [
+    "Sample Firm",
+    "Sample Firm 2"
+   ]
+  },
+  {
+   "name": "LLC_BI__Loan_Class__c",
+   "label": "Loan Class",
+   "type": "picklist",
+   "values": [
+    "New Loan",
+    "Secured Renewal",
+    "Unsecured Renewal",
+    "Refinance Existing Loan With Lender"
+   ]
+  },
+  {
+   "name": "LLC_BI__Participation_Type__c",
+   "label": "Participation Type",
+   "type": "picklist",
+   "values": [
+    "Participation agreement agented",
+    "Participation bought",
+    "Participation sold"
+   ]
+  },
+  {
+   "name": "LLC_BI__Payment_Schedule__c",
+   "label": "Payment Schedule",
+   "type": "picklist",
+   "values": [
+    "Weekly",
+    "Bi-Monthly",
+    "Monthly",
+    "Quarterly",
+    "Semi-Annual",
+    "Annual",
+    "Single Pay"
+   ]
+  },
+  {
+   "name": "LLC_BI__Payment_Type__c",
+   "label": "Payment Type",
+   "type": "picklist",
+   "values": [
+    "Installment",
+    "Single Pay",
+    "Balloon",
+    "Draw Down Line Of Credit",
+    "Principal+Interest",
+    "Irregular",
+    "Generic Non-Disclosable",
+    "Construction Permanent",
+    "Revolving Line Of Credit"
+   ]
+  },
+  {
+   "name": "LLC_BI__Pricing_Basis__c",
+   "label": "Pricing Basis",
+   "type": "picklist",
+   "values": [
+    "Fixed",
+    "Floating",
+    "Variable",
+    "Preferred Fixed",
+    "Preferred Variable"
+   ]
+  },
+  {
+   "name": "LLC_BI__Product_Line__c",
+   "label": "Product Line",
+   "type": "picklist",
+   "values": [
+    "Commercial",
+    "Consumer"
+   ]
+  },
+  {
+   "name": "LLC_BI__Product_Type__c",
+   "label": "Product Type",
+   "type": "picklist",
+   "values": [
+    "Real Estate",
+    "Non-Real Estate",
+    "Consumer Real Estate",
+    "Consumer Non-Real Estate",
+    "Deposit"
+   ]
+  },
+  {
+   "name": "LLC_BI__Product__c",
+   "label": "Product",
+   "type": "picklist",
+   "values": [
+    "Construction",
+    "Equipment",
+    "Line of Credit",
+    "HELOC",
+    "Purchase",
+    "Deposit",
+    "Term"
+   ]
+  },
+  {
+   "name": "LLC_BI__Referred_To__c",
+   "label": "Referred To",
+   "type": "picklist",
+   "values": [
+    "Bank of America",
+    "BB&T",
+    "Capital One",
+    "Citi",
+    "Fifth Third Bank",
+    "JP Morgan Chase",
+    "PNC Bank",
+    "Regions Financial",
+    "Suntrust",
+    "US Bank",
+    "Wells Fargo",
+    "Other"
+   ]
+  },
+  {
+   "name": "LLC_BI__Risk_Grade__c",
+   "label": "Risk Grade",
+   "type": "picklist",
+   "values": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15"
+   ]
+  },
+  {
+   "name": "LLC_BI__SNC_Type__c",
+   "label": "SNC Type",
+   "type": "picklist",
+   "values": [
+    "N/A",
+    "SNC agent",
+    "SNC non-agent"
+   ]
+  },
+  {
+   "name": "LLC_BI__Secondary_Mkt_Sold__c",
+   "label": "Secondary Mkt Sold",
+   "type": "picklist",
+   "values": [
+    "Yes",
+    "No"
+   ]
+  },
+  {
+   "name": "LLC_BI__Stage__c",
+   "label": "Stage",
+   "type": "picklist",
+   "values": [
+    "Qualification",
+    "Proposal",
+    "Credit Underwriting",
+    "Final Review",
+    "Approval / Loan Committee",
+    "Processing",
+    "Doc Prep",
+    "Closing",
+    "Boarding",
+    "Booked",
+    "Complete"
+   ]
+  },
+  {
+   "name": "LLC_BI__Status__c",
+   "label": "Status",
+   "type": "picklist",
+   "values": [
+    "Hold",
+    "Withdrawn",
+    "Open",
+    "Paid Out",
+    "Declined",
+    "Charge-Off",
+    "Lost",
+    "Pre-approval",
+    "Pre-approved",
+    "Pre-qualification",
+    "Pre-qualified"
+   ]
+  },
+  {
+   "name": "LLC_BI__Structure__c",
+   "label": "Structure",
+   "type": "picklist",
+   "values": [
+    "ELOC",
+    "Letter of Credit",
+    "Multi Level Future",
+    "Regular Future",
+    "Term Loan/Current"
+   ]
+  },
+  {
+   "name": "LLC_BI__Syndication_Type__c",
+   "label": "Syndication Type",
+   "type": "picklist",
+   "values": [
+    "Syndication agented",
+    "Syndication purchased",
+    "Syndication title role"
+   ]
+  },
+  {
+   "name": "LLC_BI__APR__c",
+   "label": "APR",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Account_Officer__c",
+   "label": "Account Officer",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Account__c",
+   "label": "Relationship",
+   "type": "reference",
+   "referenceTo": [
+    "Account"
+   ]
+  },
+  {
+   "name": "LLC_BI__Accrued_Interest__c",
+   "label": "Accrued Interest",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Adverse_Action_Flag__c",
+   "label": "Adverse Action Flag",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Allocated_Facility_Amount__c",
+   "label": "Allocated Facility Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Amortized_Term_Months__c",
+   "label": "Amortized Term (Months)",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Amortized_Term__c",
+   "label": "Amortized Term (Months) - D",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__AmountOutstanding__c",
+   "label": "Amount Outstanding",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Amount_New_Money__c",
+   "label": "New Money",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Amount_Unused__c",
+   "label": "Amount Unused",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Amount__c",
+   "label": "Original Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Annual_Rate_Increase__c",
+   "label": "Annual Rate Increase",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Application__c",
+   "label": "Application",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Application__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Approved_Loan_Amount__c",
+   "label": "Approved For Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Attorney__c",
+   "label": "Attorney",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Authorization_Date__c",
+   "label": "Authorization Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Auto_Decision_Status__c",
+   "label": "Auto-Decision Status",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Auto_Pay_Account__c",
+   "label": "Auto Pay Account",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Auto_Pay__c",
+   "label": "Auto Pay",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Availability_From_Core__c",
+   "label": "Availability from Core",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Balloon_Payment__c",
+   "label": "Balloon Payment",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Balloon__c",
+   "label": "Balloon",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Billing_Address__c",
+   "label": "Billing City",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Billing_State__c",
+   "label": "Billing State",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Billing_Street__c",
+   "label": "Billing Street",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Billing_Zipcode__c",
+   "label": "Billing Zipcode",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Booked_DateTime__c",
+   "label": "Booked Date Time",
+   "type": "datetime"
+  },
+  {
+   "name": "LLC_BI__Booked_Date__c",
+   "label": "Booked Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Borrower_City__c",
+   "label": "Borrower City",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Borrower_GL_Balance__c",
+   "label": "Borrower GL Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Branch__c",
+   "label": "Branch",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Branch__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Broker_Fee__c",
+   "label": "Referral Fee",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Budget__c",
+   "label": "Budget",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Budget__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__CRA_Amount__c",
+   "label": "Loan Amount (amount in thousands)",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__CRA_Census_Tract_Text__c",
+   "label": "Census Tract (####.## format)",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__CRA_Community_Development_Reportable__c",
+   "label": "Community Development Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__CRA_Consortium_Third_Party_Reportable__c",
+   "label": "Consortium/Third Party Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__CRA_Date_Action_Taken__c",
+   "label": "Date Action Taken",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__CRA_FIPS_County_Code_Text__c",
+   "label": "Three Digit County Code",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__CRA_FIPS_County_Code__c",
+   "label": "-D Three Digit County Code",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__CRA_FIPS_State_Code_Text__c",
+   "label": "Two Digit State Code",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__CRA_FIPS_State_Code__c",
+   "label": "-D Two Digit State Code",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__CRA_MSA_MD_Number_Text__c",
+   "label": "Five Digit MSA/MD Number",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__CRA_MSA_MD_Number__c",
+   "label": "-D Five Digit MSA/MD Number",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__CRA_Reportable__c",
+   "label": "CRA Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Calculated_Balloon_Amount__c",
+   "label": "Calculated Balloon Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Call_Report_Code__c",
+   "label": "Call Report Code",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Census_Tract__c",
+   "label": "-D Census Tract (####.## format)",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Class_Code__c",
+   "label": "Class Code",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__CloseDate__c",
+   "label": "Projected Close Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Close_Date_Hard__c",
+   "label": "Closing Date Confirmed",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Closed_Date__c",
+   "label": "Closed Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Complete__c",
+   "label": "% Complete",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Compliance_Officer__c",
+   "label": "Compliance Officer",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Consortium_Third_Party_Reportable__c",
+   "label": "Consortium/Third Party Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Construction_CO_Date__c",
+   "label": "Construction CO Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Credit_Approval_Date__c",
+   "label": "Credit Approval Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Credit_Memo__c",
+   "label": "Credit Memo",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Credit_Memo__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Current_Interest_Rate__c",
+   "label": "Current Interest Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Default_App__c",
+   "label": "Default App",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Description__c",
+   "label": "Loan Purpose",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Employee_Loan__c",
+   "label": "Employee Loan",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Estimated_Property_Value_2__c",
+   "label": "Estimated Property Value",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Fee_Loan_Aggregate__c",
+   "label": "Fee Loan Aggregate",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Fee_Loan_Aggregate__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__File_Number__c",
+   "label": "File Number",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__First_Payment_Date__c",
+   "label": "First Payment Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__First_Rate_Increase__c",
+   "label": "First Rate Increase",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Funded__c",
+   "label": "% Funded",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Funding_at_Close__c",
+   "label": "Funding at Close",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__GTD_Balance__c",
+   "label": "GTD Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__GTD_Participated_Balance__c",
+   "label": "GTD Participated Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Guarantee_Fee_Paid__c",
+   "label": "Guarantee Fee Paid",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__HMDA_Co_Applicant__c",
+   "label": "-D Co-Applicant",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__HMDA_Date_Action_Taken__c",
+   "label": "Date Action Taken",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__HMDA_Reportable__c",
+   "label": "HMDA Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Highest__c",
+   "label": "Highest",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Loan__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Imported__c",
+   "label": "Imported",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Index_Value__c",
+   "label": "Index Value",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Initial_Advance__c",
+   "label": "Initial Advance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__InterestRate__c",
+   "label": "Interest Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Interest_Amount_Paid__c",
+   "label": "Interest (Amt) Paid to Date",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Interest_Only_Months__c",
+   "label": "Interest Only Months",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Interest_Paid_To_Date__c",
+   "label": "Interest Paid To Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Interest_Rate_Margin_Percent__c",
+   "label": "Interest Rate Margin Percent",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Is_Approved__c",
+   "label": "ApprovalTriggerField",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Copy__c",
+   "label": "Is Copy",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Excluded__c",
+   "label": "Is Excluded",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_In_Review__c",
+   "label": "In Review",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Jumbo__c",
+   "label": "Is Jumbo",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Locked__c",
+   "label": "Is Locked",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Modification__c",
+   "label": "Is_Modification",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_No_Action_Placeholder__c",
+   "label": "Is No Action Placeholder",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Original_Inactive_Loan__c",
+   "label": "Is Original Declined Loan",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Participation__c",
+   "label": "Is Participation",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Ready_To_Transmit__c",
+   "label": "Is Ready to Transmit",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Review_Ready__c",
+   "label": "Is Review Ready",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_SBA__c",
+   "label": "Is SBA",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Secured__c",
+   "label": "Is Secured",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Is_Syndication__c",
+   "label": "Is Syndication",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Last_Pay_Date__c",
+   "label": "Last Pay Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Lead_Detail__c",
+   "label": "Lead Detail",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Loan_Collateral_Aggregate__c",
+   "label": "Loan Collateral Aggregate",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Loan_Collateral_Aggregate__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Loan_Detail__c",
+   "label": "Loan Detail",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Loan_Detail__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Loan_Number__c",
+   "label": "Loan Number - D",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Loan_Officer__c",
+   "label": "Loan Officer",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "LLC_BI__Loan_Type_Code__c",
+   "label": "Loan Type Code",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Lost_Detail__c",
+   "label": "Lost Detail",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__MAPR__c",
+   "label": "MAPR",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__MLA_Status__c",
+   "label": "MLA Status",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__MailerTeamKey__c",
+   "label": "Team Alerts",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Maturity_Date__c",
+   "label": "Maturity Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Maximum_Rate_Increase__c",
+   "label": "Maximum Rate Increase",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Modification_Number__c",
+   "label": "Modification Number",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Monthly_Payment__c",
+   "label": "Monthly Payment",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Net_Gain_on_Sale__c",
+   "label": "Net Gain on Sale",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Net_New_Funds__c",
+   "label": "Net New Funds",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Next_Interest_Payment_Date__c",
+   "label": "Next Interest Payment Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Next_Payment_Due__c",
+   "label": "Next Payment Due",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Next_Rate_Change_Date__c",
+   "label": "Next Interest Rate Change Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Non_Accrual__c",
+   "label": "Non-Accrual",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Officer_Comments__c",
+   "label": "Officer Comments",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__OriginalParentLoan__c",
+   "label": "Original Parent Loan",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Loan__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Original_LTV__c",
+   "label": "Original LTV",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Original_Total_Lendable_Value__c",
+   "label": "Original Total Lendable Value",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__ParentLoan__c",
+   "label": "Parent Loan",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Loan__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Participation_Date__c",
+   "label": "Participation Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Partner_GTD_Left_to_Fund__c",
+   "label": "Partner GTD Left to Fund",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Partner_Spread_Over_Base__c",
+   "label": "Partner Spread Over Base",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Partner_UNGTD_Left_to_Fund__c",
+   "label": "Partner UNGTD Left to Fund",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Payoff_Date__c",
+   "label": "Payoff Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Portfolio_Number__c",
+   "label": "Portfolio Number",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Post_Closing_Items__c",
+   "label": "Post Closing Items",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Postal_Code__c",
+   "label": "Postal Code",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Pre_Close_Call_Date__c",
+   "label": "Pre Close Call Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Prepayment_Penalty_Description__c",
+   "label": "Prepayment Penalty Description",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Prepayment_Penalty__c",
+   "label": "Prepayment Penalty?",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Pricing_Option__c",
+   "label": "Applied Pricing Option",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Pricing_Option__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Principal_Balance__c",
+   "label": "Principal Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Probabilty__c",
+   "label": "Probability (%)",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Processor_Name__c",
+   "label": "Loan Processor",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "LLC_BI__Product_Package__c",
+   "label": "Product Package",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Product_Package__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Product_Reference__c",
+   "label": "Product",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Product__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Proposal_Accepted__c",
+   "label": "Proposal Accepted",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Rate_Ceiling__c",
+   "label": "Rate Ceiling",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Rate_Discount__c",
+   "label": "Rate Discount",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Rate_Floor__c",
+   "label": "Rate Floor",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Real_Estate_Value__c",
+   "label": "-D Real Estate Value",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Real_Estate__c",
+   "label": "Real Estate",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Reg_O_Loan__c",
+   "label": "Reg O Loan",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Regulator_Loan_Share__c",
+   "label": "Regulator Loan Share",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Renewal_Number__c",
+   "label": "Renewal Number",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Retained_Balance__c",
+   "label": "Retained Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Retained_Servicing_Spread__c",
+   "label": "Retained Servicing Spread",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Retained__c",
+   "label": "% Retained",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Reviewed_by_Compliance__c",
+   "label": "Reviewed by Compliance",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Reviewed_by_Loan_Ops__c",
+   "label": "Reviewed by Loan Ops",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Risk_Grade_Template__c",
+   "label": "Risk Grade Template",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Risk_Grade_Template__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__SBA_Guarantee_Fee__c",
+   "label": "SBA Guarantee Fee",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__SBA_Guarantee__c",
+   "label": "SBA Guarantee (%)",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__SBA__c",
+   "label": "SBA #",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Secondary_Market_Bid_Date__c",
+   "label": "Secondary Market Bid Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Secondary_Market_Sold_Date__c",
+   "label": "Secondary Market Sold Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Secondary_Market_Sold_To__c",
+   "label": "Sold To",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Secondary_Markt__c",
+   "label": "Secondary Markt Sold %",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Secondary_Mkt_Sold_currency__c",
+   "label": "Secondary Mkt Sold $",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Semimonthly_Day__c",
+   "label": "Semimonthly Day",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Site_Visit_Date__c",
+   "label": "Site Visit Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Site_Visit_Owner__c",
+   "label": "Site Visit Owner",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Sold_Amount__c",
+   "label": "Sold Amount ($)",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Spread__c",
+   "label": "Spread (%)",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Stage_Progress__c",
+   "label": "Stage Progress",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Stair_Step_Down__c",
+   "label": "Stair Step Down",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Superceded_DateTime__c",
+   "label": "Superceded Date Time",
+   "type": "datetime"
+  },
+  {
+   "name": "LLC_BI__TDR__c",
+   "label": "TDR",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Teaser_Rate__c",
+   "label": "Teaser Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Teaser_Term__c",
+   "label": "Teaser Term",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Term_Months__c",
+   "label": "Loan Term (Months)",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Total_Assets__c",
+   "label": "Total Assets",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Charge_Offs__c",
+   "label": "Total Charge Offs",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Debts__c",
+   "label": "Total Debts",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Disbursed__c",
+   "label": "Total Disbursed",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Facility_Amount__c",
+   "label": "Total Facility Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Fee_Income__c",
+   "label": "Total Fee Income",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Monthly_Debt__c",
+   "label": "Total Monthly Debt",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Monthly_Expenses__c",
+   "label": "Total Monthly Expenses",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Monthly_Income__c",
+   "label": "Total Monthly Income",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Prior_Lien_Amount__c",
+   "label": "Total Prior Lien Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Recovery__c",
+   "label": "Total Recoveries",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Undisbursed__c",
+   "label": "Total Undisbursed",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__UCC_County__c",
+   "label": "UCC Expiration (County)",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__UCC_State__c",
+   "label": "UCC Expiration (State)",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__UNGTD_Balance__c",
+   "label": "UNGTD Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__UNGTD_Exposure__c",
+   "label": "Net Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__UNGTD_Participated_Balance__c",
+   "label": "UNGTD Participated Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Underwriting_Summary__c",
+   "label": "Underwriting Summary",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Underwriting_Summary__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Undisbursed_GTD__c",
+   "label": "Undisbursed GTD",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Undisbursed_UNGTD__c",
+   "label": "Undisbursed UNGTD",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Watchlist_Date__c",
+   "label": "Watchlist Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Wire_Date__c",
+   "label": "Wire Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__isClosed__c",
+   "label": "isClosed",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__isConvert__c",
+   "label": "isConvert",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__isRenewal__c",
+   "label": "isRenewal",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__lookupKey__c",
+   "label": "Loan Number",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Lead_Specifics__c",
+   "label": "Lead Specifics",
+   "type": "picklist",
+   "values": [
+    "Other"
+   ]
+  },
+  {
+   "name": "LLC_BI__Lost_To__c",
+   "label": "Lost To",
+   "type": "picklist",
+   "values": [
+    "Bank of America",
+    "BB&T",
+    "Capital One",
+    "Citi",
+    "Fifth Third Bank",
+    "JP Morgan Chase",
+    "PNC Bank",
+    "Regions Financial",
+    "Suntrust",
+    "US Bank",
+    "Wells Fargo",
+    "Other"
+   ]
+  },
+  {
+   "name": "LLC_BI__Structure_Hierarchy__c",
+   "label": "Structure Hierarchy",
+   "type": "picklist",
+   "values": [
+    "Main",
+    "Limit",
+    "Sub Limit",
+    "Takedown"
+   ]
+  },
+  {
+   "name": "Primary_Source_of_Repayment__c",
+   "label": "Primary Source of Repayment",
+   "type": "picklist",
+   "values": [
+    "Cash flow from Operations",
+    "Lease Income",
+    "Liquidation of Collateral",
+    "Receivables",
+    "Reliance on Guarantors",
+    "Working Capital Turnover"
+   ]
+  },
+  {
+   "name": "Secondary_Source_of_Repayment__c",
+   "label": "Secondary Source of Repayment",
+   "type": "picklist",
+   "values": [
+    "Cash flow from Operations",
+    "Lease Income",
+    "Liquidation of Collateral",
+    "Receivables",
+    "Reliance on Guarantors",
+    "Working Capital Turnover"
+   ]
+  },
+  {
+   "name": "Tertiary_Source_of_Repayment__c",
+   "label": "Tertiary Source of Repayment",
+   "type": "picklist",
+   "values": [
+    "Cash flow from Operations",
+    "Lease Income",
+    "Liquidation of Collateral",
+    "Receivables",
+    "Reliance on Guarantors",
+    "Working Capital Turnover"
+   ]
+  },
+  {
+   "name": "cm_Is_this_a_Test__c",
+   "label": "Is this a Test?",
+   "type": "picklist",
+   "values": [
+    "Yes",
+    "No"
+   ]
+  },
+  {
+   "name": "cm_Method_of_Doc_Prep__c",
+   "label": "Method of Doc Prep",
+   "type": "picklist",
+   "values": [
+    "Attorney Prepared",
+    "Internally Prepared"
+   ]
+  },
+  {
+   "name": "cm_Purpose_of_Loan__c",
+   "label": "Purpose of Loan",
+   "type": "picklist",
+   "values": [
+    "Automobile Pledge",
+    "Automobile Purchase",
+    "Debt Consolidation",
+    "Home Improvements",
+    "Life Event",
+    "Overdraft Protection",
+    "Other Type Real Estate",
+    "Other",
+    "Business Expansion"
+   ]
+  },
+  {
+   "name": "Application_Date__c",
+   "label": "Application Date",
+   "type": "date"
+  },
+  {
+   "name": "Funding_Date__c",
+   "label": "Funding Date",
+   "type": "date"
+  },
+  {
+   "name": "HVCRE_Reportable__c",
+   "label": "HVCRE Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "Integration_Source__c",
+   "label": "Integration Source",
+   "type": "string"
+  },
+  {
+   "name": "Legal_Firm_Customer__c",
+   "label": "Legal Firm",
+   "type": "reference",
+   "referenceTo": [
+    "Account"
+   ]
+  },
+  {
+   "name": "Migration_ID__c",
+   "label": "Migration ID",
+   "type": "string"
+  },
+  {
+   "name": "Post_Closing_Review_Comments__c",
+   "label": "Post Closing Review Comments",
+   "type": "textarea"
+  },
+  {
+   "name": "Post_Closing_Review_Completed_By__c",
+   "label": "Post Closing Review Completed By",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "Post_Closing_Review_Completed_Date__c",
+   "label": "Post Closing Review Completed Date",
+   "type": "date"
+  },
+  {
+   "name": "Reg_W_Reportable__c",
+   "label": "Reg W Reportable",
+   "type": "boolean"
+  },
+  {
+   "name": "Secondary_Market_Buyer__c",
+   "label": "Secondary Market Buyer",
+   "type": "string"
+  },
+  {
+   "name": "Submitted_for_Approval_Date__c",
+   "label": "Submitted for Approval Date",
+   "type": "date"
+  },
+  {
+   "name": "cm_Closer__c",
+   "label": "Closer",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "cm_Completed_Application__c",
+   "label": "Completed Application",
+   "type": "date"
+  },
+  {
+   "name": "cm_Credit_Analyst_Underwriter__c",
+   "label": "Credit Analyst / Underwriter",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "cm_Loan_Assistant__c",
+   "label": "Loan Assistant",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "cm_Loan_Ops__c",
+   "label": "Loan Ops",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "cm_Portfolio_Manager__c",
+   "label": "Portfolio Manager",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "nSight_Standing_Order_Account_Number_c__c",
+   "label": "Account Number",
+   "type": "string"
+  }
+ ],
+ "LLC_BI__Product_Package__c": [
+  {
+   "name": "OwnerId",
+   "label": "Owner ID",
+   "type": "reference",
+   "referenceTo": [
+    "Group",
+    "User"
+   ]
+  },
+  {
+   "name": "Name",
+   "label": "Product Package Name",
+   "type": "string"
+  },
+  {
+   "name": "CurrencyIsoCode",
+   "label": "Currency ISO Code",
+   "type": "picklist",
+   "values": [
+    "GBP",
+    "EUR",
+    "USD"
+   ]
+  },
+  {
+   "name": "RecordTypeId",
+   "label": "Record Type ID",
+   "type": "reference",
+   "referenceTo": [
+    "RecordType"
+   ]
+  },
+  {
+   "name": "LLC_BI__Additional_Income_Category__c",
+   "label": "Additional Income Category",
+   "type": "picklist",
+   "values": [
+    "Wealth",
+    "Insurance",
+    "Swap"
+   ]
+  },
+  {
+   "name": "LLC_BI__Approval_Status__c",
+   "label": "Approval Status",
+   "type": "picklist",
+   "values": [
+    "Not Submitted",
+    "Pending",
+    "Ready"
+   ]
+  },
+  {
+   "name": "LLC_BI__Deal_Type__c",
+   "label": "Deal Type",
+   "type": "picklist",
+   "values": [
+    "Loan Onboarding",
+    "Handover Loans"
+   ]
+  },
+  {
+   "name": "LLC_BI__Handover_Type__c",
+   "label": "Handover Type",
+   "type": "picklist",
+   "values": [
+    "Distressed Loans"
+   ]
+  },
+  {
+   "name": "LLC_BI__Reason_For_Handover__c",
+   "label": "Reason for Handover",
+   "type": "picklist",
+   "values": [
+    "Covenant Breach",
+    "Declining Industry Sector",
+    "Financial Distress",
+    "Management Issue",
+    "Other"
+   ]
+  },
+  {
+   "name": "LLC_BI__Review_Frequency__c",
+   "label": "Review Frequency",
+   "type": "picklist",
+   "values": [
+    "Annually",
+    "Semi-Annually",
+    "Quarterly",
+    "Every 2 Months",
+    "Monthly"
+   ]
+  },
+  {
+   "name": "LLC_BI__Risk_Rating__c",
+   "label": "Risk Rating",
+   "type": "picklist",
+   "values": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  {
+   "name": "LLC_BI__Stage__c",
+   "label": "Stage",
+   "type": "picklist",
+   "values": [
+    "Pending",
+    "In Review",
+    "Complete"
+   ]
+  },
+  {
+   "name": "LLC_BI__Status__c",
+   "label": "Status",
+   "type": "picklist",
+   "values": [
+    "New",
+    "In Review",
+    "Intermediately Approved",
+    "Approved",
+    "Intermediately Rejected",
+    "Rejected",
+    "Recalled",
+    "Declined",
+    "Open",
+    "Complete",
+    "Hold",
+    "Lost",
+    "Withdrawn",
+    "Approval Step 1",
+    "Approval Step 2",
+    "Approval Step 3",
+    "Approval Step 4"
+   ]
+  },
+  {
+   "name": "LLC_BI__Account__c",
+   "label": "Relationship",
+   "type": "reference",
+   "referenceTo": [
+    "Account"
+   ]
+  },
+  {
+   "name": "LLC_BI__Additional_One_Time_Income__c",
+   "label": "Additional One Time Income",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Ancillary_Product_Tax_Rate__c",
+   "label": "Deposit Tax Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Ancillary_Revenue_Comments__c",
+   "label": "Ancillary Revenue Comments",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Annual_Deposit_Operating_Cost__c",
+   "label": "Annual Deposit Operating Cost",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Booked_Affiliated_Exposure__c",
+   "label": "Booked Affiliated Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Booked_Direct_Exposure__c",
+   "label": "Booked Direct Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Booked_Indirect_Exposure__c",
+   "label": "Booked Indirect Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Capital_Allocation_Rate_of_New_Exposures__c",
+   "label": "Capital Allocation Rate of New Exposures",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Committed_Affiliated_Exposure__c",
+   "label": "Committed Affiliated Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Committed_Direct_Exposure__c",
+   "label": "Committed Direct Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Committed_Indirect_Exposure__c",
+   "label": "Committed Indirect Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Cost_Of_New_Deposit_Capital_Percent__c",
+   "label": "Cost of New Deposit Capital",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Cost_of_Capital_of_New_Exposures__c",
+   "label": "Cost of Capital of New Exposures",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Credit_Memo__c",
+   "label": "Credit Memo",
+   "type": "reference",
+   "referenceTo": [
+    "LLC_BI__Credit_Memo__c"
+   ]
+  },
+  {
+   "name": "LLC_BI__Default_App__c",
+   "label": "Default App",
+   "type": "string"
+  },
+  {
+   "name": "LLC_BI__Deposit_Reserve_Rate__c",
+   "label": "Deposit Reserve Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Description__c",
+   "label": "Description",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Expected_Loss_Rate_of_New_Exposures__c",
+   "label": "Expected Loss Rate of New Exposures",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Expected_Term_of_New_Deposit_Products__c",
+   "label": "Expected Term of New Deposit Products",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Expected_Term_of_New_Treasury_Services__c",
+   "label": "Expected Term of New Treasury Services",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Expected_Utilization_of_New_Exposure__c",
+   "label": "Expected Utilization of New Exposure",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Handover_Information__c",
+   "label": "Handover Information",
+   "type": "textarea"
+  },
+  {
+   "name": "LLC_BI__Has_Leases__c",
+   "label": "Has Leases",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Has_Syndicated_Loans__c",
+   "label": "Has Syndicated Loans",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Last_Exposure_Calc_Date__c",
+   "label": "Last Exposure Calculation Date",
+   "type": "datetime"
+  },
+  {
+   "name": "LLC_BI__Last_Review_Date__c",
+   "label": "Last Review Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Loan_Facilities_Count__c",
+   "label": "Number of Loan Facilities",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__New_Deposit_Blended_Rate__c",
+   "label": "New Deposit Product Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__New_Deposit_Revenue_Rate__c",
+   "label": "New Deposit Revenue Rate",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__New_Interest_Bearing_Deposit_Balance__c",
+   "label": "New Interest Bearing Deposit Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__New_Money__c",
+   "label": "New Money",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__New_Monthly_Treasury_Income__c",
+   "label": "New Monthly Treasury Income",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__New_Non_Interest_Bearing_Deposit_Balance__c",
+   "label": "New Non-Interest Bearing Deposit Balance",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__New_Treasury_Credit_Exposure__c",
+   "label": "New Treasury Credit Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__New_Treasury_One_Time_Fee_Amount__c",
+   "label": "New Treasury One Time Fee Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Next_Annual_Review__c",
+   "label": "-D Next Annual Review",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Next_Review_Date__c",
+   "label": "Next Review Date",
+   "type": "date"
+  },
+  {
+   "name": "LLC_BI__Outstanding__c",
+   "label": "Outstanding",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Primary_Entity__c",
+   "label": "Primary Entity",
+   "type": "reference",
+   "referenceTo": [
+    "Account"
+   ]
+  },
+  {
+   "name": "LLC_BI__Primary_Officer__c",
+   "label": "Primary Officer",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "LLC_BI__Propagate_Action__c",
+   "label": "Propagate Action",
+   "type": "boolean"
+  },
+  {
+   "name": "LLC_BI__Proposed_Affiliated_Exposure__c",
+   "label": "Proposed Affiliated Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Proposed_Direct_Exposure__c",
+   "label": "Proposed Direct Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Proposed_Indirect_Exposure__c",
+   "label": "Proposed Indirect Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__RWA_Percentage_for_New_Treasury_Exposure__c",
+   "label": "RWA Percentage for New Treasury Exposure",
+   "type": "percent"
+  },
+  {
+   "name": "LLC_BI__Reviewable_Loan_Facilities_Count__c",
+   "label": "Number of Reviewable Loan Facilities",
+   "type": "double"
+  },
+  {
+   "name": "LLC_BI__Secondary_Officer__c",
+   "label": "Secondary Officer",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "LLC_BI__TBE__c",
+   "label": "TBE",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__TCE__c",
+   "label": "TCE",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__TOE__c",
+   "label": "TOE",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Affiliated_Exposure__c",
+   "label": "Total Affiliated Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Allocated_Syndication_Amount__c",
+   "label": "Total Allocated Syndication Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Direct_Exposure__c",
+   "label": "Total Direct Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Indirect_Exposure__c",
+   "label": "Total Indirect Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Loan_Facilities_Amount__c",
+   "label": "Total Loan Facilities Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Loan_Facilities_Exposure__c",
+   "label": "Total Loan Facilities Exposure",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Net_New_Funds__c",
+   "label": "Total Net New Funds",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Total_Syndicated_Facility_Amount__c",
+   "label": "Total Syndicated Facility Amount",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Treasury_Annual_Operating_Cost__c",
+   "label": "Treasury Annual Operating Cost",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__Unused__c",
+   "label": "Unused",
+   "type": "currency"
+  },
+  {
+   "name": "LLC_BI__lookupKey__c",
+   "label": "lookupKey",
+   "type": "string"
+  },
+  {
+   "name": "cm_Approval_Committee__c",
+   "label": "Approval Committee",
+   "type": "picklist",
+   "values": [
+    "Loan Committee",
+    "Board of Directors"
+   ]
+  },
+  {
+   "name": "Approver_1__c",
+   "label": "Approver 1",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "Approver_2__c",
+   "label": "Approver 2",
+   "type": "reference",
+   "referenceTo": [
+    "User"
+   ]
+  },
+  {
+   "name": "cm_Background_Loan__c",
+   "label": "Background (Loan)",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Collateral_Analysis_Collateral_Mgmt__c",
+   "label": "Collateral Analysis (Collateral Mgmt)",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Covenant_Analysis__c",
+   "label": "Covenant Analysis",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Deal_Summary_Loan__c",
+   "label": "Deal Summary (Loan)",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Financial_Analysis_Loan__c",
+   "label": "Financial Analysis (Loan)",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Household__c",
+   "label": "Household",
+   "type": "reference",
+   "referenceTo": [
+    "Account"
+   ]
+  },
+  {
+   "name": "cm_Loan_Committee__c",
+   "label": "Loan Committee",
+   "type": "boolean"
+  },
+  {
+   "name": "cm_Relationship_Product_Request_Overview__c",
+   "label": "Relationship & Product Request Overview",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Risk_Analysis_Loan__c",
+   "label": "Risk Analysis (Loan)",
+   "type": "textarea"
+  },
+  {
+   "name": "cm_Send_to_Level_1__c",
+   "label": "Send to Level 1",
+   "type": "boolean"
+  },
+  {
+   "name": "cm_Send_to_Level_2__c",
+   "label": "Send to Level 2",
+   "type": "boolean"
+  },
+  {
+   "name": "cm_Credit_Stage__c",
+   "label": "Credit Stage",
+   "type": "picklist",
+   "values": [
+    "Application",
+    "Credit Underwriting",
+    "Final Review",
+    "Credit Decisioning",
+    "Approved",
+    "Fulfillment",
+    "Booked"
+   ]
+  }
+ ]
+}
