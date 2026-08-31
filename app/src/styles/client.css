@@ -1,0 +1,435 @@
+/* =============================================================================
+   SURFACE 2 — THE CLIENT: the header capsule, the hero, the panes, the flight.
+
+   Ported from design/dummy/dummy.template.html. The token mapping is the one
+   landing.css writes down; where a value is the dummy's literal number it is
+   spelled here rather than invented as a new token.
+
+   THREE MECHANISMS THIS FILE EXISTS FOR, and each one has a trap behind it:
+
+   1. THE CAPSULE CASCADE IS AN ANIMATION (trap 1). Entrance delays are
+      animation-delays, never transition-delays. A transition-delay on .itab
+      poisons every LATER interactive state change on the same element — the
+      active wash then waits up to .32s before it moves, which reads as the tab
+      moving back and then jumping.
+   2. THE FLIGHT SUPPRESSION OUTRANKS THE SHOW RULE (trap 2). `.view.noanim`
+      alone LOSES the specificity tie to `.view.show` and silently does nothing;
+      the suppressor has to carry both classes. It is also cleared only when the
+      view next hides, because removing it while visible flips animation
+      none -> viewin and restarts the whole entry animation.
+   3. THE MORPH ENDS AS A CROSSFADE IN PLACE (trap 4). `.flyname` transitions
+      geometry only; the handoff is the real name revealed at full opacity UNDER
+      the ghost, and the ghost dissolving over it. Nothing dips.
+
+   REDUCED MOTION. No kill-switch block here: electric-glass.css switches every
+   animation and transition off under the media query. Nothing on this surface
+   is hidden at rest and revealed only by a keyframe, so that kill is safe.
+   ============================================================================= */
+
+/* ============================================================== THE CAPSULE
+   Rule 11. The workspace nav lives IN the header, absolutely centred, visible
+   only on a client. The capsule is NOT a backdrop-filter surface: it sits
+   inside the bar's own blur, so it takes the rim and the dark hairline without
+   a second lens (a nested blur here would add a sixteenth glass surface the
+   census does not know about, and stack two blurs on one edge). */
+.topnav .icotabs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim), 0 4px 14px -8px rgba(0, 0, 0, 0.14);
+}
+
+/* Rule 60, the light: a 90px specular radial follows the cursor across the
+   capsule, hover-gated. TopBar writes --mx/--my on pointermove. */
+.topnav .icotabs::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(
+    90px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.55),
+    transparent 65%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
+}
+.topnav .icotabs:hover::after {
+  opacity: 1;
+}
+
+/* The tab. `transition: all` is the dummy's, and it is what makes the active
+   wash interpolate from its first frame. */
+.itab {
+  display: flex;
+  align-items: center;
+  padding: 6px 9px;
+  color: var(--ink-muted);
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 999px;
+  position: relative;
+  transition: all var(--dur-mid) var(--ease-out);
+}
+.itab svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+/* The label is present for assistive tech and for the active state; it is the
+   width that opens, so nothing reflows on hover. */
+.itab .lbl {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  opacity: 0;
+  transition: max-width 0.3s var(--ease-out), margin 0.3s var(--ease-out), opacity 0.25s var(--ease-out);
+}
+/* The resting tooltip is a PSEUDO-ELEMENT rather than a second span carrying
+   the same words: an icon tab that spells its label twice in the DOM says it
+   twice to a screen reader and to anything reading the button's text. */
+.itab::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 4px);
+  transform: translate(-50%, -3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease-out), transform 0.2s var(--ease-out);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  z-index: 5;
+}
+.itab:hover {
+  color: var(--ink-strong);
+  background: rgba(255, 255, 255, 0.75);
+}
+.itab:hover::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Rule 1 + rule 23: whisper-faint violet wash, ink text, and segmented-control
+   depth. No dot, no bold purple anywhere in the tab row. */
+.itab.active {
+  color: var(--ink-strong);
+  background: var(--brand-wash);
+  border-color: var(--accent-hairline-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.itab.active svg {
+  opacity: 1;
+}
+.itab.active .lbl {
+  max-width: 150px;
+  opacity: 1;
+  margin-left: 8px;
+}
+.itab.active::after {
+  display: none;
+}
+.itab:active {
+  transform: scale(0.95);
+}
+
+/* THE ENTRANCE IS AN ANIMATION, NEVER A TRANSITION-DELAY (trap 1). The capsule
+   itself fades and settles on a .12s intent delay (landing.css); its tabs
+   cascade behind it at 30ms steps, .14s to .32s. Exit is the capsule's own
+   immediate soft fade — the tabs carry no exit of their own. */
+body.on-client .topnav .itab {
+  animation: navtabin 0.35s var(--ease-spring) both;
+}
+@keyframes navtabin {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+body.on-client .topnav .itab:nth-child(1) {
+  animation-delay: 0.14s;
+}
+body.on-client .topnav .itab:nth-child(2) {
+  animation-delay: 0.17s;
+}
+body.on-client .topnav .itab:nth-child(3) {
+  animation-delay: 0.2s;
+}
+body.on-client .topnav .itab:nth-child(4) {
+  animation-delay: 0.23s;
+}
+body.on-client .topnav .itab:nth-child(5) {
+  animation-delay: 0.26s;
+}
+body.on-client .topnav .itab:nth-child(6) {
+  animation-delay: 0.29s;
+}
+body.on-client .topnav .itab:nth-child(7) {
+  animation-delay: 0.32s;
+}
+
+/* ========================================================== THE NAME FLIGHT
+   Rule 58 + trap 4. A fixed ghost carries the client name out of the worklist
+   row and into the hero: 14.5px -> 25px with the letter-spacing morphing with
+   it, over .52s on the settle-with-lift curve. Geometry ONLY — the opacity
+   handoff is written by nameFlight.ts, at the far end, over the real name. */
+.flyname {
+  position: fixed;
+  z-index: 80;
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink-strong);
+  white-space: nowrap;
+  pointer-events: none;
+  font-size: 14.5px;
+  letter-spacing: 0;
+  transition: left 0.52s var(--ease-spring), top 0.52s var(--ease-spring),
+    font-size 0.52s var(--ease-spring), letter-spacing 0.52s var(--ease-spring);
+}
+
+/* ================================================================= THE HERO
+   Rule 8: the client identity is its own floating glass HERO panel — bloom
+   inside the glass, an oversized > watermark, specular light. The blur is the
+   dummy's 36 (a bar's depth of field, not a floating panel's): the hero is a
+   wide sheet across the top of the view, and 38 over this much ground goes to
+   water. The triple rim and the dark hairline come from .eg-glass, so the
+   census passes by construction. */
+#view-account .page {
+  max-width: 1180px;
+  padding-left: 26px;
+  padding-right: 26px;
+}
+#view-account .num {
+  font-variant-numeric: tabular-nums;
+}
+.hero {
+  --eg-blur: var(--blur-bar);
+  --eg-sat: 1.8;
+  --eg-drop: 0 16px 50px -16px rgba(0, 0, 0, 0.18);
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 20px 28px 24px;
+  /* Rule 21: the page ground carries no purple. The bloom lives INSIDE the
+     glass, which is the only place violet ambience is allowed. */
+  background:
+    radial-gradient(520px 240px at 88% -12%, rgba(161, 0, 255, 0.09) 0%, transparent 58%),
+    radial-gradient(380px 200px at -4% 110%, rgba(5, 242, 219, 0.05) 0%, transparent 55%),
+    rgba(255, 255, 255, 0.55);
+}
+
+/* Rule 40 (mark census): the hero watermark is one of the six sanctioned mark
+   sites. Rule 62.3 (hero depth): it leans up to 6px/4px AGAINST the cursor over
+   a 1.2s settle — depth, never a wobble. AccountWorkspace writes the transform. */
+.acct-wm {
+  position: absolute;
+  /* THE MINT'S MARK IS A 240x254 DRAWN PATH; this one is the app's typographic
+     ">", whose ink is ~0.40 x 0.45 of its em. Matching the mark's visual MASS
+     rather than its font-size is what makes the two heroes read the same: the
+     size and the offsets are the dummy's, scaled by the ratio between the two
+     renditions. */
+  right: -84px;
+  top: -252px;
+  font-size: 560px;
+  line-height: 1;
+  color: var(--brand);
+  opacity: 0.06;
+  pointer-events: none;
+  user-select: none;
+  transition: transform 1.2s var(--ease-spring);
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.crumb button {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  cursor: pointer;
+}
+.crumb button:active {
+  transform: scale(0.97);
+}
+
+.acct-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.acct-name {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink-strong);
+}
+/* Sync and Client Actions ride the name row until the FAB arc claims them in
+   Surface 4. They sit OUTSIDE .anchors on purpose: the anchor cascade is an
+   nth-child sequence and a control in that list would take a beat of it. */
+.hero-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.verdict {
+  max-width: 74ch;
+  font-size: 13.5px;
+  color: var(--ink-muted);
+  margin: 8px 0 0;
+  text-wrap: pretty;
+}
+
+/* ============================================================== THE ANCHORS
+   Rule 23: content is SOLID. Rule 60: the anchors materialize with a 45ms
+   cascade on EVERY view entry — which in React means the hero's content mounts
+   on entry rather than persisting hidden, so the keyframes actually replay. */
+.anchors {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 16px;
+}
+.anchor {
+  min-width: 112px;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: 11px;
+  padding: 9px 13px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 6px 18px -10px rgba(0, 0, 0, 0.08);
+}
+.anchor .l {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.anchor .v {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin-top: 3px;
+}
+.anchor .v .u {
+  color: var(--brand);
+}
+.anchor .v .dn {
+  font-size: 12px;
+  margin-left: 4px;
+}
+.anchor .s {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  margin-top: 1px;
+}
+.anchor.grade-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.view.show .anchor {
+  animation: ancup 0.45s var(--ease-out) both;
+}
+.view.show .anchor:nth-child(2) {
+  animation-delay: 45ms;
+}
+.view.show .anchor:nth-child(3) {
+  animation-delay: 90ms;
+}
+.view.show .anchor:nth-child(4) {
+  animation-delay: 135ms;
+}
+.view.show .anchor:nth-child(5) {
+  animation-delay: 180ms;
+}
+@keyframes ancup {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Rule 62.1 — the grade ring DRAWS itself on every client entry: reset to the
+   full 119.4 circumference, then a 1s settle to the grade. AccountWorkspace
+   drives the reset; the curve is here. */
+.gr {
+  width: 46px;
+  height: 46px;
+  flex: none;
+}
+.gr .bg {
+  stroke: var(--surface-overlay);
+}
+.gr .fg {
+  stroke: var(--brand);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s var(--ease-spring);
+}
+.gr text {
+  font: 600 14px "Graphik", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  fill: var(--ink-strong);
+}
+
+/* ================================================================ THE PANES
+   Rule 61: panes SETTLE, they never jump. 3px on the settle curve, .34s. The
+   8px travel is reserved for view-level changes. */
+.pane {
+  display: none;
+  padding: 22px 0 90px;
+}
+.pane.show {
+  display: block;
+  animation: panein 0.34s var(--ease-settle) both;
+}
+@keyframes panein {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
