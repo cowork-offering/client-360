@@ -1,0 +1,205 @@
+/* =============================================================================
+   SURFACE 4a — THE MARK'S CORNER: the FAB, its idle breath, and the action arc.
+
+   GROUND TRUTH: design/dummy/dummy.template.html (the `.fabwrap` / `.fab` /
+   `.arcbtn` / `.arclbl` block). Values are lifted verbatim; where the port
+   already owns the number as a token (--fab-right/-bottom/-size, the easings,
+   the glass recipe) the token is used, because those tokens were minted FROM
+   this dummy in the foundation wave.
+
+   Rules: 49 (the quarter-circle arc), 50 (context-aware: landing opens the
+   assist directly, a client fans the arc), 53 (the mark rotates 180deg to point
+   LEFT into the arc), 54 (ONE anchored narrator chip, per-satellite floating
+   labels banned), 60 (press physics preserve the satellite's translate),
+   65.4 (the idle halo is a CONTINUOUS 7s sinusoid, never a blink),
+   71 (lens-grade everywhere: the satellites take the shared recipe, the micro
+   chip is the sole one-rim exception).
+
+   REDUCED MOTION: electric-glass.css switches every animation and transition
+   off globally. Nothing here is hidden at rest and revealed only by a keyframe
+   — the arc's resting state is closed, which is what a reduced-motion reader
+   should see until they open it — so no local kill-switch is needed.
+   ============================================================================= */
+
+/* --------------------------------------------------------------- the corner
+   ONE fixed anchor carries the mark, the five satellites and the narrator chip,
+   so "the FAB yields" is one transform on one object rather than four elements
+   agreeing to disappear together. */
+.fabwrap {
+  position: fixed;
+  right: var(--fab-right);
+  bottom: var(--fab-bottom);
+  z-index: var(--z-fab);
+  transition:
+    opacity 0.3s var(--ease-out),
+    transform 0.3s var(--ease-out);
+}
+
+/* Rule 56 — the mark YIELDS while the assist is open. Never two controls in the
+   corner: it goes to nothing and stops answering the pointer. */
+.fabwrap.tucked {
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ the mark
+   Ink body with a top gloss, a violet-tinged drop, and the brand ">" in white.
+   Hover takes it to brand violet: the mark is IDENTITY, and identity is the one
+   thing rule 27 still lets wear the colour. */
+.fab {
+  position: relative;
+  width: var(--fab-size);
+  height: var(--fab-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%),
+    var(--ink-strong);
+  color: var(--ink-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 6px 22px rgba(26, 7, 54, 0.28),
+    0 0 30px rgba(161, 0, 255, 0.14);
+  transition: all var(--dur-mid) var(--ease-out);
+}
+.fab:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 50%),
+    var(--brand);
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 30px rgba(26, 7, 54, 0.3),
+    0 0 44px rgba(161, 0, 255, 0.3);
+}
+/* Rule 60 — press physics: everything gives under the finger. */
+.fab:active {
+  transform: scale(0.94);
+}
+
+/* The brand ">" rides the FAB in white rather than the glyph's default violet,
+   and rotates to point LEFT into the fanned arc (rule 53) — never down. */
+.fab .gt {
+  color: var(--ink-inverse);
+  font-size: 15px;
+  transition: transform 0.35s var(--ease-settle);
+}
+.fabwrap.open .fab .gt {
+  transform: rotate(180deg);
+}
+
+/* --------------------------------------------------- the mark idles ALIVE
+   Rule 65.4, after the "trashy" v1 was rejected: a CONTINUOUS slow breath, not
+   a blink. No opacity snaps, no big blooms, no scale — a halo on ::after riding
+   a 7s ease-in-out sinusoid from 0 to .55 and back. The mark's life is FELT,
+   not seen. The halo is a pseudo-element on purpose: the element's own
+   animation slot belongs to the whisper's `fabreathe` beat, and one element
+   cannot run two named animations on the same property without one winning. */
+.fab::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 0 14px 2px rgba(161, 0, 255, 0.13);
+  animation: fabidle 7s ease-in-out infinite;
+}
+@keyframes fabidle {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ------------------------------------------------------- the quarter-circle
+   Rule 49: five 40px glass satellites fan out of the mark on a 118px radius,
+   chat at the top and the four credit actions swinging down to the horizontal,
+   staggered 28ms apart. Each satellite carries its own --tx/--ty (measured off
+   the dummy) and its own --i for the stagger.
+
+   THE STAGGER IS A TRANSITION-DELAY AND THAT IS CORRECT HERE. Trap 1 forbids
+   transition-delays on ENTRANCE CASCADES of elements that later change state
+   interactively — a delay on a nav tab poisons every later wash. A satellite's
+   only state change IS this open/close transition, in both directions, so the
+   delay is the mechanism rather than a one-off entrance. The dummy does exactly
+   this and the port keeps it. */
+.arcbtn {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translate(0, 0) scale(0.4);
+  pointer-events: none;
+  transition:
+    transform 0.42s var(--ease-settle),
+    opacity 0.3s var(--ease-out);
+  transition-delay: calc(var(--i) * 28ms);
+}
+/* Rule 35 — ONE icon language. The satellites wear the SAME glyphs their Client
+   Actions rows wear, drawn at the dummy's 15px rather than the row's 18px: the
+   corner is a smaller instrument, not a different vocabulary. */
+.arcbtn svg {
+  width: 15px;
+  height: 15px;
+}
+.fabwrap.open .arcbtn {
+  opacity: 1;
+  transform: translate(var(--tx), var(--ty)) scale(1);
+  pointer-events: auto;
+}
+.arcbtn:hover {
+  color: var(--ink-strong);
+  background: #ffffff;
+}
+/* Rule 60, the clause that is easy to get wrong: the press PRESERVES the
+   translate. Writing `scale(.9)` alone would fling the satellite back onto the
+   mark for the length of the press. */
+.fabwrap.open .arcbtn:active {
+  transform: translate(var(--tx), var(--ty)) scale(0.9);
+}
+
+/* ---------------------------------------------------------- the narrator chip
+   Rule 54: ONE anchored chip beneath the mark says what you are on. The
+   satellites stay unlabeled icons; per-satellite floating labels are BANNED.
+   Centered on the mark (left 50% + a -50% translate) so it has air on both
+   sides, and every label is one or two words so it can never spill 1360w.
+
+   It is the census's sole one-rim surface (rule 71): a triple rim smears at a
+   7px radius. `.eg-glass-micro` is the only class allowed to grant that, and
+   `.arclbl` is the only element allowed to take it. */
+.arclbl {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  white-space: nowrap;
+  line-height: 1.4;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border-radius: 7px;
+  padding: 2px 9px;
+  opacity: 0;
+  transform: translate(-50%, -3px);
+  transition: all 0.25s var(--ease-out);
+  pointer-events: none;
+}
+.fabwrap.open .arclbl {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}

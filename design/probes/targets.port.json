@@ -1,6 +1,6 @@
 {
   "target": "port",
-  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through. Filled for SURFACE 1 (the landing + the app header) as of the mint-landing wave: the weave, the worklist rows, the KPI band, the whisper, the header and its hidden capsule. Everything below that belongs to a later surface still carries the dummy's value and will fail until that surface is minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, not the dummy's three authored clients, so the client rows name the port's real accounts.",
+  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through. Filled for SURFACE 1 (the landing + the app header) in the mint-landing wave and for SURFACE 4 (the FAB, the arc, the narrator chip, the chat lifecycle) in the mint-fab wave: #fabwrap / #fab / .arcbtn / #arcLbl / #chatpanel / #chatMin / #chatX / #chatMini all carry the dummy's own hook names, so nothing but fabWrap had to move. Everything below that belongs to a later surface still carries the dummy's value and will fail until that surface is minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, not the dummy's three authored clients, so the client rows name the port's real accounts.",
   "viewport": {
     "width": 1360,
     "height": 900
@@ -44,7 +44,7 @@
     "graphRoute": "#oflowSvg path.fl",
     "graphParticle": "#oflowSvg circle.flp",
     "paneMeterFill": ".meter i",
-    "fabWrap": "#fab",
+    "fabWrap": "#fabwrap",
     "fabWrapOpenClass": "open",
     "fab": "#fab",
     "fabMark": "#fab .gt",

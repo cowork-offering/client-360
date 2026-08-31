@@ -81,8 +81,16 @@ function mount(meta?: Record<string, unknown>, booked = false): HTMLDivElement {
 
 const buttons = () => [...document.body.querySelectorAll("button")];
 const byText = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ""));
+const byLabel = (re: RegExp) => buttons().find((b) => re.test(b.getAttribute("aria-label") ?? ""));
 const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 const press = (key: string) => act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
+/** SURFACE 4, DIRECTION-LOCKED rule 50: the mark is CONTEXT-AWARE. On a client
+ *  it fans the action arc and the assist is the satellite at the top, so the
+ *  chat entry point below is two gestures rather than one. */
+const openAssist = () => {
+  click(byLabel(/Client actions/)!);
+  click(byLabel(/Assist chat/)!);
+};
 const openRow = (name: string) =>
   [...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes(name))!;
 /** The Action Panel is the dialog whose label is the action name. */
@@ -134,7 +142,7 @@ describe("A33.1.1 — one modal, three entry points", () => {
   it("opens from a chat suggestion chip", () => {
     mount();
     click(openRow("Sterling Fabrication"));
-    click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+    openAssist();
     const chip = [...document.querySelectorAll('[role="dialog"]')]
       .flatMap((d) => [...d.querySelectorAll("button")])
       .find((b) => b.hasAttribute("title") && /Collateral Valuation/.test(b.textContent ?? ""));
@@ -977,7 +985,7 @@ describe("wave 2 — the five new tickets", () => {
     const callTool = installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
     mount({ userId: APPROVER_ID }, true);
     click(openRow("Sterling Fabrication"));
-    click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+    openAssist();
     const chip = [...document.querySelectorAll('[role="dialog"]')]
       .flatMap((d) => [...d.querySelectorAll("button")])
       .find((b) => b.hasAttribute("title") && b.textContent?.trim() === "Loan Modification")!;

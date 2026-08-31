@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp, ACCOUNT_TABS } from "../state/appState";
 import type { AiMessage } from "../data/contract";
 import { formatProbe, newRequestId, probeChannels } from "../channel/adapter";
@@ -8,6 +8,7 @@ import { resolveBundle } from "../actions/registry";
 import { ActionPanel } from "./ActionPanel";
 import { suggestActions, type Suggestion } from "../actions/suggest";
 import { ACTIONS_BY_ID } from "../actions/registry";
+import { BrandGlyph } from "./brand";
 
 type SendState = "idle" | "sending" | "handedOff" | "answered" | "error";
 
@@ -69,7 +70,7 @@ function SuggestionChips({
 }) {
   if (!suggestions.length) return null;
   return (
-    <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+    <div className="chatchips">
       {suggestions.map((s) => (
         <button
           key={s.id}
@@ -77,7 +78,7 @@ function SuggestionChips({
           disabled={disabled && !ACTIONS_BY_ID[s.id]?.hasPanel}
           onClick={() => onPick(s)}
           title={s.prompt}
-          className="c360-press rounded-full border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted hover:border-accent hover:text-accent disabled:opacity-50"
+          className="chatchip c360-press"
         >
           {s.label}
         </button>
@@ -125,6 +126,15 @@ export function ChatPanelBody() {
   const [panelActionId, setPanelActionId] = useState<string | null>(null);
   const [answerMeta, setAnswerMeta] = useState<{ model?: string; costUsd?: number } | null>(null);
   const canSend = available && !sending && state.draft.trim().length > 0;
+
+  // The assist is never unmounted (rule 56 keeps the conversation), so closing
+  // it has to put away what it had open. A ticket a chip raised is the one
+  // piece of that state a banker would not expect to find still standing when
+  // they come back.
+  const assistOpen = state.panel === "chat";
+  useEffect(() => {
+    if (!assistOpen) setPanelActionId(null);
+  }, [assistOpen]);
 
   /** Chip click: send, and if the chip is registry-backed log it to the
    *  account timeline like any other triggered action (A31.3). Book-level
@@ -207,30 +217,25 @@ export function ChatPanelBody() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <>
       {panelActionId && <ActionPanel actionId={panelActionId} onClose={() => setPanelActionId(null)} />}
-      {/* Messages */}
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+
+      {/* THE THREAD. Both roles are LIGHT (rule 28's language): cool grey with
+          ink text for the banker, white bordered for the agent, alignment
+          carrying the role. A violet bubble was the last purple fill left in
+          the corner and it is gone. */}
+      <div className="chatbody">
         {messages.length === 0 ? (
-          <p className="text-[12px] leading-relaxed text-ink-muted">
+          <p className="chatempty">
             Ask about exposure, covenants, structure, or the next best action. Answers are grounded in the staged
             relationship data.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="chatmsgs">
             {messages.map((m) => (
-              <div key={m.id} className={`c360-row-in ${m.role === "user" ? "flex justify-end" : "flex justify-start"}`}>
-                <div
-                  className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-[12.5px] leading-relaxed"
-                  style={
-                    m.role === "user"
-                      ? { background: "var(--accent)", color: "var(--accent-ink)" }
-                      : { background: "var(--surface-overlay)", color: "var(--ink)" }
-                  }
-                >
-                  {/* PLAIN TEXT ONLY (A13) — React escapes; no HTML/Markdown parsing. */}
-                  {m.text}
-                </div>
+              <div key={m.id} className={`chatrow ${m.role === "user" ? "me" : "agent"}`}>
+                {/* PLAIN TEXT ONLY (A13) — React escapes; no HTML/Markdown parsing. */}
+                <div className="chatbub">{m.text}</div>
               </div>
             ))}
           </div>
@@ -238,81 +243,69 @@ export function ChatPanelBody() {
       </div>
 
       {sendState === "error" && (
-        <div className="flex-none border-t border-divider px-4 py-2">
+        <div className="chatnote bad">
           {/* Branch on the error CODE — never one catch-all banner (it would
               hide the single action that fixes the page). */}
-          <div className="text-[10.5px] leading-relaxed" style={{ color: "var(--critical)" }}>
-            {failure ? failure.fix : "Could not reach the desk. Try again from an agent-connected session."}
-          </div>
+          {failure ? failure.fix : "Could not reach the desk. Try again from an agent-connected session."}
           {lastQuestion && (
-            <button
-              type="button"
-              onClick={() => void send(lastQuestion)}
-              className="c360-press mt-1.5 rounded-md border border-border px-2 py-1 text-[10.5px] font-semibold text-ink-muted hover:text-ink"
-            >
+            <button type="button" onClick={() => void send(lastQuestion)} className="chatchip c360-press mt-1.5 block">
               Ask again
             </button>
           )}
         </div>
       )}
       {sendState === "handedOff" && (
-        <div className="flex-none border-t border-divider px-4 py-2 text-[10.5px] text-ink-faint">
-          Handed off to the desk. The cockpit refreshes in place when the answer lands.
-        </div>
+        <div className="chatnote">Handed off to the desk. The cockpit refreshes in place when the answer lands.</div>
       )}
       {sendState === "answered" && answerMeta?.model && (
-        <div className="flex-none border-t border-divider px-4 py-1.5 text-[10px] text-ink-faint">
+        <div className="chatnote">
           {answerMeta.model}
           {answerMeta.costUsd != null ? ` · $${answerMeta.costUsd.toFixed(4)}` : ""}
         </div>
       )}
 
-      {/* Composer */}
-      <div className="flex-none border-t border-divider pt-2">
-        <SuggestionChips suggestions={suggestions} disabled={!available || sending} onPick={(s) => void sendSuggestion(s)} />
-        {available ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              send(state.draft);
+      <SuggestionChips suggestions={suggestions} disabled={!available || sending} onPick={(s) => void sendSuggestion(s)} />
+
+      {/* THE COMPOSER. One pill, the field inside it, the send riding on the
+          right. Rule 27: the send is INK, never violet. Rule 47: the PILL takes
+          the focus so no rectangle is drawn inside a rounded shell. */}
+      {available ? (
+        <form
+          className="chatin eg-pill"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(state.draft);
+          }}
+        >
+          <textarea
+            data-autofocus
+            value={state.draft}
+            onChange={(e) => dispatch({ type: "SET_DRAFT", draft: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(state.draft);
+              }
             }}
-            className="flex items-end gap-2 px-3 pb-3"
-          >
-            <textarea
-              data-autofocus
-              value={state.draft}
-              onChange={(e) => dispatch({ type: "SET_DRAFT", draft: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send(state.draft);
-                }
-              }}
-              rows={2}
-              disabled={sending}
-              placeholder={sending ? "Sending…" : "Ask about this relationship…"}
-              className="min-h-0 flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-border-strong focus:outline-none disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={!canSend}
-              className="c360-btn flex-none rounded-md px-3 py-2 text-[12px] font-semibold disabled:opacity-40"
-              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
-            >
-              {sending ? "…" : "Send"}
-            </button>
-          </form>
-        ) : (
-          <div className="mx-3 mb-3 rounded-md border border-dashed border-border bg-surface px-3 py-3">
-            <div className="text-[12px] font-semibold text-ink">Chat unavailable in this view</div>
-            <div className="mt-1 text-[11.5px] leading-relaxed text-ink-muted">
-              No agent channel is connected to this artifact. Open the cockpit through the agent to ask questions; the
-              staged data stays fully navigable offline.
-            </div>
-            <ConnectionDetails />
+            rows={1}
+            disabled={sending}
+            placeholder={sending ? "Sending…" : "Ask about this relationship…"}
+            aria-label="Ask about this relationship"
+          />
+          <button type="submit" disabled={!canSend} className="send" aria-label={sending ? "Sending" : "Send"}>
+            <BrandGlyph className="gt" />
+          </button>
+        </form>
+      ) : (
+        <div className="chatoff">
+          <div className="chatoff-t">Chat unavailable in this view</div>
+          <div className="chatoff-b">
+            No agent channel is connected to this artifact. Open the cockpit through the agent to ask questions; the
+            staged data stays fully navigable offline.
           </div>
-        )}
-      </div>
-    </div>
+          <ConnectionDetails />
+        </div>
+      )}
+    </>
   );
 }

@@ -1,0 +1,323 @@
+/* =============================================================================
+   SURFACE 4b — THE ASSIST: the panel, its two ghost controls, and the pill.
+
+   GROUND TRUTH: design/dummy/dummy.template.html (`.chatpanel` / `.chatctl` /
+   `.chatx` / `.chatmini` / `.chatin`).
+
+   Rule 56, the whole lifecycle: the FAB yields, the panel takes the mark's
+   exact spot so it reads as the mark MORPHING into the conversation, minimize
+   folds it into a compact glass "Assist" pill holding that same spot with the
+   conversation kept, and close dismisses everything so the mark can come back.
+
+   Rule 27, commit-ink discipline: the send control is INK, never violet. A
+   violet fill on anything that commits is banned outright; violet stays
+   identity, which here means the brand mark inside the send button and nothing
+   else on the composer.
+   ============================================================================= */
+
+/* ------------------------------------------------------------------ the panel
+   The mark's own address, off the shared --fab-* anchor. Same right, same
+   bottom: the panel does not appear NEAR the FAB, it appears AS it. */
+.chatpanel {
+  position: fixed;
+  right: var(--fab-right);
+  bottom: var(--fab-bottom);
+  /* One above the mark's corner: the panel is what the corner becomes, and it
+     must never be overdrawn by the object it replaced. */
+  z-index: calc(var(--z-fab) + 1);
+  width: min(400px, 92vw);
+  /* The dummy's panel is content-sized around a scripted exchange. The port
+     carries a real thread, so the panel is capped and the message list scrolls
+     inside it — the corner may not grow until it eats the viewport. */
+  max-height: min(560px, calc(100vh - 150px));
+  border-radius: 18px;
+  padding: 18px 20px;
+  /* The recipe from .eg-glass with the panel's own violet bloom laid over the
+     tint. --eg-tint is still doing the work, so this is not a second recipe. */
+  background:
+    radial-gradient(300px 160px at 88% -10%, rgba(161, 0, 255, 0.08) 0%, transparent 60%),
+    var(--eg-tint);
+  display: none;
+}
+.chatpanel.show {
+  display: flex;
+  flex-direction: column;
+  animation: chatin 0.3s var(--ease-settle) both;
+}
+@keyframes chatin {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------- the two ghost controls
+   Rule 56: quiet, 24px, ink-3, a wash on hover. They sit over the header rather
+   than in it so the title can run the full width of the glass. */
+.chatctl {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 2px;
+}
+.chatx {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.chatx:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--ink-strong);
+}
+.chatx:active {
+  transform: scale(0.95);
+}
+
+.chathead {
+  flex: none;
+  /* clears the two ghost controls */
+  padding-right: 52px;
+  margin-bottom: 12px;
+}
+.chattitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+}
+.chatsub {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chatbody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* --------------------------------------------------------------- the thread
+   The dummy's chat is one scripted exchange: the banker's line as quiet grey
+   text, the agent's as body prose. The port carries a real thread, so the two
+   roles are bubbles — but they stay LIGHT (rule 28's language, applied here):
+   cool grey with ink text for the banker, white bordered for the agent.
+   Alignment carries the role. No violet bubble anywhere. */
+.chatmsgs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chatrow {
+  display: flex;
+}
+.chatrow.me {
+  justify-content: flex-end;
+}
+.chatbub {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chatrow.me .chatbub {
+  background: #e9ebf2;
+  color: var(--ink);
+}
+.chatrow.agent .chatbub {
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  color: var(--ink-body);
+}
+.chatempty {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------------ the chips
+   Quiet grey pills, one row, wrapping. They are shortcuts, not commits, so they
+   stay hairline-and-ink and never take a fill. */
+.chatchips {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.chatchip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.chatchip:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.16);
+  color: var(--ink-strong);
+}
+.chatchip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The honest empty: no channel in this view, and the reason said plainly. */
+.chatoff {
+  flex: none;
+  margin-top: 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-ctl);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 12px 14px;
+}
+.chatoff-t {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.chatoff-b {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------- the composer
+   The dummy's pill: a white field with a hairline, the send button riding
+   inside it on the right. `.eg-pill` moves focus onto the PILL rather than
+   drawing a rectangle inside a rounded shell (rule 47). */
+.chatin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 7px 7px 17px;
+  margin-top: 14px;
+  flex: none;
+}
+.chatin textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  resize: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-strong);
+}
+.chatin textarea::placeholder {
+  color: var(--ink-faint);
+}
+/* Rule 27 — the send is INK. Hover takes it to brand violet, which is the one
+   move the dummy allows: identity answering the pointer, never a violet fill
+   sitting there advertising itself as the commit. */
+.chatin .send {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink-strong);
+  color: var(--ink-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--dur-mid) var(--ease-out);
+}
+.chatin .send .gt {
+  color: var(--ink-inverse);
+  font-size: 10px;
+}
+.chatin .send:hover:not(:disabled) {
+  background: var(--brand);
+}
+.chatin .send:active:not(:disabled) {
+  transform: scale(0.95);
+}
+.chatin .send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Quiet footer lines (channel state, model + cost, the retry). */
+.chatnote {
+  flex: none;
+  margin-top: 10px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+.chatnote.bad {
+  color: var(--critical);
+}
+
+/* ------------------------------------------------------------- the Assist pill
+   Rule 56: minimize FOLDS the panel into this and it holds the mark's exact
+   spot with the conversation kept. The base .eg-glass recipe is already the
+   dummy's pill (white .6 over blur 34, saturate 1.8); only its depth is its
+   own, which is what --eg-drop exists for.
+
+   THE MARK IS A PSEUDO-ELEMENT, and that is deliberate. The pill's whole job is
+   to read as "Assist" — a real glyph node would put the ">" character into its
+   text content, and the pill's label is the thing the acceptance probe reads. */
+.chatmini {
+  position: fixed;
+  right: var(--fab-right);
+  bottom: var(--fab-bottom);
+  z-index: calc(var(--z-fab) + 1);
+  --eg-drop: 0 10px 28px -14px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  opacity: 0;
+  transform: translateY(6px) scale(0.92);
+  pointer-events: none;
+  transition: all 0.3s var(--ease-out);
+}
+.chatmini::before {
+  content: ">";
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--brand);
+}
+.chatmini.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.chatmini:active {
+  transform: scale(0.95);
+}

@@ -170,11 +170,13 @@ describe("Client Actions panel (A27.4)", () => {
   it("founder feedback — hides the chat FAB while the actions panel is open", () => {
     mount();
     click(openAnchor());
-    expect(byLabel(/Open chat/)).toBeTruthy();
+    // SURFACE 4, rule 50: on a client the mark carries the action arc, so it
+    // announces itself as "Client actions" rather than as the chat.
+    expect(byLabel(/Client actions/)).toBeTruthy();
     click(byText(/Client Actions/)!);
-    expect(byLabel(/Open chat/)).toBeUndefined(); // FAB stands down
+    expect(byLabel(/Client actions/)).toBeUndefined(); // the mark stands down
     press("Escape");
-    expect(byLabel(/Open chat/)).toBeTruthy(); // and returns
+    expect(byLabel(/Client actions/)).toBeTruthy(); // and returns
   });
 
   it("sends the action prompt through the channel when a relationship is open", async () => {
