@@ -934,35 +934,116 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     expect(d.stage).not.toHaveBeenCalled();
   });
 
-  it("REFUSES two different amounts in one plan, because the wire carries one scalar", async () => {
-    const { engine } = engineOn();
+  /* THE FOUR SCALARS, PER TARGET (2026-08-31). Founder: "there is the
+     possibility that there is a change on a loan which does not have an
+     increase or decrease". A scalar used to travel once for the WHOLE selection
+     and land on every clone, so a legitimate mixed plan was refused outright by
+     this morning's leak guard. Each scalar now names the member it lands on. */
+
+  it("stages two different amounts on two members, each targeted at its own clone", async () => {
+    const { engine, deps: d } = engineOn();
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
       ...(await confirm(engine, "take the equipment - $8,000,000.00 to $9,000,000")),
     ];
-    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/ONE value applied to every facility/);
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(JSON.parse(payload.scalarChangesJson)).toEqual([
+      { key: "requestedAmount", value: 20_000_000, targetLoanId: LINE_ID },
+      { key: "requestedAmount", value: 9_000_000, targetLoanId: EQUIPMENT_ID },
+    ]);
+    // The flat keys stay null: the org reads the targeted channel only when they
+    // are empty, and a figure in both places is a clone with two answers.
+    expect(payload.requestedAmount).toBeNull();
   });
 
-  /* THE SCALAR LEAK (P0, live). `facilityIds` is the union of every delta's
-     target, and a scalar travels once for the whole selection — so an amount
-     staged on one member and ANY other change on a second silently took the
-     second member's clone to the first one's figure. One value, so the
-     two-different-values refusal above never fired. */
-
-  it("REFUSES an amount staged beside another member's change, because the figure would land on both", async () => {
+  it("REFUSES two different amounts on ONE member, which no channel can carry", async () => {
     const { engine, deps: d } = engineOn();
     const deltas = [
       ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "change the payment schedule to monthly on the equipment - $8,000,000.00")),
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $22,000,000")),
     ];
     await expect(engine.stagePlan(deltas, context)).rejects.toThrow(WorkroomRefusalError);
-    // The refusal names the mix: the member that staged the amount, and the one
-    // it would have leaked onto.
-    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/requestedAmount travels as ONE value/);
-    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/staged on Line of Credit/);
-    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/also selects Equipment \(\$8M\)/);
-    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/its own modification/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/ONE value per facility/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/Line of Credit/);
     expect(d.stage).not.toHaveBeenCalled();
+  });
+
+  it("files the mixed plan the guard used to refuse: amount on the LoC, a field on the equipment", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "amortize the equipment - $8,000,000.00 over 20 years")),
+    ];
+    const staged = await engine.stagePlan(deltas, context);
+    expect(staged.planHash).toBe(STAGE_RESULT.planHash);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.facilityIds).toEqual([LINE_ID, EQUIPMENT_ID]);
+    // The amount names the line of credit ALONE. That is the whole fix: the
+    // equipment clone keeps its $8M and takes only the amortisation.
+    expect(JSON.parse(payload.scalarChangesJson)).toEqual([
+      { key: "requestedAmount", value: 20_000_000, targetLoanId: LINE_ID },
+    ]);
+    expect(payload.requestedAmount).toBeNull();
+    expect(JSON.parse(payload.fieldChangesJson)).toEqual([
+      { field: "LLC_BI__Amortized_Term_Months__c", value: 240, targetLoanId: EQUIPMENT_ID },
+    ]);
+  });
+
+  it("keeps the BROADCAST channel for a scalar every selected member staged", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "push the maturity on the line of credit - $15,000,000.00 to 2028-06-30")),
+      ...(await confirm(engine, "push the maturity on the equipment - $8,000,000.00 to 2028-06-30")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // The selection is not wider than the scalar's own targets, so the flat key
+    // says exactly what is meant and the deployed contract carries the plan.
+    expect(payload.facilityIds).toEqual([LINE_ID, EQUIPMENT_ID]);
+    expect(payload.requestedMaturityDate).toBe("2028-06-30");
+    expect("scalarChangesJson" in payload).toBe(false);
+  });
+
+  /* THE LEAK, AS AN INVARIANT. The membership guard survives in wirePayload as
+     the backstop on the broadcast channel, and by construction a plan routed
+     there has nothing to spread onto — so the guard cannot fire from this
+     client. What is worth pinning is the property it exists for, over every
+     mix the room can actually build: a scalar NEVER reaches a member that did
+     not stage it, whichever channel carries the plan. */
+
+  it("never lets a scalar reach a member that did not stage it, on either channel", async () => {
+    const mixes = [
+      ["increase the line of credit - $15,000,000.00 to $20,000,000", "amortize the equipment - $8,000,000.00 over 20 years"],
+      ["increase the line of credit - $15,000,000.00 to $20,000,000", "take the equipment - $8,000,000.00 to $9,000,000"],
+      ["push the maturity on the line of credit - $15,000,000.00 to 2028-06-30", "push the maturity on the equipment - $8,000,000.00 to 2028-06-30"],
+      ["increase the line of credit - $15,000,000.00 to $20,000,000", "change the payment schedule to monthly on the line of credit - $15,000,000.00"],
+    ];
+    for (const lines of mixes) {
+      const { engine, deps: d } = engineOn();
+      const deltas: Awaited<ReturnType<typeof confirm>> = [];
+      for (const line of lines) deltas.push(...(await confirm(engine, line)));
+      await engine.stagePlan(deltas, context);
+      const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+      // Who staged what, read off the deltas rather than off the payload.
+      const stagedOn = new Map<string, Set<string>>();
+      for (const dl of deltas) {
+        if (!dl.wire) continue;
+        const on = stagedOn.get(dl.wire.key) ?? new Set<string>();
+        on.add(dl.wire.facilityId);
+        stagedOn.set(dl.wire.key, on);
+      }
+      // Where the scalars ride targeted, every entry names a member that staged
+      // it. Where they broadcast, every selected member staged every scalar.
+      const targeted: Array<{ key: string; targetLoanId: string }> = payload.scalarChangesJson
+        ? JSON.parse(payload.scalarChangesJson)
+        : [];
+      for (const entry of targeted) expect([...stagedOn.get(entry.key)!]).toContain(entry.targetLoanId);
+      if (!payload.scalarChangesJson) {
+        for (const on of stagedOn.values()) expect(payload.facilityIds.filter((id: string) => !on.has(id))).toEqual([]);
+      }
+    }
   });
 
   it("stages an amount beside a field change on the SAME member, which is one plan", async () => {

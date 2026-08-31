@@ -26,6 +26,15 @@
  * ONE plan, ONE plan hash and ONE decision token, carrying N per-facility typed steps. The selection
  * contract itself lives in C360Facilities, shared with stage_renewal so the two cannot drift.
  *
+ * TWO CHANNELS FOR THE FOUR SCALARS (2026-08-31). Founder: "there is the possibility that there is a
+ * change on a loan which does not have an increase or decrease". The flat requestedAmount /
+ * requestedMaturityDate / requestedRate / requestedTermMonths BROADCAST: one value onto every
+ * selected clone. That is right for a single-facility plan, and for a change every member genuinely
+ * shares. It cannot express a mixed plan, and worse, it files silently on members that never asked:
+ * an amount on the line of credit staged beside a field change on the equipment loan used to take
+ * the equipment clone to the line's commitment. `scalarChangesJson` carries the same four keys PER
+ * TARGET, so each clone takes only its own. The two are mutually exclusive by refusal.
+ *
  * INPUT SHAPE AND THE required=true TRAP (lesson 16aa). `required=true` on an @InvocableVariable is
  * enforced by the REST Actions API BEFORE Apex runs, and NO Apex unit test can see it, because a
  * direct test invocation constructs the Request itself. A tool that grows an alternative input shape
@@ -54,20 +63,33 @@ global with sharing class StageLoanModification {
         global List<Id> facilityIds;
         @InvocableVariable(label='Rationale' required=true)
         global String rationale;
-        @InvocableVariable(label='Requested Amount')
+        @InvocableVariable(label='Requested Amount' description='BROADCAST: applied to EVERY selected facility. Use scalarChangesJson instead when the members need different figures.')
         global Decimal requestedAmount;
-        @InvocableVariable(label='Requested Maturity Date')
+        @InvocableVariable(label='Requested Maturity Date' description='BROADCAST: applied to EVERY selected facility.')
         global Date requestedMaturityDate;
-        @InvocableVariable(label='Requested Rate')
+        @InvocableVariable(label='Requested Rate' description='BROADCAST: applied to EVERY selected facility.')
         global Decimal requestedRate;
-        @InvocableVariable(label='Requested Term Months')
+        @InvocableVariable(label='Requested Term Months' description='BROADCAST: applied to EVERY selected facility.')
         global Decimal requestedTermMonths;
+        @InvocableVariable(label='Scalar Changes JSON' description='Optional. THE FOUR SCALARS, PER TARGET: JSON list [{"key" (requestedAmount|requestedMaturityDate|requestedRate|requestedTermMonths), "value", "targetLoanId"?}]. Each lands on the CLONE of the named facility ALONE, so one plan can take one member to a new commitment while another takes a different change entirely. MUTUALLY EXCLUSIVE with the four flat fields above, which broadcast one value to every selected facility: a request carrying both is refused, because the clone would hold two figures and no rule to choose between them. targetLoanId may be omitted when exactly one facility is selected.')
+        global String scalarChangesJson;
         @InvocableVariable(label='Covenant Adds JSON' description='Optional. JSON list of net-new covenants to create and attach: [{"typeName" or "typeId", "threshold", "operator" (< <= = >= >), "frequency"?, "effectiveDate"? (YYYY-MM-DD), "targetLoanId"?}]. Each is created Pending/Active on the borrower account and attached to the CLONE of the targeted facility on the new package version, never to the booked parent. targetLoanId may be omitted when exactly one facility is selected.')
         global String covenantAddsJson;
         @InvocableVariable(label='Involvement Changes JSON' description='Optional. JSON list of borrowing-structure amendments: [{"op" (add|remove), "role" (Borrower|Co-Borrower|Guarantor|Limited Guarantor|Related Entity), "accountId" or "accountName", "ownership"?, "targetLoanId"?}]. An ADD authors the involvement on the CLONE of the targeted facility on the new package version. A REMOVE is a carry exclusion: the parent keeps its row and the clone starts without it — nothing is ever deleted. targetLoanId may be omitted when exactly one facility is selected.')
         global String involvementChangesJson;
         @InvocableVariable(label='Field Changes JSON' description='Optional. THE FIELD WAVE: JSON list of loan-field amendments applied to the CLONE: [{"field" (API name or exact field label), "value", "targetLoanId"?}]. The field must be updateable and non-formula per the org\'s own describe, outside the doctrine deny-list (stage, status, the four scalar keys, anchoring lookups). Values are coerced by the field\'s own type; a picklist value is validated against the org\'s active values and a refusal carries the legal list. targetLoanId may be omitted when exactly one facility is selected.')
         global String fieldChangesJson;
+    }
+
+    /** One of the four scalars, aimed at ONE selected facility. */
+    public class ScalarChange {
+        /** The canonical request-key name, echoed back in refusals and the plan. */
+        public String key;
+        /** Set for requestedAmount, requestedRate and requestedTermMonths. */
+        public Decimal numberValue;
+        /** Set for requestedMaturityDate. */
+        public Date dateValue;
+        public Id targetLoanId;
     }
 
     /** One parsed field-wave amendment, resolved against the org's own describe. */
@@ -240,8 +262,8 @@ global with sharing class StageLoanModification {
             throw new ToolException('rationale is required. It feeds the audit ledger.');
         }
         if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
-            req.requestedTermMonths == null && String.isBlank(req.covenantAddsJson) && String.isBlank(req.involvementChangesJson) &&
-            String.isBlank(req.fieldChangesJson)) {
+            req.requestedTermMonths == null && String.isBlank(req.scalarChangesJson) && String.isBlank(req.covenantAddsJson) &&
+            String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson)) {
             throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, or a field change.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
@@ -273,9 +295,22 @@ global with sharing class StageLoanModification {
         }
 
         List<String> covenantWarnings = new List<String>();
+        List<ScalarChange> scalarChanges = parseScalarChanges(req, facilities);
         List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, covenantWarnings);
         List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, covenantWarnings);
         List<FieldChange> fieldChanges = parseFieldChanges(req, facilities);
+
+        // What each member's own clone will take, so the plan steps and the summary can name the
+        // figures per facility instead of describing one broadcast the banker did not ask for.
+        Boolean broadcastScalars = req.requestedAmount != null || req.requestedMaturityDate != null ||
+            req.requestedRate != null || req.requestedTermMonths != null;
+        Map<Id, List<String>> scalarWordsByTarget = new Map<Id, List<String>>();
+        for (ScalarChange sc : scalarChanges) {
+            if (!scalarWordsByTarget.containsKey(sc.targetLoanId)) {
+                scalarWordsByTarget.put(sc.targetLoanId, new List<String>());
+            }
+            scalarWordsByTarget.get(sc.targetLoanId).add(scalarPhrase(sc));
+        }
 
         Integer n = facilities.size();
         Integer carryover = 0;
@@ -331,8 +366,21 @@ global with sharing class StageLoanModification {
                     .onObject('LLC_BI__LoanRenewal__c', new List<String>{ 'LLC_BI__ParentLoanId__c' })
                     .provenBy('SELECT Id, LLC_BI__ParentLoanId__c FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c = :loanId')
             );
+            // The label names THIS member's own figures once the scalars are targeted. A step that
+            // said "the requested changes" over a mixed plan would be describing a broadcast the
+            // banker never asked for, on the one step where the difference is the whole point.
+            String applyLabel;
+            if (scalarChanges.isEmpty()) {
+                applyLabel = 'Apply the requested changes to the new facility cloned from ' + loan.Name;
+            } else if (scalarWordsByTarget.containsKey(loan.Id)) {
+                applyLabel = 'Set ' + String.join(scalarWordsByTarget.get(loan.Id), ' and ') +
+                    ' on the new facility cloned from ' + loan.Name + ', and on that clone only';
+            } else {
+                applyLabel = 'No scalar change is aimed at ' + loan.Name + ': its clone keeps the commitment, rate, ' +
+                    'maturity and term it carries today';
+            }
             steps.add(
-                new C360Plan.Step('apply_changes_' + s, C360Plan.TYPE_WRITE, 'Apply the requested changes to the new facility cloned from ' + loan.Name)
+                new C360Plan.Step('apply_changes_' + s, C360Plan.TYPE_WRITE, applyLabel)
                     .onObject('LLC_BI__Loan__c', new List<String>{ 'LLC_BI__Amount__c', 'LLC_BI__Maturity_Date__c', 'LLC_BI__InterestRate__c', 'LLC_BI__Term_Months__c' })
                     .provenBy('SELECT Id, LLC_BI__Amount__c, LLC_BI__Maturity_Date__c FROM LLC_BI__Loan__c WHERE Id = :cloneId')
             );
@@ -481,6 +529,18 @@ global with sharing class StageLoanModification {
             );
         }
         resolved.put('fieldChangeCount', fieldChanges.size());
+
+        // The per-target scalars ride the resolved values, which is what the plan hash covers: the
+        // banker confirms the figure AND the clone it lands on, and execute reads back exactly that.
+        for (Integer i = 0; i < scalarChanges.size(); i++) {
+            ScalarChange sc = scalarChanges[i];
+            String s4 = String.valueOf(i);
+            resolved.put('scalarChange' + s4 + '.key', sc.key);
+            resolved.put('scalarChange' + s4 + '.value', sc.key == 'requestedMaturityDate' ? (Object) sc.dateValue : (Object) sc.numberValue);
+            resolved.put('scalarChange' + s4 + '.targetLoanId', String.valueOf(sc.targetLoanId));
+        }
+        resolved.put('scalarChangeCount', scalarChanges.size());
+
         steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'Stage-driven email alerts and memo status changes the org may run')
                 .wakes(new List<String>{ 'nCino Commercial - Loan After Save' })
@@ -532,8 +592,16 @@ global with sharing class StageLoanModification {
                 'Each facility carries its own credit action, verification and apply step, so a failure on one is reported against that facility ' +
                 'and does not silently discard the others.'
             );
+        }
+        if (broadcastScalars && n > 1) {
             warnings.add(
-                'The requested changes apply to every selected facility. Stage them separately if they need different terms.'
+                'The amount, maturity date, rate and term on this request BROADCAST: each one applies to every selected ' +
+                'facility. Send them in scalarChangesJson instead if the members need different figures.'
+            );
+        } else if (!scalarChanges.isEmpty()) {
+            warnings.add(
+                'Each scalar names the facility it lands on, and reaches no other clone. ' +
+                String.join(perMemberScalars(facilities, scalarWordsByTarget), '; ') + '.'
             );
         }
 
@@ -555,6 +623,9 @@ global with sharing class StageLoanModification {
             '; the rest carry unchanged' +
             (excludedNames.isEmpty() ? '. ' : ', and ' + String.join(excludedNames, ', ') + ' stays on the current version because it is not Booked/Open. ') +
             'The requested changes are applied to the ' + (n == 1 ? 'clone' : 'clones') + ' only; every original loan and the current package stay untouched. ' +
+            (scalarChanges.isEmpty() ? '' : String.valueOf(scalarChanges.size()) + ' scalar ' +
+                (scalarChanges.size() == 1 ? 'change is' : 'changes are') + ' aimed at a NAMED member each, so a clone takes ' +
+                'only what was staged on it and the warnings say which figure lands where. ') +
             (covenantAdds.isEmpty() ? '' : String.valueOf(covenantAdds.size()) + ' net-new covenant' +
                 (covenantAdds.size() == 1 ? ' is' : 's are') + ' created on the borrower and attached to the ' +
                 (covenantAdds.size() == 1 ? 'clone' : 'clones') + ', born Pending and Active. ') +
@@ -715,6 +786,154 @@ global with sharing class StageLoanModification {
                     );
                 }
             }
+        }
+        return out;
+    }
+
+    /**
+     * THE FOUR SCALARS, in the spelling a refusal hands back. This is the whole legal set for
+     * scalarChangesJson: everything else on the Loan rides fieldChangesJson, where the org resolves
+     * the name against its own describe.
+     */
+    private static final List<String> SCALAR_ORDER = new List<String>{
+        'requestedAmount', 'requestedMaturityDate', 'requestedRate', 'requestedTermMonths'
+    };
+
+    /** The word a banker reads each scalar by, for the plan steps and the warnings. */
+    private static final Map<String, String> SCALAR_WORD = new Map<String, String>{
+        'requestedAmount' => 'amount',
+        'requestedMaturityDate' => 'maturity date',
+        'requestedRate' => 'interest rate',
+        'requestedTermMonths' => 'term'
+    };
+
+    private static String canonicalScalar(String raw) {
+        if (String.isBlank(raw)) {
+            return null;
+        }
+        for (String k : SCALAR_ORDER) {
+            if (k.equalsIgnoreCase(raw.trim())) {
+                return k;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Parses and RESOLVES the per-target scalars.
+     *
+     * WHY THIS EXISTS (founder, 2026-08-31): "there is the possibility that there is a change on a
+     * loan which does not have an increase or decrease". The four scalars used to travel ONCE per
+     * request and land on every selected clone, so an amount on the line of credit could not be
+     * staged beside an amortisation change on the equipment loan without silently taking the
+     * equipment clone to the line's commitment. Each scalar now names the member it lands on.
+     *
+     * The two channels are EXCLUSIVE. The flat fields broadcast by contract; these target by
+     * contract. A request carrying both leaves a clone with two figures and no rule to pick between
+     * them, so it is refused rather than resolved by precedence.
+     */
+    private static List<ScalarChange> parseScalarChanges(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<ScalarChange> out = new List<ScalarChange>();
+        if (String.isBlank(req.scalarChangesJson)) {
+            return out;
+        }
+        if (req.requestedAmount != null || req.requestedMaturityDate != null ||
+            req.requestedRate != null || req.requestedTermMonths != null) {
+            throw new ToolException(
+                'scalarChangesJson carries the scalars PER FACILITY, and requestedAmount, requestedMaturityDate, ' +
+                'requestedRate and requestedTermMonths broadcast ONE value to every selected facility. Sending both ' +
+                'leaves it undecided which figure a clone should take. Send one channel or the other.'
+            );
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.scalarChangesJson);
+        } catch (Exception e) {
+            throw new ToolException('scalarChangesJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        Set<String> claimed = new Set<String>();
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            String rawKey = m.get('key') == null ? null : String.valueOf(m.get('key'));
+            ScalarChange sc = new ScalarChange();
+            sc.key = canonicalScalar(rawKey);
+            if (sc.key == null) {
+                throw new ToolException(
+                    '"' + rawKey + '" is not one of the scalars this tool files. The legal keys are: ' +
+                    String.join(SCALAR_ORDER, ', ') + '. Any other loan field rides fieldChangesJson, where the org ' +
+                    'resolves the name against its own describe.'
+                );
+            }
+            sc.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (sc.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each scalar change when more than one facility is selected.');
+                }
+                sc.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(sc.targetLoanId)) {
+                List<String> legal = new List<String>();
+                for (LLC_BI__Loan__c f : facilities) {
+                    legal.add(f.Name + ' (' + f.Id + ')');
+                }
+                throw new ToolException(
+                    'A scalar change targets facility ' + sc.targetLoanId + ', which is not one of the selected facilities. ' +
+                    'A scalar lands on the CLONE of a facility this plan modifies, so the legal targets are: ' +
+                    String.join(legal, ', ') + '.'
+                );
+            }
+            String at = sc.key + '@' + sc.targetLoanId;
+            if (claimed.contains(at)) {
+                throw new ToolException(
+                    sc.key + ' is staged twice on ' + byId.get(sc.targetLoanId).Name + '. A scalar travels once per ' +
+                    'facility; a second figure for the same field on the same clone is a later modification, not this one.'
+                );
+            }
+            claimed.add(at);
+            coerceScalarValue(sc, m.get('value'));
+            out.add(sc);
+        }
+        return out;
+    }
+
+    /** Coerces a per-target scalar into the type its clone field takes. */
+    private static void coerceScalarValue(ScalarChange sc, Object supplied) {
+        if (supplied == null) {
+            throw new ToolException(sc.key + ' needs a value. Clearing a scalar is not a change this tool files.');
+        }
+        String sv = String.valueOf(supplied).trim();
+        if (sc.key == 'requestedMaturityDate') {
+            try {
+                sc.dateValue = Date.valueOf(sv);
+            } catch (Exception e) {
+                throw new ToolException('requestedMaturityDate is a date; supply YYYY-MM-DD. Got "' + sv + '".');
+            }
+            return;
+        }
+        try {
+            sc.numberValue = Decimal.valueOf(sv.replace(',', ''));
+        } catch (Exception e) {
+            throw new ToolException(sc.key + ' is a number; "' + sv + '" is not one.');
+        }
+        if (sc.key == 'requestedAmount' && sc.numberValue <= 0) {
+            throw new ToolException('requestedAmount must be greater than zero.');
+        }
+    }
+
+    /** One scalar as the banker should read it in a plan step. */
+    private static String scalarPhrase(ScalarChange sc) {
+        String value = sc.key == 'requestedMaturityDate' ? String.valueOf(sc.dateValue) : String.valueOf(sc.numberValue);
+        return SCALAR_WORD.get(sc.key) + ' to ' + value + (sc.key == 'requestedTermMonths' ? ' months' : '');
+    }
+
+    /** Every selected member and the scalars aimed at it, including the ones aimed at nothing. */
+    private static List<String> perMemberScalars(List<LLC_BI__Loan__c> facilities, Map<Id, List<String>> wordsByTarget) {
+        List<String> out = new List<String>();
+        for (LLC_BI__Loan__c f : facilities) {
+            out.add(f.Name + ': ' + (wordsByTarget.containsKey(f.Id)
+                ? String.join(wordsByTarget.get(f.Id), ' and ')
+                : 'no scalar change'));
         }
         return out;
     }

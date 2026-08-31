@@ -1404,6 +1404,255 @@ private class StageExecuteLoanModificationTest {
         System.assertEquals(null, m.sawBox);
         System.assertEquals(1, cloneCount(), 'One key, one modification, whichever leg asked');
     }
+    // -------------------------------------------------------------------------------------------
+    // The four scalars, per target (2026-08-31).
+    //
+    // Founder: "there is the possibility that there is a change on a loan which does not have an
+    // increase or decrease". The flat request keys BROADCAST, so a mixed plan could not be filed at
+    // all: an amount on one member would have landed on every clone in the selection. These prove
+    // the targeted channel end to end, and the refusals that keep it honest.
+    // -------------------------------------------------------------------------------------------
+
+    /**
+     * A SECOND booked member on the same package, installed inside the test that needs it rather
+     * than in the fixture: adding it to @TestSetup would put every other test in this file on a
+     * two-member roll and change what they are measuring.
+     */
+    private static LLC_BI__Loan__c installSecondBookedFacility() {
+        LLC_BI__Loan__c first = parent();
+        insert new LLC_BI__Loan__c(
+            LLC_BI__Account__c = borrower().Id,
+            LLC_BI__Product_Package__c = pkg().Id,
+            LLC_BI__Stage__c = 'Booked',
+            LLC_BI__Status__c = 'Open',
+            LLC_BI__lookupKey__c = PARENT_KEY + 'B',
+            LLC_BI__Amount__c = 400000,
+            LLC_BI__Principal_Balance__c = 200000,
+            LLC_BI__Product_Line__c = 'Commercial',
+            LLC_BI__Product_Type__c = 'Term Loan',
+            LLC_BI__Product__c = 'Equipment',
+            LLC_BI__isRenewal__c = false,
+            LLC_BI__Is_Modification__c = false
+        );
+        return [
+            SELECT Id, Name, LLC_BI__Amount__c FROM LLC_BI__Loan__c
+            WHERE LLC_BI__Account__c = :borrower().Id AND LLC_BI__lookupKey__c = :(PARENT_KEY + 'B') LIMIT 1
+        ];
+    }
+
+    /** The clone this run made from one named parent. */
+    private static ExecuteLoanModification.FacilityResult resultFor(ExecuteLoanModification.ExecuteResult r, Id parentId) {
+        for (ExecuteLoanModification.FacilityResult fr : r.facilities) {
+            if (fr.facilityId == String.valueOf(parentId)) {
+                return fr;
+            }
+        }
+        return null;
+    }
+
+    @IsTest
+    static void aPerTargetScalarLandsOnItsOwnCloneAndNoOther() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c first = parent();
+        LLC_BI__Loan__c second = installSecondBookedFacility();
+        String k = key('pertarget');
+
+        StageLoanModification.Request r = stageReq(k);
+        r.loanId = null;
+        r.facilityIds = new List<Id>{ first.Id, second.Id };
+        // The flat channel stays empty: this is the whole point of the targeted one.
+        r.requestedAmount = null;
+        r.scalarChangesJson = '[{"key":"requestedAmount","value":1500000,"targetLoanId":"' + first.Id + '"}]';
+        r.fieldChangesJson = '[{"field":"Amortized Term (Months)","value":240,"targetLoanId":"' + second.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        // The plan names the member each figure lands on, and says plainly that the other one keeps
+        // what it carries. A step reading "apply the requested changes" over both would be describing
+        // a broadcast nobody asked for.
+        Map<String, String> labels = new Map<String, String>();
+        for (StageLoanModification.PlanStep ps : staged.result.steps) {
+            labels.put(ps.id, ps.label);
+        }
+        System.assert(labels.get('apply_changes_0').contains('amount to 1500000') &&
+            labels.get('apply_changes_0').contains('on that clone only'),
+            'The targeted member\'s step names its own figure: ' + labels.get('apply_changes_0'));
+        System.assert(labels.get('apply_changes_1').contains('No scalar change is aimed at'),
+            'And the untargeted member\'s step says so: ' + labels.get('apply_changes_1'));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+
+        Id firstClone = (Id) resultFor(done.result, first.Id).cloneLoanId;
+        Id secondClone = (Id) resultFor(done.result, second.Id).cloneLoanId;
+        Map<Id, LLC_BI__Loan__c> clones = new Map<Id, LLC_BI__Loan__c>([
+            SELECT Id, LLC_BI__Amount__c, LLC_BI__Amortized_Term_Months__c
+            FROM LLC_BI__Loan__c WHERE Id IN :new Set<Id>{ firstClone, secondClone }
+        ]);
+        System.assertEquals(1500000, clones.get(firstClone).LLC_BI__Amount__c, 'The targeted clone took the amount');
+        System.assertEquals(second.LLC_BI__Amount__c, clones.get(secondClone).LLC_BI__Amount__c,
+            'AND THE OTHER CLONE KEPT ITS OWN. This is the leak the targeted channel closes.');
+        System.assertEquals(240, clones.get(secondClone).LLC_BI__Amortized_Term_Months__c,
+            'while still taking the field change that WAS aimed at it');
+
+        // The summary reports each member honestly rather than claiming one change for both.
+        System.assert(resultFor(done.result, first.Id).appliedChanges.contains('Amount reads back at 1500000'),
+            resultFor(done.result, first.Id).appliedChanges);
+        System.assert(resultFor(done.result, second.Id).appliedChanges.contains('No scalar change was aimed at this facility'),
+            resultFor(done.result, second.Id).appliedChanges);
+    }
+
+    @IsTest
+    static void twoDifferentAmountsOnTwoMembersIsOnePlan() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c first = parent();
+        LLC_BI__Loan__c second = installSecondBookedFacility();
+        String k = key('twoamounts');
+
+        StageLoanModification.Request r = stageReq(k);
+        r.loanId = null;
+        r.facilityIds = new List<Id>{ first.Id, second.Id };
+        r.requestedAmount = null;
+        r.scalarChangesJson = '[' +
+            '{"key":"requestedAmount","value":1500000,"targetLoanId":"' + first.Id + '"},' +
+            '{"key":"requestedAmount","value":900000,"targetLoanId":"' + second.Id + '"}' +
+        ']';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, 'Two figures, two targets, one plan: ' + whyStage(staged));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        Map<Id, LLC_BI__Loan__c> clones = new Map<Id, LLC_BI__Loan__c>([
+            SELECT Id, LLC_BI__Amount__c FROM LLC_BI__Loan__c
+            WHERE Id IN :new Set<Id>{
+                (Id) resultFor(done.result, first.Id).cloneLoanId,
+                (Id) resultFor(done.result, second.Id).cloneLoanId
+            }
+        ]);
+        System.assertEquals(1500000, clones.get((Id) resultFor(done.result, first.Id).cloneLoanId).LLC_BI__Amount__c);
+        System.assertEquals(900000, clones.get((Id) resultFor(done.result, second.Id).cloneLoanId).LLC_BI__Amount__c);
+    }
+
+    @IsTest
+    static void theTwoScalarChannelsAreRefusedTogether() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('bothchannels'));
+        // stageReq already carries the flat requestedAmount; adding the targeted one leaves the
+        // clone with two figures and no rule to pick between them.
+        r.scalarChangesJson = '[{"key":"requestedAmount","value":1500000}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'Broadcast and targeted in one request is two intentions, not a merge');
+        System.assert(res.error.message.contains('Send one channel or the other'), res.error.message);
+    }
+
+    @IsTest
+    static void aScalarChangeRefusesAnUnknownKeyWithTheLegalList() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('badkey'));
+        r.requestedAmount = null;
+        r.scalarChangesJson = '[{"key":"requestedPrincipalBalance","value":1}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'Only the four request keys ride this channel');
+        System.assert(res.error.message.contains('The legal keys are: requestedAmount, requestedMaturityDate, requestedRate, requestedTermMonths'),
+            'And the refusal hands back the legal set rather than making the caller guess: ' + res.error.message);
+        System.assert(res.error.message.contains('fieldChangesJson'),
+            'and points at the channel that WOULD take it: ' + res.error.message);
+    }
+
+    @IsTest
+    static void aScalarChangeRefusesAnUnselectedTargetAndADoubledOne() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Loan__c first = parent();
+
+        StageLoanModification.Request stranger = stageReq(key('badtarget'));
+        stranger.requestedAmount = null;
+        stranger.scalarChangesJson = '[{"key":"requestedAmount","value":1500000,"targetLoanId":"' +
+            C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType) + '"}]';
+
+        StageLoanModification.Request doubled = stageReq(key('doubled'));
+        doubled.requestedAmount = null;
+        doubled.scalarChangesJson = '[' +
+            '{"key":"requestedAmount","value":1500000,"targetLoanId":"' + first.Id + '"},' +
+            '{"key":"requestedAmount","value":1600000,"targetLoanId":"' + first.Id + '"}' +
+        ']';
+
+        Test.startTest();
+        StageLoanModification.Response strangerRes = stage(stranger);
+        StageLoanModification.Response doubledRes = stage(doubled);
+        Test.stopTest();
+
+        System.assertEquals(false, strangerRes.ok, 'A scalar lands on a clone of a SELECTED facility or on nothing');
+        System.assert(strangerRes.error.message.contains('the legal targets are'),
+            'And the refusal names them: ' + strangerRes.error.message);
+        System.assertEquals(false, doubledRes.ok, 'One scalar, one facility, one figure');
+        System.assert(doubledRes.error.message.contains('is staged twice on'), doubledRes.error.message);
+    }
+
+    @IsTest
+    static void aTargetedScalarNeedsAValueOfItsOwnType() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request bad = stageReq(key('baddate'));
+        bad.requestedAmount = null;
+        bad.scalarChangesJson = '[{"key":"requestedMaturityDate","value":"next spring"}]';
+
+        StageLoanModification.Request zero = stageReq(key('zeroamount'));
+        zero.requestedAmount = null;
+        zero.scalarChangesJson = '[{"key":"requestedAmount","value":0}]';
+
+        Test.startTest();
+        StageLoanModification.Response badRes = stage(bad);
+        StageLoanModification.Response zeroRes = stage(zero);
+        Test.stopTest();
+
+        System.assertEquals(false, badRes.ok, 'A maturity date is a date');
+        System.assert(badRes.error.message.contains('supply YYYY-MM-DD'), badRes.error.message);
+        System.assertEquals(false, zeroRes.ok, 'A commitment of zero is not a modification');
+        System.assert(zeroRes.error.message.contains('greater than zero'), zeroRes.error.message);
+    }
+
+    @IsTest
+    static void aSingleFacilityMayOmitTheTargetAndTheDateStillLands() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('onefacility');
+
+        StageLoanModification.Request r = stageReq(k);
+        r.requestedAmount = null;
+        // No targetLoanId: with one facility selected there is only one clone it could mean.
+        r.scalarChangesJson = '[{"key":"requestedMaturityDate","value":"2029-06-30"},{"key":"requestedTermMonths","value":48}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        LLC_BI__Loan__c clone = [
+            SELECT LLC_BI__Maturity_Date__c, LLC_BI__Term_Months__c
+            FROM LLC_BI__Loan__c WHERE Id = :(Id) done.result.cloneLoanId
+        ];
+        System.assertEquals(Date.newInstance(2029, 6, 30), clone.LLC_BI__Maturity_Date__c);
+        System.assertEquals(48, clone.LLC_BI__Term_Months__c);
+    }
+
     /**
      * The one test that runs the REAL bean. It cannot assert success, because a managed-package
      * credit action inside a test context is not something this suite controls, and a green assertion
