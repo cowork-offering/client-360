@@ -75,7 +75,9 @@ describe("AccountWorkspace — L2 tabs render from the anchor bundle", () => {
   it("A30.1 — Activity is the FIRST tab and the default view", () => {
     const text = mount(<AccountWorkspace bundle={anchor} />);
     expect(text).toContain("Piedmont Precision"); // verdict bar name
-    expect(text).toContain("Activity · audit trail");
+    // The Activity pane's own section head, in SURFACE 3's dummy grammar
+    // (kicker "Audit trail" over the title "Activity").
+    expect(text).toContain("Audit trail");
     // Newest first: the concluded analysis leads the anchor's timeline.
     expect(text).toContain("Relationship review concluded");
     expect(text).toContain("Debt Service Coverage Ratio tested");

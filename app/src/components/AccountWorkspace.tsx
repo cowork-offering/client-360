@@ -81,7 +81,12 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
   const grade = snap?.primaryRiskRating ?? null;
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    // SURFACE 3 hook: `view-account` is the mint's own id for the client view,
+    // the counterpart to Landing's `#view-home`, and the acceptance probes
+    // address the pane leaves through it. The `view show` CLASSES that carry
+    // the view-level entry and its suppression belong to Surface 2's hero wave;
+    // only the id is claimed here.
+    <div id="view-account" className="min-h-0 flex-1 overflow-auto">
       {/* Verdict bar — frosted, un-transformed at the top level (Safari
           backdrop-filter rule: never nest blur in a rounded+transformed box). */}
       <div
@@ -178,9 +183,14 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
         </div>
       </div>
 
-      {/* Tab content — re-keyed per tab so the cross-fade replays on switch */}
-      <PageContainer className="py-6">
-        <div key={state.tab} className="c360-tab-in">
+      {/* Tab content — re-keyed per tab so the pane's entry replays on switch.
+          SURFACE 3 hooks: the pane owns its own vertical padding (`.pane`,
+          22px/90px) and its own entry (rule 67: panein, opacity + a 3px settle
+          over .34s), so the container adds neither. The 140ms `c360-tab-in`
+          cross-fade that used to wrap this is retired — two stacked entrances
+          is the 8px jump the rule replaced. */}
+      <PageContainer>
+        <div key={state.tab}>
           <TabContent tab={state.tab} bundle={bundle} />
         </div>
       </PageContainer>
