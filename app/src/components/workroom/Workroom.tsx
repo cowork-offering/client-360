@@ -508,6 +508,10 @@ export function Workroom({
    *  decision the banker has not made. */
   const title = ask ? "Facility Actions" : vocabulary.title;
   const roomWord = title.replace(/\s*Workroom$/i, "");
+  /** The lane's kicker. It names the change set, and an unbound room does not
+   *  know yet what kind of change set this is — "This modification" over an
+   *  empty rail in a room still asking would answer its own question. */
+  const manifestHeading = ask ? "This package" : vocabulary.manifestHeading;
 
   const roomRef = useRef<HTMLDivElement | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -1578,7 +1582,7 @@ export function Workroom({
           </div>
 
           {/* ============================= THE RIGHT LANE: detail, then manifest */}
-          <aside className="wk-col-r" aria-label={vocabulary.manifestHeading}>
+          <aside className="wk-col-r" aria-label={manifestHeading}>
             {/* THE PACKAGE'S LIVE FIGURES. They belong beside the manifest that
                 moves them, not inside a briefing bubble that collapses with its
                 step — a pro-forma total the banker cannot see while composing
@@ -1627,7 +1631,7 @@ export function Workroom({
             )}
 
             <div className="wk-man-h">
-              <span className="wk-kicker">{vocabulary.manifestHeading}</span>
+              <span className="wk-kicker">{manifestHeading}</span>
               <span className="wk-c">{figures.countLine}</span>
               <button
                 type="button"

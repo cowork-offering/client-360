@@ -1277,3 +1277,20 @@ describe("the router — route binding is final per plan", () => {
     expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
   });
 });
+
+describe("the router — the room claims no mode until it has one", () => {
+  it("names neither the mode nor the change set while the route is open", () => {
+    const { room } = openRouted({ question: neutralAsk() });
+    expect(room.querySelector(".wk-title")!.textContent).toBe("Facility Actions");
+    // "This modification" over an empty rail, in a room still asking which of
+    // the three this is, would answer its own question in the lane.
+    expect(room.querySelector(".wk-kicker")!.textContent).toBe("This package");
+    expect(room.querySelector(".wk-col-r")!.getAttribute("aria-label")).toBe("This package");
+  });
+
+  it("takes the mode's own words the moment the route is bound", () => {
+    const { room } = openRouted({ question: null });
+    expect(room.querySelector(".wk-title")!.textContent).toBe("Modification");
+    expect(room.querySelector(".wk-kicker")!.textContent).toBe("This modification");
+  });
+});
