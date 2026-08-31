@@ -455,6 +455,12 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
   };
 }
 
+/** The member a fileable delta lands on. Every wire anchors on exactly one, and
+ *  which wire carries it is the delta's own business rather than the caller's. */
+function wireTarget(d: WorkroomDelta): string | undefined {
+  return d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId ?? d.fieldWire?.facilityId;
+}
+
 /* ------------------------------------------------------------- the refusals */
 
 /** Asks that are real, understood, and NOT this room's to file — each with the
@@ -1448,6 +1454,9 @@ export function createModifyEngine(args: {
    *  room says so rather than filing the wrong figure on one of them. */
   function wirePayload(fileable: WorkroomDelta[], rationale: string): StagePayloads["loan-modification"] {
     const byKey = new Map<WireKey, Set<number | string>>();
+    /** The members that actually staged each scalar, which is NOT the same set as
+     *  the members the plan selects. */
+    const scalarOn = new Map<WireKey, Set<string>>();
     for (const d of fileable) {
       if (!d.wire) continue; // a covenant delta carries covenantWire instead
       // The delta carries the key as a plain string so `types.ts` stays free of
@@ -1456,6 +1465,9 @@ export function createModifyEngine(args: {
       const set = byKey.get(key) ?? new Set<number | string>();
       set.add(d.wire.value);
       byKey.set(key, set);
+      const on = scalarOn.get(key) ?? new Set<string>();
+      on.add(d.wire.facilityId);
+      scalarOn.set(key, on);
     }
     for (const [key, values] of byKey) {
       if (values.size > 1) {
@@ -1467,13 +1479,30 @@ export function createModifyEngine(args: {
 
     // Every fileable delta anchors the selection: a covenant's target member
     // must be among the selected facilities or the org refuses the add.
-    const facilityIds = [
-      ...new Set(
-        fileable
-          .map((d) => d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId ?? d.fieldWire?.facilityId)
-          .filter((x): x is string => Boolean(x)),
-      ),
-    ];
+    const facilityIds = [...new Set(fileable.map(wireTarget).filter((x): x is string => Boolean(x)))];
+
+    /* THE SCALAR LEAK (P0, live).
+
+       `facilityIds` is the union of EVERY delta's target — a covenant on one
+       member, a curated field on another — while a scalar travels once and the
+       org applies it to every clone in that selection. So a plan staging
+       "$15M → $20M" on the Line of Credit beside a field change on the $8MM
+       Equipment loan silently took the Equipment clone to $20M as well. The
+       refusal above cannot see it: the amount is ONE value, so there is nothing
+       to compare. The check is membership, not count. */
+    const nameOf = (id: string) => fileable.find((d) => wireTarget(d) === id)?.target ?? id;
+    for (const [key, on] of scalarOn) {
+      const spread = facilityIds.filter((id) => !on.has(id));
+      if (!spread.length) continue;
+      const plural = spread.length > 1;
+      throw new WorkroomRefusalError(
+        `${key} travels as ONE value applied to every facility in the plan. It is staged on ${[...on].map(nameOf).join(" and ")}, ` +
+          `and this manifest also selects ${spread.map(nameOf).join(" and ")}, so filing it as it stands would set the same ${key} on ` +
+          `${plural ? "those members" : "that member"} too. Stage the ${key} change as its own modification, or take the other ` +
+          `${plural ? "members'" : "member's"} changes off this one.`,
+      );
+    }
+
     const covenantAdds = fileable
       .filter((d) => d.covenantWire)
       .map((d) => ({
@@ -1644,9 +1673,7 @@ export function createModifyEngine(args: {
     const filed = stagedDeltas
       .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire))
       .map((d) => {
-        const row = perFacility.get(
-          (d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId ?? d.fieldWire?.facilityId)!,
-        );
+        const row = perFacility.get(wireTarget(d)!);
         const cloneId = row?.cloneLoanId ?? result.cloneLoanId;
         return {
           deltaId: d.id,
