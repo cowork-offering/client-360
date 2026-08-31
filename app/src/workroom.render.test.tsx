@@ -84,6 +84,20 @@ function shut() {
 }
 
 const buttons = () => [...document.body.querySelectorAll("button")];
+/**
+ * OPEN THE PLAN.
+ *
+ * SURFACE 5 (rule 38, "review & execute lives in the chat"): the island is
+ * retired. The approval is no longer a bar under the manifest — a confirm puts
+ * a glass review chip in the thread, and the flow card (token, Cancel, ink
+ * Execute) pops open where that chip stands. Every test that used to reach
+ * straight for the approve button now opens that card the way the banker does.
+ */
+const openPlan = async () => {
+  const chip = document.querySelector<HTMLButtonElement>(".wk-propose");
+  if (chip) click(chip);
+  await settle();
+};
 const byText = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ""));
 const click = (el: Element | undefined) =>
   act(() => el!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
@@ -178,9 +192,12 @@ describe("law 3 — the opening view is under sixty words", () => {
     expect(room.querySelector(".wk-composer")).toBeTruthy();
     expect(room.querySelector(".wk-sugg")).toBeTruthy();
     expect(buttons().some((b) => /Open the conversation/.test(b.textContent ?? ""))).toBe(false);
-    // The spine measures PROGRESS and there is none yet, so it stays out of the
-    // opening view rather than spending four of law 3's sixty words on it.
-    expect(room.querySelector(".wk-stepper")).toBeNull();
+    // SURFACE 5 (rule 44): the stage is FOUR MICRO-DOTS in the slim bar, and
+    // the bar always carries them. The spine that used to arrive with the first
+    // move is retired, so what law 3 protects here is the WORD BUDGET — and
+    // four 5px dots carrying their labels on `title` spend none of it.
+    expect(room.querySelectorAll(".wk-stg")).toHaveLength(4);
+    expect([...room.querySelectorAll(".wk-stg")].map((d) => d.textContent).join("")).toBe("");
   });
 });
 
@@ -273,7 +290,9 @@ describe("one shell, three modes", () => {
       container?.remove();
       return title;
     });
-    expect(titles).toEqual(["Modification Workroom", "Renewal Workroom", "New Facility Workroom"]);
+    // SURFACE 5 (rule 44): the bar carries ONE word. "Workroom" is the noun the
+    // room already is, and the app bar carries the brand.
+    expect(titles).toEqual(["Modification", "Renewal", "New Facility"]);
   });
 
   it("names the fourth step for what the mode actually does", async () => {
@@ -283,11 +302,12 @@ describe("one shell, three modes", () => {
       ["create", "File"],
     ] as [WorkroomMode, string][]) {
       const room = open(mode);
-      // The spine measures progress, so it arrives with the first move rather
-      // than sitting idle on the entry scene (law 3's word budget).
       click(room.querySelector(".wk-pill")!);
       await settle();
-      const spine = [...room.querySelectorAll(".wk-stg")].map((s) => s.textContent);
+      // SURFACE 5 (rule 44): NO STAGE WORD. The dot's label lives on `title`,
+      // shown on hover, so the mode's own fourth verb is still named — it is
+      // just no longer set in the bar.
+      const spine = [...room.querySelectorAll(".wk-stg")].map((s) => s.getAttribute("title"));
       expect(spine.at(-1)).toContain(step);
       act(() => root?.unmount());
       container?.remove();
@@ -410,11 +430,14 @@ describe("no move the banker makes is answered with silence", () => {
   it("advances the stepper visibly on the same confirm", async () => {
     const { room } = await confirmFirstChip();
     expect(room.querySelector(".wk-stepper")).toBeTruthy();
-    expect([...room.querySelectorAll(".wk-stg")][1].textContent).toContain("1/");
+    // SURFACE 5 (rule 44): the compose count rides the dot's `title`.
+    expect([...room.querySelectorAll(".wk-stg")][1].getAttribute("title")).toContain("1/");
     // The beat's second chip is still open, so the room holds the next move back
-    // and SAYS why rather than offering two decisions at once (law 2).
+    // rather than offering two decisions at once (law 2). SURFACE 5: the scene
+    // bar is retired with the island (rule 44), so what proves the gate is the
+    // absence of the REVIEW CHIP — the only route to the plan there now is.
     expect(room.querySelector(".wk-pill")).toBeNull();
-    expect(room.querySelector(".wk-gatehint")!.textContent).toMatch(/Acknowledge the checks|Settle the open cards/);
+    expect(room.querySelector(".wk-propose")).toBeNull();
   });
 
   it("opens the approval on a staged manifest, NOT on the suggestions running out", async () => {
@@ -432,10 +455,13 @@ describe("no move the banker makes is answered with silence", () => {
     // open move, even though the engine still has moves left to suggest.
     expect(room.querySelectorAll(".wk-ent").length).toBeGreaterThan(0);
     expect(room.querySelector(".wk-pill")).toBeTruthy();
+    // SURFACE 5 (rule 38): the review chip is in the thread, and opening it is
+    // what puts the token and the ink Execute on the table. Both moves are
+    // legitimate, so the room offers the suggestion AND the chip rather than
+    // choosing for the banker — which is what the retired scene bar proved.
+    expect(room.querySelector(".wk-propose")).toBeTruthy();
+    await openPlan();
     expect(byText(/^Approve and file /)).toBeTruthy();
-    // Both are legitimate next moves, so the room offers both rather than
-    // choosing for the banker.
-    expect(room.querySelector(".wk-next")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("answers a discard, because declining a change is a decision too", async () => {
@@ -475,11 +501,14 @@ describe("law 7 — the mark is the original vector", () => {
   // Superseded 2026-08-31 (Electric Glass lock): the mark is the ORIGINAL
   // Accenture ">" path (path8760), never a typed character. This law asserted
   // the 2026-08-27 typographic directive; the newer founder call inverts it.
-  it("draws the lockup with the official vector, never a typed character", () => {
+  // SURFACE 5 (rules 44 + 45): the room's bar is ONE SLIM LINE and carries NO
+  // lockup — the app bar behind the glass owns the brand, and the room owns the
+  // mark alone. So what this law asserts in here is that the mark the bar does
+  // carry is the official vector, never a typed ">".
+  it("draws the bar's mark with the official vector, never a typed character", () => {
     const room = open("modify");
-    const lockup = room.querySelector(".c360-lockup")!;
-    expect(lockup.querySelector(".c360-lockup-word")!.textContent).toBe("accenture");
-    const mark = lockup.querySelector<HTMLElement>(".c360-lockup-mark")!;
+    expect(room.querySelector(".c360-lockup")).toBeNull();
+    const mark = room.querySelector<HTMLElement>(".wk-head .c360-glyph")!;
     expect(mark.querySelector("svg path")).not.toBeNull();
     expect(mark.textContent).toBe("");
   });
@@ -492,23 +521,32 @@ describe("law 7 — the mark is the original vector", () => {
       expect(glyph.querySelector("svg path")).not.toBeNull();
       expect(glyph.textContent).toBe("");
     }
-    // The step spine is glyph-led in every stage.
-    expect(room.querySelectorAll(".wk-stg .c360-glyph")).toHaveLength(4);
+    // SURFACE 5 (rule 44): the stage is four 5px DOTS, not four glyphs — the
+    // mark's census in this room is the bar, the composing beat and the liquid
+    // moments, and nothing else.
+    expect(room.querySelectorAll(".wk-stg .c360-glyph")).toHaveLength(0);
+    expect(room.querySelectorAll(".wk-head .c360-glyph")).toHaveLength(1);
   });
 });
 
 describe("law 5 — nothing in the room scrolls", () => {
   const css = readFileSync(resolve(process.cwd(), "src/styles/workroom.css"), "utf8");
 
-  it("declares no scroll container outside the narrow branch", () => {
-    // The one `overflow-y: auto` in the file is the <=1180px branch, which is a
-    // single continuous page BY DESIGN and is not held to law 5.
-    // Comments explain the rule; only DECLARATIONS can break it.
+  it("declares exactly ONE scroller, and it never shows a scrollbar", () => {
+    // SURFACE 5 (rule 31): the room shows ONE live exchange and the steps behind
+    // it collapse — but the live exchange itself may run long, so the thread is
+    // allowed to scroll. What is NOT allowed is a visible scrollbar: "no visible
+    // scrollbar in the thread ever" is the rule as locked, and it replaces the
+    // fold model this law used to be built on. So the file may declare exactly
+    // one scroller, it must be `.wk-thread`, and it must hide its own bar in
+    // both engines. Comments explain the rule; only DECLARATIONS can break it.
     const rules = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const narrow = rules.slice(rules.indexOf("@media (max-width: 1180px)"));
     const scrollers = [...rules.matchAll(/overflow(?:-[xy])?:\s*(auto|scroll)/g)];
     expect(scrollers).toHaveLength(1);
-    expect(narrow).toContain("overflow-y: auto");
+    const thread = rules.slice(rules.indexOf(".wk-thread {"));
+    expect(thread).toContain("overflow: auto");
+    expect(thread).toContain("scrollbar-width: none");
+    expect(rules).toContain(".wk-thread::-webkit-scrollbar {\n  display: none;\n}");
   });
 
   it("opens every disclosure as a peek that floats over the room", async () => {
@@ -552,6 +590,7 @@ describe("the closing beat", () => {
     for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
 
     expect(room.querySelectorAll(".wk-ent")).toHaveLength(4);
+    await openPlan();
     const approve = byText(/^Approve and file 4 changes$/);
     expect(approve).toBeTruthy();
     click(approve);
@@ -584,6 +623,7 @@ describe("the closing beat", () => {
     }
     for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
 
+    await openPlan();
     click(byText(/^Approve and submit 4 terms$/));
     await settle();
     expect(room.querySelector(".wk-handoff")!.textContent).toContain("Submit for Approval");
@@ -690,9 +730,14 @@ describe("tier-1 advice, in the room", () => {
     await askForEightMillion(room);
     click(buttons().find((b) => b.textContent === "Confirm"));
     await settle();
-    // Staged, and the approval is open — with the advice never acknowledged.
+    // Staged, and the route to the plan is open — with the advice never
+    // acknowledged. SURFACE 5 (rule 38): that route is the REVIEW CHIP in the
+    // thread, and this fixture has no channel behind it, so what proves "never
+    // blocking" here is that the chip is offered at all. What happens when the
+    // chip is opened against no connector is the channel-none doctrine and is
+    // asserted where that belongs.
     expect(room.querySelectorAll(".wk-ent")).toHaveLength(1);
-    expect(byText(/^Approve and file 1 change$/)).toBeTruthy();
+    expect(room.querySelector(".wk-propose")!.textContent).toContain("1 change on the manifest");
   });
 
   it("stops being advice once the decision is made", async () => {
@@ -840,6 +885,7 @@ describe("a typed acknowledgment settles the check it is about", () => {
     expect(room.textContent).not.toContain("One decision at a time");
     const agentBubbles = [...room.querySelectorAll(".wk-agent .wk-bub")].map((n) => n.textContent ?? "");
     expect(agentBubbles.some((t) => /(That check is|Those \d+ checks are) acknowledged\./.test(t))).toBe(true);
+    await openPlan();
     expect(byText(/^Approve and file /)).toBeTruthy();
   });
 
@@ -879,6 +925,7 @@ describe("a failed execute is a sentence, and it closes the approval", () => {
     for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
     await settle();
 
+    await openPlan();
     click(byText(/^Approve and file /));
     await settle();
 
@@ -892,6 +939,7 @@ describe("a failed execute is a sentence, and it closes the approval", () => {
     for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
     await settle();
 
+    await openPlan();
     click(byText(/^Approve and file /));
     await settle();
 
