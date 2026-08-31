@@ -155,6 +155,17 @@ private class StageExecuteLoanModificationTest {
         return e;
     }
 
+    /**
+     * The inline requests here carry NO phase, which means both halves of the work run in this one
+     * transaction. That is deliberate and it is what makes these tests worth having: the same
+     * execute() and the same arm() run, over the same plan, settling the same steps, so everything
+     * they prove about the work is true of the shipping path.
+     *
+     * What they do NOT prove is the governor headroom the two-hop split exists to buy. A test org
+     * carries a fixture package, not Hartwell's; only a live run against a package with fees on it
+     * puts nCino's own query budget under pressure, and that evidence is the probe log rather than
+     * this file. See THE TRANSACTION BOUNDARY in ExecuteLoanModification for the measurements.
+     */
     private static ExecuteLoanModification.Response execute(ExecuteLoanModification.Request e) {
         return ExecuteLoanModification.run(new List<ExecuteLoanModification.Request>{ e })[0];
     }
@@ -949,17 +960,25 @@ private class StageExecuteLoanModificationTest {
         Integer selfStatus = 200;
         String selfBody;
         Boolean selfThrows = false;
+        // The relay makes ONE HOP PER PHASE, so a door can answer the engine hop and then fail the
+        // arm hop. That is its own outcome and the suite has to be able to produce it.
+        Boolean selfThrowsAfterFirst = false;
         Integer boxStatus = 200;
         String boxBody;
         Boolean boxThrows = false;
         HttpRequest sawSelf;
         HttpRequest sawBox;
+        List<HttpRequest> selfCalls = new List<HttpRequest>();
+        List<HttpRequest> boxCalls = new List<HttpRequest>();
 
         public HttpResponse respond(HttpRequest req) {
             HttpResponse r = new HttpResponse();
             if (req.getEndpoint() == SELF_URL) {
-                sawSelf = req;
-                if (selfThrows) {
+                selfCalls.add(req);
+                if (sawSelf == null) {
+                    sawSelf = req;
+                }
+                if (selfThrows || (selfThrowsAfterFirst && selfCalls.size() > 1)) {
                     throw new CalloutException('Read timed out');
                 }
                 r.setStatusCode(selfStatus);
@@ -967,7 +986,10 @@ private class StageExecuteLoanModificationTest {
                 return r;
             }
             if (req.getEndpoint() == RELAY_URL) {
-                sawBox = req;
+                boxCalls.add(req);
+                if (sawBox == null) {
+                    sawBox = req;
+                }
                 if (boxThrows) {
                     throw new CalloutException('Unable to tunnel through proxy');
                 }
@@ -1045,6 +1067,13 @@ private class StageExecuteLoanModificationTest {
         return [SELECT cm_Token_Consumed_At__c FROM cm_Action_Staging__c WHERE Id = :stagingId].cm_Token_Consumed_At__c;
     }
 
+    /** Which half of the work an inner hop was asked for. */
+    private static String phaseOf(HttpRequest hop) {
+        Map<String, Object> body = (Map<String, Object>) JSON.deserializeUntyped(hop.getBody());
+        Map<String, Object> input = (Map<String, Object>) ((List<Object>) body.get('inputs'))[0];
+        return String.valueOf(input.get('phase'));
+    }
+
     @IsTest
     static void theSelfDoorCarriesTheSessionAndTheBoxIsNeverTouched() {
         C360TestFixture.armCalloutMock();
@@ -1067,6 +1096,13 @@ private class StageExecuteLoanModificationTest {
         System.assertEquals(null, m.sawBox, 'The external relay is a fallback, not a first choice');
         System.assertEquals(PATH_SELF, done.result.relayPath, 'And the answer says which door carried it');
 
+        // ONE HOP PER PHASE. The credit action and the arm do not fit in a transaction together on a
+        // package that carries fees, and this leg is the only one that can open a second one.
+        System.assertEquals(2, m.selfCalls.size(), 'The relay carries the plan through in two hops, not one');
+        System.assertEquals('engine', phaseOf(m.selfCalls[0]), 'The credit action goes first');
+        System.assertEquals('arm', phaseOf(m.selfCalls[1]), 'And the writes onto the new version follow in their own transaction');
+        System.assertEquals('relayed', done.result.armState, 'The merged answer says both halves ran, and where');
+
         // The inner leg is told to execute inline, which is also what stops it relaying again.
         Map<String, Object> sent = (Map<String, Object>) JSON.deserializeUntyped(m.sawSelf.getBody());
         Map<String, Object> input = (Map<String, Object>) ((List<Object>) sent.get('inputs'))[0];
@@ -1088,6 +1124,121 @@ private class StageExecuteLoanModificationTest {
         System.assertEquals('LP-INNER-CLONE', done.result.facilities[0].cloneName, 'Nested results survive the round trip intact');
         System.assertEquals(1, done.result.facilities[0].revisionNumber, 'Including the chain revision the banker is shown');
         System.assertEquals('credit_action_0', done.result.steps[0].id, 'And the tracker steps, which the panel renders');
+    }
+
+    /**
+     * The split, driven directly rather than through a door: the engine hop creates and proves the
+     * version and lands NOTHING on it, the arm hop lands the staged change, and a hop that arrives
+     * after the run is finished is refused rather than run a second time.
+     *
+     * This is the test that says what the two-hop shape actually buys and what it costs. The reason
+     * for it is a governor budget nCino spends on our behalf, which no fixture package is big enough
+     * to reproduce (see THE TRANSACTION BOUNDARY in ExecuteLoanModification); what CAN be proved
+     * here is the thing that would silently rot otherwise - that the two halves add up to the whole,
+     * and that the token gates both while being spent once.
+     */
+    @IsTest
+    static void theTwoHopsSplitTheWorkAndTheTokenIsSpentOnce() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('twohop');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Request engineHop = execReq(k, staged.result);
+        engineHop.phase = 'engine';
+        ExecuteLoanModification.Response first = execute(engineHop);
+
+        System.assertEquals(true, first.ok, 'The engine hop stands on its own: ' + whyExec(first));
+        System.assertEquals('awaiting_arm', first.result.armState, 'And says plainly that it is only half the run');
+        System.assertEquals(C360Plan.TERMINAL_PARTIAL, first.result.terminalState,
+            'A version nothing has been written onto yet is not a finished run: ' + JSON.serialize(first.result.steps));
+        Id cloneId = (Id) first.result.cloneLoanId;
+        System.assertNotEquals(null, cloneId, 'The clone exists after the engine hop');
+        System.assertNotEquals(null, consumedAt(staged.result.stagingId), 'The engine hop is where the token is burned');
+        System.assertEquals(1000000, [SELECT LLC_BI__Amount__c FROM LLC_BI__Loan__c WHERE Id = :cloneId].LLC_BI__Amount__c,
+            'The staged amount is NOT on the clone yet. Landing it is the arm hop\'s whole job');
+
+        Boolean armStepsWaiting = false;
+        for (ExecuteLoanModification.StepResult s : first.result.steps) {
+            if (s.id == 'carry_junctions') {
+                armStepsWaiting = s.state == C360Plan.STATE_WAITING;
+            }
+        }
+        System.assertEquals(true, armStepsWaiting, 'What the arm owns reads as waiting, never as attempted');
+
+        ExecuteLoanModification.Request armHop = execReq(k, staged.result);
+        armHop.phase = 'arm';
+        ExecuteLoanModification.Response second = execute(armHop);
+
+        System.assertEquals(true, second.ok, 'The arm hop re-derives its own targets and runs: ' + whyExec(second));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, second.result.terminalState, JSON.serialize(second.result.steps));
+        System.assertEquals(1500000, [SELECT LLC_BI__Amount__c FROM LLC_BI__Loan__c WHERE Id = :cloneId].LLC_BI__Amount__c,
+            'The arm hop is what lands the staged change');
+        System.assertEquals(1, cloneCount(), 'Two hops, one modification');
+
+        ExecuteLoanModification.Request thirdHop = execReq(k, staged.result);
+        thirdHop.phase = 'arm';
+        ExecuteLoanModification.Response third = execute(thirdHop);
+        System.assertEquals(false, third.ok, 'An arm hop into a finished run is refused, not run again');
+        System.assertEquals('TOKEN_REFUSED', third.error.code);
+        System.assertEquals(1, cloneCount(), 'And it wrote nothing');
+    }
+
+    /** An arm hop needs the same token the engine hop presented, or it is not part of this run. */
+    @IsTest
+    static void anArmHopWithoutTheTokenIsRefused() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('armnotoken');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+
+        ExecuteLoanModification.Request engineHop = execReq(k, staged.result);
+        engineHop.phase = 'engine';
+        System.assertEquals(true, execute(engineHop).ok, 'precondition: the engine hop ran');
+
+        ExecuteLoanModification.Request armHop = execReq(k, staged.result);
+        armHop.phase = 'arm';
+        armHop.decisionToken = 'not-the-token-the-banker-confirmed-with';
+        ExecuteLoanModification.Response res = execute(armHop);
+
+        System.assertEquals(false, res.ok, 'The second leg proves the token too, it just does not spend it again');
+        System.assertEquals('TOKEN_REFUSED', res.error.code);
+    }
+
+    /**
+     * The engine hop lands and the arm hop cannot be reached. The version exists and is verified, the
+     * staged changes are not on it, and the answer says exactly that instead of inviting a retry that
+     * would carry the junction graph twice.
+     */
+    @IsTest
+    static void anArmHopThatCannotBeReachedIsReportedRatherThanRetried() {
+        C360TestFixture.armCalloutMock();
+        String k = key('armdown');
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(stageReq(k));
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        DoorMock m = doors(new GoodSession(), parent().Id);
+        m.selfThrowsAfterFirst = true;
+        m.boxThrows = true;
+        ExecuteLoanModification.Response done = execute(relayReq(k, staged.result));
+
+        System.assertEquals(2, m.selfCalls.size(), 'One hop per phase, so the second hop was attempted');
+        System.assertEquals(false, done.ok, 'Half a run is not a success');
+        System.assertEquals('ORG_UNAVAILABLE', done.error.code);
+        System.assertEquals(false, done.error.resumable,
+            'Re-running the arm blind would carry the graph a second time, so a human reads the record instead');
+        System.assertEquals('awaiting_arm', done.result.armState, 'And the caller is told which half is missing');
+        System.assertNotEquals(null, done.result.cloneLoanId, 'The version the engine hop made is still reported');
     }
 
     @IsTest
