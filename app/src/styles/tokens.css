@@ -21,6 +21,7 @@
    ============================================================================= */
 
 @import "./electric-glass.css";
+@import "./landing.css";
 
 :root {
   color-scheme: light;
@@ -201,6 +202,14 @@
      owns them, never on the page. */
   --z-sheet: 110;
 
+  /* THE MARK'S CORNER (HANDOVER §3). The FAB sits right 44 / bottom 52 so the
+     narrator chip beneath it has air on every side, and the whisper chip hangs
+     off the same anchor. One pair of numbers: the chip and the mark are one
+     object, and Surface 4 re-points both by moving these. */
+  --fab-right: 44px;
+  --fab-bottom: 52px;
+  --fab-size: 52px;
+
   /* User-driven activity (A31.3) — a BLUER violet than the accent, so "you did
      this" never reads as "the system flagged this". */
   --user-tone: #5f49c9;
@@ -271,10 +280,16 @@
   box-sizing: border-box;
 }
 
+/* MIN-height, not height. The landing is a DOCUMENT: it flows past the fold and
+   the window scrolls it, which is what lets `body.scrolled` mean anything at all
+   (rule 70.5 — the header knows when content slides beneath it). A hard 100%
+   pinned every box to the viewport and forced an inner scroller, which the
+   sticky bar can never see. The client view still sets its own h-screen shell,
+   so nothing there changes. */
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 /* THE GROUND CARRIES NO PURPLE BLOOM (rule 21). The top-right violet radial is
