@@ -66,8 +66,12 @@ const line: Facility = {
   // The roll-over baseline the clone would carry, as the org holds it.
   loanCovenants: [{ id: "a4Vbb000000pNIjEAM", name: "COV-0107", covenantType: "Accounts Receivable", covenantId: "a3Bbb000000S0bNEAS" }],
   collateral: [
-    { loanId: LINE_ID, collateralId: "a35bb0000013xz3AAA", collateralName: "COL-000762", amountPledged: 8_000_000, advanceRate: 80, lienPosition: "1st", pledgedStatus: "Inactive" },
-    { loanId: LINE_ID, collateralId: "a35bb0000013y0fAAA", collateralName: "COL-000763", amountPledged: 4_000_000, advanceRate: 50, lienPosition: "1st", pledgedStatus: "Inactive" },
+    // The DESCRIPTIONS matter to the pledge wave: a banker names an asset the way
+    // the read describes it, never by its autonumber, and both of these share a
+    // word on purpose so an ambiguous line has something real to be ambiguous
+    // between.
+    { loanId: LINE_ID, collateralId: "a35bb0000013xz3AAA", collateralName: "COL-000762", collateralDescription: "Duluth warehouse", amountPledged: 8_000_000, advanceRate: 80, lienPosition: "1st", pledgedStatus: "Inactive" },
+    { loanId: LINE_ID, collateralId: "a35bb0000013y0fAAA", collateralName: "COL-000763", collateralDescription: "Duluth machine shop", amountPledged: 4_000_000, advanceRate: 50, lienPosition: "1st", pledgedStatus: "Inactive" },
   ],
 };
 
@@ -593,6 +597,85 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(fees[0].percentage).toBeUndefined();
   });
 
+  it("pledges an EXISTING asset onto the clone, aimed at the member the line named", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "pledge the Duluth warehouse to the equipment - $8,000,000.00");
+    expect(delta.fileable).toBe(true);
+    expect(delta.pledgeWire).toMatchObject({ collateralId: "a35bb0000013xz3AAA", facilityId: EQUIPMENT_ID });
+    expect(delta.pledgeWire!.newCollateral).toBeUndefined();
+    // The chip names the ASSET, not the catalog's category word for it.
+    expect(delta.title).toBe("Duluth warehouse");
+    expect(delta.badge).toBe("Duluth warehouse → pledged on the modification");
+    expect(delta.target).toBe("Equipment ($8M)");
+    expect(delta.handoff).toBeUndefined();
+    expect(delta.map.find(([k]) => k === "Written as")![1]).toContain("LLC_BI__Loan_Collateral2__c");
+  });
+
+  it("asks amend-or-add when the asset is already pledged to the member the line names", async () => {
+    const { engine } = engineOn();
+    // COL-000762 secures the Line of Credit today, and a modification carries it
+    // onto the clone: pledging it again there is a duplicate, not a second lien.
+    const result = await engine.parseIntent("pledge the Duluth warehouse to the line of credit - $15,000,000.00", context);
+    expect(result.kind).toBe("unparsed");
+    if (result.kind !== "unparsed") return;
+    expect(result.reply).toMatch(/Duluth warehouse is already on/);
+
+    const second = await engine.parseIntent("pledge the Duluth warehouse to the line of credit - $15,000,000.00 as well", context);
+    expect(second.kind).toBe("deltas");
+  });
+
+  it("creates then pledges a NET-NEW asset, and sends the whole chain on one wire entry", async () => {
+    const { engine, deps: d } = engineOn();
+    const asked = await engine.parseIntent(
+      "add a new $2M piece of equipment as collateral on the equipment - $8,000,000.00",
+      context,
+    );
+    expect(asked.kind).toBe("unparsed");
+    if (asked.kind !== "unparsed") return;
+    expect(asked.reply).toMatch(/advance rate/i);
+
+    const answered = await engine.parseIntent("80%", context);
+    expect(answered.kind).toBe("deltas");
+    if (answered.kind !== "deltas") return;
+    const delta = answered.deltas[0];
+    expect(delta.fileable).toBe(true);
+    expect(delta.pledgeWire).toMatchObject({
+      newCollateral: { description: "New piece of equipment", collateralType: "Equipment", value: 2_000_000 },
+      advanceRate: 80,
+      facilityId: EQUIPMENT_ID,
+    });
+    expect(delta.pledgeWire!.collateralId).toBeUndefined();
+    // The banker is told the chain, in the order the arm writes it.
+    const written = delta.map.find(([k]) => k === "Written as")![1];
+    expect(written).toContain("LLC_BI__Collateral__c");
+    expect(written).toContain("LLC_BI__Account_Collateral__c");
+
+    await engine.stagePlan(answered.deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(JSON.parse(payload.pledgeAddsJson)).toEqual([
+      {
+        newCollateral: { description: "New piece of equipment", collateralType: "Equipment", value: 2_000_000 },
+        advanceRate: 80,
+        targetLoanId: EQUIPMENT_ID,
+      },
+    ]);
+  });
+
+  it("sends a pledge on the wire as pledgeAddsJson, per target like every record wave", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "pledge the Duluth machine shop to the equipment - $8,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // The pledge's member joins the selection, so the scalar rides targeted.
+    expect(payload.requestedAmount).toBeNull();
+    expect(JSON.parse(payload.pledgeAddsJson)).toEqual([
+      { collateralId: "a35bb0000013y0fAAA", targetLoanId: EQUIPMENT_ID },
+    ]);
+  });
+
   it("stages a structure change WITHOUT a member as a handoff, and WITH one as a filing delta (W1)", async () => {
     const { engine } = engineOn();
     // No member named: the org anchors every involvement row on one loan, so
@@ -735,7 +818,7 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(result.kind).toBe("unparsed");
     if (result.kind !== "unparsed") return;
     expect(result.reply).toMatch(/could not map that onto this package/i);
-    expect(result.reply).toMatch(/commitment, rate, maturity, term, covenants, entities and fees all file on the clone/i);
+    expect(result.reply).toMatch(/commitment, rate, maturity, term, covenants, entities, fees and collateral all file on the clone/i);
   });
 
   it("names the half of the line it DID read, so the refusal can be answered", async () => {
@@ -1041,17 +1124,19 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     expect(staged.plan.steps.find((s) => s.id === "handoff_0_chain_1")!.label).toContain("LLC_BI__Loan_Covenant__c");
   });
 
-  it("never stages a create without the junctions that connect it", async () => {
+  it("refuses to pledge an asset the deal does not carry, and names the ones it does", async () => {
     const { engine } = engineOn();
-    const deltas = [
-      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
-      ...(await confirm(engine, "pledge the Mazak tooling to the line of credit - $15,000,000.00")),
-    ];
-    const staged = await engine.stagePlan(deltas, context);
-    const chain = staged.plan.steps.filter((s) => s.id.startsWith("handoff_0_chain_"));
-    // Asset, ownership, pledge — and the pledge step names the aggregate defect.
-    expect(chain).toHaveLength(3);
-    expect(chain[2].label).toContain("Loan_Collateral_Aggregate");
+    // A pledge sends the ORG'S OWN collateral record, so an asset this read
+    // never carried has no id to send and the room asks rather than inventing
+    // one. (Before 2026-08-31 this line handed off with its three-link chain;
+    // the chain-on-a-handoff assertion now lives on the covenant test above,
+    // which is still a handoff when its type is off the org's catalog.)
+    const result = await engine.parseIntent("pledge the Mazak tooling to the line of credit - $15,000,000.00", context);
+    expect(result.kind).toBe("unparsed");
+    if (result.kind !== "unparsed") return;
+    expect(result.reply).toContain("Duluth warehouse");
+    expect(result.reply).toContain("Duluth machine shop");
+    expect(result.reply).toMatch(/NEW asset/);
   });
 
   it("asks amend-or-add when a create names something already on the facility", async () => {

@@ -131,7 +131,7 @@ export function whyHandoff(delta: WorkroomDelta): string {
     case "covenant-change":
       return "The test itself lives on the covenant rather than on the facility, and no deployed write reaches it — it rides the plan as a handoff so nothing is silently dropped.";
     case "collateral-add":
-      return `Pledging security means creating the asset, recording who owns it and pledging it to the modification${steps}, none of it deployed yet — it rides the plan as a handoff so nothing is silently dropped.`;
+      return `Pledging security files on the modification${steps} — an asset the borrower already owns goes straight onto the clone, and a net-new one is created, has its ownership recorded and is then pledged. This one the room could not resolve to a single asset, or could not settle its kind, value and advance rate, so it rides the plan as a handoff rather than a pledge aimed at a record nobody picked.`;
     case "collateral-remove":
       return "Releasing a pledge is a change on the pledge itself, and no deployed write reaches it yet — it rides the plan as a handoff, with the reason.";
     case "party-add":

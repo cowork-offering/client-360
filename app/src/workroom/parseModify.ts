@@ -54,6 +54,24 @@ export type ParsedValue =
       amount?: number;
       recordType: "Fees" | "Costs";
       text: string;
+    }
+  /** A COLLATERAL PLEDGE, in one of its two shapes. Either the asset already
+   *  exists and the deal carries it — in which case the ORG'S OWN RECORD ID is
+   *  what travels, never a name — or it is net-new and the whole chain has to be
+   *  authored: the asset, the ownership junction that is its only link to the
+   *  borrower, then the pledge. There is no third shape, and in particular there
+   *  is no pledging an asset named but not resolved. */
+  | {
+      kind: "pledge";
+      /** An EXISTING `LLC_BI__Collateral__c` the borrower already owns. */
+      collateralId?: string;
+      /** A NET-NEW asset. `collateralType` is the banker's word for the kind;
+       *  the ORG resolves it against its own collateral-type catalog at stage
+       *  time, because this client holds no copy of those 43 records. */
+      create?: { description: string; collateralType: string; value: number; advanceRate: number };
+      /** The asset as the chip names it. */
+      noun: string;
+      text: string;
     };
 
 /** One amendment the banker asked for, resolved against the catalog and the
@@ -110,6 +128,17 @@ export interface Awaiting {
    * "origination fee" alone, instead of the whole instruction again.
    */
   fee?: FeeRead;
+  /**
+   * A PLEDGE QUESTION IS ANSWERED WITH THE PIECE THAT WAS MISSING.
+   *
+   * A create-then-pledge needs three facts the banker rarely says in one line —
+   * what kind of asset, what it is worth, what it lends at — so each answer has
+   * to land on the read the previous question already held. `isNew` is the one
+   * that MUST persist: without it, "equipment" answered to "what kind of asset?"
+   * would go back through the existing-collateral resolver and try to find an
+   * asset the deal never carried.
+   */
+  pledge?: PledgeRead;
 }
 
 /** What a fee line has settled so far. Every field is optional because a fee
@@ -122,6 +151,21 @@ export interface FeeRead {
   recordType?: "Fees" | "Costs";
   percentage?: number;
   amount?: number;
+}
+
+/** What a pledge line has settled so far. */
+export interface PledgeRead {
+  /** The banker said the asset is NEW, so the existing-collateral resolver is
+   *  off for the rest of this exchange. */
+  isNew?: boolean;
+  /** The banker's word for the kind of asset. Resolved ORG-SIDE against
+   *  `LLC_BI__Collateral_Type__c`; nothing here claims the org holds it. */
+  assetType?: string;
+  /** The banker's own words for the asset, which become its readable label:
+   *  `Name` on a collateral is an autonumber (COL-000762). */
+  said?: string;
+  value?: number;
+  advanceRate?: number;
 }
 
 export type ParseOutcome =
@@ -690,6 +734,217 @@ function readFee(lower: string, held?: FeeRead): { value: ParsedValue } | { ques
   };
 }
 
+/* ------------------------------------------------------------- pledge read
+
+   TWO VERBS THROUGH ONE READER, because they are the same ask with a different
+   answer to one question: does the bank already hold this asset?
+
+   PLEDGE EXISTING resolves the banker's words against THE COLLATERAL THE DEAL
+   ITSELF CARRIES — the pledges on the package's own facilities, deduped by
+   collateral id, because a cross-pledged asset appears on every facility it
+   secures and counting it twice is the double-count the coverage math exists to
+   avoid. What travels is the org's record id. A phrase matching two assets, or
+   none, is a QUESTION naming what the deal actually holds: there is no asset
+   this room will pick on the banker's behalf, and no name it will send instead
+   of an id.
+
+   CREATE-THEN-PLEDGE authors the whole chain, and the org's model dictates its
+   shape: `LLC_BI__Collateral__c` has NO account lookup at all, so the borrower
+   link is the separate `LLC_BI__Account_Collateral__c` ownership junction, and
+   the pledge to the clone comes third. `Name` on a collateral is an autonumber,
+   so the banker's own words ride the description exactly as a fee's label does.
+
+   THE ADVANCE RATE IS REQUIRED and it is never defaulted. It is a credit
+   decision on an asset nobody has lent against before, and it lands on the
+   PLEDGE as `LLC_BI__Advance_Rate_Override__c` — `LLC_BI__Advance_Rate__c` is a
+   formula, and the org's own `Advance_Rate_Override` rule then demands a written
+   reason beside it, which the stage arm composes as provenance rather than as a
+   credit justification nobody gave. */
+
+/** One asset the deal already carries, as this room can name it. */
+interface DealCollateral {
+  id: string;
+  /** The description where the read carries one, the autonumber otherwise. */
+  label: string;
+  /** The org's autonumber (COL-000762), which names exactly one row. */
+  name?: string;
+}
+
+/** Every distinct collateral the package's own pledges reach, deduped by id.
+ *  An asset with no id is deliberately dropped: a pledge needs the org's record,
+ *  and a row this read could not identify is not one to send. */
+function dealCollateral(ctx: ParseContext): DealCollateral[] {
+  const byId = new Map<string, DealCollateral>();
+  for (const f of ctx.facilities) {
+    for (const c of f.collateral ?? []) {
+      if (!c.collateralId || byId.has(c.collateralId)) continue;
+      byId.set(c.collateralId, {
+        id: c.collateralId,
+        label: c.collateralDescription ?? c.collateralName ?? c.collateralType ?? c.collateralId,
+        name: c.collateralName,
+      });
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Words that name no asset in particular, so a hit on one proves nothing. */
+const ASSET_STOP = new Set(["the", "and", "for", "llc", "inc", "collateral", "asset", "assets", "value", "loan", "pledge"]);
+
+/** The assets a line could mean, best match first. An exact id or autonumber
+ *  names one row and settles it; otherwise the distinctive words of each label
+ *  are counted, and only the top score survives. */
+function matchDealCollateral(phrase: string, pool: DealCollateral[]): DealCollateral[] {
+  const scored: Array<{ c: DealCollateral; score: number }> = [];
+  for (const c of pool) {
+    if (phrase.includes(c.id.toLowerCase())) return [c];
+    if (c.name && c.name.length > 3 && phrase.includes(c.name.toLowerCase())) return [c];
+    const tokens = c.label
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 3 && !ASSET_STOP.has(t));
+    const score = tokens.filter((t) => phrase.includes(t)).length;
+    if (score) scored.push({ c, score });
+  }
+  if (!scored.length) return [];
+  const top = Math.max(...scored.map((s) => s.score));
+  return scored.filter((s) => s.score === top).map((s) => s.c);
+}
+
+/** THE ASSET IS NET-NEW. "purchase" and "acquire" are deliberately absent: the
+ *  org's product picklist carries a Purchase facility, and a line pledging to it
+ *  would read its own target as a statement about the asset. */
+const NEW_ASSET = /\b(new|newly|another|additional|just\s+(?:bought|financed)|not\s+on\s+the\s+deal)\b/;
+
+/** The kinds of asset a banker names, and the word each one sends to the org.
+ *  The org keeps 43 collateral-type records and this client holds none of them,
+ *  so the word is a PROPOSAL that stage resolves against the real catalog and
+ *  refuses with the org's own list. */
+const ASSET_TYPE_MAP: Array<{ match: RegExp; said: string; typeWord: string }> = [
+  { match: /\b(equipment|machine|machines|machinery|tooling|press|lathe|cnc|forklift)\b/, said: "equipment", typeWord: "Equipment" },
+  { match: /\b(warehouse|building|plant|premises|real\s*estate|property|land)\b/, said: "real estate", typeWord: "Real Estate" },
+  { match: /\b(inventory|raw\s+materials?|finished\s+goods)\b/, said: "inventory", typeWord: "Inventory" },
+  { match: /\b(receivables?|accounts\s+receivable|a\/r)\b/, said: "receivables", typeWord: "Accounts Receivable" },
+  { match: /\b(vehicles?|trucks?|trailers?|fleet)\b/, said: "vehicles", typeWord: "Vehicle" },
+  { match: /\b(securities|deposits?|certificate\s+of\s+deposit)\b/, said: "cash and securities", typeWord: "Cash" },
+];
+
+/** Offered as chips when the kind is the missing half. Each is a phrase this
+ *  same reader resolves, so a click is a typed answer. */
+const ASSET_TYPE_OPTIONS = ["Equipment", "Real estate", "Inventory", "Accounts receivable", "Vehicles", "Securities"];
+
+/** The facility the pledge lands on, which is the target rather than the asset.
+ *  Stripped before anything is read, or "pledge the warehouse to the equipment
+ *  loan" reads its own destination as the kind of asset. */
+const PLEDGE_CLAUSE = /\s+\b(?:to|onto|on|against|under|for)\s+(?:the|our|this)\b.*$/i;
+const PLEDGE_LEAD = /^\s*(?:please\s+)?(?:add|pledge|attach|include|take\s+security\s+over|secure\s+it\s+with)\b\s*/i;
+
+/** The banker's own words for the asset, which become its readable label. */
+function readAssetNoun(text: string): string | undefined {
+  const s = text
+    .replace(PLEDGE_CLAUSE, "")
+    .replace(PLEDGE_LEAD, "")
+    .replace(/\bas\s+(?:new\s+|additional\s+)*collateral\b/gi, "")
+    .replace(/\bat\s+an?\s+advance\s+rate\s+of\b/gi, "")
+    .replace(/\badvance\s+rate\b/gi, "")
+    .replace(/(\$\s*)?\d[\d,]*(?:\.\d+)?\s*(?:mm|million|millions|bn|billion|k|m|b)?\b/gi, "")
+    .replace(/\d+(?:\.\d+)?\s*(?:%|per\s?cent|percent|bps|basis\s+points?)/gi, "")
+    .replace(/^\s*(?:an?|the)\s+/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(/[.,;:]+$/, "");
+  return s.length > 2 ? s[0].toUpperCase() + s.slice(1) : undefined;
+}
+
+/**
+ * Reads a pledge out of the line: an existing asset resolved to the org's own
+ * record id, or a net-new asset complete enough to author. A missing piece is a
+ * QUESTION carrying what was already read.
+ */
+function readPledge(
+  text: string,
+  lower: string,
+  ctx: ParseContext,
+  held?: PledgeRead,
+): { value: ParsedValue } | { question: string; options?: string[]; pledge: PledgeRead } {
+  // The destination is not the asset, so it goes before anything is read.
+  const phrase = lower.replace(PLEDGE_CLAUSE, "");
+  const wantsNew = held?.isNew === true || NEW_ASSET.test(phrase);
+
+  if (!wantsNew) {
+    const pool = dealCollateral(ctx);
+    const hits = matchDealCollateral(phrase, pool);
+    if (hits.length === 1) {
+      return {
+        value: { kind: "pledge", collateralId: hits[0].id, noun: hits[0].label, text: "pledged on the modification" },
+      };
+    }
+    if (hits.length > 1) {
+      return {
+        question: `The deal carries ${hits.length} assets that could be it: ${hits
+          .map((h) => h.label)
+          .join(", ")}. Which one? A pledge sends the org's own collateral record, so I will not choose between them.`,
+        options: hits.map((h) => h.label),
+        pledge: {},
+      };
+    }
+    const names = pool.map((c) => c.label);
+    return {
+      question: names.length
+        ? `I could not find that asset among the ${names.length} this deal carries: ${names.join(
+            ", ",
+          )}. Which of those is it — or say it is a NEW asset and I will create it, take the ownership down and pledge it.`
+        : "This read carries no collateral on the deal, so there is nothing here to pledge by name. Say it is a NEW asset and what it is, and I will create it, record the borrower's ownership and pledge it to the modification.",
+      options: [...names, "A new asset"],
+      pledge: {},
+    };
+  }
+
+  const mapped = ASSET_TYPE_MAP.find((m) => m.match.test(phrase));
+  const money = moneyTokens(phrase).at(-1);
+  const pct = percentTokens(phrase).at(-1);
+  const pledge: PledgeRead = {
+    isNew: true,
+    assetType: mapped?.typeWord ?? held?.assetType,
+    said: readAssetNoun(text) ?? held?.said,
+    value: money ? money.value : held?.value,
+    advanceRate: pct ? pct.value : held?.advanceRate,
+  };
+
+  if (!pledge.assetType) {
+    return {
+      question:
+        "What kind of asset is it? The org keeps its own collateral-type catalog and resolves the word against it — I will not invent a type, and a type it does not hold comes back with the list it does.",
+      options: ASSET_TYPE_OPTIONS,
+      pledge,
+    };
+  }
+  const noun = pledge.said ?? `New ${mapped?.said ?? pledge.assetType.toLowerCase()} collateral`;
+  if (pledge.value === undefined) {
+    return { question: `What is it worth? Say it in full — $2,000,000 or 2 million; I will not read a bare number as money.`, pledge };
+  }
+  if (pledge.advanceRate === undefined) {
+    return {
+      question: `What advance rate does the bank lend against it at? The rate is a credit decision on an asset nobody has lent against yet, so there is no default here — the org records it as an override on the pledge and keeps the reason with it.`,
+      pledge,
+    };
+  }
+
+  return {
+    value: {
+      kind: "pledge",
+      create: {
+        description: noun.slice(0, 255),
+        collateralType: pledge.assetType,
+        value: pledge.value,
+        advanceRate: pledge.advanceRate,
+      },
+      noun,
+      text: `created and pledged, ${exactMoney(pledge.value)} at ${pledge.advanceRate}% advance`,
+    },
+  };
+}
+
 /** Read the value for ONE catalog field out of the line. */
 function readValue(
   field: CatalogField,
@@ -697,7 +952,8 @@ function readValue(
   lower: string,
   match: CatalogMatch,
   facility: Facility | null,
-): { value: ParsedValue } | { question: string; options?: string[]; fee?: FeeRead } | { value: null } {
+  ctx: ParseContext,
+): { value: ParsedValue } | { question: string; options?: string[]; fee?: FeeRead; pledge?: PledgeRead } | { value: null } {
   if (field.type === "currency") {
     const tokens = moneyTokens(lower);
     if (!tokens.length) {
@@ -793,6 +1049,14 @@ function readValue(
   // legal picklist value and the figure must be stated, or it is a question.
   if (field.id === "fee.row") {
     return readFee(lower);
+  }
+
+  // A COLLATERAL PLEDGE files (2026-08-31) in either of its two shapes, and both
+  // are exact: an existing asset resolves to the org's own record id off the
+  // deal's own pledges, and a net-new one carries a kind, a value and an advance
+  // rate or it is a question.
+  if (field.id === "collateral.pledge") {
+    return readPledge(text, lower, ctx);
   }
 
   // A PICKLIST IS THE ORG'S OWN CLOSED SET, so the value is quoted from it or it
@@ -932,8 +1196,37 @@ export function parseAnswer(awaiting: Awaiting, text: string, ctx: ParseContext)
     };
   }
 
+  // THE ANSWER TO A PLEDGE QUESTION IS THE PIECE THAT WAS MISSING — the asset
+  // off the list the question named, or the kind, or the value, or the rate.
+  // Routed here for the same reason the fee is: only this path holds what the
+  // asking line already settled, and `isNew` in particular must survive, or an
+  // answer of "equipment" would go looking for an asset the deal never had.
+  if (awaiting.field.id === "collateral.pledge") {
+    const pledge = readPledge(trimmed, lower, ctx, awaiting.pledge);
+    if ("question" in pledge) {
+      return {
+        kind: "clarify",
+        question: pledge.question,
+        awaiting: { ...awaiting, pledge: pledge.pledge },
+        options: pledge.options,
+      };
+    }
+    return {
+      kind: "amendments",
+      amendments: [
+        {
+          field: awaiting.field,
+          facility: awaiting.facility,
+          value: pledge.value,
+          matched: trimmed,
+          op: operationFor(awaiting.field, lower),
+        },
+      ],
+    };
+  }
+
   const at: CatalogMatch = { field: awaiting.field, matched: "", index: 0 };
-  const read = readValue(awaiting.field, trimmed, lower, at, awaiting.facility);
+  const read = readValue(awaiting.field, trimmed, lower, at, awaiting.facility, ctx);
   if ("question" in read) return { kind: "clarify", question: read.question, awaiting, options: read.options };
   if (read.value === null) return null;
   return {
@@ -1042,7 +1335,7 @@ function indexFallback(trimmed: string, lower: string, ctx: ParseContext): Parse
   }
 
   const at: CatalogMatch = { field, matched: "", index: 0 };
-  const read = readValue(field, scrubbed, scrubbedLower, at, facility);
+  const read = readValue(field, scrubbed, scrubbedLower, at, facility, ctx);
   if ("question" in read) {
     return {
       kind: "clarify",
@@ -1111,9 +1404,14 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
     const scrubbedLower = scrubbed.toLowerCase();
     for (const facility of facilities) {
       const at: CatalogMatch = { ...match, index: Math.max(0, scrubbedLower.indexOf(match.matched)) };
-      const read = readValue(field, scrubbed, scrubbedLower, at, facility);
+      const read = readValue(field, scrubbed, scrubbedLower, at, facility, ctx);
       if ("question" in read) {
-        return { kind: "clarify", question: read.question, awaiting: { field, facility, fee: read.fee }, options: read.options };
+        return {
+          kind: "clarify",
+          question: read.question,
+          awaiting: { field, facility, fee: read.fee, pledge: read.pledge },
+          options: read.options,
+        };
       }
       const party = field.category === "party" ? readParty(trimmed, ctx) : undefined;
       const role = field.category === "party" ? readRole(scrubbedLower) : undefined;

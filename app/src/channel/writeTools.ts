@@ -664,6 +664,28 @@ export interface StagePayloads {
      *  LLC_BI__Record_Type__c (Fees / Costs / Adjustments).
      *  Counts toward the tool's at-least-one-change rule. */
     feeAddsJson?: string | null;
+    /** COLLATERAL PLEDGES (2026-08-31), JSON-encoded:
+     *  [{collateralId?, newCollateral?: {description, collateralType, value},
+     *    advanceRate?, amountPledged?, lienPosition?, advanceRateReason?,
+     *    targetLoanId?}]. Each pledge lands on the CLONE of the targeted
+     *  facility, beside the pledges the carry replicates from its parent.
+     *
+     *  EXACTLY ONE of `collateralId` and `newCollateral` per entry, and the org
+     *  enforces the difference. `collateralId` must be a collateral THE BORROWER
+     *  OWNS — proven through `LLC_BI__Account_Collateral__c`, which is the only
+     *  link the object has to an account (`LLC_BI__Collateral__c` carries no
+     *  account lookup at all) — and must not already be pledged to that
+     *  facility. `newCollateral` authors the chain: the asset, then the
+     *  ownership junction, then the pledge. `collateralType` is resolved against
+     *  the org's live `LLC_BI__Collateral_Type__c` catalog and a refusal carries
+     *  the candidates; a type whose own advance rate is null is refused before
+     *  the org's `Advance_Rate_should_not_be_null` rule fires on the insert.
+     *  `advanceRate` is REQUIRED on a create and rides
+     *  `LLC_BI__Advance_Rate_Override__c` (the plain advance rate is a formula),
+     *  which makes the org's `Advance_Rate_Override` rule demand a reason —
+     *  supply `advanceRateReason` or the tool composes a provenance one.
+     *  Counts toward the tool's at-least-one-change rule. */
+    pledgeAddsJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;
