@@ -676,6 +676,101 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     ]);
   });
 
+  it("logs a policy exception on the clone, and the chip is named after what is out of policy", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(
+      engine,
+      "log a policy exception: advance rate above guideline on the equipment - $8,000,000.00, mitigated by the personal guaranty",
+    );
+    expect(delta.fileable).toBe(true);
+    expect(delta.policyExceptionWire).toEqual({
+      title: "Advance rate above guideline",
+      status: "Mitigated",
+      reasons: ["the personal guaranty"],
+      severity: undefined,
+      facilityId: EQUIPMENT_ID,
+    });
+    // The chip names the exception, not the catalog's category word for it.
+    expect(delta.title).toBe("Advance rate above guideline");
+    expect(delta.badge).toBe("Advance rate above guideline → mitigated by the personal guaranty");
+    expect(delta.target).toBe("Equipment ($8M)");
+    expect(delta.handoff).toBeUndefined();
+    const written = delta.map.find(([k]) => k === "Written as")![1];
+    expect(written).toContain("LLC_BI__Policy_Exception__c");
+    expect(written).toContain("LLC_BI__Relationship__c");
+    // THE EGRESS REACHES THE BANKER. A committed write here POSTs the record to
+    // the bank's own AWS endpoint, and the person confirming is entitled to know.
+    expect(written).toContain("PolicyExceptionCDC");
+  });
+
+  it("sends the exception on the wire as policyExceptionAddsJson, per target like every record wave", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(
+        engine,
+        "log a policy exception: advance rate above guideline on the equipment - $8,000,000.00, mitigated by the personal guaranty",
+      )),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // The exception's member joins the selection, so the scalar rides targeted:
+    // broadcasting the amount would take the equipment clone to $20MM too.
+    expect(payload.requestedAmount).toBeNull();
+    expect(JSON.parse(payload.policyExceptionAddsJson)).toEqual([
+      {
+        title: "Advance rate above guideline",
+        status: "Mitigated",
+        mitigationReasons: ["the personal guaranty"],
+        targetLoanId: EQUIPMENT_ID,
+      },
+    ]);
+  });
+
+  it("omits the mitigation key entirely on an exception that has none", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = await confirm(
+      engine,
+      "log a policy exception: hold limit exceeded on the line of credit - $15,000,000.00, unmitigated",
+    );
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const [entry] = JSON.parse(payload.policyExceptionAddsJson);
+    // An absent key is "nobody said"; a null one would be an answer.
+    expect(entry).toEqual({ title: "Hold limit exceeded", status: "Unmitigated", targetLoanId: LINE_ID });
+  });
+
+  it("walks the exception clarify chain from the room, question by question", async () => {
+    const { engine } = engineOn();
+    const named = await engine.parseIntent(
+      "log a policy exception on the equipment - $8,000,000.00",
+      context,
+    );
+    expect(named.kind).toBe("unparsed");
+    if (named.kind !== "unparsed") return;
+    expect(named.reply).toMatch(/what should the exception be called/i);
+
+    const status = await engine.parseIntent("advance rate above guideline", context);
+    expect(status.kind).toBe("unparsed");
+    if (status.kind !== "unparsed") return;
+    expect(status.options?.map((o) => o.label)).toEqual(["Waived", "Mitigated", "Unmitigated"]);
+
+    const mitigant = await engine.parseIntent("Mitigated", context);
+    expect(mitigant.kind).toBe("unparsed");
+    if (mitigant.kind !== "unparsed") return;
+    expect(mitigant.reply).toMatch(/what mitigates it/i);
+
+    const done = await engine.parseIntent("the personal guaranty from James Hartwell", context);
+    expect(done.kind).toBe("deltas");
+    if (done.kind !== "deltas") return;
+    expect(done.deltas[0].policyExceptionWire).toMatchObject({
+      title: "Advance rate above guideline",
+      status: "Mitigated",
+      reasons: ["the personal guaranty from James Hartwell"],
+      facilityId: EQUIPMENT_ID,
+    });
+  });
+
   it("stages a structure change WITHOUT a member as a handoff, and WITH one as a filing delta (W1)", async () => {
     const { engine } = engineOn();
     // No member named: the org anchors every involvement row on one loan, so
@@ -818,7 +913,9 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(result.kind).toBe("unparsed");
     if (result.kind !== "unparsed") return;
     expect(result.reply).toMatch(/could not map that onto this package/i);
-    expect(result.reply).toMatch(/commitment, rate, maturity, term, covenants, entities, fees and collateral all file on the clone/i);
+    expect(result.reply).toMatch(
+      /commitment, rate, maturity, term, covenants, entities, fees, collateral and policy exceptions all file on the clone/i,
+    );
   });
 
   it("names the half of the line it DID read, so the refusal can be answered", async () => {

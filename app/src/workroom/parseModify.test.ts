@@ -404,6 +404,131 @@ describe("the deterministic parse", () => {
     expect(value.create).toBeUndefined();
   });
 
+  /* --------------------------------------------------- the policy exception */
+
+  it("reads the founder's own line into ONE exception: what, the decision, the mitigant", () => {
+    const out = parseModify(
+      "log a policy exception: advance rate above guideline on the equipment, mitigated by the personal guaranty",
+      ctx,
+    );
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    // ONE ask, not three. "advance rate" is what is out of policy and "mitigated"
+    // is this exception's own status; reading either as a second amendment would
+    // stage two chips for one sentence.
+    expect(out.amendments).toHaveLength(1);
+    expect(out.amendments[0].field.id).toBe("exception.record");
+    expect(out.amendments[0].facility?.loanId).toBe(equipment.loanId);
+    const value = out.amendments[0].value;
+    if (value?.kind !== "policyException") throw new Error(String(value?.kind));
+    expect(value.title).toBe("Advance rate above guideline");
+    expect(value.status).toBe("Mitigated");
+    expect(value.reasons).toEqual(["the personal guaranty"]);
+    expect(value.severity).toBeUndefined();
+  });
+
+  it("keeps what the banker said BEFORE the exception verb as its own amendment", () => {
+    const out = parseModify(
+      "take the commitment to $20,000,000 and log a policy exception for the advance rate above guideline, unmitigated",
+      single,
+    );
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    expect(out.amendments.map((a) => a.field.id)).toEqual(["loan.amount", "exception.record"]);
+    expect(out.amendments[0].value).toMatchObject({ kind: "currency", amount: 20_000_000 });
+    expect(out.amendments[1].value).toMatchObject({ title: "Advance rate above guideline", status: "Unmitigated" });
+  });
+
+  it("asks for the DECISION rather than taking the org's Unmitigated default", () => {
+    const asked = parseModify("log a policy exception: hold limit exceeded on the line of credit - $15,000,000.00", ctx);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(asked.question).toMatch(/waived, mitigated, or standing unmitigated/i);
+    expect(asked.options).toEqual(["Waived", "Mitigated", "Unmitigated"]);
+    expect(asked.awaiting?.exception).toMatchObject({ title: "Hold limit exceeded" });
+
+    const done = parseAnswer(asked.awaiting!, "Waived", ctx);
+    if (done?.kind !== "amendments") throw new Error(String(done?.kind));
+    expect(done.amendments[0].value).toMatchObject({ title: "Hold limit exceeded", status: "Waived", reasons: [] });
+  });
+
+  it("asks what mitigates it, then takes a BARE line as the mitigant and keeps the title", () => {
+    const asked = parseModify("log a policy exception: leverage through the ceiling, mitigated", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(asked.question).toMatch(/what mitigates it/i);
+    expect(asked.awaiting?.exception).toMatchObject({ title: "Leverage through the ceiling", status: "Mitigated" });
+
+    // "Mitigated" typed into the status question must never become the NAME of
+    // the exception, and a bare line here is the mitigant rather than a new ask.
+    const done = parseAnswer(asked.awaiting!, "sponsor support letter; unlimited personal guaranty", single);
+    if (done?.kind !== "amendments") throw new Error(String(done?.kind));
+    const value = done.amendments[0].value;
+    if (value?.kind !== "policyException") throw new Error(String(value?.kind));
+    expect(value.title).toBe("Leverage through the ceiling");
+    expect(value.reasons).toEqual(["sponsor support letter", "unlimited personal guaranty"]);
+  });
+
+  it("REFUSES a mitigant longer than the org's field rather than truncating it", () => {
+    const long = "x".repeat(101);
+    const out = parseModify(`log a policy exception: advance rate above guideline, mitigated by ${long}`, single);
+    if (out.kind !== "clarify") throw new Error(out.kind);
+    expect(out.question).toMatch(/101 characters and a mitigation reason holds 100/);
+    // The over-long reason is dropped rather than held, so the next answer is
+    // read as the replacement it is.
+    expect(out.awaiting?.exception?.reasons).toEqual([]);
+  });
+
+  it("will not compose an exception that is both unmitigated and mitigated", () => {
+    const out = parseModify(
+      "log a policy exception: advance rate above guideline, unmitigated, though mitigating factors exist: the personal guaranty",
+      single,
+    );
+    if (out.kind !== "clarify") throw new Error(out.kind);
+    expect(out.question).toMatch(/cannot be both unmitigated and mitigated/i);
+    // BOTH readings are dropped: keeping the mitigants would send an answer of
+    // "Unmitigated" straight back into the same question.
+    expect(out.awaiting?.exception).toMatchObject({ title: "Advance rate above guideline", status: undefined, reasons: [] });
+
+    const done = parseAnswer(out.awaiting!, "Unmitigated", single);
+    if (done?.kind !== "amendments") throw new Error(String(done?.kind));
+    expect(done.amendments[0].value).toMatchObject({ status: "Unmitigated", reasons: [] });
+  });
+
+  it("REFUSES a fourth mitigant, because the org holds three", () => {
+    const out = parseModify(
+      "log a policy exception: advance rate above guideline, mitigated by one; two; three; four",
+      single,
+    );
+    if (out.kind !== "clarify") throw new Error(out.kind);
+    expect(out.question).toMatch(/holds 3 mitigation reasons on an exception and this line carries 4/);
+  });
+
+  it("asks for a NAME rather than filing a record the org would name after its own Id", () => {
+    const asked = parseModify("log a policy exception on the line of credit - $15,000,000.00", ctx);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(asked.question).toMatch(/what should the exception be called/i);
+
+    const done = parseAnswer(asked.awaiting!, "Advance rate above guideline, unmitigated", ctx);
+    if (done?.kind !== "amendments") throw new Error(String(done?.kind));
+    expect(done.amendments[0].value).toMatchObject({ title: "Advance rate above guideline", status: "Unmitigated" });
+  });
+
+  it("carries a severity only where the banker LABELLED one, and never a numeric grade", () => {
+    const out = parseModify(
+      "log a policy exception: advance rate above guideline, major severity, unmitigated",
+      single,
+    );
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    const value = out.amendments[0].value;
+    if (value?.kind !== "policyException") throw new Error(String(value?.kind));
+    expect(value.severity).toBe("Major");
+    // The severity phrase is a field of its own and never part of the name.
+    expect(value.title).toBe("Advance rate above guideline");
+    expect(Object.keys(value)).not.toContain("severityValue");
+
+    // The same word in prose is NOT a grading: "a major exception" grades nothing.
+    const prose = parseModify("log a policy exception: major customer concentration, unmitigated", single);
+    if (prose.kind !== "amendments") throw new Error(prose.kind);
+    expect(prose.amendments[0].value).toMatchObject({ severity: undefined, title: "Major customer concentration" });
+  });
+
   it("says nothing rather than guessing at a line with no amendment in it", () => {
     expect(parseModify("what is the weather in Kokomo", single).kind).toBe("none");
     expect(parseModify("", single).kind).toBe("none");

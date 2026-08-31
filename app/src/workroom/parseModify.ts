@@ -72,7 +72,27 @@ export type ParsedValue =
       /** The asset as the chip names it. */
       noun: string;
       text: string;
+    }
+  /** A POLICY EXCEPTION, fully resolved. The three things a banker says about
+   *  one — what is out of policy, whether it is waived, mitigated or standing,
+   *  and what mitigates it — are ONE record rather than three amendments, so
+   *  they travel on one value. `title` is the row's only readable identity: the
+   *  org backfills an omitted `Name` with the record's own Id. */
+  | {
+      kind: "policyException";
+      title: string;
+      status: ExceptionStatus;
+      /** One per mitigant, at most three, each at most 100 characters — the
+       *  org's three `LLC_BI__Mitigation_Reason_N__c` fields. */
+      reasons: string[];
+      /** Free text on this org ("Major" is a convention, not a picklist), so it
+       *  travels only where the banker labelled it as severity. */
+      severity?: string;
+      text: string;
     };
+
+/** The org's own closed set on `LLC_BI__Status__c` (live describe 2026-08-31). */
+export type ExceptionStatus = "Waived" | "Mitigated" | "Unmitigated";
 
 /** One amendment the banker asked for, resolved against the catalog and the
  *  package. `value` is null where the field takes no scalar (a party add, a
@@ -139,6 +159,16 @@ export interface Awaiting {
    * asset the deal never carried.
    */
   pledge?: PledgeRead;
+  /**
+   * AN EXCEPTION QUESTION IS ANSWERED WITH THE PIECE THAT WAS MISSING.
+   *
+   * An exception arrives in up to three beats — what is out of policy, what the
+   * bank decided about it, what stands behind that decision — and each answer
+   * has to land on the read the previous question held. `status` is the one that
+   * changes what the NEXT line means: once it reads Mitigated and the title is
+   * settled, a bare line is the mitigant rather than a new instruction.
+   */
+  exception?: ExceptionRead;
 }
 
 /** What a fee line has settled so far. Every field is optional because a fee
@@ -166,6 +196,17 @@ export interface PledgeRead {
   said?: string;
   value?: number;
   advanceRate?: number;
+}
+
+/** What an exception line has settled so far. */
+export interface ExceptionRead {
+  /** The row's readable identity. Once settled it is never re-read off a later
+   *  answer: every question after the first is about something else, and a
+   *  "Mitigated" typed into the status question is not a new title. */
+  title?: string;
+  status?: ExceptionStatus;
+  reasons?: string[];
+  severity?: string;
 }
 
 export type ParseOutcome =
@@ -945,6 +986,238 @@ function readPledge(
   };
 }
 
+/* --------------------------------------------------- policy exception read
+
+   AN EXCEPTION IS A NARRATIVE, and that is what makes it different from every
+   other entry in this file. A commitment change names a field and a figure; an
+   exception names WHAT IS OUT OF POLICY, in the vocabulary of the thing that is
+   out of policy — "advance rate above guideline", "leverage through the covenant
+   ceiling", "commitment over the hold limit". Those words are the exception's
+   own title and not a second amendment, which is why `parseModify` gives this
+   entry the rest of its line and why the reader below is handed that clause
+   rather than the whole sentence.
+
+   THREE FACTS, ASKED FOR IN THE ORDER THEY MATTER:
+
+     THE TITLE is the row's only readable identity. `Name` here is plain text
+     rather than an autonumber, and an omitted one is worse than either: the
+     org's trigger stack backfills it with the record's own Id, so a demo ends
+     up with an exception called a4rbb000003OwSX. It is required, it is never
+     invented, and a line that carries no words of its own is a question.
+
+     THE STATUS is a credit judgement between Waived, Mitigated and Unmitigated.
+     The org defaults a new row to Unmitigated, which READS AS A DECISION rather
+     than as an absent value — a bank looking at the file cannot tell "nobody
+     said" from "nobody mitigated it" — so the room asks rather than taking it.
+
+     THE MITIGANT is what stands behind a Mitigated status, and a Mitigated
+     exception without one is a claim with nothing under it. Each rides its own
+     `LLC_BI__Mitigation_Reason_N__c`, three of them, ONE HUNDRED CHARACTERS
+     EACH. A longer one is refused with its length: truncating a mitigant leaves
+     a sentence that stops mid-clause on a credit record, and splitting one
+     across the three fields would file one mitigant as three, which is exactly
+     what the org's own hand-authored row uses those fields to distinguish.
+
+   SEVERITY IS FREE TEXT on this org and "Major" is a convention rather than a
+   picklist, so it travels only where the banker LABELLED it as severity. The
+   numeric companion `LLC_BI__Severity_Value__c` never travels at all: the one
+   row this org holds by hand reads Major = 2.0, and a scale inferred from a
+   single point is invented rather than read.                                  */
+
+/** A stated severity, and only a stated one: the room does not read "major" out
+ *  of a banker's prose and file it as a bank grading. */
+const SEVERITY_WORDS = "major|minor|moderate|material|critical";
+const SEVERITY_SAID = new RegExp(
+  `\\b(?:severity\\s*(?:is\\s*|[:=]\\s*)?(${SEVERITY_WORDS})|(${SEVERITY_WORDS})\\s+severity)\\b`,
+  "i",
+);
+/** The same phrase seen from the title's side, with the comma that introduced
+ *  it: a severity is a field of its own and never part of the row's name. */
+const SEVERITY_TAIL = new RegExp(
+  `[,;]?\\s*(?:and\\s+|with\\s+)?(?:severity\\s*(?:is\\s*|[:=]\\s*)?(?:${SEVERITY_WORDS})|(?:${SEVERITY_WORDS})\\s+severity)\\b`,
+  "gi",
+);
+
+/** The bank's decision, seen from the title's side. "mitigated" is deliberately
+ *  absent: MITIGATION_TAIL below already claims it and everything after it. */
+const STATUS_TAIL =
+  /[,;]?\s*(?:and\s+)?\b(?:status\s*(?:is\s*|[:=]\s*)?)?(?:unmitigated|waived|waive it|waive this|as a waiver)\b/gi;
+
+/** Where a mitigant clause starts, and everything after it belongs to it. */
+const MITIGATION_LEAD = /\bmitigat(?:ed|ing|ion|ions|ant|ants)\b\s*(?:by|with|are|is|:)?\s*/i;
+/** The same clause seen from the title's side: it is the exception's answer,
+ *  not its name, so the title stops where it begins. */
+const MITIGATION_TAIL = /[,;]?\s*(?:and\s+)?\bmitigat(?:ed|ing|ion|ions|ant|ants)\b[\s\S]*$/i;
+
+/** 80 on `Name`, 100 on each mitigation reason, 50 on `LLC_BI__Severity__c`
+ *  (live describe 2026-08-31). Each one refuses rather than truncating. */
+const EXCEPTION_TITLE_MAX = 80;
+const MITIGATION_REASON_MAX = 100;
+const EXCEPTION_REASON_SLOTS = 3;
+
+const EXCEPTION_STATUS_OPTIONS: ExceptionStatus[] = ["Waived", "Mitigated", "Unmitigated"];
+
+/** The status the line states, if it states one. "Unmitigated" is tested first
+ *  for readability only — the word boundary already keeps `\bmitigated\b` from
+ *  firing inside it. */
+function readExceptionStatus(lower: string): ExceptionStatus | undefined {
+  if (/\bunmitigated\b/.test(lower)) return "Unmitigated";
+  if (/\b(?:waived|waive it|waive this|as a waiver)\b/.test(lower)) return "Waived";
+  // MITIGATION_LEAD's trailing "by / with / :" is optional, so a bare "mitigated"
+  // matches it too and the status needs no second test of its own.
+  if (MITIGATION_LEAD.test(lower)) return "Mitigated";
+  return undefined;
+}
+
+/** The banker's own words for what is out of policy, with everything that is a
+ *  field of its own taken off: the mitigant, the member, the severity, and the
+ *  verb-and-noun they opened with. */
+function readExceptionTitle(clause: string): string | undefined {
+  const s = clause
+    .replace(MITIGATION_TAIL, "")
+    .replace(FACILITY_CLAUSE, "")
+    .replace(SEVERITY_TAIL, "")
+    .replace(STATUS_TAIL, "")
+    .replace(/^\s*(?:please\s+)?(?:log|logged|record|raise|grant|note|add|register|file)\s+/i, "")
+    .replace(/^\s*(?:an?|the)\s+/i, "")
+    .replace(/^\s*(?:policy\s+)?(?:exception|waiver)\b/i, "")
+    .replace(/^\s*(?:to|against)\s+policy\b/i, "")
+    .replace(/^\s*[:\-–,]\s*/, "")
+    .replace(/^\s*(?:for|on|about|regarding|covering|to|because\s+of)\b\s*/i, "")
+    .replace(/^\s*(?:an?|the)\s+/i, "")
+    // Taking a clause out mid-sentence leaves the comma that introduced the NEXT
+    // one behind it, and sometimes the conjunction that joined them — "advance
+    // rate above guideline, though" once the mitigant clause after "though" was
+    // claimed. Both are tidied once at the end rather than by every strip above
+    // guessing at its own neighbours. No conjunction below can legitimately end
+    // an exception's name.
+    .replace(/\s*,\s*(?=,)/g, "")
+    .replace(/[,;]?\s*\b(?:though|although|but|however|while|whereas|and|with|as)\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(/[\s.,;:]+$/, "");
+  return s.length > 2 ? s[0].toUpperCase() + s.slice(1) : undefined;
+}
+
+/** The mitigants the line states. Split on semicolons and line breaks ONLY: "and"
+ *  joins two mitigants as often as it sits inside one ("fixed-price contract and
+ *  5% retainage" is a single mitigant), and guessing wrong files one reason as
+ *  two or two as one. */
+function readMitigants(clause: string): string[] {
+  const at = MITIGATION_LEAD.exec(clause);
+  if (!at) return [];
+  return tidyMitigants(clause.slice(at.index + at[0].length));
+}
+
+function tidyMitigants(text: string): string[] {
+  return text
+    .split(/[;\n]+/)
+    .map((r) => r.trim().replace(/[.,;:]+$/, ""))
+    .filter((r) => r.length > 2);
+}
+
+/**
+ * Reads a policy exception out of the banker's own clause: what is out of
+ * policy, what the bank decided, and what stands behind that decision. A missing
+ * piece is a QUESTION carrying everything already read.
+ */
+function readException(
+  clause: string,
+  lower: string,
+  held?: ExceptionRead,
+): { value: ParsedValue } | { question: string; options?: string[]; exception: ExceptionRead } {
+  const saidStatus = readExceptionStatus(lower);
+  // THE TITLE, ONCE SETTLED, IS NEVER RE-READ. Every question after the first is
+  // about something else, so "Mitigated" typed into the status question must not
+  // become the name of the exception.
+  const title = held?.title ?? readExceptionTitle(clause);
+  const status = saidStatus ?? held?.status;
+  const said = SEVERITY_SAID.exec(clause)?.slice(1).find(Boolean)?.toLowerCase();
+  const severity = said ? said[0].toUpperCase() + said.slice(1) : held?.severity;
+
+  // A BARE LINE ANSWERS THE MITIGANT QUESTION. It can only be one when the
+  // question was actually asked — the title settled, the status already reading
+  // Mitigated before this line, and no mitigant held yet — and a line that
+  // states a status of its own is the banker changing their mind rather than
+  // naming a mitigant.
+  const stated = readMitigants(clause);
+  const awaitingMitigant =
+    Boolean(held?.title) && held?.status === "Mitigated" && !(held?.reasons ?? []).length && !saidStatus;
+  const reasons = stated.length
+    ? stated
+    : awaitingMitigant
+      ? tidyMitigants(clause)
+      : (held?.reasons ?? []);
+
+  const carried: ExceptionRead = { title, status, reasons, severity };
+
+  if (!title) {
+    return {
+      question:
+        "What should the exception be called? It is the only readable identity the record carries — the org backfills an omitted name with the record's own Id — so say what is out of policy in your own words.",
+      exception: carried,
+    };
+  }
+  if (title.length > EXCEPTION_TITLE_MAX) {
+    return {
+      question: `"${title}" is ${title.length} characters and the exception's name holds ${EXCEPTION_TITLE_MAX}. Give me a shorter one — I will not cut it off mid-sentence on a credit record.`,
+      exception: { ...carried, title: undefined },
+    };
+  }
+  if (!status) {
+    return {
+      question: `Is "${title}" waived, mitigated, or standing unmitigated? The org defaults a new exception to Unmitigated, which reads as a decision rather than as nobody having said — so I will not take that default for you.`,
+      options: EXCEPTION_STATUS_OPTIONS,
+      exception: carried,
+    };
+  }
+  // "NOTHING MITIGATES THIS" AND "HERE IS WHAT MITIGATES IT" cannot both be on
+  // one record, and the org refuses the pair at stage time — so the room asks
+  // rather than composing a chip that would come back refused. Both readings are
+  // dropped: keeping the mitigants would make an answer of "Unmitigated" loop
+  // straight back into this same question.
+  if (status === "Unmitigated" && reasons.length) {
+    return {
+      question: `"${title}" cannot be both unmitigated and mitigated by ${reasons[0]}. Which is it? The bank's file has to say one or the other.`,
+      options: ["Mitigated", "Unmitigated"],
+      exception: { ...carried, status: undefined, reasons: [] },
+    };
+  }
+  if (status === "Mitigated" && !reasons.length) {
+    return {
+      question: `What mitigates it? A mitigated exception with nothing recorded beside it is a claim the credit file cannot stand on. Say each mitigant on its own, separated by a semicolon.`,
+      exception: carried,
+    };
+  }
+  if (reasons.length > EXCEPTION_REASON_SLOTS) {
+    return {
+      question: `The org holds ${EXCEPTION_REASON_SLOTS} mitigation reasons on an exception and this line carries ${reasons.length}. Give me the ${EXCEPTION_REASON_SLOTS} that matter — I will not drop the rest quietly.`,
+      exception: { ...carried, reasons: [] },
+    };
+  }
+  const tooLong = reasons.find((r) => r.length > MITIGATION_REASON_MAX);
+  if (tooLong) {
+    return {
+      question: `"${tooLong}" is ${tooLong.length} characters and a mitigation reason holds ${MITIGATION_REASON_MAX}. Shorten it, or split it into separate mitigants with a semicolon — I will not truncate a mitigant on a credit record.`,
+      exception: { ...carried, reasons: [] },
+    };
+  }
+
+  return {
+    value: {
+      kind: "policyException",
+      title,
+      status,
+      reasons,
+      severity,
+      text:
+        status === "Mitigated"
+          ? `mitigated by ${reasons[0]}${reasons.length > 1 ? ` (+${reasons.length - 1} more)` : ""}`
+          : `logged as ${status.toLowerCase()}`,
+    },
+  };
+}
+
 /** Read the value for ONE catalog field out of the line. */
 function readValue(
   field: CatalogField,
@@ -953,7 +1226,10 @@ function readValue(
   match: CatalogMatch,
   facility: Facility | null,
   ctx: ParseContext,
-): { value: ParsedValue } | { question: string; options?: string[]; fee?: FeeRead; pledge?: PledgeRead } | { value: null } {
+):
+  | { value: ParsedValue }
+  | { question: string; options?: string[]; fee?: FeeRead; pledge?: PledgeRead; exception?: ExceptionRead }
+  | { value: null } {
   if (field.type === "currency") {
     const tokens = moneyTokens(lower);
     if (!tokens.length) {
@@ -1057,6 +1333,16 @@ function readValue(
   // rate or it is a question.
   if (field.id === "collateral.pledge") {
     return readPledge(text, lower, ctx);
+  }
+
+  // A POLICY EXCEPTION files (2026-08-31) and reads its OWN CLAUSE rather than
+  // the line: everything from the banker's verb onward is the exception's own
+  // narrative, and `parseModify` has already dropped the catalog matches inside
+  // it. `match.index` is where that clause starts.
+  if (field.id === "exception.record") {
+    const clause = text.slice(match.index);
+    const read = readException(clause, clause.toLowerCase());
+    return "question" in read ? { question: read.question, options: read.options, exception: read.exception } : read;
   }
 
   // A PICKLIST IS THE ORG'S OWN CLOSED SET, so the value is quoted from it or it
@@ -1225,6 +1511,35 @@ export function parseAnswer(awaiting: Awaiting, text: string, ctx: ParseContext)
     };
   }
 
+  // THE ANSWER TO AN EXCEPTION QUESTION IS THE PIECE THAT WAS MISSING — the
+  // name, the status off the org's own three, or the mitigant. Routed here for
+  // the same reason the fee and the pledge are: only this path holds what the
+  // asking line settled, and a title once settled must survive, or "Mitigated"
+  // typed into the status question would rename the exception.
+  if (awaiting.field.id === "exception.record") {
+    const exception = readException(trimmed, lower, awaiting.exception);
+    if ("question" in exception) {
+      return {
+        kind: "clarify",
+        question: exception.question,
+        awaiting: { ...awaiting, exception: exception.exception },
+        options: exception.options,
+      };
+    }
+    return {
+      kind: "amendments",
+      amendments: [
+        {
+          field: awaiting.field,
+          facility: awaiting.facility,
+          value: exception.value,
+          matched: trimmed,
+          op: operationFor(awaiting.field, lower),
+        },
+      ],
+    };
+  }
+
   const at: CatalogMatch = { field: awaiting.field, matched: "", index: 0 };
   const read = readValue(awaiting.field, trimmed, lower, at, awaiting.facility, ctx);
   if ("question" in read) return { kind: "clarify", question: read.question, awaiting, options: read.options };
@@ -1360,6 +1675,26 @@ function indexFallback(trimmed: string, lower: string, ctx: ParseContext): Parse
 }
 
 /**
+ * AN EXCEPTION CLAIMS THE REST OF ITS OWN LINE.
+ *
+ * "log a policy exception: advance rate above guideline on the equipment loan,
+ * mitigated by the personal guaranty" carries three catalog synonyms and is ONE
+ * ask. "advance rate" is the thing that is out of policy — the exception's own
+ * title — and not a second amendment moving an advance rate; "mitigated" is this
+ * exception's status and not a request to change somebody else's. An exception
+ * is a NARRATIVE about a term, so it is written in that term's vocabulary, and
+ * reading that vocabulary twice would stage two chips for one sentence.
+ *
+ * Everything said BEFORE the exception verb is still the banker's own amendment
+ * and is kept: "take the line to $20M and log a policy exception for the advance
+ * rate" is two asks, and only the second one's words belong to the exception.
+ */
+function claimExceptionClause(matches: CatalogMatch[]): CatalogMatch[] {
+  const at = matches.find((m) => m.field.id === "exception.record")?.index;
+  return at === undefined ? matches : matches.filter((m) => m.index <= at);
+}
+
+/**
  * Read a banker's line into amendments.
  *
  * ORDER OF WORK: match the catalog, resolve the member, read the value. A miss
@@ -1371,7 +1706,7 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
   if (!trimmed) return { kind: "none" };
   const lower = trimmed.toLowerCase();
 
-  const matches = matchCatalog(trimmed);
+  const matches = claimExceptionClause(matchCatalog(trimmed));
   if (!matches.length) {
     const inferred = inferAmount(lower, ctx);
     if (inferred) return inferred;
@@ -1409,7 +1744,7 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
         return {
           kind: "clarify",
           question: read.question,
-          awaiting: { field, facility, fee: read.fee, pledge: read.pledge },
+          awaiting: { field, facility, fee: read.fee, pledge: read.pledge, exception: read.exception },
           options: read.options,
         };
       }

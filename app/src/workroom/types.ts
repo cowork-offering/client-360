@@ -216,6 +216,20 @@ export interface WorkroomDelta {
     advanceRate?: number;
     facilityId: string;
   };
+  /** A POLICY EXCEPTION's contribution (2026-08-31). The row is authored on the
+   *  member's CLONE (`LLC_BI__Loan__c`) and anchored on the borrower
+   *  (`LLC_BI__Relationship__c`), born `LLC_BI__Type__c` = "Policy" like every
+   *  row this org holds. `title` rides `Name`, which is plain text here and
+   *  REQUIRED in practice: the org's trigger stack backfills an omitted one with
+   *  the record's own Id. `reasons` are the three
+   *  `LLC_BI__Mitigation_Reason_N__c` fields, 100 characters each. */
+  policyExceptionWire?: {
+    title: string;
+    status: "Waived" | "Mitigated" | "Unmitigated";
+    reasons: string[];
+    severity?: string;
+    facilityId: string;
+  };
   /** A CURATED LOAN FIELD's contribution (2026-08-31): the field wave rides
    *  `fieldChangesJson`, and the ORG resolves the name against its own live
    *  describe at stage time rather than trusting a name shipped in this client.
