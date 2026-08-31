@@ -45,10 +45,19 @@ export function BrandLockup({ size = 13.5, className = "" }: { size?: number; cl
 }
 
 /** The ">" alone: the app's load, step, fold and arrival motif. Size comes from
- *  the context it sits in, so it inherits rather than declares. */
-export function BrandGlyph({ className = "" }: { className?: string }) {
+ *  the context it sits in, so it inherits rather than declares.
+ *
+ *  DECORATION BY DEFAULT, BRAND ON REQUEST. Everywhere the glyph is a loading
+ *  beat or a step marker it is noise to a screen reader and stays aria-hidden.
+ *  In the app header it is not decoration — rule 45 retired the wordmark and
+ *  left the mark ALONE carrying the brand, so there it takes `label` and
+ *  announces itself as the mark it is. */
+export function BrandGlyph({ className = "", label }: { className?: string; label?: string }) {
   return (
-    <span className={`c360-glyph ${className}`} aria-hidden="true">
+    <span
+      className={`c360-glyph ${className}`}
+      {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true as const })}
+    >
       &gt;
     </span>
   );

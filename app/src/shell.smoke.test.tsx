@@ -54,10 +54,18 @@ describe("AppShell — standalone zero-channel render", () => {
     expect(document.body.textContent).toContain("Chat unavailable in this view");
   });
 
+  /* A24 unchanged: the Accenture mark belongs in this app and Connectry does
+     not. What changed is WHERE the mark lives. DIRECTION-LOCKED rule 45 retired
+     the spelled-out "accenture / Commercial Credit 360" lockup from the 52px
+     bar and left the original ">" alone carrying the brand, so the branding is
+     now an accessible name on the mark rather than a run of text. Asserting on
+     textContent would be asserting on the retired header. */
   it("carries the Accenture engagement chrome (A24) but no Connectry assets", () => {
-    const text = render();
-    expect(text.toLowerCase()).toContain("accenture"); // engagement branding belongs (A24)
-    expect(text).not.toMatch(/Connectry/i); // devpersonal wall still bans Connectry
+    render();
+    const mark = document.body.querySelector('[aria-label="accenture"]');
+    expect(mark, "the brand mark must carry the accenture name").toBeTruthy();
+    expect(mark!.textContent).toBe(">");
+    expect(document.body.textContent).not.toMatch(/Connectry/i); // devpersonal wall still bans Connectry
   });
 });
 

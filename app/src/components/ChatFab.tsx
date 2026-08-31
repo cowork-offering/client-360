@@ -77,15 +77,29 @@ export function ChatFab() {
       {/* One floating surface at a time: the FAB stands down while the Client
           Actions panel is open, and returns when it closes (founder feedback
           2026-07-25). */}
+      {/* THE MARK'S CORNER (HANDOVER §3): right 44 / bottom 52, off the shared
+          --fab-* anchor so the whisper chip hangs on the same object. The FAB's
+          own material (ink body, idle halo, action arc) is Surface 4's; this
+          wave only gives it its address and the `#fab` hook the whisper's beat
+          rides. */}
       {state.panel !== "actions" && (
       <button
         ref={fabRef}
+        id="fab"
         type="button"
         onClick={() => dispatch({ type: "SET_PANEL", panel: open ? "none" : "chat" })}
         aria-expanded={open}
         aria-label={open ? "Close chat" : unread > 0 ? `Open chat, ${unread} new` : "Open chat"}
-        className="c360-fab fixed bottom-6 right-6 flex h-14 w-14 items-center justify-center rounded-full"
-        style={{ zIndex: "var(--z-fab)", background: "var(--accent)", color: "var(--accent-ink)" }}
+        className="c360-fab fixed flex items-center justify-center rounded-full"
+        style={{
+          zIndex: "var(--z-fab)",
+          background: "var(--accent)",
+          color: "var(--accent-ink)",
+          right: "var(--fab-right)",
+          bottom: "var(--fab-bottom)",
+          width: "var(--fab-size)",
+          height: "var(--fab-size)",
+        }}
       >
         <span className="c360-fab-glyph flex items-center justify-center" data-open={open ? "1" : "0"}>
           {open ? (
