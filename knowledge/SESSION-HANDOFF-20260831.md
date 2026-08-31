@@ -3,14 +3,14 @@
 The full-context handoff from the e2e-drive + wave-1-fixes session. A fresh session reads THIS
 file first, then acts. Everything here is verified, not aspirational. Repo:
 `/opt/connectry/projects/commercial-credit-reinvented/customer-360-reinvented`, branch `main`
-(HEAD `5eafeb8` at handoff time). Demo: Dreamforce Demo 2, booth Sept 15-17. Founder: Fabian
+(HEAD `fe65b84` at handoff time). Demo: Dreamforce Demo 2, booth Sept 15-17. Founder: Fabian
 (style: SHORT answers, no em dashes in comms, surgical precision, evidence before claims).
 
 ## 1. Where the system stands (all verified today)
 
 **Client (the artifact)** — live at
-https://claude.ai/code/artifact/91b5e835-5536-4f23-950e-4cde7941cf7f (label `wave1-fixes`).
-1823 vitest green, `tsc --noEmit` clean. Publish chain:
+https://claude.ai/code/artifact/91b5e835-5536-4f23-950e-4cde7941cf7f (label `per-target-scalars`).
+1826 vitest green, `tsc --noEmit` clean. Publish chain:
 ```
 cd app && npm run build && cp dist/cockpit.html ../artifact/customer-360-template.html && cd .. \
   && node app/scripts/assemble-artifact.mjs artifact/live-data.json /tmp/c360-publish.html
@@ -85,14 +85,18 @@ https://claude.ai/code/artifact/583b29d3-5792-404c-9556-c5fd2f721ea1 (label
 
 ## 4. Outstanding work, in order
 
-**Wave-1 remainder:**
-1. Founder's live connector click on the current build (compose → approve in the artifact panel)
-   — verifies the two-hop execute through the real MCP relay. Watch the org while he clicks;
-   verify version + carry + applies; then REVERT to baseline. (May already be done — check the
-   account for versions and ask him.)
-2. Renewal-engine scalar sibling (deferred by design): `renewEngine.ts` carries two scalars;
-   maturity staged on member A beside rate on member B files both to both clones. Same
-   membership-guard pattern as A-1.
+**Wave-1 remainder — CLOSED 2026-08-31 pm:**
+1. DONE. Founder's live connector click verified in full: version a5Fbb000000IzwHEAS, LoC clone
+   $20M + Monthly, covenant COV-000668 on account + clone, James Hartwell excluded, 4/4 fees
+   carried, reverted. The two-hop execute is founder-proven through the real MCP relay.
+2. DONE (upgraded beyond the guard): PER-TARGET SCALARS shipped and merged (fe65b84). New
+   `scalarChangesJson` wire — each of the four scalars aims at its own member; mixed plans file
+   (live probe a5Fbb000000IzzVEAS: LoC $20M + Equipment 240mo, four untouched members kept their
+   amounts, reverted). Client routes targeted whenever scalar targets don't cover the selection OR
+   one key carries two values; flat keys remain for single-facility; both-channels refused
+   org-side. Guard kept as unreachable backstop. 1826 client / 84 org tests. THE ONLY REMAINING
+   LEAK PATTERN: `renewEngine.ts` / `StageRenewal.cls` still broadcast their two scalars — fix
+   with the same per-target pattern (flagged in the merge commit Directive trailer).
 
 **Wave 2 (the report's item 5, build order):**
 3. Fee ADD arm: "add a 1% origination fee to the LoC" — shapes proven (Record_Type picklist,
