@@ -1,6 +1,6 @@
 import json, os, urllib.request, urllib.parse
 TOK, INST = os.environ['TOK'], os.environ['INST']
-V='v62.0'; NEW_PKG='a5Fbb000000J0CPEA0'; ACCT='001bb00001I7FPNAA3'
+V='v62.0'; NEW_PKG=os.environ.get('NEW_PKG','a5Fbb000000J0CPEA0'); ACCT='001bb00001I7FPNAA3'
 def call(m,p,b=None):
     req=urllib.request.Request(INST+p,method=m,headers={'Authorization':'Bearer '+TOK,'Content-Type':'application/json'},data=json.dumps(b).encode() if b else None)
     with urllib.request.urlopen(req) as r:

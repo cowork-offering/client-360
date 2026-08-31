@@ -3,7 +3,7 @@ import json, os, sys, urllib.request, urllib.parse
 TOK, INST = os.environ['TOK'], os.environ['INST']
 V = 'v62.0'
 ANCHOR_PKG = 'a5Fbb000000IHFJEA4'
-NEW_PKG = 'a5Fbb000000J0CPEA0'
+NEW_PKG = os.environ.get('NEW_PKG', 'a5Fbb000000J0CPEA0')
 ACCT = '001bb00001I7FPNAA3'
 
 def call(method, path, body=None):
@@ -52,16 +52,5 @@ for pass_n in range(1, 8):
         print(f'aggregate sweep pass {pass_n}: clean'); break
     print(f'aggregate sweep pass {pass_n}: {len(orphans)} orphans')
     delete(orphans, 'aggregates')
-# 4. chain rows
-delete(ids(f"SELECT Id FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__RenewalLoanId__c IN {inC} OR LLC_BI__ParentLoanId__c IN (SELECT Id FROM LLC_BI__Loan__c WHERE LLC_BI__Account__c='{ACCT}')"), 'chain rows')
-# 5. clones, 6. package
-delete(clones, 'clones')
-delete([NEW_PKG], 'package')
-
-# 7. verify baseline
-print('--- BASELINE VERIFY ---')
-print('packages:', len(q(f"SELECT Id FROM LLC_BI__Product_Package__c WHERE LLC_BI__Account__c='{ACCT}'")))
-print('loans:', len(q(f"SELECT Id FROM LLC_BI__Loan__c WHERE LLC_BI__Account__c='{ACCT}'")))
-print('chain rows:', len(q(f"SELECT Id FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__ParentLoanId__c IN (SELECT Id FROM LLC_BI__Loan__c WHERE LLC_BI__Account__c='{ACCT}')")))
-print('fees org-wide:', len(q("SELECT Id FROM LLC_BI__Fee__c")))
-print('LoC amount:', q("SELECT LLC_BI__Amount__c FROM LLC_BI__Loan__c WHERE Id='a4Zbb0000027MaYEAU'")[0]['LLC_BI__Amount__c'])
+# 4-7: run revert-finish.py next (chain rows, clones, package, verify) - SOQL refuses OR beside a semi-join, finish splits it
+print('graph cleared - now run revert-finish.py with the same NEW_PKG')
