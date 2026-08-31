@@ -468,4 +468,60 @@ private class C360WriteGuardTest {
                 'Is_* are formulas derived from Borrower_Type, and Contingent Amount is XOR with Ownership. Tried: ' + f);
         }
     }
+
+    @IsTest
+    static void aFeeIsBornActiveAndNeverCarriesARecordTypeIdOrADerivedBasis() {
+        C360TestFixture.armCalloutMock();
+
+        // The net-new fee doorway (2026-08-31). Both calculation shapes pass the gate: the
+        // percentage/flat rules are the STAGE's business, and this fence is about state and fields.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Loan__c' => 'a', 'LLC_BI__Status__c' => 'Active',
+                'LLC_BI__Fee_Type__c' => 'Loan Origination', 'LLC_BI__Calculation_Type__c' => 'Percentage',
+                'LLC_BI__Basis_Source__c' => 'LLC_BI__Amount__c', 'LLC_BI__Percentage__c' => 1
+            });
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Loan__c' => 'a', 'LLC_BI__Status__c' => 'Active',
+                'LLC_BI__Fee_Type__c' => 'Attorney', 'LLC_BI__Calculation_Type__c' => 'Flat Amount',
+                'LLC_BI__Amount__c' => 5000
+            });
+
+        Boolean statusRefused = false;
+        try {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CREATE,
+                new Map<String, Object>{ 'LLC_BI__Loan__c' => 'a', 'LLC_BI__Status__c' => 'Inactive' });
+        } catch (C360WriteGuard.GuardException e) {
+            statusRefused = true;
+        }
+        System.assertEquals(true, statusRefused, 'An inactive fee is a fee nobody charges, which is not what adding one means');
+
+        // RecordTypeId is refused by the ORG (INVALID_CROSS_REFERENCE_KEY: no Fee record type is on
+        // the integration user's profile), Name is an autonumber, and Basis Amount is what nCino's
+        // FeeTrigger derives from the loan's commitment.
+        for (String f : new List<String>{ 'RecordTypeId', 'Name', 'LLC_BI__Basis_Amount__c' }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CREATE,
+                    new Map<String, Object>{ 'LLC_BI__Loan__c' => 'a', 'LLC_BI__Status__c' => 'Active', f => 'x' });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'The org assigns it, or derives it, or refuses it outright. Tried: ' + f);
+        }
+
+        // A fee is created and never touched again: amending one that already exists is a different
+        // arm, and the guard is what makes that a refusal rather than a convention.
+        for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, op,
+                    new Map<String, Object>{ 'LLC_BI__Amount__c' => 1 });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'This wave adds fees and stops. Operation: ' + op);
+        }
+    }
 }

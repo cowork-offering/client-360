@@ -80,6 +80,12 @@
  * one, because it is the only leg that writes nothing and may therefore still make a callout - a
  * queueable cannot, because this org's CDC triggers enqueue more jobs than an async context is
  * allowed to. Measured split: the engine hop spends 46 of nCino's 100, the arm hop spends 52.
+ * A NET-NEW FEE goes in the arm hop, and inside it, in the carry's own fee insert (2026-08-31). A
+ * fee insert wakes the fee aggregate and the financed-fee calculation, which are nCino's queries
+ * rather than ours; that automation is bulkified, so an extra row in the existing insert is close
+ * to free, while a second insert pays the whole pass again (~30 queries on the failing run) and
+ * would put the arm hop near 85 of 100. The row is composed under OP_CREATE before the carry runs,
+ * so the guard still sees an authored row as authored rather than as a copy.
  * The decision token is consumed exactly once and gates the whole plan; the second hop proves the
  * same token, consumes nothing, and re-derives its targets from the org rather than being handed
  * them. See THE TRANSACTION BOUNDARY in execute() for the full accounting.
@@ -261,6 +267,28 @@ global with sharing class ExecuteLoanModification {
         global String verification;
     }
 
+    /** One net-new fee this run authored on a clone. */
+    global class FeeResult {
+        @InvocableVariable(label='Fee Id')
+        global String feeId;
+        @InvocableVariable(label='Fee Name' description='The org-assigned autonumber (FEE-00000n), read back. Nothing submits a fee name.')
+        global String feeName;
+        @InvocableVariable(label='Fee Type')
+        global String feeType;
+        @InvocableVariable(label='Description' description='The human label, which is where it has to live: Name on a fee is an autonumber.')
+        global String description;
+        @InvocableVariable(label='Calculation Type' description='Percentage or Flat Amount.')
+        global String calculationType;
+        @InvocableVariable(label='Percentage' description='Null on a flat fee.')
+        global Decimal percentage;
+        @InvocableVariable(label='Amount' description='On a PERCENTAGE fee this is what the org computed from the clone\'s commitment, not a figure anybody sent.')
+        global Decimal amount;
+        @InvocableVariable(label='Clone Loan Id')
+        global String cloneLoanId;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     global class ExecuteResult {
         @InvocableVariable(label='Staging Id')
         global String stagingId;
@@ -284,6 +312,8 @@ global with sharing class ExecuteLoanModification {
         global List<InvolvementResult> involvements;
         @InvocableVariable(label='Field Changes' description='One entry per field-wave change, each re-read off the clone after the write.')
         global List<FieldChangeResult> fieldChanges;
+        @InvocableVariable(label='Fees' description='One entry per net-new fee this run authored on a clone, each re-read after the write with the figure the org settled on.')
+        global List<FeeResult> fees;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -842,6 +872,8 @@ global with sharing class ExecuteLoanModification {
         Integer involvementChangeCount = invCountRaw == null ? 0 : Integer.valueOf(invCountRaw);
         Decimal fcCountRaw = C360Plan.asDecimal(v.get('fieldChangeCount'));
         Integer fieldChangeCount = fcCountRaw == null ? 0 : Integer.valueOf(fcCountRaw);
+        Decimal feeCountRaw = C360Plan.asDecimal(v.get('feeAddCount'));
+        Integer feeAddCount = feeCountRaw == null ? 0 : Integer.valueOf(feeCountRaw);
 
         // The staged roll list. nCino package methodology: the credit action versions the WHOLE
         // package, so the plan carries every eligible member, not just the selected ones. The
@@ -919,6 +951,10 @@ global with sharing class ExecuteLoanModification {
             for (Integer fi = 0; fi < fieldChangeCount; fi++) {
                 C360Plan.setState(steps, 'field_change_' + fi, C360Plan.STATE_SKIPPED, null);
             }
+            for (Integer fe = 0; fe < feeAddCount; fe++) {
+                C360Plan.setState(steps, 'fee_add_' + fe, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'fee_verify_' + fe, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
@@ -951,6 +987,10 @@ global with sharing class ExecuteLoanModification {
             }
             for (Integer fi = 0; fi < fieldChangeCount; fi++) {
                 C360Plan.setState(steps, 'field_change_' + fi, C360Plan.STATE_SKIPPED, null);
+            }
+            for (Integer fe = 0; fe < feeAddCount; fe++) {
+                C360Plan.setState(steps, 'fee_add_' + fe, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'fee_verify_' + fe, C360Plan.STATE_SKIPPED, null);
             }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
@@ -1243,6 +1283,7 @@ global with sharing class ExecuteLoanModification {
             out.covenants = intendedCovenants(v);
             out.involvements = intendedInvolvements(v);
             out.fieldChanges = intendedFieldChanges(v);
+            out.fees = intendedFees(v);
             out.facilities = results;
             out.steps = toWireSteps(steps);
             out.terminalState = C360Plan.terminalState(steps);
@@ -1259,6 +1300,7 @@ global with sharing class ExecuteLoanModification {
         out.covenants = armed.covenants;
         out.involvements = armed.involvements;
         out.fieldChanges = armed.fieldChanges;
+        out.fees = armed.fees;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;
@@ -1269,7 +1311,9 @@ global with sharing class ExecuteLoanModification {
             (armed.involvements.isEmpty() ? '' : ', ' + armed.involvements.size() + ' borrowing-structure change' +
                 (armed.involvements.size() == 1 ? '' : 's') + ' on the new version') +
             (armed.fieldChanges.isEmpty() ? '' : ', ' + armed.fieldChanges.size() + ' field change' +
-                (armed.fieldChanges.size() == 1 ? '' : 's') + ' on the clone' + (armed.fieldChanges.size() == 1 ? '' : 's')) + '. ' +
+                (armed.fieldChanges.size() == 1 ? '' : 's') + ' on the clone' + (armed.fieldChanges.size() == 1 ? '' : 's')) +
+            (armed.fees.isEmpty() ? '' : ', ' + armed.fees.size() + ' net-new fee' +
+                (armed.fees.size() == 1 ? '' : 's') + ' on the clone' + (armed.fees.size() == 1 ? '' : 's')) + '. ' +
             (armed.facilities.size() == 1
                 ? armed.facilities[0].outcome
                 : 'See each facility for its clone and what was applied.') +
@@ -1357,6 +1401,7 @@ global with sharing class ExecuteLoanModification {
                 outcome.covenants = intendedCovenants(v);
                 outcome.involvements = intendedInvolvements(v);
                 outcome.fieldChanges = intendedFieldChanges(v);
+                outcome.fees = intendedFees(v);
                 outcome.facilities = results;
                 outcome.terminalState = C360Plan.terminalState(steps);
             }
@@ -1371,6 +1416,7 @@ global with sharing class ExecuteLoanModification {
         public List<CovenantResult> covenants;
         public List<InvolvementResult> involvements;
         public List<FieldChangeResult> fieldChanges;
+        public List<FeeResult> fees;
         public List<FacilityResult> facilities;
         public String terminalState;
     }
@@ -1507,13 +1553,99 @@ global with sharing class ExecuteLoanModification {
                 }
             }
         }
-        String carryReport = carryJunctionGraph(job.rollMembers, job.cloneByParent, job.newPkgId, excludedInvolvementIds);
+
+        // ---- The NET-NEW FEES ride the carry's own fee insert (governor, 2026-08-31).
+        //
+        // They are composed here, under OP_CREATE, and handed to the carry to be inserted in the
+        // SAME DML as the fees copied from the parents. That is a budget decision with a measured
+        // reason. A fee insert wakes nCino's fee automation - Fee_Loan_Aggregate, the financed-fee
+        // calculation, the loan's own rollups - and that automation runs in the LLC_BI namespace,
+        // spending ITS budget rather than ours; the arm hop already sits at ~52 of nCino's 100. The
+        // automation is bulkified, so one insert of five rows costs what one insert of four does,
+        // while a second insert pays the whole pass again (~30 queries on the failing run of
+        // 2026-08-31) and would put the hop near 85. Composed here rather than inside the carry
+        // because the FENCE is different: a copy is OP_CARRY, an authored row is OP_CREATE, and the
+        // guard has to see each one for what it is.
+        Integer feeAddCount = intCount(v.get('feeAddCount'));
+        List<FeeResult> feeResults = new List<FeeResult>();
+        List<LLC_BI__Fee__c> netNewFees = new List<LLC_BI__Fee__c>();
+        List<Integer> feeIndexOfRow = new List<Integer>();
+        for (Integer i = 0; i < feeAddCount; i++) {
+            String fs = String.valueOf(i);
+            FeeResult fr = new FeeResult();
+            fr.feeType = String.valueOf(v.get('feeAdd' + fs + '.feeType'));
+            fr.description = String.valueOf(v.get('feeAdd' + fs + '.description'));
+            fr.calculationType = String.valueOf(v.get('feeAdd' + fs + '.calculationType'));
+            fr.percentage = C360Plan.asDecimal(v.get('feeAdd' + fs + '.percentage'));
+            feeResults.add(fr);
+
+            Id feeTargetParent = C360Plan.asId(v.get('feeAdd' + fs + '.targetLoanId'));
+            Id feeCloneId = job.cloneByParent.get(feeTargetParent);
+            if (feeCloneId == null) {
+                String feeWhy = 'No modification clone could be read for the facility this fee targets, so the fee was not created.';
+                C360Plan.setState(steps, 'fee_add_' + fs, C360Plan.STATE_FAILED, feeWhy);
+                C360Plan.setState(steps, 'fee_verify_' + fs, C360Plan.STATE_FAILED, feeWhy);
+                fr.verification = feeWhy;
+                continue;
+            }
+            fr.cloneLoanId = feeCloneId;
+
+            String recordType = String.valueOf(v.get('feeAdd' + fs + '.recordType'));
+            String status = String.valueOf(v.get('feeAdd' + fs + '.status'));
+            String paidBy = String.valueOf(v.get('feeAdd' + fs + '.paidBy'));
+            String basisSource = v.get('feeAdd' + fs + '.basisSource') == null
+                ? null : String.valueOf(v.get('feeAdd' + fs + '.basisSource'));
+            Boolean isIncome = v.get('feeAdd' + fs + '.isIncome') == true;
+            // A PERCENTAGE fee carries its rate and its basis and NO amount: the org derives the
+            // money. Stage refuses an amount on one, so nothing here has to choose between two.
+            Decimal amount = C360Plan.asDecimal(v.get('feeAdd' + fs + '.amount'));
+
+            Map<String, Object> feeFields = new Map<String, Object>{
+                'LLC_BI__Loan__c' => feeCloneId,
+                'LLC_BI__Record_Type__c' => recordType,
+                'LLC_BI__Fee_Type__c' => fr.feeType,
+                'LLC_BI__Fee_Type_Description__c' => fr.description,
+                'LLC_BI__Calculation_Type__c' => fr.calculationType,
+                'LLC_BI__Basis_Source__c' => basisSource,
+                'LLC_BI__Percentage__c' => fr.percentage,
+                'LLC_BI__Amount__c' => amount,
+                'LLC_BI__Status__c' => status,
+                'LLC_BI__Paid_By__c' => paidBy,
+                'LLC_BI__Is_Income__c' => isIncome
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CREATE, feeFields);
+            netNewFees.add(new LLC_BI__Fee__c(
+                LLC_BI__Loan__c = feeCloneId,
+                LLC_BI__Record_Type__c = recordType,
+                LLC_BI__Fee_Type__c = fr.feeType,
+                LLC_BI__Fee_Type_Description__c = fr.description,
+                LLC_BI__Calculation_Type__c = fr.calculationType,
+                LLC_BI__Basis_Source__c = basisSource,
+                LLC_BI__Percentage__c = fr.percentage,
+                LLC_BI__Amount__c = amount,
+                LLC_BI__Status__c = status,
+                LLC_BI__Paid_By__c = paidBy,
+                LLC_BI__Is_Income__c = isIncome
+            ));
+            feeIndexOfRow.add(i);
+        }
+
+        String carryReport = carryJunctionGraph(
+            job.rollMembers, job.cloneByParent, job.newPkgId, excludedInvolvementIds, netNewFees
+        );
         C360Plan.setState(
             steps,
             'carry_junctions',
             carryReport.startsWith('CARRIED') ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
             carryReport.removeStart('CARRIED ')
         );
+
+        // The fees the carry just inserted for us, proven the only way this tool ever proves
+        // anything: ONE re-read of the rows themselves. On a percentage fee the money is the ORG'S
+        // answer - Basis_Amount and Amount are derived by nCino's FeeTrigger from the clone's own
+        // commitment - so it is REPORTED rather than asserted against a figure nobody staged. On a
+        // flat fee the amount is ours and is compared.
+        verifyFees(steps, feeResults, netNewFees, feeIndexOfRow);
 
         // ---- Net-new covenants (plan values covenantAdd{i}.*). Created on the borrower account,
         // attached to the CLONE of the targeted member on the new version - never to the booked
@@ -1815,9 +1947,81 @@ global with sharing class ExecuteLoanModification {
         outcome.covenants = covenantResults;
         outcome.involvements = involvementResults;
         outcome.fieldChanges = fieldChangeResults;
+        outcome.fees = feeResults;
         outcome.facilities = results;
         outcome.terminalState = C360Plan.terminalState(steps);
         return outcome;
+    }
+
+    /**
+     * Re-reads the net-new fees and settles their two steps each.
+     *
+     * @param rows        The inserted fee records, carrying the ids the org assigned.
+     * @param indexOfRow  Which `results` entry each inserted row belongs to; a fee whose clone
+     *                    could not be read was already settled and has no row here.
+     */
+    private static void verifyFees(
+        List<C360Plan.Step> steps,
+        List<FeeResult> results,
+        List<LLC_BI__Fee__c> rows,
+        List<Integer> indexOfRow
+    ) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        Set<Id> feeIds = new Set<Id>();
+        for (LLC_BI__Fee__c f : rows) {
+            if (f.Id != null) {
+                feeIds.add(f.Id);
+            }
+        }
+        Map<Id, LLC_BI__Fee__c> back = new Map<Id, LLC_BI__Fee__c>([
+            SELECT Id, Name, LLC_BI__Loan__c, LLC_BI__Fee_Type__c, LLC_BI__Fee_Type_Description__c,
+                   LLC_BI__Calculation_Type__c, LLC_BI__Percentage__c, LLC_BI__Basis_Amount__c, LLC_BI__Amount__c
+            FROM LLC_BI__Fee__c WHERE Id IN :feeIds WITH USER_MODE
+        ]);
+
+        for (Integer k = 0; k < rows.size(); k++) {
+            String fs = String.valueOf(indexOfRow[k]);
+            FeeResult fr = results[indexOfRow[k]];
+            LLC_BI__Fee__c row = rows[k].Id == null ? null : back.get(rows[k].Id);
+            if (row == null) {
+                fr.verification = 'The fee could not be read back after creation, so nothing is claimed for it.';
+                C360Plan.setState(steps, 'fee_add_' + fs, C360Plan.STATE_FILED_UNVERIFIED, fr.verification);
+                C360Plan.setState(steps, 'fee_verify_' + fs, C360Plan.STATE_FAILED, fr.verification);
+                continue;
+            }
+            fr.feeId = row.Id;
+            fr.feeName = row.Name;
+            fr.amount = row.LLC_BI__Amount__c;
+            C360Plan.setState(steps, 'fee_add_' + fs, C360Plan.STATE_VERIFIED,
+                'Fee ' + row.Name + ' created on clone ' + row.LLC_BI__Loan__c + ': ' + fr.description + '.');
+
+            Boolean flat = fr.calculationType != 'Percentage';
+            // Everything that was OURS to set is compared. The money on a percentage fee is not:
+            // it is nCino's own derivation from the clone's commitment.
+            Boolean landed = row.LLC_BI__Fee_Type__c == fr.feeType
+                && row.LLC_BI__Fee_Type_Description__c == fr.description
+                && row.LLC_BI__Calculation_Type__c == fr.calculationType
+                && (flat ? row.LLC_BI__Amount__c == rows[k].LLC_BI__Amount__c : row.LLC_BI__Percentage__c == fr.percentage);
+            fr.verification = flat
+                ? (landed
+                    ? 'Fee ' + row.Name + ' reads back as ' + fr.feeType + ' at ' + String.valueOf(row.LLC_BI__Amount__c) + ' flat on the clone.'
+                    : 'Not proven: the fee reads back as ' + row.LLC_BI__Fee_Type__c + ' at ' +
+                      String.valueOf(row.LLC_BI__Amount__c) + ', not ' + fr.feeType + ' at ' + String.valueOf(rows[k].LLC_BI__Amount__c) + '.')
+                : (landed
+                    // The org's figure, stated as the org's. A null here is not a failure: it means
+                    // nCino has not settled the arithmetic in this transaction, and saying so is
+                    // more honest than failing a step over a number that was never ours.
+                    ? 'Fee ' + row.Name + ' reads back as ' + fr.feeType + ' at ' + String.valueOf(fr.percentage) +
+                      '%, and the org computed ' +
+                      (row.LLC_BI__Amount__c == null
+                          ? 'no amount yet: nCino\'s own fee calculation owns that figure and had not settled it when this was read'
+                          : String.valueOf(row.LLC_BI__Amount__c) + ' against a basis of ' + String.valueOf(row.LLC_BI__Basis_Amount__c)) + '.'
+                    : 'Not proven: the fee reads back as ' + row.LLC_BI__Fee_Type__c + ' rather than ' + fr.feeType + '.');
+            C360Plan.setState(steps, 'fee_verify_' + fs,
+                landed ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, fr.verification);
+        }
     }
 
     /** Marks every step the arm owns as waiting on the transaction that has not run yet. */
@@ -1867,6 +2071,10 @@ global with sharing class ExecuteLoanModification {
         }
         for (Integer i = 0; i < intCount(v.get('fieldChangeCount')); i++) {
             ids.add('field_change_' + i);
+        }
+        for (Integer i = 0; i < intCount(v.get('feeAddCount')); i++) {
+            ids.add('fee_add_' + i);
+            ids.add('fee_verify_' + i);
         }
         Set<String> owned = new Set<String>(ids);
         for (C360Plan.Step s : steps) {
@@ -1922,6 +2130,22 @@ global with sharing class ExecuteLoanModification {
             ));
             fcr.verification = ARM_WAITING;
             out.add(fcr);
+        }
+        return out;
+    }
+
+    /** The fee adds the plan carries, reported as intent while the arm has not run. */
+    private static List<FeeResult> intendedFees(Map<String, Object> v) {
+        List<FeeResult> out = new List<FeeResult>();
+        for (Integer i = 0; i < intCount(v.get('feeAddCount')); i++) {
+            FeeResult fr = new FeeResult();
+            fr.feeType = String.valueOf(v.get('feeAdd' + i + '.feeType'));
+            fr.description = String.valueOf(v.get('feeAdd' + i + '.description'));
+            fr.calculationType = String.valueOf(v.get('feeAdd' + i + '.calculationType'));
+            fr.percentage = C360Plan.asDecimal(v.get('feeAdd' + i + '.percentage'));
+            fr.amount = C360Plan.asDecimal(v.get('feeAdd' + i + '.amount'));
+            fr.verification = ARM_WAITING;
+            out.add(fr);
         }
         return out;
     }
@@ -2056,6 +2280,7 @@ global with sharing class ExecuteLoanModification {
         out.covenants = armed.covenants;
         out.involvements = armed.involvements;
         out.fieldChanges = armed.fieldChanges;
+        out.fees = armed.fees;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;
@@ -2189,9 +2414,21 @@ global with sharing class ExecuteLoanModification {
      * retargeted at the clone and the new package. Values are COPIES of org state, never authored;
      * the OP_CARRY gate fences the objects and the fields the org derives.
      *
+     * @param netNewFees Fee rows the ARM authored for this plan, already clone-targeted and already
+     *        past OP_CREATE. They are inserted in the SAME DML as the copied fees, because nCino's
+     *        fee automation is bulkified and a second insert would pay its whole query pass again
+     *        inside a budget that is not ours (see the note at the composition site). They are
+     *        counted separately below: a carry that reported them as replicas would be claiming a
+     *        fee travelled from a parent that never charged it.
      * @return 'CARRIED <detail>' when every replica read back by count; a plain detail otherwise.
      */
-    private static String carryJunctionGraph(List<Id> parents, Map<Id, Id> cloneByParent, Id newPkgId, Set<Id> excludedInvolvementIds) {
+    private static String carryJunctionGraph(
+        List<Id> parents,
+        Map<Id, Id> cloneByParent,
+        Id newPkgId,
+        Set<Id> excludedInvolvementIds,
+        List<LLC_BI__Fee__c> netNewFees
+    ) {
         // ONE read for every source row (2026-08-31 governor fix): the versioning transaction
         // shares its 100-query budget with nCino's engine, and per-object reads blew it at 101 on
         // the first live run with fees and streams aboard. Parent subqueries collapse five reads
@@ -2352,7 +2589,14 @@ global with sharing class ExecuteLoanModification {
         if (!feeCopies.isEmpty()) {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_FEE, C360WriteGuard.OP_CARRY,
                 new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Fee_Type__c' => null });
-            insert as user feeCopies;
+        }
+        // ONE fee DML for the copies AND the plan's own net-new fees. Two inserts would wake
+        // nCino's fee automation twice, and that automation spends the LLC_BI namespace's query
+        // budget rather than ours - the whole reason the arm is a second transaction at all.
+        List<LLC_BI__Fee__c> feeWrites = new List<LLC_BI__Fee__c>(feeCopies);
+        feeWrites.addAll(netNewFees);
+        if (!feeWrites.isEmpty()) {
+            insert as user feeWrites;
         }
         // The proof is the re-read, never the insert result — ONE query, five subquery counts.
         Set<Id> cloneIds = new Set<Id>(cloneByParent.values());
@@ -2376,13 +2620,18 @@ global with sharing class ExecuteLoanModification {
             feeBack += c.LLC_BI__Fees__r.size();
             psBack += c.LLC_BI__Pricing_Streams__r.size();
         }
+        // The fee count on the clones covers BOTH the copies and this plan's own net-new fees,
+        // because both landed in the one insert above. They are named apart so nobody reads a fee
+        // the banker asked for as a fee that travelled from the parent.
         Boolean ok = covBack == covCopies.size() && plBack == pledgeCopies.size() && invBack == invCopies.size()
-            && feeBack == feeCopies.size();
+            && feeBack == feeWrites.size();
         String detail = 'The junction graph was carried onto the new version and re-read: ' +
             covBack + ' of ' + covCopies.size() + ' covenant junctions, ' +
             plBack + ' of ' + pledgeCopies.size() + ' collateral pledges (on ' + aggByClone.size() + ' fresh aggregates), ' +
             invBack + ' of ' + invCopies.size() + ' borrowing involvements, ' +
-            feeBack + ' of ' + feeCopies.size() + ' fees. Pricing streams are the engine\'s own carry: ' +
+            feeBack + ' of ' + feeWrites.size() + ' fees' +
+            (netNewFees.isEmpty() ? '' : ' (' + feeCopies.size() + ' carried, ' + netNewFees.size() + ' net-new on this plan)') +
+            '. Pricing streams are the engine\'s own carry: ' +
             psBack + ' of ' + streamSourceCount + ' observed on the clones.';
         return (ok ? 'CARRIED ' : '') + detail;
     }

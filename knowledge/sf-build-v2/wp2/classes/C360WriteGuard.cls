@@ -133,7 +133,15 @@ public with sharing class C360WriteGuard {
         // The account association nCino's own UI mints beside every covenant (founder correction,
         // 2026-08-31): a covenant belongs to the borrower as well as to the facility, and 140 such
         // rows exist in this org on other relationships. Two required lookups, nothing else.
-        OBJ_ACCOUNT_COVENANT => new Map<String, Set<String>>()
+        OBJ_ACCOUNT_COVENANT => new Map<String, Set<String>>(),
+        // A NET-NEW FEE on a modification clone (2026-08-31). SAFE by live probe: LLC_BI__Fee__c
+        // carries only nCino's managed FeeTrigger — no CDC trigger, so a fee insert egresses
+        // nothing (recon Task 3d) — and no ProcessDefinition targets it, so a create starts no
+        // approval. A fee is born Active: an inactive fee is a fee nobody is charging, which is
+        // not what "add a fee" means, and every fee this org holds carries Active.
+        OBJ_FEE => new Map<String, Set<String>>{
+            'LLC_BI__Status__c' => new Set<String>{ 'Active' }
+        }
     };
 
     /**
@@ -220,7 +228,14 @@ public with sharing class C360WriteGuard {
             'LLC_BI__Last_Evaluation_Date__c', 'LLC_BI__Last_Evaluation_Status__c', 'LLC_BI__Last_Evaluation_Value__c'
         },
         OBJ_LOAN_COVENANT => new Set<String>(),
-        OBJ_ACCOUNT_COVENANT => new Set<String>()
+        OBJ_ACCOUNT_COVENANT => new Set<String>(),
+        // RecordTypeId is refused by the ORG, not merely by us: three Fee record types exist and
+        // none is assigned to the integration user's profile, so an attempt returns
+        // INVALID_CROSS_REFERENCE_KEY (recon Task 1, finding 1). The independent picklist
+        // LLC_BI__Record_Type__c carries Fees / Costs / Adjustments and is set instead. Name is an
+        // autonumber. Basis_Amount is what nCino's FeeTrigger DERIVES from the loan's commitment
+        // for a percentage fee, and writing it would put a figure beside the one the org computed.
+        OBJ_FEE => new Set<String>{ 'RecordTypeId', 'Name', 'LLC_BI__Basis_Amount__c' }
     };
 
     /**
@@ -234,7 +249,8 @@ public with sharing class C360WriteGuard {
     /** Every object the fence knows about, in either direction. */
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
-        OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT
+        OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT,
+        OBJ_FEE
     };
 
     /**

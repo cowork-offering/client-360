@@ -79,6 +79,8 @@ global with sharing class StageLoanModification {
         global String involvementChangesJson;
         @InvocableVariable(label='Field Changes JSON' description='Optional. THE FIELD WAVE: JSON list of loan-field amendments applied to the CLONE: [{"field" (API name or exact field label), "value", "targetLoanId"?}]. The field must be updateable and non-formula per the org\'s own describe, outside the doctrine deny-list (stage, status, the four scalar keys, anchoring lookups). Values are coerced by the field\'s own type; a picklist value is validated against the org\'s active values and a refusal carries the legal list. targetLoanId may be omitted when exactly one facility is selected.')
         global String fieldChangesJson;
+        @InvocableVariable(label='Fee Adds JSON' description='Optional. NET-NEW FEES authored on the CLONE: [{"feeType" (an active LLC_BI__Fee_Type__c value), "description" (the human label; Name on a fee is an autonumber), "calculationType" (Percentage|Flat Amount), "percentage"? , "amount"?, "basisSource"?, "recordType"? (Fees|Costs|Adjustments), "paidBy"?, "targetLoanId"?}]. A PERCENTAGE fee carries a percentage and a basis and NO amount: the org\'s own FeeTrigger derives the basis amount and the money from the clone\'s commitment, and a supplied amount is refused rather than overwritten. A FLAT AMOUNT fee carries an amount and no percentage. RecordTypeId is never written (no Fee record type is assigned to the integration user\'s profile); recordType is the independent LLC_BI__Record_Type__c picklist. targetLoanId may be omitted when exactly one facility is selected.')
+        global String feeAddsJson;
     }
 
     /** One of the four scalars, aimed at ONE selected facility. */
@@ -112,6 +114,24 @@ global with sharing class StageLoanModification {
         public Id targetLoanId;
         /** The involvement row a REMOVE excludes from the carry, resolved at stage time. */
         public Id sourceRowId;
+    }
+
+    /** One parsed net-new fee, resolved against the org's own fee picklists. */
+    public class FeeAdd {
+        public String feeType;
+        /** The human label. `Name` on a fee is an autonumber, so this is the only place it can go. */
+        public String description;
+        public String calculationType;
+        /** Percentage fees only. The field the org computes the basis amount from. */
+        public String basisSource;
+        public Decimal percentage;
+        /** Flat fees only. Null on a percentage fee, where the org derives it. */
+        public Decimal amount;
+        public String recordType;
+        public String status;
+        public String paidBy;
+        public Boolean isIncome;
+        public Id targetLoanId;
     }
 
     /** One parsed net-new covenant, resolved against the org's own type catalog. */
@@ -263,8 +283,9 @@ global with sharing class StageLoanModification {
         }
         if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
             req.requestedTermMonths == null && String.isBlank(req.scalarChangesJson) && String.isBlank(req.covenantAddsJson) &&
-            String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, or a field change.');
+            String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson) &&
+            String.isBlank(req.feeAddsJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, a field change, or a fee add.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -299,6 +320,7 @@ global with sharing class StageLoanModification {
         List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, covenantWarnings);
         List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, covenantWarnings);
         List<FieldChange> fieldChanges = parseFieldChanges(req, facilities);
+        List<FeeAdd> feeAdds = parseFeeAdds(req, facilities);
 
         // What each member's own clone will take, so the plan steps and the summary can name the
         // figures per facility instead of describing one broadcast the banker did not ask for.
@@ -530,6 +552,51 @@ global with sharing class StageLoanModification {
         }
         resolved.put('fieldChangeCount', fieldChanges.size());
 
+        // Net-new fees: authored on the CLONE of the targeted member, never on the booked parent.
+        // A fee row is a DIRECT child of the loan with no junction, and LLC_BI__Loan__c on it is not
+        // updateable, so it is bound to its loan at insert and can never be re-pointed afterwards.
+        for (Integer i = 0; i < feeAdds.size(); i++) {
+            FeeAdd fa = feeAdds[i];
+            String s5 = String.valueOf(i);
+            resolved.put('feeAdd' + s5 + '.feeType', fa.feeType);
+            resolved.put('feeAdd' + s5 + '.description', fa.description);
+            resolved.put('feeAdd' + s5 + '.calculationType', fa.calculationType);
+            resolved.put('feeAdd' + s5 + '.basisSource', fa.basisSource);
+            resolved.put('feeAdd' + s5 + '.percentage', fa.percentage);
+            resolved.put('feeAdd' + s5 + '.amount', fa.amount);
+            resolved.put('feeAdd' + s5 + '.recordType', fa.recordType);
+            resolved.put('feeAdd' + s5 + '.status', fa.status);
+            resolved.put('feeAdd' + s5 + '.paidBy', fa.paidBy);
+            resolved.put('feeAdd' + s5 + '.isIncome', fa.isIncome);
+            resolved.put('feeAdd' + s5 + '.targetLoanId', String.valueOf(fa.targetLoanId));
+            String targetName4 = facilityById.get(fa.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('fee_add_' + s5, C360Plan.TYPE_WRITE,
+                    'Add ' + fa.description + ' to the clone of ' + targetName4 + ': ' + feePhrase(fa) +
+                    ', ' + fa.recordType + ' / ' + fa.status + ', paid by ' + fa.paidBy)
+                    .onObject('LLC_BI__Fee__c', new List<String>{
+                        'LLC_BI__Loan__c', 'LLC_BI__Fee_Type__c', 'LLC_BI__Fee_Type_Description__c',
+                        'LLC_BI__Calculation_Type__c', 'LLC_BI__Basis_Source__c', 'LLC_BI__Percentage__c',
+                        'LLC_BI__Amount__c', 'LLC_BI__Record_Type__c', 'LLC_BI__Status__c', 'LLC_BI__Paid_By__c'
+                    })
+                    .wakes(new List<String>{
+                        'nCino FeeTrigger: on a percentage fee it computes LLC_BI__Basis_Amount__c and ' +
+                        'LLC_BI__Amount__c from the clone\'s own commitment, and the loan\'s fee aggregate follows'
+                    })
+                    .provenBy('SELECT Id, LLC_BI__Amount__c, LLC_BI__Basis_Amount__c FROM LLC_BI__Fee__c WHERE Id = :createdId')
+            );
+            steps.add(
+                new C360Plan.Step('fee_verify_' + s5, C360Plan.TYPE_VERIFICATION,
+                    'Re-read the fee on the clone of ' + targetName4 +
+                    (fa.calculationType == 'Percentage'
+                        ? ', with the money the org computed rather than one this plan supplied'
+                        : ', with the amount this plan staged'))
+                    .onObject('LLC_BI__Fee__c', new List<String>{ 'Id', 'Name', 'LLC_BI__Amount__c' })
+                    .provenBy('SELECT Id, Name, LLC_BI__Amount__c FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :cloneId')
+            );
+        }
+        resolved.put('feeAddCount', feeAdds.size());
+
         // The per-target scalars ride the resolved values, which is what the plan hash covers: the
         // banker confirms the figure AND the clone it lands on, and execute reads back exactly that.
         for (Integer i = 0; i < scalarChanges.size(); i++) {
@@ -586,6 +653,20 @@ global with sharing class StageLoanModification {
                 'cycle owns the schedule from here, and booking the new version is what makes the covenant bind.'
             );
         }
+        if (!feeAdds.isEmpty()) {
+            Integer pctFees = percentageFees(feeAdds);
+            warnings.add(
+                String.valueOf(feeAdds.size()) + ' net-new ' + (feeAdds.size() == 1 ? 'fee is' : 'fees are') +
+                ' authored on the CLONE only; the booked facility keeps exactly the fees it charges today. ' +
+                'A fee row is bound to its loan at insert (LLC_BI__Loan__c is not updateable on it), so this is a ' +
+                'creation on the new version rather than a move.' +
+                (pctFees == 0 ? '' :
+                    ' On the ' + String.valueOf(pctFees) + ' percentage ' + (pctFees == 1 ? 'fee' : 'fees') +
+                    ' this plan sends NO money figure: nCino\'s own FeeTrigger computes the basis and the amount from ' +
+                    'the clone\'s commitment, which is the commitment this plan may itself be moving. The execution ' +
+                    'reports what the org worked out.')
+            );
+        }
         if (n > 1) {
             warnings.add(
                 'This is one plan over ' + n + ' facilities on the same package, under a single confirmation and a single decision token. ' +
@@ -635,6 +716,10 @@ global with sharing class StageLoanModification {
             (fieldChanges.isEmpty() ? '' : String.valueOf(fieldChanges.size()) + ' field ' +
                 (fieldChanges.size() == 1 ? 'change is' : 'changes are') + ' applied to the clone, each resolved against the ' +
                 'org\'s own describe and named with its value in the plan. ') +
+            (feeAdds.isEmpty() ? '' : String.valueOf(feeAdds.size()) + ' net-new fee' +
+                (feeAdds.size() == 1 ? ' is' : 's are') + ' created on the ' + (feeAdds.size() == 1 ? 'clone' : 'clones') +
+                ', each resolved against the org\'s own fee picklists; a percentage fee carries its basis and its rate and ' +
+                'lets the org compute the money. ') +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -788,6 +873,183 @@ global with sharing class StageLoanModification {
             }
         }
         return out;
+    }
+
+    /** The two calculation shapes a fee can have, and the whole difference between them. */
+    private static final String FEE_PERCENTAGE = 'Percentage';
+    private static final String FEE_FLAT = 'Flat Amount';
+    /** 255 on the org (recon Task 1, finding 5), and the only place a fee's human label can go. */
+    private static final Integer FEE_DESCRIPTION_MAX = 255;
+
+    /**
+     * Parses and RESOLVES the net-new fees against the org's OWN fee model, which is unusual
+     * enough that every one of these checks is a live finding rather than a convention
+     * (`knowledge/sf-build-v2/recon-20260831.md` Task 1):
+     *
+     *   - `LLC_BI__Fee_Type__c` is a residential/TRID picklist. A C&I fee has no value in it, so
+     *     the caller sends "Other" plus a description; whatever it sends is validated against the
+     *     org's ACTIVE values and a refusal carries the legal list.
+     *   - `Name` is an autonumber, so the description IS the label and is required. A fee whose
+     *     only readable identity is FEE-000007 is a row nobody can find.
+     *   - A PERCENTAGE fee trips the validation rule `Percentage_Fee_Required_Fields` without a
+     *     basis source and a percentage, and the org's FeeTrigger then DERIVES Basis_Amount and
+     *     Amount from the loan. So a percentage fee must carry both and must NOT carry an amount:
+     *     a supplied one is refused rather than silently overwritten, because a caller that sent it
+     *     believes a number that is about to be replaced.
+     *   - `RecordTypeId` is never accepted from us at all, so it is not a parameter: the record
+     *     type rides the independent `LLC_BI__Record_Type__c` picklist.
+     *
+     * Nothing is created here. The arm hop of the execute pair writes the rows.
+     */
+    private static List<FeeAdd> parseFeeAdds(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<FeeAdd> out = new List<FeeAdd>();
+        if (String.isBlank(req.feeAddsJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.feeAddsJson);
+        } catch (Exception e) {
+            throw new ToolException('feeAddsJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            FeeAdd fa = new FeeAdd();
+
+            fa.description = m.get('description') == null ? null : String.valueOf(m.get('description')).trim();
+            if (String.isBlank(fa.description)) {
+                throw new ToolException(
+                    'Each fee add needs a description. Name on a fee is an autonumber, so the description is the only ' +
+                    'label the row carries and a fee without one cannot be found by anybody looking for it.'
+                );
+            }
+            if (fa.description.length() > FEE_DESCRIPTION_MAX) {
+                throw new ToolException(
+                    'A fee description is at most ' + FEE_DESCRIPTION_MAX + ' characters on this org; this one is ' +
+                    fa.description.length() + '.'
+                );
+            }
+
+            fa.feeType = feePicklist('LLC_BI__Fee_Type__c', m.get('feeType'), 'fee type');
+            fa.calculationType = feePicklist('LLC_BI__Calculation_Type__c', m.get('calculationType'), 'fee calculation type');
+            if (fa.calculationType != FEE_PERCENTAGE && fa.calculationType != FEE_FLAT) {
+                throw new ToolException(
+                    'A fee add is calculated as "' + FEE_PERCENTAGE + '" or "' + FEE_FLAT + '". Supplied: ' +
+                    fa.calculationType + '.'
+                );
+            }
+            fa.percentage = C360Plan.asDecimal(m.get('percentage'));
+            fa.amount = C360Plan.asDecimal(m.get('amount'));
+
+            if (fa.calculationType == FEE_PERCENTAGE) {
+                if (fa.percentage == null || fa.percentage <= 0) {
+                    throw new ToolException(
+                        'A percentage fee needs a percentage greater than zero: the org\'s Percentage_Fee_Required_Fields ' +
+                        'rule refuses the row without one, and the rate IS the fee.'
+                    );
+                }
+                if (fa.amount != null) {
+                    throw new ToolException(
+                        'A percentage fee carries no amount. nCino\'s FeeTrigger computes LLC_BI__Basis_Amount__c and ' +
+                        'LLC_BI__Amount__c from the loan\'s own commitment, so an amount sent here would be replaced by ' +
+                        'the org and is refused rather than accepted and lost.'
+                    );
+                }
+                fa.basisSource = feePicklist(
+                    'LLC_BI__Basis_Source__c',
+                    m.get('basisSource') == null ? 'LLC_BI__Amount__c' : m.get('basisSource'),
+                    'fee basis source'
+                );
+            } else {
+                if (fa.amount == null || fa.amount <= 0) {
+                    throw new ToolException('A flat fee needs an amount greater than zero.');
+                }
+                if (fa.percentage != null) {
+                    throw new ToolException(
+                        'A flat fee carries no percentage. Send it as a Percentage fee if the rate is what was agreed.'
+                    );
+                }
+            }
+
+            // Reasonable defaults, every one of them the shape the org's own fee rows carry.
+            fa.recordType = feePicklist(
+                'LLC_BI__Record_Type__c', m.get('recordType') == null ? 'Fees' : m.get('recordType'), 'fee record type'
+            );
+            fa.paidBy = feePicklist(
+                'LLC_BI__Paid_By__c',
+                m.get('paidBy') == null ? 'Financed from Proceeds' : m.get('paidBy'),
+                'fee paid-by'
+            );
+            // Active is the guard's only legal birth state: an inactive fee is a fee nobody charges,
+            // which is not what adding one means.
+            fa.status = 'Active';
+            // Income is what the record type already says: a "Fees" row is the bank's revenue, a
+            // "Costs" row is a third-party charge passing through.
+            fa.isIncome = fa.recordType == 'Fees';
+
+            fa.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (fa.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each fee add when more than one facility is selected.');
+                }
+                fa.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(fa.targetLoanId)) {
+                throw new ToolException(
+                    'A fee add targets facility ' + fa.targetLoanId + ', which is not one of the selected facilities. ' +
+                    'A fee is created on the CLONE of a facility this plan modifies.'
+                );
+            }
+            out.add(fa);
+        }
+        return out;
+    }
+
+    /**
+     * Resolves one value against a LIVE picklist on LLC_BI__Fee__c, by value or by label, and
+     * refuses with the org's own legal list. The describe is the authority: this org's fee
+     * picklists are configured, not standard, and a near-miss written blind is a row the bank
+     * cannot report on.
+     */
+    private static String feePicklist(String fieldName, Object supplied, String what) {
+        if (supplied == null || String.isBlank(String.valueOf(supplied))) {
+            throw new ToolException('Each fee add names its ' + what + '.');
+        }
+        String sv = String.valueOf(supplied).trim();
+        Schema.DescribeFieldResult dfr =
+            Schema.SObjectType.LLC_BI__Fee__c.fields.getMap().get(fieldName.toLowerCase()).getDescribe();
+        List<String> legal = new List<String>();
+        for (Schema.PicklistEntry pe : dfr.getPicklistValues()) {
+            if (!pe.isActive()) {
+                continue;
+            }
+            legal.add(pe.getValue());
+            if (pe.getValue().equalsIgnoreCase(sv) || pe.getLabel().equalsIgnoreCase(sv)) {
+                return pe.getValue();
+            }
+        }
+        throw new ToolException(
+            '"' + sv + '" is not a legal ' + what + ' on this org. The org offers: ' + String.join(legal, ', ') + '.'
+        );
+    }
+
+    /** One fee as the banker should read it in a plan step. */
+    private static String feePhrase(FeeAdd fa) {
+        return fa.calculationType == FEE_PERCENTAGE
+            ? String.valueOf(fa.percentage) + '% of ' + fa.basisSource + ', with the money computed by the org'
+            : String.valueOf(fa.amount) + ' flat';
+    }
+
+    /** How many of the staged fees let the org do the arithmetic. */
+    private static Integer percentageFees(List<FeeAdd> feeAdds) {
+        Integer n = 0;
+        for (FeeAdd fa : feeAdds) {
+            if (fa.calculationType == FEE_PERCENTAGE) {
+                n++;
+            }
+        }
+        return n;
     }
 
     /**
