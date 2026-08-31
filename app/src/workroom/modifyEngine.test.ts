@@ -902,6 +902,64 @@ describe("stagePlan composes the ORDERED plan (W1)", () => {
     await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/ONE value applied to every facility/);
   });
 
+  /* THE SCALAR LEAK (P0, live). `facilityIds` is the union of every delta's
+     target, and a scalar travels once for the whole selection — so an amount
+     staged on one member and ANY other change on a second silently took the
+     second member's clone to the first one's figure. One value, so the
+     two-different-values refusal above never fired. */
+
+  it("REFUSES an amount staged beside another member's change, because the figure would land on both", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "change the payment schedule to monthly on the equipment - $8,000,000.00")),
+    ];
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(WorkroomRefusalError);
+    // The refusal names the mix: the member that staged the amount, and the one
+    // it would have leaked onto.
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/requestedAmount travels as ONE value/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/staged on Line of Credit/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/also selects Equipment \(\$8M\)/);
+    await expect(engine.stagePlan(deltas, context)).rejects.toThrow(/its own modification/);
+    expect(d.stage).not.toHaveBeenCalled();
+  });
+
+  it("stages an amount beside a field change on the SAME member, which is one plan", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "take the equipment - $8,000,000.00 to $10,000,000")),
+      ...(await confirm(engine, "change the payment schedule to monthly on the equipment - $8,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.facilityIds).toEqual([EQUIPMENT_ID]);
+    expect(payload.requestedAmount).toBe(10_000_000);
+    expect(JSON.parse(payload.fieldChangesJson)).toEqual([
+      { field: "LLC_BI__Payment_Schedule__c", value: "Monthly", targetLoanId: EQUIPMENT_ID },
+    ]);
+  });
+
+  it("stages record and field changes across two members, because none of them is a scalar", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "add a leverage covenant max 3.5x to the equipment - $8,000,000.00")),
+      ...(await confirm(engine, "add Hartwell Logistics LLC as a limited guarantor on the line of credit - $15,000,000.00")),
+      ...(await confirm(engine, "change the payment schedule to monthly on the line of credit - $15,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // Each of these carries its own target, so a two-member selection is a
+    // normal plan and not the leak the guard above exists to catch.
+    expect(payload.facilityIds).toEqual([EQUIPMENT_ID, LINE_ID]);
+    expect(payload.requestedAmount).toBeNull();
+    expect(payload.requestedRate).toBeNull();
+    expect(payload.requestedMaturityDate).toBeNull();
+    expect(payload.requestedTermMonths).toBeNull();
+    expect(JSON.parse(payload.covenantAddsJson)[0].targetLoanId).toBe(EQUIPMENT_ID);
+    expect(JSON.parse(payload.involvementChangesJson)[0].targetLoanId).toBe(LINE_ID);
+    expect(JSON.parse(payload.fieldChangesJson)[0].targetLoanId).toBe(LINE_ID);
+  });
+
   it("carries the org's own refusal message rather than a paraphrase", async () => {
     const { engine } = engineOn({
       stage: vi.fn().mockResolvedValue({ ok: false, error: { code: "VALIDATION_FAILED", message: "The request contains invalid facilities" } }),
