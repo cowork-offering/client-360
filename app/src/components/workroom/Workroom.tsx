@@ -693,7 +693,16 @@ export function Workroom({
         // separately they are two renders, and the fit pass runs against a
         // thread that never existed.
         const answer: ThreadItem[] = [
-          { kind: "agent", id: nextId("agent"), text: result.reply, options: result.kind === "unparsed" ? result.options : undefined },
+          {
+            kind: "agent",
+            id: nextId("agent"),
+            text: result.reply,
+            // CLICKABLE ANSWERS ride BOTH reply kinds now: an "unparsed" clarify
+            // and a "deltas" reply that still ends on a closed-set question, so
+            // a banker never loses the product chips just because the same
+            // message also landed a delta.
+            options: result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined,
+          },
         ];
         const chips: ChipModel[] =
           result.kind === "deltas"
@@ -778,13 +787,13 @@ export function Workroom({
       setThinking(true);
       flyToManifest(from, manifestCountRef.current, () => {
         const staged = addEntry(entries, delta);
-        const { reply, challenge } = engine.acknowledge(delta, staged);
+        const { reply, challenge, options } = engine.acknowledge(delta, staged);
         setEntries(staged);
         settleChip(blockId, chipKey, "confirmed");
         setToast(delta.badge);
         setItems((prev) => [
           ...prev,
-          { kind: "agent", id: nextId("agent"), text: reply },
+          { kind: "agent", id: nextId("agent"), text: reply, options },
           // CHECKS COME TO YOU. The check a confirm trips arrives back in the
           // conversation the moment it becomes true, never in a separate tab.
           ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), challenge, acked: false }] : []),

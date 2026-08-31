@@ -539,7 +539,7 @@ export function createCreateEngine(args: {
    *  product and the answer path reads it like a typed one. */
   function optionsFor(field: CreateField | null): Array<{ label: string; say: string }> | undefined {
     if (field?.id === "create.product") {
-      return CREATE_PRODUCTS.map((product) => ({ label: product, say: product }));
+      return CREATE_PRODUCTS.slice(0, 10).map((product) => ({ label: product, say: product }));
     }
     return undefined;
   }
@@ -567,7 +567,11 @@ export function createCreateEngine(args: {
     ]
       .filter(Boolean)
       .join(" ");
-    return { kind: "deltas", reply, deltas };
+    // THE CHIPS TRAVEL WITH THE QUESTION, NOT JUST THE PROSE. `awaiting` is
+    // already the field this reply's own question is about — set two lines up
+    // — so a deltas reply that still ends on "Which product?" gets the same
+    // clickable catalog the pure clarify path always has.
+    return { kind: "deltas", reply, deltas, options: optionsFor(awaiting) };
   }
 
   async function parseIntent(text: string): Promise<IntentResult> {
@@ -696,6 +700,11 @@ export function createCreateEngine(args: {
     return {
       reply: `${landed} ${packageMove(entries)} ${missing.length ? questionFor(missing[0]) : vocabulary.nextMove}`,
       challenge: coverageCheck(entries),
+      // A CONFIRM IS NOT SILENT, AND NEITHER IS THE QUESTION IT LEAVES OPEN.
+      // `awaiting` is this reply's own next question, set two lines up; where
+      // it is the product ask the chips ride the confirm's reply exactly as
+      // they ride the first ask, so the banker never loses them mid-composition.
+      options: optionsFor(awaiting),
     };
   }
 

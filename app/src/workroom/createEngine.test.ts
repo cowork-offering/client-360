@@ -390,6 +390,80 @@ describe("the room collects the three the tool refuses without", () => {
   });
 });
 
+/* The product ask is now clickable everywhere it appears, not just on the pure
+   clarify path. `optionsFor` reads the catalog directly (CREATE_PRODUCTS.map),
+   so asserting against a literal here would drift if the catalog ever does;
+   the tests below check shape and the label/say pairing instead. */
+describe("the product catalog rides the reply, not just the clarify path", () => {
+  it("keeps the product chips on a reply that also lands delta chips", async () => {
+    const { engine } = engineOn();
+    const out = await engine.parseIntent("a new 2 million facility for working capital", packageDoor);
+    expect(out.kind).toBe("deltas");
+    if (out.kind !== "deltas") return;
+    // The sentence gave an amount and a purpose; product is still open, so the
+    // reply both lands chips AND keeps asking — and now offers the catalog.
+    expect(out.deltas.map((d) => d.title)).toEqual(["Amount", "Primary loan purpose"]);
+    expect(out.reply).toContain("Which product?");
+    expect(out.options?.map((o) => o.label)).toEqual(["Construction", "Deposit", "Equipment", "HELOC", "Line of Credit", "Purchase"]);
+    expect(out.options?.every((o) => o.say === o.label)).toBe(true);
+  });
+
+  it("still offers the catalog on the pure clarify path (regression)", async () => {
+    const { engine } = engineOn();
+    const out = await engine.parseIntent("add a new facility", packageDoor);
+    expect(out.kind).toBe("unparsed");
+    if (out.kind !== "unparsed") return;
+    expect(out.reply).toContain("Which product?");
+    expect(out.options?.map((o) => o.label)).toContain("Line of Credit");
+  });
+
+  it("completes product selection when the tapped chip's own value is said back", async () => {
+    const { engine } = engineOn();
+    const first = await engine.parseIntent("a new 2 million facility for working capital", packageDoor);
+    expect(first.kind).toBe("deltas");
+    if (first.kind !== "deltas") return;
+    const tapped = first.options!.find((o) => o.say === "Line of Credit")!;
+
+    // A tap SAYS the value: it goes back through the same parser as a typed
+    // answer, resolving the field the reply was still waiting on.
+    const second = await engine.parseIntent(tapped.say, packageDoor);
+    expect(second.kind).toBe("deltas");
+    if (second.kind !== "deltas") return;
+    expect(second.deltas.map((d) => d.title)).toEqual(["Product"]);
+    expect(second.deltas[0].after).toBe("Line of Credit");
+    // Amount and purpose were never confirmed onto the manifest in this flow,
+    // so the room now asks for one of those next rather than reading as done.
+    expect(second.reply).toContain("What amount?");
+  });
+
+  it("keeps offering the catalog on the confirm's own follow-up ask, once product is what is left", async () => {
+    const { engine } = engineOn();
+    const first = await engine.parseIntent("a new 2 million facility for working capital", packageDoor);
+    expect(first.kind).toBe("deltas");
+    if (first.kind !== "deltas") return;
+
+    // Confirm the amount and purpose one at a time, exactly as the chip UI
+    // does — each confirm adds one delta to the manifest and asks what is
+    // still missing, which by the second confirm is only the product.
+    let manifest: WorkroomDelta[] = [];
+    let last: ReturnType<typeof engine.acknowledge> | null = null;
+    for (const delta of first.deltas) {
+      manifest = [...manifest, delta];
+      last = engine.acknowledge(delta, manifest);
+    }
+    expect(last!.reply).toContain("Which product?");
+    expect(last!.options?.map((o) => o.label)).toEqual(["Construction", "Deposit", "Equipment", "HELOC", "Line of Credit", "Purchase"]);
+
+    // Saying the tapped chip's value now closes the composition outright: the
+    // manifest already carries amount and purpose, so product is the last one.
+    const tapped = last!.options!.find((o) => o.say === "Line of Credit")!;
+    const third = await engine.parseIntent(tapped.say, packageDoor);
+    expect(third.kind).toBe("deltas");
+    if (third.kind !== "deltas") return;
+    expect(third.reply).toContain("everything the tool requires");
+  });
+});
+
 describe("staging refuses here what the org would refuse there", () => {
   it("sends the package anchor and no account on the package door", async () => {
     const { deps: d } = await filed();
