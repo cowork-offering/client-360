@@ -18,8 +18,13 @@
    the tie resolve to `outline: transparent` on every keyboard tab. The
    leading type selector pushes this rule to (0,2,1), which wins outright
    regardless of minifier order. Same treatment and token as the app-wide
-   `:focus-visible` rule in tokens.css — one ring, everywhere. */
+   `:focus-visible` rule in tokens.css — one ring, everywhere.
+
+   ELECTRIC GLASS (rule 47): that shared token is now --focus-ring, which is
+   INK. The ring is not weakened or removed — it is recolored, here and in
+   tokens.css together, because "one ring everywhere" is only true if both
+   places move at once. */
 html .focus\:outline-none:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
