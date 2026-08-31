@@ -1,0 +1,975 @@
+{
+  "meta": {
+    "suite": "customer-360-electric-glass-acceptance-probes",
+    "suiteVersion": 1,
+    "target": "dummy",
+    "url": "(local static server)",
+    "viewport": {
+      "width": 1360,
+      "height": 900
+    },
+    "runs": 3,
+    "generatedAt": "2026-08-31T17:15:24.077Z",
+    "chromium": "147.0.7727.15",
+    "sourceDigest": "sha256:7aad211be877b93d"
+  },
+  "weave": {
+    "weaveNodeCount": 12,
+    "weaveNodesWithTransform": 12,
+    "weaveNodesDriftingCount": 12,
+    "weaveDrifts": true,
+    "weaveLayerPointerEvents": "none",
+    "weaveLayerZIndex": "0",
+    "weaveLayerHeightPx": 380,
+    "weaveLayerHasMask": true,
+    "weaveReachesPastKpiBandTop": true,
+    "weaveLeadOpacityPct": 20,
+    "weaveMinOpacityPct": 6.1,
+    "weaveMinStrokeWidthPx": 0.52,
+    "weaveMaxStrokeWidthPx": 1.1,
+    "worklistRowHitThroughWeave": true
+  },
+  "header": {
+    "landing": {
+      "navVisibleOnLanding": false,
+      "navOpacityOnLandingPct": 0,
+      "navPointerEvents": "none",
+      "navDisplay": "block",
+      "bodyHasOnClient": false
+    },
+    "client": {
+      "navVisibleOnClient": true,
+      "capsuleCenterDeltaPx": 0,
+      "capsuleHeightPx": 40.75,
+      "barHeightPx": 52,
+      "capsuleFitsInsideBar": true,
+      "navWrapTransitionDelayMs": 120,
+      "tabCount": 7,
+      "tabAnimationDelaysMs": [
+        140,
+        170,
+        200,
+        230,
+        260,
+        290,
+        320
+      ],
+      "tabAnimationName": "navtabin",
+      "tabAnimationDelayFirstMs": 140,
+      "tabAnimationDelayLastMs": 320,
+      "tabTransitionDelaysAllZero": true,
+      "clickedTabTransitionDelayMs": 0,
+      "clickedTabTransitionDelayRaw": "0s",
+      "activeTabWashColor": "rgba(161, 0, 255, 0.06)",
+      "activeTabWashRgb": [
+        161,
+        0,
+        255
+      ],
+      "activeTabWashStartAlphaPct": 0,
+      "activeTabWashEndAlphaPct": 6,
+      "activeTabWashHueAppearsByMs": 177,
+      "activeTabWashInterpolatesFromFirstFrame": true,
+      "tabTransitionDurationMs": 240
+    },
+    "paneSettle": {
+      "paneEntryAnimationName": "panein",
+      "paneEntryDurationMs": 340,
+      "paneSettleTravelPx": 3,
+      "paneEntryKeyframeFrom": "opacity: 0; transform: translateY(3px);"
+    },
+    "scrollShadow": {
+      "scrollableSurfaceFound": true,
+      "scrollableSurface": "financials",
+      "documentHeightPx": 1173,
+      "bodyScrolledAtTop": false,
+      "bodyScrolledAt8": false,
+      "bodyScrolledAt40": true,
+      "shadowToggleThresholdRespected": true,
+      "topbarInsetCountAtTop": 3,
+      "topbarInsetCountScrolled": 3,
+      "topbarOuterShadowCountAtTop": 0,
+      "topbarOuterShadowCountScrolled": 1,
+      "topbarShadowAppearsOnScroll": true,
+      "shadowRestoredOnReturn": true,
+      "topbarTransitionProperties": [
+        "filter",
+        "transform",
+        "opacity"
+      ],
+      "topbarBoxShadowTransitionMs": null,
+      "topbarBlurPx": 36
+    }
+  },
+  "fab": {
+    "position": {
+      "fabRightPx": 44,
+      "fabBottomPx": 52,
+      "fabWidthPx": 52,
+      "fabHeightPx": 52,
+      "idleHaloAnimationName": "fabidle",
+      "idleHaloDurationMs": 7000,
+      "idleHaloTimingFunction": "ease-in-out",
+      "idleHaloIterationCount": "infinite",
+      "idleHaloBoxShadow": "rgba(161, 0, 255, 0.13) 0px 0px 14px 2px",
+      "idleHaloKeyframes": "0%, 100%{opacity: 0;} 50%{opacity: 0.55;}"
+    },
+    "whisper": {
+      "whisperAppears": true,
+      "whisperOpacityPct": 100,
+      "whisperBreatheAnimationName": "fabreathe",
+      "whisperBreatheDurationMs": 3200,
+      "whisperBreatheIterationCount": "2"
+    },
+    "arc": {
+      "arcOpens": true,
+      "arcSatelliteCount": 5,
+      "arcRadiiPx": [
+        118,
+        117.92,
+        117.38,
+        117.92,
+        118
+      ],
+      "arcRadiusPx": 117.84,
+      "arcNeighbourSpacingPx": [
+        45.89,
+        46.04,
+        46.04,
+        45.89
+      ],
+      "arcNeighbourSpacingMeanPx": 45.97,
+      "markRotationOpenDeg": 180,
+      "narratorChipCenterDeltaPx": 0,
+      "narratorChipTextAtRest": "Client actions",
+      "narratorChipTextRestoredAtRest": "Client actions",
+      "narratorChipMatchesExpectedRest": true,
+      "narratorHoverLabels": [
+        "Assist",
+        "Modification",
+        "Renewal",
+        "Annual review",
+        "Covenant review"
+      ],
+      "narratorLabelsFitViewport": true,
+      "arcClosedOnOutsideClick": true
+    }
+  },
+  "glass": {
+    "landing": {
+      "state": "landing",
+      "glassSurfaceCount": 15,
+      "glassSurfacesByRimCount": {
+        "1": 1,
+        "3": 14
+      },
+      "glassBlurScalePx": [
+        20,
+        28,
+        30,
+        34,
+        36,
+        38
+      ],
+      "glassRimViolationCount": 0,
+      "glassRimViolations": [],
+      "glassEntries": [
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arclbl",
+          "tag": "span",
+          "insetCount": 1,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "chatmini",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "chatpanel",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "cmdk",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "hero",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": false
+        },
+        {
+          "cls": "toast",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "topbar",
+          "tag": "header",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "whisper",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "wk-hist",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 20,
+          "onScreen": false
+        },
+        {
+          "cls": "wk-room",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 30,
+          "onScreen": false
+        }
+      ]
+    },
+    "client": {
+      "state": "client",
+      "glassSurfaceCount": 15,
+      "glassSurfacesByRimCount": {
+        "1": 1,
+        "3": 14
+      },
+      "glassBlurScalePx": [
+        20,
+        28,
+        30,
+        34,
+        36,
+        38
+      ],
+      "glassRimViolationCount": 0,
+      "glassRimViolations": [],
+      "glassEntries": [
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arclbl",
+          "tag": "span",
+          "insetCount": 1,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "chatmini",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "chatpanel",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "cmdk",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "hero",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "toast",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "topbar",
+          "tag": "header",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "whisper show",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "wk-hist",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 20,
+          "onScreen": false
+        },
+        {
+          "cls": "wk-room",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 30,
+          "onScreen": false
+        }
+      ]
+    },
+    "hairlines": {
+      "glassSurfaceCountForBorders": 15,
+      "glassWhiteBorderCount": 0,
+      "glassWhiteBorders": [],
+      "glassBorderColors": [
+        "rgba(0, 0, 0, 0.05)",
+        "rgba(0, 0, 0, 0.06)"
+      ]
+    },
+    "cmdk": {
+      "state": "cmdk-open",
+      "glassSurfaceCount": 15,
+      "glassSurfacesByRimCount": {
+        "1": 1,
+        "3": 14
+      },
+      "glassBlurScalePx": [
+        20,
+        28,
+        30,
+        34,
+        36,
+        38
+      ],
+      "glassRimViolationCount": 0,
+      "glassRimViolations": [],
+      "glassEntries": [
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arclbl",
+          "tag": "span",
+          "insetCount": 1,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "chatmini",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "chatpanel",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "cmdk",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": true
+        },
+        {
+          "cls": "hero",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "toast",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "topbar",
+          "tag": "header",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "whisper",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "wk-hist",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 20,
+          "onScreen": false
+        },
+        {
+          "cls": "wk-room",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 30,
+          "onScreen": false
+        }
+      ]
+    },
+    "workroom": {
+      "state": "workroom",
+      "glassSurfaceCount": 15,
+      "glassSurfacesByRimCount": {
+        "1": 1,
+        "3": 14
+      },
+      "glassBlurScalePx": [
+        20,
+        28,
+        30,
+        34,
+        36,
+        38
+      ],
+      "glassRimViolationCount": 0,
+      "glassRimViolations": [],
+      "glassEntries": [
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arcbtn",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "arclbl",
+          "tag": "span",
+          "insetCount": 1,
+          "blurPx": 28,
+          "onScreen": true
+        },
+        {
+          "cls": "chatmini",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "chatpanel",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "cmdk",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 38,
+          "onScreen": false
+        },
+        {
+          "cls": "hero",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "toast",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "topbar",
+          "tag": "header",
+          "insetCount": 3,
+          "blurPx": 36,
+          "onScreen": true
+        },
+        {
+          "cls": "whisper",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 34,
+          "onScreen": true
+        },
+        {
+          "cls": "wk-hist",
+          "tag": "button",
+          "insetCount": 3,
+          "blurPx": 20,
+          "onScreen": false
+        },
+        {
+          "cls": "wk-room show",
+          "tag": "div",
+          "insetCount": 3,
+          "blurPx": 30,
+          "onScreen": true
+        }
+      ]
+    }
+  },
+  "continuity": {
+    "nameFlight": {
+      "ghostAppeared": true,
+      "ghostStartFontPx": 14.5,
+      "ghostEndFontPx": 25,
+      "ghostMaxFontPx": 25,
+      "ghostTransitionMs": 520,
+      "ghostTransitionTiming": "cubic-bezier(0.22, 1, 0.36, 1)",
+      "ghostStartOriginDeltaXPx": 0,
+      "ghostStartOriginDeltaYPx": 0,
+      "landingOffsetXPx": 0,
+      "landingOffsetYPx": 0,
+      "flightMinCarriedOpacityPct": 100,
+      "flightMinViewOpacityPct": 100,
+      "realNameOpacityAtLastGhostFramePct": 100,
+      "realNameOpacityFinalPct": 100,
+      "handoffNoOpacityDip": true,
+      "ghostDissolveMs": 160,
+      "viewEntryAnimationDuringFlight": "none",
+      "viewSuppressClassDuringFlight": true,
+      "ghostRemovedAfterFlight": true
+    },
+    "entrySuppression": {
+      "showRuleAnimates": true,
+      "showRuleAnimationName": "viewin",
+      "suppressOutranksShow": true,
+      "suppressHeldWhileViewShown": true,
+      "viewHiddenWhenSuppressCleared": true,
+      "suppressClearedAfterLeave": true,
+      "noEntryAnimationLeftRunning": true
+    }
+  },
+  "chat": {
+    "chatOpens": true,
+    "fabTuckedOnChat": true,
+    "fabOpacityOnChatPct": 0,
+    "fabScaleOnChat": 0.6,
+    "fabPointerEventsOnChat": "none",
+    "chatPanelRightPx": 44,
+    "chatPanelBottomPx": 52,
+    "chatPanelAtFabRightDeltaPx": 0,
+    "chatPanelAtFabBottomDeltaPx": 0,
+    "chatPanelEntryAnimationName": "chatin",
+    "chatPanelEntryDurationMs": 300,
+    "minimizeShowsPill": true,
+    "minimizeHidesPanel": true,
+    "pillRightPx": 44,
+    "pillBottomPx": 52,
+    "pillHoldsFabSpotDeltaPx": 0,
+    "pillText": "Assist",
+    "fabStillTuckedWhileMinimized": true,
+    "pillRestoresPanel": true,
+    "closeReturnsFab": true,
+    "fabOpacityAfterClosePct": 100,
+    "fabScaleAfterClose": 1,
+    "chatClosed": true
+  },
+  "cmdk": {
+    "lens": {
+      "bodyLensed": true,
+      "cmdkShown": true,
+      "lensTopbarBlurPx": 14,
+      "lensTopbarSaturate": 0.92,
+      "lensTopbarScale": 0.988,
+      "lensViewBlurPx": 14,
+      "lensViewSaturate": 0.92,
+      "lensViewScale": 0.988,
+      "lensFabBlurPx": 10,
+      "backdropDimColor": "rgba(16, 4, 30, 0.14)",
+      "lensTransitionMs": 450,
+      "filterHidesAllRows": true,
+      "noMatchRowShown": true,
+      "noMatchRowText": "Nothing matches. Try a client or an action.",
+      "noMatchRowTextStartsAsExpected": true,
+      "filterVisibleRowCount": 1,
+      "filterVisibleRowText": [
+        "Back to worklistView"
+      ],
+      "cmdkRowCount": 3,
+      "cmdkSelectionStartIndex": 0,
+      "cmdkSelectionAfterArrowDownIndex": 1,
+      "cmdkSelectionAfterTwoDownIndex": 2,
+      "cmdkSelectionAfterArrowUpIndex": 1,
+      "cmdkArrowsTraverseVisibleRows": true,
+      "escapeClearsLens": true,
+      "topbarFilterRestored": true,
+      "topbarFilterAtRest": "none",
+      "cmdkHiddenAfterEscape": true
+    },
+    "enterFires": {
+      "enterCandidateRowCount": 1,
+      "enterNavigatedHome": true,
+      "enterClosedPalette": true
+    }
+  },
+  "client": {
+    "perClient": {
+      "hartwell": {
+        "heroName": "Hartwell Industrial Group",
+        "ringTargetAttrPx": 41.8,
+        "ringStartOffsetPx": 119.4,
+        "ringEndOffsetPx": 41.8,
+        "ringAnimated": true,
+        "ringTransitionMs": 1000,
+        "anchorCount": 5,
+        "anchorCascadeDelaysMs": [
+          0,
+          45,
+          90,
+          135,
+          180
+        ],
+        "anchorCascadeStepMs": 45,
+        "anchorEntryAnimationName": "ancup",
+        "meterFillAnimationName": "meterfill",
+        "meterFillDelayMs": 150,
+        "meterFillDurationMs": 900,
+        "nameMatchesExpected": true,
+        "ringHitsExpectedTarget": true
+      },
+      "piedmont": {
+        "heroName": "Piedmont Fabrication Co.",
+        "ringTargetAttrPx": 74.6,
+        "ringStartOffsetPx": 119.4,
+        "ringEndOffsetPx": 74.6,
+        "ringAnimated": true,
+        "ringTransitionMs": 1000,
+        "anchorCount": 5,
+        "anchorCascadeDelaysMs": [
+          0,
+          45,
+          90,
+          135,
+          180
+        ],
+        "anchorCascadeStepMs": 45,
+        "anchorEntryAnimationName": "ancup",
+        "meterFillAnimationName": "meterfill",
+        "meterFillDelayMs": 150,
+        "meterFillDurationMs": 900,
+        "nameMatchesExpected": true,
+        "ringHitsExpectedTarget": true
+      },
+      "meridian": {
+        "heroName": "Meridian Logistics LLC",
+        "ringTargetAttrPx": 14.9,
+        "ringStartOffsetPx": 119.4,
+        "ringEndOffsetPx": 14.9,
+        "ringAnimated": true,
+        "ringTransitionMs": 1000,
+        "anchorCount": 5,
+        "anchorCascadeDelaysMs": [
+          0,
+          45,
+          90,
+          135,
+          180
+        ],
+        "anchorCascadeStepMs": 45,
+        "anchorEntryAnimationName": "ancup",
+        "meterFillAnimationName": "meterfill",
+        "meterFillDelayMs": 150,
+        "meterFillDurationMs": 900,
+        "nameMatchesExpected": true,
+        "ringHitsExpectedTarget": true
+      }
+    },
+    "graphPane": {
+      "graphTabFound": true,
+      "graphRouteCount": 2,
+      "graphCornerCountPerRoute": [
+        2,
+        2
+      ],
+      "graphParticleCount": 2,
+      "graphRoutesUseQuadraticCorners": true
+    },
+    "workroomGate": {
+      "gateToastShown": true,
+      "gateToastText": "The modification ritual is scripted on Hartwell in this dummy",
+      "workroomBlocked": true
+    },
+    "emptyStateWatermark": {
+      "emptyWatermarkFound": true,
+      "emptyWatermarkAnimationName": "wmbreathe",
+      "emptyWatermarkDurationMs": 8000,
+      "emptyWatermarkIterationCount": "infinite",
+      "emptyWatermarkKeyframes": "0%, 100%{opacity: 0.04;} 50%{opacity: 0.08;}"
+    }
+  },
+  "workroom": {
+    "open": {
+      "seedAppeared": true,
+      "seedWidthPx": 340,
+      "seedHeightPx": 340,
+      "seedBackdropFilter": "none",
+      "seedHasNoBackdropFilter": true,
+      "seedOriginDeltaXPx": 0,
+      "seedOriginDeltaYPx": 0,
+      "roomOpened": true,
+      "threadGapPx": 38,
+      "scrimShown": true
+    },
+    "ritual": {
+      "packageChoiceAppeared": true,
+      "agentWordSpanCount": 17,
+      "agentWordStaggerMs": 26,
+      "agentWordAnimationName": "wkw",
+      "agentWordAnimationDurationMs": 380,
+      "identityChipOffsetPx": -21,
+      "identityChipContent": "\"Agent\"",
+      "facilityListAppeared": true,
+      "facilityCount": 3,
+      "stepGapPx": 32,
+      "stepCount": 2,
+      "suggestChipFound": true,
+      "suggestChipText": "Increase the revolver to $20.0M, keep pricing",
+      "suggestChipVisibleAfterFacilitySelect": true,
+      "suggestChipProducesDeltaCard": false,
+      "composeInputEnabledAfterFacilitySelect": true,
+      "deltaCardAppeared": true,
+      "deltaCardText": "HIG-2041 · Revolver · commitment$15.0M → $19.0M · pricing + maturity unchangedAll four covenants pass pro-forma at the new commitment.ConfirmDiscard",
+      "detailLaneOdoColumnCount": 1,
+      "detailLaneWasNoteCount": 1,
+      "manifestEntryCount": 1,
+      "proposeButtonAppeared": true,
+      "flowCardAppeared": true,
+      "preExposureAnchorText": "$46.2M",
+      "preWorklistAmountText": "$46.2M",
+      "preExposureTotalText": "$46.2M"
+    },
+    "execute": {
+      "auraFound": true,
+      "haloTransformStart": "none",
+      "haloTransformEnd": "none",
+      "haloBoxRotationDeg": 0,
+      "haloBoxTransformIsStatic": true,
+      "haloBoxSizeStablePx": 3.53,
+      "haloAngleAnimates": true,
+      "haloAngleAdvancedDeg": 35.33,
+      "haloAnimationName": "aurarot",
+      "haloAnimationDurationMs": 9000,
+      "haloAnimationTimingFunction": "linear",
+      "haloOpacityPct": 38,
+      "haloBlurPx": 14,
+      "haloFadeTransitionMs": 1400,
+      "haloRotateKeyframes": "100%{--aang: 360deg;}",
+      "writeBackOdoColumnCount": 6,
+      "writeBackRolledWhileRoomOpen": true,
+      "odoStripTransitionMs": 600,
+      "odoStripTimingFunction": "cubic-bezier(0.65, 0, 0.35, 1)",
+      "odoColumnDelaysMs": [
+        45,
+        90
+      ],
+      "odoColumnStaggerMs": 45,
+      "odoBlurKeyframes": "0%, 100%{filter: blur(0px);} 45%{filter: blur(1.3px);}",
+      "odoBlurAnimationName": "odoblur",
+      "resultCardAppeared": true,
+      "resultCardSegmentCount": 5,
+      "resultCardSegmentDelaysMs": [
+        140,
+        420,
+        640,
+        940,
+        1140
+      ],
+      "resultCardRowStepMs": null,
+      "resultCardCheckAnimationName": "okpop",
+      "resultCardLit": true,
+      "postExposureAnchorText": "$50.2M",
+      "postWorklistAmountText": "$50.2M",
+      "postExposureTotalText": "$50.2M",
+      "writeBackChangedAllThree": true,
+      "roomStillOpenAfterWrite": true
+    },
+    "numerals": {
+      "rollingFigureCount": 3,
+      "rollingFiguresTabularNums": true
+    },
+    "closeAndWash": {
+      "roomClosed": true,
+      "washApplied": true,
+      "washAnimationName": "ancup",
+      "washAnimationIsWashKeyframe": false,
+      "washDurationMs": 450,
+      "washKeyframes": "0%{background: rgba(161, 0, 255, 0.09); border-color: rgba(161, 0, 255, 0.2);} 100%{background: rgb(255, 255, 255); border-color: var(--line-soft);}",
+      "bodyOverflowRestored": true,
+      "washClearedAfter": true,
+      "valueBeforeNavigation": "$50.2M",
+      "valueAfterNavigation": "$50.2M",
+      "executedValueSurvivesNavigation": true
+    }
+  },
+  "traps": {
+    "trap1_transitionDelayPoison_clickedTabDelayMs": 0,
+    "trap1_pass": true,
+    "trap2_entryAnimationRestart_suppressOutranksShow": true,
+    "trap2_pass": true,
+    "trap3_rotatingBoxHalo_boxTransformStatic": true,
+    "trap3_pass": true,
+    "trap4_sharedElementMorph_noOpacityDip": true,
+    "trap4_pass": true,
+    "glassCensus_pass": true
+  },
+  "pageErrors": []
+}
