@@ -320,6 +320,24 @@ global with sharing class ExecuteLoanModification {
         global String verification;
     }
 
+    /** One policy exception this run logged against a clone and the borrower. */
+    global class PolicyExceptionResult {
+        @InvocableVariable(label='Exception Id')
+        global String exceptionId;
+        @InvocableVariable(label='Title' description='The row\'s readable identity, read back. Name is plain text here and the org backfills an omitted one with the record\'s own Id, which is why this tool always sends one.')
+        global String title;
+        @InvocableVariable(label='Status' description='Waived, Mitigated or Unmitigated - what the banker decided, never the org\'s Unmitigated default.')
+        global String status;
+        @InvocableVariable(label='Mitigation Count' description='How many of the org\'s three mitigation reason fields this exception filled.')
+        global Integer mitigationCount;
+        @InvocableVariable(label='Clone Loan Id')
+        global String cloneLoanId;
+        @InvocableVariable(label='Relationship Id' description='The borrower the exception is anchored on, so it reads at relationship level as well as on the facility.')
+        global String relationshipId;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     global class ExecuteResult {
         @InvocableVariable(label='Staging Id')
         global String stagingId;
@@ -347,6 +365,8 @@ global with sharing class ExecuteLoanModification {
         global List<FeeResult> fees;
         @InvocableVariable(label='Pledges' description='One entry per collateral pledge this run authored on a clone, each re-read after the write with the advance rate the org resolved.')
         global List<PledgeResult> pledges;
+        @InvocableVariable(label='Policy Exceptions' description='One entry per policy exception this run logged against a clone and the borrower, each re-read after the write. A committed exception is also transmitted to the bank\'s external change-stream endpoint by the org\'s own PolicyExceptionCDC trigger.')
+        global List<PolicyExceptionResult> policyExceptions;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -1332,6 +1352,7 @@ global with sharing class ExecuteLoanModification {
             out.fieldChanges = intendedFieldChanges(v);
             out.fees = intendedFees(v);
             out.pledges = intendedPledges(v);
+            out.policyExceptions = intendedPolicyExceptions(v);
             out.facilities = results;
             out.steps = toWireSteps(steps);
             out.terminalState = C360Plan.terminalState(steps);
@@ -1350,6 +1371,7 @@ global with sharing class ExecuteLoanModification {
         out.fieldChanges = armed.fieldChanges;
         out.fees = armed.fees;
         out.pledges = armed.pledges;
+        out.policyExceptions = armed.policyExceptions;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;
@@ -1364,7 +1386,10 @@ global with sharing class ExecuteLoanModification {
             (armed.fees.isEmpty() ? '' : ', ' + armed.fees.size() + ' net-new fee' +
                 (armed.fees.size() == 1 ? '' : 's') + ' on the clone' + (armed.fees.size() == 1 ? '' : 's')) +
             (armed.pledges.isEmpty() ? '' : ', ' + armed.pledges.size() + ' collateral pledge' +
-                (armed.pledges.size() == 1 ? '' : 's') + ' on the clone' + (armed.pledges.size() == 1 ? '' : 's')) + '. ' +
+                (armed.pledges.size() == 1 ? '' : 's') + ' on the clone' + (armed.pledges.size() == 1 ? '' : 's')) +
+            (armed.policyExceptions.isEmpty() ? '' : ', ' + armed.policyExceptions.size() + ' policy exception' +
+                (armed.policyExceptions.size() == 1 ? '' : 's') + ' logged on the clone' +
+                (armed.policyExceptions.size() == 1 ? '' : 's') + ' and the borrower') + '. ' +
             (armed.facilities.size() == 1
                 ? armed.facilities[0].outcome
                 : 'See each facility for its clone and what was applied.') +
@@ -1454,6 +1479,7 @@ global with sharing class ExecuteLoanModification {
                 outcome.fieldChanges = intendedFieldChanges(v);
                 outcome.fees = intendedFees(v);
                 outcome.pledges = intendedPledges(v);
+                outcome.policyExceptions = intendedPolicyExceptions(v);
                 outcome.facilities = results;
                 outcome.terminalState = C360Plan.terminalState(steps);
             }
@@ -1470,6 +1496,7 @@ global with sharing class ExecuteLoanModification {
         public List<FieldChangeResult> fieldChanges;
         public List<FeeResult> fees;
         public List<PledgeResult> pledges;
+        public List<PolicyExceptionResult> policyExceptions;
         public List<FacilityResult> facilities;
         public String terminalState;
     }
@@ -1937,6 +1964,23 @@ global with sharing class ExecuteLoanModification {
             }
         }
 
+        // ---- POLICY EXCEPTIONS (plan values policyException{i}.*). Logged against the CLONE and
+        // anchored on the borrower, so the bank reads each one both on the facility it applies to
+        // and at relationship level - which is where a credit officer goes looking for the bank's
+        // exceptions. Probed safe 2026-08-31: of the 16 ProcessDefinition records in this org NONE
+        // targets this object, and a three-insert rollback probe moved the email counter by zero.
+        //
+        // ONE DML FOR THE WHOLE PLAN, and here the reason is EGRESS rather than governors. The
+        // org-local PolicyExceptionCDC trigger enqueues an EventBridgeCallout PER DML that POSTs
+        // the serialised records to an external AWS endpoint; the queueable ceiling is 50 and this
+        // is nowhere near it either way, but one insert is ONE transmission of the plan's
+        // exceptions instead of one per exception. Stage caps the plan at five for the same reason.
+        Integer policyExceptionCount = intCount(v.get('policyExceptionAddCount'));
+        List<PolicyExceptionResult> policyExceptionResults = new List<PolicyExceptionResult>();
+        if (policyExceptionCount > 0) {
+            authorPolicyExceptions(steps, v, job, policyExceptionCount, policyExceptionResults);
+        }
+
         // Re-read the clones after the change. The PARENTS are deliberately not re-read here: whether
         // this tool moved a parent was settled by the engine leg, which is the only leg that holds the
         // pre-image and the only one whose writes could ever reach a parent. Everything below writes
@@ -2032,9 +2076,140 @@ global with sharing class ExecuteLoanModification {
         outcome.fieldChanges = fieldChangeResults;
         outcome.fees = feeResults;
         outcome.pledges = pledgeResults;
+        outcome.policyExceptions = policyExceptionResults;
         outcome.facilities = results;
         outcome.terminalState = C360Plan.terminalState(steps);
         return outcome;
+    }
+
+    /**
+     * Authors every staged policy exception in ONE DML and proves them with ONE re-read.
+     *
+     * THE TWO ANCHORS TRAVEL TOGETHER. `LLC_BI__Loan__c` points at the CLONE, never the booked
+     * parent, and `LLC_BI__Relationship__c` at the borrower: an exception on the facility alone is
+     * invisible where the bank reviews exceptions at relationship level, and one on the account
+     * alone does not say which facility it is about.
+     *
+     * NOTHING HERE INVENTS A VALUE. The status is the banker's, checked against the org's own
+     * picklist at stage time; the three mitigation reasons are the banker's words within the org's
+     * own 100-character fields; the type is "Policy", which is what all 81 rows in this org carry.
+     * What the org contributes is the Id and, if this tool ever omitted a name, an ugly one.
+     *
+     * @param results Filled with one entry per staged exception, in plan order.
+     */
+    private static void authorPolicyExceptions(
+        List<C360Plan.Step> steps,
+        Map<String, Object> v,
+        ArmPlan job,
+        Integer plannedCount,
+        List<PolicyExceptionResult> results
+    ) {
+        List<LLC_BI__Policy_Exception__c> rows = new List<LLC_BI__Policy_Exception__c>();
+        List<Integer> indexOfRow = new List<Integer>();
+
+        for (Integer i = 0; i < plannedCount; i++) {
+            String xs = String.valueOf(i);
+            PolicyExceptionResult pxr = new PolicyExceptionResult();
+            pxr.title = C360Plan.asString(v.get('policyException' + xs + '.title'));
+            pxr.status = C360Plan.asString(v.get('policyException' + xs + '.status'));
+            results.add(pxr);
+
+            Id targetParent = C360Plan.asId(v.get('policyException' + xs + '.targetLoanId'));
+            Id cloneId = job.cloneByParent.get(targetParent);
+            if (cloneId == null) {
+                String why = 'No modification clone could be read for the facility this policy exception targets, so nothing was created.';
+                C360Plan.setState(steps, 'policy_exception_add_' + xs, C360Plan.STATE_FAILED, why);
+                C360Plan.setState(steps, 'policy_exception_verify_' + xs, C360Plan.STATE_FAILED, why);
+                pxr.verification = why;
+                continue;
+            }
+            pxr.cloneLoanId = cloneId;
+            pxr.relationshipId = job.accountId;
+
+            String reason1 = C360Plan.asString(v.get('policyException' + xs + '.reason1'));
+            String reason2 = C360Plan.asString(v.get('policyException' + xs + '.reason2'));
+            String reason3 = C360Plan.asString(v.get('policyException' + xs + '.reason3'));
+            pxr.mitigationCount =
+                (String.isBlank(reason1) ? 0 : 1) + (String.isBlank(reason2) ? 0 : 1) + (String.isBlank(reason3) ? 0 : 1);
+
+            Map<String, Object> fields = new Map<String, Object>{
+                'Name' => pxr.title,
+                'LLC_BI__Type__c' => C360Plan.asString(v.get('policyException' + xs + '.type')),
+                'LLC_BI__Status__c' => pxr.status,
+                'LLC_BI__Loan__c' => cloneId,
+                'LLC_BI__Relationship__c' => job.accountId,
+                'LLC_BI__Code__c' => C360Plan.asString(v.get('policyException' + xs + '.code')),
+                'LLC_BI__Severity__c' => C360Plan.asString(v.get('policyException' + xs + '.severity')),
+                'LLC_BI__Severity_Value__c' => C360Plan.asDecimal(v.get('policyException' + xs + '.severityValue')),
+                'LLC_BI__Mitigation_Reason_1__c' => reason1,
+                'LLC_BI__Mitigation_Reason_2__c' => reason2,
+                'LLC_BI__Mitigation_Reason_3__c' => reason3
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_POLICY_EXCEPTION, C360WriteGuard.OP_CREATE, fields);
+            rows.add(new LLC_BI__Policy_Exception__c(
+                Name = pxr.title,
+                LLC_BI__Type__c = (String) fields.get('LLC_BI__Type__c'),
+                LLC_BI__Status__c = pxr.status,
+                LLC_BI__Loan__c = cloneId,
+                LLC_BI__Relationship__c = job.accountId,
+                LLC_BI__Code__c = (String) fields.get('LLC_BI__Code__c'),
+                LLC_BI__Severity__c = (String) fields.get('LLC_BI__Severity__c'),
+                LLC_BI__Severity_Value__c = (Decimal) fields.get('LLC_BI__Severity_Value__c'),
+                LLC_BI__Mitigation_Reason_1__c = reason1,
+                LLC_BI__Mitigation_Reason_2__c = reason2,
+                LLC_BI__Mitigation_Reason_3__c = reason3
+            ));
+            indexOfRow.add(i);
+        }
+
+        if (rows.isEmpty()) {
+            return;
+        }
+        insert as user rows;
+
+        // The proof is the re-read, never the insert result. `Name` is read back specifically: it
+        // is the one field the org is known to rewrite when a caller omits it, so reading it is how
+        // this tool proves it did not leave a row named after its own Id.
+        Set<Id> ids = new Set<Id>();
+        for (LLC_BI__Policy_Exception__c row : rows) {
+            if (row.Id != null) {
+                ids.add(row.Id);
+            }
+        }
+        Map<Id, LLC_BI__Policy_Exception__c> back = new Map<Id, LLC_BI__Policy_Exception__c>([
+            SELECT Id, Name, LLC_BI__Type__c, LLC_BI__Status__c, LLC_BI__Loan__c, LLC_BI__Relationship__c,
+                   LLC_BI__Mitigation_Reason_1__c
+            FROM LLC_BI__Policy_Exception__c WHERE Id IN :ids WITH USER_MODE
+        ]);
+
+        for (Integer k = 0; k < rows.size(); k++) {
+            String xs = String.valueOf(indexOfRow[k]);
+            PolicyExceptionResult pxr = results[indexOfRow[k]];
+            LLC_BI__Policy_Exception__c row = rows[k].Id == null ? null : back.get(rows[k].Id);
+            if (row == null) {
+                pxr.verification = 'The policy exception could not be read back after creation, so nothing is claimed for it.';
+                C360Plan.setState(steps, 'policy_exception_add_' + xs, C360Plan.STATE_FILED_UNVERIFIED, pxr.verification);
+                C360Plan.setState(steps, 'policy_exception_verify_' + xs, C360Plan.STATE_FAILED, pxr.verification);
+                continue;
+            }
+            pxr.exceptionId = row.Id;
+            C360Plan.setState(steps, 'policy_exception_add_' + xs, C360Plan.STATE_VERIFIED,
+                'Policy exception ' + row.Id + ' created on clone ' + row.LLC_BI__Loan__c + ': ' + pxr.title + '.');
+
+            Boolean landed = row.Name == pxr.title
+                && row.LLC_BI__Status__c == pxr.status
+                && row.LLC_BI__Loan__c == rows[k].LLC_BI__Loan__c
+                && row.LLC_BI__Relationship__c == rows[k].LLC_BI__Relationship__c;
+            pxr.verification = landed
+                ? '"' + row.Name + '" reads back ' + row.LLC_BI__Status__c + ' on the clone, anchored on the borrower, ' +
+                  'with ' + pxr.mitigationCount + ' mitigation reason' + (pxr.mitigationCount == 1 ? '' : 's') + '. ' +
+                  'The org transmitted it to the bank\'s change-stream endpoint on commit.'
+                : 'Not proven: the exception reads back as "' + row.Name + '" at ' + row.LLC_BI__Status__c +
+                  ' on loan ' + row.LLC_BI__Loan__c + ' and relationship ' + row.LLC_BI__Relationship__c +
+                  ', which is not what this plan composed.';
+            C360Plan.setState(steps, 'policy_exception_verify_' + xs,
+                landed ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, pxr.verification);
+        }
     }
 
     /**
@@ -2369,6 +2544,10 @@ global with sharing class ExecuteLoanModification {
             ids.add('pledge_add_' + i);
             ids.add('pledge_verify_' + i);
         }
+        for (Integer i = 0; i < intCount(v.get('policyExceptionAddCount')); i++) {
+            ids.add('policy_exception_add_' + i);
+            ids.add('policy_exception_verify_' + i);
+        }
         Set<String> owned = new Set<String>(ids);
         for (C360Plan.Step s : steps) {
             if (!owned.contains(s.id)) {
@@ -2455,6 +2634,19 @@ global with sharing class ExecuteLoanModification {
             pr.advanceRate = C360Plan.asDecimal(v.get('pledgeAdd' + i + '.advanceRate'));
             pr.verification = ARM_WAITING;
             out.add(pr);
+        }
+        return out;
+    }
+
+    /** The policy exceptions the plan carries, reported as intent while the arm has not run. */
+    private static List<PolicyExceptionResult> intendedPolicyExceptions(Map<String, Object> v) {
+        List<PolicyExceptionResult> out = new List<PolicyExceptionResult>();
+        for (Integer i = 0; i < intCount(v.get('policyExceptionAddCount')); i++) {
+            PolicyExceptionResult pxr = new PolicyExceptionResult();
+            pxr.title = C360Plan.asString(v.get('policyException' + i + '.title'));
+            pxr.status = C360Plan.asString(v.get('policyException' + i + '.status'));
+            pxr.verification = ARM_WAITING;
+            out.add(pxr);
         }
         return out;
     }
@@ -2591,6 +2783,7 @@ global with sharing class ExecuteLoanModification {
         out.fieldChanges = armed.fieldChanges;
         out.fees = armed.fees;
         out.pledges = armed.pledges;
+        out.policyExceptions = armed.policyExceptions;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;

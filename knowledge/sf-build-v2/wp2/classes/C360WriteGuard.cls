@@ -53,10 +53,16 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_PRICING_STREAM = 'LLC_BI__Pricing_Stream__c';
     public static final String OBJ_COLLATERAL = 'LLC_BI__Collateral__c';
     public static final String OBJ_ACCOUNT_COLLATERAL = 'LLC_BI__Account_Collateral__c';
+    public static final String OBJ_POLICY_EXCEPTION = 'LLC_BI__Policy_Exception__c';
 
     /** The junction graph OP_CARRY may replicate, and nothing else. */
     // Pricing streams are DELIBERATELY absent: nCino's engine carries them itself on every
     // credit action (observed live 2026-08-31) and a doorway here produced duplicates.
+    // Policy exceptions are absent too, and that is a STATEMENT rather than an omission: an
+    // exception records what the bank decided about a facility as it stands, and replicating one
+    // onto a version the bank has not approved would restate a decision nobody took about the new
+    // terms. A clone therefore carries only the exceptions this plan authors on it, and the parent
+    // keeps its own. Carrying them is a founder call, not a gap to close quietly.
     private static final Set<String> CARRY_OBJECTS = new Set<String>{
         OBJ_LOAN_COVENANT, OBJ_PLEDGE, OBJ_PLEDGE_AGGREGATE, OBJ_INVOLVEMENT, OBJ_FEE
     };
@@ -160,6 +166,29 @@ public with sharing class C360WriteGuard {
         OBJ_PLEDGE => new Map<String, Set<String>>{
             'LLC_BI__Pledged_Status__c' => new Set<String>{ 'Active' },
             'LLC_BI__Active__c' => new Set<String>{ 'true' }
+        },
+        // A POLICY EXCEPTION on a modification clone (2026-08-31). PROBED SAFE, and probed
+        // precisely: of the 16 ProcessDefinition records in this org NONE targets this object, and
+        // a three-insert rollback probe moved Limits.getEmailInvocations() by zero (recon Task 3d).
+        // So a create starts no approval and sends no email.
+        //
+        // IT IS NOT FREE OF SIDE EFFECTS. The same probe moved Limits.getQueueableJobs() from 0 to
+        // 3 - one per DML - because the org-local PolicyExceptionCDC trigger enqueues an
+        // EventBridgeCallout that POSTs the serialised record to an external AWS endpoint. That is
+        // data egress rather than an approval, and it is why the arm inserts the whole plan's
+        // exceptions in ONE DML and the stage warnings say so out loud.
+        //
+        // TWO STATE FENCES. LLC_BI__Type__c is the object's ONLY required field and every one of
+        // the 81 rows this org holds carries "Policy". LLC_BI__Status__c is fenced to the org's
+        // whole picklist rather than to one value: waived, mitigated and unmitigated are three real
+        // outcomes of logging an exception, and an allowlist that could express only one would
+        // force the banker out of the tool with the decision unrecorded - the same reasoning that
+        // put `Waived` on the covenant-compliance update set. The fence does require the status to
+        // be PRESENT, which is the point: the org defaults it to Unmitigated, and a defaulted
+        // Unmitigated reads as a decision nobody made.
+        OBJ_POLICY_EXCEPTION => new Map<String, Set<String>>{
+            'LLC_BI__Type__c' => new Set<String>{ 'Policy' },
+            'LLC_BI__Status__c' => new Set<String>{ 'Waived', 'Mitigated', 'Unmitigated' }
         }
     };
 
@@ -272,7 +301,14 @@ public with sharing class C360WriteGuard {
             'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Collateral_Value__c',
             'LLC_BI__Total_Pledged_Rollup_Value__c', 'LLC_BI__Total_Pledged_Rollup_Lendable_Value__c',
             'LLC_BI__Authorize__c', 'LLC_BI__Unique_Id__c'
-        }
+        },
+        // Automatically_Added is the org's own provenance flag: 76 of this org's 81 exceptions are
+        // auto-generated exposure rows, and a tool-authored exception claiming to be one of them
+        // would misstate where it came from to anyone reading the file. It defaults to false and
+        // stays there. RecordTypeId is refused because the object HAS NO SUCH FIELD on this org
+        // (recon Task 3a lists all 17 createable fields; it is not among them), so an attempt fails
+        // at the platform - the same reasoning as the risk-rating object above.
+        OBJ_POLICY_EXCEPTION => new Set<String>{ 'LLC_BI__Automatically_Added__c', 'RecordTypeId' }
     };
 
     /**
@@ -287,7 +323,7 @@ public with sharing class C360WriteGuard {
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
         OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT,
-        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE
+        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE, OBJ_POLICY_EXCEPTION
     };
 
     /**

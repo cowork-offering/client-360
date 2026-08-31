@@ -2203,6 +2203,195 @@ private class StageExecuteLoanModificationTest {
         System.assert(res.error.message.contains('not one of the selected facilities'), res.error.message);
     }
 
+    // -------------------------------------------------------------------------------------------
+    // Policy exceptions (2026-08-31).
+    //
+    // The object needs no fixture of its own: LLC_BI__Type__c is its only required field and every
+    // anchor it takes is optional, which is exactly why the tool has to supply the ones that make a
+    // row findable. What these tests prove is that it does - the CLONE and the borrower on every
+    // row, a name the org did not have to invent, and a refusal for every shape that would leave a
+    // credit record saying something nobody said.
+    // -------------------------------------------------------------------------------------------
+
+    private static List<LLC_BI__Policy_Exception__c> exceptionsOnClone() {
+        return [
+            SELECT Id, Name, LLC_BI__Type__c, LLC_BI__Status__c, LLC_BI__Loan__c, LLC_BI__Relationship__c,
+                   LLC_BI__Severity__c, LLC_BI__Code__c, LLC_BI__Mitigation_Reason_1__c,
+                   LLC_BI__Mitigation_Reason_2__c, LLC_BI__Mitigation_Reason_3__c
+            FROM LLC_BI__Policy_Exception__c
+            WHERE LLC_BI__Relationship__c = :borrower().Id
+            ORDER BY CreatedDate
+        ];
+    }
+
+    @IsTest
+    static void aPolicyExceptionIsLoggedOnTheCloneAndOnTheBorrower() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('exception-mitigated');
+
+        StageLoanModification.Request r = stageReq(k);
+        r.policyExceptionAddsJson =
+            '[{"title":"Advance rate above guideline","status":"Mitigated","severity":"Major","code":"CRE-AR-01",' +
+            '"mitigationReasons":["Unlimited personal guaranty from James Hartwell.","Owner-occupied with committed take-out."]}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('policy exception'),
+            'The banker confirms a plan that NAMES the exception it will log: ' + staged.result.summary);
+
+        // THE EGRESS IS IN THE WARNINGS, before the banker confirms. It is the one write in this
+        // plan whose data goes somewhere the org's own audit trail cannot follow.
+        Boolean warnedAboutEgress = false;
+        for (String w : staged.result.warnings) {
+            if (w.contains('DATA LEAVES THE ORG') && w.contains('PolicyExceptionCDC')) {
+                warnedAboutEgress = true;
+            }
+        }
+        System.assert(warnedAboutEgress, 'The plan must say the record is transmitted: ' + String.join(staged.result.warnings, ' | '));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(1, done.result.policyExceptions.size());
+
+        ExecuteLoanModification.PolicyExceptionResult pxr = done.result.policyExceptions[0];
+        System.assertNotEquals(null, pxr.exceptionId, 'The exception id is the receipt');
+        System.assertEquals('Mitigated', pxr.status, 'The banker\'s decision, not the org\'s Unmitigated default');
+        System.assertEquals(2, pxr.mitigationCount);
+        System.assertEquals(borrower().Id, pxr.relationshipId, 'And it is anchored on the relationship too');
+
+        List<LLC_BI__Policy_Exception__c> rows = exceptionsOnClone();
+        System.assertEquals(1, rows.size(), 'Exactly one exception, and it exists');
+        LLC_BI__Policy_Exception__c row = rows[0];
+        // THE NAME IS OURS. An omitted one is backfilled by the org with the record's own Id, which
+        // is the single reason a title is required rather than optional.
+        System.assertEquals('Advance rate above guideline', row.Name);
+        System.assertNotEquals(String.valueOf(row.Id).substring(0, 15), row.Name, 'The org did not have to name this row');
+        System.assertEquals('Policy', row.LLC_BI__Type__c, 'The only required field, and the value all 81 org rows carry');
+        System.assertEquals('Mitigated', row.LLC_BI__Status__c);
+        System.assertEquals('Major', row.LLC_BI__Severity__c, 'Free text on this org, so it travels as the caller wrote it');
+        System.assertEquals('CRE-AR-01', row.LLC_BI__Code__c);
+        System.assertEquals('Unlimited personal guaranty from James Hartwell.', row.LLC_BI__Mitigation_Reason_1__c);
+        System.assertEquals('Owner-occupied with committed take-out.', row.LLC_BI__Mitigation_Reason_2__c);
+        System.assertEquals(null, row.LLC_BI__Mitigation_Reason_3__c, 'The third slot stays empty rather than repeating one');
+        System.assertEquals(borrower().Id, row.LLC_BI__Relationship__c);
+
+        // ON THE CLONE, NEVER ON THE BOOKED PARENT.
+        System.assertNotEquals(parent().Id, row.LLC_BI__Loan__c, 'The booked facility carries no new exception');
+        LLC_BI__Loan__c host = [SELECT Id, LLC_BI__Is_Modification__c FROM LLC_BI__Loan__c WHERE Id = :row.LLC_BI__Loan__c];
+        System.assertEquals(true, host.LLC_BI__Is_Modification__c, 'The exception sits on the modification clone');
+    }
+
+    @IsTest
+    static void anUnmitigatedExceptionFilesWithNoMitigantAtAll() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('exception-unmitigated');
+
+        StageLoanModification.Request r = stageReq(k);
+        r.policyExceptionAddsJson = '[{"title":"Hold limit exceeded","status":"Unmitigated"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(0, done.result.policyExceptions[0].mitigationCount);
+
+        List<LLC_BI__Policy_Exception__c> rows = exceptionsOnClone();
+        System.assertEquals(1, rows.size());
+        System.assertEquals('Unmitigated', rows[0].LLC_BI__Status__c,
+            'Unmitigated because the banker SAID so, which is a different fact from the org defaulting it');
+        System.assertEquals(null, rows[0].LLC_BI__Mitigation_Reason_1__c);
+        System.assertEquals(null, rows[0].LLC_BI__Severity__c, 'Nothing invents a severity: the field is free text and nobody graded this');
+    }
+
+    @IsTest
+    static void everyMalformedPolicyExceptionIsRefusedByName() {
+        C360TestFixture.armCalloutMock();
+
+        // No title. Name is plain text and the org backfills an omitted one with the record's Id.
+        StageLoanModification.Request noTitle = stageReq(key('px-notitle'));
+        noTitle.policyExceptionAddsJson = '[{"status":"Unmitigated"}]';
+        // A title longer than the org's own Name field.
+        StageLoanModification.Request longTitle = stageReq(key('px-longtitle'));
+        longTitle.policyExceptionAddsJson = '[{"title":"' + 'x'.repeat(81) + '","status":"Unmitigated"}]';
+        // No status. The org would default it to Unmitigated, which reads as a decision.
+        StageLoanModification.Request noStatus = stageReq(key('px-nostatus'));
+        noStatus.policyExceptionAddsJson = '[{"title":"Advance rate above guideline"}]';
+        // A status the org's picklist does not hold.
+        StageLoanModification.Request badStatus = stageReq(key('px-badstatus'));
+        badStatus.policyExceptionAddsJson = '[{"title":"Advance rate above guideline","status":"Tolerated"}]';
+        // Mitigated with nothing behind it.
+        StageLoanModification.Request noMitigant = stageReq(key('px-nomitigant'));
+        noMitigant.policyExceptionAddsJson = '[{"title":"Advance rate above guideline","status":"Mitigated"}]';
+        // Unmitigated WITH mitigants: the record would contradict itself.
+        StageLoanModification.Request contradiction = stageReq(key('px-contradiction'));
+        contradiction.policyExceptionAddsJson =
+            '[{"title":"Advance rate above guideline","status":"Unmitigated","mitigationReasons":["A personal guaranty"]}]';
+        // A mitigant longer than the org's 100-character field.
+        StageLoanModification.Request longReason = stageReq(key('px-longreason'));
+        longReason.policyExceptionAddsJson =
+            '[{"title":"Advance rate above guideline","status":"Mitigated","mitigationReasons":["' + 'y'.repeat(101) + '"]}]';
+        // A fourth mitigant, which has nowhere to go.
+        StageLoanModification.Request fourReasons = stageReq(key('px-fourreasons'));
+        fourReasons.policyExceptionAddsJson =
+            '[{"title":"Advance rate above guideline","status":"Mitigated","mitigationReasons":["one","two","three","four"]}]';
+
+        Test.startTest();
+        StageLoanModification.Response r1 = stage(noTitle);
+        StageLoanModification.Response r2 = stage(longTitle);
+        StageLoanModification.Response r3 = stage(noStatus);
+        StageLoanModification.Response r4 = stage(badStatus);
+        StageLoanModification.Response r5 = stage(noMitigant);
+        StageLoanModification.Response r6 = stage(contradiction);
+        StageLoanModification.Response r7 = stage(longReason);
+        StageLoanModification.Response r8 = stage(fourReasons);
+        Test.stopTest();
+
+        System.assertEquals(false, r1.ok, 'An exception with no title is a row nobody can find');
+        System.assert(r1.error.message.contains('backfills an omitted one'), r1.error.message);
+        System.assertEquals(false, r2.ok, 'A title over the org\'s own field length is refused, not cut');
+        System.assert(r2.error.message.contains('refused rather than cut'), r2.error.message);
+        System.assertEquals(false, r3.ok, 'The status is the banker\'s to state');
+        System.assert(r3.error.message.contains('will not take that default'), r3.error.message);
+        System.assertEquals(false, r4.ok, 'A status the org does not hold is refused with the ones it does');
+        System.assert(r4.error.message.contains('The org offers:'), r4.error.message);
+        System.assertEquals(false, r5.ok, 'Mitigated with nothing behind it is a claim, not a record');
+        System.assert(r5.error.message.contains('at least one mitigation reason'), r5.error.message);
+        System.assertEquals(false, r6.ok, 'A record cannot say both that nothing mitigates this and here is what does');
+        System.assert(r6.error.message.contains('carries no mitigation reasons'), r6.error.message);
+        System.assertEquals(false, r7.ok, 'An over-long mitigant is refused rather than truncated');
+        System.assert(r7.error.message.contains('refused rather than truncated'), r7.error.message);
+        System.assertEquals(false, r8.ok, 'The org holds three mitigation reasons and no more');
+        System.assert(r8.error.message.contains('refused rather than dropped quietly'), r8.error.message);
+
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Policy_Exception__c],
+            'None of the eight wrote anything');
+    }
+
+    @IsTest
+    static void aPolicyExceptionAimedAtAFacilityOutsideThePlanIsRefused() {
+        C360TestFixture.armCalloutMock();
+
+        StageLoanModification.Request r = stageReq(key('px-stranger-loan'));
+        r.policyExceptionAddsJson = '[{"title":"Advance rate above guideline","status":"Unmitigated","targetLoanId":"' +
+            C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType) + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'An exception is logged against the clone of a facility THIS plan modifies, or nowhere');
+        System.assert(res.error.message.contains('not one of the selected facilities'), res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Policy_Exception__c], 'And nothing was written');
+    }
+
     /**
      * The one test that runs the REAL bean. It cannot assert success, because a managed-package
      * credit action inside a test context is not something this suite controls, and a green assertion
