@@ -68,17 +68,30 @@ export interface Amendment {
 
 export type AmendmentOp = "change" | "add" | "remove";
 
+/** WHAT A QUESTION IS ABOUT, so the next line can answer it with the missing
+ *  fact alone — "$20,000,000" is an answer, and a room that made the banker
+ *  restate the whole instruction would not be a conversation. */
+export interface Awaiting {
+  field: CatalogField;
+  facility: Facility | null;
+  /**
+   * A PARTY QUESTION IS ANSWERED WITH A NAME, not a value.
+   *
+   * "Which entity?" is asked over a line that already settled the op, the role
+   * and the member; only the name was missing. Holding those here is what lets
+   * "James Hartwell" complete the amendment, instead of arriving as a bare noun
+   * the room has to read as a whole new instruction.
+   */
+  party?: { op: AmendmentOp; role?: string; ownership?: number };
+}
+
 export type ParseOutcome =
   | { kind: "amendments"; amendments: Amendment[] }
-  /** Read, but not resolvable without one more fact. Never a guess.
-   *  `awaiting` names WHAT the question is about, so the next line can answer
-   *  it with the missing fact alone — "$20,000,000" is an answer, and a room
-   *  that made the banker restate the whole instruction would not be a
-   *  conversation. */
+  /** Read, but not resolvable without one more fact. Never a guess. */
   | {
       kind: "clarify";
       question: string;
-      awaiting?: { field: CatalogField; facility: Facility | null };
+      awaiting?: Awaiting;
       /** The closed set of legal answers, where one exists (an org picklist).
        *  The engine turns these into clickable chips; each click is SAID and
        *  re-parsed like any typed answer. */
@@ -332,6 +345,37 @@ function operationFor(field: CatalogField, lower: string): AmendmentOp {
 
 /* ---------------------------------------------------------------- parties */
 
+/* A BORROWING-STRUCTURE LINE NAMES THREE THINGS — a verb, a role and an entity
+   — and it may name a member as well. Bankers say them in that order ("remove
+   the guarantor James Hartwell from the line of credit"), so the reader below
+   walks the same order rather than assuming the name follows the verb. */
+
+const PARTY_VERB = "(?:[Aa]dd|[Rr]emove|[Rr]elease|[Dd]rop|[Bb]ring\\s+in|[Tt]ake\\s+off)";
+/** The roles the borrowing structure holds, longest first so "limited
+ *  guarantor" is never read as "guarantor" with a stray word in front. LOWER
+ *  CASE on purpose: a banker writes the role in lower case and an entity name
+ *  capitalised, and that is what keeps "add Borrower Holdings LLC" from reading
+ *  its own first word as a role and filing "Holdings LLC". */
+const PARTY_ROLE = "(?:limited\\s+guarantor|co[-\\s]?borrower|related\\s+entity|guarantor|borrower)";
+const PARTY_NAME =
+  "[A-Z][\\w&.'-]*(?:\\s+[A-Z][\\w&.'-]*)*(?:\\s+(?:LLC|Inc\\.?|Ltd\\.?|LP|LLP|Corp\\.?|Co\\.?|Holdings|Industrial))?";
+/** Verb, optional article, optional ROLE, then the name. */
+const PARTY_NAMED = new RegExp(`\\b${PARTY_VERB}\\b\\s+(?:(?:the|an?)\\s+)?(?:${PARTY_ROLE}\\s+)?(${PARTY_NAME})`);
+/** Not a name, whatever the capitalisation: "add a guarantor" names nobody. */
+const PARTY_NOT_A_NAME = new RegExp(`^(?:an?|the|entity|${PARTY_ROLE})$`, "i");
+/**
+ * WHERE THE NAME ENDS.
+ *
+ * "remove the guarantor James Hartwell from the Line of Credit" names a party
+ * AND a member, and the org capitalises its own product names — so a capture
+ * left to run swallows the member and files an entity called "James Hartwell
+ * From The Line Of Credit". The member is resolved separately by
+ * `namedFacilities`; here it is only in the way.
+ *
+ * "off" is deliberately not in the list: "take off" is one of the verbs above.
+ */
+const FACILITY_CLAUSE = /\s+\b(?:from|on|under|against)\s+the\b.*$/i;
+
 /** The entity a party amendment names. Matched against the deal's own entities
  *  first; an unknown name is kept verbatim, because ADDING an entity that is not
  *  on the deal yet is exactly what the ask is. */
@@ -341,13 +385,10 @@ function readParty(text: string, ctx: ParseContext): string | undefined {
   const onDeal = known.find((n) => lower.includes(n.toLowerCase()));
   if (onDeal) return onDeal;
 
-  // "add Hartwell Logistics as a guarantor" / "remove Elena Hartwell from".
-  const after = text.match(
-    /\b(?:add|remove|release|drop|bring\s+in|take\s+off)\b\s+(?:the\s+)?([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)*(?:\s+(?:LLC|Inc\.?|Ltd\.?|LP|LLP|Corp\.?|Co\.?|Holdings|Industrial))?)/,
-  );
-  const candidate = after?.[1]?.trim();
-  // A role word is not a name: "add a guarantor" names nobody.
-  if (!candidate || /^(a|an|the|borrower|guarantor|co-borrower|entity)$/i.test(candidate)) return undefined;
+  // "add Hartwell Logistics as a guarantor" / "remove the guarantor Elena
+  // Hartwell from the line of credit".
+  const candidate = text.replace(FACILITY_CLAUSE, "").match(PARTY_NAMED)?.[1]?.trim();
+  if (!candidate || PARTY_NOT_A_NAME.test(candidate)) return undefined;
   return candidate;
 }
 
@@ -543,9 +584,26 @@ function readValue(
 
     if (field.type === "months") {
       const months = monthTokens(lower);
-      if (!months.length) return { question: "How long — in months or years?" };
-      const last = months.at(-1)!;
-      return { value: { kind: "months", months: last.value, text: last.text } };
+      if (months.length) {
+        const last = months.at(-1)!;
+        return { value: { kind: "months", months: last.value, text: last.text } };
+      }
+      // THE LABEL ALREADY CARRIES THE UNIT. The org names these fields
+      // "Amortized Term (Months)" and "Loan Term (Months)", so a banker who
+      // quotes the org's own label and then states a figure HAS said the unit,
+      // and asking "months or years?" back is the room failing to read its own
+      // field name. The anchor word is still required — a length is a move to a
+      // figure, and a figure sitting loose in a sentence is not one.
+      const unit = /\((month|year)s?\)/i.exec(field.label);
+      const stated = unit ? /\b(?:to|at|of)\s+(\d+(?:\.\d+)?)\b/.exec(lower) : null;
+      if (unit && stated) {
+        const said = Number(stated[1]);
+        const isYears = unit[1].toLowerCase() === "year";
+        return {
+          value: { kind: "months", months: isYears ? Math.round(said * 12) : said, text: `${stated[1]} ${isYears ? "years" : "months"}` },
+        };
+      }
+      return { question: "How long — in months or years?" };
     }
 
     if (field.type === "date") {
@@ -665,13 +723,39 @@ function inferAmount(lower: string, ctx: ParseContext): ParseOutcome | null {
  * that carries nothing else. Returns null when the answer is not one either —
  * an unreadable answer is still unreadable.
  */
-export function parseAnswer(
-  awaiting: { field: CatalogField; facility: Facility | null },
-  text: string,
-): ParseOutcome | null {
+export function parseAnswer(awaiting: Awaiting, text: string, ctx: ParseContext): ParseOutcome | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   const lower = trimmed.toLowerCase();
+
+  // THE ANSWER TO "WHICH ENTITY?" IS A NAME, and the op, the role and the member
+  // were all read off the line that asked. Resolved against the deal's own
+  // involvement rows where it is one of them, so the row the org has to find
+  // travels spelled the way the org spells it; kept verbatim where it is not,
+  // because naming somebody who is not on the deal yet is exactly what an add
+  // is. The verb is synthesised so one reader does both jobs.
+  if (awaiting.party) {
+    const party = readParty(`add ${trimmed}`, ctx) ?? trimmed;
+    // "the line of credit" is an answer to a different question.
+    if (PARTY_NOT_A_NAME.test(party) || /^(?:an?|the)\b/i.test(party)) return null;
+    return {
+      kind: "amendments",
+      amendments: [
+        {
+          field: awaiting.field,
+          facility: awaiting.facility,
+          value: null,
+          party,
+          // A role stated in the ANSWER beats the one the question carried.
+          role: readRole(lower) ?? awaiting.party.role,
+          ownership: readOwnership(lower) ?? awaiting.party.ownership,
+          matched: trimmed,
+          op: awaiting.party.op,
+        },
+      ],
+    };
+  }
+
   const at: CatalogMatch = { field: awaiting.field, matched: "", index: 0 };
   const read = readValue(awaiting.field, trimmed, lower, at, awaiting.facility);
   if ("question" in read) return { kind: "clarify", question: read.question, awaiting, options: read.options };
@@ -854,11 +938,17 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
       const read = readValue(field, scrubbed, scrubbedLower, at, facility);
       if ("question" in read) return { kind: "clarify", question: read.question, awaiting: { field, facility }, options: read.options };
       const party = field.category === "party" ? readParty(trimmed, ctx) : undefined;
-      if (field.category === "party" && !party) {
-        return { kind: "clarify", question: "Which entity? Name it and I will stage the involvement." };
-      }
       const role = field.category === "party" ? readRole(scrubbedLower) : undefined;
       const ownership = field.category === "party" ? readOwnership(scrubbedLower) : undefined;
+      if (field.category === "party" && !party) {
+        return {
+          kind: "clarify",
+          question: "Which entity? Name it and I will stage the involvement.",
+          // The op, the role and the member are already settled. Carrying them
+          // is what lets the next line be the name and nothing else.
+          awaiting: { field, facility, party: { op: operationFor(field, lower), role, ownership } },
+        };
+      }
       amendments.push({ field, facility, value: read.value, party, role, ownership, matched: match.matched, op: operationFor(field, lower) });
     }
   }

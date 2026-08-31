@@ -807,12 +807,22 @@ const PARTY_FIELDS: CatalogField[] = [
     ],
     // Directional phrases, not bare nouns: "who is the guarantor" is a question
     // about the deal, not an instruction to put somebody on it.
+    //
+    // EVERY ROLE, WITH EVERY ARTICLE. A banker naming the role between the verb
+    // and the name ("add the co-borrower Hartwell Logistics LLC") is saying the
+    // same thing as one naming it after; a list that carried only "a" left the
+    // "the" phrasings matching nothing at all, which reads as the room having no
+    // opinion rather than as a gap in its vocabulary.
     synonyms: [
-      "add a borrower", "add borrower", "add a guarantor", "add guarantor",
+      "add a borrower", "add borrower", "add the borrower",
+      "add a guarantor", "add guarantor", "add the guarantor",
+      "add a limited guarantor", "add limited guarantor", "add the limited guarantor",
+      "add a co-borrower", "add co-borrower", "add the co-borrower",
+      "add a related entity", "add related entity", "add the related entity",
       "as a guarantor", "as guarantor", "as a borrower", "as borrower",
       "as a co-borrower", "as co-borrower", "as a related entity", "as related entity",
-      "as a limited guarantor", "as limited guarantor", "add a limited guarantor",
-      "bring in", "add the entity", "add a co-borrower",
+      "as a limited guarantor", "as limited guarantor",
+      "bring in", "add the entity",
     ],
   },
   {
@@ -831,7 +841,19 @@ const PARTY_FIELDS: CatalogField[] = [
     recordWire: "involvementChange",
     gap: "A removal files when the line names the member it comes off; without the member it travels as a handoff.",
     closes: "Name the member: \"remove Hartwell Logistics LLC from the Line of Credit\" files as a carry exclusion.",
-    synonyms: ["remove the borrower", "remove borrower", "remove the guarantor", "remove guarantor", "release the guarantor", "drop the guarantor", "take off", "release from the guaranty"],
+    // Same role list as the add, and for the same reason: the demo package
+    // carries a Limited Guarantor, and "remove the limited guarantor Elena
+    // Hartwell" matched nothing here while "remove the guarantor" did.
+    synonyms: [
+      "remove the borrower", "remove borrower",
+      "remove the guarantor", "remove guarantor",
+      "remove the limited guarantor", "remove limited guarantor",
+      "remove the co-borrower", "remove co-borrower",
+      "remove the related entity", "remove related entity",
+      "release the guarantor", "release the limited guarantor",
+      "drop the guarantor", "drop the limited guarantor",
+      "take off", "release from the guaranty",
+    ],
   },
   {
     id: "party.borrowerType",
@@ -1224,6 +1246,9 @@ const INDEXED: Array<{ field: CatalogField; synonym: string }> = FIELD_CATALOG.f
   field.synonyms.map((synonym) => ({ field, synonym })),
 ).sort((a, b) => b.synonym.length - a.synonym.length);
 
+/** The unit an org label states in brackets, right after the field's own name. */
+const UNIT_PARENTHETICAL = /^\s*\((?:months?|years?|mos?|yrs?)\)/;
+
 function wordBoundedIndex(haystack: string, needle: string): number {
   let from = 0;
   for (;;) {
@@ -1245,6 +1270,13 @@ export function matchCatalog(text: string): CatalogMatch[] {
     const at = wordBoundedIndex(lower, synonym);
     if (at === -1) continue;
     const span: [number, number] = [at, at + synonym.length];
+    // THE UNIT IN A LABEL BELONGS TO THE FIELD IT FOLLOWS. A banker who pastes
+    // the org's own label — "Amortized Term (Months)" — is naming ONE field, and
+    // "months" inside the bracket is a synonym of a DIFFERENT one (Term). So the
+    // claim extends over a trailing unit parenthetical, and the second read of
+    // the same words never happens.
+    const unit = UNIT_PARENTHETICAL.exec(lower.slice(span[1]));
+    if (unit) span[1] += unit[0].length;
     // A longer phrase that already claimed this span wins: the shorter synonym
     // inside it is the same words being read twice.
     if (claimed.some(([s, e]) => at < e && span[1] > s)) continue;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Facility, LegalEntity } from "../data/contract";
-import { parseModify, type ParseContext } from "./parseModify";
+import { parseAnswer, parseModify, type ParseContext } from "./parseModify";
 
 /* =============================================================================
    THE DETERMINISTIC PARSE, AND ITS REFUSALS.
@@ -183,7 +183,7 @@ describe("the deterministic parse", () => {
   });
 
   it("reads a mapped covenant with a threshold as a FILEABLE covenant value", () => {
-    const out = parseModify("add a leverage covenant max 3.5x", single, "Hartwell");
+    const out = parseModify("add a leverage covenant max 3.5x", single);
     if (out.kind !== "amendments") throw new Error(out.kind);
     const a = out.amendments[0];
     expect(a.field.id).toBe("covenant.add");
@@ -195,7 +195,7 @@ describe("the deterministic parse", () => {
   });
 
   it("asks for the threshold when a mapped covenant arrives without one", () => {
-    const out = parseModify("add a leverage covenant", single, "Hartwell");
+    const out = parseModify("add a leverage covenant", single);
     expect(out.kind).toBe("clarify");
     if (out.kind !== "clarify") return;
     expect(out.question).toMatch(/threshold/i);
@@ -262,5 +262,117 @@ describe("the deterministic parse", () => {
     expect(out.kind).toBe("clarify");
     if (out.kind !== "clarify") return;
     expect(out.question).toMatch(/booked/i);
+  });
+});
+
+/* =============================================================================
+   THE BORROWING STRUCTURE, IN THE ORDER BANKERS SAY IT.
+
+   "remove the guarantor James Hartwell" puts the ROLE between the verb and the
+   name, and the name is somebody the read does not carry — which is the whole
+   point of a removal the room has to stage. Everything here is a name that is
+   NOT in `entities`, so what is exercised is the reader and not the lookup.
+   ============================================================================= */
+
+describe("a party the deal does not already carry", () => {
+  const NAMED = [
+    "remove the guarantor James Hartwell",
+    "remove the guarantor James Hartwell from the line of credit",
+    // The role AFTER the name — the phrasing that already worked, kept honest.
+    "remove James Hartwell as guarantor",
+    "remove the limited guarantor James Hartwell",
+    "add the co-borrower James Hartwell",
+  ];
+
+  it.each(NAMED)("reads the entity out of %j", (line) => {
+    const out = parseModify(line, single);
+    if (out.kind !== "amendments") throw new Error(`${line}: ${out.kind}`);
+    expect(out.amendments[0].party).toBe("James Hartwell");
+  });
+
+  it("never lets the MEMBER clause become part of the name", () => {
+    // The org capitalises its own product names, so a capture left to run would
+    // file an entity called "James Hartwell From The Line Of Credit".
+    const out = parseModify("remove the guarantor James Hartwell from the Line of Credit - $15,000,000.00", single);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    expect(out.amendments[0].party).toBe("James Hartwell");
+    expect(out.amendments[0].facility?.loanId).toBe(line15.loanId);
+  });
+
+  it("still reads a first word that only LOOKS like a role", () => {
+    // Capitalised, so it is a name: the role words are the ones a banker writes
+    // in lower case.
+    const out = parseModify("add Borrower Holdings LLC as a guarantor", single);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    expect(out.amendments[0].party).toBe("Borrower Holdings LLC");
+  });
+
+  it("ANSWERS the room's own question with the name alone", () => {
+    const asked = parseModify("remove the guarantor", single);
+    expect(asked.kind).toBe("clarify");
+    if (asked.kind !== "clarify") return;
+    expect(asked.question).toMatch(/which entity/i);
+    // The op, the role and the member were all read off the asking line.
+    expect(asked.awaiting?.party).toMatchObject({ op: "remove", role: "Guarantor" });
+    expect(asked.awaiting?.facility?.loanId).toBe(line15.loanId);
+
+    const answered = parseAnswer(asked.awaiting!, "James Hartwell", single);
+    if (answered?.kind !== "amendments") throw new Error(String(answered?.kind));
+    expect(answered.amendments).toHaveLength(1);
+    expect(answered.amendments[0]).toMatchObject({
+      party: "James Hartwell",
+      role: "Guarantor",
+      op: "remove",
+    });
+    expect(answered.amendments[0].facility?.loanId).toBe(line15.loanId);
+  });
+
+  it("spells an answered name the way the DEAL spells it", () => {
+    const asked = parseModify("remove the limited guarantor", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    const answered = parseAnswer(asked.awaiting!, "elena hartwell", single);
+    if (answered?.kind !== "amendments") throw new Error(String(answered?.kind));
+    // The org has to find the row by name, so the deal's own spelling travels.
+    expect(answered.amendments[0].party).toBe("Elena Hartwell");
+  });
+
+  it("lets the ANSWER state a role and an ownership the question did not carry", () => {
+    const asked = parseModify("bring in an entity on the line of credit - $15,000,000.00", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    const answered = parseAnswer(asked.awaiting!, "Hartwell Logistics LLC as a co-borrower at 40% ownership", single);
+    if (answered?.kind !== "amendments") throw new Error(String(answered?.kind));
+    expect(answered.amendments[0]).toMatchObject({
+      party: "Hartwell Logistics LLC",
+      role: "Co-Borrower",
+      ownership: 40,
+      op: "add",
+    });
+  });
+
+  it("refuses an answer that belongs to a different question", () => {
+    const asked = parseModify("remove the guarantor", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(parseAnswer(asked.awaiting!, "the line of credit", single)).toBeNull();
+  });
+});
+
+describe("a length whose own label states the unit", () => {
+  it("reads a bare figure as MONTHS rather than asking which unit", () => {
+    // The org labels the field "Amortized Term (Months)". A banker who quotes
+    // that label and says 240 has already said the unit.
+    const out = parseModify("set the Amortized Term (Months) to 240", single);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    // ONE amendment: "months" inside the org's own label is part of the field
+    // name, not a second field for the parse to find.
+    expect(out.amendments).toHaveLength(1);
+    expect(out.amendments[0].field.id).toBe("loan.amortisedTerm");
+    expect(out.amendments[0].value).toMatchObject({ kind: "months", months: 240 });
+  });
+
+  it("still asks when the figure is loose in the sentence", () => {
+    const out = parseModify("shorten the amortisation", single);
+    expect(out.kind).toBe("clarify");
+    if (out.kind !== "clarify") return;
+    expect(out.question).toMatch(/months or years/i);
   });
 });
