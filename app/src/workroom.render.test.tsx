@@ -226,15 +226,19 @@ describe("law 3 — the WIRED room, on the baked relationship", () => {
     expect(visibleWords(openWired()).length).toBeLessThan(60);
   });
 
-  it("opens by name and leads on what the PACKAGE can carry", () => {
+  it("opens by name and leads on the deal's next move, not a headcount", () => {
     const room = openWired();
     const headline = room.querySelector(".wk-headline")!.textContent ?? "";
     expect(headline).toContain("Hey Fabian.");
-    // Founder law 1, applied to the conversation: the package total is the
-    // story and the members are the mechanism.
-    expect(headline).toContain("All 6 members are booked");
-    expect(headline).toContain("$46M is open");
-    expect(headline).toMatch(/Pick one\.$/);
+    // Wave 2: the opener is proactive. Of Hartwell's six booked members, none
+    // matures inside the coming quarter as of this snapshot's own clock
+    // (`meta.generatedAt`), so the highest-priority thing this room can say is
+    // the nearest covenant test due soon — the Accounts Receivable test on the
+    // Line of Credit, six days out (`nextMove.ts`, tier 2). The old headcount
+    // sentence ("All 6 members are booked...") is now the fallback, exercised
+    // in modifyEngine.test.ts on a bundle with no next move to lead on.
+    expect(headline).toContain("The Accounts Receivable covenant is due in 6 days.");
+    expect(headline).toMatch(/Start the review\?$/);
   });
 
   it("offers every eligible member as something to click, not something to read", () => {
