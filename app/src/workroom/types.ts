@@ -221,6 +221,11 @@ export interface WorkroomDelta {
 export interface WorkroomAcknowledgement {
   reply: string;
   challenge?: WorkroomChallenge;
+  /** CLICKABLE ANSWERS for the question this confirm's own follow-up asks, on
+   *  the same closed-set contract as IntentResult's `options` below: a confirm
+   *  is not silent, and where what it asks next has a legal answer set, the
+   *  chips ride here too rather than only on the first ask. */
+  options?: Array<{ label: string; say: string }>;
 }
 
 /** An ask the room will not stage, answered with the reason rather than a
@@ -254,6 +259,12 @@ export type IntentResult =
       /** What the room noticed about these deltas before anything is staged.
        *  Never a gate: the chips arrive open either way. */
       advisories?: WorkroomAdvisory[];
+      /** CLICKABLE ANSWERS, same contract as "unparsed" below. A deltas reply
+       *  still ends on a question wherever something required is still missing,
+       *  and where THAT question has a closed set of legal answers, the chips
+       *  ride here too — a banker should never lose the chips just because the
+       *  same message also landed a delta. */
+      options?: Array<{ label: string; say: string }>;
     }
   | { kind: "refusal"; reply: string; refusal: WorkroomRefusal }
   | {
