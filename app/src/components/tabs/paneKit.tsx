@@ -103,22 +103,11 @@ export function Fig({ children }: { children: string }) {
 }
 
 /* ---------------------------------------------------------------- the meter */
-export function Meter({
-  pct,
-  tone,
-  tickPct,
-}: {
-  pct: number;
-  tone?: "good" | "warn" | "bad";
-  tickPct?: number | null;
-}) {
+export function Meter({ pct, tone }: { pct: number; tone?: "good" | "warn" | "bad" }) {
   const w = Math.max(0, Math.min(100, pct));
   return (
     <div className="meter">
       <i className={tone ?? undefined} style={{ width: `${w}%` }} />
-      {tickPct != null && tickPct >= 0 && tickPct <= 100 && (
-        <span className="tick" style={{ left: `${tickPct}%` }} aria-hidden="true" />
-      )}
     </div>
   );
 }
@@ -130,14 +119,12 @@ export function MeterBlock({
   figure,
   pct,
   tone,
-  tickPct,
   caption,
 }: {
   label: string;
   figure: string;
   pct: number;
   tone?: "good" | "warn" | "bad";
-  tickPct?: number | null;
   caption?: ReactNode;
 }) {
   return (
@@ -156,7 +143,7 @@ export function MeterBlock({
           <Fig>{figure}</Fig>
         </span>
       </div>
-      <Meter pct={pct} tone={tone} tickPct={tickPct} />
+      <Meter pct={pct} tone={tone} />
       {caption && (
         <div style={{ marginTop: 7, fontSize: 11, color: "var(--ink-faint)" }}>{caption}</div>
       )}

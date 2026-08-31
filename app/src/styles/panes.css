@@ -251,9 +251,9 @@
 /* THE TREND LINE DRAWS ITSELF on pane entry. The dummy hard-codes a 1550-unit
    dasharray because it authors one fixed path; the port's path is as long as
    the spread is, so the line declares `pathLength="1"` and the dash works in
-   normalised units. Purple discipline: ONE chart line is violet (revenue). The
-   second series is quiet ink, and it is not a spine — it is the same series
-   class as the first, carrying its own data. */
+   normalised units. There is exactly ONE chart line and it is violet (revenue),
+   which is the purple-discipline non-negotiable; every other Boom figure reads
+   in the key-ratios card beside it. */
 .pane .finline {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -323,7 +323,6 @@
   background: var(--surface-overlay);
   overflow: hidden;
   margin-top: 8px;
-  position: relative;
 }
 .pane .meter i {
   display: block;
@@ -350,16 +349,6 @@
   from {
     width: 0;
   }
-}
-/* A meter that measures against a limit shows the limit. A 2px ink tick, on
-   the meter's own scale — the covenant threshold and the gauge ceiling. */
-.pane .meter .tick {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: var(--ink-strong);
-  border-radius: 1px;
 }
 /* Tone override for a meter that reports a status rather than a magnitude. */
 .pane .meter i.good {
@@ -568,10 +557,6 @@
 .pane .tli .tag.ses {
   background: var(--surface-overlay);
   color: var(--ink-muted);
-}
-.pane .tli .tag.req {
-  background: var(--accent-wash);
-  color: var(--accent);
 }
 .pane .tli .cite {
   display: inline-flex;
