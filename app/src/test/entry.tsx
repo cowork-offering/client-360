@@ -29,8 +29,3 @@ export function AppEntry() {
 export function dispatchOpenSheet(): void {
   appDispatch?.({ type: "SET_PANEL", panel: "actions" });
 }
-
-/** Close it again. */
-export function dispatchClosePanel(): void {
-  appDispatch?.({ type: "SET_PANEL", panel: "none" });
-}

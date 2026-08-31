@@ -4,7 +4,6 @@ import { FloatingPanel } from "./FloatingPanel";
 import { ChatPanelBody } from "./ChatPanel";
 import { ActionsPanelBody } from "./ActionsPanel";
 import { ActionPanel } from "./ActionPanel";
-import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { closeActionTicket, openActionTicket, useActionTicket } from "./actionTicket";
 import { ActionGlyph } from "./ActionIcon";
 import { BrandGlyph } from "./brand";
@@ -443,7 +442,6 @@ export function ChatFab() {
           title="Client Actions"
           subtitle={subtitle}
           variant="sheet"
-          returnFocusTo={() => document.getElementById(ACTIONS_TRIGGER_ID)}
           onClose={() => dispatch({ type: "SET_PANEL", panel: "none" })}
         >
           <ActionsPanelBody />
