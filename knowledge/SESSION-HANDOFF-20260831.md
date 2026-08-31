@@ -118,9 +118,16 @@ state + user intent + policy into composed plans and intelligent follow-ups — 
 deterministic parser as the primary understanding; (2) the DETERMINISTIC SPINE exactly as proven
 today (describe validation, plan hash, single-use token, one human approval, re-query verify) as
 the only thing that ever writes. Agent proposes, machinery validates, human approves. The parser
-stays as fast path + safety floor. Design question to resolve first: where the agent runs (the
-surrounding Claude conversation via the chat bridge is the natural channel — the artifact already
-carries the mcp capability; an in-page completion capability is NOT available in this runtime).
+stays as fast path + safety floor. RESOLVED with the founder (2026-08-31): the agent runs as an MCP TOOL the page calls via
+window.claude.mcp — the same mechanism the relationship chat already uses against the IDB Gateway
+(which carries a generic get_llm_response tool). NOT the surrounding conversation (no channel back
+into the room, 10-40s latency), NOT direct API from the page (CSP blocks external hosts; no
+in-page completion capability in this runtime). Fast path: prototype on IDB Gateway
+get_llm_response with our system prompt (state machine + catalog + doctrine) and a STRICT JSON
+schema the client validates (reject malformed = treat as unparsed); then graduate to a dedicated
+workroom_reason tool on a server we control. The model only ever PROPOSES amendments in the
+parser's own schema; the deterministic spine (validation, hash, token, approval, re-query) stays
+the only writer. Parser remains fast path + fallback.
 
 **Then:** final full re-drive (Playwright client sweep + org replays + founder connector click),
 report to all-green, then the UI-revamp port-back (the founder's parallel design session owns the
