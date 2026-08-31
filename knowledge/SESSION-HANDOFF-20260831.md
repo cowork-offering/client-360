@@ -94,7 +94,7 @@ https://claude.ai/code/artifact/583b29d3-5792-404c-9556-c5fd2f721ea1 (label
    (live probe a5Fbb000000IzzVEAS: LoC $20M + Equipment 240mo, four untouched members kept their
    amounts, reverted). Client routes targeted whenever scalar targets don't cover the selection OR
    one key carries two values; flat keys remain for single-facility; both-channels refused
-   org-side. Guard kept as unreachable backstop. 1826 client / 84 org tests. THE ONLY REMAINING
+   org-side. Guard kept as unreachable backstop. 1826 client / 84 org tests. FOUNDER-VERIFIED LIVE 12:45Z: his own panel click filed the mixed plan (version a5Fbb000000J04LEAS: LoC clone $20M, Equipment clone amort 84->240 with amount kept $8M, other clones inherited parent values untouched, full carry), verified and reverted. NOTE: Equipment parent's own baseline amort is 84, Purchase 240, Equip-3.5M 60 - clones inheriting these is NORMAL, do not misread as leakage. THE ONLY REMAINING
    LEAK PATTERN: `renewEngine.ts` / `StageRenewal.cls` still broadcast their two scalars — fix
    with the same per-target pattern (flagged in the merge commit Directive trailer).
 
