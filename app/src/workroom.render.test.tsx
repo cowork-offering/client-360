@@ -471,25 +471,26 @@ describe("no move the banker makes is answered with silence", () => {
   });
 });
 
-describe("law 7 — the mark is typographic", () => {
-  it("draws the lockup as a wordmark plus a kerned glyph, not an SVG", () => {
+describe("law 7 — the mark is the original vector", () => {
+  // Superseded 2026-08-31 (Electric Glass lock): the mark is the ORIGINAL
+  // Accenture ">" path (path8760), never a typed character. This law asserted
+  // the 2026-08-27 typographic directive; the newer founder call inverts it.
+  it("draws the lockup with the official vector, never a typed character", () => {
     const room = open("modify");
     const lockup = room.querySelector(".c360-lockup")!;
-    expect(lockup.querySelector("svg")).toBeNull();
     expect(lockup.querySelector(".c360-lockup-word")!.textContent).toBe("accenture");
     const mark = lockup.querySelector<HTMLElement>(".c360-lockup-mark")!;
-    expect(mark.textContent).toBe(">");
-    // Tight-kerned onto the wordmark: negative, and scaled to the size.
-    expect(Number.parseFloat(mark.style.marginLeft)).toBeLessThan(0);
+    expect(mark.querySelector("svg path")).not.toBeNull();
+    expect(mark.textContent).toBe("");
   });
 
-  it("carries the load, step and arrival motif on the same glyph", async () => {
+  it("carries the load, step and arrival motif on the same vector glyph", async () => {
     const room = open("modify");
     click(room.querySelector(".wk-pill")!);
     await settle();
     for (const glyph of room.querySelectorAll(".c360-glyph")) {
-      expect(glyph.textContent).toBe(">");
-      expect(glyph.querySelector("svg")).toBeNull();
+      expect(glyph.querySelector("svg path")).not.toBeNull();
+      expect(glyph.textContent).toBe("");
     }
     // The step spine is glyph-led in every stage.
     expect(room.querySelectorAll(".wk-stg .c360-glyph")).toHaveLength(4);
