@@ -11,6 +11,7 @@ import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
 import { resolveBundle, type ActionIcon as IconName } from "../actions/registry";
 import { openWorkroom, workroomContextFor } from "../workroom/openWorkroom";
+import { sowSeed } from "./workroom/seed";
 import "../styles/fab.css";
 import "../styles/chat.css";
 
@@ -363,6 +364,13 @@ export function ChatFab() {
         "this relationship";
 
       if (act === "modify") {
+        // NOTHING TELEPORTS (rule 58). A glass seed circle ripples out of the
+        // exact satellite that was pressed, timed with the room's opacity
+        // entrance. It is sown HERE, inside the shared handler and AFTER the
+        // client gate — trap 5: a second direct listener on the button would
+        // fire the seed on a press the gate then refused, which is how the arc
+        // opened a room on a client it had no business opening.
+        sowSeed(document.querySelector('.arcbtn[data-act="modify"]'));
         openWorkroom(
           workroomContextFor({
             mode: "modify",

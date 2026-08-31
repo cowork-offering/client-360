@@ -8,6 +8,7 @@ import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { TabContent } from "./tabs";
 import { SyncButton } from "./SyncSweep";
 import { prefersReducedMotion } from "../data/motion";
+import { Odo } from "./Odometer";
 
 /* =============================================================================
    SURFACE 2 — THE CLIENT HERO.
@@ -48,6 +49,31 @@ function isRatingAnchor(a: Anchor): boolean {
   return /^(risk\s*)?(rating|grade)$/i.test(a.label.trim());
 }
 
+/**
+ * THE ANCHOR A WRITE-BACK MOVES (rule 62).
+ *
+ * The workroom's manifest carries a COMMITTED delta, so the cell it lands on is
+ * the one the read calls committed or total exposure — whatever the agent
+ * labelled it. Nothing else in the strip is touched: a room that moved a figure
+ * it did not compute would be worse than a room that moved none.
+ */
+function isExposureAnchor(a: Anchor): boolean {
+  return /^(total\s+)?(committed|exposure|total\s+exposure|commitment)$/i.test(a.label.trim());
+}
+
+/** The anchor's figure, walked forward by a landed write-back. The value is a
+ *  string the agent composed, so the delta is applied to the NUMBER inside it
+ *  and re-set at the precision it was already written to — which is also what
+ *  keeps the old and new strings the same length, and therefore rollable. */
+function withWriteBack(value: string, deltaMM: number): string {
+  if (!deltaMM) return value;
+  const m = value.match(/^(\D*)(\d+(?:\.\d+)?)(.*)$/);
+  if (!m) return value;
+  const [, head, digits, tail] = m;
+  const dp = digits.includes(".") ? digits.split(".")[1].length : 0;
+  return `${head}${(parseFloat(digits) + deltaMM).toFixed(dp)}${tail}`;
+}
+
 /** Split "$12.5M" / "1.42×" / "75 days" into the figure and its unit. Purple
  *  discipline allows exactly one violet on a number, and it is the unit. */
 function splitUnit(value: string): [string, string] {
@@ -55,15 +81,19 @@ function splitUnit(value: string): [string, string] {
   return m ? [m[1], m[2]] : [value, ""];
 }
 
-function AnchorCell({ a }: { a: Anchor }) {
-  const [figure, unit] = splitUnit(a.value);
+function AnchorCell({ a, deltaMM, washed }: { a: Anchor; deltaMM: number; washed: boolean }) {
+  const moved = isExposureAnchor(a);
+  const [figure, unit] = splitUnit(moved ? withWriteBack(a.value, deltaMM) : a.value);
   const arrow = a.dir === "down" ? "↓" : a.dir === "up" ? "↑" : "";
   const arrowColor = a.dir === "down" ? STATUS.red.fg : STATUS.green.fg;
   return (
-    <div className="anchor">
+    <div className={`anchor ${moved && washed ? "washed" : ""}`} id={moved ? "ancExposure" : undefined}>
       <div className="l">{a.label}</div>
       <div className="v num">
-        {figure}
+        {/* A FIGURE NEVER SWAPS, IT ROLLS (rule 61). The odometer owns the text
+            node, so a write-back landing behind the workroom's blur is watched
+            turning over rather than found already changed. */}
+        {moved ? <Odo id="ancExpV" value={figure} /> : figure}
         {unit && <span className="u">{unit}</span>}
         {arrow && (
           <span className="dn" style={{ color: arrowColor }}>
@@ -167,6 +197,18 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
   const ratingAnchor = anchors.find(isRatingAnchor);
   const rest = anchors.filter((a) => a !== ratingAnchor);
 
+  /* WRITE-BACK THROUGH THE GLASS (rule 62). An execute in the workroom walked
+     the committed figure forward; the anchor rolls to it while the room is
+     still open, and the violet wash settles on it ONCE when the glass lifts. */
+  const deltaMM = (state.accountId && state.writeBacks[state.accountId]) || 0;
+  const washing = !!state.accountId && state.washes.includes(state.accountId);
+  useEffect(() => {
+    if (!washing || !state.accountId) return;
+    const id = state.accountId;
+    const t = window.setTimeout(() => dispatch({ type: "CLEAR_WASH", accountId: id }), 1900);
+    return () => clearTimeout(t);
+  }, [washing, state.accountId, dispatch]);
+
   const hero = useRef<HTMLDivElement | null>(null);
   useRingDraw(state.accountId);
   useWatermarkLean(hero);
@@ -213,7 +255,7 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
           <div className="anchors num">
             <GradeCell anchor={ratingAnchor} grade={grade} />
             {rest.map((a) => (
-              <AnchorCell key={a.label} a={a} />
+              <AnchorCell key={a.label} a={a} deltaMM={deltaMM} washed={washing} />
             ))}
           </div>
         </div>

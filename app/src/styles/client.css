@@ -380,6 +380,32 @@ body.on-client .topnav .itab:nth-child(7) {
 .view.show .anchor:nth-child(5) {
   animation-delay: 180ms;
 }
+/* THE WRITE-BACK'S WASH (rule 62, INTENT OVERRIDE #1 — Fabian, 2026-08-31).
+   A workroom execute walked this figure forward while the room was open; when
+   the glass LIFTS, the anchor it moved washes violet ONCE and clears.
+
+   THE SPECIFICITY IS THE WHOLE POINT. In the frozen dummy this rule is dead
+   CSS: it was written at `.anchor.washed` (0,2,0) and lost the cascade to
+   `.view.show .anchor` (0,2,1) above, so the wash never played and the leaf
+   reads `ancup`. The PORT implements the WRITTEN INTENT, which means beating
+   the entry cascade on its own terms — `.view.show .anchor.washed` is (0,3,1)
+   and wins. Anything that re-lowers this selector re-kills the wash silently.
+
+   The only purple the write-back is allowed. */
+.view.show .anchor.washed {
+  animation: ancwash 1.7s var(--ease-out) both;
+}
+@keyframes ancwash {
+  0% {
+    background: rgba(161, 0, 255, 0.09);
+    border-color: rgba(161, 0, 255, 0.2);
+  }
+  100% {
+    background: var(--surface-raised);
+    border-color: var(--row-divider);
+  }
+}
+
 @keyframes ancup {
   from {
     opacity: 0;

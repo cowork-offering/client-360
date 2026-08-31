@@ -6,6 +6,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom } from "./components/workroom/Workroom";
 import { clearComposed, createScriptedEngine, type WorkroomEngine } from "./workroom/engine";
+import { NO_CONNECTOR_REFUSAL } from "./workroom/explain";
 import { createModifyEngine } from "./workroom/modifyEngine";
 import { doorFor } from "./workroom/modes";
 import { workroomContextFor } from "./workroom/openWorkroom";
@@ -947,5 +948,117 @@ describe("a failed execute is a sentence, and it closes the approval", () => {
     const approve = room.querySelector<HTMLButtonElement>(".wk-approve")!;
     expect(approve.disabled).toBe(true);
     expect(approve.textContent).toBe("Approval closed");
+  });
+});
+
+/* =============================================================================
+   SURFACE 5 — THE CHANNEL-NONE DOCTRINE, SAID OUT LOUD.
+
+   No connector means no plan, nothing simulated, and no token ever burnt. That
+   part was always true; what it was NOT was legible. The refusal arrived as one
+   more sentence in the flow of the conversation, and a founder reading the room
+   could not tell "this view is not connected" from "something went wrong" —
+   which is a banker retrying a room that can never answer. It gets a surface of
+   its own now, in glass, with the way out of it.
+   ============================================================================= */
+
+describe("no connector is a state the room SHOWS, not a sentence it mumbles", () => {
+  /** An engine that reaches no org. The refusal is the one the real engines
+   *  raise, verbatim, so the room is matching production and not a fixture. */
+  function roomWithNoConnector(seen: { executed: number }) {
+    const context = contextFor("modify");
+    const scripted = createScriptedEngine(context);
+    const engine: WorkroomEngine = {
+      ...scripted,
+      stagePlan: async () => {
+        throw new Error(NO_CONNECTOR_REFUSAL);
+      },
+      execute: async () => {
+        seen.executed += 1;
+        throw new Error("the room must never get here");
+      },
+    };
+    return openWith(context, engine);
+  }
+
+  it("puts a glass notice in the thread, with the reason and the way out", async () => {
+    const seen = { executed: 0 };
+    const room = roomWithNoConnector(seen);
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+
+    await openPlan();
+
+    const notice = room.querySelector(".wk-notice")!;
+    expect(notice).toBeTruthy();
+    expect(notice.getAttribute("role")).toBe("alert");
+    expect(notice.textContent).toContain("not connected to the bank's systems");
+    // The way out, in the banker's own terms, not a stack trace.
+    expect(notice.textContent).toContain("Reload the page and accept the connection prompt");
+  });
+
+  it("burns no token and offers no plan it cannot honour", async () => {
+    const seen = { executed: 0 };
+    const room = roomWithNoConnector(seen);
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+
+    await openPlan();
+
+    // Staging is where the room found out, so execute is never reached and no
+    // single-use token is spent finding out what it already knew.
+    expect(seen.executed).toBe(0);
+    // And no flow card is left on the table pretending it has a plan.
+    expect(room.querySelector(".wk-flowcard")).toBeNull();
+    expect(byText(/^Approve and file /)).toBeUndefined();
+    // The manifest is untouched: nothing was written and nothing was dropped.
+    expect(room.querySelectorAll(".wk-ent").length).toBeGreaterThan(0);
+  });
+});
+
+/* =============================================================================
+   SURFACE 5 — WRITE-BACK THROUGH THE GLASS (rule 62).
+
+   Execute is theatre with REAL numbers: the commitment delta the manifest
+   carried is handed to the cockpit, which rolls its own figures behind the
+   room's blur while the room is still open on the confirmation. The room hands
+   the figure over and does not reach into the cockpit itself — it has no
+   provider above it here, and a dispatch that rebuilt its own engine would
+   knock it out of the scene it just landed on.
+   ============================================================================= */
+
+describe("the executed commitment delta leaves the room", () => {
+  it("hands the cockpit the delta its own manifest carried, once, on a landed execute", async () => {
+    const context = contextFor("modify");
+    const seen: number[] = [];
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createScriptedEngine(context)}
+          onClose={() => {}}
+          onExecuted={(mm) => seen.push(mm)}
+        />,
+      );
+    });
+    const room = document.querySelector<HTMLElement>(".wk-room")!;
+
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+    await openPlan();
+    click(byText(/^Approve and file /));
+    await settle();
+
+    // The dossier landed, so the write is real — and the delta went out exactly
+    // once, carrying the figure the manifest computed rather than a constant.
+    expect(room.querySelector(".wk-rescard")).toBeTruthy();
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeGreaterThan(0);
   });
 });
