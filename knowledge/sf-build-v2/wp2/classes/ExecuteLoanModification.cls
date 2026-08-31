@@ -2125,7 +2125,7 @@ global with sharing class ExecuteLoanModification {
     private static void composeCollateralChain(
         List<C360Plan.Step> steps,
         Map<String, Object> v,
-        ArmJob job,
+        ArmPlan job,
         Integer pledgeAddCount,
         List<PledgeResult> results,
         List<LLC_BI__Loan_Collateral2__c> pledgeRows,
