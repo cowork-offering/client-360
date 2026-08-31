@@ -1879,6 +1879,330 @@ private class StageExecuteLoanModificationTest {
         System.assert(res.error.message.contains('not one of the selected facilities'), res.error.message);
     }
 
+    // -------------------------------------------------------------------------------------------
+    // The collateral chain (2026-08-31).
+    //
+    // Every fixture here builds its own collateral type, because the org's
+    // Advance_Rate_should_not_be_null rule refuses a COLLATERAL created against a type with no
+    // advance rate and the error surfaces on the asset insert rather than on the type (LESSONS 9).
+    // Note the org rewrites LLC_BI__Collateral_Type__c.Name to the record id on insert in a real
+    // transaction and NOT in a test context, which is why resolving one by name works here.
+    // -------------------------------------------------------------------------------------------
+
+    private static LLC_BI__Collateral_Type__c collateralType(String name, Decimal rate) {
+        LLC_BI__Collateral_Type__c ct = new LLC_BI__Collateral_Type__c(Name = name, LLC_BI__Advance_Rate__c = rate);
+        insert ct;
+        return ct;
+    }
+
+    /** An asset the borrower owns. Ownership is the junction: LLC_BI__Collateral__c has no account
+     *  lookup of any kind on this org, so without this row the asset belongs to nobody. */
+    private static LLC_BI__Collateral__c ownedAsset(LLC_BI__Collateral_Type__c ct, String label, Decimal value) {
+        LLC_BI__Collateral__c c = new LLC_BI__Collateral__c(
+            LLC_BI__Collateral_Type__c = ct.Id,
+            LLC_BI__Value__c = value,
+            LLC_BI__Description__c = label
+        );
+        insert c;
+        insert new LLC_BI__Account_Collateral__c(
+            LLC_BI__Account__c = borrower().Id,
+            LLC_BI__Collateral__c = c.Id,
+            LLC_BI__Ownership_Percentage__c = 100,
+            LLC_BI__Primary_Owner__c = true
+        );
+        return c;
+    }
+
+    /** A pledge on the booked parent, so the carry has something of its own to replicate. */
+    private static LLC_BI__Loan_Collateral2__c pledgeToParent(LLC_BI__Collateral__c c, Decimal amount) {
+        LLC_BI__Loan_Collateral_Aggregate__c agg = new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'ZZ-MOD-TEST Aggregate');
+        insert agg;
+        LLC_BI__Loan_Collateral2__c p = new LLC_BI__Loan_Collateral2__c(
+            LLC_BI__Loan__c = parent().Id,
+            LLC_BI__Collateral__c = c.Id,
+            LLC_BI__Loan_Collateral_Aggregate__c = agg.Id,
+            LLC_BI__Pledged_Status__c = 'Active',
+            LLC_BI__Active__c = true,
+            LLC_BI__Amount_Pledged__c = amount
+        );
+        insert p;
+        return p;
+    }
+
+    @IsTest
+    static void anExistingAssetIsPledgedOntoTheCloneBesideTheOneTheCarryCopies() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('pledge-existing');
+
+        LLC_BI__Collateral_Type__c ct = collateralType('ZZ-MOD-TEST Real Estate', 80);
+        LLC_BI__Collateral__c carried = ownedAsset(ct, 'Duluth machine shop', 4000000);
+        LLC_BI__Collateral__c authored = ownedAsset(ct, 'Duluth warehouse', 5000000);
+        pledgeToParent(carried, 1000000);
+        Integer aggregatesBefore = [SELECT COUNT() FROM LLC_BI__Loan_Collateral_Aggregate__c];
+
+        StageLoanModification.Request r = stageReq(k);
+        r.pledgeAddsJson = '[{"collateralId":"' + authored.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('collateral pledge'),
+            'The banker confirms a plan that NAMES the pledge it will author: ' + staged.result.summary);
+        // No asset is created here, so the chain steps are absent rather than empty.
+        for (StageLoanModification.PlanStep ps : staged.result.steps) {
+            System.assertNotEquals('collateral_create_0', ps.id, 'The borrower already owns this asset; nothing creates one');
+        }
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(1, done.result.pledges.size());
+
+        ExecuteLoanModification.PledgeResult pr = done.result.pledges[0];
+        System.assertNotEquals(null, pr.pledgeId, 'The pledge id is the receipt');
+        System.assertEquals(false, pr.createdAsset, 'The asset was already the borrower\'s');
+        System.assertEquals(null, pr.ownershipId, 'And so no ownership row was authored');
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        List<LLC_BI__Loan_Collateral2__c> onClone = [
+            SELECT Id, LLC_BI__Collateral__c, LLC_BI__Loan_Collateral_Aggregate__c, LLC_BI__Pledged_Status__c,
+                   LLC_BI__Active__c, LLC_BI__Amount_Pledged__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :cloneId ORDER BY LLC_BI__Amount_Pledged__c
+        ];
+        System.assertEquals(2, onClone.size(), 'The clone carries the parent\'s pledge AND the new one');
+        // THE AGGREGATE QUESTION, answered by mirroring the carry rather than by inventing a scheme:
+        // ONE shell per clone, whatever mix of copied and authored pledges lands on it.
+        System.assertEquals(onClone[0].LLC_BI__Loan_Collateral_Aggregate__c, onClone[1].LLC_BI__Loan_Collateral_Aggregate__c,
+            'Both pledges hang off the SAME per-clone aggregate shell');
+        System.assertEquals(aggregatesBefore + 1, [SELECT COUNT() FROM LLC_BI__Loan_Collateral_Aggregate__c],
+            'Exactly one fresh shell was minted, not one per pledge');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :parent().Id],
+            'The booked parent keeps exactly the security it held, and gains nothing');
+
+        LLC_BI__Loan_Collateral2__c mine = [
+            SELECT LLC_BI__Pledged_Status__c, LLC_BI__Active__c, LLC_BI__Amount_Pledged__c, LLC_BI__Advance_Rate_Override__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE Id = :pr.pledgeId
+        ];
+        System.assertEquals('Active', mine.LLC_BI__Pledged_Status__c, 'The guard\'s only legal birth state');
+        System.assertEquals(true, mine.LLC_BI__Active__c);
+        System.assertEquals(4000000, mine.LLC_BI__Amount_Pledged__c,
+            'Unstated, the share defaults to the asset\'s lendable value at the type\'s own 80% rate');
+        System.assertEquals(null, mine.LLC_BI__Advance_Rate_Override__c,
+            'Nobody stated a rate, so nothing is overridden and the type default governs');
+
+        Boolean addOk = false;
+        Boolean verifyOk = false;
+        Boolean carryNamesBoth = false;
+        for (ExecuteLoanModification.StepResult s : done.result.steps) {
+            if (s.id == 'pledge_add_0') { addOk = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'pledge_verify_0') { verifyOk = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'carry_junctions') { carryNamesBoth = s.detail.contains('1 carried, 1 net-new'); }
+        }
+        System.assertEquals(true, addOk && verifyOk,
+            'The add and its verification are each their own settled step: ' + JSON.serialize(done.result.steps));
+        System.assertEquals(true, carryNamesBoth,
+            'The carry counts the authored pledge apart from the copied one: ' + JSON.serialize(done.result.steps));
+    }
+
+    @IsTest
+    static void aNetNewAssetIsCreated_ThenOwned_ThenPledgedToTheClone() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('pledge-create');
+        collateralType('ZZ-MOD-TEST Equipment', 50);
+
+        StageLoanModification.Request r = stageReq(k);
+        r.pledgeAddsJson = '[{"newCollateral":{"description":"New piece of equipment",' +
+            '"collateralType":"ZZ-MOD-TEST Equipment","value":2000000},"advanceRate":80}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        // The plan shows all three writes, in the order the arm performs them.
+        List<String> chain = new List<String>();
+        for (StageLoanModification.PlanStep ps : staged.result.steps) {
+            if (ps.id == 'collateral_create_0' || ps.id == 'collateral_own_0' || ps.id == 'pledge_add_0') {
+                chain.add(ps.id);
+            }
+        }
+        System.assertEquals(new List<String>{ 'collateral_create_0', 'collateral_own_0', 'pledge_add_0' }, chain,
+            'Asset, then ownership, then pledge: the asset has no account lookup, so the junction is not optional');
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(1, done.result.pledges.size());
+        ExecuteLoanModification.PledgeResult pr = done.result.pledges[0];
+        System.assertEquals(true, pr.createdAsset);
+        System.assertNotEquals(null, pr.collateralId, 'The asset id is the receipt for the first write');
+        System.assertNotEquals(null, pr.ownershipId, 'And the ownership row for the second');
+        System.assertNotEquals(null, pr.pledgeId, 'And the pledge for the third');
+
+        LLC_BI__Collateral__c asset = [
+            SELECT Name, LLC_BI__Description__c, LLC_BI__Value__c, LLC_BI__Collateral_Type__r.Name, RecordTypeId
+            FROM LLC_BI__Collateral__c WHERE Id = :pr.collateralId
+        ];
+        System.assertEquals('New piece of equipment', asset.LLC_BI__Description__c,
+            'The human label rides the description: Name on a collateral is an autonumber');
+        System.assertEquals(2000000, asset.LLC_BI__Value__c);
+        System.assertEquals('ZZ-MOD-TEST Equipment', asset.LLC_BI__Collateral_Type__r.Name,
+            'The type is the org\'s own record, resolved from a word');
+        System.assertEquals(null, asset.RecordTypeId, 'This tool never picks a collateral record type');
+
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Account_Collateral__c
+            WHERE LLC_BI__Collateral__c = :pr.collateralId AND LLC_BI__Account__c = :borrower().Id
+        ], 'The borrower owns it, which is the ONLY link the asset has to the relationship');
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        LLC_BI__Loan_Collateral2__c pledge = [
+            SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Amount_Pledged__c,
+                   LLC_BI__Advance_Rate_Override__c, LLC_BI__Override_Reason__c, LLC_BI__Lien_Position__c,
+                   LLC_BI__Authorize__c, LLC_BI__Loan_Collateral_Aggregate__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE Id = :pr.pledgeId
+        ];
+        System.assertEquals(cloneId, pledge.LLC_BI__Loan__c, 'The pledge sits on the CLONE');
+        System.assertEquals(80, pledge.LLC_BI__Advance_Rate_Override__c,
+            'A stated rate is an OVERRIDE: LLC_BI__Advance_Rate__c itself is a formula');
+        System.assertNotEquals(null, pledge.LLC_BI__Override_Reason__c,
+            'The org\'s Advance_Rate_Override rule refuses the row without a reason');
+        System.assertEquals(1600000, pledge.LLC_BI__Amount_Pledged__c,
+            '$2M at the stated 80%, not at the type\'s own 50%');
+        System.assertEquals(false, pledge.LLC_BI__Authorize__c, 'Never set by this tool');
+        System.assertEquals(null, pledge.LLC_BI__Lien_Position__c, 'Nobody stated a priority, so none is claimed');
+        System.assertNotEquals(null, pledge.LLC_BI__Loan_Collateral_Aggregate__c,
+            'The parent carried no pledges, so the AUTHORED pledge is what asked for the clone\'s shell');
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :parent().Id],
+            'The booked parent gains no security at all');
+    }
+
+    @IsTest
+    static void aPledgeIsRefusedWhenTheBorrowerDoesNotOwnTheAsset() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral_Type__c ct = collateralType('ZZ-MOD-TEST Real Estate', 80);
+        // Deliberately WITHOUT the ownership junction: somebody else's building.
+        LLC_BI__Collateral__c stranger = new LLC_BI__Collateral__c(
+            LLC_BI__Collateral_Type__c = ct.Id, LLC_BI__Value__c = 1000000, LLC_BI__Description__c = 'Somebody else\'s yard'
+        );
+        insert stranger;
+
+        StageLoanModification.Request r = stageReq(key('pledge-stranger'));
+        r.pledgeAddsJson = '[{"collateralId":"' + stranger.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A bank does not take security over an asset its borrower does not own');
+        System.assert(res.error.message.contains('not owned by this borrower'), res.error.message);
+        System.assert(res.error.message.contains('LLC_BI__Account_Collateral__c'),
+            'And the refusal names the junction that would settle it: ' + res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c], 'Nothing was written');
+    }
+
+    @IsTest
+    static void aSecondPledgeOfAnAssetTheFacilityAlreadyCarriesIsRefused() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral_Type__c ct = collateralType('ZZ-MOD-TEST Real Estate', 80);
+        LLC_BI__Collateral__c already = ownedAsset(ct, 'Duluth warehouse', 5000000);
+        pledgeToParent(already, 1000000);
+
+        StageLoanModification.Request r = stageReq(key('pledge-dupe'));
+        r.pledgeAddsJson = '[{"collateralId":"' + already.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'The carry brings the existing pledge onto the clone by itself');
+        System.assert(res.error.message.contains('already pledged'), res.error.message);
+        System.assert(res.error.message.contains('duplicate rather than a second lien'), res.error.message);
+
+        // The same duplicate arriving from the other side: named twice by ONE plan, on a facility
+        // that carries neither yet.
+        LLC_BI__Collateral__c fresh = ownedAsset(ct, 'Duluth machine shop', 2000000);
+        StageLoanModification.Request twice = stageReq(key('pledge-twice'));
+        twice.pledgeAddsJson = '[{"collateralId":"' + fresh.Id + '"},{"collateralId":"' + fresh.Id + '"}]';
+        StageLoanModification.Response second = stage(twice);
+        System.assertEquals(false, second.ok, 'One plan does not pledge the same asset to the same facility twice');
+        System.assert(second.error.message.contains('this plan pledges it there twice'), second.error.message);
+    }
+
+    @IsTest
+    static void aMalformedPledgeIsRefusedAtStageTimeWithTheOrgsOwnRule() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral_Type__c ct = collateralType('ZZ-MOD-TEST Equipment', 50);
+        LLC_BI__Collateral__c owned = ownedAsset(ct, 'Duluth warehouse', 1000000);
+
+        // A create with no advance rate. The type has one; the tool does not fall back to it.
+        StageLoanModification.Request noRate = stageReq(key('pledge-norate'));
+        noRate.pledgeAddsJson = '[{"newCollateral":{"description":"New kit","collateralType":"ZZ-MOD-TEST Equipment","value":100000}}]';
+        // A create against a type this org does not hold.
+        StageLoanModification.Request badType = stageReq(key('pledge-badtype'));
+        badType.pledgeAddsJson = '[{"newCollateral":{"description":"New kit","collateralType":"Racehorses","value":100000},"advanceRate":50}]';
+        // A create with no description. Name on a collateral is an autonumber.
+        StageLoanModification.Request noLabel = stageReq(key('pledge-nolabel'));
+        noLabel.pledgeAddsJson = '[{"newCollateral":{"collateralType":"ZZ-MOD-TEST Equipment","value":100000},"advanceRate":50}]';
+        // Both shapes at once, and neither shape.
+        StageLoanModification.Request both = stageReq(key('pledge-both'));
+        both.pledgeAddsJson = '[{"collateralId":"' + owned.Id + '","newCollateral":{"description":"x",' +
+            '"collateralType":"ZZ-MOD-TEST Equipment","value":1},"advanceRate":50}]';
+        StageLoanModification.Request neither = stageReq(key('pledge-neither'));
+        neither.pledgeAddsJson = '[{"advanceRate":50}]';
+        // More pledged than the asset can lend against. The escape is LLC_BI__Authorize__c, which
+        // is a banker's checkbox and never a tool's.
+        StageLoanModification.Request over = stageReq(key('pledge-over'));
+        over.pledgeAddsJson = '[{"collateralId":"' + owned.Id + '","amountPledged":900000}]';
+
+        Test.startTest();
+        StageLoanModification.Response r1 = stage(noRate);
+        StageLoanModification.Response r2 = stage(badType);
+        StageLoanModification.Response r3 = stage(noLabel);
+        StageLoanModification.Response r4 = stage(both);
+        StageLoanModification.Response r5 = stage(neither);
+        StageLoanModification.Response r6 = stage(over);
+        Test.stopTest();
+
+        System.assertEquals(false, r1.ok, 'A new asset needs an advance rate stated for it');
+        System.assert(r1.error.message.contains('does not fall back to the collateral type'), r1.error.message);
+        System.assertEquals(false, r2.ok, 'A collateral type the org does not hold is refused');
+        System.assert(r2.error.message.contains('The org offers:'),
+            'And the refusal carries the org\'s own catalog: ' + r2.error.message);
+        System.assertEquals(false, r3.ok, 'A new asset with no description is refused');
+        System.assert(r3.error.message.contains('autonumber'), r3.error.message);
+        System.assertEquals(false, r4.ok, 'An entry is one shape or the other, never both');
+        System.assert(r4.error.message.contains('never both'), r4.error.message);
+        System.assertEquals(false, r5.ok, 'An entry with neither shape names no asset at all');
+        System.assert(r5.error.message.contains('Each pledge names its asset'), r5.error.message);
+        System.assertEquals(false, r6.ok, 'An over-pledge is refused rather than authorised');
+        System.assert(r6.error.message.contains('Pledge_More_Than_Lendable_Value'), r6.error.message);
+        System.assert(r6.error.message.contains('never sets it'), r6.error.message);
+
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c],
+            'None of the six wrote anything');
+    }
+
+    @IsTest
+    static void aPledgeAimedAtAFacilityOutsideThePlanIsRefused() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral_Type__c ct = collateralType('ZZ-MOD-TEST Real Estate', 80);
+        LLC_BI__Collateral__c owned = ownedAsset(ct, 'Duluth warehouse', 5000000);
+
+        StageLoanModification.Request r = stageReq(key('pledge-stranger-loan'));
+        r.pledgeAddsJson = '[{"collateralId":"' + owned.Id + '","targetLoanId":"' +
+            C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType) + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A pledge lands on the clone of a facility THIS plan modifies, or nowhere');
+        System.assert(res.error.message.contains('not one of the selected facilities'), res.error.message);
+    }
+
     /**
      * The one test that runs the REAL bean. It cannot assert success, because a managed-package
      * credit action inside a test context is not something this suite controls, and a green assertion

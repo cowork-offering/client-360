@@ -51,6 +51,8 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_ACCOUNT_COVENANT = 'LLC_BI__Account_Covenant__c';
     public static final String OBJ_FEE = 'LLC_BI__Fee__c';
     public static final String OBJ_PRICING_STREAM = 'LLC_BI__Pricing_Stream__c';
+    public static final String OBJ_COLLATERAL = 'LLC_BI__Collateral__c';
+    public static final String OBJ_ACCOUNT_COLLATERAL = 'LLC_BI__Account_Collateral__c';
 
     /** The junction graph OP_CARRY may replicate, and nothing else. */
     // Pricing streams are DELIBERATELY absent: nCino's engine carries them itself on every
@@ -141,6 +143,23 @@ public with sharing class C360WriteGuard {
         // not what "add a fee" means, and every fee this org holds carries Active.
         OBJ_FEE => new Map<String, Set<String>>{
             'LLC_BI__Status__c' => new Set<String>{ 'Active' }
+        },
+        // THE COLLATERAL CHAIN on a modification clone (2026-08-31), three objects that only ever
+        // travel together. The asset is created, the ownership junction ties it to the borrower -
+        // `LLC_BI__Collateral__c` has NO account lookup of any kind on this org, so that junction is
+        // the only link there is - and the pledge attaches it to the clone.
+        //
+        // NO STATE FENCE ON THE ASSET OR THE OWNERSHIP. `LLC_BI__Collateral__c.LLC_BI__Status__c`
+        // exists but its active values are not verified on this org, and a fence on a value that
+        // turns out to be illegal refuses a legal write with an answer that reads like a bug. The
+        // forbidden-field list below is what fences these two.
+        OBJ_COLLATERAL => new Map<String, Set<String>>(),
+        OBJ_ACCOUNT_COLLATERAL => new Map<String, Set<String>>(),
+        // A pledge is born ACTIVE and Active: security nobody is claiming is not what pledging an
+        // asset means, and every pledge this org holds carries both.
+        OBJ_PLEDGE => new Map<String, Set<String>>{
+            'LLC_BI__Pledged_Status__c' => new Set<String>{ 'Active' },
+            'LLC_BI__Active__c' => new Set<String>{ 'true' }
         }
     };
 
@@ -235,7 +254,25 @@ public with sharing class C360WriteGuard {
         // LLC_BI__Record_Type__c carries Fees / Costs / Adjustments and is set instead. Name is an
         // autonumber. Basis_Amount is what nCino's FeeTrigger DERIVES from the loan's commitment
         // for a percentage fee, and writing it would put a figure beside the one the org computed.
-        OBJ_FEE => new Set<String>{ 'RecordTypeId', 'Name', 'LLC_BI__Basis_Amount__c' }
+        OBJ_FEE => new Set<String>{ 'RecordTypeId', 'Name', 'LLC_BI__Basis_Amount__c' },
+        // Name is an autonumber (COL-000nnn). Lendable Value is a formula over the asset's own value
+        // and its type's rate, and Advance Rate on the ASSET is the type's rate restated - both are
+        // the org's arithmetic. RecordTypeId is not written by this tool at all: the asset a pledge
+        // needs is a plain collateral, and picking a record type would be picking a data model.
+        OBJ_COLLATERAL => new Set<String>{
+            'Name', 'RecordTypeId', 'LLC_BI__Lendable_Value__c', 'LLC_BI__Advance_Rate__c'
+        },
+        OBJ_ACCOUNT_COLLATERAL => new Set<String>(),
+        // The same derived fields the carry may not copy, plus two the CREATE side has its own
+        // reasons for. LLC_BI__Authorize__c is the escape from the org's Pledge_More_Than_Lendable_
+        // Value rule and it is a BANKER's checkbox: a tool that could set it could authorise an
+        // over-pledge silently, so an over-pledge is refused at stage time instead. Unique_Id is
+        // nCino's own `<aggregateId> - <collateralId>` key and belongs to the package.
+        OBJ_PLEDGE => new Set<String>{
+            'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Collateral_Value__c',
+            'LLC_BI__Total_Pledged_Rollup_Value__c', 'LLC_BI__Total_Pledged_Rollup_Lendable_Value__c',
+            'LLC_BI__Authorize__c', 'LLC_BI__Unique_Id__c'
+        }
     };
 
     /**
@@ -250,7 +287,7 @@ public with sharing class C360WriteGuard {
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
         OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT,
-        OBJ_FEE
+        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE
     };
 
     /**
@@ -265,8 +302,11 @@ public with sharing class C360WriteGuard {
      *         carries a value the allowlist does not permit.
      */
     public static void assertAllowed(String objectApiName, String operation, Map<String, Object> values) {
-        // The carry has its own object table: junction objects are deliberately NOT in
-        // KNOWN_OBJECTS, because no create/update/delete arm may ever reach them.
+        // The carry has its own object table. Three junctions now appear in BOTH tables, because a
+        // wave learned to author what the carry could only replicate: the covenant junction
+        // (2026-08-30), the account-covenant junction and the collateral pledge (2026-08-31). Each
+        // is admitted on the CREATE side under its own birth state, and the carry side is unchanged.
+        // Everything else on the junction graph is still carry-only.
         if (operation == OP_CARRY) {
             assertCarryAllowed(objectApiName, values);
             return;

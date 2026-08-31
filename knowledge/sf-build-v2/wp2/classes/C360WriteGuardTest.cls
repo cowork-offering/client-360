@@ -524,4 +524,104 @@ private class C360WriteGuardTest {
             System.assertEquals(true, refused, 'This wave adds fees and stops. Operation: ' + op);
         }
     }
+
+    @IsTest
+    static void theCollateralChainIsAdmittedOnCreateAndNowhereElse() {
+        C360TestFixture.armCalloutMock();
+
+        // The three objects a pledge needs, in the order the arm writes them. The asset and the
+        // ownership junction carry no state fence: `LLC_BI__Collateral__c.LLC_BI__Status__c` has no
+        // verified active value on this org, and a fence on a guess refuses a legal write.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COLLATERAL, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Collateral_Type__c' => 'a', 'LLC_BI__Value__c' => 2000000,
+                'LLC_BI__Description__c' => 'New piece of equipment'
+            });
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_ACCOUNT_COLLATERAL, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Account__c' => 'a', 'LLC_BI__Collateral__c' => 'b',
+                'LLC_BI__Ownership_Percentage__c' => 100, 'LLC_BI__Primary_Owner__c' => true
+            });
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Loan__c' => 'a', 'LLC_BI__Collateral__c' => 'b',
+                'LLC_BI__Pledged_Status__c' => 'Active', 'LLC_BI__Active__c' => true,
+                'LLC_BI__Amount_Pledged__c' => 1600000, 'LLC_BI__Advance_Rate_Override__c' => 80,
+                'LLC_BI__Override_Reason__c' => 'Stated by the approver on this modification.'
+            });
+
+        // A pledge is born Active in both senses: security nobody is claiming is not security.
+        for (Map<String, Object> dead : new List<Map<String, Object>>{
+            new Map<String, Object>{ 'LLC_BI__Pledged_Status__c' => 'Inactive', 'LLC_BI__Active__c' => true },
+            new Map<String, Object>{ 'LLC_BI__Pledged_Status__c' => 'Active', 'LLC_BI__Active__c' => false }
+        }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CREATE, dead);
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'A pledge is born Active. Tried: ' + dead);
+        }
+
+        // Name is an autonumber; Lendable Value and the asset's Advance Rate are the org's formulas.
+        for (String f : new List<String>{ 'Name', 'RecordTypeId', 'LLC_BI__Lendable_Value__c', 'LLC_BI__Advance_Rate__c' }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COLLATERAL, C360WriteGuard.OP_CREATE,
+                    new Map<String, Object>{ 'LLC_BI__Value__c' => 1, f => 'x' });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'The org assigns it or derives it. Tried: LLC_BI__Collateral__c.' + f);
+        }
+
+        // AUTHORIZE IS THE BANKER'S CHECKBOX. It is the only escape from the org's
+        // Pledge_More_Than_Lendable_Value rule, so a tool that could set it could authorise an
+        // over-pledge without anybody deciding to.
+        for (String f : new List<String>{
+            'LLC_BI__Authorize__c', 'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Unique_Id__c'
+        }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CREATE,
+                    new Map<String, Object>{
+                        'LLC_BI__Pledged_Status__c' => 'Active', 'LLC_BI__Active__c' => true, f => 'x'
+                    });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'Derived by the org, or a decision that is not a tool\'s. Tried: ' + f);
+        }
+
+        // The chain is created and never touched again: releasing a pledge or revaluing an asset are
+        // different arms, and the guard is what makes that a refusal rather than a convention.
+        for (String obj : new List<String>{
+            C360WriteGuard.OBJ_COLLATERAL, C360WriteGuard.OBJ_ACCOUNT_COLLATERAL, C360WriteGuard.OBJ_PLEDGE
+        }) {
+            for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
+                Boolean refused = false;
+                try {
+                    C360WriteGuard.assertAllowed(obj, op, new Map<String, Object>{ 'LLC_BI__Active__c' => false });
+                } catch (C360WriteGuard.GuardException e) {
+                    refused = true;
+                }
+                System.assertEquals(true, refused, 'This wave adds security and stops. ' + obj + ' / ' + op);
+            }
+        }
+
+        // The carry side is untouched by any of that: a replicated pledge still passes OP_CARRY.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CARRY,
+            new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Collateral__c' => null });
+        // And the asset itself is NOT a carryable junction: the carry re-points pledges at the
+        // collateral the parent already had, and never copies the asset.
+        Boolean carryRefused = false;
+        try {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COLLATERAL, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{ 'LLC_BI__Value__c' => null });
+        } catch (C360WriteGuard.GuardException e) {
+            carryRefused = true;
+        }
+        System.assertEquals(true, carryRefused, 'A clone shares its parent\'s assets; it does not get copies of them');
+    }
 }

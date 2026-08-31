@@ -81,6 +81,8 @@ global with sharing class StageLoanModification {
         global String fieldChangesJson;
         @InvocableVariable(label='Fee Adds JSON' description='Optional. NET-NEW FEES authored on the CLONE: [{"feeType" (an active LLC_BI__Fee_Type__c value), "description" (the human label; Name on a fee is an autonumber), "calculationType" (Percentage|Flat Amount), "percentage"? , "amount"?, "basisSource"?, "recordType"? (Fees|Costs|Adjustments), "paidBy"?, "targetLoanId"?}]. A PERCENTAGE fee carries a percentage and a basis and NO amount: the org\'s own FeeTrigger derives the basis amount and the money from the clone\'s commitment, and a supplied amount is refused rather than overwritten. A FLAT AMOUNT fee carries an amount and no percentage. RecordTypeId is never written (no Fee record type is assigned to the integration user\'s profile); recordType is the independent LLC_BI__Record_Type__c picklist. targetLoanId may be omitted when exactly one facility is selected.')
         global String feeAddsJson;
+        @InvocableVariable(label='Pledge Adds JSON' description='Optional. COLLATERAL PLEDGES authored on the CLONE: [{"collateralId"? (an existing LLC_BI__Collateral__c the BORROWER owns), "newCollateral"? {"description", "collateralType", "value"}, "advanceRate"?, "advanceRateReason"?, "amountPledged"?, "lienPosition"?, "targetLoanId"?}]. EXACTLY ONE of collateralId and newCollateral per entry. An existing collateral must be owned by the borrower through LLC_BI__Account_Collateral__c (LLC_BI__Collateral__c carries no account lookup at all) and must not already be pledged to that facility. A newCollateral is authored as asset, then ownership junction, then pledge; collateralType is resolved against the org\'s live LLC_BI__Collateral_Type__c catalog and a type whose own advance rate is null is refused before the org\'s Advance_Rate_should_not_be_null rule fires on the insert. advanceRate is REQUIRED on a create and rides LLC_BI__Advance_Rate_Override__c (the plain advance rate is a formula), which makes the org\'s Advance_Rate_Override rule demand a reason beside it. targetLoanId may be omitted when exactly one facility is selected.')
+        global String pledgeAddsJson;
     }
 
     /** One of the four scalars, aimed at ONE selected facility. */
@@ -131,6 +133,35 @@ global with sharing class StageLoanModification {
         public String status;
         public String paidBy;
         public Boolean isIncome;
+        public Id targetLoanId;
+    }
+
+    /** One parsed pledge, in whichever of its two shapes the caller sent. */
+    public class PledgeAdd {
+        /** An EXISTING collateral, proven owned by the borrower. Null on a create. */
+        public Id collateralId;
+        /** True when this run has to author the asset and its ownership junction first. */
+        public Boolean isNew;
+        /** The asset's readable label. `Name` on a collateral is an autonumber (COL-000nnn). */
+        public String description;
+        /** The resolved `LLC_BI__Collateral_Type__c` record, never a name. */
+        public Id collateralTypeId;
+        public String collateralTypeName;
+        /** The type's OWN advance rate, which is what a pledge falls back to. */
+        public Decimal typeAdvanceRate;
+        public Decimal newValue;
+        /** Rides `LLC_BI__Advance_Rate_Override__c`; the plain advance rate is a formula. */
+        public Decimal advanceRate;
+        /** Demanded by the org's `Advance_Rate_Override` rule whenever the override is set. */
+        public String advanceRateReason;
+        /** This facility's share of the asset. Never above the lendable value. */
+        public Decimal amountPledged;
+        public String lienPosition;
+        public String pledgedStatus;
+        /** What the asset is worth, whether authored here or read off the org. */
+        public Decimal collateralValue;
+        /** The asset as the plan names it, which is the description or the autonumber. */
+        public String assetLabel;
         public Id targetLoanId;
     }
 
@@ -284,8 +315,8 @@ global with sharing class StageLoanModification {
         if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
             req.requestedTermMonths == null && String.isBlank(req.scalarChangesJson) && String.isBlank(req.covenantAddsJson) &&
             String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson) &&
-            String.isBlank(req.feeAddsJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, a field change, or a fee add.');
+            String.isBlank(req.feeAddsJson) && String.isBlank(req.pledgeAddsJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, a field change, a fee add, or a collateral pledge.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -321,6 +352,8 @@ global with sharing class StageLoanModification {
         List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, covenantWarnings);
         List<FieldChange> fieldChanges = parseFieldChanges(req, facilities);
         List<FeeAdd> feeAdds = parseFeeAdds(req, facilities);
+        List<PledgeAdd> pledgeAdds = parsePledgeAdds(req, facilities);
+        Integer createdAssets = newCollaterals(pledgeAdds);
 
         // What each member's own clone will take, so the plan steps and the summary can name the
         // figures per facility instead of describing one broadcast the banker did not ask for.
@@ -597,6 +630,79 @@ global with sharing class StageLoanModification {
         }
         resolved.put('feeAddCount', feeAdds.size());
 
+        // Collateral pledges: authored on the CLONE of the targeted member, beside the pledges the
+        // carry replicates from its parent. A NET-NEW asset is three connected writes and the plan
+        // shows all three, because `LLC_BI__Collateral__c` has no account lookup of any kind on this
+        // org: the ownership junction is the asset's ONLY link to the borrower, and skipping it
+        // would leave an asset nobody owns securing a loan.
+        for (Integer i = 0; i < pledgeAdds.size(); i++) {
+            PledgeAdd pa = pledgeAdds[i];
+            String s6 = String.valueOf(i);
+            resolved.put('pledgeAdd' + s6 + '.isNew', pa.isNew);
+            // NULL STAYS NULL. String.valueOf(null) is the four-character string 'null', and
+            // C360Plan.asId on the other side would try to make a record id out of it.
+            resolved.put('pledgeAdd' + s6 + '.collateralId', pa.collateralId == null ? null : String.valueOf(pa.collateralId));
+            resolved.put('pledgeAdd' + s6 + '.description', pa.description);
+            resolved.put('pledgeAdd' + s6 + '.collateralTypeId', pa.collateralTypeId == null ? null : String.valueOf(pa.collateralTypeId));
+            resolved.put('pledgeAdd' + s6 + '.collateralTypeName', pa.collateralTypeName);
+            resolved.put('pledgeAdd' + s6 + '.newValue', pa.newValue);
+            resolved.put('pledgeAdd' + s6 + '.advanceRate', pa.advanceRate);
+            resolved.put('pledgeAdd' + s6 + '.advanceRateReason', pa.advanceRateReason);
+            resolved.put('pledgeAdd' + s6 + '.amountPledged', pa.amountPledged);
+            resolved.put('pledgeAdd' + s6 + '.lienPosition', pa.lienPosition);
+            resolved.put('pledgeAdd' + s6 + '.pledgedStatus', pa.pledgedStatus);
+            resolved.put('pledgeAdd' + s6 + '.assetLabel', pa.assetLabel);
+            resolved.put('pledgeAdd' + s6 + '.targetLoanId', String.valueOf(pa.targetLoanId));
+            String targetName5 = facilityById.get(pa.targetLoanId).Name;
+
+            if (pa.isNew) {
+                steps.add(
+                    new C360Plan.Step('collateral_create_' + s6, C360Plan.TYPE_WRITE,
+                        'Create the asset "' + pa.description + '" as ' + pa.collateralTypeName +
+                        ', valued at ' + String.valueOf(pa.newValue) +
+                        '. Name on a collateral is an autonumber, so the description is its readable identity')
+                        .onObject('LLC_BI__Collateral__c', new List<String>{
+                            'LLC_BI__Collateral_Type__c', 'LLC_BI__Value__c', 'LLC_BI__Description__c'
+                        })
+                        .provenBy('SELECT Id, Name, LLC_BI__Value__c FROM LLC_BI__Collateral__c WHERE Id = :createdId')
+                );
+                steps.add(
+                    new C360Plan.Step('collateral_own_' + s6, C360Plan.TYPE_WRITE,
+                        'Record the borrower as owner of "' + pa.description +
+                        '". LLC_BI__Collateral__c carries NO account lookup, so this junction is the asset\'s only link to the relationship')
+                        .onObject('LLC_BI__Account_Collateral__c', new List<String>{
+                            'LLC_BI__Account__c', 'LLC_BI__Collateral__c', 'LLC_BI__Ownership_Percentage__c', 'LLC_BI__Primary_Owner__c'
+                        })
+                        .provenBy('SELECT Id FROM LLC_BI__Account_Collateral__c WHERE LLC_BI__Collateral__c = :createdId')
+                );
+            }
+            steps.add(
+                new C360Plan.Step('pledge_add_' + s6, C360Plan.TYPE_WRITE,
+                    'Pledge ' + pa.assetLabel + ' to the clone of ' + targetName5 + ': ' + pledgePhrase(pa))
+                    .onObject('LLC_BI__Loan_Collateral2__c', new List<String>{
+                        'LLC_BI__Loan__c', 'LLC_BI__Collateral__c', 'LLC_BI__Loan_Collateral_Aggregate__c',
+                        'LLC_BI__Pledged_Status__c', 'LLC_BI__Active__c', 'LLC_BI__Amount_Pledged__c',
+                        'LLC_BI__Lien_Position__c', 'LLC_BI__Advance_Rate_Override__c', 'LLC_BI__Override_Reason__c'
+                    })
+                    .wakes(new List<String>{
+                        'nCino collateral aggregate automation: the pledge hangs off a per-clone ' +
+                        'LLC_BI__Loan_Collateral_Aggregate__c shell, which is created first because the ' +
+                        'lookup is not updateable afterwards, and the loan\'s own collateral rollups follow'
+                    })
+                    .provenBy('SELECT Id, LLC_BI__Advance_Rate__c, LLC_BI__Current_Lendable_Value__c FROM LLC_BI__Loan_Collateral2__c WHERE Id = :createdId')
+            );
+            steps.add(
+                new C360Plan.Step('pledge_verify_' + s6, C360Plan.TYPE_VERIFICATION,
+                    'Re-read the pledge on the clone of ' + targetName5 +
+                    ', with the advance rate the org resolved and the lendable value it derived from it')
+                    .onObject('LLC_BI__Loan_Collateral2__c', new List<String>{
+                        'Id', 'LLC_BI__Collateral__c', 'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c'
+                    })
+                    .provenBy('SELECT Id, LLC_BI__Collateral__c, LLC_BI__Advance_Rate__c FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :cloneId')
+            );
+        }
+        resolved.put('pledgeAddCount', pledgeAdds.size());
+
         // The per-target scalars ride the resolved values, which is what the plan hash covers: the
         // banker confirms the figure AND the clone it lands on, and execute reads back exactly that.
         for (Integer i = 0; i < scalarChanges.size(); i++) {
@@ -667,6 +773,28 @@ global with sharing class StageLoanModification {
                     'reports what the org worked out.')
             );
         }
+        if (!pledgeAdds.isEmpty()) {
+            Integer noLien = 0;
+            for (PledgeAdd pa : pledgeAdds) {
+                if (String.isBlank(pa.lienPosition)) {
+                    noLien++;
+                }
+            }
+            warnings.add(
+                String.valueOf(pledgeAdds.size()) + ' collateral ' + (pledgeAdds.size() == 1 ? 'pledge is' : 'pledges are') +
+                ' authored on the CLONE only; the booked facility keeps exactly the security it holds today, and no ' +
+                'existing pledge anywhere is touched.' +
+                (createdAssets == 0 ? '' :
+                    ' ' + String.valueOf(createdAssets) + ' of them ' + (createdAssets == 1 ? 'creates a NEW asset' : 'create NEW assets') +
+                    ', which is three connected writes each: the asset, then the LLC_BI__Account_Collateral__c ownership ' +
+                    'junction (LLC_BI__Collateral__c has no account lookup of its own, so this is the borrower link), then ' +
+                    'the pledge. The asset itself is a permanent record on the relationship and survives whatever the ' +
+                    'bank decides about this version.') +
+                (noLien == 0 ? '' :
+                    ' ' + String.valueOf(noLien) + ' ' + (noLien == 1 ? 'pledge states' : 'pledges state') +
+                    ' NO lien position: nobody said one, and priority is a perfection question this tool does not settle.')
+            );
+        }
         if (n > 1) {
             warnings.add(
                 'This is one plan over ' + n + ' facilities on the same package, under a single confirmation and a single decision token. ' +
@@ -720,6 +848,11 @@ global with sharing class StageLoanModification {
                 (feeAdds.size() == 1 ? ' is' : 's are') + ' created on the ' + (feeAdds.size() == 1 ? 'clone' : 'clones') +
                 ', each resolved against the org\'s own fee picklists; a percentage fee carries its basis and its rate and ' +
                 'lets the org compute the money. ') +
+            (pledgeAdds.isEmpty() ? '' : String.valueOf(pledgeAdds.size()) + ' collateral pledge' +
+                (pledgeAdds.size() == 1 ? ' is' : 's are') + ' authored on the ' + (pledgeAdds.size() == 1 ? 'clone' : 'clones') +
+                (createdAssets == 0 ? ', each on an asset the borrower already owns. '
+                    : ', creating ' + String.valueOf(createdAssets) + ' new asset' + (createdAssets == 1 ? '' : 's') +
+                      ' and the ownership junction that ties ' + (createdAssets == 1 ? 'it' : 'them') + ' to the borrower. ')) +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -1046,6 +1179,372 @@ global with sharing class StageLoanModification {
         Integer n = 0;
         for (FeeAdd fa : feeAdds) {
             if (fa.calculationType == FEE_PERCENTAGE) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /* ------------------------------------------------------------------------------- pledges */
+
+    /**
+     * A PLEDGE WAKES nCino's collateral aggregate automation AND this org's own CDC triggers, and a
+     * CREATE wakes them three times over - asset, ownership junction, pledge - because each of those
+     * objects carries an org-local change-stream trigger that enqueues an EventBridge callout
+     * (the shared-sandbox shield in C360TestFixture names all 24 of them). The platform allows 50
+     * queueables in one synchronous transaction and the arm hop already spends some of that budget
+     * on the carry, so the cap is deliberate and low. stage_collateral_valuation caps its own items
+     * at 20 for exactly this reason; a pledge costs up to three where a valuation costs one.
+     */
+    private static final Integer PLEDGE_MAX = 5;
+    /** 255 on `LLC_BI__Collateral__c.LLC_BI__Description__c` (LESSONS 15ad). */
+    private static final Integer COLLATERAL_DESCRIPTION_MAX = 255;
+
+    /**
+     * Parses and RESOLVES the pledges against the org's OWN collateral model. Every refusal below is
+     * a live finding rather than a convention:
+     *
+     *   - `LLC_BI__Collateral__c` has NO account lookup of any kind, so "does the borrower own this
+     *     asset?" is answerable ONLY through `LLC_BI__Account_Collateral__c`. An existing collateral
+     *     with no ownership row for this borrower is refused: pledging a stranger's asset is the one
+     *     mistake in this arm that a bank cannot unwind by deleting a record.
+     *   - A collateral already pledged to the target facility carries onto the clone by itself. A
+     *     second pledge there is a duplicate rather than a second lien, and is refused by name.
+     *   - `LLC_BI__Collateral_Type__c` is a 43-record config catalog and the caller sends a WORD.
+     *     It resolves by exact name, then by containment, and an ambiguous or absent word comes back
+     *     with the org's own candidates. A type whose own `LLC_BI__Advance_Rate__c` is null is
+     *     refused HERE, because the org's `Advance_Rate_should_not_be_null` rule fires on the
+     *     COLLATERAL insert rather than on the type, and a refusal at write time reads as a mystery.
+     *   - `LLC_BI__Advance_Rate__c` on a pledge is a FORMULA resolving override -> auto-applied ->
+     *     the type's default (LESSONS 29). A stated rate is therefore an OVERRIDE, and the org's
+     *     `Advance_Rate_Override` rule refuses the row unless `LLC_BI__Override_Reason__c` carries
+     *     something. The caller may send that reason; where it does not, one is composed as
+     *     PROVENANCE - where the number came from - never as a credit justification nobody gave.
+     *   - `Pledge_More_Than_Lendable_Value` fires when `LLC_BI__Amount_Pledged__c` exceeds the
+     *     lendable value and `LLC_BI__Authorize__c` is false. Authorize is a banker's checkbox and
+     *     this tool never sets it, so an over-pledge is refused rather than authorised.
+     *
+     * Nothing is created here. The arm hop of the execute pair writes the rows.
+     */
+    private static List<PledgeAdd> parsePledgeAdds(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<PledgeAdd> out = new List<PledgeAdd>();
+        if (String.isBlank(req.pledgeAddsJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.pledgeAddsJson);
+        } catch (Exception e) {
+            throw new ToolException('pledgeAddsJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        if (raw.size() > PLEDGE_MAX) {
+            throw new ToolException(
+                'At most ' + PLEDGE_MAX + ' collateral pledges in one plan; this one carries ' + raw.size() + '. Each ' +
+                'pledge wakes nCino\'s collateral aggregate automation, and a create wakes this org\'s change-stream ' +
+                'triggers three times over, against a ceiling of 50 queued jobs in one transaction. Split the plan.'
+            );
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        Id borrowerId = facilities[0].LLC_BI__Account__c;
+
+        // ONE read for every existing collateral the plan names, and one for every type word, rather
+        // than a pair per entry. Staging writes nothing, but it is still the call a banker waits on.
+        Set<Id> existingIds = new Set<Id>();
+        Set<String> typeWords = new Set<String>();
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            Id cid = C360Plan.asId(m.get('collateralId'));
+            if (cid != null) {
+                existingIds.add(cid);
+            }
+            Map<String, Object> nc = m.get('newCollateral') == null ? null : (Map<String, Object>) m.get('newCollateral');
+            if (nc != null && nc.get('collateralType') != null) {
+                typeWords.add(String.valueOf(nc.get('collateralType')).trim().toLowerCase());
+            }
+        }
+        Map<Id, LLC_BI__Collateral__c> assets = existingIds.isEmpty()
+            ? new Map<Id, LLC_BI__Collateral__c>()
+            : new Map<Id, LLC_BI__Collateral__c>([
+                SELECT Id, Name, LLC_BI__Description__c, LLC_BI__Value__c,
+                       LLC_BI__Collateral_Type__r.Name, LLC_BI__Collateral_Type__r.LLC_BI__Advance_Rate__c
+                FROM LLC_BI__Collateral__c WHERE Id IN :existingIds WITH USER_MODE
+            ]);
+        Set<Id> ownedByBorrower = new Set<Id>();
+        if (!existingIds.isEmpty()) {
+            for (LLC_BI__Account_Collateral__c own : [
+                SELECT LLC_BI__Collateral__c FROM LLC_BI__Account_Collateral__c
+                WHERE LLC_BI__Collateral__c IN :existingIds AND LLC_BI__Account__c = :borrowerId WITH USER_MODE
+            ]) {
+                ownedByBorrower.add(own.LLC_BI__Collateral__c);
+            }
+        }
+        // What each selected facility already secures, so a duplicate is named rather than filed.
+        Map<Id, Set<Id>> pledgedByFacility = new Map<Id, Set<Id>>();
+        Set<Id> selectedIds = byId.keySet();
+        if (!existingIds.isEmpty()) {
+            for (LLC_BI__Loan_Collateral2__c p : [
+                SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c FROM LLC_BI__Loan_Collateral2__c
+                WHERE LLC_BI__Loan__c IN :selectedIds AND LLC_BI__Collateral__c IN :existingIds WITH USER_MODE
+            ]) {
+                if (!pledgedByFacility.containsKey(p.LLC_BI__Loan__c)) {
+                    pledgedByFacility.put(p.LLC_BI__Loan__c, new Set<Id>());
+                }
+                pledgedByFacility.get(p.LLC_BI__Loan__c).add(p.LLC_BI__Collateral__c);
+            }
+        }
+        List<LLC_BI__Collateral_Type__c> types = typeWords.isEmpty()
+            ? new List<LLC_BI__Collateral_Type__c>()
+            : [SELECT Id, Name, LLC_BI__Advance_Rate__c FROM LLC_BI__Collateral_Type__c WITH USER_MODE LIMIT 500];
+
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            PledgeAdd pa = new PledgeAdd();
+            pa.collateralId = C360Plan.asId(m.get('collateralId'));
+            Map<String, Object> nc = m.get('newCollateral') == null ? null : (Map<String, Object>) m.get('newCollateral');
+            pa.isNew = nc != null;
+
+            if (pa.collateralId != null && pa.isNew) {
+                throw new ToolException(
+                    'A pledge names an EXISTING collateral or describes a NEW one, never both. Entry carries collateralId ' +
+                    pa.collateralId + ' and a newCollateral block.'
+                );
+            }
+            if (pa.collateralId == null && !pa.isNew) {
+                throw new ToolException(
+                    'Each pledge names its asset: collateralId for one the borrower already owns, or newCollateral ' +
+                    '{description, collateralType, value} for one this plan should create.'
+                );
+            }
+
+            pa.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (pa.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each pledge when more than one facility is selected.');
+                }
+                pa.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(pa.targetLoanId)) {
+                throw new ToolException(
+                    'A pledge targets facility ' + pa.targetLoanId + ', which is not one of the selected facilities. ' +
+                    'A pledge is authored on the CLONE of a facility this plan modifies.'
+                );
+            }
+
+            pa.advanceRate = C360Plan.asDecimal(m.get('advanceRate'));
+            if (pa.advanceRate != null && (pa.advanceRate <= 0 || pa.advanceRate > 100)) {
+                throw new ToolException('An advance rate is a percentage above zero and at most 100. Supplied: ' + pa.advanceRate + '.');
+            }
+
+            if (pa.isNew) {
+                pa.description = nc.get('description') == null ? null : String.valueOf(nc.get('description')).trim();
+                if (String.isBlank(pa.description)) {
+                    throw new ToolException(
+                        'A new collateral needs a description. Name on a collateral is an autonumber (COL-000nnn), so the ' +
+                        'description is the only readable identity the asset carries.'
+                    );
+                }
+                if (pa.description.length() > COLLATERAL_DESCRIPTION_MAX) {
+                    throw new ToolException(
+                        'A collateral description is at most ' + COLLATERAL_DESCRIPTION_MAX + ' characters on this org; ' +
+                        'this one is ' + pa.description.length() + '. The 32k narrative field is ' +
+                        'LLC_BI__Collateral_Legal_Description__c, which this arm does not write.'
+                    );
+                }
+                pa.newValue = C360Plan.asDecimal(nc.get('value'));
+                if (pa.newValue == null || pa.newValue <= 0) {
+                    throw new ToolException('A new collateral needs a value greater than zero: the lendable value is derived from it.');
+                }
+                if (pa.advanceRate == null) {
+                    throw new ToolException(
+                        'A new collateral needs an advance rate. It is a credit decision on an asset nobody has lent ' +
+                        'against yet, and this tool does not fall back to the collateral type\'s default on the banker\'s behalf.'
+                    );
+                }
+                resolveCollateralType(pa, nc.get('collateralType'), types);
+                pa.collateralValue = pa.newValue;
+                pa.assetLabel = pa.description;
+            } else {
+                LLC_BI__Collateral__c asset = assets.get(pa.collateralId);
+                if (asset == null) {
+                    throw new ToolException('No collateral exists with id ' + pa.collateralId + '.');
+                }
+                if (!ownedByBorrower.contains(pa.collateralId)) {
+                    throw new ToolException(
+                        'Collateral ' + asset.Name + ' is not owned by this borrower. LLC_BI__Collateral__c carries no ' +
+                        'account lookup at all on this org, so ownership is the LLC_BI__Account_Collateral__c junction ' +
+                        'and there is no row joining this asset to the relationship. Record the ownership first, or ' +
+                        'pledge an asset the borrower holds.'
+                    );
+                }
+                // Already on the facility, so the carry brings it onto the clone by itself; or named
+                // twice by this same plan, which is the same duplicate arriving from the other side.
+                Set<Id> already = pledgedByFacility.get(pa.targetLoanId);
+                if (already == null) {
+                    already = new Set<Id>();
+                    pledgedByFacility.put(pa.targetLoanId, already);
+                }
+                if (already.contains(pa.collateralId)) {
+                    throw new ToolException(
+                        'Collateral ' + asset.Name + ' is already pledged to ' + byId.get(pa.targetLoanId).Name +
+                        ', or this plan pledges it there twice. Either way the modification carries one pledge onto ' +
+                        'the clone, and a second row there is a duplicate rather than a second lien.'
+                    );
+                }
+                already.add(pa.collateralId);
+                pa.description = asset.LLC_BI__Description__c;
+                pa.collateralTypeName = asset.LLC_BI__Collateral_Type__r.Name;
+                pa.typeAdvanceRate = asset.LLC_BI__Collateral_Type__r.LLC_BI__Advance_Rate__c;
+                pa.collateralValue = asset.LLC_BI__Value__c;
+                pa.assetLabel = String.isBlank(asset.LLC_BI__Description__c) ? asset.Name : asset.LLC_BI__Description__c;
+            }
+
+            // Active is the only birth state the guard admits: an inactive pledge is security nobody
+            // is claiming, which is not what pledging an asset means.
+            pa.pledgedStatus = 'Active';
+            pa.lienPosition = m.get('lienPosition') == null
+                ? null
+                : pledgePicklist('LLC_BI__Lien_Position__c', m.get('lienPosition'), 'lien position');
+
+            // THE OVERRIDE AND ITS REASON TRAVEL TOGETHER, or the org refuses the row.
+            if (pa.advanceRate != null) {
+                pa.advanceRateReason = m.get('advanceRateReason') == null
+                    ? null : String.valueOf(m.get('advanceRateReason')).trim();
+                if (String.isBlank(pa.advanceRateReason)) {
+                    pa.advanceRateReason =
+                        'Advance rate of ' + String.valueOf(pa.advanceRate) + '% stated by the approver on this ' +
+                        'modification when the collateral was pledged' +
+                        (pa.typeAdvanceRate == null ? '' :
+                            ', against the ' + pa.collateralTypeName + ' type default of ' + String.valueOf(pa.typeAdvanceRate) + '%') +
+                        '. Recorded as provenance: the org requires a reason with any override, and this states where ' +
+                        'the figure came from rather than why it was judged right.';
+                }
+            }
+
+            // THE FACILITY'S SHARE. Left unstated it is zero, and a pledge contributing nothing to
+            // the facility's coverage is a row that reads as security and is not. So it defaults to
+            // the whole lendable value of the asset AT THE RATE THIS PLEDGE WILL RESOLVE TO - which
+            // is the override where one is stated, and the type's own rate otherwise.
+            Decimal effectiveRate = pa.advanceRate != null ? pa.advanceRate : pa.typeAdvanceRate;
+            Decimal lendable = (pa.collateralValue == null || effectiveRate == null)
+                ? null
+                : (pa.collateralValue * effectiveRate / 100).setScale(2);
+            pa.amountPledged = C360Plan.asDecimal(m.get('amountPledged'));
+            if (pa.amountPledged == null) {
+                pa.amountPledged = lendable;
+            } else if (pa.amountPledged <= 0) {
+                throw new ToolException('An amount pledged is greater than zero, or it is left out and the lendable value is used.');
+            } else if (lendable != null && pa.amountPledged > lendable) {
+                throw new ToolException(
+                    'A pledged amount of ' + pa.amountPledged + ' exceeds the asset\'s lendable value of ' + lendable +
+                    ' at ' + effectiveRate + '%. The org\'s Pledge_More_Than_Lendable_Value rule refuses that unless ' +
+                    'LLC_BI__Authorize__c is set, and this tool never sets it: authorising an over-pledge is a banker\'s ' +
+                    'decision, not a tool\'s.'
+                );
+            }
+            out.add(pa);
+        }
+        return out;
+    }
+
+    /**
+     * Resolves the caller's word for the kind of asset against the org's OWN collateral-type
+     * catalog: exact name first, then containment, and an ambiguous or unmatched word comes back
+     * with the candidates. The type must carry an advance rate of its own, because the org's
+     * `Advance_Rate_should_not_be_null` rule surfaces on the COLLATERAL insert rather than on the
+     * type record, where nobody would think to look for it.
+     */
+    private static void resolveCollateralType(PledgeAdd pa, Object supplied, List<LLC_BI__Collateral_Type__c> types) {
+        if (supplied == null || String.isBlank(String.valueOf(supplied))) {
+            throw new ToolException('A new collateral names its collateralType: the org resolves the word against its own catalog.');
+        }
+        String word = String.valueOf(supplied).trim();
+        List<LLC_BI__Collateral_Type__c> hits = new List<LLC_BI__Collateral_Type__c>();
+        for (LLC_BI__Collateral_Type__c t : types) {
+            if (t.Name != null && t.Name.equalsIgnoreCase(word)) {
+                hits = new List<LLC_BI__Collateral_Type__c>{ t };
+                break;
+            }
+        }
+        if (hits.isEmpty()) {
+            for (LLC_BI__Collateral_Type__c t : types) {
+                if (t.Name != null && t.Name.toLowerCase().contains(word.toLowerCase())) {
+                    hits.add(t);
+                }
+            }
+        }
+        if (hits.isEmpty()) {
+            throw new ToolException(
+                '"' + word + '" is not a collateral type this org holds. The org offers: ' + typeNames(types) + '.'
+            );
+        }
+        if (hits.size() > 1) {
+            throw new ToolException(
+                '"' + word + '" matches ' + hits.size() + ' collateral types on this org: ' + typeNames(hits) +
+                '. Name one of them exactly.'
+            );
+        }
+        if (hits[0].LLC_BI__Advance_Rate__c == null) {
+            throw new ToolException(
+                'Collateral type "' + hits[0].Name + '" carries no advance rate of its own, and the org\'s ' +
+                'Advance_Rate_should_not_be_null rule refuses a collateral created against it - the error surfaces on ' +
+                'the ASSET insert rather than on the type. Set the type\'s advance rate in the org, or pick another type.'
+            );
+        }
+        pa.collateralTypeId = hits[0].Id;
+        pa.collateralTypeName = hits[0].Name;
+        pa.typeAdvanceRate = hits[0].LLC_BI__Advance_Rate__c;
+    }
+
+    /** The org's own candidate list, for a refusal that can be acted on. */
+    private static String typeNames(List<LLC_BI__Collateral_Type__c> types) {
+        List<String> names = new List<String>();
+        for (LLC_BI__Collateral_Type__c t : types) {
+            if (t.Name != null) {
+                names.add(t.Name);
+            }
+            if (names.size() == 40) {
+                names.add('(and more)');
+                break;
+            }
+        }
+        names.sort();
+        return String.join(names, ', ');
+    }
+
+    /** Resolves one value against a LIVE picklist on the pledge junction. */
+    private static String pledgePicklist(String fieldName, Object supplied, String what) {
+        String sv = String.valueOf(supplied).trim();
+        Schema.DescribeFieldResult dfr =
+            Schema.SObjectType.LLC_BI__Loan_Collateral2__c.fields.getMap().get(fieldName.toLowerCase()).getDescribe();
+        List<String> legal = new List<String>();
+        for (Schema.PicklistEntry pe : dfr.getPicklistValues()) {
+            if (!pe.isActive()) {
+                continue;
+            }
+            legal.add(pe.getValue());
+            if (pe.getValue().equalsIgnoreCase(sv) || pe.getLabel().equalsIgnoreCase(sv)) {
+                return pe.getValue();
+            }
+        }
+        throw new ToolException(
+            '"' + sv + '" is not a legal ' + what + ' on this org. The org offers: ' + String.join(legal, ', ') + '.'
+        );
+    }
+
+    /** One pledge as the banker should read it in a plan step. */
+    private static String pledgePhrase(PledgeAdd pa) {
+        return (pa.amountPledged == null ? 'no stated share of the asset' : String.valueOf(pa.amountPledged) + ' pledged') +
+            (pa.advanceRate == null
+                ? ', at the ' + pa.collateralTypeName + ' type\'s own advance rate'
+                : ', at a ' + String.valueOf(pa.advanceRate) + '% advance-rate override with its reason recorded') +
+            (String.isBlank(pa.lienPosition) ? ', lien position not stated' : ', ' + pa.lienPosition + ' lien');
+    }
+
+    /** How many of the staged pledges have to author their asset first. */
+    private static Integer newCollaterals(List<PledgeAdd> pledgeAdds) {
+        Integer n = 0;
+        for (PledgeAdd pa : pledgeAdds) {
+            if (pa.isNew) {
                 n++;
             }
         }

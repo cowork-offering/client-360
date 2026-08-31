@@ -91,8 +91,10 @@ export interface CatalogField {
    *  "covenantAdd" rides stage_loan_modification's covenantAddsJson; an
    *  "involvementChange" rides involvementChangesJson (adds authored on the
    *  clone, removes as carry exclusions). Both 2026-08-30. "feeAdd" rides
-   *  feeAddsJson and authors LLC_BI__Fee__c on the clone (2026-08-31). */
-  recordWire?: "covenantAdd" | "involvementChange" | "feeAdd";
+   *  feeAddsJson and authors LLC_BI__Fee__c on the clone; "pledgeAdd" rides
+   *  pledgeAddsJson and attaches a collateral to the clone, creating the asset
+   *  and its ownership junction first where it is net-new. Both 2026-08-31. */
+  recordWire?: "covenantAdd" | "involvementChange" | "feeAdd" | "pledgeAdd";
   /** A DYNAMIC FIELD wire: the entry files through `stage_loan_modification`'s
    *  `fieldChangesJson` under this API name, and the ORG resolves it against its
    *  own live describe at stage time — updateable, non-formula, off the
@@ -665,10 +667,14 @@ const COVENANT_FIELDS: CatalogField[] = [
   },
 ];
 
+/* THE PLEDGE ITSELF FILES since 2026-08-31; these two entries are attributes OF
+   an existing pledge, which is a different arm. Adding a pledge authors a row;
+   moving the rate on one, or releasing it, AMENDS a row the carry replicated,
+   and the guard admits the pledge on the create side only. */
 const NO_PLEDGE_TOOL =
-  "The pledge junction LLC_BI__Loan_Collateral2__c is not on C360WriteGuard's allowlist. stage_collateral_valuation writes a VALUATION against an existing collateral, which is a different fact from pledging one to a facility.";
+  "Adding a pledge files on the clone; this entry MOVES one that is already there, and the pair only ever authors a pledge, never amends the replica the carry made.";
 const PLEDGE_FIX =
-  "A pledges[] block on the modification pair, writing the junction against the CLONE. LLC_BI__Advance_Rate__c and the rollup totals are formulas and must be forbidden; LLC_BI__Advance_Rate_Override__c is the writable one.";
+  "A pledge-amend arm, scoped to junction rows on a clone this plan created. LLC_BI__Advance_Rate__c and the rollup totals are formulas and stay forbidden; LLC_BI__Advance_Rate_Override__c is the writable one, and the org's own Advance_Rate_Override rule demands a written reason beside it.";
 
 const COLLATERAL_FIELDS: CatalogField[] = [
   {
@@ -680,8 +686,13 @@ const COLLATERAL_FIELDS: CatalogField[] = [
     category: "collateral",
     group: "security",
     source: "live-verified",
-    gap: NO_PLEDGE_TOOL,
-    closes: PLEDGE_FIX,
+    // FILES since 2026-08-31: pledgeAddsJson carries either the org's own
+    // collateral record id, resolved off the deal's existing pledges, or a
+    // net-new asset (kind, value, advance rate) whose whole chain the arm
+    // authors — collateral, ownership junction, pledge — onto the clone.
+    recordWire: "pledgeAdd",
+    gap: "An asset this room could not resolve travels as a handoff rather than a guess: a pledge sends the ORG'S OWN collateral record, so a name matching two of the deal's assets or none of them is a question, and a net-new asset with no kind, no value or no advance rate is not an asset yet.",
+    closes: "Nothing structural. The unresolved case closes with a picker fed by the borrower's whole collateral list rather than only the assets this deal already pledges.",
     associationScope: "pledges",
     chain: [
       // The asset has NO account lookup in this org (live describe): the borrower connection IS the
@@ -696,7 +707,17 @@ const COLLATERAL_FIELDS: CatalogField[] = [
         note: "MASTER-DETAIL THROUGH THE AGGREGATE: LLC_BI__Loan_Collateral_Aggregate__c is non-updateable on the pledge, so it is set at insert and the aggregate has to exist first. This is the known defect area for a clone (Loan_Collateral_Aggregate), so the step is verified by re-query and never a casual insert.",
       },
     ],
-    synonyms: ["pledge", "pledge the", "add collateral", "secure it with", "take security over"],
+    // "as collateral" and its neighbours are how a banker says it when the VERB
+    // is "add": "add a new $2M piece of equipment as collateral on the LoC" was
+    // read by nothing before, because every synonym here assumed the word
+    // "pledge". The bare word "collateral" is deliberately NOT a synonym — it
+    // sits inside "collateral insurance covenant", and matching it would file a
+    // pledge for a covenant ask.
+    synonyms: [
+      "pledge", "pledge the", "add collateral", "secure it with", "take security over",
+      "as additional collateral", "as new collateral", "as collateral", "as security",
+      "additional collateral", "new collateral",
+    ],
   },
   {
     id: "collateral.release",

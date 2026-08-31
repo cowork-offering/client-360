@@ -27,6 +27,13 @@ const line15: Facility = {
   outstanding: 9_200_000,
   interestRate: 7.6,
   maturityDate: "2027-03-15",
+  // The two Hartwell assets this member secures, described the way the read
+  // carries them. They share a word on purpose: a pledge resolves on the org's
+  // own record, so a phrase fitting both has to be a question.
+  collateral: [
+    { loanId: "a4Zbb0000027MaYEAU", collateralId: "a35bb0000013xz3AAA", collateralName: "COL-000762", collateralDescription: "Duluth warehouse" },
+    { loanId: "a4Zbb0000027MaYEAU", collateralId: "a35bb0000013y0fAAA", collateralName: "COL-000763", collateralDescription: "Duluth machine shop" },
+  ],
 };
 
 const line25: Facility = {
@@ -312,6 +319,89 @@ describe("the deterministic parse", () => {
     // Neither reading survives: keeping one would answer the question asked.
     expect(both.awaiting?.fee?.percentage).toBeUndefined();
     expect(both.awaiting?.fee?.amount).toBeUndefined();
+  });
+
+  /* ------------------------------------------------------------- the pledge */
+
+  it("resolves an EXISTING asset off the deal's own pledges, and sends the org's record", () => {
+    const out = parseModify("pledge the Duluth warehouse to the equipment", ctx);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    expect(out.amendments[0].field.category).toBe("collateral");
+    expect(out.amendments[0].facility?.loanId).toBe(equipment.loanId);
+    const value = out.amendments[0].value;
+    if (value?.kind !== "pledge") throw new Error(String(value?.kind));
+    // The ID, never the name: the org resolves nothing on the banker's spelling.
+    expect(value.collateralId).toBe("a35bb0000013xz3AAA");
+    expect(value.create).toBeUndefined();
+    expect(value.noun).toBe("Duluth warehouse");
+  });
+
+  it("asks WHICH ASSET when the words fit two of the deal's own, and never picks one", () => {
+    const out = parseModify("pledge the Duluth asset to the equipment", ctx);
+    if (out.kind !== "clarify") throw new Error(out.kind);
+    expect(out.question).toMatch(/2 assets that could be it/);
+    expect(out.options).toEqual(["Duluth warehouse", "Duluth machine shop"]);
+
+    const answered = parseAnswer(out.awaiting!, "Duluth machine shop", ctx);
+    if (answered?.kind !== "amendments") throw new Error(String(answered?.kind));
+    expect(answered.amendments[0].value).toMatchObject({ collateralId: "a35bb0000013y0fAAA" });
+  });
+
+  it("names the deal's own assets when it cannot find the one the line meant", () => {
+    const out = parseModify("pledge the Mazak tooling to the line of credit - $15,000,000.00", single);
+    if (out.kind !== "clarify") throw new Error(out.kind);
+    expect(out.question).toContain("Duluth warehouse");
+    expect(out.options).toContain("A new asset");
+  });
+
+  it("creates then pledges a NEW asset, asking for the kind, the value and the rate in turn", () => {
+    // The founder's own line. Nothing in it says "pledge", which is why the
+    // catalog carries "as collateral" as a verb of its own.
+    const asked = parseModify("add a new $2M piece of equipment as collateral on the LoC", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    // The kind and the value are already read; only the rate is missing.
+    expect(asked.question).toMatch(/advance rate/i);
+    expect(asked.awaiting?.pledge).toMatchObject({ isNew: true, assetType: "Equipment", value: 2_000_000 });
+
+    const done = parseAnswer(asked.awaiting!, "80%", single);
+    if (done?.kind !== "amendments") throw new Error(String(done?.kind));
+    const value = done.amendments[0].value;
+    if (value?.kind !== "pledge") throw new Error(String(value?.kind));
+    expect(value.collateralId).toBeUndefined();
+    expect(value.create).toEqual({
+      description: "New piece of equipment",
+      collateralType: "Equipment",
+      value: 2_000_000,
+      advanceRate: 80,
+    });
+  });
+
+  it("asks the KIND of a new asset before anything else, and holds that it is new", () => {
+    const asked = parseModify("add a new asset as collateral on the line of credit - $15,000,000.00", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(asked.question).toMatch(/what kind of asset/i);
+    expect(asked.options).toContain("Equipment");
+
+    // "Equipment" must NOT go back through the existing-asset resolver: `isNew`
+    // survives the answer, which is the whole reason it is held.
+    const worth = parseAnswer(asked.awaiting!, "Equipment", single);
+    if (worth?.kind !== "clarify") throw new Error(String(worth?.kind));
+    expect(worth.question).toMatch(/what is it worth/i);
+    expect(worth.awaiting?.pledge).toMatchObject({ isNew: true, assetType: "Equipment" });
+
+    const rate = parseAnswer(worth.awaiting!, "$2,000,000", single);
+    if (rate?.kind !== "clarify") throw new Error(String(rate?.kind));
+    expect(rate.question).toMatch(/advance rate/i);
+    expect(rate.awaiting?.pledge?.value).toBe(2_000_000);
+  });
+
+  it("will not read the pledge's DESTINATION as the kind of asset", () => {
+    // "to the equipment loan" is where the pledge lands, not what it is made of.
+    const out = parseModify("pledge the Duluth warehouse to the equipment", ctx);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    const value = out.amendments[0].value;
+    if (value?.kind !== "pledge") throw new Error(String(value?.kind));
+    expect(value.create).toBeUndefined();
   });
 
   it("says nothing rather than guessing at a line with no amendment in it", () => {

@@ -268,6 +268,7 @@ function valueLabel(value: ParsedValue | null): string {
       return fmtDate(value.iso);
     case "covenant":
     case "fee":
+    case "pledge":
       return value.text;
     default:
       return value.text;
@@ -322,11 +323,13 @@ function fieldWireValue(v: ParsedValue): string | number | null {
 
 function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): WorkroomDelta {
   const { field, facility, value, op } = a;
-  // A FEE NAMES ITSELF. The catalog entry is called "Facility fee", which is the
-  // category rather than the thing: a chip reading "Facility fee → Origination
-  // fee, 1.00%" says the category twice and the fee once. The banker's own word
-  // for it is the better title, and the category is already on the badge.
-  const title = value?.kind === "fee" && op === "add" ? value.noun : deltaTitle(field, op);
+  // A FEE, AND AN ASSET, NAME THEMSELVES. The catalog entries are called
+  // "Facility fee" and "Collateral pledge", which are the categories rather than
+  // the things: a chip reading "Collateral pledge → Duluth warehouse" says the
+  // category and buries the asset. The banker's own word for it is the better
+  // title, and the category is already on the badge.
+  const title =
+    op === "add" && (value?.kind === "fee" || value?.kind === "pledge") ? value.noun : deltaTitle(field, op);
   // The handoff badge leads with the op, so a title that already carries the
   // word must not say it twice ("Remove remove a legal entity").
   const noun = title.replace(/^(?:Add|Remove)\s+/, "");
@@ -404,6 +407,26 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
           facilityId: facility.loanId,
         }
       : undefined;
+  // A COLLATERAL PLEDGE files as a structured record on the member's CLONE, in
+  // one of its two shapes. An EXISTING asset travels as the org's own collateral
+  // id — resolved off the deal's own pledges, never as a name the org would have
+  // to guess at. A NET-NEW one travels as its shape and the arm authors the
+  // whole chain: `LLC_BI__Collateral__c` has no account lookup, so the borrower
+  // link is the `LLC_BI__Account_Collateral__c` junction, and only then the
+  // pledge. `advanceRate` is the OVERRIDE on the pledge; the plain advance rate
+  // is a formula the org resolves from the override, the auto-applied value and
+  // the collateral type's default, in that order.
+  const pledgeWire =
+    field.recordWire === "pledgeAdd" && op === "add" && facility?.loanId !== undefined && value?.kind === "pledge"
+      ? {
+          collateralId: value.collateralId,
+          newCollateral: value.create
+            ? { description: value.create.description, collateralType: value.create.collateralType, value: value.create.value }
+            : undefined,
+          advanceRate: value.create?.advanceRate,
+          facilityId: facility.loanId,
+        }
+      : undefined;
   // A CURATED LOAN FIELD files through fieldChangesJson: the room sends the API
   // name and the typed value, and the ORG resolves the name against its own live
   // describe at stage time — updateable, non-formula, off the deny-list — then
@@ -435,7 +458,7 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
    *  because every wave added since has had to be threaded through the same
    *  eight places, and one of them being missed is a chip that reads as filed
    *  and travels as a handoff. */
-  const files = Boolean(wire || covenantWire || involvementWire || fieldWire || feeWire);
+  const files = Boolean(wire || covenantWire || involvementWire || fieldWire || feeWire || pledgeWire);
 
   return {
     id: `${field.id}:${facility?.loanId ?? a.party ?? "package"}:${seq}`,
@@ -471,14 +494,18 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
                   ? feeWire.calculationType === "Percentage"
                     ? `LLC_BI__Fee__c created on the CLONE as a Percentage fee: ${feeWire.percentage}% against LLC_BI__Amount__c. The org's own FeeTrigger computes the basis and the money from the clone's commitment; this room sets no figure.`
                     : "LLC_BI__Fee__c created on the CLONE as a Flat Amount fee. The label rides LLC_BI__Fee_Type_Description__c, because Name on a fee is an autonumber."
-                  : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
+                  : pledgeWire
+                    ? pledgeWire.newCollateral
+                      ? `LLC_BI__Collateral__c created, LLC_BI__Account_Collateral__c recording the borrower's ownership (the asset has no account lookup of its own), then LLC_BI__Loan_Collateral2__c pledging it to the CLONE at ${pledgeWire.advanceRate}% as an override with its reason. The booked facility keeps exactly the security it has today.`
+                      : "LLC_BI__Loan_Collateral2__c pledging the borrower's existing asset to the CLONE, beside the pledges the carry replicates. The booked facility keeps exactly the security it has today."
+                    : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
       ],
     ],
     fields: field.apiName ? [`${field.object}.${field.apiName}`] : [field.object],
     caveat: files ? undefined : field.gap,
     filed: {
       recordId:
-        wire || covenantWire || fieldWire || feeWire || involvementWire?.op === "add"
+        wire || covenantWire || fieldWire || feeWire || pledgeWire || involvementWire?.op === "add"
           ? "assigned by the org on execution"
           : involvementWire
             ? "a carry exclusion writes nothing"
@@ -489,7 +516,9 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
           ? "Covenant and junction re-queried on the clone after creation"
           : feeWire
             ? "Fee re-queried on the clone after creation, with the figure the org computed"
-            : involvementWire
+            : pledgeWire
+              ? "Pledge re-queried on the clone after creation, with the lendable value the org derived"
+              : involvementWire
               ? involvementWire.op === "add"
                 ? "Involvement re-queried on the clone after creation"
                 : "Proven by absence on the clone and presence on the parent"
@@ -501,6 +530,7 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     involvementWire,
     fieldWire,
     feeWire,
+    pledgeWire,
     // Only a FILEABLE entry carries a basis: drift is the check that a figure
     // reaching the org has not moved, and a handoff sends no figure.
     basis: wire && facility?.loanId ? { facilityId: facility.loanId, fieldId: field.id, before } : undefined,
@@ -519,7 +549,8 @@ function wireTarget(d: WorkroomDelta): string | undefined {
     d.covenantWire?.facilityId ??
     d.involvementWire?.facilityId ??
     d.fieldWire?.facilityId ??
-    d.feeWire?.facilityId
+    d.feeWire?.facilityId ??
+    d.pledgeWire?.facilityId
   );
 }
 
@@ -1018,7 +1049,7 @@ export function createModifyEngine(args: {
     const summary = catalogSummary();
     rows.push({
       label: "What this room can file",
-      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower, borrowing-structure changes and net-new fees, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
+      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower, borrowing-structure changes, net-new fees and collateral pledges, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
     });
     return rows;
   }
@@ -1125,7 +1156,13 @@ export function createModifyEngine(args: {
       case "loan-covenants":
         return (facility?.loanCovenants ?? []).map((j) => j.covenantType ?? j.name ?? "").filter(Boolean);
       case "pledges":
-        return (facility?.collateral ?? []).map((c) => c.collateralName ?? c.collateralType ?? "").filter(Boolean);
+        // The DESCRIPTION first, because it is what a banker says: the amend-or-
+        // add question compares the line against these, and matching only on the
+        // autonumber would let "pledge the Duluth warehouse" through silently on
+        // a facility that already carries it.
+        return (facility?.collateral ?? [])
+          .map((c) => c.collateralDescription ?? c.collateralName ?? c.collateralType ?? "")
+          .filter(Boolean);
       case "parties":
         return entities
           .filter((e) => !e.loanId || !facility?.loanId || e.loanId === facility.loanId)
@@ -1375,7 +1412,7 @@ export function createModifyEngine(args: {
     // difference between a refusal the banker can answer and a dead end.
     const named = membersNamedIn(text, parseContext());
     const scope =
-      "Commitment, rate, maturity, term, covenants, entities and fees all file on the clone; collateral and pricing I stage and hand off with the reason.";
+      "Commitment, rate, maturity, term, covenants, entities, fees and collateral all file on the clone; pricing I stage and hand off with the reason.";
     asked = true;
     return {
       kind: "unparsed",
@@ -1422,7 +1459,7 @@ export function createModifyEngine(args: {
       .join(", ");
     return {
       kind: "unparsed",
-      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity, term, covenants, entities and fees all file on the clone; collateral and pricing I stage and hand off with the reason.`,
+      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity, term, covenants, entities, fees and collateral all file on the clone; pricing I stage and hand off with the reason.`,
     };
   }
 
@@ -1696,6 +1733,19 @@ export function createModifyEngine(args: {
         recordType: d.feeWire!.recordType,
         targetLoanId: d.feeWire!.facilityId,
       }));
+    // A PLEDGE IS PER TARGET TOO, and it carries exactly one of its two shapes:
+    // `collateralId` for an asset the borrower already owns, `newCollateral` for
+    // one the arm has to author first. Neither key is nulled when it does not
+    // apply — the org reads the presence of one as the choice between the two
+    // verbs, and a null there would be a third answer nobody meant.
+    const pledgeAdds = fileable
+      .filter((d) => d.pledgeWire)
+      .map((d) => ({
+        ...(d.pledgeWire!.collateralId ? { collateralId: d.pledgeWire!.collateralId } : {}),
+        ...(d.pledgeWire!.newCollateral ? { newCollateral: d.pledgeWire!.newCollateral } : {}),
+        ...(d.pledgeWire!.advanceRate !== undefined ? { advanceRate: d.pledgeWire!.advanceRate } : {}),
+        targetLoanId: d.pledgeWire!.facilityId,
+      }));
     // The flat keys carry a value only on the channel that owns them; on the
     // per-target channel they stay null, which is what the org requires to read
     // `scalarChangesJson` at all.
@@ -1716,6 +1766,7 @@ export function createModifyEngine(args: {
       ...(involvementChanges.length ? { involvementChangesJson: JSON.stringify(involvementChanges) } : {}),
       ...(fieldChanges.length ? { fieldChangesJson: JSON.stringify(fieldChanges) } : {}),
       ...(feeAdds.length ? { feeAddsJson: JSON.stringify(feeAdds) } : {}),
+      ...(pledgeAdds.length ? { pledgeAddsJson: JSON.stringify(pledgeAdds) } : {}),
     };
   }
 
@@ -1726,7 +1777,7 @@ export function createModifyEngine(args: {
     if (!deps.available()) throw new WorkroomRefusalError(NO_CONNECTOR_REFUSAL);
     if (!context.productPackageId) throw new WorkroomRefusalError(NO_PACKAGE_REFUSAL);
 
-    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire));
+    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire || d.pledgeWire));
     const handed = deltas.filter((d) => !d.fileable);
     if (!fileable.length) {
       throw new WorkroomRefusalError(
@@ -1841,7 +1892,7 @@ export function createModifyEngine(args: {
     const verified = (result.steps ?? []).filter((s) => s.state === "verified").length;
 
     const filed = stagedDeltas
-      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire))
+      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire || d.pledgeWire))
       .map((d) => {
         const row = perFacility.get(wireTarget(d)!);
         const cloneId = row?.cloneLoanId ?? result.cloneLoanId;

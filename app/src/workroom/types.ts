@@ -202,6 +202,20 @@ export interface WorkroomDelta {
     recordType: string;
     facilityId: string;
   };
+  /** A COLLATERAL PLEDGE's contribution (2026-08-31), in one of its two shapes.
+   *  `collateralId` pledges an asset the borrower already owns; `newCollateral`
+   *  authors the whole chain first — the asset, then the
+   *  `LLC_BI__Account_Collateral__c` ownership junction that is the only link
+   *  `LLC_BI__Collateral__c` has to an account, then the pledge. Either way the
+   *  pledge lands on the member's CLONE and the booked parent keeps exactly the
+   *  security it has today. `advanceRate` rides the pledge as
+   *  `LLC_BI__Advance_Rate_Override__c`: the plain advance rate is a formula. */
+  pledgeWire?: {
+    collateralId?: string;
+    newCollateral?: { description: string; collateralType: string; value: number };
+    advanceRate?: number;
+    facilityId: string;
+  };
   /** A CURATED LOAN FIELD's contribution (2026-08-31): the field wave rides
    *  `fieldChangesJson`, and the ORG resolves the name against its own live
    *  describe at stage time rather than trusting a name shipped in this client.

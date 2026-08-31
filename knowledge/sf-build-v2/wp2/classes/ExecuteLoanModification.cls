@@ -86,6 +86,13 @@
  * to free, while a second insert pays the whole pass again (~30 queries on the failing run) and
  * would put the arm hop near 85 of 100. The row is composed under OP_CREATE before the carry runs,
  * so the guard still sees an authored row as authored rather than as a copy.
+ * A COLLATERAL PLEDGE goes the same way, and for the same reason (2026-08-31): the pledge rides the
+ * carry's own pledge insert, taking the same per-clone aggregate shell the copies take, because a
+ * pledge insert wakes nCino's collateral aggregate automation and that automation is bulkified. Its
+ * asset and ownership junction cannot - a pledge needs the collateral's id, and nothing else here
+ * creates one - so they are two DMLs of their own, bulked across every pledge in the plan. Stage
+ * caps the plan at five pledges: each of those three objects carries an org-local change-stream
+ * trigger that enqueues a callout per DML, against a ceiling of 50 queued jobs in one transaction.
  * The decision token is consumed exactly once and gates the whole plan; the second hop proves the
  * same token, consumes nothing, and re-derives its targets from the org rather than being handed
  * them. See THE TRANSACTION BOUNDARY in execute() for the full accounting.
@@ -289,6 +296,30 @@ global with sharing class ExecuteLoanModification {
         global String verification;
     }
 
+    /** One collateral pledge this run authored on a clone, and the asset behind it. */
+    global class PledgeResult {
+        @InvocableVariable(label='Pledge Id')
+        global String pledgeId;
+        @InvocableVariable(label='Collateral Id' description='The asset. Newly created on this run where the plan said so, otherwise one the borrower already owned.')
+        global String collateralId;
+        @InvocableVariable(label='Collateral Name' description='The org-assigned autonumber (COL-000nnn), read back. Nothing submits a collateral name.')
+        global String collateralName;
+        @InvocableVariable(label='Asset Label' description='The description, which is the asset\'s only readable identity: Name is an autonumber.')
+        global String assetLabel;
+        @InvocableVariable(label='Created The Asset' description='True when this run authored the collateral and its ownership junction as well as the pledge.')
+        global Boolean createdAsset;
+        @InvocableVariable(label='Ownership Id' description='The LLC_BI__Account_Collateral__c row tying a NEW asset to the borrower. Null when the asset was already owned.')
+        global String ownershipId;
+        @InvocableVariable(label='Amount Pledged')
+        global Decimal amountPledged;
+        @InvocableVariable(label='Advance Rate' description='What the ORG resolved: the override where one was stated, the auto-applied rate, or the collateral type\'s default. A formula, never a figure anybody sent.')
+        global Decimal advanceRate;
+        @InvocableVariable(label='Clone Loan Id')
+        global String cloneLoanId;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     global class ExecuteResult {
         @InvocableVariable(label='Staging Id')
         global String stagingId;
@@ -314,6 +345,8 @@ global with sharing class ExecuteLoanModification {
         global List<FieldChangeResult> fieldChanges;
         @InvocableVariable(label='Fees' description='One entry per net-new fee this run authored on a clone, each re-read after the write with the figure the org settled on.')
         global List<FeeResult> fees;
+        @InvocableVariable(label='Pledges' description='One entry per collateral pledge this run authored on a clone, each re-read after the write with the advance rate the org resolved.')
+        global List<PledgeResult> pledges;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -874,6 +907,8 @@ global with sharing class ExecuteLoanModification {
         Integer fieldChangeCount = fcCountRaw == null ? 0 : Integer.valueOf(fcCountRaw);
         Decimal feeCountRaw = C360Plan.asDecimal(v.get('feeAddCount'));
         Integer feeAddCount = feeCountRaw == null ? 0 : Integer.valueOf(feeCountRaw);
+        Decimal pledgeCountRaw = C360Plan.asDecimal(v.get('pledgeAddCount'));
+        Integer pledgeAddCount = pledgeCountRaw == null ? 0 : Integer.valueOf(pledgeCountRaw);
 
         // The staged roll list. nCino package methodology: the credit action versions the WHOLE
         // package, so the plan carries every eligible member, not just the selected ones. The
@@ -955,6 +990,12 @@ global with sharing class ExecuteLoanModification {
                 C360Plan.setState(steps, 'fee_add_' + fe, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'fee_verify_' + fe, C360Plan.STATE_SKIPPED, null);
             }
+            for (Integer pl = 0; pl < pledgeAddCount; pl++) {
+                C360Plan.setState(steps, 'collateral_create_' + pl, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'collateral_own_' + pl, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'pledge_add_' + pl, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'pledge_verify_' + pl, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
@@ -991,6 +1032,12 @@ global with sharing class ExecuteLoanModification {
             for (Integer fe = 0; fe < feeAddCount; fe++) {
                 C360Plan.setState(steps, 'fee_add_' + fe, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'fee_verify_' + fe, C360Plan.STATE_SKIPPED, null);
+            }
+            for (Integer pl = 0; pl < pledgeAddCount; pl++) {
+                C360Plan.setState(steps, 'collateral_create_' + pl, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'collateral_own_' + pl, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'pledge_add_' + pl, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'pledge_verify_' + pl, C360Plan.STATE_SKIPPED, null);
             }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
@@ -1284,6 +1331,7 @@ global with sharing class ExecuteLoanModification {
             out.involvements = intendedInvolvements(v);
             out.fieldChanges = intendedFieldChanges(v);
             out.fees = intendedFees(v);
+            out.pledges = intendedPledges(v);
             out.facilities = results;
             out.steps = toWireSteps(steps);
             out.terminalState = C360Plan.terminalState(steps);
@@ -1301,6 +1349,7 @@ global with sharing class ExecuteLoanModification {
         out.involvements = armed.involvements;
         out.fieldChanges = armed.fieldChanges;
         out.fees = armed.fees;
+        out.pledges = armed.pledges;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;
@@ -1313,7 +1362,9 @@ global with sharing class ExecuteLoanModification {
             (armed.fieldChanges.isEmpty() ? '' : ', ' + armed.fieldChanges.size() + ' field change' +
                 (armed.fieldChanges.size() == 1 ? '' : 's') + ' on the clone' + (armed.fieldChanges.size() == 1 ? '' : 's')) +
             (armed.fees.isEmpty() ? '' : ', ' + armed.fees.size() + ' net-new fee' +
-                (armed.fees.size() == 1 ? '' : 's') + ' on the clone' + (armed.fees.size() == 1 ? '' : 's')) + '. ' +
+                (armed.fees.size() == 1 ? '' : 's') + ' on the clone' + (armed.fees.size() == 1 ? '' : 's')) +
+            (armed.pledges.isEmpty() ? '' : ', ' + armed.pledges.size() + ' collateral pledge' +
+                (armed.pledges.size() == 1 ? '' : 's') + ' on the clone' + (armed.pledges.size() == 1 ? '' : 's')) + '. ' +
             (armed.facilities.size() == 1
                 ? armed.facilities[0].outcome
                 : 'See each facility for its clone and what was applied.') +
@@ -1402,6 +1453,7 @@ global with sharing class ExecuteLoanModification {
                 outcome.involvements = intendedInvolvements(v);
                 outcome.fieldChanges = intendedFieldChanges(v);
                 outcome.fees = intendedFees(v);
+                outcome.pledges = intendedPledges(v);
                 outcome.facilities = results;
                 outcome.terminalState = C360Plan.terminalState(steps);
             }
@@ -1417,6 +1469,7 @@ global with sharing class ExecuteLoanModification {
         public List<InvolvementResult> involvements;
         public List<FieldChangeResult> fieldChanges;
         public List<FeeResult> fees;
+        public List<PledgeResult> pledges;
         public List<FacilityResult> facilities;
         public String terminalState;
     }
@@ -1630,8 +1683,32 @@ global with sharing class ExecuteLoanModification {
             feeIndexOfRow.add(i);
         }
 
+        // ---- The COLLATERAL CHAIN, and where each of its three writes lands in the budget.
+        //
+        // The ASSET and its OWNERSHIP junction are inserted HERE, in two DMLs of their own, and they
+        // have to be: a pledge needs the collateral's id, and nothing else in this transaction
+        // creates a collateral. They are bulked into one insert each rather than one per pledge,
+        // because both objects carry an org-local change-stream trigger that enqueues an EventBridge
+        // callout per DML (the 24 CDC triggers the test fixture's shield exists for), against a
+        // ceiling of 50 queued jobs in a synchronous transaction. Stage caps the plan at five
+        // pledges for the same reason.
+        //
+        // The PLEDGE itself rides the carry's own pledge insert, exactly as a net-new fee rides the
+        // carry's fee insert: a pledge insert wakes nCino's collateral aggregate automation, which
+        // spends the LLC_BI namespace's query budget rather than ours, and that automation is
+        // bulkified - an extra row in the existing insert is close to free, while a second insert
+        // pays the whole pass again. Composed here rather than inside the carry because the FENCE is
+        // different: a copy is OP_CARRY, an authored row is OP_CREATE.
+        Integer pledgeAddCount = intCount(v.get('pledgeAddCount'));
+        List<PledgeResult> pledgeResults = new List<PledgeResult>();
+        List<LLC_BI__Loan_Collateral2__c> netNewPledges = new List<LLC_BI__Loan_Collateral2__c>();
+        List<Integer> pledgeIndexOfRow = new List<Integer>();
+        if (pledgeAddCount > 0) {
+            composeCollateralChain(steps, v, job, pledgeAddCount, pledgeResults, netNewPledges, pledgeIndexOfRow);
+        }
+
         String carryReport = carryJunctionGraph(
-            job.rollMembers, job.cloneByParent, job.newPkgId, excludedInvolvementIds, netNewFees
+            job.rollMembers, job.cloneByParent, job.newPkgId, excludedInvolvementIds, netNewFees, netNewPledges
         );
         C360Plan.setState(
             steps,
@@ -1646,6 +1723,12 @@ global with sharing class ExecuteLoanModification {
         // commitment - so it is REPORTED rather than asserted against a figure nobody staged. On a
         // flat fee the amount is ours and is compared.
         verifyFees(steps, feeResults, netNewFees, feeIndexOfRow);
+
+        // The pledges the carry just inserted for us, proven the same way: ONE re-read. The advance
+        // rate is the ORG'S answer - a formula resolving the override, then the auto-applied rate,
+        // then the collateral type's default - so it is reported rather than asserted against a
+        // figure this plan supplied.
+        verifyPledges(steps, pledgeResults, netNewPledges, pledgeIndexOfRow);
 
         // ---- Net-new covenants (plan values covenantAdd{i}.*). Created on the borrower account,
         // attached to the CLONE of the targeted member on the new version - never to the booked
@@ -1948,6 +2031,7 @@ global with sharing class ExecuteLoanModification {
         outcome.involvements = involvementResults;
         outcome.fieldChanges = fieldChangeResults;
         outcome.fees = feeResults;
+        outcome.pledges = pledgeResults;
         outcome.facilities = results;
         outcome.terminalState = C360Plan.terminalState(steps);
         return outcome;
@@ -2024,6 +2108,209 @@ global with sharing class ExecuteLoanModification {
         }
     }
 
+    /**
+     * Authors the collateral chain for every staged pledge and composes the pledge rows, leaving
+     * them for the carry to insert.
+     *
+     * THE ORDER IS THE MODEL'S, not a preference. `LLC_BI__Collateral__c` carries no account lookup
+     * of any kind on this org, so an asset created without its `LLC_BI__Account_Collateral__c` row
+     * belongs to nobody and cannot be found from the relationship at all - which is why the
+     * ownership junction is a step of its own in the plan rather than an implementation detail.
+     * The pledge is composed but NOT inserted here: its aggregate lookup is not updateable, so the
+     * per-clone aggregate shell has to exist first, and that shell is minted inside the carry.
+     *
+     * @param pledgeRows  Filled with the composed pledges, in insert order.
+     * @param indexOfRow  Which `results` entry each composed pledge belongs to.
+     */
+    private static void composeCollateralChain(
+        List<C360Plan.Step> steps,
+        Map<String, Object> v,
+        ArmJob job,
+        Integer pledgeAddCount,
+        List<PledgeResult> results,
+        List<LLC_BI__Loan_Collateral2__c> pledgeRows,
+        List<Integer> indexOfRow
+    ) {
+        // Pass one: settle the clone for every pledge, and collect the assets to author.
+        List<LLC_BI__Collateral__c> newAssets = new List<LLC_BI__Collateral__c>();
+        List<Integer> assetIndexOfRow = new List<Integer>();
+        List<Id> cloneOf = new List<Id>();
+        for (Integer i = 0; i < pledgeAddCount; i++) {
+            String ps = String.valueOf(i);
+            PledgeResult pr = new PledgeResult();
+            pr.assetLabel = C360Plan.asString(v.get('pledgeAdd' + ps + '.assetLabel'));
+            pr.createdAsset = v.get('pledgeAdd' + ps + '.isNew') == true;
+            pr.amountPledged = C360Plan.asDecimal(v.get('pledgeAdd' + ps + '.amountPledged'));
+            results.add(pr);
+            cloneOf.add(null);
+
+            Id targetParent = C360Plan.asId(v.get('pledgeAdd' + ps + '.targetLoanId'));
+            Id cloneId = job.cloneByParent.get(targetParent);
+            if (cloneId == null) {
+                String why = 'No modification clone could be read for the facility this pledge targets, so nothing was created.';
+                C360Plan.setState(steps, 'collateral_create_' + ps, C360Plan.STATE_FAILED, why);
+                C360Plan.setState(steps, 'collateral_own_' + ps, C360Plan.STATE_FAILED, why);
+                C360Plan.setState(steps, 'pledge_add_' + ps, C360Plan.STATE_FAILED, why);
+                C360Plan.setState(steps, 'pledge_verify_' + ps, C360Plan.STATE_FAILED, why);
+                pr.verification = why;
+                continue;
+            }
+            pr.cloneLoanId = cloneId;
+            cloneOf[i] = cloneId;
+
+            if (pr.createdAsset) {
+                Map<String, Object> assetFields = new Map<String, Object>{
+                    'LLC_BI__Collateral_Type__c' => C360Plan.asId(v.get('pledgeAdd' + ps + '.collateralTypeId')),
+                    'LLC_BI__Value__c' => C360Plan.asDecimal(v.get('pledgeAdd' + ps + '.newValue')),
+                    'LLC_BI__Description__c' => C360Plan.asString(v.get('pledgeAdd' + ps + '.description'))
+                };
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_COLLATERAL, C360WriteGuard.OP_CREATE, assetFields);
+                newAssets.add(new LLC_BI__Collateral__c(
+                    LLC_BI__Collateral_Type__c = (Id) assetFields.get('LLC_BI__Collateral_Type__c'),
+                    LLC_BI__Value__c = (Decimal) assetFields.get('LLC_BI__Value__c'),
+                    LLC_BI__Description__c = (String) assetFields.get('LLC_BI__Description__c')
+                ));
+                assetIndexOfRow.add(i);
+            } else {
+                pr.collateralId = C360Plan.asString(v.get('pledgeAdd' + ps + '.collateralId'));
+            }
+        }
+
+        // ONE insert for every new asset, then ONE for every ownership junction. Each DML flushes a
+        // change-stream queueable, so the count of DMLs is what matters rather than the count of rows.
+        if (!newAssets.isEmpty()) {
+            insert as user newAssets;
+            List<LLC_BI__Account_Collateral__c> ownerships = new List<LLC_BI__Account_Collateral__c>();
+            for (Integer k = 0; k < newAssets.size(); k++) {
+                Integer i = assetIndexOfRow[k];
+                results[i].collateralId = newAssets[k].Id;
+                C360Plan.setState(steps, 'collateral_create_' + i, C360Plan.STATE_VERIFIED,
+                    'Asset created for "' + results[i].assetLabel + '".');
+                Map<String, Object> ownFields = new Map<String, Object>{
+                    'LLC_BI__Account__c' => job.accountId,
+                    'LLC_BI__Collateral__c' => newAssets[k].Id,
+                    'LLC_BI__Ownership_Percentage__c' => 100,
+                    'LLC_BI__Primary_Owner__c' => true
+                };
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_ACCOUNT_COLLATERAL, C360WriteGuard.OP_CREATE, ownFields);
+                ownerships.add(new LLC_BI__Account_Collateral__c(
+                    LLC_BI__Account__c = job.accountId,
+                    LLC_BI__Collateral__c = newAssets[k].Id,
+                    LLC_BI__Ownership_Percentage__c = 100,
+                    LLC_BI__Primary_Owner__c = true
+                ));
+            }
+            insert as user ownerships;
+            for (Integer k = 0; k < ownerships.size(); k++) {
+                Integer i = assetIndexOfRow[k];
+                results[i].ownershipId = ownerships[k].Id;
+                C360Plan.setState(steps, 'collateral_own_' + i, C360Plan.STATE_VERIFIED,
+                    'The borrower is recorded as sole owner of "' + results[i].assetLabel + '".');
+            }
+        }
+
+        // Pass two: compose the pledges. The aggregate lookup is set inside the carry, after the
+        // per-clone shell exists; it is not updateable afterwards, so it cannot be filled in later.
+        for (Integer i = 0; i < pledgeAddCount; i++) {
+            String ps = String.valueOf(i);
+            PledgeResult pr = results[i];
+            if (cloneOf[i] == null || pr.collateralId == null) {
+                continue;
+            }
+            Decimal rateOverride = C360Plan.asDecimal(v.get('pledgeAdd' + ps + '.advanceRate'));
+            String overrideReason = C360Plan.asString(v.get('pledgeAdd' + ps + '.advanceRateReason'));
+            String lien = C360Plan.asString(v.get('pledgeAdd' + ps + '.lienPosition'));
+            Id collId = C360Plan.asId(pr.collateralId);
+            Map<String, Object> pledgeFields = new Map<String, Object>{
+                'LLC_BI__Loan__c' => cloneOf[i],
+                'LLC_BI__Collateral__c' => collId,
+                'LLC_BI__Pledged_Status__c' => C360Plan.asString(v.get('pledgeAdd' + ps + '.pledgedStatus')),
+                'LLC_BI__Active__c' => true,
+                'LLC_BI__Amount_Pledged__c' => pr.amountPledged,
+                'LLC_BI__Lien_Position__c' => lien,
+                'LLC_BI__Advance_Rate_Override__c' => rateOverride,
+                'LLC_BI__Override_Reason__c' => overrideReason
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CREATE, pledgeFields);
+            pledgeRows.add(new LLC_BI__Loan_Collateral2__c(
+                LLC_BI__Loan__c = cloneOf[i],
+                LLC_BI__Collateral__c = collId,
+                LLC_BI__Pledged_Status__c = C360Plan.asString(v.get('pledgeAdd' + ps + '.pledgedStatus')),
+                LLC_BI__Active__c = true,
+                LLC_BI__Amount_Pledged__c = pr.amountPledged,
+                LLC_BI__Lien_Position__c = lien,
+                LLC_BI__Advance_Rate_Override__c = rateOverride,
+                LLC_BI__Override_Reason__c = overrideReason
+            ));
+            indexOfRow.add(i);
+        }
+    }
+
+    /**
+     * Re-reads the pledges and settles their steps.
+     *
+     * The ADVANCE RATE is not compared against anything: `LLC_BI__Advance_Rate__c` is a formula
+     * resolving the override, then the auto-applied value, then the collateral type's default
+     * (LESSONS 29), so it is the org's answer and it is REPORTED as the org's. What is compared is
+     * what was ours - the loan, the collateral and the pledged amount.
+     */
+    private static void verifyPledges(
+        List<C360Plan.Step> steps,
+        List<PledgeResult> results,
+        List<LLC_BI__Loan_Collateral2__c> rows,
+        List<Integer> indexOfRow
+    ) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        Set<Id> pledgeIds = new Set<Id>();
+        for (LLC_BI__Loan_Collateral2__c p : rows) {
+            if (p.Id != null) {
+                pledgeIds.add(p.Id);
+            }
+        }
+        Map<Id, LLC_BI__Loan_Collateral2__c> back = new Map<Id, LLC_BI__Loan_Collateral2__c>([
+            SELECT Id, LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Collateral__r.Name,
+                   LLC_BI__Amount_Pledged__c, LLC_BI__Advance_Rate__c, LLC_BI__Current_Lendable_Value__c,
+                   LLC_BI__Pledged_Status__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE Id IN :pledgeIds WITH USER_MODE
+        ]);
+
+        for (Integer k = 0; k < rows.size(); k++) {
+            String ps = String.valueOf(indexOfRow[k]);
+            PledgeResult pr = results[indexOfRow[k]];
+            LLC_BI__Loan_Collateral2__c row = rows[k].Id == null ? null : back.get(rows[k].Id);
+            if (row == null) {
+                pr.verification = 'The pledge could not be read back after creation, so nothing is claimed for it.';
+                C360Plan.setState(steps, 'pledge_add_' + ps, C360Plan.STATE_FILED_UNVERIFIED, pr.verification);
+                C360Plan.setState(steps, 'pledge_verify_' + ps, C360Plan.STATE_FAILED, pr.verification);
+                continue;
+            }
+            pr.pledgeId = row.Id;
+            pr.collateralName = row.LLC_BI__Collateral__r.Name;
+            pr.advanceRate = row.LLC_BI__Advance_Rate__c;
+            C360Plan.setState(steps, 'pledge_add_' + ps, C360Plan.STATE_VERIFIED,
+                'Pledge created on clone ' + row.LLC_BI__Loan__c + ' over ' + row.LLC_BI__Collateral__r.Name + '.');
+
+            Boolean landed = row.LLC_BI__Loan__c == rows[k].LLC_BI__Loan__c
+                && row.LLC_BI__Collateral__c == rows[k].LLC_BI__Collateral__c
+                && row.LLC_BI__Amount_Pledged__c == rows[k].LLC_BI__Amount_Pledged__c;
+            pr.verification = landed
+                ? row.LLC_BI__Collateral__r.Name + ' ("' + pr.assetLabel + '") is pledged to the clone at ' +
+                  String.valueOf(row.LLC_BI__Amount_Pledged__c) + ', and the org resolved the advance rate to ' +
+                  (row.LLC_BI__Advance_Rate__c == null
+                      ? 'no figure: nothing set an override, an auto-applied rate or a type default'
+                      : String.valueOf(row.LLC_BI__Advance_Rate__c) + '% for a lendable value of ' +
+                        String.valueOf(row.LLC_BI__Current_Lendable_Value__c)) +
+                  (pr.createdAsset ? '. The asset and its ownership row were created by this run.' : '.')
+                : 'Not proven: the pledge reads back against collateral ' + row.LLC_BI__Collateral__c + ' on loan ' +
+                  row.LLC_BI__Loan__c + ' at ' + String.valueOf(row.LLC_BI__Amount_Pledged__c) +
+                  ', which is not what this plan composed.';
+            C360Plan.setState(steps, 'pledge_verify_' + ps,
+                landed ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, pr.verification);
+        }
+    }
+
     /** Marks every step the arm owns as waiting on the transaction that has not run yet. */
     private static void armWaiting(List<C360Plan.Step> steps, Map<String, Object> v, List<ParentSnapshot> snapshots) {
         setArmSteps(steps, v, snapshots, C360Plan.STATE_WAITING, ARM_WAITING);
@@ -2075,6 +2362,12 @@ global with sharing class ExecuteLoanModification {
         for (Integer i = 0; i < intCount(v.get('feeAddCount')); i++) {
             ids.add('fee_add_' + i);
             ids.add('fee_verify_' + i);
+        }
+        for (Integer i = 0; i < intCount(v.get('pledgeAddCount')); i++) {
+            ids.add('collateral_create_' + i);
+            ids.add('collateral_own_' + i);
+            ids.add('pledge_add_' + i);
+            ids.add('pledge_verify_' + i);
         }
         Set<String> owned = new Set<String>(ids);
         for (C360Plan.Step s : steps) {
@@ -2146,6 +2439,22 @@ global with sharing class ExecuteLoanModification {
             fr.amount = C360Plan.asDecimal(v.get('feeAdd' + i + '.amount'));
             fr.verification = ARM_WAITING;
             out.add(fr);
+        }
+        return out;
+    }
+
+    /** The pledges the plan carries, reported as intent while the arm has not run. */
+    private static List<PledgeResult> intendedPledges(Map<String, Object> v) {
+        List<PledgeResult> out = new List<PledgeResult>();
+        for (Integer i = 0; i < intCount(v.get('pledgeAddCount')); i++) {
+            PledgeResult pr = new PledgeResult();
+            pr.assetLabel = C360Plan.asString(v.get('pledgeAdd' + i + '.assetLabel'));
+            pr.createdAsset = v.get('pledgeAdd' + i + '.isNew') == true;
+            pr.collateralId = C360Plan.asString(v.get('pledgeAdd' + i + '.collateralId'));
+            pr.amountPledged = C360Plan.asDecimal(v.get('pledgeAdd' + i + '.amountPledged'));
+            pr.advanceRate = C360Plan.asDecimal(v.get('pledgeAdd' + i + '.advanceRate'));
+            pr.verification = ARM_WAITING;
+            out.add(pr);
         }
         return out;
     }
@@ -2281,6 +2590,7 @@ global with sharing class ExecuteLoanModification {
         out.involvements = armed.involvements;
         out.fieldChanges = armed.fieldChanges;
         out.fees = armed.fees;
+        out.pledges = armed.pledges;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;
@@ -2420,6 +2730,13 @@ global with sharing class ExecuteLoanModification {
      *        inside a budget that is not ours (see the note at the composition site). They are
      *        counted separately below: a carry that reported them as replicas would be claiming a
      *        fee travelled from a parent that never charged it.
+     * @param netNewPledges Pledge rows the ARM authored, already clone-targeted and already past
+     *        OP_CREATE, but WITHOUT their aggregate lookup: it is not updateable, so it can only be
+     *        set at insert, and the per-clone shell it points at is minted below. Their clones join
+     *        the aggregate map for exactly that reason - a clone whose parent carried no pledges has
+     *        no shell of its own until an authored pledge asks for one. They then ride the SAME DML
+     *        as the copies, because nCino's collateral aggregate automation is bulkified and a
+     *        second insert would pay its whole pass again. Counted apart below.
      * @return 'CARRIED <detail>' when every replica read back by count; a plain detail otherwise.
      */
     private static String carryJunctionGraph(
@@ -2427,7 +2744,8 @@ global with sharing class ExecuteLoanModification {
         Map<Id, Id> cloneByParent,
         Id newPkgId,
         Set<Id> excludedInvolvementIds,
-        List<LLC_BI__Fee__c> netNewFees
+        List<LLC_BI__Fee__c> netNewFees,
+        List<LLC_BI__Loan_Collateral2__c> netNewPledges
     ) {
         // ONE read for every source row (2026-08-31 governor fix): the versioning transaction
         // shares its 100-query budget with nCino's engine, and per-object reads blew it at 101 on
@@ -2530,6 +2848,15 @@ global with sharing class ExecuteLoanModification {
                 new Map<String, Object>{ 'LLC_BI__Loan__c' => null, 'LLC_BI__Covenant2__c' => null });
             insert as user covCopies;
         }
+        // AN AUTHORED PLEDGE NEEDS THE SAME SHELL A COPIED ONE DOES, and the scheme is deliberately
+        // the carry's own rather than a second one: ONE aggregate per clone, whatever mix of copied
+        // and authored pledges lands on it. A clone whose parent carried no collateral has no shell
+        // yet, so an authored pledge is what asks for it.
+        for (LLC_BI__Loan_Collateral2__c p : netNewPledges) {
+            if (!aggByClone.containsKey(p.LLC_BI__Loan__c)) {
+                aggByClone.put(p.LLC_BI__Loan__c, new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'Collateral Aggregate'));
+            }
+        }
         if (!aggByClone.isEmpty()) {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE_AGGREGATE, C360WriteGuard.OP_CARRY,
                 new Map<String, Object>{ 'Name' => null });
@@ -2571,7 +2898,17 @@ global with sharing class ExecuteLoanModification {
                     'LLC_BI__Is_Excluded__c' => null, 'LLC_BI__Is_Leased_Asset__c' => null,
                     'LLC_BI__Abundance_of_Caution__c' => null
                 });
-            insert as user pledgeCopies;
+        }
+        // The authored pledges take their aggregate now that the shells exist, and then ONE pledge
+        // DML carries the copies and them together. Two inserts would wake nCino's collateral
+        // aggregate automation twice, inside a query budget that is the package's rather than ours.
+        for (LLC_BI__Loan_Collateral2__c p : netNewPledges) {
+            p.LLC_BI__Loan_Collateral_Aggregate__c = aggByClone.get(p.LLC_BI__Loan__c).Id;
+        }
+        List<LLC_BI__Loan_Collateral2__c> pledgeWrites = new List<LLC_BI__Loan_Collateral2__c>(pledgeCopies);
+        pledgeWrites.addAll(netNewPledges);
+        if (!pledgeWrites.isEmpty()) {
+            insert as user pledgeWrites;
         }
         if (!invCopies.isEmpty()) {
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CARRY,
@@ -2623,11 +2960,13 @@ global with sharing class ExecuteLoanModification {
         // The fee count on the clones covers BOTH the copies and this plan's own net-new fees,
         // because both landed in the one insert above. They are named apart so nobody reads a fee
         // the banker asked for as a fee that travelled from the parent.
-        Boolean ok = covBack == covCopies.size() && plBack == pledgeCopies.size() && invBack == invCopies.size()
+        Boolean ok = covBack == covCopies.size() && plBack == pledgeWrites.size() && invBack == invCopies.size()
             && feeBack == feeWrites.size();
         String detail = 'The junction graph was carried onto the new version and re-read: ' +
             covBack + ' of ' + covCopies.size() + ' covenant junctions, ' +
-            plBack + ' of ' + pledgeCopies.size() + ' collateral pledges (on ' + aggByClone.size() + ' fresh aggregates), ' +
+            plBack + ' of ' + pledgeWrites.size() + ' collateral pledges' +
+            (netNewPledges.isEmpty() ? '' : ' (' + pledgeCopies.size() + ' carried, ' + netNewPledges.size() + ' net-new on this plan)') +
+            ' (on ' + aggByClone.size() + ' fresh aggregates), ' +
             invBack + ' of ' + invCopies.size() + ' borrowing involvements, ' +
             feeBack + ' of ' + feeWrites.size() + ' fees' +
             (netNewFees.isEmpty() ? '' : ' (' + feeCopies.size() + ' carried, ' + netNewFees.size() + ' net-new on this plan)') +
