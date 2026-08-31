@@ -325,6 +325,66 @@ describe("the modify engine reads the real package", () => {
   });
 });
 
+/* =============================================================================
+   WAVE 2 — THE OPENER LEADS ON THE DEAL'S NEXT MOVE.
+
+   `nextMove.ts` carries its own exhaustive date-math coverage in isolation
+   (nextMove.test.ts): edge days, ties, missing fields, priority order. What is
+   proved HERE is the WIRING — that `position()` reaches for it, in the right
+   place relative to the two things that already outrank it (an unanchored
+   room, a client's own ask), and falls back to the original inventory
+   sentence exactly as before where no move applies. `data.meta.generatedAt`
+   is "2026-08-27T08:00:00Z" throughout, from the module fixture above.
+   ============================================================================= */
+describe("the opener leads on the deal's next move (wave 2)", () => {
+  it("leads on a facility maturing within the coming quarter, with no client ask staged", () => {
+    const soon = bundleWith([{ ...line, maturityDate: "2026-09-10" }, equipment, proposal]);
+    delete soon.requests;
+    const brief = createModifyEngine({ context, data, bundle: soon, deps: deps() }).brief(context);
+    expect(brief.position).toBe("The $15M Line of Credit matures in 14 days. Start the renewal?");
+  });
+
+  it("leads on a covenant test due soon when nothing is maturing inside the quarter", () => {
+    const due = bundleWith();
+    delete due.requests;
+    due.covenants!.covenants![0] = { ...due.covenants!.covenants![0], nextEvaluationDate: "2026-09-06" };
+    const brief = createModifyEngine({ context, data, bundle: due, deps: deps() }).brief(context);
+    expect(brief.position).toBe("The Fixed Charge Coverage covenant is due in 10 days. Start the review?");
+  });
+
+  it("leads on utilization when the package is drawn hard and neither of the first two tiers applies", () => {
+    const drawn = bundleWith([
+      { ...line, outstanding: 14_500_000 },
+      { ...equipment, outstanding: 7_800_000 },
+      proposal,
+    ]);
+    delete drawn.requests;
+    const brief = createModifyEngine({ context, data, bundle: drawn, deps: deps() }).brief(context);
+    expect(brief.position).toBe("The package is drawn to 86% of commitment. Worth a headroom conversation?");
+  });
+
+  it("still leads on the client's own ask even where a facility also matures within the quarter", () => {
+    // request?.ask?.to already outranks the fallback inventory sentence
+    // (proven above); this proves it outranks the DERIVED move too — a human
+    // waiting on an answer beats a signal the room noticed on its own.
+    const both = bundleWith([{ ...line, maturityDate: "2026-09-10" }, equipment, proposal]);
+    const brief = createModifyEngine({ context, data, bundle: both, deps: deps() }).brief(context);
+    expect(brief.position).toContain("The client has asked to take the Line of Credit to $20M");
+    expect(brief.position).not.toContain("Start the renewal");
+  });
+
+  it("falls back to the original inventory sentence where no move applies at all", () => {
+    const quiet = bundleWith();
+    delete quiet.requests;
+    const brief = createModifyEngine({ context, data, bundle: quiet, deps: deps() }).brief(context);
+    // Neither facility matures soon (2027-03-15, and Equipment carries no
+    // maturityDate), neither covenant has a nextEvaluationDate, and utilization
+    // sits at 15.1/26 ≈ 58% — nothing in any tier, so this is the room's
+    // ORIGINAL sentence, unchanged by wave 2.
+    expect(brief.position).toBe("$23M of $26M is open: 2 of 3 members are booked. Pick one.");
+  });
+});
+
 describe("parseIntent maps a sentence onto the catalog", () => {
   it("turns a commitment increase into a fileable delta on the named member", async () => {
     const { engine } = engineOn();

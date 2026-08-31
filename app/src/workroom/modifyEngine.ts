@@ -38,6 +38,7 @@ import {
 } from "./explain";
 import { catalogSummary, chainFor, isFileable, FILING_FIELDS, type CatalogField, type WireKey } from "./fieldCatalog";
 import { vocabularyFor } from "./modes";
+import { deriveNextMove } from "./nextMove";
 import {
   membersNamedIn,
   parseAnswer,
@@ -601,6 +602,10 @@ export function createModifyEngine(args: {
     (e) => !context.productPackageId || !e.packageId || e.packageId === context.productPackageId,
   );
   const committed = members.reduce((sum, f) => sum + (typeof f.committed === "number" ? f.committed : 0), 0);
+  // The SAME population `committed` sums — every member, not just the booked
+  // ones — so the utilization tier of `deriveNextMove` divides two figures
+  // that were always meant to be read together.
+  const outstanding = members.reduce((sum, f) => sum + (typeof f.outstanding === "number" ? f.outstanding : 0), 0);
   const request = (bundle?.requests ?? [])[0];
 
   /**
@@ -996,6 +1001,16 @@ export function createModifyEngine(args: {
    * strip above already prints the committed total once, so this says it in the
    * one place it changes the reading — how much of that total a credit action
    * can actually reach — and nowhere else.
+   *
+   * PROACTIVE, where the deal itself has something to lead on. A maturity
+   * inside the coming quarter, a covenant test due soon, or the package drawn
+   * hard against its commitment (`deriveNextMove`, ./nextMove.ts) outranks the
+   * inventory sentence below — a banker opening this room wants the next move,
+   * not a headcount. An inbound client ask still outranks the derived move: a
+   * human is already waiting on that answer, which is the one thing this room
+   * already treats as more urgent than a signal it noticed on its own. Where
+   * neither applies, the room falls back to the inventory sentence exactly as
+   * it always has.
    */
   function position(): string {
     if (unanchored) {
@@ -1015,6 +1030,11 @@ export function createModifyEngine(args: {
         after !== null ? `, which moves the package to ${fmtMoney(after)}` : ""
       }.`;
     }
+    const move = deriveNextMove(
+      { facilities: booked, covenants, committed, outstanding, relationship },
+      data.meta?.generatedAt ?? "",
+    );
+    if (move) return move.line;
     if (booked.length === members.length) {
       return members.length === 1
         ? `The one member is booked, so the whole ${fmtMoney(committed)} is open. Pick it.`
