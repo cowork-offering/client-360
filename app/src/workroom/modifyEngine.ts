@@ -1493,58 +1493,107 @@ export function createModifyEngine(args: {
     };
   }
 
-  /** ONE scalar per wire key, applied to every selected facility — the tool's own
-   *  semantic. Two members needing different amounts is not one plan, and the
-   *  room says so rather than filing the wrong figure on one of them. */
+  /** ONE SCALAR, TWO CHANNELS (2026-08-31).
+   *
+   *  A change on a loan is not always an increase or a decrease of the same
+   *  thing on every member (founder, 2026-08-31). The four scalars used to
+   *  travel ONCE for the whole plan and land on every selected clone, so a
+   *  legitimate mixed manifest — commitment on the line of credit, amortisation
+   *  on the equipment loan — could not be filed at all: this morning's guard
+   *  refused it rather than let the amount leak onto the second clone.
+   *
+   *  They now travel PER TARGET. Every scalar delta already carries the member
+   *  it was staged on, so a multi-member plan sends `scalarChangesJson` —
+   *  one entry per (scalar, member) — and each clone takes only its own
+   *  changes. Two DIFFERENT amounts on two members is therefore a legal plan.
+   *  Two different amounts on ONE member is not, and never can be: that is the
+   *  ambiguity the refusal below still exists for.
+   *
+   *  Where broadcasting says exactly what the banker meant — one member, or one
+   *  figure every selected member asked for — the flat request keys still carry
+   *  the plan. The org accepts both shapes and refuses a request carrying them
+   *  at once, and staying on the flat keys where they are unambiguous is what
+   *  keeps this client safe against a connector still running the older
+   *  contract. */
   function wirePayload(fileable: WorkroomDelta[], rationale: string): StagePayloads["loan-modification"] {
-    const byKey = new Map<WireKey, Set<number | string>>();
+    /** One entry per (scalar, member), in the order the banker staged them. */
+    const scalars: Array<{ key: WireKey; value: number | string; targetLoanId: string }> = [];
+    const valueAt = new Map<string, number | string>();
     /** The members that actually staged each scalar, which is NOT the same set as
      *  the members the plan selects. */
     const scalarOn = new Map<WireKey, Set<string>>();
+    const nameOf = (id: string) => fileable.find((d) => wireTarget(d) === id)?.target ?? id;
     for (const d of fileable) {
       if (!d.wire) continue; // a covenant delta carries covenantWire instead
       // The delta carries the key as a plain string so `types.ts` stays free of
       // the catalog; this is the one place it is read back as the wire key.
       const key = d.wire.key as WireKey;
-      const set = byKey.get(key) ?? new Set<number | string>();
-      set.add(d.wire.value);
-      byKey.set(key, set);
+      const at = `${key} ${d.wire.facilityId}`;
+      const held = valueAt.get(at);
+      if (held !== undefined) {
+        // WITHIN ONE MEMBER a scalar still travels once. Two figures for the
+        // same field on the same clone is not a plan the org could file either
+        // way round, so it is refused here rather than resolved by arrival order.
+        if (held !== d.wire.value) {
+          throw new WorkroomRefusalError(
+            `${key} travels as ONE value per facility, and this manifest asks for two on ${nameOf(d.wire.facilityId)}: ` +
+              `${held} and ${d.wire.value}. Take one of them off; a second figure for the same field on the same facility is a ` +
+              `later modification, not this one.`,
+          );
+        }
+        continue;
+      }
+      valueAt.set(at, d.wire.value);
+      scalars.push({ key, value: d.wire.value, targetLoanId: d.wire.facilityId });
       const on = scalarOn.get(key) ?? new Set<string>();
       on.add(d.wire.facilityId);
       scalarOn.set(key, on);
-    }
-    for (const [key, values] of byKey) {
-      if (values.size > 1) {
-        throw new WorkroomRefusalError(
-          `${key} travels as ONE value applied to every facility in the plan, and this manifest asks for ${values.size} different ones. Remove all but one and stage the rest as a second modification.`,
-        );
-      }
     }
 
     // Every fileable delta anchors the selection: a covenant's target member
     // must be among the selected facilities or the org refuses the add.
     const facilityIds = [...new Set(fileable.map(wireTarget).filter((x): x is string => Boolean(x)))];
 
-    /* THE SCALAR LEAK (P0, live).
+    /* WHICH CHANNEL. The flat keys BROADCAST: the org applies each one to every
+       selected clone. That says exactly what the banker meant on TWO conditions
+       together — every selected member staged the scalar, and they all staged
+       the SAME figure. A one-member plan is the common case; "push the maturity
+       on both facilities to the same date" is the other, and keeping it on the
+       flat keys keeps a connector still running the pre-per-target contract
+       working through the rollout.
+       Fail either condition and broadcasting is a lie: a member that never
+       asked for the change would take it, or one of two figures would win by
+       arrival order. Then the scalars ride targeted. */
+    const spreadOf = (on: Set<string>) => facilityIds.filter((id) => !on.has(id));
+    const figures = (key: WireKey) => new Set(scalars.filter((s) => s.key === key).map((s) => s.value));
+    const perTarget = [...scalarOn].some(([key, on]) => spreadOf(on).length > 0 || figures(key).size > 1);
+
+    /* THE SCALAR LEAK (P0, closed by the per-target channel above).
 
        `facilityIds` is the union of EVERY delta's target — a covenant on one
-       member, a curated field on another — while a scalar travels once and the
-       org applies it to every clone in that selection. So a plan staging
+       member, a curated field on another — while a FLAT scalar travels once and
+       the org applies it to every clone in that selection. So a plan staging
        "$15M → $20M" on the Line of Credit beside a field change on the $8MM
-       Equipment loan silently took the Equipment clone to $20M as well. The
-       refusal above cannot see it: the amount is ONE value, so there is nothing
-       to compare. The check is membership, not count. */
-    const nameOf = (id: string) => fileable.find((d) => wireTarget(d) === id)?.target ?? id;
-    for (const [key, on] of scalarOn) {
-      const spread = facilityIds.filter((id) => !on.has(id));
-      if (!spread.length) continue;
-      const plural = spread.length > 1;
-      throw new WorkroomRefusalError(
-        `${key} travels as ONE value applied to every facility in the plan. It is staged on ${[...on].map(nameOf).join(" and ")}, ` +
-          `and this manifest also selects ${spread.map(nameOf).join(" and ")}, so filing it as it stands would set the same ${key} on ` +
-          `${plural ? "those members" : "that member"} too. Stage the ${key} change as its own modification, or take the other ` +
-          `${plural ? "members'" : "member's"} changes off this one.`,
-      );
+       Equipment loan silently took the Equipment clone to $20M as well.
+
+       This guard is now a BACKSTOP: it asserts the routing above actually held,
+       and by construction a plan that reaches the flat channel has nothing to
+       spread onto. It stays because that is an INVARIANT rather than a fact —
+       narrow the routing, bypass it, or hand this a selection assembled
+       elsewhere, and the room refuses instead of filing the wrong figure on
+       someone else's clone. */
+    if (!perTarget) {
+      for (const [key, on] of scalarOn) {
+        const spread = spreadOf(on);
+        if (!spread.length) continue;
+        const plural = spread.length > 1;
+        throw new WorkroomRefusalError(
+          `${key} travels as ONE value applied to every facility in the plan. It is staged on ${[...on].map(nameOf).join(" and ")}, ` +
+            `and this manifest also selects ${spread.map(nameOf).join(" and ")}, so filing it as it stands would set the same ${key} on ` +
+            `${plural ? "those members" : "that member"} too. Stage the ${key} change as its own modification, or take the other ` +
+            `${plural ? "members'" : "member's"} changes off this one.`,
+        );
+      }
     }
 
     const covenantAdds = fileable
@@ -1565,9 +1614,8 @@ export function createModifyEngine(args: {
         ownership: d.involvementWire!.ownership,
         targetLoanId: d.involvementWire!.facilityId,
       }));
-    // ONE ENTRY PER FIELD PER MEMBER. Unlike the four scalars, a field change
-    // carries its own target, so two members taking different values is a normal
-    // plan rather than the ambiguity the refusal above exists to catch.
+    // ONE ENTRY PER FIELD PER MEMBER. A field change has always carried its own
+    // target, which is the shape the scalars have now adopted.
     const fieldChanges = fileable
       .filter((d) => d.fieldWire)
       .map((d) => ({
@@ -1575,7 +1623,10 @@ export function createModifyEngine(args: {
         value: d.fieldWire!.value,
         targetLoanId: d.fieldWire!.facilityId,
       }));
-    const one = (key: WireKey) => [...(byKey.get(key) ?? [])][0];
+    // The flat keys carry a value only on the channel that owns them; on the
+    // per-target channel they stay null, which is what the org requires to read
+    // `scalarChangesJson` at all.
+    const one = (key: WireKey) => (perTarget ? undefined : scalars.find((s) => s.key === key)?.value);
     return {
       idempotencyKey: idempotencyKey!,
       rationale,
@@ -1587,6 +1638,7 @@ export function createModifyEngine(args: {
       requestedRate: (one("requestedRate") as number | undefined) ?? null,
       // The key exists on the wire ONLY when covenants ride: a null field would
       // still put the word on every scalar-only payload.
+      ...(perTarget ? { scalarChangesJson: JSON.stringify(scalars) } : {}),
       ...(covenantAdds.length ? { covenantAddsJson: JSON.stringify(covenantAdds) } : {}),
       ...(involvementChanges.length ? { involvementChangesJson: JSON.stringify(involvementChanges) } : {}),
       ...(fieldChanges.length ? { fieldChangesJson: JSON.stringify(fieldChanges) } : {}),

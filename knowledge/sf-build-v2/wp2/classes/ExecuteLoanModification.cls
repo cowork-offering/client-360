@@ -1284,6 +1284,32 @@ global with sharing class ExecuteLoanModification {
     // the same code either way: the dispatcher decides only WHERE it runs, never what it does.
     // -------------------------------------------------------------------------------------------
 
+    /**
+     * The four scalars as ONE member's clone takes them. Null everywhere is a real answer: a member
+     * selected for a field change alone is modified without any of its terms moving.
+     */
+    private class MemberScalars {
+        Decimal amount;
+        Date maturity;
+        Decimal rate;
+        Decimal term;
+
+        /** Reads one staged per-target entry onto this member, by its request-key name. */
+        void take(String key, Object value) {
+            if (key == 'requestedAmount') {
+                amount = C360Plan.asDecimal(value);
+            } else if (key == 'requestedMaturityDate') {
+                maturity = C360Plan.asDate(value);
+            } else if (key == 'requestedRate') {
+                rate = C360Plan.asDecimal(value);
+            } else if (key == 'requestedTermMonths') {
+                term = C360Plan.asDecimal(value);
+            }
+            // An unknown key cannot reach here: stage validates against exactly the four names and
+            // refuses anything else with the legal list, so the plan can only carry these.
+        }
+    }
+
     /** One selected parent and the clone the engine made from it, in step order. */
     public class ParentSnapshot {
         public Id parentId;
@@ -1371,10 +1397,33 @@ global with sharing class ExecuteLoanModification {
         // the percentage fees copied below are then computed by the org against the commitment the
         // banker actually asked for, first time, instead of being written at the parent's figure and
         // recomputed afterwards.
-        Decimal requestedAmount = C360Plan.asDecimal(v.get('requestedAmount'));
-        Date requestedMaturity = C360Plan.asDate(v.get('requestedMaturityDate'));
-        Decimal requestedRate = C360Plan.asDecimal(v.get('requestedRate'));
-        Decimal requestedTerm = C360Plan.asDecimal(v.get('requestedTermMonths'));
+        //
+        // THE SCALARS ARRIVE ONE OF TWO WAYS (2026-08-31). The flat plan values broadcast: one
+        // figure onto every clone, which is what a single-facility plan stages and what every plan
+        // staged before this wave. `scalarChange{i}.*` carries them PER TARGET, so a mixed plan can
+        // take the line of credit to a new commitment while the equipment loan takes something else
+        // entirely. Stage refuses a plan carrying both, so the two never have to be reconciled here:
+        // per-target values, where they exist, are the WHOLE answer and the flat ones are not read.
+        Integer scalarChangeCount = intCount(v.get('scalarChangeCount'));
+        Boolean perTargetScalars = scalarChangeCount > 0;
+
+        MemberScalars broadcast = new MemberScalars();
+        broadcast.amount = C360Plan.asDecimal(v.get('requestedAmount'));
+        broadcast.maturity = C360Plan.asDate(v.get('requestedMaturityDate'));
+        broadcast.rate = C360Plan.asDecimal(v.get('requestedRate'));
+        broadcast.term = C360Plan.asDecimal(v.get('requestedTermMonths'));
+
+        Map<Id, MemberScalars> scalarsByTarget = new Map<Id, MemberScalars>();
+        for (Integer i = 0; i < scalarChangeCount; i++) {
+            Id t = C360Plan.asId(v.get('scalarChange' + i + '.targetLoanId'));
+            if (t == null) {
+                continue;
+            }
+            if (!scalarsByTarget.containsKey(t)) {
+                scalarsByTarget.put(t, new MemberScalars());
+            }
+            scalarsByTarget.get(t).take(String.valueOf(v.get('scalarChange' + i + '.key')), v.get('scalarChange' + i + '.value'));
+        }
 
         Map<Id, List<Integer>> fieldChangesByTarget = new Map<Id, List<Integer>>();
         for (Integer i = 0; i < fieldChangeCount; i++) {
@@ -1388,25 +1437,34 @@ global with sharing class ExecuteLoanModification {
             fieldChangesByTarget.get(t).add(i);
         }
 
+        // What each clone actually took, kept so the read-back below reports THIS member's figures
+        // rather than a plan-level intention that may never have been aimed at it.
+        Map<Id, MemberScalars> takenByParent = new Map<Id, MemberScalars>();
+
         List<LLC_BI__Loan__c> toUpdate = new List<LLC_BI__Loan__c>();
         for (ParentSnapshot snap : job.snapshots) {
+            MemberScalars own = perTargetScalars
+                ? (scalarsByTarget.containsKey(snap.parentId) ? scalarsByTarget.get(snap.parentId) : new MemberScalars())
+                : broadcast;
+            takenByParent.put(snap.parentId, own);
+
             LLC_BI__Loan__c fields = new LLC_BI__Loan__c(Id = snap.cloneId);
             Map<String, Object> writeFields = new Map<String, Object>();
-            if (requestedAmount != null) {
-                fields.LLC_BI__Amount__c = requestedAmount;
-                writeFields.put('LLC_BI__Amount__c', requestedAmount);
+            if (own.amount != null) {
+                fields.LLC_BI__Amount__c = own.amount;
+                writeFields.put('LLC_BI__Amount__c', own.amount);
             }
-            if (requestedMaturity != null) {
-                fields.LLC_BI__Maturity_Date__c = requestedMaturity;
-                writeFields.put('LLC_BI__Maturity_Date__c', requestedMaturity);
+            if (own.maturity != null) {
+                fields.LLC_BI__Maturity_Date__c = own.maturity;
+                writeFields.put('LLC_BI__Maturity_Date__c', own.maturity);
             }
-            if (requestedRate != null) {
-                fields.LLC_BI__InterestRate__c = requestedRate;
-                writeFields.put('LLC_BI__InterestRate__c', requestedRate);
+            if (own.rate != null) {
+                fields.LLC_BI__InterestRate__c = own.rate;
+                writeFields.put('LLC_BI__InterestRate__c', own.rate);
             }
-            if (requestedTerm != null) {
-                fields.LLC_BI__Term_Months__c = requestedTerm;
-                writeFields.put('LLC_BI__Term_Months__c', requestedTerm);
+            if (own.term != null) {
+                fields.LLC_BI__Term_Months__c = own.term;
+                writeFields.put('LLC_BI__Term_Months__c', own.term);
             }
             // The field wave lands in the SAME clone update: dynamic puts of values the stage
             // already coerced against the describe, so nothing here re-interprets a banker's words.
@@ -1737,7 +1795,9 @@ global with sharing class ExecuteLoanModification {
             fr.cloneName = clone.Name;
             fr.cloneStage = clone.LLC_BI__Stage__c;
 
-            fr.appliedChanges = applied(clone, requestedAmount, requestedMaturity, requestedRate, requestedTerm);
+            Integer ownFieldChanges = fieldChangesByTarget.containsKey(snap.parentId)
+                ? fieldChangesByTarget.get(snap.parentId).size() : 0;
+            fr.appliedChanges = applied(clone, takenByParent.get(snap.parentId), ownFieldChanges);
             Boolean everythingLanded = !fr.appliedChanges.contains('did not land');
             C360Plan.setState(
                 steps,
@@ -2405,36 +2465,44 @@ global with sharing class ExecuteLoanModification {
             && before.LLC_BI__Amount__c == after.LLC_BI__Amount__c;
     }
 
-    /** Reports each requested change as it reads back off the clone, naming any that did not land. */
-    private static String applied(
-        LLC_BI__Loan__c clone,
-        Decimal amount,
-        Date maturity,
-        Decimal rate,
-        Decimal term
-    ) {
+    /**
+     * Reports the scalars THIS member's clone took, as they read back off it, naming any that did
+     * not land. The values are the member's own: under the per-target channel a clone is only ever
+     * measured against what was staged on it, never against another member's figure.
+     *
+     * @param ownFieldChanges How many field-wave changes target this member, so a clone that took a
+     *        field change and no scalar does not report as having taken nothing.
+     */
+    private static String applied(LLC_BI__Loan__c clone, MemberScalars taken, Integer ownFieldChanges) {
         List<String> parts = new List<String>();
-        if (amount != null) {
-            parts.add(amount == clone.LLC_BI__Amount__c
+        if (taken.amount != null) {
+            parts.add(taken.amount == clone.LLC_BI__Amount__c
                 ? 'Amount reads back at ' + String.valueOf(clone.LLC_BI__Amount__c)
-                : 'Amount did not land: requested ' + String.valueOf(amount) + ', reads back ' + String.valueOf(clone.LLC_BI__Amount__c));
+                : 'Amount did not land: requested ' + String.valueOf(taken.amount) + ', reads back ' + String.valueOf(clone.LLC_BI__Amount__c));
         }
-        if (maturity != null) {
-            parts.add(maturity == clone.LLC_BI__Maturity_Date__c
+        if (taken.maturity != null) {
+            parts.add(taken.maturity == clone.LLC_BI__Maturity_Date__c
                 ? 'Maturity date reads back at ' + String.valueOf(clone.LLC_BI__Maturity_Date__c)
-                : 'Maturity date did not land: requested ' + String.valueOf(maturity) + ', reads back ' + String.valueOf(clone.LLC_BI__Maturity_Date__c));
+                : 'Maturity date did not land: requested ' + String.valueOf(taken.maturity) + ', reads back ' + String.valueOf(clone.LLC_BI__Maturity_Date__c));
         }
-        if (rate != null) {
-            parts.add(rate == clone.LLC_BI__InterestRate__c
+        if (taken.rate != null) {
+            parts.add(taken.rate == clone.LLC_BI__InterestRate__c
                 ? 'Interest rate reads back at ' + String.valueOf(clone.LLC_BI__InterestRate__c)
-                : 'Interest rate did not land: requested ' + String.valueOf(rate) + ', reads back ' + String.valueOf(clone.LLC_BI__InterestRate__c));
+                : 'Interest rate did not land: requested ' + String.valueOf(taken.rate) + ', reads back ' + String.valueOf(clone.LLC_BI__InterestRate__c));
         }
-        if (term != null) {
-            parts.add(term == clone.LLC_BI__Term_Months__c
+        if (taken.term != null) {
+            parts.add(taken.term == clone.LLC_BI__Term_Months__c
                 ? 'Term reads back at ' + String.valueOf(clone.LLC_BI__Term_Months__c) + ' months'
-                : 'Term did not land: requested ' + String.valueOf(term) + ', reads back ' + String.valueOf(clone.LLC_BI__Term_Months__c));
+                : 'Term did not land: requested ' + String.valueOf(taken.term) + ', reads back ' + String.valueOf(clone.LLC_BI__Term_Months__c));
         }
-        return parts.isEmpty() ? 'No field changes were staged.' : String.join(parts, '. ') + '.';
+        if (!parts.isEmpty()) {
+            return String.join(parts, '. ') + '.';
+        }
+        return ownFieldChanges > 0
+            ? 'No scalar change was aimed at this facility, so its clone keeps the commitment, rate, maturity and term ' +
+              'it carries today; its ' + ownFieldChanges + ' field change' + (ownFieldChanges == 1 ? '' : 's') +
+              ' ' + (ownFieldChanges == 1 ? 'is' : 'are') + ' reported on ' + (ownFieldChanges == 1 ? 'its' : 'their') + ' own step.'
+            : 'No field changes were staged.';
     }
 
     private static List<StepResult> toWireSteps(List<C360Plan.Step> steps) {

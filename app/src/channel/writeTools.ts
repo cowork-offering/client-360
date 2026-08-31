@@ -596,6 +596,14 @@ export interface StagePayloads {
     idempotencyKey: string;
     rationale?: string;
     productPackageId?: string | null;
+    /* THE FOUR SCALARS TRAVEL TWO WAYS (2026-08-31).
+
+       Flat, below: ONE value applied to EVERY selected facility. That is the
+       shape the tool shipped with, and it is still what a single-facility plan
+       sends. Per target, in `scalarChangesJson`: one value aimed at one clone,
+       which is what a mixed plan needs. The org REFUSES both channels in one
+       request, because a clone would then have two figures and no rule to pick
+       between them. */
     requestedAmount?: number | null;
     /** OBSERVED on StageLoanModification.Request as a Date, and applied by the
      *  plan's `apply_changes_*` step to `LLC_BI__Maturity_Date__c` on each
@@ -603,6 +611,17 @@ export interface StagePayloads {
     requestedMaturityDate?: string | null;
     requestedTermMonths?: number | null;
     requestedRate?: number | null;
+    /** PER-TARGET SCALARS (2026-08-31), JSON-encoded:
+     *  [{key (one of the four request keys), value, targetLoanId}]. Each lands
+     *  on the CLONE of the named facility ALONE, so a plan can take the line of
+     *  credit to a new commitment while the equipment loan takes a different
+     *  change entirely — the case the flat fields above cannot express, because
+     *  they broadcast.
+     *
+     *  Mutually exclusive with those flat fields. Keys are validated against
+     *  exactly the four names and targets against the selected facilities; an
+     *  unknown one is refused with the legal list rather than dropped. */
+    scalarChangesJson?: string | null;
     /** NET-NEW COVENANTS (2026-08-30). A JSON-encoded list the org resolves
      *  against its own covenant-type catalog at stage time:
      *  [{typeName, threshold, operator (< <= = >= >), frequency?, targetLoanId?}].
