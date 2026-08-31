@@ -615,6 +615,19 @@ export interface StagePayloads {
      *  Adds are authored on the CLONE with the new package anchor; removes are
      *  CARRY EXCLUSIONS — the parent keeps its row, nothing is deleted. */
     involvementChangesJson?: string | null;
+    /** CURATED LOAN FIELDS (2026-08-31), JSON-encoded:
+     *  [{field (API name or exact label), value, targetLoanId}]. Each is applied
+     *  to the modification CLONE.
+     *
+     *  THE ORG RESOLVES THE NAME, not this client: the server reads its own live
+     *  describe and takes the field only if it is updateable, non-formula and off
+     *  the deny-list (the four scalars, which ride their own request keys; stage
+     *  and status; the anchoring lookups; the versioning flags). It coerces the
+     *  value by field type and validates a picklist against the org's ACTIVE
+     *  values, refusing with the legal list rather than writing a near-miss.
+     *  That is what makes a name here safe in a way the Interest_Rate lesson
+     *  was not. Counts toward the tool's at-least-one-change rule. */
+    fieldChangesJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;

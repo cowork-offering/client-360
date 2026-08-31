@@ -248,6 +248,27 @@ const WIRE_VALUE: Record<WireKey, (v: ParsedValue) => number | string | null> = 
   requestedMaturityDate: (v) => (v.kind === "date" ? v.iso : null),
 };
 
+/** What a parsed value becomes on the FIELD WIRE. The org coerces by field type
+ *  against its own describe, so what travels is the figure the banker said and
+ *  never a formatted string. A covenant is a record rather than a field, and has
+ *  its own wire. */
+function fieldWireValue(v: ParsedValue): string | number | null {
+  switch (v.kind) {
+    case "currency":
+      return v.amount;
+    case "percent":
+      return v.rate;
+    case "months":
+      return v.months;
+    case "date":
+      return v.iso;
+    case "text":
+      return v.text;
+    default:
+      return null;
+  }
+}
+
 function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): WorkroomDelta {
   const { field, facility, value, op } = a;
   // THE TARGET IS A DISPLAY NAME, and it has to be, because the org names a loan
@@ -307,6 +328,27 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
           facilityId: facility.loanId,
         }
       : undefined;
+  // A CURATED LOAN FIELD files through fieldChangesJson: the room sends the API
+  // name and the typed value, and the ORG resolves the name against its own live
+  // describe at stage time — updateable, non-formula, off the deny-list — then
+  // coerces by type and refuses an illegal picklist value with the legal list.
+  // The name travels because the describe checks it, not because this file is
+  // sure of it.
+  const fieldWire =
+    fileable && field.dynamicField && value
+      ? (() => {
+          const v = fieldWireValue(value);
+          return v === null
+            ? undefined
+            : {
+                field: field.dynamicField!,
+                label: field.label,
+                value: v,
+                display: valueLabel(value),
+                facilityId: facility!.loanId!,
+              };
+        })()
+      : undefined;
 
   const committedDeltaMM =
     wire?.key === "requestedAmount" && typeof facility?.committed === "number" && typeof wire.value === "number"
@@ -320,8 +362,11 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     kind: [OP_KIND[op], GROUP_KIND[field.category] ?? "Change"].filter(Boolean).join(" "),
     // A removal is the destructive one, and it carries the refusal tone whether
     // or not a tool files it: the banker must never mistake it for an addition.
-    kindTone: op === "remove" ? "refusal" : wire || covenantWire || involvementWire ? undefined : "refusal",
-    badge: wire || covenantWire || involvementWire ? `${field.label} → ${after}` : `${OP_KIND[op] || "Change"} ${field.label.toLowerCase()} · handed off`,
+    kindTone: op === "remove" ? "refusal" : wire || covenantWire || involvementWire || fieldWire ? undefined : "refusal",
+    badge:
+      wire || covenantWire || involvementWire || fieldWire
+        ? `${field.label} → ${after}`
+        : `${OP_KIND[op] || "Change"} ${field.label.toLowerCase()} · handed off`,
     title: field.label,
     target,
     before,
@@ -335,20 +380,27 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
         "Written as",
         wire
           ? `${field.apiName} on the modification clone. The booked facility is untouched.`
-          : covenantWire
-            ? "LLC_BI__Covenant2__c created Pending/Active on the borrower, LLC_BI__Loan_Covenant__c junction attached to the CLONE on the new package version. No compliance row is minted and no approval starts."
-            : involvementWire
-              ? involvementWire.op === "add"
-                ? "LLC_BI__Legal_Entities__c authored on the CLONE with the new package anchor, under the guard's five-role birth state."
-                : "A CARRY EXCLUSION: the named row never travels to the new version. The booked facility keeps it; nothing is deleted anywhere."
-              : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
+          : fieldWire
+            ? `${fieldWire.field} on the modification clone, resolved against the org's live describe. The booked facility is untouched.`
+            : covenantWire
+              ? "LLC_BI__Covenant2__c created Pending/Active on the borrower, LLC_BI__Loan_Covenant__c junction attached to the CLONE on the new package version. No compliance row is minted and no approval starts."
+              : involvementWire
+                ? involvementWire.op === "add"
+                  ? "LLC_BI__Legal_Entities__c authored on the CLONE with the new package anchor, under the guard's five-role birth state."
+                  : "A CARRY EXCLUSION: the named row never travels to the new version. The booked facility keeps it; nothing is deleted anywhere."
+                : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
       ],
     ],
     fields: field.apiName ? [`${field.object}.${field.apiName}`] : [field.object],
-    caveat: wire || covenantWire || involvementWire ? undefined : field.gap,
+    caveat: wire || covenantWire || involvementWire || fieldWire ? undefined : field.gap,
     filed: {
-      recordId: wire || covenantWire || involvementWire?.op === "add" ? "assigned by the org on execution" : involvementWire ? "a carry exclusion writes nothing" : "not filed",
-      verification: wire
+      recordId:
+        wire || covenantWire || fieldWire || involvementWire?.op === "add"
+          ? "assigned by the org on execution"
+          : involvementWire
+            ? "a carry exclusion writes nothing"
+            : "not filed",
+      verification: wire || fieldWire
         ? "Re-queried on the clone after the write"
         : covenantWire
           ? "Covenant and junction re-queried on the clone after creation"
@@ -358,14 +410,18 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
               : "Proven by absence on the clone and presence on the parent"
             : "Handed off — nothing was written",
     },
-    fileable: Boolean(wire || covenantWire || involvementWire),
+    fileable: Boolean(wire || covenantWire || involvementWire || fieldWire),
     wire,
     covenantWire,
     involvementWire,
+    fieldWire,
     // Only a FILEABLE entry carries a basis: drift is the check that a figure
     // reaching the org has not moved, and a handoff sends no figure.
     basis: wire && facility?.loanId ? { facilityId: facility.loanId, fieldId: field.id, before } : undefined,
-    handoff: wire || covenantWire || involvementWire ? undefined : { reason: field.gap ?? "No tool files this today.", closes: field.closes },
+    handoff:
+      wire || covenantWire || involvementWire || fieldWire
+        ? undefined
+        : { reason: field.gap ?? "No tool files this today.", closes: field.closes },
     // The chain a create must carry. Held on the delta so the plan cannot be
     // composed without it: a create with no junctions never becomes steps.
     chainLinks: op === "add" ? chainFor(field) : undefined,
@@ -1374,7 +1430,7 @@ export function createModifyEngine(args: {
     const facilityIds = [
       ...new Set(
         fileable
-          .map((d) => d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId)
+          .map((d) => d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId ?? d.fieldWire?.facilityId)
           .filter((x): x is string => Boolean(x)),
       ),
     ];
@@ -1396,6 +1452,16 @@ export function createModifyEngine(args: {
         ownership: d.involvementWire!.ownership,
         targetLoanId: d.involvementWire!.facilityId,
       }));
+    // ONE ENTRY PER FIELD PER MEMBER. Unlike the four scalars, a field change
+    // carries its own target, so two members taking different values is a normal
+    // plan rather than the ambiguity the refusal above exists to catch.
+    const fieldChanges = fileable
+      .filter((d) => d.fieldWire)
+      .map((d) => ({
+        field: d.fieldWire!.field,
+        value: d.fieldWire!.value,
+        targetLoanId: d.fieldWire!.facilityId,
+      }));
     const one = (key: WireKey) => [...(byKey.get(key) ?? [])][0];
     return {
       idempotencyKey: idempotencyKey!,
@@ -1410,6 +1476,7 @@ export function createModifyEngine(args: {
       // still put the word on every scalar-only payload.
       ...(covenantAdds.length ? { covenantAddsJson: JSON.stringify(covenantAdds) } : {}),
       ...(involvementChanges.length ? { involvementChangesJson: JSON.stringify(involvementChanges) } : {}),
+      ...(fieldChanges.length ? { fieldChangesJson: JSON.stringify(fieldChanges) } : {}),
     };
   }
 
@@ -1420,7 +1487,7 @@ export function createModifyEngine(args: {
     if (!deps.available()) throw new WorkroomRefusalError(NO_CONNECTOR_REFUSAL);
     if (!context.productPackageId) throw new WorkroomRefusalError(NO_PACKAGE_REFUSAL);
 
-    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire));
+    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire));
     const handed = deltas.filter((d) => !d.fileable);
     if (!fileable.length) {
       throw new WorkroomRefusalError(
@@ -1525,9 +1592,11 @@ export function createModifyEngine(args: {
     const verified = (result.steps ?? []).filter((s) => s.state === "verified").length;
 
     const filed = stagedDeltas
-      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire))
+      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire))
       .map((d) => {
-        const row = perFacility.get((d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId)!);
+        const row = perFacility.get(
+          (d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId ?? d.fieldWire?.facilityId)!,
+        );
         const cloneId = row?.cloneLoanId ?? result.cloneLoanId;
         return {
           deltaId: d.id,

@@ -1,6 +1,6 @@
 import type { Facility, LegalEntity } from "../data/contract";
 import { facilityProduct, shortFacilityLabel } from "../data/facilityStage";
-import { catalogField, matchCatalog, type CatalogField, type CatalogMatch } from "./fieldCatalog";
+import { catalogField, isFileable, matchCatalog, type CatalogField, type CatalogMatch } from "./fieldCatalog";
 
 /** The only money field the modification tool carries. See `inferAmount`. */
 const FILEABLE_AMOUNT = catalogField("loan.amount")!;
@@ -543,11 +543,14 @@ function readValue(
       const read = readDate(lower);
       if (read?.iso) return { value: { kind: "date", iso: read.iso, text: read.text } };
       if (read?.dayMissing) {
-        return { question: `${read.text} names a month. A maturity date is a day, and I will not pick one for you.` };
+        return { question: `${read.text} names a month. A ${field.label.toLowerCase()} is a day, and I will not pick one for you.` };
       }
-      // "extend by 18 months" is a real, derivable maturity move.
+      // "extend by 18 months" is a real, derivable maturity move — and ONLY a
+      // maturity move. The baseline it shifts from is the member's own maturity,
+      // so no other date field may borrow it (the field wave brought a second
+      // one: a first payment date derived off maturity would be fiction).
       const months = monthTokens(lower);
-      if (months.length && /\b(extend|push|roll|out\s+by)\b/.test(lower)) {
+      if (field.id === "loan.maturityDate" && months.length && /\b(extend|push|roll|out\s+by)\b/.test(lower)) {
         const shifted = shiftMaturity(facility?.maturityDate, months.at(-1)!.value);
         if (shifted) {
           return { value: { kind: "date", iso: shifted, text: `${months.at(-1)!.text} from ${facility?.maturityDate}` } };
@@ -556,7 +559,7 @@ function readValue(
           question: "This member's maturity is not staged in the read, so there is nothing here to extend from. Give me the new maturity date.",
         };
       }
-      return { question: "What should the new maturity date be?" };
+      return { question: `What should the new ${field.label.toLowerCase()} be?` };
     }
 
     const pcts = percentTokens(lower);
@@ -571,6 +574,26 @@ function readValue(
   if (field.id === "covenant.add") {
     const cov = readCovenant(lower);
     if (cov) return cov;
+  }
+
+  // A PICKLIST IS THE ORG'S OWN CLOSED SET, so the value is quoted from it or it
+  // is a question. Longest value first, because "Monthly" sits inside
+  // "Bi-Monthly" and the shorter read would file a schedule nobody said. The
+  // scan runs on the line the branch was handed, which is the SCRUBBED one: the
+  // org names a loan "<Borrower> - <Product> - <$Amount>", so an unscrubbed line
+  // carries a product picklist value inside the member's own name.
+  if (field.type === "picklist" && field.values?.length) {
+    const said = [...field.values].sort((a, b) => b.length - a.length).find((v) => wordIn(lower, v.toLowerCase()));
+    if (said) return { value: { kind: "text", text: said } };
+    // A FIELD THAT FILES ASKS, and names every value it would accept. One that
+    // only ever travels as a handoff keeps the banker's own words instead:
+    // sending them to pick off a list and then handing the ask off regardless
+    // would be a question with nothing behind it.
+    if (isFileable(field)) {
+      return {
+        question: `${field.label} takes one of the org's own values, and I will not write one it does not hold. The org offers: ${field.values.join(", ")}.`,
+      };
+    }
   }
 
   // Everything else is spoken about rather than filed, so a scalar is optional:

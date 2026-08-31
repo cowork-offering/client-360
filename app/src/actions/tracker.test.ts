@@ -291,6 +291,11 @@ describe("A33.3.1 — the transition allowlist", () => {
       { id: "covenant_create_0", type: "write", objectName: "LLC_BI__Covenant2__c", fields: ["LLC_BI__Covenant_Type__c", "LLC_BI__Financial_Indicator_Value__c", "Financial_Indicator_Operator__c", "LLC_BI__Frequency__c", "LLC_BI__Effective_Date__c"] },
       { id: "covenant_attach_0", type: "write", objectName: "LLC_BI__Loan_Covenant__c", fields: ["LLC_BI__Loan__c", "LLC_BI__Covenant2__c"] },
       { id: "covenant_verify_0", type: "verification", objectName: "LLC_BI__Covenant2__c" },
+      // The field wave (2026-08-31): a curated loan field applied to the clone.
+      // The mirror asks whether the tool may write the OBJECT; the org's own
+      // describe is what settles the field, and neither is a formula field the
+      // policy refuses.
+      { id: "field_change_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["LLC_BI__Payment_Schedule__c"] },
       { id: "observe_side_effects", type: "observed_side_effect" },
       { id: "held_execution", type: "handoff" },
     ];

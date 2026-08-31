@@ -440,6 +440,54 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(payload.facilityIds).toEqual([LINE_ID]);
   });
 
+  it("stages a curated loan field as FILEABLE, carrying the org's own picklist value", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "change the payment schedule to monthly on the line of credit - $15,000,000.00");
+    expect(delta.fileable).toBe(true);
+    // It rides fieldChangesJson, not one of the four request keys.
+    expect(delta.wire).toBeUndefined();
+    expect(delta.fieldWire).toMatchObject({ field: "LLC_BI__Payment_Schedule__c", value: "Monthly", facilityId: LINE_ID });
+    expect(delta.handoff).toBeUndefined();
+    expect(delta.filed.recordId).toBe("assigned by the org on execution");
+    // The chip says who settles the field name, because it is not this client.
+    expect(delta.map.find(([label]) => label === "Written as")![1]).toMatch(/resolved against the org's live describe/);
+  });
+
+  it("files an amortisation as months, and never on the term the tool already carries", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "amortize the line of credit - $15,000,000.00 over 20 years");
+    // LLC_BI__Term_Months__c is the facility's own term and rides
+    // requestedTermMonths; the amortisation is the schedule the payment is
+    // struck on. Two fields, and a plan that confused them would move the wrong
+    // one silently.
+    expect(delta.wire).toBeUndefined();
+    expect(delta.fieldWire).toMatchObject({ field: "LLC_BI__Amortized_Term_Months__c", value: 240, facilityId: LINE_ID });
+  });
+
+  it("sends curated fields as fieldChangesJson, and leaves the key off a scalar-only plan", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "change the payment schedule to monthly on the line of credit - $15,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(JSON.parse(payload.fieldChangesJson)).toEqual([
+      { field: "LLC_BI__Payment_Schedule__c", value: "Monthly", targetLoanId: LINE_ID },
+    ]);
+    // The scalar still rides its own request key, and both anchor one member.
+    expect(payload.requestedAmount).toBe(20_000_000);
+    expect(payload.facilityIds).toEqual([LINE_ID]);
+
+    // THE KEY EXISTS ONLY WHEN FIELDS RIDE. A null would put the word on every
+    // scalar-only payload and offer the org an empty change set to read.
+    const scalar = engineOn();
+    const only = await confirm(scalar.engine, "increase the line of credit - $15,000,000.00 to $20,000,000");
+    await scalar.engine.stagePlan(only, context);
+    const plain = (scalar.deps.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect("fieldChangesJson" in plain).toBe(false);
+  });
+
   it("REFUSES an ask that belongs to another credit action rather than staging it", async () => {
     const { engine } = engineOn();
     const result = await engine.parseIntent("waive the covenant on the line of credit - $15,000,000.00", context);

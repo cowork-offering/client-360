@@ -92,6 +92,13 @@ export interface CatalogField {
    *  "involvementChange" rides involvementChangesJson (adds authored on the
    *  clone, removes as carry exclusions). Both 2026-08-30. */
   recordWire?: "covenantAdd" | "involvementChange";
+  /** A DYNAMIC FIELD wire: the entry files through `stage_loan_modification`'s
+   *  `fieldChangesJson` under this API name, and the ORG resolves it against its
+   *  own live describe at stage time — updateable, non-formula, off the
+   *  deny-list — coercing by type and validating a picklist against its active
+   *  values. The name below is what the room SENDS; the describe is what decides
+   *  (2026-08-31). */
+  dynamicField?: string;
   /** Why nothing files it. Required whenever `wireKey` is absent. */
   gap?: string;
   /** What would close the gap. Design only — nothing here is deployed. */
@@ -167,7 +174,12 @@ const LOAN_TERMS: CatalogField[] = [
     group: "terms",
     source: "live-verified",
     wireKey: "requestedRate",
-    synonyms: ["rate", "interest rate", "pricing", "price", "priced", "reprice", "coupon", "margin", "spread", "all-in rate"],
+    // "spread" and "margin" moved to `loan.spread` with the field wave: the org
+    // holds LLC_BI__Spread__c and this field is the ALL-IN rate. Reading a margin
+    // as an absolute rate is the mistake `readValue` already refuses out loud for
+    // "SOFR+300", and it had two words here that would have walked straight past
+    // that refusal.
+    synonyms: ["rate", "interest rate", "pricing", "price", "priced", "reprice", "coupon", "all-in rate"],
   },
   {
     id: "loan.termMonths",
@@ -184,13 +196,15 @@ const LOAN_TERMS: CatalogField[] = [
   },
 ];
 
-/** The rest of the loan. Real fields, and no tool writes any of them: the
- *  modification pair takes exactly four scalars and `C360WriteGuard` permits one
- *  loan transition (Stage: Qualification to Proposal) and nothing else. */
+/** The rest of the loan. Real fields the FIELD WAVE deliberately left out: it is
+ *  a CURATED list, not everything the describe would accept, because a field a
+ *  banker has no settled phrasing for is a field the room would be guessing at.
+ *  `C360WriteGuard` still permits exactly one loan transition (Stage:
+ *  Qualification to Proposal) and nothing else. */
 const NO_LOAN_TOOL =
-  "stage_loan_modification carries exactly four changes — amount, maturity date, rate and term. No tool writes any other loan field.";
+  "The field wave carries loan fields through fieldChangesJson, resolved against the org's live describe at stage time. This one is not in the curated set the room will send.";
 const LOAN_TOOL_FIX =
-  "Add a typed fieldChanges[] block to the modification pair and a per-field clone allowlist to C360WriteGuard, applied in the existing apply_changes step and verified by re-query.";
+  "Add it to the wave's curated list once the describe, the deny-list and a banker's phrasing for it are all settled.";
 
 const LOAN_OTHER: CatalogField[] = [
   {
@@ -275,9 +289,50 @@ const LOAN_OTHER: CatalogField[] = [
     group: "structure",
     source: "live-verified",
     values: ["Hold", "Withdrawn", "Open", "Paid Out", "Declined", "Charge-Off", "Lost", "Pre-approval", "Pre-approved", "Pre-qualification", "Pre-qualified"],
-    gap: NO_LOAN_TOOL,
-    closes: LOAN_TOOL_FIX,
+    gap: NO_LOAN_TOOL + " Status sits on the server's own deny-list beside stage: the org refuses it whatever a client sends.",
+    closes: "Nothing. Where a facility stands is the output of nCino's approval run, not an input a room can type.",
     synonyms: ["status", "close the facility", "pay off"],
+  },
+];
+
+/* ------------------------------------------------------------ the field wave
+
+   THE SECOND KIND OF FILING (2026-08-31). The four scalars ride their own
+   request keys; everything here rides `fieldChangesJson`, and the difference
+   that matters is WHO RESOLVES THE NAME. The room sends an API name and a typed
+   value; the ORG reads its own live describe and takes the field only if it is
+   updateable, non-formula and off the deny-list, coercing by type and refusing
+   an illegal picklist value with the legal list. A wrong name is therefore a
+   refusal the banker can read, not a plan that dereferences to nothing on
+   execution — which is the Interest_Rate lesson, closed from the other side.
+
+   THE LIST IS CURATED, AND THAT IS THE SAFETY. The describe would accept far
+   more than these nine. What earns a place is a field a banker actually says in
+   a modification conversation, whose values this file can quote from the org's
+   own answer (`knowledge/sf-build-v2/field-inventory-20260831.json`, the live
+   describe of 2026-08-31: 267 fields on Loan).
+
+   NO BOOLEAN IN THIS WAVE, deliberately. A prepayment-penalty flag reads as
+   "add a prepayment penalty" and the parse model has no honest way to tell a
+   banker asking to SET one from a banker asking what one IS — a yes/no with no
+   value in the line looks identical to a question. Booleans wait for a wave
+   that gives them their own reader.                                          */
+
+const FIELD_WAVE: CatalogField[] = [
+  {
+    id: "loan.paymentSchedule",
+    object: "LLC_BI__Loan__c",
+    apiName: "LLC_BI__Payment_Schedule__c",
+    label: "Payment schedule",
+    type: "picklist",
+    category: "loan-other",
+    group: "terms",
+    source: "live-verified",
+    dynamicField: "LLC_BI__Payment_Schedule__c",
+    values: ["Weekly", "Bi-Monthly", "Monthly", "Quarterly", "Semi-Annual", "Annual", "Single Pay"],
+    gap: "The line named the schedule but no value the org's picklist carries, so there is nothing to write.",
+    closes: "Say one of the org's own values and it files on the clone.",
+    synonyms: ["payment schedule", "payment frequency", "pay monthly", "pay quarterly", "monthly payments", "quarterly payments"],
   },
   {
     id: "loan.paymentType",
@@ -288,24 +343,32 @@ const LOAN_OTHER: CatalogField[] = [
     category: "loan-other",
     group: "terms",
     source: "live-verified",
+    dynamicField: "LLC_BI__Payment_Type__c",
     values: ["Installment", "Single Pay", "Balloon", "Draw Down Line Of Credit", "Principal+Interest", "Irregular", "Generic Non-Disclosable", "Construction Permanent", "Revolving Line Of Credit"],
-    gap: NO_LOAN_TOOL,
-    closes: LOAN_TOOL_FIX,
-    synonyms: ["payment type", "payment structure", "interest only", "amortising", "amortizing"],
+    gap: "The line named the payment type but no value the org's picklist carries, so there is nothing to write.",
+    closes: "Say one of the org's own values and it files on the clone.",
+    // "interest only" moved to the interest-only PERIOD below: a banker saying
+    // it means a number of months, not a payment-type value the org holds.
+    synonyms: ["payment type", "payment structure", "balloon", "single pay"],
   },
   {
-    id: "loan.accrualMethod",
+    id: "loan.interestOnlyMonths",
     object: "LLC_BI__Loan__c",
-    apiName: "LLC_BI__Interest_Accrual_Method__c",
-    label: "Interest accrual method",
-    type: "picklist",
+    apiName: "LLC_BI__Interest_Only_Months__c",
+    // The org labels it "Interest Only Months" and types it a double.
+    label: "Interest-only period (months)",
+    type: "months",
     category: "loan-other",
     group: "terms",
     source: "live-verified",
-    values: ["30_360", "30_365", "Actual_360", "Actual_365", "Actual_Actual", "True360_360", "True360_365", "True360_DaysPerPeriod", "UnitPeriod_365.25", "True360_365.25", "True365_360", "True365_365"],
-    gap: NO_LOAN_TOOL,
-    closes: LOAN_TOOL_FIX,
-    synonyms: ["accrual", "accrual method", "day count", "actual/360", "30/360"],
+    dynamicField: "LLC_BI__Interest_Only_Months__c",
+    gap: "An interest-only period is a length, and the line states none.",
+    closes: "Say it in months or years and it files on the clone.",
+    // "interest only period" came from `pricing.paymentType`, which is a payment
+    // STREAM component on another object and holds no period at all. Longest
+    // phrase wins the match, so leaving it there pointed the most natural
+    // phrasing a banker uses at a handoff while the fileable field sat beside it.
+    synonyms: ["interest only", "interest-only", "interest only period", "io period"],
   },
   {
     id: "loan.amortisedTerm",
@@ -316,26 +379,108 @@ const LOAN_OTHER: CatalogField[] = [
     category: "loan-other",
     group: "terms",
     source: "live-verified",
+    dynamicField: "LLC_BI__Amortized_Term_Months__c",
     // DISTINCT FROM THE TERM THE TOOL WRITES. `LLC_BI__Term_Months__c` is the
-    // facility's own term and is fileable; this is the schedule the payment is
-    // struck on, and moving one without the other is a real amendment.
-    gap: NO_LOAN_TOOL + " It is also a different field from the term the tool does carry, so an amortisation change cannot ride on requestedTermMonths.",
-    closes: LOAN_TOOL_FIX,
-    synonyms: ["amortisation", "amortization", "amortisation term", "amortization term", "amort"],
+    // facility's own term and rides requestedTermMonths; this is the schedule
+    // the payment is struck on, and moving one without the other is a real
+    // amendment. Two fields, two entries, and neither borrows the other's wire.
+    gap: "An amortisation is a length, and the line states none.",
+    closes: "Say it in months or years and it files on the clone.",
+    // "amortising" and "amortizing" came from `loan.paymentType`, where they
+    // named a payment-type value this org's picklist does not hold. Both
+    // participles are kept, because a word a banker already said has to keep
+    // landing somewhere.
+    synonyms: ["amortisation", "amortization", "amortise", "amortize", "amortising", "amortizing", "amortisation term", "amortization term", "amortised term", "amortized term", "amortise over", "amortize over", "amort"],
   },
   {
-    id: "loan.paymentSchedule",
+    id: "loan.accrualMethod",
     object: "LLC_BI__Loan__c",
-    apiName: "LLC_BI__Payment_Schedule__c",
-    label: "Payment schedule",
+    apiName: "LLC_BI__Interest_Accrual_Method__c",
+    label: "Interest accrual method",
     type: "picklist",
     category: "loan-other",
     group: "terms",
     source: "live-verified",
-    values: ["Weekly", "Bi-Monthly", "Monthly", "Quarterly", "Semi-Annual", "Annual", "Single Pay"],
-    gap: NO_LOAN_TOOL,
-    closes: LOAN_TOOL_FIX,
-    synonyms: ["payment schedule", "payment frequency", "pay monthly", "pay quarterly"],
+    dynamicField: "LLC_BI__Interest_Accrual_Method__c",
+    // THIRTY-FOUR VALUES, all of them, from the describe. The earlier catalog
+    // carried the first twelve, which reads as the whole picklist and is not:
+    // a banker asking for a Simple variant would have been told it is illegal.
+    // The org spells them with underscores, so "30/360" is the banker's word
+    // and `30_360` is the value that travels.
+    values: ["30_360", "30_365", "Actual_360", "Actual_365", "Actual_Actual", "True360_360", "True360_365", "True360_DaysPerPeriod", "UnitPeriod_365.25", "True360_365.25", "True365_360", "True365_365", "Midnight_366", "Actual_365.25", "UnitPeriod_DaysPerPeriod", "UnitPeriod_360_Simple", "UnitPeriod_365_Simple", "UnitPeriod_DaysPerPeriod_Simple", "UnitPeriod_True360_360_Simple", "UnitPeriod_True360_365_Simple", "UnitPeriod_True360_DaysPerPeriod_Simple", "UnitPeriod_FederalCalendar_Simple", "UnitPeriod_365.25_Simple", "UnitPeriod_True360_365.25_Simple", "True365_360_Simple", "Actual_365_Simple", "True365_365_Simple", "Actual_Actual_Simple", "Midnight_366_Simple", "Actual_365.25_Simple", "UnitPeriod_VARDPY_Simple", "UnitPeriod_True360_DaysPerPeriod", "UnitPeriod_FederalCalendar", "UnitPeriod_VARDPY"],
+    gap: "The line named the accrual method but no value the org's picklist carries, so there is nothing to write.",
+    closes: "Say one of the org's own values and it files on the clone.",
+    synonyms: ["accrual", "accrual method", "day count", "actual/360", "30/360"],
+  },
+  {
+    id: "loan.index",
+    object: "LLC_BI__Loan__c",
+    apiName: "LLC_BI__Index__c",
+    label: "Index",
+    type: "picklist",
+    category: "loan-other",
+    group: "terms",
+    source: "live-verified",
+    dynamicField: "LLC_BI__Index__c",
+    // SOFR IS NOT IN THIS ORG'S PICKLIST. The last value is a URL-encoded
+    // duplicate of the "- 1 Year +" row and it is quoted exactly as the describe
+    // returned it: the org validates against its own values, so a tidied-up copy
+    // here would be a value the org refuses.
+    values: ["ARM", "Fixed", "LIBOR", "Treasury Constant Maturity - 1 Year +", "Treasury Constant Maturity - 2 Year +", "Treasury Constant Maturity - 3 Year +", "Treasury Constant Maturity - 5 Year +", "Treasury Constant Maturity - 7 Year +", "Treasury Constant Maturity - 10 Year +", "WSJ Prime", "Treasury Constant Maturity - 1 Year %2B"],
+    gap: "The line named the index but no value the org's picklist carries, so there is nothing to write.",
+    closes: "Say one of the org's own values and it files on the clone.",
+    synonyms: ["index", "rate index"],
+  },
+  {
+    id: "loan.spread",
+    object: "LLC_BI__Loan__c",
+    apiName: "LLC_BI__Spread__c",
+    // The org labels it "Spread (%)".
+    label: "Spread",
+    type: "percent",
+    category: "loan-other",
+    group: "terms",
+    source: "live-verified",
+    dynamicField: "LLC_BI__Spread__c",
+    // THE SPREAD IS NOT THE RATE, and the room now has both. `loan.interestRate`
+    // writes the ALL-IN rate through requestedRate and refuses spread language
+    // outright; this writes the margin over the index. The two words moved here
+    // from that entry's synonyms, because sending a margin as an absolute rate
+    // is exactly the mistake its own refusal was written to prevent.
+    gap: "A spread is a percentage, and the line states none.",
+    closes: "Say it as a percentage or in basis points and it files on the clone.",
+    synonyms: ["spread", "margin", "margin over index"],
+  },
+  {
+    id: "loan.firstPaymentDate",
+    object: "LLC_BI__Loan__c",
+    apiName: "LLC_BI__First_Payment_Date__c",
+    label: "First payment date",
+    type: "date",
+    category: "loan-other",
+    group: "terms",
+    source: "live-verified",
+    dynamicField: "LLC_BI__First_Payment_Date__c",
+    gap: "A first payment date is a day, and the line states none.",
+    closes: "Say the date and it files on the clone.",
+    synonyms: ["first payment date", "first payment"],
+  },
+  {
+    id: "loan.primarySourceOfRepayment",
+    object: "LLC_BI__Loan__c",
+    // NOT an LLC_BI__ field: this one is the bank's own, and the describe is the
+    // only reason we know it exists on Loan at all.
+    apiName: "Primary_Source_of_Repayment__c",
+    label: "Primary source of repayment",
+    type: "picklist",
+    category: "loan-other",
+    group: "terms",
+    source: "live-verified",
+    dynamicField: "Primary_Source_of_Repayment__c",
+    values: ["Cash flow from Operations", "Lease Income", "Liquidation of Collateral", "Receivables", "Reliance on Guarantors", "Working Capital Turnover"],
+    gap: "The line named the source of repayment but no value the org's picklist carries, so there is nothing to write.",
+    closes: "Say one of the org's own values and it files on the clone.",
+    synonyms: ["source of repayment", "primary repayment", "repayment source"],
   },
 ];
 
@@ -496,7 +641,12 @@ const COVENANT_FIELDS: CatalogField[] = [
     values: ["Annually", "Semi-Annually", "Quarterly", "Every 2 Months", "Monthly", "One-Off", "Custom"],
     gap: "The frequency lives on the covenant record, which no tool writes. Its effective date drives the whole compliance schedule and is fenced separately.",
     closes: "The same covenants[] block, keeping LLC_BI__Effective_Date__c forbidden (writing it corrupts the schedule — PDI-00023403).",
-    synonyms: ["frequency", "test frequency", "quarterly", "monthly", "annually", "how often"],
+    // A BARE CADENCE WORD NAMES NO FIELD. "quarterly", "monthly" and "annually"
+    // sat here and matched anywhere they appeared, so with the field wave live
+    // "change the payment schedule to monthly" raised a covenant-frequency chip
+    // beside the schedule the banker actually said. A cadence qualifies whatever
+    // field the line is about; the words that NAME this one are kept.
+    synonyms: ["frequency", "test frequency", "how often"],
   },
   {
     id: "covenant.complianceStatus",
@@ -853,7 +1003,9 @@ const PRICING_FIELDS: CatalogField[] = [
     values: ["Principal & Interest", "Principal + Interest", "Interest Only"],
     gap: NO_PRICING_TOOL,
     closes: PRICING_FIX,
-    synonyms: ["interest only period", "principal and interest", "payment component"],
+    // "interest only period" moved to `loan.interestOnlyMonths` with the field
+    // wave: a period is a length, and this entry is a stream's payment type.
+    synonyms: ["principal and interest", "payment component"],
   },
 ];
 
@@ -1011,6 +1163,7 @@ const EXCEPTION_FIELDS: CatalogField[] = [
 /** THE CATALOG. Order matters only for reporting; lookup is by index below. */
 export const FIELD_CATALOG: CatalogField[] = [
   ...LOAN_TERMS,
+  ...FIELD_WAVE,
   ...LOAN_OTHER,
   ...PACKAGE_FIELDS,
   ...COVENANT_FIELDS,
@@ -1033,7 +1186,7 @@ export function catalogField(id: string): CatalogField | undefined {
 export const FILEABLE_FIELDS: CatalogField[] = FIELD_CATALOG.filter((f) => f.wireKey);
 
 export function isFileable(field: CatalogField): boolean {
-  return field.wireKey !== undefined || field.recordWire !== undefined;
+  return field.wireKey !== undefined || field.recordWire !== undefined || field.dynamicField !== undefined;
 }
 
 /** Everything a create must write, in order. Empty for a field amendment. */
