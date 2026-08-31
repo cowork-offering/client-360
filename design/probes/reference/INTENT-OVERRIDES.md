@@ -13,3 +13,14 @@ the dummy baseline, so these three leaves are expected to DIFFER, in exactly thi
    rule is dead. PORT: .10 as written.
 
 Everything else: the dummy wins, byte for byte.
+
+## Consolidated-sweep probe artifacts (2026-08-31, orchestrator-verified, not regressions)
+
+Direct Playwright measurement on the merged 4-surface build confirmed the UI matches baseline
+where the suite reports null/FAIL for module-logic reasons:
+- `cmdk.lens.lensFabBlurPx: null` - the module reads the blur on #fabwrap; the port applies it
+  on #fab (measured: blur(10px) while lensed). Fix the module to read sel.fab, or accept.
+- `client.perClient.*.meterFill*: null` - module tab-navigation assumes the dummy's tab order;
+  direct click on data-pane="exposure" shows meterfill 150ms/900ms exactly per baseline.
+- `glass.*.glassSurfaceCount` low vs dummy: React mounts chrome lazily (dummy holds all views
+  in DOM). The gating number is glassRimViolationCount = 0, which passes in every state.
