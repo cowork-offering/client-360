@@ -238,6 +238,99 @@ public with sharing class C360ActionStaging {
     }
 
     /**
+     * The preconditions for the SECOND leg of a two-transaction execute, WITHOUT consuming anything.
+     *
+     * A tool whose work does not fit in one transaction (ExecuteLoanModification splits the credit
+     * action from the arm, for governor reasons documented there) has to let a second leg in without
+     * handing it a second authority. So the same token, the same plan hash and the same named human
+     * are demanded again - a leg that cannot present them is not part of this run - but the token is
+     * NOT re-consumed, because it was already spent by the first leg and a single-use token that had
+     * to be spent twice could never be spent at all.
+     *
+     * What stops this being a way to run the arm over and over is the status: only a record the first
+     * leg left mid-run is armable, and the arm writes a terminal status when it finishes.
+     *
+     * @param stagingId The handle returned by stage_*.
+     * @param planHash The hash the banker confirmed.
+     * @param decisionToken The token the first leg consumed. Proved again, spent only once.
+     * @param approverUserId The named human bound to the token. Must be the running identity.
+     * @return The staging record, untouched.
+     * @throws StagingException when this is not a run waiting on its second leg.
+     */
+    public static cm_Action_Staging__c assertArmable(
+        Id stagingId,
+        String planHash,
+        String decisionToken,
+        Id approverUserId
+    ) {
+        if (String.isBlank(decisionToken)) {
+            throw new StagingException('decisionToken is required on every leg of an execute_* (A33.5.4).');
+        }
+        if (approverUserId == null || approverUserId != UserInfo.getUserId()) {
+            throw new StagingException(
+                'approverUserId is required and must match the running identity. The token binds a named human ' +
+                'to a plan, and this server runs as-user (A33.5.4).'
+            );
+        }
+
+        List<cm_Action_Staging__c> rows = [
+            SELECT Id, cm_Action_Id__c, cm_Plan_Hash__c, cm_Plan_JSON__c, cm_Status__c,
+                   cm_Decision_Token_Hash__c, cm_Token_Consumed_At__c, cm_Result_Record_Id__c,
+                   cm_Tracker_JSON__c, cm_Idempotency_Key__c, cm_Account__c, cm_Product_Package__c
+            FROM cm_Action_Staging__c
+            WHERE Id = :stagingId
+            WITH USER_MODE
+            LIMIT 1
+        ];
+        if (rows.isEmpty()) {
+            throw new StagingException('No staging record found for stagingId ' + stagingId + '.');
+        }
+        cm_Action_Staging__c rec = rows[0];
+
+        if (rec.cm_Plan_Hash__c != planHash) {
+            throw new StagingException(
+                'planHash does not match the staged plan. A plan is never executed against figures the banker ' +
+                'did not see (A33.2.7).'
+            );
+        }
+        if (rec.cm_Decision_Token_Hash__c != tokenDigest(decisionToken, planHash, approverUserId)) {
+            throw new StagingException('decisionToken is not valid for this stagingId, planHash and approver (A33.5.4).');
+        }
+        if (rec.cm_Token_Consumed_At__c == null || rec.cm_Status__c != 'Executing' || rec.cm_Result_Record_Id__c == null) {
+            throw new StagingException(
+                'This plan is not waiting on a second leg: its first leg has not run, or the run is already ' +
+                'finished. Nothing was written.'
+            );
+        }
+        return rec;
+    }
+
+    /**
+     * Writes an INTERIM tracker state, leaving the run open.
+     *
+     * An execute_* that finishes its work in more than one transaction (ExecuteLoanModification
+     * splits the credit action from the arm, for governor reasons documented there) has to leave
+     * the authority record in a state that says both "this has not finished" and "this has already
+     * produced a record". The status stays Executing so the run does not read as terminal, and the
+     * result record id lands NOW so the idempotency fence in findCompleted refuses a second run
+     * from the moment this transaction commits, rather than from whenever the last one does.
+     *
+     * @param rec The claimed staging record.
+     * @param steps The plan steps as far as they have been settled.
+     * @param resultRecordId The domain record created, or null when nothing was written yet.
+     */
+    public static void recordProgress(
+        cm_Action_Staging__c rec,
+        List<C360Plan.Step> steps,
+        String resultRecordId
+    ) {
+        rec.cm_Tracker_JSON__c = JSON.serialize(steps);
+        rec.cm_Result_Record_Id__c = resultRecordId;
+        rec.cm_Status__c = 'Executing';
+        update as user rec;
+    }
+
+    /**
      * Binds the token to the plan and the human in one digest. The raw token never lands in
      * the database, so a read of the staging record cannot yield a usable token.
      */
