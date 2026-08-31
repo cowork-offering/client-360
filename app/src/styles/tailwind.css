@@ -1,3 +1,25 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* KEYBOARD FOCUS, RESTORED ON THE SIX PLAIN-TEXT FIELDS. Worklist search,
+   the chat composer, the two DealTicket inline inputs and the command
+   palette input all reach for Tailwind's `focus:outline-none` so a mouse
+   click doesn't ring a text field — but `:focus` fires on keyboard focus
+   too, so tabbing into any of them left no visible indicator at all (the
+   accessibility gap this file exists to close; it also broke keyboard-
+   driven e2e since there was nothing to assert against). Re-open the ring
+   on `:focus-visible` only, so a click still stays silent.
+   This rule leads with `html` on purpose: it isn't decoration, it's a
+   specificity bump. `.focus\:outline-none:focus-visible` alone ties the
+   generated `.focus\:outline-none:focus` at (0,2,0), and the production
+   build's CSS minifier does not preserve source order between the two —
+   it was observed emitting Tailwind's rule LAST, which would have made
+   the tie resolve to `outline: transparent` on every keyboard tab. The
+   leading type selector pushes this rule to (0,2,1), which wins outright
+   regardless of minifier order. Same treatment and token as the app-wide
+   `:focus-visible` rule in tokens.css — one ring, everywhere. */
+html .focus\:outline-none:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
