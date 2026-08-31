@@ -127,7 +127,15 @@ get_llm_response with our system prompt (state machine + catalog + doctrine) and
 schema the client validates (reject malformed = treat as unparsed); then graduate to a dedicated
 workroom_reason tool on a server we control. The model only ever PROPOSES amendments in the
 parser's own schema; the deterministic spine (validation, hash, token, approval, re-query) stays
-the only writer. Parser remains fast path + fallback.
+the only writer. Parser remains fast path + fallback. OWNERSHIP SPLIT (founder-confirmed): NOTHING
+is added to the IDB Gateway — the whole agent brain lives OUR side (prompt pack = state machine +
+catalog + doctrine + describe digest, shipped IN the artifact bundle and versioned in the repo;
+the page composes the prompt per turn, parses + schema-validates the reply, malformed = unparsed
+fallback). The gateway is a dumb completion pipe. FIRST STEP before building: observe ONE real
+get_llm_response call to learn its shape (caller-supplied system prompt? which model? length
+limits?). If it will not take our prompt, mount workroom_reason on our own server
+(experience-mcp pattern, bot.connectry.io) and declare it as one more connector — still zero IDB
+changes. Our-side ownership means prompt iteration = artifact republish, no server deploys.
 
 **Then:** final full re-drive (Playwright client sweep + org replays + founder connector click),
 report to all-green, then the UI-revamp port-back (the founder's parallel design session owns the
