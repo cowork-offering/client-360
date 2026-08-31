@@ -2,6 +2,8 @@ import type { BorrowerBundle, Collateral, Facility } from "../../data/contract";
 import { fmtMoney, fmtPct, fmtDate } from "../../data/format";
 import { fmtRatio, fmtRate, type Tone } from "../../data/finance";
 import { Pulse } from "../Pulse";
+import { Odo } from "../Odometer";
+import { useApp } from "../../state/appState";
 import { collateralRecords } from "../../data/collateralRecords";
 import { isActiveFacility } from "../../data/worklist";
 import {
@@ -64,6 +66,8 @@ const STATUS_WORD: Record<Tone, StatusTone> = {
 };
 
 export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
+  const { state } = useApp();
+  const writeBackMM = (state.accountId && state.writeBacks[state.accountId]) || 0;
   const exp = bundle.exposure ?? {};
   const allFacs = exp.facilities ?? [];
   // F6: closed / paid-off facilities stay visible (with a status word) but are
@@ -85,7 +89,13 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
     );
   }
 
-  const committed = exp.totalCommitted ?? 0;
+  /* WRITE-BACK THROUGH THE GLASS (rule 62), applied ONCE at the source. Every
+     figure on this pane is derived from `committed` — the strip, the drawn
+     percentage, the coverage ratio and the table total — so a delta applied to
+     the total alone would leave the pane disagreeing with itself, and with what
+     the room said out loud while staging it. If the commitment moved, the
+     utilisation and the coverage moved with it. */
+  const committed = (exp.totalCommitted ?? 0) + writeBackMM * 1e6;
   const drawn = exp.totalOutstanding ?? 0;
   const avail = exp.totalAvailable ?? 0;
   const drawnPct = committed > 0 ? Math.round((drawn / committed) * 100) : 0;
@@ -216,8 +226,11 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
             <tr className="total">
               <td>Total</td>
               <td />
-              <td className="r num" id="tblExpTotal">
-                {fmtMoney(committed)}
+              {/* The exposure total ROLLS when a workroom execute walks the
+                  committed figure forward (rule 62), and simply reads the org's
+                  own number the rest of the time. */}
+              <td className="r num">
+                <Odo id="tblExpTotal" value={fmtMoney(committed)} />
               </td>
               <td className="r">{fmtMoney(drawn)}</td>
               <td />

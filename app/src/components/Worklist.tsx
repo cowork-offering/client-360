@@ -7,6 +7,7 @@ import type { ReasonCode } from "../data/contract";
 import { REASON_META } from "./reasons";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 import { flyName } from "./nameFlight";
+import { Odo } from "./Odometer";
 
 /* =============================================================================
    THE WORKLIST — the landing's third beat.
@@ -80,7 +81,7 @@ function initialsOf(name: string): string {
 }
 
 export function Worklist() {
-  const { data, worklist, dispatch } = useApp();
+  const { data, worklist, state, dispatch } = useApp();
   const rows = useMemo(() => buildWorklistRows(data, worklist), [data, worklist]);
   const [unstaged, setUnstaged] = useState<WorklistRow | null>(null);
 
@@ -146,7 +147,12 @@ export function Worklist() {
                   ))}
                 </span>
                 <span className="amt num">
-                  <b>{fmtMoney(r.tce)}</b>
+                  {/* The book's own figure, walked forward by a workroom
+                      execute and ROLLED into place (rules 61 + 62) — the same
+                      delta the hero anchor and the exposure total take. */}
+                  <b>
+                    <Odo value={fmtMoney((r.tce ?? 0) + (state.writeBacks[r.accountId] ?? 0) * 1e6)} />
+                  </b>
                   <span>total exposure</span>
                 </span>
                 <span className="go">→</span>

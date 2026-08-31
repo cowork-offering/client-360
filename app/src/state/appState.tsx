@@ -65,6 +65,23 @@ export interface ViewState {
   /** Display ids a sync just changed. The value pulses where it already sits,
    *  then this clears — it is a notification, not a data state. */
   pulse: string[];
+  /**
+   * WRITE-BACK THROUGH THE GLASS (rule 62).
+   *
+   * Millions added to a relationship's committed figure by a workroom execute
+   * that actually landed. Held APART from `livePatches` on purpose: a live
+   * patch rebuilds the workroom's engine, which would knock the room out of the
+   * confirmation it is standing on the instant the write-back fired. This slice
+   * is read by the cockpit's own figures and by nothing else, so the room can
+   * watch the numbers move behind its own blur.
+   *
+   * A page session, and no longer. Nothing from an execution persists.
+   */
+  writeBacks: Record<string, number>;
+  /** Relationships whose anchor still owes a violet wash. The wash plays once,
+   *  when the glass LIFTS — while the room is open the figure has already
+   *  rolled and a wash under the blur would be a light nobody saw. */
+  washes: string[];
 }
 
 type Action =
@@ -82,6 +99,9 @@ type Action =
   | { type: "RESTORE_OVERLAY"; overlays: Record<string, AccountOverlay> }
   | { type: "PULSE"; ids: string[] }
   | { type: "CLEAR_PULSE" }
+  | { type: "WRITE_BACK"; accountId: string; committedDeltaMM: number }
+  | { type: "ARM_WASH"; accountId: string }
+  | { type: "CLEAR_WASH"; accountId: string }
   | { type: "SET_DRAFT"; draft: string }
   | { type: "PUSH_MESSAGE"; message: LocalMessage }
   | { type: "RESTORE"; ui: Partial<PersistedUi> };
@@ -100,6 +120,8 @@ const initial: ViewState = {
   actionHistory: {},
   slowTierFetchedAt: {},
   pulse: [],
+  writeBacks: {},
+  washes: [],
 };
 
 function reducer(state: ViewState, action: Action): ViewState {
@@ -192,6 +214,24 @@ function reducer(state: ViewState, action: Action): ViewState {
       return { ...state, pulse: action.ids };
     case "CLEAR_PULSE":
       return state.pulse.length ? { ...state, pulse: [] } : state;
+    // The delta ACCUMULATES: two executes in one session move the figure twice,
+    // and the second must not throw the first away.
+    case "WRITE_BACK":
+      return {
+        ...state,
+        writeBacks: {
+          ...state.writeBacks,
+          [action.accountId]: (state.writeBacks[action.accountId] ?? 0) + action.committedDeltaMM,
+        },
+      };
+    case "ARM_WASH":
+      return state.washes.includes(action.accountId)
+        ? state
+        : { ...state, washes: [...state.washes, action.accountId] };
+    case "CLEAR_WASH":
+      return state.washes.includes(action.accountId)
+        ? { ...state, washes: state.washes.filter((id) => id !== action.accountId) }
+        : state;
     case "PATCH_BUNDLE": {
       const prev = state.livePatches[action.accountId] ?? {};
       return {

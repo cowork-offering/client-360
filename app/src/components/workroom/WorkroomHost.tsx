@@ -18,7 +18,7 @@ import { Workroom } from "./Workroom";
  *  wired one. */
 export function WorkroomHost() {
   const context = useWorkroom();
-  const { data, state } = useApp();
+  const { data, state, dispatch } = useApp();
 
   /* THE READ THE ROOM STANDS ON. `resolveBundle` returns the BAKED bundle; the
      live patch a sync sweep landed is merged over it exactly as AppShell does,
@@ -60,8 +60,22 @@ export function WorkroomHost() {
       key={`${context.mode}-${context.door}-${context.accountId}-${context.productPackageId ?? "none"}`}
       context={context}
       engine={engine}
-      onClose={closeWorkroom}
+      /* THE GLASS LIFTS, AND THE WASH SETTLES (rule 62). Every route out of the
+         room — the close button, Escape, the scrim — comes through this one
+         prop, so arming the wash here catches all three. */
+      onClose={() => {
+        dispatch({ type: "ARM_WASH", accountId: context.accountId });
+        closeWorkroom();
+      }}
       onAnchor={(choice) => openWorkroom({ ...context, productPackageId: choice.id, packageName: choice.label })}
+      /* WRITE-BACK THROUGH THE GLASS. The room hands over the committed delta
+         its own manifest carried; the cockpit's figures roll to it behind the
+         blur. This host dispatches rather than the room, because the room has
+         no provider above it in its render test — and because a dispatch that
+         touched `livePatches` would rebuild the room's engine mid-scene. */
+      onExecuted={(committedDeltaMM) =>
+        dispatch({ type: "WRITE_BACK", accountId: context.accountId, committedDeltaMM })
+      }
     />
   );
 }
