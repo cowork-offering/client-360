@@ -76,14 +76,20 @@ function installMcp(exposure?: Record<string, unknown>) {
 }
 
 describe("the sync trigger lives in the account header", () => {
-  it("sits next to Client Actions, not on the Activity tab", () => {
+  /* The Client Actions button this used to sit beside is RETIRED (founder call,
+     2026-08-31 night): the > FAB arc owns client actions and Sync is the hero's
+     one quiet secondary control. The contract that mattered is unchanged and
+     still asserted — Sync is in the hero's name row, not on a tab. */
+  it("is the hero's one control, on the name row and not on the Activity tab", () => {
     installMcp();
     mount();
     click(openRow("Sterling Fabrication"));
     const sync = byText(/^Sync$/)!;
     expect(sync).toBeTruthy();
-    const trigger = document.querySelector("#c360-client-actions-trigger")!;
-    expect(sync.parentElement).toBe(trigger.parentElement);
+    expect(sync.closest(".hero")).toBeTruthy();
+    expect(sync.closest(".acct-name-row")).toBeTruthy();
+    expect(sync.parentElement!.children).toHaveLength(1);
+    expect(document.getElementById("c360-client-actions-trigger")).toBeNull();
   });
 
   it("retired the separate refresh and inbox controls", () => {

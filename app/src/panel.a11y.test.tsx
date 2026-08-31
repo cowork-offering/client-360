@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import sample from "../../artifact/sample-data.json";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,6 +43,7 @@ function mount(data: C360Data = sample as unknown as C360Data): HTMLDivElement {
     root!.render(
       <AppProvider data={data}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
@@ -50,17 +52,20 @@ function mount(data: C360Data = sample as unknown as C360Data): HTMLDivElement {
 
 const buttons = () => [...document.body.querySelectorAll("button")];
 const byLabel = (re: RegExp) => buttons().find((b) => re.test(b.getAttribute("aria-label") ?? ""));
-const byText = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ""));
 const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 const tab = (shiftKey = false) =>
   act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true })));
 const press = (key: string) => act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
 
 const panel = () => document.querySelector('[role="dialog"]')!;
-/** Client Actions is account-only — open a relationship, then its trigger. */
+/** Client Actions is account-only — open a relationship, then the sheet.
+ *
+ *  THE BUTTON IS RETIRED (founder call, 2026-08-31 night). The sheet's focus
+ *  machinery is unchanged and still under test; it is entered through the app's
+ *  own reducer, the same SET_PANEL the button dispatched. */
 const openActions = () => {
   click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Piedmont Precision"))!);
-  click(byText(/Client Actions/)!);
+  act(() => dispatchOpenSheet());
 };
 const focusables = () =>
   [...panel().querySelectorAll<HTMLElement>("button:not([disabled]),textarea:not([disabled])")];
@@ -112,11 +117,18 @@ describe("C5 — focus trap cannot be walked out of", () => {
 });
 
 describe("C6 — closing returns focus to the trigger that opened the panel", () => {
-  it("Client Actions panel returns focus to the Client Actions button", () => {
+  /* The Client Actions BUTTON is retired (founder call, 2026-08-31 night), so
+     the contract is asserted on the surface that owns client actions now: a
+     ticket opened from the arc hands focus back to the mark that fanned it. */
+  it("a ticket opened from the arc returns focus to the FAB mark", () => {
     mount();
-    openActions();
+    click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Piedmont Precision"))!);
+    const mark = byLabel(/Client actions/)!;
+    click(mark);
+    click(byLabel(/^Annual review$/)!);
+    expect(document.querySelector('[role="dialog"][aria-label="Annual Review"]')).toBeTruthy();
     press("Escape");
-    expect(document.activeElement).toBe(document.getElementById("c360-client-actions-trigger"));
+    expect(document.activeElement).toBe(mark);
   });
 
   it("chat panel returns focus to the FAB", () => {

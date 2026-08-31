@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { C360Data } from "./data/contract";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
+import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { clearOverlays } from "./state/syncOverlay";
 import live from "../../artifact/live-data.json";
 
@@ -63,14 +64,13 @@ function mount(): HTMLDivElement {
     root!.render(
       <AppProvider data={DATA}>
         <AppShell />
+        <AppEntry />
       </AppProvider>,
     );
   });
   return container;
 }
 
-const buttons = () => [...document.body.querySelectorAll("button")];
-const byText = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ""));
 const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 const openRow = (name: string) =>
   [...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes(name))!;
@@ -80,7 +80,7 @@ const panel = (label: string) =>
 function openTicket(actionLabel: string, account = HARTWELL) {
   mount();
   click(openRow(account));
-  click(byText(/Client Actions/)!);
+  act(() => dispatchOpenSheet());
   const row = [...document.querySelector('[role="dialog"]')!.querySelectorAll("button")].find((b) =>
     b.textContent?.includes(actionLabel),
   )!;
