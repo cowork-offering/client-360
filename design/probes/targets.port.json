@@ -1,6 +1,6 @@
 {
   "target": "port",
-  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through - and clients[].id is one of them, because it becomes the report key client.perClient.<id>. Filled through SURFACE 2 (the landing, the app header, the nav capsule, the client hero, the name flight). Everything below that still carries the dummy's value and will fail until its surface is minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, not the dummy's three authored clients, so the three client SLOTS point at the port's real accounts - two of which carry the mint's own names. Slot 3 has no Meridian to point at and takes the book's distressed relationship instead. heroName, ringTargetAttrPx and ringEndOffsetPx therefore differ from the baseline by design; nameMatchesExpected and ringHitsExpectedTarget are the leaves that actually gate 'every row opens ITS client, and the ring draws ITS grade'.",
+  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through - and clients[].id is one of them (it becomes the report key client.perClient.<id>). Filled through SURFACE 1 (landing + app header), SURFACE 2 (nav capsule, client hero, name flight) and SURFACE 4 (FAB, arc, narrator chip, chat lifecycle - dummy hook names throughout, only fabWrap moved to #fabwrap). Later-surface entries still carry the dummy's value and fail until minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, so the three client SLOTS point at the port's real accounts; slot 3 has no Meridian and takes the book's distressed relationship. heroName/ringTargetAttrPx/ringEndOffsetPx differ from baseline by design; nameMatchesExpected and ringHitsExpectedTarget gate the real contract.",
   "viewport": {
     "width": 1360,
     "height": 900
@@ -44,7 +44,7 @@
     "graphRoute": "#oflowSvg path.fl",
     "graphParticle": "#oflowSvg circle.flp",
     "paneMeterFill": ".meter i",
-    "fabWrap": "#fab",
+    "fabWrap": "#fabwrap",
     "fabWrapOpenClass": "open",
     "fab": "#fab",
     "fabMark": "#fab .gt",

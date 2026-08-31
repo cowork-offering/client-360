@@ -85,9 +85,18 @@ function mount() {
 
 const buttons = () => [...document.body.querySelectorAll("button")];
 const byText = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ""));
+const byLabel = (re: RegExp) => buttons().find((b) => re.test(b.getAttribute("aria-label") ?? ""));
 const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 const openAccount = () =>
   click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Sterling Fabrication"))!);
+/** SURFACE 4, DIRECTION-LOCKED rule 50: the mark is CONTEXT-AWARE. On the
+ *  landing it opens the assist directly; on a client it fans the action arc and
+ *  the assist is the satellite at the top. These tests all stand on a client,
+ *  so the chat entry point is now two gestures rather than one. */
+const openAssist = () => {
+  click(byLabel(/Client actions/)!);
+  click(byLabel(/Assist chat/)!);
+};
 const flush = async () => {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0));
@@ -117,7 +126,7 @@ async function stageViaChatChip(label: string) {
   const staged = installMcp();
   mount();
   openAccount();
-  click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+  openAssist();
   const chip = panelChips().find((b) => b.textContent?.trim() === label)!;
   click(chip);
   click(byText(/Review the plan/)!);
@@ -131,7 +140,7 @@ describe("A33.6.1 — the chat path and the panel path stage the same thing", ()
     installMcp();
     mount();
     openAccount();
-    click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+    openAssist();
     expect(panelChips().length).toBeGreaterThan(0);
   });
 
@@ -139,7 +148,7 @@ describe("A33.6.1 — the chat path and the panel path stage the same thing", ()
     installMcp();
     mount();
     openAccount();
-    click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+    openAssist();
     const labels = panelChips().map((b) => b.textContent!.trim());
     teardown();
     expect(labels.length).toBeGreaterThan(0);
@@ -169,7 +178,7 @@ describe("A33.6.1 — the chat path and the panel path stage the same thing", ()
     installMcp();
     mount();
     openAccount();
-    click(buttons().find((b) => /Open chat/.test(b.getAttribute("aria-label") ?? ""))!);
+    openAssist();
     const hasChip = panelChips().some((b) => b.textContent?.trim() === label);
     teardown();
     if (!hasChip) return; // ordering is data-driven; parity is proven above
