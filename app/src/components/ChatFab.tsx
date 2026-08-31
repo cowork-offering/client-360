@@ -5,12 +5,14 @@ import { ChatPanelBody } from "./ChatPanel";
 import { ActionsPanelBody } from "./ActionsPanel";
 import { ActionPanel } from "./ActionPanel";
 import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
+import { closeActionTicket, openActionTicket, useActionTicket } from "./actionTicket";
 import { ActionGlyph } from "./ActionIcon";
 import { BrandGlyph } from "./brand";
 import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
 import { resolveBundle, type ActionIcon as IconName } from "../actions/registry";
-import { openWorkroom, workroomContextFor } from "../workroom/openWorkroom";
+import { openFacilityRoom } from "./workroom/roomSession";
+import { smartOpeningFor } from "./workroom/route";
 import { sowSeed } from "./workroom/seed";
 import "../styles/fab.css";
 import "../styles/chat.css";
@@ -20,12 +22,17 @@ import "../styles/chat.css";
 
    The mark in the corner is the app's ONE floating control. On the landing it
    opens the assist directly, because credit actions make no sense without a
-   client (rule 50). On a client it fans a quarter-circle of five satellites —
-   the assist at the top, then the four credit actions swinging down to the
-   horizontal (rule 49) — narrated by ONE anchored chip beneath the mark
-   (rule 54). Opening the assist makes the mark YIELD entirely; the panel takes
-   its exact spot, minimize folds it into a glass pill holding that same spot,
-   and close brings the mark back (rule 56).
+   client (rule 50). On a client it fans a quarter-circle of FOUR satellites —
+   the assist at the top, then the three credit actions swinging down the arc
+   (rule 49) — narrated by ONE anchored chip beneath the mark (rule 54). Opening
+   the assist makes the mark YIELD entirely; the panel takes its exact spot,
+   minimize folds it into a glass pill holding that same spot, and close brings
+   the mark back (rule 56).
+
+   FOUR, NOT FIVE (founder, 2026-08-31). Modification and Renewal collapsed into
+   ONE "Facility Actions" satellite: they are the same room now, and which of
+   the three routes a session takes is the room's own first question rather than
+   a decision the arc makes on the banker's behalf.
 
    ONE HANDLER, ONE GATE (HANDOVER §4, trap 5). Every satellite routes through
    `runArcAction`, which resolves the client ONCE and refuses to act without
@@ -34,12 +41,19 @@ import "../styles/chat.css";
    No satellite here has an onClick of its own.
    ============================================================================= */
 
-type ArcAct = "chat" | "modify" | "renewal" | "annual" | "covenant";
+type ArcAct = "chat" | "facility" | "annual" | "covenant";
 
-/** The arc, measured off the dummy: five satellites on a 118px radius with 46px
+/** The arc, measured off the dummy: satellites on a 118px radius with 46px
  *  between neighbouring centres, staggered 28ms apart by index. The offsets are
  *  the dummy's literal --tx/--ty; nothing here is recomputed from trigonometry,
- *  because the founder-approved arc is these numbers and not a formula. */
+ *  because the founder-approved arc is these numbers and not a formula.
+ *
+ *  RECOMPUTED FOR FOUR FROM THE SPACING RHYTHM, not from the sweep. The dummy's
+ *  five sit at 22.5° steps off vertical, which is what makes the neighbouring
+ *  centres 2·118·sin(11.25°) = 46px apart. Dropping a satellite therefore drops
+ *  the LAST POSITION and keeps the rhythm — the alternative, spreading four
+ *  across the same 90°, opens the gaps to 61px and the arc stops reading as one
+ *  swing. The four kept offsets are byte-identical to the dummy's first four. */
 const ARC: {
   act: ArcAct;
   /** The narrator chip's word for it. One or two words so the centred chip can
@@ -56,10 +70,9 @@ const ARC: {
   domId?: string;
 }[] = [
   { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -118 },
-  { act: "modify", label: "Modification", aria: "Stage a modification", tx: -45, ty: -109, actionId: "loan-modification", icon: "modify", domId: "actModify" },
-  { act: "renewal", label: "Renewal", aria: "Start renewal", tx: -83, ty: -83, actionId: "renewal", icon: "renew" },
-  { act: "annual", label: "Annual review", aria: "Annual review", tx: -109, ty: -45, actionId: "annual-review", icon: "review" },
-  { act: "covenant", label: "Covenant review", aria: "Covenant review", tx: -118, ty: 0, actionId: "covenant-review", icon: "covenant" },
+  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -45, ty: -109, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
+  { act: "annual", label: "Annual review", aria: "Annual review", tx: -83, ty: -83, actionId: "annual-review", icon: "review" },
+  { act: "covenant", label: "Covenant review", aria: "Covenant review", tx: -109, ty: -45, actionId: "covenant-review", icon: "covenant" },
 ];
 
 const ARC_LABEL_AT_REST = "Client actions";
@@ -268,8 +281,10 @@ export function ChatFab() {
 
   const [arcOpen, setArcOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  /** The staged-action ticket a satellite opened, if any. */
-  const [panelActionId, setPanelActionId] = useState<string | null>(null);
+  /** The staged-action ticket a satellite opened, if any. Held in a module
+   *  store so the arc's shared handler and every other caller reach it the same
+   *  way (components/actionTicket.ts). */
+  const panelActionId = useActionTicket();
   const [hoverLabel, setHoverLabel] = useState<string | null>(null);
 
   const open = state.panel === "chat";
@@ -341,10 +356,11 @@ export function ChatFab() {
    * one place where "which client is this for?" is answered, and no second path
    * that can be wired past it later.
    *
-   * The four credit actions route to the surfaces the app already has: the
-   * modification opens the workroom in `modify` mode on the resolved package,
-   * the other three open the same staged-action ticket their Client Actions row
-   * opens. Per-action availability is deliberately NOT re-litigated here — the
+   * The three credit actions route to the surfaces the app already has:
+   * Facility Actions opens the UNIFIED room, unbound, and the room's first
+   * question decides whether this session is a modification, a renewal or a new
+   * facility; the other two open the same staged-action ticket they always have.
+   * Per-action availability is deliberately NOT re-litigated here — the
    * destination surface owns the honest reason a thing cannot be done, and a
    * second copy of that judgement in the corner would be the next thing to
    * drift out of step with it.
@@ -363,27 +379,27 @@ export function ChatFab() {
         data.borrower?.snapshot?.name ??
         "this relationship";
 
-      if (act === "modify") {
+      if (act === "facility") {
         // NOTHING TELEPORTS (rule 58). A glass seed circle ripples out of the
         // exact satellite that was pressed, timed with the room's opacity
         // entrance. It is sown HERE, inside the shared handler and AFTER the
         // client gate — trap 5: a second direct listener on the button would
         // fire the seed on a press the gate then refused, which is how the arc
         // opened a room on a client it had no business opening.
-        sowSeed(document.querySelector('.arcbtn[data-act="modify"]'));
-        openWorkroom(
-          workroomContextFor({
-            mode: "modify",
-            data,
-            bundle: resolveBundle(data, accountId),
-            accountId,
-            accountName,
-          }),
-        );
+        sowSeed(document.querySelector('.arcbtn[data-act="facility"]'));
+        // THE OPENING IS DERIVED, NEVER INVENTED. `smartOpeningFor` consults the
+        // deal and hands back a signal or null; null opens on the neutral
+        // three-way, and the room never suggests a route the data did not make.
+        const bundle = resolveBundle(data, accountId);
+        openFacilityRoom({
+          accountId,
+          accountName,
+          opening: smartOpeningFor({ data, bundle, accountName, productPackageId: null }),
+        });
         return;
       }
       const spec = ARC.find((a) => a.act === act);
-      if (spec?.actionId) setPanelActionId(spec.actionId);
+      if (spec?.actionId) openActionTicket(spec.actionId);
     },
     [closeArc, openAssist, state.view, state.accountId, data],
   );
@@ -419,7 +435,7 @@ export function ChatFab() {
       />
 
       {panelActionId && (
-        <ActionPanel actionId={panelActionId} onClose={() => setPanelActionId(null)} returnFocusTo={() => fabRef.current} />
+        <ActionPanel actionId={panelActionId} onClose={closeActionTicket} returnFocusTo={() => fabRef.current} />
       )}
 
       {state.panel === "actions" && (
