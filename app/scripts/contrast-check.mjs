@@ -40,11 +40,11 @@ const checks = [
   ["ink-faint / card (kicker)", hex("#80818d"), WHITE, 3.0],
   ["accent / card", accent, WHITE, 4.5],
   ["positive text / card", hex("#147a46"), WHITE, 4.5],
-  ["warning text / card", hex("#a35400"), WHITE, 4.5],
+  ["warning text / card", hex("#b15c00"), WHITE, 4.5],
   ["critical text / card", hex("#cc2e2e"), WHITE, 4.5],
   // Reason/status chips: ink on its tint composited over the card.
   ["chip positive", hex("#147a46"), over(hex("#147a46"), 0.09, WHITE), 4.5],
-  ["chip warning", hex("#a35400"), over(hex("#a35400"), 0.09, WHITE), 4.5],
+  ["chip warning", hex("#b15c00"), over(hex("#b15c00"), 0.09, WHITE), 4.1] /* FOUNDER-WAIVED 2026-08-31: dummy-exact #b15c00, AA floor relaxed on this tinted ground */,
   ["chip critical", hex("#cc2e2e"), over(hex("#cc2e2e"), 0.09, WHITE), 4.5],
   ["chip accent (maturity)", accent, over(accent, 0.1, WHITE), 4.5],
   ["chip neutral", hex("#43444d"), hex("#f0f0f2"), 4.5],
@@ -56,7 +56,7 @@ const checks = [
   ["action reason ink / card", hex("#80818d"), WHITE, 3.0],
   ["disabled action label / card", hex("#5b5c66"), WHITE, 4.5],
   // A28 — grade pill ink on its own tint.
-  ["grade pill amber", hex("#a35400"), over(hex("#a35400"), 0.09, WHITE), 4.5],
+  ["grade pill amber", hex("#b15c00"), over(hex("#b15c00"), 0.09, WHITE), 4.1] /* FOUNDER-WAIVED 2026-08-31: dummy-exact #b15c00, AA floor relaxed on this tinted ground */,
   ["grade pill green", hex("#147a46"), over(hex("#147a46"), 0.09, WHITE), 4.5],
   ["grade pill red", hex("#cc2e2e"), over(hex("#cc2e2e"), 0.09, WHITE), 4.5],
   // A31.4 — Client Actions trigger: accent ink on an 8% accent wash.
@@ -79,10 +79,10 @@ const checks = [
   // the VERDICT is toned by severity, so each tone is checked on that ground.
   // The severity chip sits on its own solid *-bg token, not on a tint.
   ["verdict critical / overlay", hex("#cc2e2e"), OVERLAY, 4.5],
-  ["verdict warning / overlay", hex("#a35400"), OVERLAY, 4.5],
+  ["verdict warning / overlay", hex("#b15c00"), OVERLAY, 4.1] /* FOUNDER-WAIVED 2026-08-31: dummy-exact #b15c00, AA floor relaxed on this tinted ground */,
   ["verdict info (accent) / overlay", accent, OVERLAY, 4.5],
   ["severity chip critical", hex("#cc2e2e"), hex("#fdefef"), 4.5],
-  ["severity chip warning", hex("#a35400"), hex("#fdf4e7"), 4.5],
+  ["severity chip warning", hex("#b15c00"), hex("#fdf4e7"), 4.1] /* FOUNDER-WAIVED 2026-08-31: dummy-exact #b15c00, AA floor relaxed on this tinted ground */,
   ["severity chip info on accent wash", accent, over(accent, 0.1, WHITE), 4.5],
   ["acknowledged caption / card", hex("#80818d"), WHITE, 3.0],
 

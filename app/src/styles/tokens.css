@@ -89,16 +89,13 @@
      panels that genuinely need a filled ground. */
   --positive: #147a46;
   --positive-bg: #eef7f1;
-  /* THE ONE DEVIATION FROM THE DUMMY IN THIS FILE, and it is an accessibility
-     floor rather than a taste call. The dummy's --warn is #b15c00, which it
-     only ever renders as a status word on white (4.67:1, a hair over AA). This
-     app also renders warning ink on --surface-overlay and on the 9% warning
-     tint, where #b15c00 lands at 4.19-4.38:1 and fails the standing AA gate in
-     four places (scripts/contrast-check.mjs: chip warning, grade pill amber,
-     verdict warning / overlay, severity chip warning). #a35400 is the same hue
-     two steps down and clears every ground at >=4.82:1. Revert to #b15c00 the
-     day warning ink stops rendering on a tint. */
-  --warning: #a35400;
+  /* DUMMY-EXACT by founder call (Fabian, 2026-08-31, AskUserQuestion): the frozen
+     dummy's #b15c00 stands even though it lands at 4.19-4.38:1 on the four
+     tinted/overlay warning grounds (chip warning, grade pill amber, verdict
+     warning / overlay, severity chip warning). Those four checks are WAIVED in
+     contrast-check.mjs with a 4.1 floor, not deleted. The accessible variant
+     #a35400 was offered and declined; contract purity won. */
+  --warning: #b15c00;
   --warning-bg: #fdf4e7;
   --critical: #cc2e2e;
   --critical-bg: #fdefef;
