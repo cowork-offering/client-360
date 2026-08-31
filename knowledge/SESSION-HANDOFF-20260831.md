@@ -21,8 +21,8 @@ Cockpit" from ~11:53 may still sit in the gallery; ignorable). Also
 `cp /tmp/c360-publish.html /opt/connectry/brain/preview-site/builds/c360-cockpit-workroom/index.html`.
 The artifact carries capability `{mcp}` (carried forward automatically; do not clear it).
 
-**Org (bankinggpt-at)** — running the two-hop execute (deployed == committed `3d138b5`, merged in
-`5eafeb8`). 77/77 org tests. Access: `read TOK INST <<< "$(~/.local/bin/bankinggpt-rest)"`
+**Org (bankinggpt-at)** — running the two-hop execute WITH per-target scalars (deployed ==
+committed `1bb0491`, merged in `fe65b84`). 84/84 org tests. Access: `read TOK INST <<< "$(~/.local/bin/bankinggpt-rest)"`
 (SECRET-BEARING, never commit). Deploy via mdapi dir `/tmp/deploy-pkgver` +
 `sf project deploy start --metadata-dir /tmp/deploy-pkgver -o bankinggpt-at --test-level
 RunSpecifiedTests --tests StageExecuteLoanModificationTest --tests C360WriteGuardTest --tests
