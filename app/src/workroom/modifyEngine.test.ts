@@ -416,11 +416,121 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(delta.filed.recordId).toBe("not filed");
   });
 
-  it("stages a FEE ask honestly, saying the org holds no fee records", async () => {
+  it("stages a PERCENTAGE fee as fileable, and sets no amount the org will compute itself", async () => {
     const { engine } = engineOn();
-    const [delta] = await confirm(engine, "add a $50,000 arrangement fee on the line of credit - $15,000,000.00");
-    expect(delta.fileable).toBe(false);
-    expect(delta.handoff?.reason).toMatch(/re-counted live/);
+    const [delta] = await confirm(engine, "add a 1% origination fee to the line of credit - $15,000,000.00");
+    expect(delta.fileable).toBe(true);
+    expect(delta.feeWire).toMatchObject({
+      feeType: "Loan Origination",
+      calculationType: "Percentage",
+      percentage: 1,
+      recordType: "Fees",
+      facilityId: LINE_ID,
+    });
+    // THE ORG COMPUTES THE MONEY on a percentage fee, so the room sends none.
+    expect(delta.feeWire!.amount).toBeUndefined();
+    expect(delta.feeWire!.description).toBe("Origination fee - 1.00% of the committed amount");
+    // The chip names the fee, not the catalog's category word for it.
+    expect(delta.title).toBe("Origination fee");
+    expect(delta.badge).toBe("Origination fee → 1.00% of the committed amount");
+    expect(delta.target).toBe("Line of Credit");
+    expect(delta.handoff).toBeUndefined();
+    expect(delta.filed.recordId).toBe("assigned by the org on execution");
+  });
+
+  it("stages a FLAT fee with its amount, on the member the line named", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "add a $5,000 attorney fee to the equipment - $8,000,000.00");
+    expect(delta.fileable).toBe(true);
+    expect(delta.feeWire).toMatchObject({
+      feeType: "Attorney",
+      calculationType: "Flat Amount",
+      amount: 5000,
+      facilityId: EQUIPMENT_ID,
+    });
+    expect(delta.feeWire!.percentage).toBeUndefined();
+  });
+
+  it("maps a C&I fee the org's residential picklist cannot express onto Other, with the banker's words", async () => {
+    const { engine } = engineOn();
+    const [delta] = await confirm(engine, "add a 25bps unused commitment fee to the line of credit - $15,000,000.00");
+    expect(delta.feeWire).toMatchObject({ feeType: "Other", calculationType: "Percentage", percentage: 0.25 });
+    // The autonumber Name cannot carry the banker's phrase, so the description does.
+    expect(delta.feeWire!.description).toContain("Unused commitment fee");
+  });
+
+  it("asks WHICH KIND when the line says fee and nothing else, then completes on the answer alone", async () => {
+    const { engine } = engineOn();
+    const asked = await engine.parseIntent("add a 1% fee to the line of credit - $15,000,000.00", context);
+    expect(asked.kind).toBe("unparsed");
+    if (asked.kind !== "unparsed") return;
+    expect(asked.reply).toMatch(/what kind of fee/i);
+    expect(asked.options?.map((o) => o.label)).toContain("Origination fee");
+
+    // The answer is the missing half; the figure and the member were settled.
+    const answered = await engine.parseIntent("origination fee", context);
+    expect(answered.kind).toBe("deltas");
+    if (answered.kind !== "deltas") return;
+    expect(answered.deltas[0].feeWire).toMatchObject({
+      feeType: "Loan Origination",
+      calculationType: "Percentage",
+      percentage: 1,
+      facilityId: LINE_ID,
+    });
+  });
+
+  it("asks HOW MUCH when the kind is settled and the figure is not", async () => {
+    const { engine } = engineOn();
+    const asked = await engine.parseIntent("add an origination fee to the line of credit - $15,000,000.00", context);
+    expect(asked.kind).toBe("unparsed");
+    if (asked.kind !== "unparsed") return;
+    expect(asked.reply).toMatch(/how much is the origination fee/i);
+
+    const answered = await engine.parseIntent("0.75%", context);
+    expect(answered.kind).toBe("deltas");
+    if (answered.kind !== "deltas") return;
+    expect(answered.deltas[0].feeWire).toMatchObject({ feeType: "Loan Origination", percentage: 0.75 });
+  });
+
+  it("sends the fee add on the wire as feeAddsJson, beside a scalar on the same member", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "add a 1% origination fee to the line of credit - $15,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(payload.facilityIds).toEqual([LINE_ID]);
+    expect(JSON.parse(payload.feeAddsJson)).toEqual([
+      {
+        feeType: "Loan Origination",
+        description: "Origination fee - 1.00% of the committed amount",
+        calculationType: "Percentage",
+        percentage: 1,
+        recordType: "Fees",
+        targetLoanId: LINE_ID,
+      },
+    ]);
+  });
+
+  it("aims a fee at its OWN member in a mixed plan, exactly as the scalars do", async () => {
+    const { engine, deps: d } = engineOn();
+    const deltas = [
+      ...(await confirm(engine, "increase the line of credit - $15,000,000.00 to $20,000,000")),
+      ...(await confirm(engine, "add a $5,000 attorney fee to the equipment - $8,000,000.00")),
+    ];
+    await engine.stagePlan(deltas, context);
+    const payload = (d.stage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // The fee's member joins the selection, so the scalar must ride targeted:
+    // broadcasting the amount would take the equipment clone to $20MM too.
+    expect(payload.requestedAmount).toBeNull();
+    expect(JSON.parse(payload.scalarChangesJson)).toEqual([
+      { key: "requestedAmount", value: 20_000_000, targetLoanId: LINE_ID },
+    ]);
+    const fees = JSON.parse(payload.feeAddsJson);
+    expect(fees).toHaveLength(1);
+    expect(fees[0]).toMatchObject({ calculationType: "Flat Amount", amount: 5000, targetLoanId: EQUIPMENT_ID });
+    expect(fees[0].percentage).toBeUndefined();
   });
 
   it("stages a structure change WITHOUT a member as a handoff, and WITH one as a filing delta (W1)", async () => {
@@ -565,7 +675,7 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(result.kind).toBe("unparsed");
     if (result.kind !== "unparsed") return;
     expect(result.reply).toMatch(/could not map that onto this package/i);
-    expect(result.reply).toMatch(/commitment, rate, maturity and term file on the clone/i);
+    expect(result.reply).toMatch(/commitment, rate, maturity, term, covenants, entities and fees all file on the clone/i);
   });
 
   it("names the half of the line it DID read, so the refusal can be answered", async () => {

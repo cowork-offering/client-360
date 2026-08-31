@@ -180,9 +180,13 @@ describe("beat 4 — why an entry is recorded rather than filed", () => {
     }
   });
 
-  it("says the org holds no fee records at all rather than implying a missing permission", () => {
+  // A whole fee FILES since 2026-08-31, so the fee handoff is no longer "this
+  // org has no fees": it is "that is not a fee I could settle into a shape",
+  // which is a sentence the banker can answer.
+  it("says what a fee needs to file, rather than implying a missing permission", () => {
     const why = whyHandoff(delta({ group: "terms", op: "add", fileable: false, title: "Fee amount" }));
-    expect(why).toContain("holds no fee records");
+    expect(why).toContain("percentage of the commitment or a flat amount");
+    expect(why).not.toContain("holds no fee records");
     speaksCredit(why);
   });
 

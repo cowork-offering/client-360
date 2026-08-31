@@ -187,6 +187,21 @@ export interface WorkroomDelta {
    *  authored on the member's clone, a remove is a CARRY EXCLUSION — the parent
    *  keeps its row, the clone starts without it, nothing is deleted. */
   involvementWire?: { op: "add" | "remove"; role?: string; accountName: string; ownership?: number; facilityId: string };
+  /** A NET-NEW FEE's contribution (2026-08-31): the fee is authored on the
+   *  member's CLONE, never on the booked parent. `feeType` is the org's own
+   *  legal `LLC_BI__Fee_Type__c` value and `description` is the human label,
+   *  because `Name` on a fee is an autonumber. A PERCENTAGE fee carries no
+   *  amount: the org's FeeTrigger computes it from the clone's commitment, and
+   *  a hand-set figure would be a number nobody derived. */
+  feeWire?: {
+    feeType: string;
+    description: string;
+    calculationType: "Percentage" | "Flat Amount";
+    percentage?: number;
+    amount?: number;
+    recordType: string;
+    facilityId: string;
+  };
   /** A CURATED LOAN FIELD's contribution (2026-08-31): the field wave rides
    *  `fieldChangesJson`, and the ORG resolves the name against its own live
    *  describe at stage time rather than trusting a name shipped in this client.

@@ -266,6 +266,7 @@ function valueLabel(value: ParsedValue | null): string {
     case "date":
       return fmtDate(value.iso);
     case "covenant":
+    case "fee":
       return value.text;
     default:
       return value.text;
@@ -320,7 +321,11 @@ function fieldWireValue(v: ParsedValue): string | number | null {
 
 function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): WorkroomDelta {
   const { field, facility, value, op } = a;
-  const title = deltaTitle(field, op);
+  // A FEE NAMES ITSELF. The catalog entry is called "Facility fee", which is the
+  // category rather than the thing: a chip reading "Facility fee → Origination
+  // fee, 1.00%" says the category twice and the fee once. The banker's own word
+  // for it is the better title, and the category is already on the badge.
+  const title = value?.kind === "fee" && op === "add" ? value.noun : deltaTitle(field, op);
   // The handoff badge leads with the op, so a title that already carries the
   // word must not say it twice ("Remove remove a legal entity").
   const noun = title.replace(/^(?:Add|Remove)\s+/, "");
@@ -381,6 +386,23 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
           facilityId: facility.loanId,
         }
       : undefined;
+  // A NET-NEW FEE files as a structured record on the member's CLONE. The org's
+  // fee-type picklist is residential, so `feeType` is always a value the org
+  // holds and `description` is where the banker's own words go — `Name` on a fee
+  // is an autonumber and cannot carry them. A percentage fee sends NO amount:
+  // the org's FeeTrigger derives it from the clone's commitment.
+  const feeWire =
+    field.recordWire === "feeAdd" && op === "add" && facility?.loanId !== undefined && value?.kind === "fee"
+      ? {
+          feeType: value.feeType,
+          description: value.description,
+          calculationType: value.calculationType,
+          percentage: value.percentage,
+          amount: value.amount,
+          recordType: value.recordType,
+          facilityId: facility.loanId,
+        }
+      : undefined;
   // A CURATED LOAN FIELD files through fieldChangesJson: the room sends the API
   // name and the typed value, and the ORG resolves the name against its own live
   // describe at stage time — updateable, non-formula, off the deny-list — then
@@ -408,6 +430,12 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
       ? MM(wire.value - facility.committed)
       : undefined;
 
+  /** Whether ANY wave carries this entry to the org. Read as a single fact here
+   *  because every wave added since has had to be threaded through the same
+   *  eight places, and one of them being missed is a chip that reads as filed
+   *  and travels as a handoff. */
+  const files = Boolean(wire || covenantWire || involvementWire || fieldWire || feeWire);
+
   return {
     id: `${field.id}:${facility?.loanId ?? a.party ?? "package"}:${seq}`,
     group: field.group,
@@ -415,11 +443,8 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     kind: [OP_KIND[op], GROUP_KIND[field.category] ?? "Change"].filter(Boolean).join(" "),
     // A removal is the destructive one, and it carries the refusal tone whether
     // or not a tool files it: the banker must never mistake it for an addition.
-    kindTone: op === "remove" ? "refusal" : wire || covenantWire || involvementWire || fieldWire ? undefined : "refusal",
-    badge:
-      wire || covenantWire || involvementWire || fieldWire
-        ? `${title} → ${after}`
-        : `${OP_KIND[op] || "Change"} ${noun.toLowerCase()} · handed off`,
+    kindTone: op === "remove" ? "refusal" : files ? undefined : "refusal",
+    badge: files ? `${title} → ${after}` : `${OP_KIND[op] || "Change"} ${noun.toLowerCase()} · handed off`,
     title,
     target,
     before,
@@ -441,14 +466,18 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
                 ? involvementWire.op === "add"
                   ? "LLC_BI__Legal_Entities__c authored on the CLONE with the new package anchor, under the guard's five-role birth state."
                   : "A CARRY EXCLUSION: the named row never travels to the new version. The booked facility keeps it; nothing is deleted anywhere."
-                : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
+                : feeWire
+                  ? feeWire.calculationType === "Percentage"
+                    ? `LLC_BI__Fee__c created on the CLONE as a Percentage fee: ${feeWire.percentage}% against LLC_BI__Amount__c. The org's own FeeTrigger computes the basis and the money from the clone's commitment; this room sets no figure.`
+                    : "LLC_BI__Fee__c created on the CLONE as a Flat Amount fee. The label rides LLC_BI__Fee_Type_Description__c, because Name on a fee is an autonumber."
+                  : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
       ],
     ],
     fields: field.apiName ? [`${field.object}.${field.apiName}`] : [field.object],
-    caveat: wire || covenantWire || involvementWire || fieldWire ? undefined : field.gap,
+    caveat: files ? undefined : field.gap,
     filed: {
       recordId:
-        wire || covenantWire || fieldWire || involvementWire?.op === "add"
+        wire || covenantWire || fieldWire || feeWire || involvementWire?.op === "add"
           ? "assigned by the org on execution"
           : involvementWire
             ? "a carry exclusion writes nothing"
@@ -457,24 +486,24 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
         ? "Re-queried on the clone after the write"
         : covenantWire
           ? "Covenant and junction re-queried on the clone after creation"
-          : involvementWire
-            ? involvementWire.op === "add"
-              ? "Involvement re-queried on the clone after creation"
-              : "Proven by absence on the clone and presence on the parent"
-            : "Handed off — nothing was written",
+          : feeWire
+            ? "Fee re-queried on the clone after creation, with the figure the org computed"
+            : involvementWire
+              ? involvementWire.op === "add"
+                ? "Involvement re-queried on the clone after creation"
+                : "Proven by absence on the clone and presence on the parent"
+              : "Handed off — nothing was written",
     },
-    fileable: Boolean(wire || covenantWire || involvementWire || fieldWire),
+    fileable: files,
     wire,
     covenantWire,
     involvementWire,
     fieldWire,
+    feeWire,
     // Only a FILEABLE entry carries a basis: drift is the check that a figure
     // reaching the org has not moved, and a handoff sends no figure.
     basis: wire && facility?.loanId ? { facilityId: facility.loanId, fieldId: field.id, before } : undefined,
-    handoff:
-      wire || covenantWire || involvementWire || fieldWire
-        ? undefined
-        : { reason: field.gap ?? "No tool files this today.", closes: field.closes },
+    handoff: files ? undefined : { reason: field.gap ?? "No tool files this today.", closes: field.closes },
     // The chain a create must carry. Held on the delta so the plan cannot be
     // composed without it: a create with no junctions never becomes steps.
     chainLinks: op === "add" ? chainFor(field) : undefined,
@@ -484,7 +513,13 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
 /** The member a fileable delta lands on. Every wire anchors on exactly one, and
  *  which wire carries it is the delta's own business rather than the caller's. */
 function wireTarget(d: WorkroomDelta): string | undefined {
-  return d.wire?.facilityId ?? d.covenantWire?.facilityId ?? d.involvementWire?.facilityId ?? d.fieldWire?.facilityId;
+  return (
+    d.wire?.facilityId ??
+    d.covenantWire?.facilityId ??
+    d.involvementWire?.facilityId ??
+    d.fieldWire?.facilityId ??
+    d.feeWire?.facilityId
+  );
 }
 
 /* ------------------------------------------------------------- the refusals */
@@ -899,7 +934,7 @@ export function createModifyEngine(args: {
       label: "Not in this read",
       value: "Fees and pricing streams",
       detail:
-        "The cockpit's six detail reads carry no fee rows and no pricing streams, so what the clone would carry on those two is not shown here. Both are named in the gap analysis, and this org holds no fee records at all.",
+        "The cockpit's six detail reads carry no fee rows and no pricing streams, so what the clone would carry on those two is not shown here. The org's own credit action carries both onto the new version and counts them back; a fee this room ADDS is named on its own manifest entry.",
     });
 
     return rows;
@@ -978,7 +1013,7 @@ export function createModifyEngine(args: {
     const summary = catalogSummary();
     rows.push({
       label: "What this room can file",
-      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower and borrowing-structure changes, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
+      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower, borrowing-structure changes and net-new fees, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
     });
     return rows;
   }
@@ -1077,8 +1112,11 @@ export function createModifyEngine(args: {
           .map((e) => e.accountName ?? "")
           .filter(Boolean);
       case "fees":
-        // No read tool carries fee rows, and this org holds none. "Nothing
-        // associated" is therefore what the room knows, not what it assumes.
+        // No read tool carries fee rows onto the bundle, so the room cannot
+        // name what a facility already charges. Returning nothing here means
+        // "not read", not "not there" — which is why the amend-or-add question
+        // never fires on a fee and the org's own duplicate warning is the one
+        // the banker sees.
         return [];
       default:
         return [];
@@ -1317,7 +1355,7 @@ export function createModifyEngine(args: {
     // difference between a refusal the banker can answer and a dead end.
     const named = membersNamedIn(text, parseContext());
     const scope =
-      "Commitment, rate, maturity and term file on the clone; covenants, collateral, entities and fees I stage and hand off with the reason.";
+      "Commitment, rate, maturity, term, covenants, entities and fees all file on the clone; collateral and pricing I stage and hand off with the reason.";
     asked = true;
     return {
       kind: "unparsed",
@@ -1364,7 +1402,7 @@ export function createModifyEngine(args: {
       .join(", ");
     return {
       kind: "unparsed",
-      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity and term file on the clone; covenants, collateral, entities and fees I stage and hand off with the reason.`,
+      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity, term, covenants, entities and fees all file on the clone; collateral and pricing I stage and hand off with the reason.`,
     };
   }
 
@@ -1623,6 +1661,21 @@ export function createModifyEngine(args: {
         value: d.fieldWire!.value,
         targetLoanId: d.fieldWire!.facilityId,
       }));
+    // A FEE IS PER TARGET LIKE EVERY RECORD WAVE, and a percentage fee sends no
+    // amount at all: the key is omitted rather than nulled, because the org
+    // refuses an amount on a percentage fee and a null would still be an answer
+    // to a question this room has no business answering.
+    const feeAdds = fileable
+      .filter((d) => d.feeWire)
+      .map((d) => ({
+        feeType: d.feeWire!.feeType,
+        description: d.feeWire!.description,
+        calculationType: d.feeWire!.calculationType,
+        ...(d.feeWire!.percentage !== undefined ? { percentage: d.feeWire!.percentage } : {}),
+        ...(d.feeWire!.amount !== undefined ? { amount: d.feeWire!.amount } : {}),
+        recordType: d.feeWire!.recordType,
+        targetLoanId: d.feeWire!.facilityId,
+      }));
     // The flat keys carry a value only on the channel that owns them; on the
     // per-target channel they stay null, which is what the org requires to read
     // `scalarChangesJson` at all.
@@ -1642,6 +1695,7 @@ export function createModifyEngine(args: {
       ...(covenantAdds.length ? { covenantAddsJson: JSON.stringify(covenantAdds) } : {}),
       ...(involvementChanges.length ? { involvementChangesJson: JSON.stringify(involvementChanges) } : {}),
       ...(fieldChanges.length ? { fieldChangesJson: JSON.stringify(fieldChanges) } : {}),
+      ...(feeAdds.length ? { feeAddsJson: JSON.stringify(feeAdds) } : {}),
     };
   }
 
@@ -1652,7 +1706,7 @@ export function createModifyEngine(args: {
     if (!deps.available()) throw new WorkroomRefusalError(NO_CONNECTOR_REFUSAL);
     if (!context.productPackageId) throw new WorkroomRefusalError(NO_PACKAGE_REFUSAL);
 
-    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire));
+    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire));
     const handed = deltas.filter((d) => !d.fileable);
     if (!fileable.length) {
       throw new WorkroomRefusalError(
@@ -1767,7 +1821,7 @@ export function createModifyEngine(args: {
     const verified = (result.steps ?? []).filter((s) => s.state === "verified").length;
 
     const filed = stagedDeltas
-      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire))
+      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire))
       .map((d) => {
         const row = perFacility.get(wireTarget(d)!);
         const cloneId = row?.cloneLoanId ?? result.cloneLoanId;

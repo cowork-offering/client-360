@@ -36,7 +36,25 @@ export type ParsedValue =
   /** A NET-NEW COVENANT, fully resolved: the exact org catalog type name, the
    *  threshold, and the operator symbol the org's picklists express. Only a
    *  value this complete files; anything looser stays a question or a handoff. */
-  | { kind: "covenant"; typeName: string; threshold: number; operator: "<" | "<=" | "=" | ">=" | ">"; text: string };
+  | { kind: "covenant"; typeName: string; threshold: number; operator: "<" | "<=" | "=" | ">=" | ">"; text: string }
+  /** A NET-NEW FEE, fully resolved: a legal `LLC_BI__Fee_Type__c` value, the
+   *  human label the autonumber Name cannot carry, and EITHER a percentage or a
+   *  flat amount — never both, because the org computes the money for a
+   *  percentage fee and a hand-set figure would contradict it. */
+  | {
+      kind: "fee";
+      feeType: string;
+      /** The banker's own name for it, which titles the chip. */
+      noun: string;
+      /** The label the row carries in `LLC_BI__Fee_Type_Description__c`, which is
+       *  where it has to go: `Name` on a fee is an autonumber. */
+      description: string;
+      calculationType: "Percentage" | "Flat Amount";
+      percentage?: number;
+      amount?: number;
+      recordType: "Fees" | "Costs";
+      text: string;
+    };
 
 /** One amendment the banker asked for, resolved against the catalog and the
  *  package. `value` is null where the field takes no scalar (a party add, a
@@ -83,6 +101,27 @@ export interface Awaiting {
    * the room has to read as a whole new instruction.
    */
   party?: { op: AmendmentOp; role?: string; ownership?: number };
+  /**
+   * A FEE QUESTION IS ANSWERED WITH THE HALF THAT WAS MISSING.
+   *
+   * "add a 1% fee to the line of credit" settles the member and the figure and
+   * leaves only the KIND; "add an origination fee to the line of credit" does
+   * the opposite. Holding what was read is what lets the next line be "1%" or
+   * "origination fee" alone, instead of the whole instruction again.
+   */
+  fee?: FeeRead;
+}
+
+/** What a fee line has settled so far. Every field is optional because a fee
+ *  arrives in pieces and the room asks for the piece it is missing. */
+export interface FeeRead {
+  /** The org's own legal `LLC_BI__Fee_Type__c` value. */
+  typeName?: string;
+  /** The banker's word for it, which becomes the human label on the row. */
+  said?: string;
+  recordType?: "Fees" | "Costs";
+  percentage?: number;
+  amount?: number;
 }
 
 export type ParseOutcome =
@@ -544,6 +583,113 @@ function readCovenant(lower: string): { value: ParsedValue } | { question: strin
   };
 }
 
+/* ---------------------------------------------------------- net-new fee read
+
+   THE ORG'S FEE-TYPE PICKLIST IS RESIDENTIAL. Live describe, 2026-08-31: it
+   carries Appraisal, Attorney, Credit Report, Loan Origination, Survey, Title
+   Insurance and a long tail of closing costs — and NO commitment, unused,
+   facility, amendment, agency or waiver value. That is a real finding about
+   this org's fee model rather than a lookup failure, so the map below does two
+   different things with one shape: banker vocabulary that lands on a legal
+   value uses it, and the C&I fees the picklist cannot express file as the legal
+   value "Other" with the banker's own words as the label. Nothing is invented,
+   and nothing is silently renamed into a fee type nobody said.
+
+   `recordType` is the INDEPENDENT picklist LLC_BI__Record_Type__c, not a record
+   type id: no Fee record type is assigned to the integration user's profile, so
+   RecordTypeId is refused outright by the org (recon Task 1, finding 1). Income
+   fees are "Fees"; third-party pass-through costs are "Costs". */
+
+const FEE_TYPE_MAP: Array<{ match: RegExp; said: string; typeName: string; recordType: "Fees" | "Costs" }> = [
+  { match: /\b(origination|arrangement|upfront|up[- ]front|front[- ]end|structuring)\b/, said: "Origination fee", typeName: "Loan Origination", recordType: "Fees" },
+  { match: /\b(attorney|legal|counsel|documentation)\b/, said: "Attorney fee", typeName: "Attorney", recordType: "Fees" },
+  { match: /\b(appraisal|reappraisal)\b/, said: "Appraisal fee", typeName: "Appraisal", recordType: "Costs" },
+  { match: /\bsurvey\b/, said: "Survey fee", typeName: "Survey", recordType: "Costs" },
+  { match: /\bcredit report\b/, said: "Credit report fee", typeName: "Credit Report", recordType: "Costs" },
+  { match: /\btitle\b/, said: "Title insurance fee", typeName: "Title Insurance", recordType: "Costs" },
+  // Below here the picklist has nothing, so the legal value is "Other" and the
+  // description carries what the banker actually called it.
+  { match: /\b(unused|non[- ]utilisation|non[- ]utilization)\b/, said: "Unused commitment fee", typeName: "Other", recordType: "Fees" },
+  { match: /\b(commitment|facility)\s+fee\b/, said: "Commitment fee", typeName: "Other", recordType: "Fees" },
+  { match: /\bamendment\b/, said: "Amendment fee", typeName: "Other", recordType: "Fees" },
+  { match: /\b(waiver|consent)\b/, said: "Waiver fee", typeName: "Other", recordType: "Fees" },
+  { match: /\b(agency|agent)\b/, said: "Agency fee", typeName: "Other", recordType: "Fees" },
+];
+
+/** The kinds offered as chips when the line says "fee" and nothing else. Each
+ *  one is a phrase this same reader resolves, so a click is a typed answer. */
+const FEE_TYPE_OPTIONS = [
+  "Origination fee",
+  "Commitment fee",
+  "Amendment fee",
+  "Attorney fee",
+  "Appraisal fee",
+  "Agency fee",
+];
+
+/** An exact money reading for the fee's own label. `fmtMoney` abbreviates to
+ *  "$5K", which is a fine chip and a poor description on a bank record. */
+function exactMoney(n: number): string {
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Reads a net-new fee out of the line: the org's legal fee type, the label, and
+ * either a percentage or a flat amount. A missing half is a QUESTION carrying
+ * what was already read, so the answer can be the missing half alone.
+ */
+function readFee(lower: string, held?: FeeRead): { value: ParsedValue } | { question: string; options?: string[]; fee: FeeRead } {
+  const mapped = FEE_TYPE_MAP.find((m) => m.match.test(lower));
+  const pct = percentTokens(lower).at(-1);
+  const money = moneyTokens(lower).at(-1);
+  const fee: FeeRead = {
+    typeName: mapped?.typeName ?? held?.typeName,
+    said: mapped?.said ?? held?.said,
+    recordType: mapped?.recordType ?? held?.recordType,
+    percentage: pct ? pct.value : held?.percentage,
+    amount: money ? money.value : held?.amount,
+  };
+
+  if (!fee.typeName || !fee.said || !fee.recordType) {
+    return {
+      question:
+        "What kind of fee? The org's own fee list is a closing-cost set, so a commercial fee files as Other with your words as the label — but I will not pick the kind for you.",
+      options: FEE_TYPE_OPTIONS,
+      fee,
+    };
+  }
+  if (fee.percentage !== undefined && fee.amount !== undefined) {
+    return {
+      question: `Is the ${fee.said.toLowerCase()} ${fee.percentage}% or ${exactMoney(fee.amount)}? A fee is one or the other: on a percentage fee the org computes the money itself from the commitment, so a figure beside it would contradict what it works out.`,
+      // Both readings are dropped, because keeping either would decide the
+      // question the banker is being asked.
+      fee: { ...fee, percentage: undefined, amount: undefined },
+    };
+  }
+  if (fee.percentage === undefined && fee.amount === undefined) {
+    return {
+      question: `How much is the ${fee.said.toLowerCase()}? A percentage of the commitment ("1%", "25bps") or a flat amount ("$5,000").`,
+      fee,
+    };
+  }
+
+  const percentage = fee.percentage;
+  const figure = percentage !== undefined ? `${percentage.toFixed(2)}% of the committed amount` : exactMoney(fee.amount!);
+  return {
+    value: {
+      kind: "fee",
+      feeType: fee.typeName,
+      noun: fee.said,
+      description: `${fee.said} - ${figure}`,
+      calculationType: percentage !== undefined ? "Percentage" : "Flat Amount",
+      percentage,
+      amount: percentage !== undefined ? undefined : fee.amount,
+      recordType: fee.recordType,
+      text: figure,
+    },
+  };
+}
+
 /** Read the value for ONE catalog field out of the line. */
 function readValue(
   field: CatalogField,
@@ -551,7 +697,7 @@ function readValue(
   lower: string,
   match: CatalogMatch,
   facility: Facility | null,
-): { value: ParsedValue } | { question: string; options?: string[] } | { value: null } {
+): { value: ParsedValue } | { question: string; options?: string[]; fee?: FeeRead } | { value: null } {
   if (field.type === "currency") {
     const tokens = moneyTokens(lower);
     if (!tokens.length) {
@@ -641,6 +787,12 @@ function readValue(
   if (field.id === "covenant.add") {
     const cov = readCovenant(lower);
     if (cov) return cov;
+  }
+
+  // A net-new fee files (2026-08-31) on the same terms: the type must land on a
+  // legal picklist value and the figure must be stated, or it is a question.
+  if (field.id === "fee.row") {
+    return readFee(lower);
   }
 
   // A PICKLIST IS THE ORG'S OWN CLOSED SET, so the value is quoted from it or it
@@ -751,6 +903,30 @@ export function parseAnswer(awaiting: Awaiting, text: string, ctx: ParseContext)
           ownership: readOwnership(lower) ?? awaiting.party.ownership,
           matched: trimmed,
           op: awaiting.party.op,
+        },
+      ],
+    };
+  }
+
+  // THE ANSWER TO A FEE QUESTION IS THE MISSING HALF. The kind, the figure and
+  // the member were settled by whichever line asked, so "1%" completes a fee
+  // whose kind is already known and "origination fee" completes one whose
+  // figure is. Routed here rather than through readValue because only this path
+  // holds what was already read.
+  if (awaiting.field.id === "fee.row") {
+    const fee = readFee(lower, awaiting.fee);
+    if ("question" in fee) {
+      return { kind: "clarify", question: fee.question, awaiting: { ...awaiting, fee: fee.fee }, options: fee.options };
+    }
+    return {
+      kind: "amendments",
+      amendments: [
+        {
+          field: awaiting.field,
+          facility: awaiting.facility,
+          value: fee.value,
+          matched: trimmed,
+          op: operationFor(awaiting.field, lower),
         },
       ],
     };
@@ -936,7 +1112,9 @@ export function parseModify(text: string, ctx: ParseContext): ParseOutcome {
     for (const facility of facilities) {
       const at: CatalogMatch = { ...match, index: Math.max(0, scrubbedLower.indexOf(match.matched)) };
       const read = readValue(field, scrubbed, scrubbedLower, at, facility);
-      if ("question" in read) return { kind: "clarify", question: read.question, awaiting: { field, facility }, options: read.options };
+      if ("question" in read) {
+        return { kind: "clarify", question: read.question, awaiting: { field, facility, fee: read.fee }, options: read.options };
+      }
       const party = field.category === "party" ? readParty(trimmed, ctx) : undefined;
       const role = field.category === "party" ? readRole(scrubbedLower) : undefined;
       const ownership = field.category === "party" ? readOwnership(scrubbedLower) : undefined;

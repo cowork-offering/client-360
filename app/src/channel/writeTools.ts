@@ -647,6 +647,23 @@ export interface StagePayloads {
      *  That is what makes a name here safe in a way the Interest_Rate lesson
      *  was not. Counts toward the tool's at-least-one-change rule. */
     fieldChangesJson?: string | null;
+    /** NET-NEW FEES (2026-08-31), JSON-encoded:
+     *  [{feeType, description, calculationType (Percentage|Flat Amount),
+     *    percentage?, amount?, recordType?, targetLoanId?}]. Each is authored on
+     *  the CLONE of the targeted facility, never on the booked parent.
+     *
+     *  THE ORG VALIDATES THE SHAPE, and its fee model is unusual enough that it
+     *  has to: `feeType` is checked against the live LLC_BI__Fee_Type__c
+     *  picklist (a residential/TRID set — a C&I fee files as "Other" with the
+     *  banker's words in `description`, because `Name` on a fee is an
+     *  autonumber); a Percentage fee must carry `percentage` and NO `amount`,
+     *  since the org's own FeeTrigger derives the money from the clone's
+     *  commitment; a Flat Amount fee must carry `amount` and no percentage.
+     *  `RecordTypeId` is never sent — no Fee record type is assigned to the
+     *  integration user's profile — so `recordType` is the independent picklist
+     *  LLC_BI__Record_Type__c (Fees / Costs / Adjustments).
+     *  Counts toward the tool's at-least-one-change rule. */
+    feeAddsJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;

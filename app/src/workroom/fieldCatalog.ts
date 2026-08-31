@@ -90,8 +90,9 @@ export interface CatalogField {
   /** A RECORD wire: the entry files as a structured record rather than a scalar.
    *  "covenantAdd" rides stage_loan_modification's covenantAddsJson; an
    *  "involvementChange" rides involvementChangesJson (adds authored on the
-   *  clone, removes as carry exclusions). Both 2026-08-30. */
-  recordWire?: "covenantAdd" | "involvementChange";
+   *  clone, removes as carry exclusions). Both 2026-08-30. "feeAdd" rides
+   *  feeAddsJson and authors LLC_BI__Fee__c on the clone (2026-08-31). */
+  recordWire?: "covenantAdd" | "involvementChange" | "feeAdd";
   /** A DYNAMIC FIELD wire: the entry files through `stage_loan_modification`'s
    *  `fieldChangesJson` under this API name, and the ORG resolves it against its
    *  own live describe at stage time — updateable, non-formula, off the
@@ -1031,16 +1032,27 @@ const PRICING_FIELDS: CatalogField[] = [
   },
 ];
 
-/** FEES (founder directive 2026-08-27: "we need to include fees etc. whenever we
- *  ask that"). Two facts, and both belong in the handoff copy: no tool writes a
- *  fee, AND this org holds none — LLC_BI__Fee__c and LLC_BI__Fee_Loan_Aggregate__c
- *  are both 0 rows, re-counted live on 2026-08-27, with the inline loan fee
- *  fields null on every loan sampled. The object and its fields are now
- *  live-verified; what is empty is the DATA. */
-const FEE_NO_TOOL =
-  "No tool writes a fee. This org also holds none: LLC_BI__Fee__c and LLC_BI__Fee_Loan_Aggregate__c are both empty (re-counted live 2026-08-27), so a fee amendment on this deal is an ADD rather than a change.";
-const FEE_FIX =
-  "A fees[] block on the modification pair creating LLC_BI__Fee__c rows against the CLONE. The describe settles the shape: LLC_BI__Loan__c on a fee is NOT updateable, so a fee row is bound to its loan at creation and the roll-over has to re-create rather than re-point.";
+/* FEES (founder directive 2026-08-27: "we need to include fees etc. whenever we
+   ask that"). A WHOLE FEE FILES since 2026-08-31: stage_loan_modification takes
+   `feeAddsJson` and the pair authors LLC_BI__Fee__c against the CLONE.
+
+   THREE ORG FACTS THE RECON SETTLED (`knowledge/sf-build-v2/recon-20260831.md`
+   Task 1), and each one is a place a naive fee write fails:
+     - `Name` is an AUTONUMBER. The human label goes in Fee_Type_Description__c.
+     - `RecordTypeId` is refused (INVALID_CROSS_REFERENCE_KEY: no Fee record type
+       is assigned to the integration user's profile). The independent picklist
+       LLC_BI__Record_Type__c carries Fees / Costs / Adjustments instead.
+     - A PERCENTAGE fee needs Basis_Source and Percentage (validation rule
+       Percentage_Fee_Required_Fields) and must NOT carry an Amount: the org's
+       FeeTrigger computes Basis_Amount and Amount from the loan's commitment.
+
+   The individual fee FIELDS below stay handoffs. They are attributes OF a fee,
+   and a banker asking to move one of them on its own is asking to amend an
+   existing row rather than to add one — a different arm, not this one. */
+const FEE_FIELD_ONLY =
+  "A whole fee ADD files on the clone; this entry is one FIELD of a fee rather than the fee itself, and amending a fee row that already exists is a different arm from adding one.";
+const FEE_FIELD_FIX =
+  "A fees[] update arm, scoped to fee rows on a clone this plan created. The describe settles the shape: LLC_BI__Loan__c on a fee is NOT updateable, so a fee row is bound to its loan at insert and can never be re-pointed.";
 
 const FEE_FIELDS: CatalogField[] = [
   {
@@ -1052,24 +1064,22 @@ const FEE_FIELDS: CatalogField[] = [
     category: "fee",
     group: "terms",
     source: "live-verified",
-    gap: FEE_NO_TOOL,
-    closes: FEE_FIX,
+    // FILES since 2026-08-31: feeAddsJson carries the resolved fee type, the
+    // human label and either a percentage (with its basis) or a flat amount,
+    // targeted at ONE member — the fee is authored on that member's clone.
+    recordWire: "feeAdd",
+    gap: "A fee whose TYPE or whose FIGURE the room could not settle travels as a handoff rather than a guess: the org's fee-type picklist is a residential/TRID set, so a C&I fee maps onto a legal value or onto Other with the banker's own words, and a fee with no percentage and no amount is not a fee yet.",
+    closes: "Nothing structural. The unmapped case closes with a picker fed by the live LLC_BI__Fee_Type__c picklist.",
     associationScope: "fees",
     chain: [
       {
-        object: "LLC_BI__Fee_Loan_Aggregate__c",
-        via: "LLC_BI__Loan__c",
-        label: "Resolve or create the loan's fee aggregate",
-        note: "The aggregate carries the totals the loan reads back; a fee row without one leaves LLC_BI__Total_Fee_Income__c unmoved.",
-      },
-      {
         object: "LLC_BI__Fee__c",
-        via: "LLC_BI__Loan__c + LLC_BI__Fee_Loan_Aggregate__c",
+        via: "LLC_BI__Loan__c",
         label: "Create the fee row against the clone",
-        note: "LLC_BI__Loan__c on a fee is NOT updateable, so the row is bound to its loan at insert: a roll-over re-creates the parent's fees on the clone rather than re-pointing them.",
+        note: "A DIRECT CHILD, no junction (verified live 2026-08-31). LLC_BI__Loan__c on a fee is NOT updateable, so the row is bound to its loan at insert: a roll-over re-creates the parent's fees on the clone rather than re-pointing them.",
       },
     ],
-    synonyms: ["fee", "fees", "add a fee", "charge a fee", "waive the fee", "arrangement fee", "commitment fee", "facility fee", "upfront fee", "origination fee", "unused fee", "amendment fee"],
+    synonyms: ["fee", "fees", "add a fee", "charge a fee", "waive the fee", "arrangement fee", "commitment fee", "facility fee", "upfront fee", "origination fee", "unused fee", "amendment fee", "attorney fee", "appraisal fee", "agency fee", "waiver fee", "survey fee", "credit report fee"],
   },
   {
     id: "fee.amount",
@@ -1080,8 +1090,8 @@ const FEE_FIELDS: CatalogField[] = [
     category: "fee",
     group: "terms",
     source: "live-verified",
-    gap: FEE_NO_TOOL,
-    closes: FEE_FIX,
+    gap: FEE_FIELD_ONLY + " On a PERCENTAGE fee it is not writable at all: the org's FeeTrigger derives Amount from Basis_Amount and the percentage.",
+    closes: FEE_FIELD_FIX,
     synonyms: ["fee amount", "fee of"],
   },
   {
@@ -1093,13 +1103,14 @@ const FEE_FIELDS: CatalogField[] = [
     category: "fee",
     group: "terms",
     source: "live-verified",
-    // The picklist this org actually carries is a CLOSING-COST set (Appraisal,
-    // Attorney, Credit Report, taxes). There is no "arrangement fee" or
-    // "commitment fee" value in it, which is a real finding: a commercial
-    // amendment fee has nowhere to go on this org's fee model as configured.
-    values: ["Appraisal", "Attorney", "City Property Taxes", "Condo Association Dues", "Cost to Cure", "County Property Taxes", "Credit Report", "DMV", "Flood Insurance"],
-    gap: FEE_NO_TOOL + " The fee-type picklist on this org is a closing-cost set — Appraisal, Attorney, Credit Report, taxes — with no commercial arrangement or commitment fee value, so a C&I fee has nowhere to file even once a tool exists.",
-    closes: FEE_FIX + " It also needs a picklist decision: add the commercial fee types, or model a C&I fee somewhere other than this object.",
+    // The picklist this org carries is a residential/TRID set (Appraisal,
+    // Attorney, Credit Report, taxes). There is no commitment, unused or
+    // facility fee value in it, which is a real finding rather than a lookup
+    // failure: a C&I fee files as "Other" with the banker's words in the
+    // description, and the recon flagged the picklist itself for a founder call.
+    values: ["Appraisal", "Attorney", "Credit Report", "Flood Insurance", "Loan Origination", "Settlement/Close", "Survey", "Title Insurance", "Title Search", "Other"],
+    gap: FEE_FIELD_ONLY + " The fee-type picklist on this org is residential/TRID-shaped with no commercial commitment, unused or amendment value, so those file as Other with the banker's own words as the label.",
+    closes: FEE_FIELD_FIX + " Reading well on screen also needs a picklist decision: add the C&I fee types, or accept Other plus the description.",
     synonyms: ["fee type", "kind of fee"],
   },
   {
@@ -1112,8 +1123,8 @@ const FEE_FIELDS: CatalogField[] = [
     group: "terms",
     source: "live-verified",
     values: ["Flat Amount", "Percentage"],
-    gap: FEE_NO_TOOL,
-    closes: FEE_FIX,
+    gap: FEE_FIELD_ONLY + " It is settled by the ask itself: a percentage said in the line makes the fee a Percentage fee, a money figure makes it a Flat Amount.",
+    closes: FEE_FIELD_FIX,
     synonyms: ["flat fee", "percentage fee", "basis points fee", "bps fee"],
   },
   {
@@ -1125,8 +1136,8 @@ const FEE_FIELDS: CatalogField[] = [
     category: "fee",
     group: "terms",
     source: "live-verified",
-    gap: FEE_NO_TOOL,
-    closes: FEE_FIX,
+    gap: "The aggregate is a rollup the org maintains itself from the fee rows underneath it. Writing a total directly would decouple it from the fees that produced it.",
+    closes: "Nothing should. Add or amend the fees and the total follows.",
     synonyms: ["total fees", "fee aggregate"],
   },
 ];

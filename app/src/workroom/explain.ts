@@ -139,7 +139,7 @@ export function whyHandoff(delta: WorkroomDelta): string {
     case "party-remove":
       return "Taking an entity off files as a CARRY EXCLUSION when the line names the member — the booked facility keeps its row, the clone starts without it. This line did not name one, so it rides the plan as a handoff.";
     case "fee":
-      return "This org holds no fee records at all and nothing writes one, so it rides the plan as a handoff rather than a figure that would look filed.";
+      return "A whole fee files on the modification — the kind, and either a percentage of the commitment or a flat amount. This one the room could not settle into that shape, so it rides the plan as a handoff rather than a figure that would look filed.";
     case "pricing":
       return "Pricing is neither read nor written here, so the room can name the change but not show today's value — it rides the plan as a handoff so nothing is silently dropped.";
     case "exception":
