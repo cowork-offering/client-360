@@ -106,6 +106,18 @@ https://claude.ai/code/artifact/583b29d3-5792-404c-9556-c5fd2f721ea1 (label
    utilization trend) instead of the static paragraph.
 7. `:focus-visible` rings on all c360 buttons (accessibility + enables keyboard-driven automation).
 
+**The post-wave-2 headline (founder direction, 2026-08-31): THE WORKROOM AGENT.** Fabian's words:
+the room today "seems like a static demo workflow which should not be the case." Target
+architecture, two layers: (1) an AGENT BRAIN that knows the org inside out (live describe,
+catalog, covenant types, doctrine) AND reads whatever the banker actually says, combining deal
+state + user intent + policy into composed plans and intelligent follow-ups — replacing the
+deterministic parser as the primary understanding; (2) the DETERMINISTIC SPINE exactly as proven
+today (describe validation, plan hash, single-use token, one human approval, re-query verify) as
+the only thing that ever writes. Agent proposes, machinery validates, human approves. The parser
+stays as fast path + safety floor. Design question to resolve first: where the agent runs (the
+surrounding Claude conversation via the chat bridge is the natural channel — the artifact already
+carries the mcp capability; an in-page completion capability is NOT available in this runtime).
+
 **Then:** final full re-drive (Playwright client sweep + org replays + founder connector click),
 report to all-green, then the UI-revamp port-back (the founder's parallel design session owns the
 static design artifact; hard rules in the standing directives: ONE unified design system,
