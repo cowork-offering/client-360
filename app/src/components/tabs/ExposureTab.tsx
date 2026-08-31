@@ -1,11 +1,23 @@
 import type { BorrowerBundle, Collateral, Facility } from "../../data/contract";
 import { fmtMoney, fmtPct, fmtDate } from "../../data/format";
-import { fmtRatio, fmtRate, STATUS, type Tone } from "../../data/finance";
-import { Card, SectionHead, GapChip, EmptyState, NoteCaption, StatCell, StatDivider, StatStrip, ToneChip } from "../ui";
-import { staggerDelay, useEnterTransition } from "../../data/motion";
+import { fmtRatio, fmtRate, type Tone } from "../../data/finance";
 import { Pulse } from "../Pulse";
 import { collateralRecords } from "../../data/collateralRecords";
 import { isActiveFacility } from "../../data/worklist";
+import {
+  EmptyPane,
+  Fig,
+  Figure,
+  Figures,
+  Gap,
+  MeterBlock,
+  Note,
+  Pane,
+  PaneCard,
+  SecHead,
+  Status,
+  type StatusTone,
+} from "./paneKit";
 
 /* =============================================================================
    COVERAGE, AS THE ORG COMPUTES IT.
@@ -25,9 +37,6 @@ import { isActiveFacility } from "../../data/worklist";
 const EXPLAIN =
   "Explain this exposure: committed versus drawn, coverage, and what secures it.";
 
-const FAC_COLS = "1.5fr 0.9fr 1fr 1fr 1fr 0.9fr 1fr 0.95fr";
-const COL_COLS = "1.4fr 1.1fr 1fr 0.7fr 1fr 0.6fr 1.2fr";
-
 /** The facility's pledged share, under either of the two names the read uses. */
 const pledgedShare = (f: Facility): number | null => f.totalPledgedValue ?? f.totalLendableValue ?? null;
 
@@ -44,21 +53,35 @@ function coverageStatus(ratio: number | null | undefined, shortfall: boolean | u
   return ratio < 1 ? "Under-covered" : "Covered";
 }
 
+/** Status IS typography here (systemNonNegotiable): the tone maps to a coloured
+ *  word with a 5px dot, never to a filled pill. */
+const STATUS_WORD: Record<Tone, StatusTone> = {
+  green: "good",
+  amber: "warn",
+  red: "bad",
+  purple: "acc",
+  neutral: "mut",
+};
+
 export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
-  const entered = useEnterTransition();
   const exp = bundle.exposure ?? {};
   const allFacs = exp.facilities ?? [];
-  // F6: closed / paid-off facilities stay visible (with a status chip) but are
+  // F6: closed / paid-off facilities stay visible (with a status word) but are
   // excluded from the lendable + coverage math.
   const facs = allFacs.filter(isActiveFacility);
 
   if (!allFacs.length) {
     return (
-      <Card className="p-6">
-        <SectionHead kicker="Exposure & Collateral" explain={EXPLAIN} />
-        <EmptyState title="No active facilities" body="No active facilities found for this account in the source org." />
-        <NoteCaption note={exp.note} />
-      </Card>
+      <Pane id="exposure">
+        <PaneCard>
+          <SecHead kicker="Facilities" sub="Exposure & collateral" explain={EXPLAIN} />
+          <EmptyPane
+            title="No active facilities"
+            body="No active facilities found for this account in the source org."
+          />
+          <Note note={exp.note} />
+        </PaneCard>
+      </Pane>
     );
   }
 
@@ -88,262 +111,294 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
   const records = collateralRecords(bundle);
 
   return (
-    <div className="flex flex-col gap-4">
-      <SectionHead kicker="Exposure & Collateral · live match" explain={EXPLAIN} />
+    <Pane id="exposure">
+      <PaneCard>
+        <SecHead kicker="Facilities" sub="Exposure & collateral" explain={EXPLAIN} />
 
-      {/* stat strip — one row, left-aligned, figures on a shared baseline */}
-      <StatStrip>
-        <StatCell
-          label="Committed"
-          value={<Pulse id="exposure.totalCommitted">{fmtMoney(committed)}</Pulse>}
-          sub="Total commitment"
-        />
-        <StatDivider />
-        <StatCell
-          label="Drawn"
-          value={<Pulse id="exposure.totalOutstanding">{fmtMoney(drawn)}</Pulse>}
-          sub="Outstanding balance"
-        />
-        <StatDivider />
-        <StatCell label="Collateral coverage" value={covLabel} color={STATUS[covTone].fg} sub={covStatus} />
-        {uniqueCount !== null && (
-          <>
-            <StatDivider />
-            <StatCell
+        {/* The pane's own headline figures. The hero carries the relationship
+            anchors; these are the ones the exposure read owns. */}
+        <Figures>
+          <Figure
+            label="Committed"
+            value={
+              <Pulse id="exposure.totalCommitted">
+                <Fig>{fmtMoney(committed)}</Fig>
+              </Pulse>
+            }
+            sub="Total commitment"
+          />
+          <Figure
+            label="Drawn"
+            value={
+              <Pulse id="exposure.totalOutstanding">
+                <Fig>{fmtMoney(drawn)}</Fig>
+              </Pulse>
+            }
+            sub="Outstanding balance"
+          />
+          <Figure
+            label="Collateral coverage"
+            value={<Fig>{covLabel}</Fig>}
+            sub={<Status tone={STATUS_WORD[covTone]}>{covStatus}</Status>}
+          />
+          {uniqueCount !== null && (
+            <Figure
               label="Distinct collateral"
               value={String(uniqueCount)}
               sub={uniqueCount === 1 ? "record" : "records"}
             />
-          </>
-        )}
-      </StatStrip>
+          )}
+        </Figures>
 
-      {/* committed vs drawn bar — kicker and the total it measures share one
-          baseline, so the meter reads as an instrument rather than a graphic
-          with a caption bolted underneath. */}
-      <Card className="px-6 py-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-          <div className="kicker">Committed vs Drawn</div>
-          <div className="text-[12px] text-ink-label">
-            Total committed <span className="tnum ml-1 font-bold text-ink">{fmtMoney(committed)}</span>
-          </div>
-        </div>
-        <div
-          className="mt-3.5 flex h-[46px] overflow-hidden rounded-[11px]"
-          style={{ background: "var(--wash-2)", boxShadow: "inset 0 1px 2px rgba(26, 10, 54, 0.06)" }}
-        >
-          <div
-            className="c360-meter-w tnum flex items-center whitespace-nowrap px-4 text-[12.5px] font-bold"
-            style={{ width: `${entered ? drawnPct : 0}%`, background: "var(--fill-strong)", color: "var(--ink-inverse)", overflow: "hidden" }}
-          >
-            Drawn {fmtMoney(drawn)}
-          </div>
-          <div className="tnum flex flex-1 items-center justify-end whitespace-nowrap px-4 text-[12.5px] font-semibold text-ink-body">
-            Available {fmtMoney(avail)}
-          </div>
-        </div>
-      </Card>
+        <table className="dt num" style={{ marginTop: 20 }}>
+          <thead>
+            <tr>
+              <th>Facility</th>
+              <th>Type</th>
+              <th className="r">Commitment</th>
+              <th className="r">Drawn</th>
+              <th className="r">Pledged</th>
+              <th className="r">Coverage</th>
+              <th className="r">Maturity</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allFacs.map((f, i) => {
+              const active = isActiveFacility(f);
+              const rate = f.interestRate != null ? `Note rate ${fmtRate(f.interestRate)}` : null;
+              // The org's own reason a ratio is blank, verbatim. A credit officer
+              // can act on "the pledges are Abundance-of-Caution"; nobody can act
+              // on an em dash.
+              const sub = [rate, f.coverageNote].filter(Boolean).join(" · ");
+              return [
+                <tr key={f.loanId ?? i}>
+                  <td>{f.name ?? "Facility"}</td>
+                  <td>{f.productType ?? "—"}</td>
+                  <td className="r">
+                    <Pulse id={`facility.${f.loanId}.committed`}>
+                      <Fig>{fmtMoney(f.committed)}</Fig>
+                    </Pulse>
+                  </td>
+                  <td className="r">
+                    <Pulse id={`facility.${f.loanId}.outstanding`}>
+                      <Fig>{fmtMoney(f.outstanding)}</Fig>
+                    </Pulse>
+                  </td>
+                  <td className="r">
+                    <Fig>{fmtMoney(pledgedShare(f))}</Fig>
+                  </td>
+                  <td className="r">
+                    <Pulse id={`facility.${f.loanId}.coverageRatio`}>
+                      <Fig>{fmtRatio(f.coverageRatio)}</Fig>
+                    </Pulse>
+                  </td>
+                  <td className="r">
+                    <Pulse id={`facility.${f.loanId}.maturityDate`}>{fmtDate(f.maturityDate)}</Pulse>
+                  </td>
+                  <td>
+                    {!active ? (
+                      <Status tone="mut">{f.status ?? "Closed"}</Status>
+                    ) : (
+                      <Status tone={f.coverageShortfall ? "bad" : "good"}>
+                        {f.coverageShortfall ? "Shortfall" : f.riskGrade ? `Grade ${f.riskGrade}` : "Active"}
+                      </Status>
+                    )}
+                  </td>
+                </tr>,
+                sub ? (
+                  <tr className="subrow" key={`${f.loanId ?? i}-note`}>
+                    <td colSpan={8}>{sub}</td>
+                  </tr>
+                ) : null,
+              ];
+            })}
+            <tr className="total">
+              <td>Total</td>
+              <td />
+              <td className="r num" id="tblExpTotal">
+                {fmtMoney(committed)}
+              </td>
+              <td className="r">{fmtMoney(drawn)}</td>
+              <td />
+              <td />
+              <td />
+              <td />
+            </tr>
+          </tbody>
+        </table>
 
-      {/* pledges + coverage dial */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card className="px-6 py-5">
-          <div className="kicker mb-3.5">Pledges · facility share</div>
+        <MeterBlock
+          label="Committed vs Drawn"
+          figure={`${drawnPct}%`}
+          pct={drawnPct}
+          caption={
+            <>
+              Drawn <b style={{ color: "var(--ink-strong)" }}>{fmtMoney(drawn)}</b> · Available{" "}
+              <b style={{ color: "var(--ink-strong)" }}>{fmtMoney(avail)}</b>
+            </>
+          }
+        />
+      </PaneCard>
+
+      <div className="pane-grid">
+        <PaneCard>
+          <div className="kicker" style={{ marginBottom: 12 }}>
+            Pledges · facility share
+          </div>
           {pledges.length ? (
-            pledges.map((p, i) => (
-              <div
-                key={i}
-                className="flex items-baseline justify-between gap-5 border-b border-divider py-2.5 text-[13.5px] last:border-b-0"
-              >
-                <div className="min-w-0">
-                  <div className="text-ink-body-strong">
+            <div className="ratio-rows num">
+              {pledges.map((p, i) => (
+                <div className="rr" key={i}>
+                  <span>
                     {p.collateralType ?? "Collateral"}
                     {p.lienPosition ? ` · ${p.lienPosition}` : ""}
                     {p.advanceRate != null ? ` · ${fmtPct(p.advanceRate, 0)} adv` : ""}
-                  </div>
-                  {p.advanceRateSource && <div className="mt-0.5 text-[11px] text-ink-faint">{p.advanceRateSource}</div>}
+                    {p.advanceRateSource ? ` · ${p.advanceRateSource}` : ""}
+                  </span>
+                  <b>
+                    <Fig>{fmtMoney(p.amountPledged ?? p.currentLendableValue ?? p.collateralValue)}</Fig>
+                  </b>
                 </div>
-                <div className="tnum flex-none whitespace-nowrap text-right">
-                  <div className="font-bold">{fmtMoney(p.amountPledged ?? p.currentLendableValue ?? p.collateralValue)}</div>
-                  <div className="mt-0.5 text-[11px] text-ink-faint">
-                    {p.amountPledged != null ? "pledged of " : ""}
-                    {fmtMoney(p.currentLendableValue ?? p.collateralValue)} lendable
-                  </div>
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           ) : reasons.length ? (
             // Not "no collateral". The org says the pledges exist and are out of
             // the math, which is a different fact and the one a banker needs.
-            reasons.map((r, i) => (
-              <div key={i} className="border-b border-divider py-2 text-[13px] last:border-b-0">
-                <div className="font-semibold text-ink-body-strong">{r.name}</div>
-                <div className="mt-px text-[12px] leading-relaxed text-ink-label">{r.note}</div>
-              </div>
-            ))
+            <div className="ratio-rows">
+              {reasons.map((r, i) => (
+                <div className="rr" key={i} style={{ display: "block" }}>
+                  <b>{r.name}</b>
+                  <div style={{ marginTop: 2, fontSize: 12, color: "var(--ink-muted)" }}>{r.note}</div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <GapChip title="No collateral pledged" provenance="Customer360Exposure — 0 Loan_Collateral2 rows" />
+            <Gap title="No collateral pledged" provenance="Customer360Exposure — 0 Loan_Collateral2 rows" />
           )}
           {uniqueLendable !== null && (
-            <div className="mt-auto flex items-baseline justify-between gap-5 border-t border-border pt-3.5 text-[14px] font-extrabold">
+            <div
+              className="num"
+              style={{
+                marginTop: "auto",
+                paddingTop: 14,
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 14,
+                fontSize: 13.5,
+                fontWeight: 600,
+                color: "var(--ink-strong)",
+              }}
+            >
               <span>Distinct collateral lendable</span>
-              <span className="tnum">{fmtMoney(uniqueLendable)}</span>
+              <span>
+                <Fig>{fmtMoney(uniqueLendable)}</Fig>
+              </span>
             </div>
           )}
-        </Card>
+        </PaneCard>
 
-        {/* Coverage ratio. Left-aligned like every other figure in the cockpit:
-            a centred column of ragged lines was the "looks odd" the founder
-            flagged (2026-07-29). The ratio and its verdict share one baseline. */}
-        <Card className="px-6 py-5">
-          <div className="kicker mb-3">Coverage ratio</div>
-          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-2">
-            <span className="tnum text-[52px] font-extrabold leading-none tracking-tight" style={{ color: STATUS[covTone].fg }}>
-              {covLabel}
-            </span>
-            <ToneChip tone={covTone}>{covStatus}</ToneChip>
+        {/* Coverage ratio. One big figure, its verdict as a status word beside
+            it, and the ratio SHOWN as a bar against its own ceiling — two
+            figures divided by each other read as a sentence; one bar reads at a
+            glance, which is what a coverage number is for. */}
+        <PaneCard>
+          <div className="kicker" style={{ marginBottom: 10 }}>
+            Coverage ratio
           </div>
-          {/* THE RATIO, SHOWN. Two figures divided by each other read as a
-              sentence; as one bar against its own ceiling they read at a
-              glance, which is what a coverage number is for. The sentence that
-              used to carry both figures is now the caption under the bar. */}
+          <div className="bigfig num">
+            <span className="n">
+              <Fig>{covLabel}</Fig>
+            </span>
+            <Status tone={STATUS_WORD[covTone]}>{covStatus}</Status>
+          </div>
           {uniqueLendable !== null && uniqueLendable > 0 ? (
-            <div className="mt-4">
-              <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--wash-2)" }}>
-                <div
-                  className="c360-meter-x h-full w-full rounded-full"
-                  style={{
-                    transform: `scaleX(${Math.min(1, drawn / uniqueLendable)})`,
-                    background: STATUS[covTone].fg,
-                  }}
-                />
-              </div>
-              <div className="mt-2 flex items-baseline justify-between gap-4 text-[11px] text-ink-label">
-                <span>
-                  Drawn <span className="tnum font-semibold text-ink-body">{fmtMoney(drawn)}</span>
-                </span>
-                <span>
-                  Lendable <span className="tnum font-semibold text-ink-body">{fmtMoney(uniqueLendable)}</span>
+            <MeterBlock
+              label="Drawn against distinct lendable"
+              figure={fmtMoney(drawn)}
+              pct={Math.min(1, drawn / uniqueLendable) * 100}
+              tone={covTone === "red" ? "bad" : covTone === "amber" ? "warn" : "good"}
+              caption={
+                <>
+                  Lendable <b style={{ color: "var(--ink-strong)" }}>{fmtMoney(uniqueLendable)}</b>
                   {uniqueCount !== null &&
                     ` across ${uniqueCount} collateral ${uniqueCount === 1 ? "record" : "records"}`}
-                </span>
-              </div>
-            </div>
+                </>
+              }
+            />
           ) : (
-            <div className="mt-3.5 text-[12.5px] leading-relaxed text-ink-muted">
+            <p style={{ margin: "12px 0 0", fontSize: 12.5, lineHeight: 1.6, color: "var(--ink-muted)" }}>
               The source read does not carry a relationship coverage ratio.
-            </div>
+            </p>
           )}
           {/* A relationship can clear its floor while facilities under it do not.
               Saying so is the whole point of a per-facility ratio. */}
           {shortfallFacs.length > 0 && (
-            <div className="mt-auto border-t border-divider pt-3 text-[12px] leading-relaxed text-ink-label" style={{ textWrap: "pretty" as never }}>
-              {shortfallFacs.length} of {facs.length} {facs.length === 1 ? "facility is" : "facilities are"} under-covered at
-              facility level.
+            <div className="note" style={{ marginTop: "auto" }}>
+              {shortfallFacs.length} of {facs.length} {facs.length === 1 ? "facility is" : "facilities are"}{" "}
+              under-covered at facility level.
             </div>
           )}
-        </Card>
+        </PaneCard>
       </div>
 
       {/* COLLATERAL RECORDS. One row per piece of security, not per pledge: the
           exposure read returns a pledge per facility, so a warehouse securing
           three loans arrives three times. A banker reads their collateral once,
           with what it is worth and what it secures. */}
-      <Card className="py-1">
-        <div className="kicker px-6 pb-1.5 pt-4">Collateral</div>
+      <PaneCard>
+        <div className="kicker" style={{ marginBottom: 12 }}>
+          Collateral
+        </div>
         {records.length ? (
-          <>
-            <div
-              className="grid gap-3 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
-              style={{ gridTemplateColumns: COL_COLS }}
-            >
-              <span>Collateral</span><span>Type</span><span className="text-right">Value</span><span className="text-right">Advance</span><span className="text-right">Lendable</span><span>Lien</span><span>Secures</span>
-            </div>
-            {records.map((r, i) => (
-              <div
-                key={r.collateralId ?? i}
-                className="c360-row-in c360-datarow grid items-center gap-3 border-t border-divider px-6 py-3 text-[13px]"
-                style={{ gridTemplateColumns: COL_COLS, animationDelay: staggerDelay(i) }}
-              >
-                <span className="font-bold">{r.displayName}</span>
-                <span className="text-ink-body-strong">{r.collateralType ?? "—"}</span>
-                <span className="tnum text-right font-semibold">{fmtMoney(r.currentValue)}</span>
-                <span className="tnum text-right text-ink-body">{r.advanceRate != null ? fmtPct(r.advanceRate, 0) : "—"}</span>
-                <span className="tnum text-right font-semibold">{fmtMoney(r.lendableValue)}</span>
-                <span className="text-ink-body">{r.lienPosition ?? "—"}</span>
-                <span className="text-ink-body">
-                  {r.securesFacilities.length === 1 ? r.securesFacilities[0] : `${r.securesFacilities.length} facilities`}
-                </span>
-              </div>
-            ))}
-          </>
+          <table className="dt num">
+            <thead>
+              <tr>
+                <th>Collateral</th>
+                <th>Type</th>
+                <th className="r">Value</th>
+                <th className="r">Advance</th>
+                <th className="r">Lendable</th>
+                <th>Lien</th>
+                <th>Secures</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r, i) => (
+                <tr key={r.collateralId ?? i}>
+                  <td>{r.displayName}</td>
+                  <td>{r.collateralType ?? "—"}</td>
+                  <td className="r">
+                    <Fig>{fmtMoney(r.currentValue)}</Fig>
+                  </td>
+                  <td className="r">{r.advanceRate != null ? <Fig>{fmtPct(r.advanceRate, 0)}</Fig> : "—"}</td>
+                  <td className="r">
+                    <Fig>{fmtMoney(r.lendableValue)}</Fig>
+                  </td>
+                  <td>{r.lienPosition ?? "—"}</td>
+                  <td>
+                    {r.securesFacilities.length === 1
+                      ? r.securesFacilities[0]
+                      : `${r.securesFacilities.length} facilities`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         ) : (
-          <div className="flex flex-col gap-2 px-6 pb-4">
-            <GapChip title="No collateral pledged" provenance="Customer360Exposure — 0 Loan_Collateral2 rows" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+            <Gap title="No collateral pledged" provenance="Customer360Exposure — 0 Loan_Collateral2 rows" />
             {reasons.map((r, i) => (
-              <div key={i} className="text-[12px] leading-relaxed text-ink-label">
-                <span className="font-semibold text-ink-body-strong">{r.name}:</span> {r.note}
+              <div key={i} style={{ fontSize: 12, lineHeight: 1.6, color: "var(--ink-muted)" }}>
+                <b style={{ color: "var(--ink)" }}>{r.name}:</b> {r.note}
               </div>
             ))}
           </div>
         )}
-      </Card>
+      </PaneCard>
 
-      {/* facilities table */}
-      <Card className="py-1">
-        <div className="kicker px-6 pb-1.5 pt-4">Facilities</div>
-        <div
-          className="grid gap-3 px-6 py-2 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
-          style={{ gridTemplateColumns: FAC_COLS }}
-        >
-          <span>Facility</span><span>Type</span><span className="text-right">Commitment</span><span className="text-right">Drawn</span><span className="text-right">Pledged</span><span className="text-right">Coverage</span><span>Maturity</span><span>Status</span>
-        </div>
-        {allFacs.map((f, i) => {
-          const active = isActiveFacility(f);
-          const tone = coverageTone(f.coverageRatio, f.coverageShortfall);
-          const rate = f.interestRate != null ? `Note rate ${fmtRate(f.interestRate)}` : null;
-          const sub = [rate, f.coverageNote].filter(Boolean).join(" · ");
-          return (
-            <div
-              key={f.loanId ?? i}
-              className="c360-row-in c360-datarow border-t border-divider px-6 py-3"
-              style={{ animationDelay: staggerDelay(i) }}
-            >
-              <div className="grid items-center gap-3 text-[13px]" style={{ gridTemplateColumns: FAC_COLS }}>
-                <span className="font-bold">{f.name ?? "Facility"}</span>
-                <span className="text-ink-body-strong">{f.productType ?? "—"}</span>
-                <span className="tnum text-right font-semibold">
-                  <Pulse id={`facility.${f.loanId}.committed`}>{fmtMoney(f.committed)}</Pulse>
-                </span>
-                <span className="tnum text-right font-semibold">
-                  <Pulse id={`facility.${f.loanId}.outstanding`}>{fmtMoney(f.outstanding)}</Pulse>
-                </span>
-                <span className="tnum text-right font-semibold">{fmtMoney(pledgedShare(f))}</span>
-                <span className="tnum text-right font-bold" style={active ? { color: STATUS[tone].fg } : undefined}>
-                  <Pulse id={`facility.${f.loanId}.coverageRatio`}>{fmtRatio(f.coverageRatio)}</Pulse>
-                </span>
-                <span className="text-ink-body">
-                  <Pulse id={`facility.${f.loanId}.maturityDate`}>{fmtDate(f.maturityDate)}</Pulse>
-                </span>
-                <span className="justify-self-start">
-                  {!active ? (
-                    <ToneChip tone="neutral">{f.status ?? "Closed"}</ToneChip>
-                  ) : (
-                    <ToneChip tone={f.coverageShortfall ? "red" : "green"}>
-                      {f.coverageShortfall ? "Shortfall" : f.riskGrade ? `Grade ${f.riskGrade}` : "Active"}
-                    </ToneChip>
-                  )}
-                </span>
-              </div>
-              {/* The org's own reason a ratio is blank, verbatim. A credit officer
-                  can act on "the pledges are Abundance-of-Caution"; nobody can act
-                  on an em dash. */}
-              {sub && <div className="mt-1.5 text-[11.5px] leading-relaxed text-ink-label">{sub}</div>}
-            </div>
-          );
-        })}
-      </Card>
-
-      <NoteCaption note={exp.note} />
-    </div>
+      <Note note={exp.note} />
+    </Pane>
   );
 }

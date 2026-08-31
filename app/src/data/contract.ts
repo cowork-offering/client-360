@@ -79,6 +79,8 @@ export const PROVENANCE = {
   "borrower.requests[]": { kind: "NCINO", source: "Inbound client requests (A29 seam); live intake pending M365/Graph" },
 
   "borrower.boom.ratios": { kind: "BOOM", source: "boom_get_ratios" },
+  "borrower.boom.ratios.ebitda": { kind: "BOOM", source: "boom_get_ratios — spread EBITDA" },
+  "borrower.boom.ratios.ebitdaMargin": { kind: "BOOM", source: "boom_get_ratios — EBITDA ÷ revenue" },
   "borrower.boom.ratios.totalLeverage": { kind: "BOOM", source: "boom_get_ratios — debt ÷ EBITDA" },
   "borrower.boom.ratios.interestCoverage": { kind: "BOOM", source: "boom_get_ratios — EBITDA ÷ interest expense" },
   "borrower.boom.spread.sourceFile": { kind: "BOOM", source: "boom_get_spread — originating workbook filename" },

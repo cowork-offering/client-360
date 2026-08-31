@@ -1,0 +1,853 @@
+/* =============================================================================
+   SURFACE 3 — THE SEVEN CLIENT PANES.
+
+   Ported from design/dummy/dummy.template.html (the `.pane` block and
+   everything it contains). Values are the dummy's, read through the
+   foundation's tokens where the token IS the dummy's number. The mapping is the
+   one landing.css established:
+
+     dummy --ink        #000     -> --ink-strong
+     dummy --ink-2      #1a1a1a  -> --ink
+     dummy --ink-3      #5b5c66  -> --ink-muted
+     dummy --ink-4      #80818d  -> --ink-faint
+     dummy --line       #e8e8ed  -> --border
+     dummy --line-soft  #ececf1  -> --row-divider
+     dummy --surface-2  #f0f0f2  -> --surface-overlay
+     dummy --purple     #a100ff  -> --brand
+     dummy --purple-deep#7500c0  -> --accent
+     dummy --purple-100 #e6dcff  -> --accent-hairline
+     dummy --purple-050 #f6efff  -> --accent-tint
+     dummy --good/warn/bad       -> --positive/--warning/--critical
+     dummy --ease/--settle/--dur -> --ease-out/--ease-settle/--dur-mid
+     dummy --r-card              -> --radius
+
+   SCOPING. `.pane` is global (it is the pane container itself). EVERYTHING
+   else is scoped under `.pane`, because `.card`, `.kicker`, `.empty` and `.st`
+   already mean something on the landing and in the workroom, and a surface
+   mint that reaches outside its own surface is how a surface-by-surface port
+   turns into a rewrite.
+
+   MATERIAL. Rule 23: CONTENT IS SOLID. Nothing in this file carries a
+   backdrop-filter. The panes add zero glass surfaces to the census, which is
+   the point — a translucent data card reads muddy and is banned.
+
+   REDUCED MOTION. No kill-switch block here: electric-glass.css already
+   switches every animation and transition off under the media query. The one
+   thing CSS cannot stop is the graph's particle motion, and MetroRoutes
+   refuses to emit it.
+   ============================================================================= */
+
+/* ---------------------------------------------------------------- the pane
+   Rule 67: panes SETTLE, they never jump. `panein` is opacity + a 3px rise on
+   the settle curve over .34s, and it replaces the 8px view-level entry. Bigger
+   travel is reserved for view changes. */
+.pane {
+  display: none;
+  padding: 22px 0 90px;
+}
+.pane.show {
+  display: block;
+  animation: panein 0.34s var(--ease-settle) both;
+}
+@keyframes panein {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pane-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+/* The pane's own vertical rhythm: siblings at the pane's top level breathe on
+   the same 16px the grid does, so a stack and a grid read as one column. */
+.pane > * + * {
+  margin-top: 16px;
+}
+
+/* ------------------------------------------------------------------- cards
+   The dummy's `.card` recipe verbatim: opaque white, a soft hairline, one
+   shadow, and a hover that moves the SHADOW only (no lift — the lift belongs to
+   worklist rows). `.eg-solid` carries the same three declarations, but the
+   panes state theirs so the pane's material never drifts with a chrome edit. */
+.pane .card {
+  position: relative;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--dur-mid) var(--ease-out);
+}
+.pane .card:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+.pane .cardpad {
+  padding: 22px 24px;
+}
+
+.pane .kicker {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.pane .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pane .sechead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.pane .sechead .sub {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin-top: 2px;
+}
+
+/* ------------------------------------------------- status IS typography
+   systemNonNegotiable: "status as typography, never pill soup". A 5px dot in
+   the status colour, the word beside it, and nothing else. */
+.pane .st {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.pane .st::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+}
+.pane .st.good {
+  color: var(--positive);
+}
+.pane .st.warn {
+  color: var(--warning);
+}
+.pane .st.bad {
+  color: var(--critical);
+}
+.pane .st.acc {
+  color: var(--accent);
+}
+.pane .st.mut {
+  color: var(--ink-faint);
+}
+
+/* PURPLE DISCIPLINE (systemNonNegotiable): the unit is the one place a figure
+   is allowed to be violet. Not the figure, not the label. The unit. */
+.pane .u {
+  color: var(--brand);
+}
+
+/* ------------------------------------------------------------------ tables */
+.pane table.dt {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.pane table.dt th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0 12px 9px;
+  border-bottom: 1px solid var(--border);
+}
+.pane table.dt td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--row-divider);
+  color: var(--ink);
+  vertical-align: top;
+}
+.pane table.dt td:first-child {
+  font-weight: 500;
+  color: var(--ink-strong);
+}
+.pane .r {
+  text-align: right;
+}
+.pane table.dt tr.total td {
+  border-bottom: 0;
+  border-top: 1.5px solid var(--ink-strong);
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.pane table.dt tbody tr {
+  transition: background var(--dur-mid) var(--ease-out);
+}
+.pane table.dt tbody tr:hover {
+  background: var(--surface-overlay);
+}
+/* A row that carries a second line under the columns (the org's own reason a
+   ratio is blank, an effective-challenge note). It is the same row, so it
+   never takes its own top border. */
+.pane table.dt tr.subrow td {
+  border-top: 0;
+  padding-top: 0;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.pane table.dt tr.subrow:hover {
+  background: none;
+}
+
+/* --------------------------------------------------------- figures + ratios */
+.pane .bigfig {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.pane .bigfig .n {
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink-strong);
+}
+.pane .bigfig .chg {
+  font-size: 12px;
+  color: var(--positive);
+  font-weight: 500;
+}
+.pane .bigfig .chg.down {
+  color: var(--warning);
+}
+.pane .bigfig .cap {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+.pane .grid line {
+  stroke: var(--row-divider);
+}
+.pane .axis text {
+  font: 400 10px var(--font-sans);
+  fill: var(--ink-faint);
+}
+
+/* THE TREND LINE DRAWS ITSELF on pane entry. The dummy hard-codes a 1550-unit
+   dasharray because it authors one fixed path; the port's path is as long as
+   the spread is, so the line declares `pathLength="1"` and the dash works in
+   normalised units. There is exactly ONE chart line and it is violet (revenue),
+   which is the purple-discipline non-negotiable; every other Boom figure reads
+   in the key-ratios card beside it. */
+.pane .finline {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.pane.show .finline {
+  animation: drawline 1.1s var(--ease-out) 0.1s both;
+}
+@keyframes drawline {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.pane .ratio-rows .rr {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--row-divider);
+  font-size: 13px;
+}
+.pane .ratio-rows .rr:last-child {
+  border-bottom: 0;
+}
+.pane .ratio-rows .rr span {
+  color: var(--ink-muted);
+}
+.pane .ratio-rows .rr b {
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+
+/* THE FIGURE ROW. The dummy carries its headline figures in the hero anchors;
+   the port's panes carry a few of their own (committed, drawn, coverage) that
+   the hero has no room for. Same type scale as the dummy's anchor: a small
+   grey label over a 20px semibold figure with a violet unit. */
+.pane .pfigs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 34px;
+}
+.pane .pfig .l {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+.pane .pfig .v {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+  margin-top: 3px;
+}
+.pane .pfig .s {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 3px;
+}
+
+/* ------------------------------------------------------------------- meters
+   Rule 68.2: meters fill FROM WIDTH 0 on pane entry, on a .15s delay, and the
+   end state is the inline width. Two animations on purpose, exactly as the
+   dummy writes them: `grow` scales the fill in, `meterfill` (pane-entry only)
+   runs the width from zero. */
+.pane .meter {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface-overlay);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.pane .meter i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--brand);
+  opacity: 0.75;
+  transform-origin: left center;
+  animation: grow 0.64s var(--ease-out) both;
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.pane.show .meter i {
+  animation: meterfill 0.9s var(--ease-settle) both;
+  animation-delay: 0.15s;
+}
+@keyframes meterfill {
+  from {
+    width: 0;
+  }
+}
+/* Tone override for a meter that reports a status rather than a magnitude. */
+.pane .meter i.good {
+  background: var(--positive);
+}
+.pane .meter i.warn {
+  background: var(--warning);
+}
+.pane .meter i.bad {
+  background: var(--critical);
+}
+
+/* --------------------------------------------------------------- the feed */
+.pane .feeditem {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: 12px;
+  padding: 13px 16px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 9px;
+}
+.pane .feeditem .ic {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pane .feeditem .ic.w {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.pane .feeditem .ic.a {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.pane .feeditem .ic.b {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+.pane .feeditem .tx b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  display: block;
+}
+.pane .feeditem .tx span {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.pane .feeditem .when {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+  flex: none;
+}
+
+/* ------------------------------------------------- the audit trail, porcelain
+   Rule 48. A 1px line that FADES at both ends, 9px white dots with a hairline
+   ring and a 3.5px white halo so the line passes BEHIND every dot, the latest
+   entry solid ink with a 7px aura, dots filling ink on hover, 24px spacing, and
+   the whole thing cascading in when the pane opens. Rule 70.4: the spine draws
+   itself top-down over .9s while the dots cascade. */
+.pane .tl {
+  position: relative;
+  padding-left: 32px;
+}
+.pane .tl::before {
+  transform-origin: top;
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--border) 10%,
+    var(--border) 90%,
+    transparent
+  );
+}
+.pane.show .tl::before {
+  animation: tldraw 0.9s var(--ease-settle) both;
+}
+@keyframes tldraw {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.pane .tli {
+  position: relative;
+  padding-bottom: 24px;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding-left: 0;
+  padding-right: 0;
+  padding-top: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.pane .tli:last-child {
+  padding-bottom: 2px;
+}
+.pane .tli::before {
+  content: "";
+  position: absolute;
+  left: -26.5px;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 1.5px solid rgba(0, 0, 0, 0.22);
+  box-shadow: 0 0 0 3.5px var(--surface-raised); /* the line passes BEHIND the dot */
+  transition: all 0.25s var(--ease-out);
+}
+.pane .tli:hover::before {
+  background: var(--ink-strong);
+  border-color: var(--ink-strong);
+}
+.pane .tli.hot::before {
+  background: var(--ink-strong);
+  border-color: var(--ink-strong);
+  box-shadow:
+    0 0 0 3.5px var(--surface-raised),
+    0 0 0 7px rgba(0, 0, 0, 0.05);
+}
+.pane .tli b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.pane .tli .m {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-left: 7px;
+}
+.pane .tli .d {
+  display: block;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  max-width: 60ch;
+}
+/* A31.3 — a user-driven entry says so on the trail's own instrument, the dot.
+   The violet wash the row used to carry was a box, and the trail has none. */
+.pane .tli.c360-activity-user::before {
+  border-color: var(--user-tone);
+}
+/* The entries cascade in when the pane opens. The dummy hard-codes five
+   nth-child delays because it authors five entries; the port carries as many
+   as the trail holds, so the 70ms step is set per row and the class only says
+   WHICH animation runs. */
+.pane.show .tli {
+  animation: fadeup 0.5s var(--ease-settle) both;
+}
+@keyframes fadeup {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* A trail entry is a button in the port (it opens the detail modal), which the
+   dummy's div never was. The affordance is the dot and the title, so the row
+   answers the pointer without gaining a box. */
+.pane .tli .meta {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.pane .tli .tag {
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pane .tli .tag.rec {
+  background: var(--positive-bg);
+  color: var(--positive);
+}
+.pane .tli .tag.ses {
+  background: var(--surface-overlay);
+  color: var(--ink-muted);
+}
+.pane .tli .cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.pane .tli .next {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ----------------------------------------------- ownership tree, orthogonal
+   Rules 9 + 15 + 18 + 19. Nodes are solid content; the connectors are EDGED
+   metro routes on a gradient stroke, measured from the real node positions by
+   MetroRoutes so the shape generalises to any entity count. */
+.pane .otree {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 4px;
+  width: 100%;
+}
+.pane .otree .orow {
+  display: flex;
+  width: 100%;
+  gap: 14px;
+  justify-content: center;
+}
+.pane .onode {
+  flex: 1;
+  min-width: 140px;
+  max-width: 210px;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 12px 14px;
+  text-align: center;
+  transition:
+    transform var(--dur-mid) var(--ease-out),
+    box-shadow var(--dur-mid) var(--ease-out);
+}
+.pane .onode:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px -8px rgba(26, 7, 54, 0.16);
+}
+.pane .onode b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  line-height: 1.3;
+}
+.pane .onode .p {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.pane .onode .role {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-tint);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.pane .oflowlayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.pane .oflowlayer .fl {
+  fill: none;
+  stroke: url(#ogr);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.pane .oflowlayer .flp {
+  fill: var(--brand);
+  opacity: 0.45;
+  filter: drop-shadow(0 0 3px rgba(161, 0, 255, 0.4));
+}
+.pane .ogap {
+  height: 74px;
+  width: 100%;
+}
+/* Rule 19: the borrower card is QUIET. White surface, a lavender hairline, the
+   standard card shadow. No purple glow, no gradient fill — the drift current
+   arriving into it is what says "this is the one". */
+.pane .oborrower {
+  min-width: 230px;
+  border: 1px solid var(--accent-hairline);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  padding: 14px 30px;
+  text-align: center;
+}
+.pane .oborrower .k {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+.pane .oborrower b {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.pane .oborrower .p {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+
+/* ----------------------------------------------------------- opportunities */
+.pane .opp {
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-card);
+}
+.pane .opp b {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  display: block;
+}
+.pane .opp .v {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink-strong);
+  margin: 8px 0 5px;
+}
+.pane .opp .p {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  margin: 5px 0;
+}
+
+/* -------------------------------------------------- empty state + watermark
+   Rule 57: an empty state CENTERS in its card, never hugs the top — the card is
+   a column and `.empty` is a full-height centred column inside it, so a
+   grid-stretched card centres its watermark at its true middle. Rule 70.3: no
+   surface in the product is fully dead, so the watermark BREATHES .04 -> .08
+   over an 8s sinusoid. */
+.pane .empty {
+  position: relative;
+  text-align: center;
+  padding: 46px 20px;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.pane .card:has(> .empty) {
+  display: flex;
+  flex-direction: column;
+}
+.pane .empty .wm {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -52%);
+  color: var(--brand);
+  opacity: 0.05;
+  font-size: 110px;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  animation: wmbreathe 8s ease-in-out infinite;
+}
+@keyframes wmbreathe {
+  0%,
+  100% {
+    opacity: 0.04;
+  }
+  50% {
+    opacity: 0.08;
+  }
+}
+.pane .empty h5 {
+  position: relative;
+  margin: 0 0 5px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink-strong);
+}
+.pane .empty p {
+  position: relative;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  max-width: 46ch;
+}
+
+/* ------------------------------------------------------------- prose blocks
+   A note the org wrote, a caveat the pane has to carry, a gap the read cannot
+   fill. Quiet by construction: these are footnotes, not findings. */
+.pane .note {
+  margin-top: 14px;
+  border-top: 1px solid var(--row-divider);
+  padding-top: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+  text-wrap: pretty;
+}
+.pane .gap {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-overlay);
+  padding: 10px 12px;
+}
+.pane .gap .t {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pane .gap .s {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+/* A callout is a status the pane has to SAY, not a chip it can show: a
+   covenant past threshold, an administrative exception. Warning ink on the
+   warning wash, no icon soup. */
+.pane .callout {
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  background: var(--warning-bg);
+}
+.pane .callout .k {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--warning);
+  margin-bottom: 4px;
+}
+.pane .callout p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--warning-prose);
+  text-wrap: pretty;
+}
+
+/* --------------------------------------------------------- the quiet button
+   The panes carry two: "Explain" beside a section head, and the technical
+   provenance toggle. Both are footnote affordances and neither may read as a
+   commit trigger, so neither is ever violet (rule 27). */
+.pane .btn-q {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  background: var(--quiet-fill);
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  flex: none;
+  cursor: pointer;
+  transition: all var(--dur-mid) var(--ease-out);
+}
+.pane .btn-q:hover {
+  background: var(--quiet-fill-hover);
+  color: var(--ink-strong);
+}
+.pane .btn-q:active {
+  transform: scale(0.97);
+}

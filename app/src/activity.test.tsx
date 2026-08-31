@@ -126,7 +126,10 @@ describe("A30.1/A30.2 — Activity tab", () => {
     click(openRow("Sterling Fabrication"));
     const tabs = buttons().filter((b) => /^(Activity|Exposure & Collateral)$/.test(b.textContent ?? ""));
     expect(tabs[0].textContent).toBe("Activity");
-    expect(container!.textContent).toContain("Activity · audit trail");
+    // The pane's own section head. SURFACE 3 gave it the dummy's grammar
+    // (kicker = the domain, title = the noun), so "Activity · audit trail"
+    // became "Audit trail" over "Activity". Same pane, same proof.
+    expect(container!.textContent).toContain("Audit trail");
   });
 
   it("renders entries newest-first with relative timestamps", () => {
