@@ -6,21 +6,29 @@
    consumes them and hardcodes nothing (mirrors the LWC rule). Contrast is
    verified in scripts/contrast-check.mjs, which mirrors the values below.
 
-   PALETTE: "Violet Dusk Linen" adapted (founder pick, 2026-08-27). The theme's
-   FEEL is taken — linen-soft near-white surfaces, dusk-tinted neutral greys
-   rather than pure greys, -0.01em tracking, one soft shadow model
-   (0.05 opacity / 10px blur / 4px y), quiet violet — but the theme's own
-   #846feb is NOT transplanted. Its saturation model is applied to ACCENTURE's
-   hue instead: #A100FF pulled to 60% saturation for every interactive state,
-   with the raw brand violet reserved for the mark and the approval moment.
+   PALETTE: "ELECTRIC GLASS" (founder-approved, 2026-08-31, three-way lab
+   a00c6a57). Supersedes "Violet Dusk Linen", whose linen ground carried a
+   violet cast that muddies frosted chrome. The ground is now the APPLE CANVAS
+   #F5F5F7 with a white radial at the top: near-neutral and whisper-cool, the
+   macOS light ground. Not pure white, which kills glass; and never warm, which
+   is banned outright. Every value below is lifted from the frozen dummy
+   (design/dummy/dummy.template.html) rather than paraphrased from prose — the
+   dummy wins every disagreement.
+
+   TOKEN NAMES ARE UNCHANGED. This is a re-point, not a rename: every component
+   keeps consuming exactly what it consumed before, and nothing hardcodes a hex.
+   The material recipes, the face and the controls live in electric-glass.css.
    ============================================================================= */
+
+@import "./electric-glass.css";
 
 :root {
   color-scheme: light;
 
-  /* Graphik is the engagement's brand family. No webfont ships with this
-     artifact, so the stack falls to the host's system face — which on the demo
-     machines is SF, the closest thing to Graphik's neutral grotesque. */
+  /* Graphik is the engagement's brand family, and as of the Electric Glass mint
+     it actually SHIPS: four real weights are embedded by electric-glass.css and
+     inlined into the single-file artifact. The system stack below is now a
+     fallback for a font that failed to decode, not the everyday reality. */
   --font-sans: Graphik, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     ui-sans-serif, system-ui, sans-serif;
   /* The mark's own family. Held apart from --font-sans on purpose: the brand
@@ -28,24 +36,27 @@
   --font-brand: Graphik, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Surfaces — linen. Near-white with a violet cast rather than a grey one, so
-     the accent sits ON the page rather than against it. */
-  --surface: #f6f6fb; /* page (solid fallback under the radial gradient) */
-  --surface-raised: #ffffff; /* cards */
-  --surface-overlay: #f7f7fc; /* wash */
-  --wash-2: #f1f1f8;
-  --row-divider: #f0f0f7;
-  --border: #e9e9f4;
-  --border-strong: #dedeee;
+  /* Surfaces — APPLE CANVAS (rule 22). Cool near-neutral, no violet cast and no
+     warm cast: warm greys are banned by name. Content stays SOLID white on this
+     ground so frosted chrome has something grey to float over. */
+  --surface: #f5f5f7; /* page (solid fallback under the radial gradient) */
+  --surface-raised: #ffffff; /* cards — opaque, never translucent (rule 23) */
+  --surface-overlay: #f0f0f2; /* wash */
+  --wash-2: #f0f0f2;
+  --row-divider: #ececf1;
+  --border: #e8e8ed; /* Apple separator */
+  --border-strong: #dcdce3;
 
-  /* Ink — dusk-tinted neutrals, never pure grey. */
-  --ink: #1a1b25;
-  --ink-muted: #63637e;
-  --ink-label: #82829d;
-  --ink-body: #53536b;
-  --ink-body-strong: #3b3b52;
+  /* Ink — the dummy's ramp. Body sits at #1a1a1a; --ink-strong is the pure
+     black reserved for a heading, a figure or a bolded name inside prose. */
+  --ink: #1a1a1a;
+  --ink-strong: #000000;
+  --ink-muted: #5b5c66;
+  --ink-label: #80818d;
+  --ink-body: #43444d;
+  --ink-body-strong: #1a1a1a;
   /* Supplementary 11px text. Kept at >=3:1 on every ground it renders on. */
-  --ink-faint: #8a8aa4;
+  --ink-faint: #80818d;
 
   /* ------------------------------------------------------------------ brand
      THE MARK'S OWN VIOLET, raw, at full strength. Reserved for the typographic
@@ -53,27 +64,44 @@
      made the earlier pass read loud; --accent below is the working tone. */
   --brand: #a100ff;
   --brand-ink: #ffffff;
-  --brand-wash: rgba(161, 0, 255, 0.1);
+  /* PURPLE DISCIPLINE (systemNonNegotiables): the wash is a WHISPER at 6%, not
+     a fill at 10%. An active state is tinted, never painted. */
+  --brand-wash: rgba(161, 0, 255, 0.06);
 
-  /* Accent — #A100FF's hue (278) calmed to 60% saturation. Every interactive
-     state, every chip, every focus ring reads from this and nothing else. */
-  --accent: #822db4;
+  /* Accent — the official mid-purple #7500C0 is the working interactive tone;
+     raw #A100FF stays reserved for the mark, units and deltas. Note what the
+     accent is NO LONGER allowed to do: it is not the focus ring (rule 47) and
+     it is not a commit button's fill (rule 27). Both are ink now. */
+  --accent: #7500c0;
   --accent-ink: #ffffff;
-  --accent-wash: rgba(130, 45, 180, 0.1);
+  --accent-wash: rgba(161, 0, 255, 0.06);
   /* The accent at rest: meter fills, a step already walked. Held at >=3:1 on
      both card and page so it can carry a graphic mark, not just decoration. */
-  --accent-quiet: #a766cc;
+  --accent-quiet: #9a4fd1;
+  /* The active pair from the dummy: a whisper-faint purple surface with its own
+     hairline. This is what an active tab or a selected chip wears. */
+  --accent-tint: #f6efff;
+  --accent-hairline: #e6dcff;
+  --accent-hairline-strong: rgba(161, 0, 255, 0.16);
 
-  /* Status — legacy S (ink) + T (tint) maps. */
-  --positive: #047857;
-  --positive-bg: #e8f4ef;
-  --warning: #92400e;
-  --warning-bg: #fbf2e7;
-  --critical: #991b1b;
-  --critical-bg: #fbecec;
-  --info: #822db4;
-  --neutral-fg: #53536b;
-  --neutral-bg: #f1f1f8;
+  /* Status — the dummy's ramp. Status is TYPOGRAPHY (a colored word and a 5px
+     dot), so these are ink values first; the tints survive for banners and
+     panels that genuinely need a filled ground. */
+  --positive: #147a46;
+  --positive-bg: #eef7f1;
+  /* DUMMY-EXACT by founder call (Fabian, 2026-08-31, AskUserQuestion): the frozen
+     dummy's #b15c00 stands even though it lands at 4.19-4.38:1 on the four
+     tinted/overlay warning grounds (chip warning, grade pill amber, verdict
+     warning / overlay, severity chip warning). Those four checks are WAIVED in
+     contrast-check.mjs with a 4.1 floor, not deleted. The accessible variant
+     #a35400 was offered and declined; contract purity won. */
+  --warning: #b15c00;
+  --warning-bg: #fdf4e7;
+  --critical: #cc2e2e;
+  --critical-bg: #fdefef;
+  --info: #7500c0;
+  --neutral-fg: #5b5c66;
+  --neutral-bg: #f0f0f2;
 
   /* Reason-code chips — derived from the legacy status palette (not invented). */
   /* CLIENT_REQUEST leads the severity order but is not a RISK state — it is
@@ -99,26 +127,64 @@
   --chip-recently-modified-fg: var(--neutral-fg);
 
   /* Structural / chart neutrals — tokenised so components carry zero literals. */
-  --fill-strong: #33324a; /* drawn bar, avatar, the scene-bar action */
+  --fill-strong: #1a1a1a; /* drawn bar, avatar, the scene-bar action */
   --ink-inverse: #ffffff;
-  --divider-soft: #eeeef6;
-  --crumb-sep: #d3d3e4;
-  --tree-line: #cfcfe2;
-  --scroll-thumb: #dadae8;
-  --prose-deep: #2b2a3f;
+  --divider-soft: #ececf1;
+  --crumb-sep: #d3d3d8;
+  --tree-line: #dcdce3;
+  --scroll-thumb: #dcdce3;
+  --prose-deep: #26262a;
   --warning-prose: #5a4423;
-  --chart-bar-1: #c9c7dc; /* revenue */
-  --chart-bar-2: #474659; /* EBITDA */
-  --ambient-2: #2f7fd0; /* second ambient bloom */
-  --gloss: rgba(255, 255, 255, 0.28); /* inset highlight on the primary action */
-  --frost-nav: rgba(246, 246, 251, 0.72); /* sticky top nav */
-  --frost-bar: rgba(255, 255, 255, 0.82); /* sticky verdict bar */
-  --frost-shadow: 0 1px 0 rgba(20, 0, 40, 0.05), 0 8px 24px -18px rgba(20, 0, 40, 0.2);
-  --nav-shadow: 0 1px 0 rgba(20, 0, 40, 0.06);
-  --scrim: rgba(20, 0, 40, 0.18);
-  --shadow-node: 0 1px 2px rgba(26, 10, 54, 0.05); /* ownership-tree owner box */
-  --shadow-panel: 0 20px 48px -14px rgba(20, 0, 40, 0.24), 0 6px 16px -8px rgba(20, 0, 40, 0.14);
-  --shadow-borrower: 0 8px 20px -8px rgba(130, 45, 180, 0.34); /* borrower node */
+  --chart-bar-1: #ddd5ea; /* revenue */
+  --chart-bar-2: #3d3d42; /* EBITDA */
+  --ambient-2: #05f2db; /* second ambient bloom — the official teal, whisper only */
+
+  /* ------------------------------------------------------------ the controls
+     BUTTONS ARE PLAIN INK PILLS (rule 41), and a commit moment is ink and never
+     violet (rule 27). --gloss is kept only because a legacy call site still
+     reads it; the ink pill primitive does NOT use it, because gloss plus glow
+     is exactly what reads vibecoded. */
+  --ink-pill: #141318;
+  --ink-pill-hover: #000000;
+  --quiet-fill: rgba(0, 0, 0, 0.05);
+  --quiet-fill-hover: rgba(0, 0, 0, 0.09);
+  --gloss: rgba(255, 255, 255, 0.28);
+
+  /* -------------------------------------------------------------- the lens
+     THE GLASS RECIPE, WRITTEN ONCE (rule 71). Every frosted surface reads the
+     hairline and the rim from here; electric-glass.css is the only place they
+     are composed. The outer hairline is DARK — a white border makes glass glow
+     instead of reading as a cut edge, which is the bug this rule exists for. */
+  --glass-hairline: rgba(0, 0, 0, 0.06);
+  --glass-rim:
+    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  /* THE BLUR SCALE, by surface size (rule 71). Depth of field is a function of
+     how big the pane of glass is and nothing else. The .eg-glass modifiers read
+     these, so a surface picks a modifier and never types a number. */
+  --blur-chip: 28px;
+  --blur-satellite: 30px;
+  --blur-workroom: 30px;
+  --blur-bar: 36px;
+  --blur-panel: 38px;
+
+  --frost-nav: rgba(255, 255, 255, 0.55); /* sticky top bar body */
+  --frost-bar: rgba(255, 255, 255, 0.55); /* sticky verdict bar body */
+  --frost-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.25);
+  --nav-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+  /* The cmdk lens dims almost nothing: the depth of field does the work. */
+  --scrim: rgba(16, 4, 30, 0.1);
+  --shadow-node: 0 1px 2px rgba(0, 0, 0, 0.03); /* ownership-tree owner box */
+  --shadow-panel: 0 8px 40px rgba(26, 7, 54, 0.14);
+  --shadow-borrower: 0 8px 20px -8px rgba(161, 0, 255, 0.22); /* borrower node */
+
+  /* THE FOCUS RING IS INK (rule 47). The accessibility ring stays visible — it
+     is never removed, only recolored — but it is never purple, and a scripted
+     refocus never flashes violet. --focus-ring-soft is the 3px halo a pill
+     wears when the input inside it takes focus. */
+  --focus-ring: rgba(20, 19, 24, 0.65);
+  --focus-ring-soft: rgba(0, 0, 0, 0.05);
 
   /* ---------------------------------------------------------------- z-scale
      ONE overlay scale (A31.1). Every floating surface reads from this — never
@@ -140,12 +206,14 @@
   --user-tone: #5f49c9;
   --user-tone-wash: rgba(95, 73, 201, 0.1);
 
-  --radius: 12px;
-  /* ONE shadow model, the theme's: a hairline plus one soft 10px drop at 0.05.
-     Nothing in this app carries a second, heavier shadow of its own. */
-  --shadow-raised: 0 1px 2px rgba(26, 10, 54, 0.04), 0 4px 10px rgba(26, 10, 54, 0.05);
-  --shadow-card: 0 1px 2px rgba(26, 10, 54, 0.04), 0 4px 10px rgba(26, 10, 54, 0.05);
-  --shadow-card-hover: 0 1px 2px rgba(26, 10, 54, 0.05), 0 10px 24px -6px rgba(26, 10, 54, 0.1);
+  --radius: 16px; /* the dummy's --r-card */
+  --radius-ctl: 10px; /* the dummy's --r-ctl: an input, a small control */
+  /* ONE shadow model for SOLID content (rule 23): a 1px contact shadow plus one
+     wide, soft, lifted drop. Nothing on the content side carries a second,
+     heavier shadow of its own; depth on the chrome side comes from the lens. */
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.03), 0 10px 28px -14px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03), 0 10px 28px -14px rgba(0, 0, 0, 0.1);
+  --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.04), 0 14px 36px -12px rgba(0, 0, 0, 0.14);
 
   /* Layout scale (A25.3) — ONE container width + ONE gutter, consumed by every
      screen so cards share exact edges. Never hand-roll a page margin. */
@@ -153,14 +221,36 @@
   --gutter: 24px;
   --stack: 16px;
 
-  /* Motion scale (A25.4) — short, decelerating, banking-sober. */
-  --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
+  /* ------------------------------------------------------------------ motion
+     ONE MOTION RULE: 240ms ease-out, event-driven (systemNonNegotiables). That
+     is --dur-mid + --ease-out, and it is the answer unless a rule names another
+     curve. Three curves exist beyond it and each has one job:
+
+       --ease-settle  the dummy's --settle. Strong deceleration, zero overshoot:
+                      what a thing does when it ARRIVES.
+       --ease-spring  (.22,1,.36,1). The dummy uses this LITERALLY, not through
+                      its --settle variable, for every continuity moment: the
+                      name flight, the workroom seed, a toast, a whisper. Prose
+                      calls this "the settle curve"; the dummy is the authority
+                      and the dummy keeps them apart, so we keep them apart.
+       --ease-odo     (.65,0,.35,1). The odometer, and nothing else. It is an
+                      ease-in-out on purpose: a digit strip must accelerate away
+                      and decelerate in, or it reads as a slide rather than a
+                      mechanism.
+
+     DELAYS ARE ANIMATION-DELAYS, NEVER TRANSITION-DELAYS. A transition-delay
+     used for an entrance cascade poisons every later interactive state change
+     on that element — a clicked tab waited up to .32s before its own wash moved
+     and read as "moves back, then jumps". Trap #1 of five; cost real time. */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
   /* Weighty, not bouncy: what carries mass and settles. */
   --ease-weight: cubic-bezier(0.32, 0.72, 0, 1);
-  /* Strong deceleration, zero overshoot — what a thing does when it ARRIVES. */
   --ease-settle: cubic-bezier(0.19, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-odo: cubic-bezier(0.65, 0, 0.35, 1);
   --dur-fast: 130ms;
-  --dur-mid: 260ms;
+  --dur-mid: 240ms;
+  --dur-odo: 600ms;
   --dur-dial: 640ms;
 
   /* ------------------------------------------------- the signature beat
@@ -187,9 +277,15 @@ body,
   height: 100%;
 }
 
+/* THE GROUND CARRIES NO PURPLE BLOOM (rule 21). The top-right violet radial is
+   gone: purple blooms live INSIDE glass panels (hero, workroom, drawer), never
+   on the page itself. What is left is a white radial at the top of the Apple
+   canvas, plus one quiet teal bloom bottom-left — the whole ambient budget. */
 body {
   margin: 0;
-  background: radial-gradient(135% 85% at 50% -12%, #fbfbff 0%, #f6f6fb 46%);
+  background:
+    radial-gradient(560px 300px at -6% 30%, rgba(5, 242, 219, 0.04) 0%, transparent 55%),
+    radial-gradient(135% 85% at 50% -12%, #ffffff 0%, #f5f5f7 46%);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 13px;
@@ -215,14 +311,20 @@ body {
 }
 
 
-/* THE RING FOLLOWS THE SHAPE. `border-radius: 3px` here did not round the
-   outline — it OVERWROTE the focused element's own radius, so opening the
-   Client Actions panel squared an 18px card into a hard-cornered violet
-   rectangle that sat off its own edges. An outline already follows the
-   element's border-radius; the element's shape is not the focus ring's to
-   change. */
+/* THE RING IS INK, AND IT FOLLOWS THE SHAPE (rule 47).
+
+   INK: the ring was violet, which put the loudest color in the system on an
+   affordance that is supposed to be quiet until a keyboard asks for it. It is
+   now 2px of rgba(20,19,24,.65). It is still VISIBLE and still on every focusable
+   thing — this is the a11y ring, and recoloring it is the whole change.
+
+   SHAPE: `border-radius: 3px` once lived here, and it did not round the outline
+   — it OVERWROTE the focused element's own radius, so opening the Client
+   Actions panel squared an 18px card into a hard-cornered rectangle that sat
+   off its own edges. An outline already follows the element's border-radius;
+   the element's shape is not the focus ring's to change. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -574,7 +676,14 @@ body {
   background: var(--surface-overlay);
 }
 
-/* Row hover — tint + a whisper of inset travel, no layout shift. */
+/* Row hover — tint and lift, nothing else.
+
+   THE INSET ACCENT BAR IS GONE (rule 20, hard call). A 2px violet rule down the
+   leading edge of a hovered row reads as a SPINE, and decorative spines are out
+   of the system entirely — the same verdict that removed sparklines and
+   gradient hairlines. A row answers the pointer with its ground, not with a
+   stripe. This is the shared row primitive, so removing it here removes it from
+   the worklist, the client panes and every list that adopts the class. */
 .c360-row {
   transition:
     background-color var(--dur-fast) var(--ease-out),
@@ -582,7 +691,7 @@ body {
 }
 .c360-row:hover {
   background: var(--surface-overlay);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: var(--shadow-card);
 }
 
 /* ---------------------------------------------------------------- FAB + panels
@@ -741,33 +850,42 @@ body {
   }
 }
 
-/* Reduced motion: everything resolves to its final state instantly. The
-   infinite ambient drift is stopped outright (a 0.001s infinite loop would
-   still repaint), leaving a static wash. Hover lift is dropped to shadow only. */
+/* Reduced motion. THE KILL ITSELF NOW LIVES IN electric-glass.css, matching the
+   dummy: animation and transition are switched OFF wholesale rather than run at
+   0.001s. The old duration approach kept every animation scheduled — an
+   infinite loop still repainted, and a spinner became a strobe instead of
+   stopping. Each of the exceptions this block used to enumerate is covered by
+   the global rule now.
+
+   Two things survive here anyway.
+
+   FIRST, the named stops below. They are now redundant with the global rule,
+   and they stay on purpose: sync.ui.test.tsx reads this file and asserts that
+   the spinner, the pulse, the stepper slide, the execution reveal and the
+   option sheet are each named as stopped OUTRIGHT. That assertion is about
+   intent, not about which file carries it, and the cheapest way to keep the
+   intent legible to the next reader is to leave it written down where the test
+   looks for it. Every line is still true.
+
+   SECOND, the resting states a kill-switch cannot express. The brand glyph is
+   painted by a background-position sweep, so with the animation gone it has to
+   be told to sit at FILLED rather than half-inked. Hover lift is dropped to
+   shadow only for the same reason: the transform is inline in the rule, not in
+   a keyframe, so killing the transition would otherwise leave it snapping. */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    transition-duration: 0.001s !important;
-    animation-duration: 0.001s !important;
-    animation-delay: 0s !important;
-  }
   .c360-ambient-a,
   .c360-ambient-b,
-  /* A spinner at 0.001s is a strobe, and a pulse the viewer asked not to see is
-     still motion. Both stop entirely rather than run fast. The brand beat is
-     the same case: the glyph stays, at full strength, and does not move. */
   .c360-sync-spin,
   .c360-pulse,
-  .c360-beat {
-    animation: none !important;
-    /* The still glyph reads FILLED, never half-inked. */
-    background-position: 0 0 !important;
-  }
-  /* Slides and reveals become instant: the content is there, the movement is
-     not. Duration alone would still animate opacity from 0 for a frame. */
   .c360-step-in,
   .c360-row-land,
   .c360-sheet-in {
     animation: none !important;
+  }
+  .c360-beat {
+    animation: none !important;
+    /* The still glyph reads FILLED, never half-inked. */
+    background-position: 0 0 !important;
   }
   .c360-hover-lift:hover {
     transform: none !important;

@@ -1,0 +1,294 @@
+/* =============================================================================
+   ELECTRIC GLASS — THE MATERIAL FOUNDATION.
+
+   Phase 0 of the surface-by-surface mint. This file carries the FACE (Graphik),
+   the MATERIAL (one lens-glass recipe, one solid-content recipe), the CONTROLS
+   (ink pill + quiet grey), the FOCUS MODEL (ink, never violet) and the motion
+   kill-switch. It does not lay out a single surface: every surface adopts these
+   classes in its own wave, behind its own acceptance gate.
+
+   GROUND TRUTH: design/dummy/dummy.template.html. Where prose and the dummy
+   disagree, the dummy wins. Values below are lifted from its CSS verbatim.
+   Rules: DIRECTION-LOCKED.json 22 (canvas), 23 (material split), 41 (buttons),
+   47 (focus), 71 (lens-grade everywhere).
+   ============================================================================= */
+
+/* ---------------------------------------------------------------- the face
+   GRAPHIK EMBEDDED is a systemNonNegotiable. The four weights the app actually
+   sets (400/500/600/700) each ship as a real file rather than being synthesised
+   off one master, which is what a faux-bold looks like. Vite inlines them as
+   base64 (assetsInlineLimit is effectively unbounded), so the built
+   cockpit.html stays the one self-contained file it has to be. */
+@font-face {
+  font-family: "Graphik";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/Graphik-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Graphik";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/Graphik-Medium.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Graphik";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/Graphik-Semibold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Graphik";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/Graphik-Bold.woff2") format("woff2");
+}
+
+/* ============================================================================
+   THE MATERIAL SPLIT (rule 23)
+
+   CONTENT IS SOLID. Cards, rows, feeds, tree nodes, anchors, thread cards are
+   opaque white with a hairline and one soft shadow. A translucent data card
+   reads muddy and is banned.
+
+   CHROME IS LENS GLASS. Bars, hero, nav capsule, workroom, drawer, chat, cmdk,
+   chips: white .55-.66 over a blur, a DARK outer hairline, and the triple inner
+   rim. A white border makes glass GLOW; the dark hairline makes it read as a
+   cut edge. That is the whole difference and it is not negotiable.
+   ========================================================================== */
+
+/* -------------------------------------------------------------- solid content */
+/* A solid surface that answers the pointer pairs this with the app's existing
+   .c360-hover-lift; there is no second hover primitive here. */
+.eg-solid {
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* ------------------------------------------------------------------- the lens
+   ONE SHEET. `.eg-glass` is the only place the recipe is written down; a size
+   modifier moves the blur and nothing else. The triple rim and the dark outer
+   hairline are emitted by the base class, so the glass census (count `inset`
+   in the computed box-shadow of every backdrop-filter element; expected 3)
+   passes BY CONSTRUCTION rather than by remembering.
+
+   The drop shadow is a variable rather than a fourth hard-coded shadow, so a
+   surface can size its own depth without ever re-typing the rim. Its default is
+   an invisible zero shadow: the box-shadow list must stay well-formed, and an
+   empty custom property would break the whole declaration. */
+.eg-glass {
+  --eg-blur: 34px;
+  --eg-sat: 1.8;
+  --eg-tint: rgba(255, 255, 255, 0.6);
+  --eg-drop: 0 0 0 0 transparent;
+  background: var(--eg-tint);
+  /* THE PREFIX IS LOAD-BEARING AND IS PINNED HERE ON PURPOSE. Unprefixed
+     backdrop-filter only landed in Safari 18; every Safari and iOS WebKit
+     before it is -webkit- only, and this artifact gets opened wherever the
+     engagement opens it. Autoprefixer read its bundled data and STRIPPED the
+     prefixed line on the first build, which would have turned every piece of
+     chrome into flat tint on those hosts. The ignore comment keeps it. */
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim), var(--eg-drop);
+}
+
+/* THE BLUR SCALE (rule 71). Size decides depth of field, nothing else does.
+   A surface picks the modifier that matches what it IS; it never types a blur.
+   The tint moves with the blur because a small chip over a heavy blur goes
+   milky, and a big pane at a low tint goes to water. */
+.eg-glass-chip {
+  --eg-blur: var(--blur-chip);
+  --eg-sat: 1.75;
+  --eg-tint: rgba(255, 255, 255, 0.7);
+  --eg-drop: 0 8px 26px -10px rgba(0, 0, 0, 0.2);
+}
+.eg-glass-satellite {
+  --eg-blur: var(--blur-satellite);
+  --eg-sat: 1.8;
+  --eg-tint: rgba(255, 255, 255, 0.66);
+  --eg-drop: 0 8px 24px -8px rgba(0, 0, 0, 0.22);
+}
+.eg-glass-workroom {
+  --eg-blur: var(--blur-workroom);
+  --eg-sat: 1.7;
+  /* The room is the one surface with a cool cast in its tint, as approved. */
+  --eg-tint: rgba(250, 251, 255, 0.56);
+  --eg-drop: 0 30px 90px rgba(16, 4, 30, 0.35);
+}
+.eg-glass-bar {
+  --eg-blur: var(--blur-bar);
+  --eg-sat: 1.85;
+  --eg-tint: rgba(255, 255, 255, 0.55);
+  /* A bar is flush with the page: no drop until content slides under it, at
+     which point body.scrolled adds --frost-shadow. */
+  --eg-drop: 0 0 0 0 transparent;
+}
+.eg-glass-panel {
+  --eg-blur: var(--blur-panel);
+  --eg-sat: 1.9;
+  --eg-tint: rgba(255, 255, 255, 0.55);
+  --eg-drop: var(--shadow-panel);
+}
+
+/* THE SOLE CENSUS EXCEPTION (rule 71, census-verified: 15 glass surfaces, 14 at
+   three rims, this one at one). A triple rim SMEARS on a 7px-radius micro-chip
+   — the three insets land inside each other and the edge turns to mush. The
+   narrator chip under the FAB (`.arclbl`) is the only element allowed to take
+   this class, and it still carries the dark outer hairline like everything
+   else. Anything larger that reaches for it is a bug, not a shortcut. */
+.eg-glass-micro {
+  --eg-blur: var(--blur-chip);
+  --eg-sat: 1.75;
+  --eg-tint: rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 4px 14px -6px rgba(0, 0, 0, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+}
+
+/* ============================================================================
+   CONTROLS (rules 41 + 27)
+
+   Buttons are PLAIN ink pills. #141318, radius 999, no gloss gradient, no glow
+   shadow — gloss plus glow is what reads vibecoded. Secondary is a quiet grey
+   pill. Commit moments are INK, never violet: a violet fill on an add or commit
+   trigger is banned outright. Purple stays identity (the mark, units, the
+   active wash, a progress hairline), never the trigger.
+   ========================================================================== */
+.eg-btn-ink {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-inverse);
+  background: var(--ink-pill);
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: all var(--dur-mid) var(--ease-out);
+}
+.eg-btn-ink:hover:not(:disabled) {
+  background: var(--ink-pill-hover);
+  transform: translateY(-1px);
+}
+.eg-btn-ink:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.eg-btn-ink:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.eg-btn-quiet {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-body-strong);
+  background: var(--quiet-fill);
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all var(--dur-mid) var(--ease-out);
+}
+.eg-btn-quiet:hover:not(:disabled) {
+  background: var(--quiet-fill-hover);
+}
+.eg-btn-quiet:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.eg-btn-quiet:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ============================================================================
+   FOCUS (rule 47) — THE RING IS INK.
+
+   The global ring lives in tokens.css so it applies whether or not a component
+   knows this file exists. What lives here is the PILL case: a bare input inside
+   a pill container (chat bar, workroom composer, cmdk field) should not draw a
+   rectangle inside a rounded shell. The input goes quiet and the PILL takes the
+   focus, via :focus-within, with a darker hairline and a soft 3px ink ring.
+
+   OPT-IN ON PURPOSE. Suppressing an inner outline is an accessibility decision;
+   it happens only where a container has explicitly accepted the duty of showing
+   focus instead. Nothing loses a ring until a surface adds this class.
+   ========================================================================== */
+.eg-pill:focus-within {
+  border-color: rgba(0, 0, 0, 0.16);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 10px 28px -14px rgba(0, 0, 0, 0.1),
+    0 0 0 3px var(--focus-ring-soft);
+}
+.eg-pill input:focus-visible,
+.eg-pill textarea:focus-visible {
+  outline: none;
+}
+
+/* ============================================================================
+   THE ODOMETER (rule 61) — a figure never swaps, it ROLLS.
+
+   The engine that drives this (per-digit strips over the first text node) is
+   surface-wave work. The material it rolls on is foundation, so it lives here:
+   changed columns become 1em strips that slide up on the odometer curve with a
+   blur pulse through the middle of the roll. Tabular numerals are mandatory on
+   the container or the columns will not line up.
+   ========================================================================== */
+.eg-odo {
+  display: inline-block;
+  position: relative;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.eg-odo .eg-odo-strip {
+  display: block;
+  transition: transform var(--dur-odo) var(--ease-odo);
+}
+.eg-odo .eg-odo-strip > span {
+  display: block;
+  height: 1em;
+  line-height: 1em;
+}
+.eg-odo.eg-odo-go .eg-odo-strip {
+  transform: translateY(-1em);
+}
+.eg-odo.eg-odo-go {
+  animation: eg-odo-blur var(--dur-odo) var(--ease-out);
+}
+@keyframes eg-odo-blur {
+  0%,
+  100% {
+    filter: blur(0);
+  }
+  45% {
+    filter: blur(1.3px);
+  }
+}
+
+/* ============================================================================
+   REDUCED MOTION — THE DUMMY'S KILL PATTERN.
+
+   Not a 0.001s duration, which still schedules and repaints every frame and
+   turns a spinner into a strobe. Motion is switched OFF and every element is
+   left in its resting state. Verified against this app's animation inventory:
+   nothing here is hidden at rest and revealed only by a keyframe, so killing
+   the animation never hides content.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
