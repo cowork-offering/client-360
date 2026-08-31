@@ -448,6 +448,47 @@ describe("parseIntent maps a sentence onto the catalog", () => {
     expect(filedRemove.filed.recordId).toBe("a carry exclusion writes nothing");
   });
 
+  it("NEVER titles a removal as an addition, whichever catalog entry the line matched", async () => {
+    const { engine } = engineOn();
+    // "as guarantor" is a synonym of the ADD entry and the verb is a REMOVE, so
+    // the chip used to read "Add a legal entity" directly above "off the
+    // modification" — the one misread in a change set that actually matters.
+    const [delta] = await confirm(engine, "remove James Hartwell as guarantor from the line of credit - $15,000,000.00");
+    expect(delta.op).toBe("remove");
+    expect(delta.title).toBe("Remove a legal entity");
+    expect(delta.badge).toBe("Remove a legal entity → off the modification");
+    expect(delta.involvementWire).toMatchObject({ op: "remove", accountName: "James Hartwell", facilityId: LINE_ID });
+  });
+
+  it("carries the op, the role and the member across its OWN question", async () => {
+    const { engine } = engineOn();
+    // The room asks who; the banker answers with the name and nothing else, and
+    // the amendment completes from what the asking line already settled.
+    const asked = await engine.parseIntent("remove the guarantor from the line of credit - $15,000,000.00", context);
+    expect(asked.kind).toBe("unparsed");
+    expect(asked.reply).toMatch(/which entity/i);
+
+    const answered = await engine.parseIntent("James Hartwell", context);
+    if (answered.kind !== "deltas") throw new Error(`${answered.kind}: ${answered.reply}`);
+    expect(answered.deltas).toHaveLength(1);
+    expect(answered.deltas[0].title).toBe("Remove a legal entity");
+    expect(answered.deltas[0].involvementWire).toMatchObject({
+      op: "remove",
+      role: "Guarantor",
+      accountName: "James Hartwell",
+      facilityId: LINE_ID,
+    });
+  });
+
+  it("reads a bare figure against a label that states its own unit", async () => {
+    const { engine } = engineOn();
+    // The org labels the field "Amortized Term (Months)". Quoting that label and
+    // saying 240 has already said the unit, so the room does not ask which.
+    const deltas = await confirm(engine, "set the Amortized Term (Months) on the line of credit - $15,000,000.00 to 240");
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0].fieldWire).toMatchObject({ field: "LLC_BI__Amortized_Term_Months__c", value: 240, facilityId: LINE_ID });
+  });
+
   it("sends structure changes on the wire as involvementChangesJson", async () => {
     const { engine, deps: d } = engineOn();
     const deltas = [

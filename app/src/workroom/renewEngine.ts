@@ -26,7 +26,16 @@ import { catalogField, chainFor, type CatalogField } from "./fieldCatalog";
 import { gatewayRestate, type Restate } from "./gatewayRestate";
 import { WorkroomRefusalError } from "./modifyEngine";
 import { vocabularyFor } from "./modes";
-import { membersNamedIn, parseAnswer, parseModify, readDate, type Amendment, type ParseContext, type ParsedValue } from "./parseModify";
+import {
+  membersNamedIn,
+  parseAnswer,
+  parseModify,
+  readDate,
+  type Amendment,
+  type Awaiting,
+  type ParseContext,
+  type ParsedValue,
+} from "./parseModify";
 import { greetingFor } from "./viewer";
 import type { SourceChip, WhyRow } from "./scripts";
 import type {
@@ -306,7 +315,7 @@ export function createRenewEngine(args: {
   let idempotencyKey: string | null = held.idempotencyKey;
   const spent = new Set<string>();
   let deltaSeq = 0;
-  let awaiting: { field: CatalogField; facility: Facility | null } | null = null;
+  let awaiting: Awaiting | null = null;
 
   /* ------------------------------------------------------------- the deltas */
 
@@ -641,7 +650,7 @@ export function createRenewEngine(args: {
 
   const RENEW_VERB = /\b(renew|renewal|renewing|roll\s*over|rollover|roll\s+forward|extend\s+the\s+facility)\b/i;
 
-  function withCurrent(question: string, at?: { field: CatalogField; facility: Facility | null }): string {
+  function withCurrent(question: string, at?: Awaiting): string {
     if (!at?.facility) return question;
     const today = currentValue(at.field, at.facility);
     return today.startsWith("not ") || today.includes("not staged") ? question : `${question} Today it reads ${today}.`;
@@ -719,7 +728,7 @@ export function createRenewEngine(args: {
     // reply to "what maturity does the renewal run to", and reading it as a new
     // instruction would lose both the field and the member.
     if (awaiting) {
-      const answered = parseAnswer(awaiting, text);
+      const answered = parseAnswer(awaiting, text, parseContext());
       if (answered) {
         const result = toResult(answered, deltaSeq);
         if (result) {

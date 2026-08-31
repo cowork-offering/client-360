@@ -38,7 +38,16 @@ import {
 } from "./explain";
 import { catalogSummary, chainFor, isFileable, FILING_FIELDS, type CatalogField, type WireKey } from "./fieldCatalog";
 import { vocabularyFor } from "./modes";
-import { membersNamedIn, parseAnswer, parseModify, type Amendment, type ParseContext, type ParsedValue } from "./parseModify";
+import {
+  membersNamedIn,
+  parseAnswer,
+  parseModify,
+  type Amendment,
+  type AmendmentOp,
+  type Awaiting,
+  type ParseContext,
+  type ParsedValue,
+} from "./parseModify";
 import { greetingFor } from "./viewer";
 import type { SourceChip, WhyRow } from "./scripts";
 import type {
@@ -232,6 +241,19 @@ const GROUP_KIND: Record<string, string> = {
  *  entry in a change set that takes something away. */
 const OP_KIND: Record<string, string> = { add: "Add", remove: "Remove", change: "" };
 
+/**
+ * THE CHIP'S TITLE FOLLOWS THE OP, NOT THE CATALOG ENTRY.
+ *
+ * "remove James Hartwell as guarantor" matches the ADD entry — "as guarantor"
+ * is one of its synonyms — and the verb makes it a removal. Printing that
+ * entry's label gave a chip that read "Add a legal entity" directly above "off
+ * the modification", which is the one misread in a change set that matters: a
+ * banker must never sign a removal believing it was an addition.
+ */
+function deltaTitle(field: CatalogField, op: AmendmentOp): string {
+  return op === "remove" ? field.label.replace(/^Add\b/, "Remove") : field.label;
+}
+
 function valueLabel(value: ParsedValue | null): string {
   if (!value) return "as described";
   switch (value.kind) {
@@ -298,6 +320,10 @@ function fieldWireValue(v: ParsedValue): string | number | null {
 
 function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): WorkroomDelta {
   const { field, facility, value, op } = a;
+  const title = deltaTitle(field, op);
+  // The handoff badge leads with the op, so a title that already carries the
+  // word must not say it twice ("Remove remove a legal entity").
+  const noun = title.replace(/^(?:Add|Remove)\s+/, "");
   // THE TARGET IS A DISPLAY NAME, and it has to be, because the org names a loan
   // `<Borrower> - <Product> - <$Amount>`: using it here printed the member's
   // CURRENT commitment on the chip directly above "$15M → $20M", which is a live
@@ -392,9 +418,9 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     kindTone: op === "remove" ? "refusal" : wire || covenantWire || involvementWire || fieldWire ? undefined : "refusal",
     badge:
       wire || covenantWire || involvementWire || fieldWire
-        ? `${field.label} → ${after}`
-        : `${OP_KIND[op] || "Change"} ${field.label.toLowerCase()} · handed off`,
-    title: field.label,
+        ? `${title} → ${after}`
+        : `${OP_KIND[op] || "Change"} ${noun.toLowerCase()} · handed off`,
+    title,
     target,
     before,
     after,
@@ -595,6 +621,24 @@ export function createModifyEngine(args: {
   /** The member the banker picked off the strip. A default for a line that names
    *  none; never an override for one that does. */
   let focus: Facility | null = null;
+  /**
+   * WHO THE PARSE ALREADY KNOWS ABOUT.
+   *
+   * `entities` above is the org's OWN involvement set — `graph.legalEntities` is
+   * the read of LLC_BI__Legal_Entities__c — so it carries every guarantor,
+   * co-borrower and related entity on the package, not just the borrower.
+   * Verified against the live read and the sample bundle: both return the
+   * guarantor rows. So the name lookup in `readParty` is already as wide as the
+   * data goes, and a name it misses is a name the ORG does not hold.
+   *
+   * `graph.connections` — the household around the deal — deliberately does NOT
+   * join it. Those counterparties are related to the relationship and NOT on the
+   * package, and `entities` is what the advisories read to decide whether a party
+   * is already involved. Widening it there would make every add of a subsidiary
+   * report itself as a duplicate involvement. An unknown name needs no lookup
+   * anyway: adding somebody who is not on the deal yet is exactly the ask, and
+   * the parse keeps their name verbatim.
+   */
   const parseContext = (): ParseContext => ({ facilities: members, booked, relationship, entities, focus });
 
   const suggestions = buildSuggestions();
@@ -1092,7 +1136,7 @@ export function createModifyEngine(args: {
    *
    * The parser cannot do this itself. It resolves fields, not the bundle.
    */
-  function withCurrent(question: string, awaiting?: { field: CatalogField; facility: Facility | null }): string {
+  function withCurrent(question: string, awaiting?: Awaiting): string {
     if (!awaiting) return question;
     const today = awaiting.facility ? currentValue(awaiting.field, awaiting.facility) : "";
     const reads = today && !today.startsWith("not ") && !today.includes("not staged") ? ` Today it reads ${today}.` : "";
@@ -1194,7 +1238,7 @@ export function createModifyEngine(args: {
 
   let deltaSeq = 0;
   /** The question the room last asked, so the next line can answer it. */
-  let awaiting: { field: CatalogField; facility: Facility | null } | null = null;
+  let awaiting: Awaiting | null = null;
 
   /**
    * WHAT THE ANSWER DID TO THE ROOM'S OWN STATE.
@@ -1231,7 +1275,7 @@ export function createModifyEngine(args: {
     // reply to "what should the commitment become", and reading it as a new
     // instruction would lose both the field and the member.
     if (awaiting) {
-      const answered = parseAnswer(awaiting, text);
+      const answered = parseAnswer(awaiting, text, parseContext());
       if (answered) {
         const result = toResult(answered, deltaSeq, text);
         if (result) {
