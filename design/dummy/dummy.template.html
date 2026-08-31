@@ -1,0 +1,2285 @@
+<meta charset="utf-8">
+<title>C360 Electric Glass</title>
+<style>
+  @font-face{font-family:"Graphik";font-weight:400;font-style:normal;font-display:swap;src:url(data:font/woff2;base64,__FONT_REG__) format("woff2")}
+  @font-face{font-family:"Graphik";font-weight:500;font-style:normal;font-display:swap;src:url(data:font/woff2;base64,__FONT_MED__) format("woff2")}
+  @font-face{font-family:"Graphik";font-weight:600;font-style:normal;font-display:swap;src:url(data:font/woff2;base64,__FONT_SEMI__) format("woff2")}
+
+  /* ============================================================
+     ELECTRIC GLASS — the approved system (lab a00c6a57, option 1
+     + all polish rounds), shaped as the Customer 360 cockpit.
+     ============================================================ */
+  :root{
+    --ground:#f5f5f7;--surface:#fff;--surface-2:#f0f0f2;
+    --ink:#000;--ink-2:#1a1a1a;--ink-3:#5b5c66;--ink-4:#80818d;
+    --line:#e8e8ed;--line-soft:#ececf1;
+    --purple:#a100ff;--purple-deep:#7500c0;--purple-100:#e6dcff;--purple-050:#f6efff;
+    --wash-active:rgba(161,0,255,.06);--hairline-active:rgba(161,0,255,.16);
+    --good:#147a46;--warn:#b15c00;--bad:#cc2e2e;
+    --glass:rgba(255,255,255,.62);--glass-b:rgba(255,255,255,.65);--hairline:rgba(0,0,0,.07);
+    --sh-card:0 1px 2px rgba(0,0,0,.03),0 4px 18px rgba(0,0,0,.05);
+    --sh-float:0 8px 40px rgba(26,7,54,.14);
+    --r-card:16px;--r-ctl:10px;
+    --ease:cubic-bezier(.2,.7,.3,1);--settle:cubic-bezier(.19,1,.3,1);--dur:240ms;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;
+    background:
+      radial-gradient(560px 300px at -6% 30%, rgba(5,242,219,.04) 0%, transparent 55%),
+      radial-gradient(135% 85% at 50% -12%, #ffffff 0%, var(--ground) 46%);
+    color:var(--ink-2);
+    font-family:"Graphik",-apple-system,"Helvetica Neue",Arial,sans-serif;
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+    letter-spacing:-.01em;font-variant-numeric:tabular-nums;
+  }
+  /* ambient life — two blooms on a slow drift, behind everything */
+  .ambient{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+  .ambient span{position:absolute;border-radius:50%;filter:blur(80px);will-change:transform,opacity}
+  .ambient .b{width:36vw;height:36vw;bottom:-16vw;left:-10vw;background:#05f2db;opacity:.05;
+    animation:driftb 32s ease-in-out infinite alternate}
+  @keyframes driftb{from{transform:translate(2%,2%) scale(1.06)}to{transform:translate(-4%,-3%) scale(1)}}
+  .view,.topbar{position:relative;z-index:1}
+  button{font:inherit;letter-spacing:inherit;cursor:pointer}
+  button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid rgba(20,19,24,.65);outline-offset:2px}
+  /* inputs living inside pills: the PILL takes the focus, quietly */
+  .wk-in input:focus-visible,.chatin input:focus-visible,.cmdk input:focus-visible{outline:none}
+  .wk-in:focus-within,.chatin:focus-within{border-color:rgba(0,0,0,.16);
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1),0 0 0 3px rgba(0,0,0,.05)}
+  .gt{display:inline-block;vertical-align:-2px}
+  .page{max-width:1180px;margin:0 auto;padding:0 26px}
+  .num{font-variant-numeric:tabular-nums}
+
+  /* ---------- status = typography ---------- */
+  .st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;white-space:nowrap}
+  .st::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.8}
+  .st.good{color:var(--good)}.st.warn{color:var(--warn)}.st.bad{color:var(--bad)}
+  .st.acc{color:var(--purple-deep)}.st.mut{color:var(--ink-4)}
+
+  /* ---------- glass top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.55);
+    -webkit-backdrop-filter:blur(36px) saturate(1.85);backdrop-filter:blur(36px) saturate(1.85);
+    border-bottom:1px solid rgba(0,0,0,.06);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    transition:box-shadow .4s var(--ease)}
+  body.scrolled .topbar{box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28),0 10px 30px -18px rgba(0,0,0,.25)}
+  .topbar-in{position:relative;max-width:1180px;margin:0 auto;padding:0 26px;height:52px;display:flex;align-items:center;gap:12px}
+
+  .topbar .apptitle{font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+  .topbar .spacer{flex:1}
+
+  .dot-live{width:7px;height:7px;border-radius:50%;background:var(--good);position:relative;cursor:help}
+  .dot-live::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid var(--good);opacity:.3;animation:pulse 2.4s var(--ease) infinite}
+  @keyframes pulse{0%{transform:scale(.55);opacity:.5}70%{transform:scale(1.1);opacity:0}100%{opacity:0}}
+  .kbd{font-size:10.5px;color:var(--ink-4);border:1px solid var(--line);border-radius:6px;padding:2.5px 8px;background:rgba(255,255,255,.6);cursor:pointer}
+  .kbd:hover{color:var(--purple-deep);border-color:var(--purple-100)}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600}
+
+  /* ---------- the agent leans in: one quiet whisper off the mark ---------- */
+  .whisper{position:fixed;right:44px;bottom:118px;z-index:44;display:flex;align-items:center;gap:9px;
+    max-width:340px;padding:11px 14px;border-radius:14px;cursor:pointer;
+    background:rgba(255,255,255,.6);-webkit-backdrop-filter:blur(34px) saturate(1.8);backdrop-filter:blur(34px) saturate(1.8);
+    border:1px solid rgba(0,0,0,.06);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28),0 14px 40px -16px rgba(0,0,0,.3);
+    font-size:12px;color:var(--ink-2);line-height:1.45;
+    opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;
+    transition:opacity .45s var(--ease),transform .5s cubic-bezier(.22,1,.36,1)}
+  .whisper.show{opacity:1;transform:none;pointer-events:auto}
+  .whisper .gt{flex:none;color:var(--purple)}
+  .whisper b{color:var(--ink);font-weight:600}
+  .whisper .wx{flex:none;border:0;background:transparent;color:var(--ink-4);font-size:11px;cursor:pointer;
+    width:20px;height:20px;border-radius:6px;display:grid;place-items:center;align-self:flex-start;margin:-3px -6px 0 0}
+  .whisper .wx:hover{background:rgba(0,0,0,.05);color:var(--ink)}
+  .fab.breathe{animation:fabreathe 3.2s ease-in-out 2}
+  @keyframes fabreathe{0%,100%{transform:scale(1)}
+    50%{transform:scale(1.02);box-shadow:0 6px 22px rgba(26,7,54,.28),0 0 22px rgba(161,0,255,.16)}}
+
+  /* ---------- boot: the briefing headline rises word by word ---------- */
+  .brief h1 .bw{display:inline-block;opacity:0;transform:translateY(16px);
+    animation:bwup .6s cubic-bezier(.22,1,.36,1) forwards}
+  @keyframes bwup{to{opacity:1;transform:none}}
+
+  /* ---------- lens specular: the capsule catches the light under the cursor ---------- */
+  .topnav .icotabs{position:relative}
+  .topnav .icotabs::after{content:"";position:absolute;inset:0;border-radius:999px;pointer-events:none;
+    background:radial-gradient(90px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.55),transparent 65%);
+    opacity:0;transition:opacity .3s var(--ease)}
+  .topnav .icotabs:hover::after{opacity:1}
+
+  /* ---------- client anchors materialize with a quiet cascade ---------- */
+  .view.show .anchor{animation:ancup .45s var(--ease) both}
+  .view.show .anchor:nth-child(2){animation-delay:45ms}
+  .view.show .anchor:nth-child(3){animation-delay:90ms}
+  .view.show .anchor:nth-child(4){animation-delay:135ms}
+  .view.show .anchor:nth-child(5){animation-delay:180ms}
+  @keyframes ancup{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){
+    .brief h1 .bw{animation:none;opacity:1;transform:none}
+    .view.show .anchor{animation:none}
+    .fab.breathe{animation:none}}
+
+  /* ---------- precision life: rings draw, meters fill, bubbles settle ---------- */
+  .gr .fg{transition:stroke-dashoffset 1s cubic-bezier(.22,1,.36,1)}
+  .pane.show .meter i{animation:meterfill .9s var(--settle) both;animation-delay:.15s}
+  @keyframes meterfill{from{width:0}}
+  .wk-msg{animation:msgin .45s var(--settle) both}
+  @keyframes msgin{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+  .acct-wm{transition:transform 1.2s cubic-bezier(.22,1,.36,1)}
+  .cmdk .r.hid{display:none}
+  .cmdk .nores{padding:16px 18px;font-size:12.5px;color:var(--ink-4);display:none}
+  .cmdk .nores.on{display:block}
+  @media (prefers-reduced-motion: reduce){
+    .gr .fg{transition:none}.pane.show .meter i{animation:none}
+    .wk-msg{animation:none}.acct-wm{transition:none}
+    .empty .wm{animation:none}.pane.show .tl::before{animation:none}}
+
+  /* ---------- the agent SPEAKS: words condense out of the glass ---------- */
+  .wk-w{opacity:0;filter:blur(4px);animation:wkw .38s var(--ease) forwards}
+  @keyframes wkw{to{opacity:1;filter:blur(0)}}
+
+  /* ---------- the mark idles alive: a bloom breath every nine seconds ---------- */
+  .fab::after{content:"";position:absolute;inset:-3px;border-radius:50%;pointer-events:none;
+    opacity:0;box-shadow:0 0 14px 2px rgba(161,0,255,.13);animation:fabidle 7s ease-in-out infinite}
+  @keyframes fabidle{0%,100%{opacity:0}50%{opacity:.55}}
+  @media (prefers-reduced-motion: reduce){
+    .wk-w{animation:none;opacity:1;filter:none}
+    .fab::after{animation:none}}
+
+  /* ---------- odometer: numbers are instruments, they roll ---------- */
+  .odo{display:inline-block;position:relative;height:1em;overflow:hidden;vertical-align:baseline}
+  .odo .strip{display:block;transition:transform .6s cubic-bezier(.65,0,.35,1)}
+  .odo .strip span{display:block;height:1em;line-height:1em}
+  .odo.go .strip{transform:translateY(-1em)}
+  .odo.go{animation:odoblur .6s var(--ease)}
+  @keyframes odoblur{0%,100%{filter:blur(0)}45%{filter:blur(1.3px)}}
+  /* the violet wash: a write-back settles on what it changed */
+  .anchor.washed{animation:ancwash 1.7s var(--ease) both}
+  @keyframes ancwash{0%{background:rgba(161,0,255,.09);border-color:rgba(161,0,255,.2)}
+    100%{background:#fff;border-color:var(--line-soft)}}
+
+  /* ---------- the lens: cmdk pushes the world into depth of field ---------- */
+  .topbar,.view.show,.fabwrap{transition:filter .45s var(--ease),transform .5s cubic-bezier(.22,1,.36,1),opacity .3s var(--ease)}
+  body.lensed .topbar,body.lensed .view.show{filter:blur(14px) saturate(.92);transform:scale(.988)}
+  body.lensed .fabwrap{filter:blur(10px);pointer-events:none}
+  .cmdk-wrap{background:rgba(16,4,30,.10)}
+  .cmdk-wrap.show .cmdk{animation:cmdkin .42s cubic-bezier(.22,1,.36,1) both}
+  @keyframes cmdkin{from{opacity:0;transform:translateY(10px) scale(.965)}to{opacity:1;transform:none}}
+  .cmdk-wrap.show .r{opacity:0;animation:fadeup .35s var(--ease) forwards}
+  .cmdk-wrap.show .r:nth-child(1){animation-delay:.10s}
+  .cmdk-wrap.show .r:nth-child(2){animation-delay:.16s}
+  .cmdk-wrap.show .r:nth-child(3){animation-delay:.22s}
+  @media (prefers-reduced-motion: reduce){
+    .odo .strip{transition:none}.odo.go{animation:none}
+    body.lensed .topbar,body.lensed .view.show,body.lensed .fabwrap{filter:none;transform:none}}
+
+  /* ---------- continuity: nothing teleports ---------- */
+  .flyname{position:fixed;z-index:80;margin:0;font-weight:600;color:var(--ink);white-space:nowrap;
+    pointer-events:none;font-size:14.5px;letter-spacing:0;
+    transition:left .52s cubic-bezier(.22,1,.36,1),top .52s cubic-bezier(.22,1,.36,1),
+      font-size .52s cubic-bezier(.22,1,.36,1),letter-spacing .52s cubic-bezier(.22,1,.36,1)}
+  .view.noanim.show{animation:none} /* the ghost carries the motion; must OUTRANK .view.show, and stays until the view next hides so removal never restarts the entry animation */
+  .wkseed{position:fixed;z-index:54;border-radius:50%;background:rgba(255,255,255,.8);
+    box-shadow:0 0 60px 30px rgba(161,0,255,.10);pointer-events:none;
+    transform:translate(-50%,-50%) scale(0);opacity:1}
+  .wkseed.go{transform:translate(-50%,-50%) scale(1);opacity:0;
+    transition:transform .5s cubic-bezier(.22,1,.36,1),opacity .55s var(--ease)}
+  /* press physics — everything gives under the finger */
+  .itab:active,.kbd:active,.chatmini:active,.chatx:active,.send:active{transform:scale(.95)}
+  .wlrow:active{transform:translateY(0) scale(.99)}
+  .fab:active{transform:scale(.94)}
+  .fabwrap.open .arcbtn:active{transform:translate(var(--tx),var(--ty)) scale(.9)}
+
+  /* ---------- the weave: slim filament threads breathing behind the briefing ---------- */
+  #view-home{position:relative}
+  .weave{position:absolute;top:-10px;left:0;right:0;height:380px;z-index:0;pointer-events:none;overflow:hidden;
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.5) 14%,#000 40%,rgba(0,0,0,.55) 78%,transparent 100%);
+    mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.5) 14%,#000 40%,rgba(0,0,0,.55) 78%,transparent 100%)}
+  .weave svg{display:block;width:100%;height:100%}
+  .weave path{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round}
+
+  /* ---------- views ---------- */
+  .view{display:none}
+  .view.show{display:block;animation:viewin .32s var(--ease) both}
+  @keyframes viewin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ---------- cards ARE glass — one recipe, everywhere ---------- */
+  .card{background:#fff;
+    border:1px solid var(--line-soft);border-radius:var(--r-card);
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    transition:box-shadow var(--dur) var(--ease)}
+  .card:hover{box-shadow:0 1px 2px rgba(0,0,0,.04),0 14px 36px -12px rgba(0,0,0,.14)}
+  .kicker{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4)}
+  .eyebrow{display:flex;align-items:center;gap:8px}
+  .eyebrow .gt{color:var(--purple)}
+
+  /* ---------- the briefing ---------- */
+  .brief{max-width:640px;margin-bottom:30px}
+  .brief h1{font-size:40px;font-weight:600;letter-spacing:-.025em;line-height:1.12;color:var(--ink);margin:10px 0 12px;
+    animation:arrive .55s var(--settle) both}
+  .brief p{margin:0;font-size:14.5px;color:var(--ink-3);max-width:56ch;animation:arrive .55s var(--settle) .08s both}
+
+  .mono{width:40px;height:40px;flex:none;border-radius:12px;background:var(--surface-2);color:var(--ink-3);
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+
+  /* ---------- KPI band ---------- */
+  .kpis{display:flex;flex-wrap:wrap;overflow:hidden}
+  .kpi{flex:1 1 0;min-width:120px;padding:18px 22px;border-right:1px solid rgba(0,0,0,.05)}
+  .kpi:last-child{border-right:0}
+  .kpi .l{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-4)}
+  .kpi .v{font-size:25px;font-weight:600;letter-spacing:-.02em;color:var(--ink);margin-top:6px}
+  .kpi .v .u{color:var(--purple)}
+  .kpi .v.warn{color:var(--warn)}
+  .kpi .s{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+
+  /* ---------- worklist ---------- */
+  .wl{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+  .wlrow{display:flex;align-items:center;gap:18px;background:#fff;
+    border:1px solid var(--line-soft);
+    border-radius:13px;padding:15px 20px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    cursor:pointer;text-align:left;width:100%;
+    transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease);
+    animation:arrive .5s var(--ease) both}
+  .wlrow:nth-child(2){animation-delay:45ms}.wlrow:nth-child(3){animation-delay:90ms}
+  @keyframes arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .wlrow:hover{transform:translateY(-1px);box-shadow:0 8px 40px rgba(26,7,54,.16)}
+  .wlrow .who{min-width:230px}
+  .wlrow .who b{display:block;font-size:14.5px;font-weight:600;color:var(--ink)}
+  .wlrow .who span{font-size:11.5px;color:var(--ink-4)}
+  .wlrow .sts{display:flex;gap:16px;flex-wrap:wrap;flex:1}
+  .wlrow .amt{text-align:right}
+  .wlrow .amt b{display:block;font-size:15px;font-weight:600;color:var(--ink)}
+  .wlrow .amt span{font-size:11px;color:var(--ink-4)}
+  .wlrow .go{color:var(--ink-4);font-size:14px;transition:transform var(--dur) var(--ease)}
+  .wlrow:hover .go{transform:translateX(3px);color:var(--purple-deep)}
+
+  /* ---------- account header (glass) ---------- */
+  /* the client identity is its OWN glass panel — a hero, not a band */
+  .hero{position:relative;overflow:hidden;border-radius:22px;padding:20px 28px 24px;
+    background:
+      radial-gradient(520px 240px at 88% -12%, rgba(161,0,255,.09) 0%, transparent 58%),
+      radial-gradient(380px 200px at -4% 110%, rgba(5,242,219,.05) 0%, transparent 55%),
+      rgba(255,255,255,.55);
+    -webkit-backdrop-filter:blur(36px) saturate(1.8);backdrop-filter:blur(36px) saturate(1.8);
+    border:1px solid rgba(0,0,0,.05);
+    box-shadow:0 16px 50px -16px rgba(0,0,0,.18),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28)}
+  .acct-wm{position:absolute;right:-34px;top:-74px;color:var(--purple);opacity:.06;pointer-events:none}
+  /* the workspace nav: a floating glass capsule the full width of the client
+     card — tabs spread across it */
+  /* client workspace nav lives IN the header, truly centered (client view only) */
+  /* nav breathes in, never pops: capsule fades + settles, tabs cascade */
+  .topnav{position:absolute;left:50%;top:50%;transform:translate(-50%,-46%) scale(.94);
+    opacity:0;pointer-events:none;
+    transition:opacity .38s var(--ease),transform .45s cubic-bezier(.22,1,.36,1)}
+  body.on-client .topnav{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto;transition-delay:.12s}
+  /* entrance cascade is an ANIMATION, never transition-delays - delays on a
+     transition poison every later interactive state change on the same element */
+  body.on-client .topnav .itab{animation:navtabin .35s cubic-bezier(.22,1,.36,1) both}
+  @keyframes navtabin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  body.on-client .topnav .itab:nth-child(1){animation-delay:.14s}
+  body.on-client .topnav .itab:nth-child(2){animation-delay:.17s}
+  body.on-client .topnav .itab:nth-child(3){animation-delay:.2s}
+  body.on-client .topnav .itab:nth-child(4){animation-delay:.23s}
+  body.on-client .topnav .itab:nth-child(5){animation-delay:.26s}
+  body.on-client .topnav .itab:nth-child(6){animation-delay:.29s}
+  body.on-client .topnav .itab:nth-child(7){animation-delay:.32s}
+  @media (prefers-reduced-motion: reduce){.topnav{transition:none !important}.topnav .itab{animation:none !important}}
+  .topnav .icotabs{padding:3px 5px;gap:6px;flex-wrap:nowrap;align-items:center;
+    border-radius:999px;
+    background:rgba(255,255,255,.55);
+    border:1px solid rgba(0,0,0,.05);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28),0 4px 14px -8px rgba(0,0,0,.14)}
+  .topnav .itab{padding:6px 9px}
+  .topnav .itab svg{width:14px;height:14px}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-4);padding-top:16px}
+  .crumb button{border:0;background:none;color:var(--purple-deep);font-weight:600;font-size:12px;display:inline-flex;align-items:center;gap:5px;padding:0}
+  .acct-name-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .acct-name{font-size:25px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+  .stagechip{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);
+    background:var(--surface-2);border:1px solid var(--line-soft);border-radius:7px;padding:3px 10px}
+  .stagechip b{color:var(--ink);margin-left:5px}
+  .verdict{max-width:74ch;font-size:13.5px;color:var(--ink-3);margin:8px 0 0}
+  .anchors{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;margin:14px 0 16px}
+  .anchor{min-width:112px;background:#fff;
+    border:1px solid var(--line-soft);border-radius:11px;padding:9px 13px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 6px 18px -10px rgba(0,0,0,.08)}
+  .anchor .l{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+  .anchor .v{font-size:15.5px;font-weight:600;color:var(--ink);margin-top:3px}
+  .anchor .v .u{color:var(--purple)}
+  .anchor .v .dn{color:var(--bad);font-size:12px;margin-left:4px}
+  .anchor .s{font-size:10.5px;color:var(--ink-4);margin-top:1px}
+  .anchor.grade-cell{display:flex;align-items:center;gap:12px}
+  .gr{width:46px;height:46px;flex:none}
+  .gr .bg{stroke:var(--surface-2)}
+  .gr .fg{stroke:var(--purple);stroke-linecap:round}
+  .gr text{font:600 14px "Graphik",sans-serif;fill:var(--ink)}
+
+
+  /* ---------- expanding icon nav (THE approved tab pattern) ---------- */
+  .icotabs{display:flex;gap:5px;padding:0 0 14px;flex-wrap:wrap}
+  .itab{display:flex;align-items:center;color:var(--ink-3);border:1px solid transparent;background:none;
+    border-radius:999px;padding:8px 11px;transition:all var(--dur) var(--ease);position:relative}
+  .itab svg{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+  .itab .lbl{max-width:0;overflow:hidden;white-space:nowrap;font-size:12.5px;font-weight:600;
+    transition:max-width .3s var(--ease),margin .3s var(--ease),opacity .25s var(--ease);opacity:0}
+  .itab:hover{color:var(--ink);background:rgba(255,255,255,.75)}
+  .itab .tip{position:absolute;left:50%;top:calc(100% + 4px);transform:translate(-50%,-3px);opacity:0;
+    pointer-events:none;transition:all .2s var(--ease);font-size:10.5px;font-weight:500;color:var(--ink-3);
+    background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:2px 8px;white-space:nowrap;z-index:5}
+  .itab:hover .tip{opacity:1;transform:translate(-50%,0)}
+  .itab.active{color:var(--ink);background:var(--wash-active);border-color:var(--hairline-active);
+    box-shadow:0 1px 4px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.8)}
+  .itab.active svg{opacity:1}
+  .itab.active .lbl{max-width:150px;opacity:1;margin-left:8px}
+  .itab.active .tip{display:none}
+
+  /* ---------- tab panes ---------- */
+  .pane{display:none;padding:22px 0 90px}
+  .pane.show{display:block;animation:panein .34s var(--settle) both}
+  @keyframes panein{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  .pane-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+  .cardpad{padding:22px 24px}
+  .sechead{margin-bottom:14px}
+  .sechead .sub{font-size:16px;font-weight:600;color:var(--ink);margin-top:2px}
+
+  /* chart */
+  .bigfig{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  .bigfig .n{font-size:27px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+  .bigfig .n .u{color:var(--purple)}
+  .bigfig .chg{font-size:12px;color:var(--good);font-weight:500}
+  .bigfig .cap{font-size:11px;color:var(--ink-4);margin-left:auto}
+  .grid line{stroke:var(--line-soft)}
+  .axis text{font:400 10px "Graphik",sans-serif;fill:var(--ink-4)}
+
+  /* tables */
+  table.dt{width:100%;border-collapse:collapse;font-size:13px}
+  table.dt th{text-align:left;font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--ink-4);padding:0 12px 9px;border-bottom:1px solid var(--line)}
+  table.dt td{padding:11px 12px;border-bottom:1px solid var(--line-soft);color:var(--ink-2)}
+  table.dt td:first-child{font-weight:500;color:var(--ink)}
+  .r{text-align:right}
+  table.dt tr.total td{border-bottom:0;border-top:1.5px solid var(--ink);font-weight:600;color:var(--ink)}
+  table.dt tbody tr{transition:background var(--dur) var(--ease)}
+  table.dt tbody tr:hover{background:var(--surface-2)}
+  .ratio-rows .rr{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px dashed var(--line-soft);font-size:13px}
+  .ratio-rows .rr:last-child{border-bottom:0}
+  .ratio-rows .rr span{color:var(--ink-3)}
+  .ratio-rows .rr b{font-weight:600;color:var(--ink)}
+  .ratio-rows .rr b .u{color:var(--purple)}
+
+  /* meter */
+  .meter{height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin-top:8px}
+  .meter i{display:block;height:100%;border-radius:4px;background:var(--purple);opacity:.75;
+    transform-origin:left center;animation:grow .64s var(--ease) both}
+  @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+  /* feed + timeline */
+  .feeditem{display:flex;gap:12px;align-items:flex-start;background:#fff;
+    border:1px solid var(--line-soft);
+    border-radius:12px;padding:13px 16px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);margin-bottom:9px}
+  .feeditem .ic{width:30px;height:30px;flex:none;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+  .feeditem .ic.w{background:#fdf4e7;color:var(--warn)}
+  .feeditem .ic.a{background:var(--purple-050);color:var(--purple-deep)}
+  .feeditem .ic.b{background:#fdefef;color:var(--bad)}
+  .feeditem .tx b{font-size:13px;font-weight:600;color:var(--ink);display:block}
+  .feeditem .tx span{font-size:12px;color:var(--ink-3)}
+  .feeditem .when{margin-left:auto;font-size:11px;color:var(--ink-4);flex:none}
+  /* the audit trail: a line that breathes, dots like porcelain */
+  .tl{position:relative;padding-left:32px}
+  .pane.show .tl::before{animation:tldraw .9s var(--settle) both}
+  @keyframes tldraw{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+  .tl::before{transform-origin:top;content:"";position:absolute;left:10px;top:0;bottom:0;width:1px;
+    background:linear-gradient(to bottom,transparent,var(--line) 10%,var(--line) 90%,transparent)}
+  .tli{position:relative;padding-bottom:24px}
+  .tli:last-child{padding-bottom:2px}
+  .tli::before{content:"";position:absolute;left:-26.5px;top:4px;width:9px;height:9px;border-radius:50%;
+    background:#fff;border:1.5px solid rgba(0,0,0,.22);
+    box-shadow:0 0 0 3.5px #fff; /* the line passes BEHIND the dot */
+    transition:all .25s var(--ease)}
+  .tli:hover::before{background:var(--ink);border-color:var(--ink)}
+  .tli.hot::before{background:var(--ink);border-color:var(--ink);
+    box-shadow:0 0 0 3.5px #fff,0 0 0 7px rgba(0,0,0,.05)}
+  .tli b{font-size:13px;font-weight:600;color:var(--ink)}
+  .tli .m{font-size:11px;color:var(--ink-4);margin-left:7px}
+  .tli p{margin:3px 0 0;font-size:12.5px;color:var(--ink-3);max-width:60ch}
+  /* entries cascade in when the pane opens */
+  .pane.show .tli{animation:fadeup .5s var(--settle) both}
+  .pane.show .tli:nth-child(2){animation-delay:.07s}
+  .pane.show .tli:nth-child(3){animation-delay:.14s}
+  .pane.show .tli:nth-child(4){animation-delay:.21s}
+  .pane.show .tli:nth-child(5){animation-delay:.28s}
+
+  /* ownership tree — orthogonal */
+  .otree{display:flex;flex-direction:column;align-items:center;padding:8px 0 4px;width:100%}
+  .otree .orow{display:flex;width:100%;gap:14px;justify-content:center}
+  .onode{flex:1;min-width:140px;max-width:210px;background:#fff;
+    border:1px solid var(--line-soft);
+    border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    padding:12px 14px;text-align:center}
+  .onode b{display:block;font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.3}
+  .onode .p{display:block;font-size:11px;color:var(--ink-3);margin-top:2px}
+  .onode .role{display:inline-block;margin-top:7px;font-size:9.5px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--purple-deep);background:var(--purple-050);border-radius:6px;padding:2px 8px}
+  .onode{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .onode:hover{transform:translateY(-2px);box-shadow:0 10px 30px -8px rgba(26,7,54,.16)}
+  /* connectors FLOAT into the relationship being worked on: organic curves,
+     measured from real node positions (any number of entities), with glowing
+     particles traveling down the flow. */
+  .otree{position:relative}
+  .oflowlayer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+  .oflowlayer .fl{fill:none;stroke:url(#ogr);stroke-width:1.5;stroke-linecap:round;opacity:.6}
+  .oflowlayer .flp{fill:var(--purple);opacity:.45;filter:drop-shadow(0 0 3px rgba(161,0,255,.4))}
+  .ogap{height:74px;width:100%}
+  .oborrower{min-width:230px;border:1px solid var(--purple-100);border-radius:14px;
+    background:#fff;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    padding:14px 30px;text-align:center}
+  .oborrower .k{font-size:9.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--purple-deep);margin-bottom:3px}
+  .oborrower b{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .oborrower .p{display:block;font-size:11px;color:var(--ink-3);margin-top:2px}
+
+  /* opportunities */
+  .opp{background:#fff;border:1px solid var(--line-soft);border-radius:12px;padding:16px 18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1)}
+  .opp b{font-size:13.5px;font-weight:600;color:var(--ink);display:block}
+  .opp .v{font-size:20px;font-weight:600;color:var(--ink);margin:8px 0 5px}
+  .opp .v .u{color:var(--purple)}
+
+  /* empty state + watermark */
+  .empty{position:relative;text-align:center;padding:46px 20px;overflow:hidden;
+    height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center}
+  .card:has(> .empty){display:flex;flex-direction:column} /* empty states fill + center in a grid-stretched card */
+  .empty .wm{position:absolute;left:50%;top:50%;transform:translate(-50%,-52%);color:var(--purple);opacity:.05;
+    animation:wmbreathe 8s ease-in-out infinite}
+  @keyframes wmbreathe{0%,100%{opacity:.04}50%{opacity:.08}}
+  .empty h5{position:relative;margin:0 0 5px;font-size:14.5px;font-weight:600;color:var(--ink)}
+  .empty p{position:relative;margin:0;font-size:12.5px;color:var(--ink-3)}
+
+
+  .btn-q{font-size:12.5px;font-weight:500;background:rgba(0,0,0,.05);border:0;
+    border-radius:999px;padding:8px 16px;color:var(--ink-2);transition:all var(--dur) var(--ease)}
+  .btn-q:hover{background:rgba(0,0,0,.09)}
+  .btn-p{font-size:12.5px;font-weight:600;color:#fff;border:0;background:#141318;
+    border-radius:999px;padding:8px 18px;transition:all var(--dur) var(--ease)}
+  .btn-p:hover{background:#000;transform:translateY(-1px)}
+  .btn-p:active{transform:scale(.98)}
+
+
+
+  /* ============================================================
+     THE WORKROOM — a full-surface overlay over the cockpit.
+     One viewport, no page scroll; the thread is the protagonist
+     (left column), the rail carries spine + manifest (right).
+     ============================================================ */
+  .wk-scrim{position:fixed;inset:0;z-index:54;background:rgba(26,7,54,.16);display:none}
+  .wk-scrim.show{display:block;animation:fadein .25s var(--ease) both}
+  /* THE ROOM IS GLASS. The cockpit stays visible beneath it, blurred and
+     glowing — the overlay reads as a sheet of frosted light, not a new page.
+     Entrance is opacity-only (Safari: never animate transform on a rounded
+     backdrop-filter surface). */
+  .wk-room{position:fixed;inset:14px;z-index:55;border-radius:20px;display:none;flex-direction:column;overflow:hidden;
+    background:
+      radial-gradient(640px 300px at 88% -10%, rgba(161,0,255,.045) 0%, transparent 58%),
+      radial-gradient(480px 260px at -4% 104%, rgba(5,242,219,.035) 0%, transparent 55%),
+      rgba(250,251,255,.56);
+    -webkit-backdrop-filter:blur(30px) saturate(1.7);backdrop-filter:blur(30px) saturate(1.7);
+    border:1px solid rgba(0,0,0,.06);
+    box-shadow:0 30px 90px rgba(16,4,30,.35),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28)}
+  .wk-room.show{display:flex;animation:fadein .3s var(--settle) both}
+  .wk-top{flex:none;display:flex;align-items:center;gap:11px;padding:13px 22px;
+    background:rgba(255,255,255,.4);border-bottom:1px solid var(--hairline)}
+  .wk-top .t{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .wk-top .x{border:0;background:none;color:var(--ink-4);font-size:17px;padding:4px 8px}
+  .wk-top .x:hover{color:var(--ink)}
+  /* the stage is four quiet dots, nothing more */
+  .wk-dots{display:inline-flex;align-items:center;gap:7px;margin-right:6px}
+  .wk-dots i{width:5px;height:5px;border-radius:50%;background:rgba(0,0,0,.14);
+    transition:all .4s var(--settle)}
+  .wk-dots i.done{background:var(--ink)}
+  .wk-dots i.on{background:var(--ink);transform:scale(1.5);box-shadow:0 0 0 3px rgba(0,0,0,.06)}
+  /* one immersive canvas — the thread is the room */
+  .wk-body{flex:1;min-height:0;display:flex;justify-content:center;padding-right:292px}
+  @media (max-width:1080px){.wk-body{padding-right:0}}
+  .wk-col-l{flex:1;min-width:0;max-width:760px;display:flex;flex-direction:column;padding:26px 26px 30px}
+
+
+  .wk-thread{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:38px;padding-right:6px;
+    padding-top:14px;scroll-behavior:smooth;transition:padding-top .3s var(--ease)}
+  .wk-thread.has-hist{padding-top:58px}
+  .wk-thread.masked{
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 64px);
+    mask-image:linear-gradient(to bottom,transparent 0,#000 64px)}
+  /* the past recedes: everything but the live exchange dims until hovered */
+  .wk-old{opacity:.45;transition:opacity .45s var(--ease)}
+  .wk-old:hover{opacity:1}
+  /* no visible scrollbar in the room - ever */
+  .wk-thread{scrollbar-width:none}
+  .wk-thread::-webkit-scrollbar{display:none}
+  /* ONE interaction at a time: each exchange is a step; past steps collapse */
+  .wk-step{display:flex;flex-direction:column;gap:32px}
+  .wk-step.gone{display:none}
+  /* shimmer load chip - the sexy loading moment, in-thread */
+  .wk-loadchip{align-self:flex-start;display:flex;align-items:center;gap:12px;
+    background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:12px 18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);animation:wk-in .4s var(--settle) both}
+  .wk-loadchip .bars{display:flex;flex-direction:column;gap:7px}
+  .wk-loadchip .bars i{display:block;height:9px;border-radius:5px;width:180px;
+    background:linear-gradient(90deg,var(--surface-2) 25%,#e4e4ea 50%,var(--surface-2) 75%);
+    background-size:200% 100%;animation:shimmer 1.6s linear infinite}
+  .wk-loadchip .bars i:nth-child(2){width:120px;animation-delay:.15s}
+  /* package option cards */
+  .wk-pkg{display:flex;align-items:center;gap:14px;width:100%;max-width:460px;text-align:left;
+    background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:14px 18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    transition:all var(--dur) var(--ease);animation:wk-in .5s var(--settle) both}
+  .wk-pkg:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 12px 34px -12px rgba(0,0,0,.16);border-color:rgba(0,0,0,.12)}
+  .wk-pkg b{display:block;font-size:13.5px;font-weight:600;color:var(--ink)}
+  .wk-pkg span{font-size:12px;color:var(--ink-3)}
+  .wk-pkg .go{margin-left:auto;color:var(--ink-4)}
+  .wk-pkg:disabled{opacity:.45;cursor:default}
+  /* facility rows: uniform length, compact, stacked under the bubble */
+  .wk-faclist{display:flex;flex-direction:column;gap:8px;max-width:380px;width:100%}
+  .wk-fac{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    font-size:12.5px;font-weight:500;color:var(--ink-2);background:#fff;
+    border:1px solid var(--line);border-radius:11px;padding:8px 12px;transition:all var(--dur) var(--ease)}
+  .wk-fac:hover{border-color:rgba(0,0,0,.14);transform:translateY(-1px)}
+  .wk-fac.sel{border-color:var(--hairline-active);background:var(--wash-active);color:var(--ink);font-weight:600}
+  .wk-fac .amt{margin-left:auto;font-weight:600;color:var(--ink)}
+  /* the subtle type icon — one language for loans, covenants, pricing, everything */
+  .tico{width:24px;height:24px;flex:none;border-radius:7px;background:var(--surface-2);color:var(--ink-3);
+    display:inline-flex;align-items:center;justify-content:center}
+  .tico svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .wk-fac.sel .tico{background:#fff;color:var(--purple-deep)}
+  /* right lane: detail card above the manifest */
+  #wkMchips{display:flex;flex-direction:column;gap:10px}
+  .wk-detail{background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:14px 16px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    margin-bottom:16px;display:none;animation:wk-pop .45s var(--settle) both}
+  .wk-detail.show{display:block}
+  .wk-detail .dh{display:flex;align-items:center;gap:8px;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);margin-bottom:10px}
+  .wk-detail .dh .tico{width:20px;height:20px;border-radius:6px}
+  .wk-detail .dh .tico svg{width:11px;height:11px}
+  .wk-detail .drow{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:5.5px 0;border-bottom:1px dashed var(--line-soft)}
+  .wk-detail .drow:last-child{border-bottom:0}
+  .wk-detail .drow span{color:var(--ink-3)}
+  .wk-detail .drow b{font-weight:600;color:var(--ink);text-align:right}
+  .wk-detail .was{display:block;font-size:10.5px;color:var(--ink-4);text-decoration:line-through;font-weight:400}
+
+  /* the hint that history lives above */
+  .wk-hist{position:absolute;top:82px;left:26px;z-index:5;display:none;
+    align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--ink-3);
+    background:rgba(255,255,255,.65);border:1px solid rgba(0,0,0,.05);border-radius:999px;padding:5px 14px;
+    -webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);
+    box-shadow:0 6px 20px -8px rgba(0,0,0,.18),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);cursor:pointer}
+  .wk-hist.show{display:inline-flex;animation:arrive .35s var(--settle) both}
+  .wk-hist:hover{color:var(--ink)}
+  .wk-pin{font-size:13.5px;color:var(--ink-3);max-width:58ch}
+  .wk-pin b{color:var(--ink);font-weight:600}
+  .wk-loans{display:flex;gap:8px;flex-wrap:wrap}
+  .wk-loan{font-size:12px;font-weight:500;color:var(--ink-2);background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:5px 13px}
+  .wk-loan.sel{border-color:var(--hairline-active);background:var(--wash-active);color:var(--ink);font-weight:600}
+  .wk-msg{max-width:78%;border-radius:14px;padding:10px 16px;font-size:13px;line-height:1.55;position:relative}
+  /* who said what: a tiny glass chip breathes in above the bubble on hover */
+  .wk-msg::before{content:attr(data-who);position:absolute;top:-21px;
+    font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);
+    background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.05);border-radius:6px;padding:2px 8px;
+    box-shadow:0 3px 10px -4px rgba(0,0,0,.12);
+    opacity:0;transform:translateY(3px);transition:opacity .18s var(--ease),transform .18s var(--ease);
+    pointer-events:none;white-space:nowrap}
+  .wk-msg.banker::before{right:4px}
+  .wk-msg.agent::before{left:4px}
+  .wk-msg:hover::before{opacity:1;transform:none}
+  .wk-msg.banker{align-self:flex-end;color:var(--ink);
+    background:#e9ebf2;border:1px solid rgba(0,0,0,.04);
+    box-shadow:0 2px 8px -2px rgba(0,0,0,.08)}
+  .wk-msg.agent{align-self:flex-start;background:#fff;
+    border:1px solid var(--line-soft);box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);color:var(--ink-2)}
+  .wk-compose{align-self:flex-start;display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-3);min-height:24px}
+  .wk-compose .gtb{color:var(--purple);animation:breathe 1.8s var(--ease) infinite}
+  .wk-delta{align-self:flex-start;max-width:86%;background:#fff;
+    border:1px solid var(--line-soft);
+    border-radius:13px;padding:14px 18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1)}
+  .wk-delta .dl{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4);margin-bottom:6px}
+  .wk-delta .dv{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .wk-delta .adv{font-size:12px;color:var(--ink-3);margin-top:7px;padding-top:7px;border-top:1px dashed var(--line-soft)}
+  .wk-delta .row{display:flex;gap:8px;margin-top:11px}
+  .wk-delta.confirmed{border-color:#d8ecdf;background:#fbfdfc}
+  .wk-delta.confirmed .row{display:none}
+  .wk-delta.confirmed .dl::after{content:" · confirmed";color:var(--good);text-transform:none;letter-spacing:0}
+
+  /* workroom motion: arrivals breathe in with a whisper of spring */
+  @keyframes wk-in{
+    0%{opacity:0;transform:translateY(12px) scale(.965)}
+    70%{opacity:1;transform:translateY(-1px) scale(1.004)}
+    100%{opacity:1;transform:none}
+  }
+  .wk-delta{animation:wk-in .55s var(--settle) both;margin:4px 0 2px;
+    transition:border-color .35s var(--ease),background .35s var(--ease)}
+  /* the delta reveals itself in a cascade */
+  .wk-delta .dl,.wk-delta .dv,.wk-delta .adv,.wk-delta .row{animation:fadeup .4s var(--settle) both}
+  .wk-delta .dl{display:flex;align-items:center;gap:8px}
+  .wk-delta .dl .tico{width:20px;height:20px;border-radius:6px}
+  .wk-delta .dl .tico svg{width:11px;height:11px}
+  .wk-mentry{display:flex;align-items:flex-start;gap:10px}
+  .wk-mentry .tico{margin-top:1px}
+  .wk-mentry .mtx{min-width:0}
+  .wk-delta .dv{animation-delay:.07s}
+  .wk-delta .adv{animation-delay:.14s}
+  .wk-delta .row{animation-delay:.21s}
+  @keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  /* manifest chip lands with a pop */
+  .wk-mentry{animation:wk-pop .45s var(--settle) both}
+  @keyframes wk-pop{0%{opacity:0;transform:scale(.88)}70%{opacity:1;transform:scale(1.02)}100%{opacity:1;transform:none}}
+  .wk-suggest{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 8px}
+  .wk-chipbtn{font-size:12px;font-weight:500;color:var(--ink-3);background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;transition:all var(--dur) var(--ease)}
+  .wk-chipbtn:hover{border-color:rgba(0,0,0,.14);color:var(--ink);background:#fff}
+  .wk-in{flex:none;display:flex;align-items:center;gap:10px;background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:8px 8px 8px 18px;box-shadow:var(--sh-card)}
+  .wk-in input{flex:1;border:0;background:none;font:inherit;font-size:13px;color:var(--ink)}
+  .wk-in .send{width:32px;height:32px;flex:none;border-radius:50%;border:0;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;transition:background var(--dur) var(--ease)}
+  .wk-in .send:hover{background:var(--purple)}
+  /* the manifest FLOATS — confirmed changes fly here as glass chips */
+  .wk-mstack{position:absolute;top:74px;right:22px;width:252px;display:flex;flex-direction:column;gap:8px;z-index:4}
+  .wk-mentry{background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.05);border-radius:12px;
+    padding:10px 14px;box-shadow:0 8px 26px -8px rgba(0,0,0,.2),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    -webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8)}
+  .wk-mentry b{display:block;font-size:12px;font-weight:600;color:var(--ink)}
+  .wk-mentry span{font-size:11px;color:var(--ink-3)}
+
+  /* THE PROPOSAL LIVES IN THE CHAT: an appearing icon pops into the flow */
+  .wk-propose{align-self:flex-start;display:inline-flex;align-items:center;gap:9px;
+    font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer;border:1px solid rgba(0,0,0,.06);
+    background:rgba(255,255,255,.7);border-radius:999px;padding:7px 16px 7px 8px;
+    -webkit-backdrop-filter:blur(24px) saturate(1.7);backdrop-filter:blur(24px) saturate(1.7);
+    box-shadow:0 8px 26px -10px rgba(0,0,0,.2),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    animation:wk-pop .45s var(--settle) both;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .wk-propose:hover{transform:translateY(-1px);box-shadow:0 10px 30px -10px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.9)}
+  .wk-propose .tico{background:var(--purple-050);color:var(--purple-deep)}
+  .wk-flowcard{align-self:flex-start;background:#fff;border:1px solid var(--line-soft);border-radius:14px;
+    padding:16px 20px;max-width:430px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 10px 28px -14px rgba(0,0,0,.1);
+    animation:wk-pop .4s var(--settle) both}
+  .wk-flowcard h5{margin:0 0 5px;font-size:13.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px}
+  .wk-flowcard p{margin:0 0 7px;font-size:12.5px;color:var(--ink-3)}
+  .wk-flowcard .tok{font-size:10px;color:var(--ink-4);background:rgba(0,0,0,.05);border-radius:6px;
+    display:inline-block;padding:3px 10px;margin-bottom:12px}
+  .wk-flowcard .row{display:flex;gap:9px;margin-top:4px}
+  .flowload{display:flex;flex-direction:column;gap:14px;min-width:340px}
+  .flowload .top{display:flex;align-items:center;gap:12px}
+  .flowload .lstat{position:relative;height:18px;flex:1;max-width:none;text-align:left}
+  .flowload .lstat span{position:absolute;left:0;right:0;top:0;text-align:left}
+  .flowload .skel{max-width:none;width:100%}
+  /* the executed result: the flow card MORPHS into this chip */
+  .wk-result{position:relative;align-self:flex-start;display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;
+    font-size:12.5px;color:var(--ink-2);border:1px solid rgba(0,0,0,.06);
+    background:rgba(255,255,255,.66);border-radius:999px;padding:8px 18px 8px 9px;
+    -webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8);
+    box-shadow:0 12px 36px -14px rgba(0,0,0,.24),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    animation:wk-pop .5s var(--settle) both}
+  /* the chip NARRATES: each segment materializes in order, the check lands last */
+  .wk-result .seg,.wk-result .sep{opacity:0;animation:segin .45s var(--settle) forwards}
+  @keyframes segin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .wk-result .ok{opacity:0;animation:okpop .5s var(--settle) forwards}
+  @keyframes okpop{0%{opacity:0;transform:scale(.4)}70%{opacity:1;transform:scale(1.12)}100%{opacity:1;transform:none}}
+  /* the result CARD: a small glass dossier that constructs itself */
+  .wk-rescard{position:relative;align-self:flex-start;min-width:320px;max-width:420px;
+    display:flex;flex-direction:column;gap:9px;border-radius:16px;padding:13px 17px;
+    font-size:12.5px;color:var(--ink-2);border:1px solid rgba(0,0,0,.06);
+    background:rgba(255,255,255,.66);
+    -webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8);
+    box-shadow:0 12px 36px -14px rgba(0,0,0,.24),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    animation:wk-pop .5s var(--settle) both}
+  .wk-rescard .rc-h{display:flex;align-items:center;gap:8px;color:var(--ink-2)}
+  .wk-rescard .rc-h b{color:var(--ink);font-weight:600}
+  .wk-rescard .rc-line{height:1px;background:rgba(0,0,0,.07);transform:scaleX(0);transform-origin:left;
+    animation:linedraw .55s var(--settle) forwards}
+  @keyframes linedraw{to{transform:scaleX(1)}}
+  .wk-rescard .rc-r{display:flex;align-items:center;gap:9px;color:var(--ink-3)}
+  .wk-rescard .rc-r b{margin-left:auto;color:var(--ink);font-weight:600}
+  .wk-rescard .rc-f{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-4)}
+  .wk-rescard .rc-h,.wk-rescard .rc-r,.wk-rescard .rc-f{opacity:0;animation:segin .45s var(--settle) forwards}
+  .wk-rescard .ok{width:18px;height:18px;border-radius:50%;background:#eef7f1;color:var(--good);
+    display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;
+    opacity:0;animation:okpop .5s var(--settle) forwards}
+
+  /* the aura: iridescence you sense rather than see - light through glass, slowly turning */
+  /* the aura: iridescence you sense rather than see - light through glass,
+     the gradient angle slowly turning (the box NEVER rotates) */
+  @property --aang{syntax:"<angle>";initial-value:0deg;inherits:false}
+  .aura{position:absolute;inset:-4px;border-radius:inherit;z-index:-1;pointer-events:none;
+    background:conic-gradient(from var(--aang),rgba(161,0,255,.35),rgba(79,140,255,.3),rgba(45,212,167,.28),rgba(255,211,77,.28),rgba(255,107,107,.3),rgba(161,0,255,.35));
+    filter:blur(14px);opacity:0;transition:opacity 1.4s var(--ease);
+    animation:aurarot 9s linear infinite}
+  .lit>.aura{opacity:.38}
+  @keyframes aurarot{to{--aang:360deg}}
+  .flowload{position:relative;border-radius:16px}
+  @media (prefers-reduced-motion: reduce){
+    .wk-result .seg,.wk-result .sep,.wk-result .ok{animation:none;opacity:1}
+    .aura{animation:none}}
+  .wk-result b{font-weight:600;color:var(--ink)}
+  .wk-result .seg{display:inline-flex;align-items:center;gap:7px}
+  .wk-result .sep{width:1px;height:16px;background:rgba(0,0,0,.08)}
+  .wk-result .ok{width:20px;height:20px;border-radius:50%;background:#eef7f1;color:var(--good);
+    display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+
+
+  /* loading — the LIQUID moment: a gooey halo merges and parts behind the
+     breathing mark (silhouette layer soft, content layer crisp). The system is
+     molten only while it composes; data never melts. */
+  .liquidmark{position:relative;width:92px;height:92px;display:flex;align-items:center;justify-content:center}
+  .goo{position:absolute;inset:0;filter:url(#goo)}
+  .goo i{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;
+    border-radius:50%;background:var(--purple);opacity:.14}
+  .goo i:nth-child(1){animation:g1 3.4s ease-in-out infinite}
+  .goo i:nth-child(2){animation:g2 4.1s ease-in-out infinite}
+  .goo i:nth-child(3){animation:g3 3.7s ease-in-out infinite}
+  @keyframes g1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-18px,10px) scale(1.15)}}
+  @keyframes g2{0%,100%{transform:translate(0,0) scale(.9)}50%{transform:translate(18px,-12px) scale(1.1)}}
+  @keyframes g3{0%,100%{transform:translate(0,0) scale(1.05)}50%{transform:translate(4px,18px) scale(.85)}}
+  .liquidmark .gtbreathe{position:relative;z-index:1}
+  .liquidmark.mini{width:42px;height:42px;flex:none}
+  .liquidmark.mini .goo i{width:17px;height:17px;margin:-8.5px 0 0 -8.5px;opacity:.16}
+
+  .loadw{display:flex;flex-direction:column;align-items:center;gap:14px;padding:8px 0 4px}
+  .gtbreathe{color:var(--purple);animation:breathe 2.4s var(--ease) infinite}
+  @keyframes breathe{0%,100%{opacity:.35;transform:scale(.97)}50%{opacity:.95;transform:none}}
+  .lstat{height:20px;position:relative;width:100%;max-width:320px;text-align:center}
+  .lstat span{position:absolute;inset:0;font-size:12.5px;color:var(--ink-3);opacity:0;transition:opacity .5s var(--ease)}
+  .lstat span.on{opacity:1}
+  .skel{width:100%;max-width:340px;display:flex;flex-direction:column;gap:9px}
+  .skel i{display:block;height:10px;border-radius:5px;
+    background:linear-gradient(90deg,var(--surface-2) 25%,var(--line-soft) 50%,var(--surface-2) 75%);
+    background-size:200% 100%;animation:shimmer 1.8s linear infinite}
+  .skel i:nth-child(2){width:78%;animation-delay:.12s}
+  .skel i:nth-child(3){width:56%;animation-delay:.24s}
+  @keyframes shimmer{to{background-position:-200% 0}}
+  .landed .mrow{display:flex;justify-content:space-between;gap:14px;font-size:12.5px;padding:8px 0;border-bottom:1px dashed var(--line-soft);text-align:left}
+  .landed .mrow:last-child{border-bottom:0}
+  .landed .mrow span{color:var(--ink-3)}
+  .landed .mrow b{font-weight:500;color:var(--ink)}
+
+  /* ---------- chat ---------- */
+  .fabwrap{position:fixed;right:44px;bottom:52px;z-index:45;transition:opacity .3s var(--ease),transform .3s var(--ease)}
+  .fabwrap.tucked{opacity:0;transform:scale(.6);pointer-events:none}
+  .fabwrap .fab{position:relative;right:auto;bottom:auto}
+  .fab .gt{transition:transform .35s var(--settle)}
+  .fabwrap.open .fab .gt{transform:rotate(180deg)}
+  /* the quarter-circle: small glass satellites fan out of the mark */
+  .arcbtn{position:absolute;right:6px;bottom:6px;width:40px;height:40px;border-radius:50%;border:1px solid rgba(0,0,0,.06);
+    background:rgba(255,255,255,.66);color:var(--ink-2);
+    -webkit-backdrop-filter:blur(28px) saturate(1.75);backdrop-filter:blur(28px) saturate(1.75);
+    box-shadow:0 8px 24px -8px rgba(0,0,0,.22),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;transform:translate(0,0) scale(.4);pointer-events:none;
+    transition:transform .42s var(--settle),opacity .3s var(--ease);
+    transition-delay:calc(var(--i)*28ms)}
+  .fabwrap.open .arcbtn{opacity:1;transform:translate(var(--tx),var(--ty)) scale(1);pointer-events:auto}
+  .arcbtn:hover{color:var(--ink);background:#fff}
+  /* ONE narrator chip beneath the mark: it says what you're on */
+  .arclbl{position:absolute;top:calc(100% + 9px);left:50%;white-space:nowrap;line-height:1.4;
+    font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+    background:rgba(255,255,255,.7);border:1px solid rgba(0,0,0,.05);border-radius:7px;padding:2px 9px;
+    -webkit-backdrop-filter:blur(28px) saturate(1.75);backdrop-filter:blur(28px) saturate(1.75);
+    box-shadow:0 4px 14px -6px rgba(0,0,0,.15),inset 0 1px 1px rgba(255,255,255,.9);
+    opacity:0;transform:translate(-50%,-3px);transition:all .25s var(--ease);pointer-events:none}
+  .fabwrap.open .arclbl{opacity:1;transform:translate(-50%,0)}
+
+
+  .fab{position:fixed;right:26px;bottom:26px;z-index:45;width:52px;height:52px;border-radius:50%;border:0;
+    background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,0) 50%),var(--ink);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 22px rgba(26,7,54,.28),0 0 30px rgba(161,0,255,.14);transition:all var(--dur) var(--ease)}
+  .fab:hover{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,0) 50%),var(--purple);
+    transform:translateY(-2px);box-shadow:0 10px 30px rgba(26,7,54,.3),0 0 44px rgba(161,0,255,.3)}
+  .chatpanel{position:fixed;right:44px;bottom:52px;z-index:46;width:min(400px,92vw);border-radius:18px;
+    background:
+      radial-gradient(300px 160px at 88% -10%, rgba(161,0,255,.08) 0%, transparent 60%),
+      rgba(255,255,255,.55);
+    border:1px solid rgba(0,0,0,.06);
+    box-shadow:var(--sh-float),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    -webkit-backdrop-filter:blur(38px) saturate(1.9);backdrop-filter:blur(38px) saturate(1.9);
+    padding:18px 20px;display:none}
+  .chatctl{position:absolute;top:10px;right:10px;display:flex;gap:2px}
+  .chatx{width:24px;height:24px;border-radius:8px;border:0;background:transparent;color:var(--ink-3);display:grid;place-items:center;cursor:pointer;transition:all .2s}
+  .chatx:hover{background:rgba(0,0,0,.05);color:var(--ink)}
+  /* minimized assist: a quiet glass pill holding the FAB's spot */
+  .chatmini{position:fixed;right:44px;bottom:52px;z-index:46;display:flex;align-items:center;gap:8px;
+    padding:9px 16px;border-radius:999px;border:1px solid rgba(0,0,0,.06);cursor:pointer;
+    background:rgba(255,255,255,.6);-webkit-backdrop-filter:blur(34px) saturate(1.8);backdrop-filter:blur(34px) saturate(1.8);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28),0 10px 28px -14px rgba(0,0,0,.25);
+    font-size:11.5px;font-weight:600;color:var(--ink);
+    opacity:0;transform:translateY(6px) scale(.92);pointer-events:none;transition:all .3s var(--ease)}
+  .chatmini.show{opacity:1;transform:none;pointer-events:auto}
+  .chatmini .gt{color:var(--brand)}
+  .chatpanel.show{display:block;animation:chatin .3s var(--settle) both}
+  @keyframes chatin{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  .umsg{font-size:12.5px;color:var(--ink-3);margin-bottom:12px}
+  .umsg b{color:var(--ink);font-weight:500}
+  .think{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--ink-3);min-height:22px}
+  .think .gtb{color:var(--purple);animation:breathe 1.8s var(--ease) infinite}
+  .amsg{font-size:13px;color:var(--ink-2);line-height:1.6;min-height:56px}
+  .amsg .w{display:inline-block;white-space:pre-wrap;opacity:0;transform:translateY(4px);filter:blur(1.5px);
+    transition:opacity .34s var(--ease),transform .34s var(--ease),filter .34s var(--ease)}
+  .amsg .w.in{opacity:1;transform:none;filter:none}
+  .amsg .src{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--purple-deep);
+    background:var(--purple-050);border-radius:6px;padding:1.5px 8px;font-weight:500}
+  .caret{display:inline-block;width:6px;height:13px;background:var(--purple);vertical-align:-2px;border-radius:1.5px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .chatin{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.85);
+    border:1px solid var(--hairline);border-radius:999px;padding:7px 7px 7px 17px;margin-top:14px}
+  .chatin input{flex:1;border:0;background:none;font:inherit;font-size:13px;color:var(--ink)}
+  .chatin .send{width:30px;height:30px;flex:none;border-radius:50%;border:0;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;transition:background var(--dur) var(--ease)}
+  .chatin .send:hover{background:var(--purple)}
+
+  /* ---------- odometer: a figure never swaps, it rolls ---------- */
+  function odoRoll(el, newText){
+    var tn = el.firstChild;
+    if(!tn || tn.nodeType !== 3){ el.insertBefore(document.createTextNode(""), el.firstChild); tn = el.firstChild; }
+    var old = tn.nodeValue;
+    if(reduce || old.length !== newText.length || old === newText){ tn.nodeValue = newText; return; }
+    var wrap = document.createElement("span");
+    for(var i = 0; i < old.length; i++){
+      if(old[i] === newText[i]){ wrap.appendChild(document.createTextNode(old[i])); continue; }
+      var col = document.createElement("span"); col.className = "odo";
+      var strip = document.createElement("span"); strip.className = "strip";
+      strip.style.transitionDelay = (i * 45) + "ms";
+      var o = document.createElement("span"); o.textContent = old[i];
+      var n = document.createElement("span"); n.textContent = newText[i];
+      strip.appendChild(o); strip.appendChild(n); col.appendChild(strip); wrap.appendChild(col);
+    }
+    el.replaceChild(wrap, tn);
+    wrap.getBoundingClientRect();
+    requestAnimationFrame(function(){
+      wrap.querySelectorAll(".odo").forEach(function(c){ c.classList.add("go"); });
+    });
+    setTimeout(function(){ el.replaceChild(document.createTextNode(newText), wrap); }, 1100);
+  }
+
+  /* ---------- command palette ---------- */
+  .cmdk-wrap{position:fixed;inset:0;z-index:70;display:none;align-items:flex-start;justify-content:center;padding-top:14vh;background:rgba(16,4,30,.14)}
+  .cmdk-wrap.show{display:flex}
+  .cmdk{width:min(560px,92vw);border-radius:16px;
+    background:radial-gradient(360px 160px at 90% -12%, rgba(161,0,255,.07) 0%, transparent 60%),rgba(255,255,255,.55);
+    border:1px solid rgba(0,0,0,.06);
+    box-shadow:var(--sh-float),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28);
+    -webkit-backdrop-filter:blur(38px) saturate(1.9);backdrop-filter:blur(38px) saturate(1.9);
+    overflow:hidden;animation:chatin .25s var(--settle) both}
+  .cmdk .inrow{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--hairline)}
+  .cmdk .inrow .gt{color:var(--purple)}
+  .cmdk input{flex:1;border:0;background:none;font:inherit;font-size:14.5px;color:var(--ink)}
+  .cmdk .res{padding:5px}
+  .cmdk .r{display:flex;align-items:center;gap:11px;padding:10px 14px;margin:2px 4px;border-radius:9px;font-size:13px;color:var(--ink-2);cursor:pointer}
+  .cmdk .r:hover,.cmdk .r.sel{background:rgba(255,255,255,.85)}
+  .cmdk .r .act{margin-left:auto;font-size:10.5px;color:var(--ink-4)}
+  .cmdk .r.sel .act{color:var(--purple-deep)}
+
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(90px);opacity:0;
+    display:flex;align-items:center;gap:9px;
+    background:rgba(255,255,255,.6);color:var(--ink);font-size:12.5px;font-weight:500;
+    border:1px solid rgba(0,0,0,.06);border-radius:999px;padding:10px 18px;
+    -webkit-backdrop-filter:blur(34px) saturate(1.8);backdrop-filter:blur(34px) saturate(1.8);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28),0 14px 40px -16px rgba(0,0,0,.3);
+    transition:transform .35s cubic-bezier(.22,1,.36,1),opacity .3s var(--ease);z-index:80;max-width:90vw;pointer-events:none}
+  .toast::before{content:"";width:11px;height:12px;flex:none;background:var(--purple);
+    -webkit-mask:url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="116.99973 0 19.79227 20.94533"><path d="m 116.99973,0 v 5.97866 l 11.556,4.516 -11.556,4.296 v 6.15467 l 19.792,-8.016 V 7.97066 Z"/></svg>') center/contain no-repeat;
+    mask:url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="116.99973 0 19.79227 20.94533"><path d="m 116.99973,0 v 5.97866 l 11.556,4.516 -11.556,4.296 v 6.15467 l 19.792,-8.016 V 7.97066 Z"/></svg>') center/contain no-repeat}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+  /* chart line draws itself when the tab opens */
+  #finLine{stroke-dasharray:1550;stroke-dashoffset:1550}
+  .pane.show #finLine{animation:drawline 1.1s var(--ease) .1s both}
+  @keyframes drawline{to{stroke-dashoffset:0}}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important}
+    #finLine{stroke-dashoffset:0!important}
+  }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="acn-gt" viewBox="116.99973 0 19.79227 20.94533">
+    <path d="m 116.99973,0 v 5.97866 l 11.556,4.516 -11.556,4.296 v 6.15467 l 19.792,-8.016 V 7.97066 Z" fill="currentColor"/>
+  </symbol>
+  <!-- the gooey metaball filter: blur + alpha contrast. Native, no library. -->
+  <filter id="goo">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+    <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -11"/>
+  </filter>
+</defs></svg>
+
+<div class="ambient" aria-hidden="true"><span class="b"></span></div>
+
+<!-- ================= TOP BAR ================= -->
+<header class="topbar">
+  <div class="topbar-in">
+    <svg class="gt" width="15" height="16" style="color:var(--purple)"><use href="#acn-gt"/></svg>
+    <span class="apptitle">Credit 360</span>
+    <div class="topnav"><nav class="icotabs" id="tabs" aria-label="Workspace">
+        <button class="itab active" data-pane="exposure"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg><span class="lbl">Exposure</span><span class="tip">Exposure</span></button>
+        <button class="itab" data-pane="financials"><svg viewBox="0 0 16 16"><path d="M2 13 L6 8 L9 10.5 L14 3.5"/><path d="M10.5 3.5 H14 V7"/></svg><span class="lbl">Financials</span><span class="tip">Financials</span></button>
+        <button class="itab" data-pane="covenants"><svg viewBox="0 0 16 16"><path d="M8 1.5 L13.5 3.8 V8 C13.5 11.4 11.2 13.6 8 14.7 C4.8 13.6 2.5 11.4 2.5 8 V3.8 Z"/><path d="M5.6 8 L7.4 9.8 L10.6 6.4"/></svg><span class="lbl">Covenants</span><span class="tip">Covenants</span></button>
+        <button class="itab" data-pane="signals"><svg viewBox="0 0 16 16"><path d="M2 8 H4.5 L6.5 3.5 L9.5 12.5 L11.5 8 H14"/></svg><span class="lbl">Signals</span><span class="tip">Signals</span></button>
+        <button class="itab" data-pane="activity"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5 V8 L10.6 9.6"/></svg><span class="lbl">Activity</span><span class="tip">Activity</span></button>
+        <button class="itab" data-pane="graph"><svg viewBox="0 0 16 16"><circle cx="8" cy="4" r="2.2"/><circle cx="3.5" cy="12" r="2.2"/><circle cx="12.5" cy="12" r="2.2"/><path d="M6.9 5.9 L4.5 10 M9.1 5.9 L11.5 10"/></svg><span class="lbl">Graph</span><span class="tip">Graph</span></button>
+        <button class="itab" data-pane="opportunities"><svg viewBox="0 0 16 16"><path d="M8 2 L9.7 6 L14 6.4 L10.8 9.3 L11.8 13.6 L8 11.3 L4.2 13.6 L5.2 9.3 L2 6.4 L6.3 6 Z"/></svg><span class="lbl">Opportunities</span><span class="tip">Opportunities</span></button>
+      </nav></div>
+    <span class="spacer"></span>
+    <span class="dot-live" title="Live · nCino + AFS"></span>
+    <button class="kbd" id="cmdkOpen">⌘K</button>
+    <span class="avatar">FG</span>
+  </div>
+</header>
+
+<!-- ================= HOME ================= -->
+<div class="view show" id="view-home">
+  <div class="weave" aria-hidden="true"><svg id="hweave" preserveAspectRatio="none"><g id="hweaveG"></g></svg></div>
+  <div class="page" style="padding-top:40px;padding-bottom:100px;position:relative;z-index:1">
+    <!-- the briefing — the landing opens like a morning brief, not a list -->
+    <div class="brief">
+      <div class="eyebrow"><span class="kicker" id="briefDate">Sunday, August 31 · your book</span></div>
+      <h1>Three relationships<br>need you today.</h1>
+      <p>Hartwell's revolver has held above 90% for three weeks, Meridian is 12 days past due, and a renewal window is open. Everything else in the book is current.</p>
+    </div>
+
+    <div class="card kpis num" id="kpiband">
+      <div class="kpi"><div class="l">Managed exposure</div><div class="v"><span data-count="127" data-dec="0" data-pre="$">0</span><span class="u">M</span></div>
+        <div class="s">Committed · 5 relationships</div></div>
+      <div class="kpi"><div class="l">Drawn balance</div><div class="v"><span data-count="90.1" data-dec="1" data-pre="$">0</span><span class="u">M</span></div>
+        <div class="s">Across the book</div></div>
+      <div class="kpi"><div class="l">Utilization</div><div class="v"><span data-count="72.9" data-dec="1">0</span><span class="u">%</span></div>
+        <div class="s">Drawn / committed</div></div>
+      <div class="kpi"><div class="l">Needs action</div><div class="v warn"><span data-count="3" data-dec="0">0</span></div><div class="s">On the queue</div></div>
+      <div class="kpi"><div class="l">Reviews due</div><div class="v"><span data-count="2" data-dec="0">0</span></div><div class="s">None overdue</div></div>
+    </div>
+
+    <div style="margin-top:36px">
+      <div class="eyebrow"><span class="kicker">Worklist</span></div>
+      <div style="font-size:19px;font-weight:600;color:var(--ink);margin-top:3px">Needs action</div>
+      <div class="wl">
+        <button class="wlrow" data-open="hartwell">
+          <span class="mono" style="background:var(--purple-050);color:var(--purple-deep)">HI</span>
+          <span class="who"><b>Hartwell Industrial Group</b><span>C&amp;I · Metal fabrication · NAICS 332312</span></span>
+          <span class="sts"><span class="st warn">Covenant watch</span><span class="st acc">Renewal 45d</span></span>
+          <span class="amt num"><b id="wlHartAmt">$46.2M</b><span>total exposure</span></span>
+          <span class="go">→</span>
+        </button>
+        <button class="wlrow" data-open="piedmont">
+          <span class="mono">PF</span>
+          <span class="who"><b>Piedmont Fabrication Co.</b><span>C&amp;I · Precision parts · NAICS 332710</span></span>
+          <span class="sts"><span class="st good">In compliance</span><span class="st mut">Review complete</span></span>
+          <span class="amt num"><b>$18.4M</b><span>total exposure</span></span>
+          <span class="go">→</span>
+        </button>
+        <button class="wlrow" data-open="meridian">
+          <span class="mono" style="background:#fdefef;color:var(--bad)">ML</span>
+          <span class="who"><b>Meridian Logistics LLC</b><span>C&amp;I · Freight · NAICS 484121</span></span>
+          <span class="sts"><span class="st bad">Past due 12d</span><span class="st warn">Utilization 91%</span></span>
+          <span class="amt num"><b>$7.9M</b><span>total exposure</span></span>
+          <span class="go">→</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= ACCOUNT ================= -->
+<div class="view" id="view-account">
+  <div class="page" style="padding-top:22px">
+    <div class="hero">
+      <svg class="acct-wm" width="240" height="254" aria-hidden="true"><use href="#acn-gt"/></svg>
+      <div class="crumb" style="padding-top:0">
+        <button id="goHome">‹ Worklist</button><span>/</span><span>Metal fabrication · NAICS 332312</span>
+      </div>
+      <div class="acct-name-row">
+        <span class="acct-name">Hartwell Industrial Group</span>
+        <span class="stagechip">Package<b>Booked</b></span>
+      </div>
+      <p class="verdict">Grade 5 with the revolver at 91% drawn for three consecutive weeks, the strongest evidence yet for the staged $5.0M increase. Leverage headroom stays comfortable at 3.85× against a 4.50× covenant; get the modification in front of committee before the renewal window closes.</p>
+      <div class="anchors num">
+        <div class="anchor grade-cell">
+          <svg class="gr" viewBox="0 0 46 46">
+            <circle class="bg" cx="23" cy="23" r="19" fill="none" stroke-width="4"/>
+            <circle class="fg" cx="23" cy="23" r="19" fill="none" stroke-width="4" stroke-dasharray="119.4" stroke-dashoffset="41.8" transform="rotate(-90 23 23)"/>
+            <text x="23" y="28" text-anchor="middle">5</text>
+          </svg>
+          <div><div class="l">Risk grade</div><div class="v" style="font-size:13px">Pass/Watch</div><div class="s">IRIS · 2026-07-14</div></div>
+        </div>
+        <div class="anchor" id="ancExposure"><div class="l">Total exposure</div><div class="v num" id="ancExpV">$46.2<span class="u">M</span></div><div class="s">$39.7M drawn</div></div>
+        <div class="anchor"><div class="l">Total leverage</div><div class="v">3.85<span class="u">×</span></div><div class="s">Covenant 4.50×</div></div>
+        <div class="anchor"><div class="l">Interest coverage</div><div class="v">2.64<span class="u">×</span></div><div class="s">▲ 0.18× QoQ</div></div>
+        <div class="anchor"><div class="l">Renewal</div><div class="v">45 <span class="u">days</span><span class="dn">↓</span></div><div class="s">HIG-2044 · 2026-10</div></div>
+
+      </div>
+    </div>
+  </div>
+  
+  <div class="page">
+    <!-- EXPOSURE -->
+    <section class="pane show" id="pane-exposure">
+      <div class="card cardpad">
+        <div class="sechead"><div class="eyebrow"><span class="kicker">Facilities</span></div><div class="sub">Exposure &amp; collateral</div></div>
+        <table class="dt num">
+          <thead><tr><th>Facility</th><th>Type</th><th class="r">Commitment</th><th class="r">Outstanding</th><th class="r">Maturity</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>HIG-2041</td><td>Revolver</td><td class="r">$15.0M</td><td class="r">$12.1M</td><td class="r">2027-03</td><td><span class="st warn">91% drawn</span></td></tr>
+            <tr><td>HIG-2044</td><td>Term loan</td><td class="r">$22.0M</td><td class="r">$19.6M</td><td class="r">2029-06</td><td><span class="st good">Current</span></td></tr>
+            <tr><td>HIG-2051</td><td>Equipment</td><td class="r">$9.2M</td><td class="r">$8.0M</td><td class="r">2028-11</td><td><span class="st good">Current</span></td></tr>
+            <tr class="total"><td>Total</td><td></td><td class="r num" id="tblExpTotal">$46.2M</td><td class="r">$39.7M</td><td></td><td></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:18px">
+          <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3)"><span>Revolver utilization</span><span class="num" style="font-weight:600;color:var(--ink)">91<span style="color:var(--purple)">%</span></span></div>
+          <div class="meter"><i style="width:91%"></i></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINANCIALS -->
+    <section class="pane" id="pane-financials">
+      <div class="pane-grid">
+        <div class="card cardpad" style="grid-column:1/-1">
+          <div class="bigfig num"><span class="n">$24.8<span class="u">M</span></span><span class="chg">▲ 12.7% revolver utilization · TTM</span><span class="cap">Boom · monthly</span></div>
+          <svg viewBox="0 0 720 190" style="width:100%;height:auto" role="img" aria-label="Utilization trend">
+            <g class="grid"><line x1="0" y1="38" x2="720" y2="38"/><line x1="0" y1="86" x2="720" y2="86"/><line x1="0" y1="134" x2="720" y2="134"/></g>
+            <path d="M0,146 C40,142 60,128 95,124 S160,134 195,120 250,80 290,84 340,104 380,92 440,48 480,54 540,70 580,58 680,30 720,26 L720,190 L0,190 Z" fill="#a100ff" opacity=".06"/>
+            <path id="finLine" d="M0,146 C40,142 60,128 95,124 S160,134 195,120 250,80 290,84 340,104 380,92 440,48 480,54 540,70 580,58 680,30 720,26" fill="none" stroke="#a100ff" stroke-width="2.4" stroke-linecap="round" style="filter:drop-shadow(0 3px 8px rgba(161,0,255,.3))"/>
+            <circle cx="720" cy="26" r="4" fill="#a100ff"/>
+            <g class="axis"><text x="2" y="186">Sep</text><text x="180" y="186">Dec</text><text x="360" y="186">Mar</text><text x="540" y="186">Jun</text><text x="700" y="186">Aug</text></g>
+          </svg>
+        </div>
+        <div class="card cardpad">
+          <p class="kicker" style="margin:0 0 12px">Key ratios · FY2025</p>
+          <div class="ratio-rows num">
+            <div class="rr"><span>Revenue TTM</span><b>$64.5<span class="u">M</span></b></div>
+            <div class="rr"><span>EBITDA</span><b>$5.2<span class="u">M</span></b></div>
+            <div class="rr"><span>EBITDA margin</span><b>8.1<span class="u">%</span></b></div>
+            <div class="rr"><span>Total leverage</span><b>3.85<span class="u">×</span></b></div>
+            <div class="rr"><span>Interest coverage</span><b>2.64<span class="u">×</span></b></div>
+            <div class="rr"><span>DSC</span><b>1.38<span class="u">×</span></b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="empty">
+            <svg class="wm" width="110" height="117"><use href="#acn-gt"/></svg>
+            <h5>No projections on file</h5>
+            <p>FY2026 management projections have not been provided. Flagged for the RM.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COVENANTS -->
+    <section class="pane" id="pane-covenants">
+      <div class="card cardpad">
+        <div class="sechead"><div class="eyebrow"><span class="kicker">Compliance</span></div><div class="sub">Covenant tests</div></div>
+        <table class="dt num">
+          <thead><tr><th>Covenant</th><th class="r">Requirement</th><th class="r">Actual</th><th class="r">Headroom</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Total leverage</td><td class="r">≤ 4.50×</td><td class="r">3.85×</td><td class="r">0.65×</td><td><span class="st good">Pass</span></td></tr>
+            <tr><td>Interest coverage</td><td class="r">≥ 2.00×</td><td class="r">2.64×</td><td class="r">0.64×</td><td><span class="st good">Pass</span></td></tr>
+            <tr><td>DSC</td><td class="r">≥ 1.30×</td><td class="r">1.38×</td><td class="r">0.08×</td><td><span class="st warn">Watch</span></td></tr>
+            <tr><td>Minimum liquidity</td><td class="r">≥ $2.0M</td><td class="r">$3.4M</td><td class="r">$1.4M</td><td><span class="st good">Pass</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SIGNALS -->
+    <section class="pane" id="pane-signals">
+      <div class="feeditem"><div class="ic w">!</div><div class="tx"><b>Utilization crossed 90%</b><span>Revolver HIG-2041 · sustained 3 weeks · AFS</span></div><span class="when">2d</span></div>
+      <div class="feeditem"><div class="ic a"><svg viewBox="0 0 16 16" width="13" height="13" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4"/></svg></div><div class="tx"><b>Renewal window opened</b><span>Term loan HIG-2044 · 45 days to maturity action</span></div><span class="when">6d</span></div>
+      <div class="feeditem"><div class="ic w">!</div><div class="tx"><b>DSC headroom narrowing</b><span>1.38× against a 1.30× floor · trending flat</span></div><span class="when">12d</span></div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="pane" id="pane-activity">
+      <div class="card cardpad">
+        <div class="sechead"><div class="eyebrow"><span class="kicker">Audit trail</span></div><div class="sub">Activity</div></div>
+        <div class="tl">
+          <div class="tli hot"><b>Modification staged</b><span class="m">T. Alvarez · 08-30</span><p>Revolver increase $15.0M → $20.0M staged for committee; decision token minted.</p></div>
+          <div class="tli"><b>Covenant review completed</b><span class="m">system · 08-12</span><p>All four covenants tested; leverage passed at 3.85× against 4.50×.</p></div>
+          <div class="tli"><b>Annual review approved</b><span class="m">Credit committee · 06-02</span><p>Grade affirmed at 5; watch note on utilization retained.</p></div>
+          <div class="tli"><b>Financials spread</b><span class="m">Boom · 05-18</span><p>FY2025 statements spread; standard ratio set recomputed.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GRAPH -->
+    <section class="pane" id="pane-graph">
+      <div class="card cardpad">
+        <div class="sechead"><div class="eyebrow"><span class="kicker">Household &amp; ownership</span></div><div class="sub">Ownership structure</div></div>
+        <div class="otree">
+          <div class="orow" style="max-width:560px">
+            <div class="onode"><b>Hartwell Holdings LP</b><span class="p">68% ownership</span><span class="role">Parent</span></div>
+            <div class="onode"><b>Hartwell Family Trust</b><span class="p">32% ownership</span><span class="role">Guarantor</span></div>
+          </div>
+          <div class="ogap"></div>
+          <svg class="oflowlayer" id="oflowSvg" aria-hidden="true">
+            <defs>
+              <linearGradient id="ogr" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#c2a3ff"/><stop offset="1" stop-color="#a100ff"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <div class="oborrower" id="oBorrower"><div class="k">Borrower</div><b>Hartwell Industrial Group</b><span class="p">Metal fabrication · NAICS 332312</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- OPPORTUNITIES -->
+    <section class="pane" id="pane-opportunities">
+      <div class="pane-grid">
+        <div class="opp num"><b>Treasury management</b><div class="v">$120<span class="u">K</span></div><span class="st acc">Warm · CFO intro</span></div>
+        <div class="opp num"><b>Equipment line expansion</b><div class="v">$4.5<span class="u">M</span></div><span class="st mut">Exploring</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ================= DRAWER / GATE / EXECUTE ================= -->
+<!-- ================= THE WORKROOM (full-surface overlay) ================= -->
+<div class="wk-scrim" id="wkScrim"></div>
+<div class="wk-room" id="wkRoom" role="dialog" aria-label="Workroom">
+  <div class="wk-top">
+    <svg class="gt" width="13" height="14" style="color:var(--purple)"><use href="#acn-gt"/></svg>
+    <span class="t">Modification</span>
+    <span style="flex:1"></span>
+    <span class="wk-dots" id="wkDots" aria-label="Stage">
+      <i title="Briefing"></i><i title="Compose"></i><i title="Plan"></i><i title="Execution"></i>
+    </span>
+    <button class="x" id="wkClose" aria-label="Close workroom">×</button>
+  </div>
+  <button class="wk-hist" id="wkHist">↑ earlier steps</button>
+  <div class="wk-body">
+    <div class="wk-col-l">
+      <div class="wk-thread" id="wkThread"></div>
+      <div class="wk-suggest" id="wkSuggest">
+        <button class="wk-chipbtn" data-say="Increase the revolver to $20.0M, keep pricing">Increase the revolver to $20.0M</button>
+        <button class="wk-chipbtn" data-say="Add a leverage covenant max 4.25x">Add a leverage covenant max 4.25×</button>
+      </div>
+      <div class="wk-in">
+        <input id="wkInput" placeholder="Say what changes on this package…" aria-label="Compose">
+        <button class="send" id="wkSend" aria-label="Send"><svg class="gt" width="10" height="11"><use href="#acn-gt"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- confirmed changes FLOAT here — a stack, not a pane -->
+  <div class="wk-mstack" id="wkMstack" aria-label="Manifest">
+    <div class="wk-detail num" id="wkDetail"></div>
+    <div id="wkMchips"></div>
+  </div>
+
+</div>
+
+<!-- ================= CHAT ================= -->
+<div class="fabwrap" id="fabwrap">
+  <button class="arcbtn" data-act="chat" style="--tx:0px;--ty:-118px;--i:0" aria-label="Assist chat">
+    <svg viewBox="0 0 16 16" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M14 7.6c0 3-2.7 5.4-6 5.4-.7 0-1.4-.1-2-.3L2.6 13.7l.8-2.5C2.5 10.2 2 9 2 7.6c0-3 2.7-5.4 6-5.4s6 2.4 6 5.4Z"/></svg>
+  </button>
+  <button class="arcbtn" data-act="modify" id="actModify" style="--tx:-45px;--ty:-109px;--i:1" aria-label="Stage a modification">
+    <svg viewBox="0 0 16 16" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><rect x="1.8" y="4" width="12.4" height="8" rx="2"/><circle cx="8" cy="8" r="1.9"/></svg>
+  </button>
+  <button class="arcbtn" data-act="renewal" style="--tx:-83px;--ty:-83px;--i:2" aria-label="Start renewal">
+    <svg viewBox="0 0 16 16" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.7 1.8v2.6h-2.6"/></svg>
+  </button>
+  <button class="arcbtn" data-act="annual" style="--tx:-109px;--ty:-45px;--i:3" aria-label="Annual review">
+    <svg viewBox="0 0 16 16" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.6 1.6"/></svg>
+  </button>
+  <button class="arcbtn" data-act="covenant" style="--tx:-118px;--ty:0px;--i:4" aria-label="Covenant review">
+    <svg viewBox="0 0 16 16" width="15" height="15" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M8 1.5 13.5 3.8V8c0 3.4-2.3 5.6-5.5 6.7C4.8 13.6 2.5 11.4 2.5 8V3.8Z"/><path d="M5.6 8l1.8 1.8 3.2-3.4"/></svg>
+  </button>
+  <button class="fab" id="fab" aria-label="Actions">
+    <svg class="gt" width="15" height="16"><use href="#acn-gt"/></svg>
+  </button>
+  <span class="arclbl" id="arcLbl">Client actions</span>
+</div>
+<div class="whisper" id="whisper" role="status">
+  <svg class="gt" width="11" height="12"><use href="#acn-gt"/></svg>
+  <span>Hartwell renewal window · <b>45 days</b>. Open the client?</span>
+  <button class="wx" id="whisperX" aria-label="Dismiss">✕</button>
+</div>
+<div class="chatpanel" id="chatpanel">
+  <div class="chatctl"><button class="chatx" id="chatMin" aria-label="Minimize chat"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 5h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button><button class="chatx" id="chatX" aria-label="Close chat"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button></div>
+  <div class="umsg"><b>You</b> · Should we support the revolver increase?</div>
+  <div class="think" id="chatThink"><svg class="gtb gt" width="12" height="13"><use href="#acn-gt"/></svg><span id="chatThinkLine">Reading AFS utilization history…</span></div>
+  <div class="amsg" id="chatMsg"></div>
+  <div class="chatin">
+    <input placeholder="Ask about this relationship…" aria-label="Ask">
+    <button class="send" aria-label="Send"><svg class="gt" width="10" height="11"><use href="#acn-gt"/></svg></button>
+  </div>
+</div>
+<button class="chatmini" id="chatMini"><svg class="gt" width="11" height="12"><use href="#acn-gt"/></svg>Assist</button>
+
+<!-- ================= COMMAND PALETTE ================= -->
+<div class="cmdk-wrap" id="cmdkWrap">
+  <div class="cmdk">
+    <div class="inrow"><svg viewBox="0 0 16 16" width="14" height="14" style="stroke:var(--ink-4);fill:none;stroke-width:1.5;stroke-linecap:round"><circle cx="7" cy="7" r="4.6"/><path d="M10.5 10.5 14 14"/></svg><input id="cmdkInput" placeholder="Search clients, actions, records…"></div>
+    <div class="res">
+      <div class="r sel" data-cmd="drawer">Stage a modification · Hartwell revolver<span class="act">Action</span></div>
+      <div class="r" data-cmd="account">Open Hartwell Industrial Group<span class="act">Client</span></div>
+      <div class="r" data-cmd="home">Back to worklist<span class="act">View</span></div>
+      <div class="nores" id="cmdkNores">Nothing matches. Try a client or an action.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(s){ return document.querySelector(s); };
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- views ---------- */
+  function show(view){
+    document.querySelectorAll(".view").forEach(function(v){
+      var on = v.id === "view-"+view;
+      if(!on) v.classList.remove("noanim"); /* hidden views animate normally next time */
+      v.classList.toggle("show", on);
+    });
+    document.body.classList.toggle("on-client", view === "account"); /* header nav appears only on a client */
+    scrollTo({top:0, behavior: reduce ? "auto" : "smooth"});
+  }
+  document.querySelectorAll(".wlrow").forEach(function(r){
+    r.addEventListener("click", function(){
+      var src = r.querySelector(".who b");
+      applyClient(r.getAttribute("data-open")); /* the view becomes THIS client before anything moves */
+      if(reduce || !src){ show("account"); return; }
+      setTimeout(drawRing, 60);
+      /* the name TRAVELS from the row into the hero — nothing teleports */
+      var r1 = src.getBoundingClientRect();
+      $("#view-account").classList.add("noanim"); /* this entry's motion belongs to the ghost */
+      show("account");
+      scrollTo(0,0); /* geometry must be settled before we measure the destination */
+      var dst = document.querySelector(".acct-name");
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        var r2 = dst.getBoundingClientRect();
+        var g = document.createElement("div");
+        g.className = "flyname"; g.textContent = src.textContent;
+        g.style.left = r1.left + "px"; g.style.top = r1.top + "px";
+        document.body.appendChild(g);
+        dst.style.opacity = "0";
+        g.getBoundingClientRect(); /* commit start frame */
+        g.style.left = r2.left + "px"; g.style.top = r2.top + "px";
+        g.style.fontSize = "25px"; g.style.letterSpacing = "-.02em";
+        setTimeout(function(){
+          dst.style.opacity = ""; /* identical pixels appear beneath the ghost */
+          g.style.transition = "opacity .16s var(--ease)";
+          g.style.opacity = "0"; /* the ghost dissolves over them; never a gap */
+          setTimeout(function(){ g.remove(); }, 180);
+        }, 520);
+      }); });
+    });
+  });
+  document.addEventListener("click", function(e){ if(e.target.closest("#goHome")) show("home"); });
+
+  /* ============ THE BOOK: every client renders the client view ============
+     Hartwell is authored in the HTML (pristine, captured at boot); the other
+     relationships rebuild the same regions from data. Same classes, same
+     system - different truth. */
+  var PRIST = {
+    hero: $("#view-account .hero").innerHTML,
+    exposure: $("#pane-exposure").innerHTML,
+    financials: $("#pane-financials").innerHTML,
+    covenants: $("#pane-covenants").innerHTML,
+    signals: $("#pane-signals").innerHTML,
+    activity: $("#pane-activity").innerHTML,
+    graph: $("#pane-graph").innerHTML,
+    opps: $("#pane-opportunities").innerHTML
+  };
+  var FIN_CHART = document.querySelector("#pane-financials svg").outerHTML;
+  var WM = '<svg class="acct-wm" width="240" height="254" aria-hidden="true"><use href="#acn-gt"/></svg>';
+  var curClient = "hartwell";
+
+  var CLIENTS = {
+    piedmont: {
+      crumb: "Precision parts · NAICS 332710", name: "Piedmont Fabrication Co.",
+      chip: ["Package","Booked"],
+      verdict: "Grade 3 and clean. All four covenants pass with comfortable headroom, utilization sits at 54%, and the annual review closed in June with no conditions. Nothing needs you here this quarter.",
+      grade: {n:3, label:"Pass", sub:"IRIS · 2026-06-11", off:74.6},
+      anchors: [
+        ["Total exposure","$18.4","M","$9.9M drawn"],
+        ["Total leverage","2.10","×","Covenant 3.50×"],
+        ["Interest coverage","4.80","×","▲ 0.22× QoQ"],
+        ["Renewal","210 ","days","PFC-1103 · 2027-03"]],
+      fac: [["PFC-1101","Revolver","$8.0M","$4.3M","2027-09",'<span class="st good">54% drawn</span>'],
+            ["PFC-1103","Term loan","$10.4M","$5.6M","2027-03",'<span class="st good">Current</span>']],
+      facTotal: ["$18.4M","$9.9M"], util: 54,
+      big: ["$9.9<span class=\"u\">M</span>","▲ 3.1% drawn balance · TTM"],
+      ratios: [["Revenue TTM","$31.2","M"],["EBITDA","$4.6","M"],["EBITDA margin","14.7","%"],
+               ["Total leverage","2.10","×"],["Interest coverage","4.80","×"],["DSC","2.05","×"]],
+      cov: [["Total leverage","≤ 3.50×","2.10×","1.40×","good","Pass"],
+            ["Interest coverage","≥ 2.00×","4.80×","2.80×","good","Pass"],
+            ["DSC","≥ 1.25×","2.05×","0.80×","good","Pass"],
+            ["Minimum liquidity","≥ $1.5M","$4.1M","$2.6M","good","Pass"]],
+      signals: [["a","✓","Annual review closed","No conditions · grade affirmed at 3","81d"],
+                ["a","✓","Clean payment record","24 months without a late payment · AFS","12d"]],
+      tl: [["Annual review approved","Credit committee · 06-08","Grade affirmed at 3; no watch items.",1],
+           ["Financials spread","Boom · 05-02","FY2025 statements spread; ratio set recomputed.",0],
+           ["Covenant review completed","system · 04-19","All four covenants tested and passing.",0]],
+      owners: [["Piedmont Holdings Inc.","100% ownership","Parent"]],
+      bsub: "Precision parts · NAICS 332710",
+      opps: '<div class="opp num"><b>FX hedging program</b><div class="v">$85<span class="u">K</span></div><span class="st acc">Warm · CFO intro</span></div>' +
+            '<div class="opp num"><b>Capex term line</b><div class="v">$6.0<span class="u">M</span></div><span class="st mut">Exploring</span></div>'
+    },
+    meridian: {
+      crumb: "Freight · NAICS 484121", name: "Meridian Logistics LLC",
+      chip: ["Package","Watch"],
+      verdict: "Grade 7 and past due 12 days on the revolver. Utilization sits at 91% with DSC below test at 1.12×. The next move is a payment conversation this week; if the payment does not land, the file needs a downgrade memo.",
+      grade: {n:7, label:"Substandard", sub:"IRIS · 2026-08-02", off:14.9},
+      anchors: [
+        ["Total exposure","$7.9","M","$6.4M drawn"],
+        ["Total leverage","5.20","×","Covenant 4.00× · breach"],
+        ["Interest coverage","1.45","×","▼ 0.31× QoQ"],
+        ["Past due","12 ","days","MLL-3019 · revolver"]],
+      fac: [["MLL-3019","Revolver","$4.5M","$4.1M","2027-01",'<span class="st bad">Past due 12d</span>'],
+            ["MLL-3021","Term loan","$3.4M","$2.3M","2028-05",'<span class="st warn">91% drawn</span>']],
+      facTotal: ["$7.9M","$6.4M"], util: 91,
+      big: ["$6.4<span class=\"u\">M</span>","▲ 9.4% drawn balance · TTM"],
+      ratios: [["Revenue TTM","$18.6","M"],["EBITDA","$1.9","M"],["EBITDA margin","10.2","%"],
+               ["Total leverage","5.20","×"],["Interest coverage","1.45","×"],["DSC","1.12","×"]],
+      cov: [["Total leverage","≤ 4.00×","5.20×","−1.20×","bad","Breach"],
+            ["Interest coverage","≥ 1.75×","1.45×","−0.30×","bad","Breach"],
+            ["DSC","≥ 1.20×","1.12×","−0.08×","warn","Watch"],
+            ["Minimum liquidity","≥ $1.0M","$0.7M","−$0.3M","bad","Breach"]],
+      signals: [["w","!","Payment past due","Revolver MLL-3019 · 12 days · AFS","12d"],
+                ["w","!","Utilization at 91%","Sustained above 85% for five weeks","19d"],
+                ["w","!","DSC below test","1.12× against a 1.20× floor","34d"]],
+      tl: [["Past-due notice issued","system · 08-19","Payment due 08-19 not received; grace period entered.",1],
+           ["Risk rating downgraded","Credit committee · 08-02","Grade moved 6 to 7 on coverage deterioration.",0],
+           ["Covenant breach recorded","system · 07-28","Leverage tested at 5.20× against 4.00×.",0]],
+      owners: [["Meridian Holdco LLC","80% ownership","Parent"],["J. Reyes","20% ownership","Guarantor"]],
+      bsub: "Freight · NAICS 484121",
+      opps: '<div class="card" style="grid-column:1/-1"><div class="empty">' + WM.replace("240","110").replace("254","117").replace("acct-wm","wm") +
+            '<h5>No open opportunities</h5><p>Origination is paused while the relationship is past due.</p></div></div>'
+    }
+  };
+
+  function heroHTML(c){
+    var anchors = c.anchors.map(function(x, i){
+      var idv = i === 0 ? ' id="ancExposure"' : "";
+      var idi = i === 0 ? ' id="ancExpV"' : "";
+      var dn = (c === CLIENTS.meridian && x[0] === "Past due") ? '<span class="dn">↓</span>' : "";
+      return '<div class="anchor"' + idv + '><div class="l">' + x[0] + '</div><div class="v num"' + idi + '>' + x[1] + '<span class="u">' + x[2] + '</span>' + dn + '</div><div class="s">' + x[3] + '</div></div>';
+    }).join("");
+    return WM +
+      '<div class="crumb" style="padding-top:0"><button id="goHome">‹ Worklist</button><span>/</span><span>' + c.crumb + '</span></div>' +
+      '<div class="acct-name-row"><span class="acct-name">' + c.name + '</span><span class="stagechip">' + c.chip[0] + '<b>' + c.chip[1] + '</b></span></div>' +
+      '<p class="verdict">' + c.verdict + '</p>' +
+      '<div class="anchors num">' +
+      '<div class="anchor grade-cell"><svg class="gr" viewBox="0 0 46 46">' +
+      '<circle class="bg" cx="23" cy="23" r="19" fill="none" stroke-width="4"/>' +
+      '<circle class="fg" cx="23" cy="23" r="19" fill="none" stroke-width="4" stroke-dasharray="119.4" stroke-dashoffset="' + c.grade.off + '" transform="rotate(-90 23 23)"/>' +
+      '<text x="23" y="28" text-anchor="middle">' + c.grade.n + '</text></svg>' +
+      '<div><div class="l">Risk grade</div><div class="v" style="font-size:13px">' + c.grade.label + '</div><div class="s">' + c.grade.sub + '</div></div></div>' +
+      anchors + '</div>';
+  }
+
+  function applyClient(id){
+    curClient = id;
+    var hero = $("#view-account .hero");
+    if(id === "hartwell"){
+      hero.innerHTML = PRIST.hero;
+      $("#pane-exposure").innerHTML = PRIST.exposure;
+      $("#pane-financials").innerHTML = PRIST.financials;
+      $("#pane-covenants").innerHTML = PRIST.covenants;
+      $("#pane-signals").innerHTML = PRIST.signals;
+      $("#pane-activity").innerHTML = PRIST.activity;
+      $("#pane-graph").innerHTML = PRIST.graph;
+      $("#pane-opportunities").innerHTML = PRIST.opps;
+      if(curExposure !== 46.2){ /* an executed write survives navigation */
+        var nv = "$" + curExposure.toFixed(1);
+        $("#ancExpV").firstChild.nodeValue = nv;
+        $("#tblExpTotal").textContent = nv + "M";
+      }
+      return;
+    }
+    var c = CLIENTS[id];
+    hero.innerHTML = heroHTML(c);
+    $("#pane-exposure").innerHTML =
+      '<div class="card cardpad"><div class="sechead"><div class="eyebrow"><span class="kicker">Facilities</span></div><div class="sub">Exposure &amp; collateral</div></div>' +
+      '<table class="dt num"><thead><tr><th>Facility</th><th>Type</th><th class="r">Commitment</th><th class="r">Outstanding</th><th class="r">Maturity</th><th>Status</th></tr></thead><tbody>' +
+      c.fac.map(function(f){ return '<tr><td>' + f[0] + '</td><td>' + f[1] + '</td><td class="r">' + f[2] + '</td><td class="r">' + f[3] + '</td><td class="r">' + f[4] + '</td><td>' + f[5] + '</td></tr>'; }).join("") +
+      '<tr class="total"><td>Total</td><td></td><td class="r num">' + c.facTotal[0] + '</td><td class="r">' + c.facTotal[1] + '</td><td></td><td></td></tr></tbody></table>' +
+      '<div style="margin-top:18px"><div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-3)"><span>Revolver utilization</span><span class="num" style="font-weight:600;color:var(--ink)">' + c.util + '<span style="color:var(--purple)">%</span></span></div>' +
+      '<div class="meter"><i style="width:' + c.util + '%"></i></div></div></div>';
+    $("#pane-financials").innerHTML =
+      '<div class="pane-grid"><div class="card cardpad" style="grid-column:1/-1">' +
+      '<div class="bigfig num"><span class="n">' + c.big[0] + '</span><span class="chg">' + c.big[1] + '</span><span class="cap">Boom · monthly</span></div>' + FIN_CHART + '</div>' +
+      '<div class="card cardpad"><p class="kicker" style="margin:0 0 12px">Key ratios · FY2025</p><div class="ratio-rows num">' +
+      c.ratios.map(function(r){ return '<div class="rr"><span>' + r[0] + '</span><b>' + r[1] + '<span class="u">' + r[2] + '</span></b></div>'; }).join("") +
+      '</div></div><div class="card"><div class="empty">' + WM.replace('width="240" height="254"','width="110" height="117"').replace("acct-wm","wm") +
+      '<h5>No projections on file</h5><p>FY2026 management projections have not been provided. Flagged for the RM.</p></div></div></div>';
+    $("#pane-covenants").innerHTML =
+      '<div class="card cardpad"><div class="sechead"><div class="eyebrow"><span class="kicker">Compliance</span></div><div class="sub">Covenant tests</div></div>' +
+      '<table class="dt num"><thead><tr><th>Covenant</th><th class="r">Requirement</th><th class="r">Actual</th><th class="r">Headroom</th><th>Status</th></tr></thead><tbody>' +
+      c.cov.map(function(r){ return '<tr><td>' + r[0] + '</td><td class="r">' + r[1] + '</td><td class="r">' + r[2] + '</td><td class="r">' + r[3] + '</td><td><span class="st ' + r[4] + '">' + r[5] + '</span></td></tr>'; }).join("") +
+      '</tbody></table></div>';
+    $("#pane-signals").innerHTML =
+      c.signals.map(function(x){ return '<div class="feeditem"><div class="ic ' + x[0] + '">' + x[1] + '</div><div class="tx"><b>' + x[2] + '</b><span>' + x[3] + '</span></div><span class="when">' + x[4] + '</span></div>'; }).join("");
+    $("#pane-activity").innerHTML =
+      '<div class="card cardpad"><div class="sechead"><div class="eyebrow"><span class="kicker">Audit trail</span></div><div class="sub">Activity</div></div><div class="tl">' +
+      c.tl.map(function(t){ return '<div class="tli' + (t[3] ? " hot" : "") + '"><b>' + t[0] + '</b><span class="m">' + t[1] + '</span><p>' + t[2] + '</p></div>'; }).join("") +
+      '</div></div>';
+    $("#pane-graph").innerHTML =
+      '<div class="card cardpad"><div class="sechead"><div class="eyebrow"><span class="kicker">Household &amp; ownership</span></div><div class="sub">Ownership structure</div></div>' +
+      '<div class="otree"><div class="orow" style="max-width:560px">' +
+      c.owners.map(function(o){ return '<div class="onode"><b>' + o[0] + '</b><span class="p">' + o[1] + '</span><span class="role">' + o[2] + '</span></div>'; }).join("") +
+      '</div><div class="ogap"></div>' +
+      '<svg class="oflowlayer" id="oflowSvg" aria-hidden="true"><defs><linearGradient id="ogr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c2a3ff"/><stop offset="1" stop-color="#a100ff"/></linearGradient></defs></svg>' +
+      '<div class="oborrower" id="oBorrower"><div class="k">Borrower</div><b>' + c.name + '</b><span class="p">' + c.bsub + '</span></div></div></div>';
+    $("#pane-opportunities").innerHTML = '<div class="pane-grid">' + c.opps + '</div>';
+  }
+
+
+  /* ---------- the header lifts when content slides beneath it ---------- */
+  addEventListener("scroll", function(){
+    document.body.classList.toggle("scrolled", scrollY > 8);
+  }, {passive:true});
+
+  /* ---------- the weave: filament threads from the truist-brain hero,
+       tuned way down for the Apple-light ground ---------- */
+  (function(){
+    var svg = document.getElementById("hweave"), grp = document.getElementById("hweaveG");
+    if(!svg || !grp) return;
+    var NS = "http://www.w3.org/2000/svg", VW = 1000, VH = 380;
+    svg.setAttribute("viewBox", "0 0 " + VW + " " + VH);
+    var _s = 20260831;
+    function rnd(){ _s = (_s * 1103515245 + 12345) & 0x7fffffff; return _s / 0x7fffffff; }
+    var DEEP = "#5B2D90", MID = "#7B3FB0", CORE = "#A100FF";
+    var N = 12, threads = [];
+    function pathFor(y, k){
+      var x1 = VW * .30, y1 = y + Math.sin(k * 1.7) * 46 - 12,
+          x2 = VW * .58, y2 = y + Math.sin(k * 2.3 + 1.1) * 56,
+          x3 = VW * .82, y3 = y + Math.sin(k * 1.3 + 2.0) * 40,
+          y0 = y + (rnd() * 2 - 1) * 26, y4 = y + (rnd() * 2 - 1) * 30;
+      return "M -40 " + y0.toFixed(1) +
+        " C " + x1 + " " + ((y0 + y1) / 2 | 0) + " " + x1 + " " + y1.toFixed(1) + " " + ((x1 + x2) / 2 | 0) + " " + ((y1 + y2) / 2 | 0) +
+        " S " + x2 + " " + y2.toFixed(1) + " " + ((x2 + x3) / 2 | 0) + " " + ((y2 + y3) / 2 | 0) +
+        " S " + x3 + " " + y3.toFixed(1) + " " + (VW + 40) + " " + y4.toFixed(1);
+    }
+    for(var i = 0; i < N; i++){
+      var k = i * .9 + rnd() * .4, y = 50 + (i / (N - 1)) * (VH - 100) + (rnd() * 2 - 1) * 12;
+      var lead = i === 0, r = rnd(), stroke, op, w;
+      if(lead){ stroke = CORE; op = .20; w = 1.1; }
+      else if(r < .4){ stroke = DEEP; op = .06 + rnd() * .05; w = .5 + rnd() * .5; }
+      else if(r < .75){ stroke = MID; op = .07 + rnd() * .06; w = .5 + rnd() * .5; }
+      else { stroke = CORE; op = .08 + rnd() * .06; w = .5 + rnd() * .5; }
+      var g = document.createElementNS(NS, "g");
+      var path = document.createElementNS(NS, "path");
+      path.setAttribute("d", pathFor(y, k));
+      path.setAttribute("stroke", stroke);
+      path.setAttribute("stroke-width", w.toFixed(2));
+      path.setAttribute("opacity", op.toFixed(3));
+      g.appendChild(path); grp.appendChild(g);
+      threads.push({ g: g, amp: 4 + rnd() * 10, ax: 3 + rnd() * 7, freq: .05 + rnd() * .08, phase: rnd() * Math.PI * 2 });
+    }
+    if(reduce) return;
+    var t0 = null, clk = 0;
+    (function frame(ts){
+      if(t0 == null) t0 = ts || 0;
+      var dt = Math.min(64, (ts || 0) - t0); t0 = ts || 0; clk += dt * .001;
+      for(var j = 0; j < threads.length; j++){
+        var th = threads[j];
+        var dy = Math.sin(clk * th.freq * Math.PI * 2 + th.phase) * th.amp;
+        var dx = Math.cos(clk * th.freq * Math.PI * 1.4 + th.phase * .7) * th.ax;
+        th.g.setAttribute("transform", "translate(" + dx.toFixed(2) + " " + dy.toFixed(2) + ")");
+      }
+      requestAnimationFrame(frame);
+    })();
+  })();
+
+  /* ---------- the landing knows what day it is ---------- */
+  (function(){
+    var d = new Date();
+    var days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    $("#briefDate").textContent = days[d.getDay()] + ", " + months[d.getMonth()] + " " + d.getDate() + " · your book";
+  })();
+
+  /* ---------- the grade ring draws itself on every client entry ---------- */
+  function drawRing(){
+    var fg = document.querySelector("#view-account .gr .fg");
+    if(!fg || reduce) return;
+    var target = fg.getAttribute("stroke-dashoffset");
+    fg.style.transition = "none";
+    fg.style.strokeDashoffset = "119.4";
+    fg.getBoundingClientRect();
+    fg.style.transition = "";
+    requestAnimationFrame(function(){ fg.style.strokeDashoffset = target; });
+  }
+
+  /* ---------- hero depth: the watermark leans away from the cursor ---------- */
+  document.addEventListener("pointermove", function(e){
+    var hero = document.querySelector("#view-account.show .hero");
+    if(!hero) return;
+    var wm = hero.querySelector(".acct-wm");
+    if(!wm) return;
+    var r = hero.getBoundingClientRect();
+    if(e.clientY < r.top - 80 || e.clientY > r.bottom + 80) return;
+    var dx = ((e.clientX - r.left) / r.width - .5) * -6;
+    var dy = ((e.clientY - r.top) / r.height - .5) * -4;
+    wm.style.transform = "translate(" + dx.toFixed(1) + "px," + dy.toFixed(1) + "px)";
+  }, {passive:true});
+
+  /* ---------- boot: headline rises word by word ---------- */
+  (function(){
+    var h1 = document.querySelector(".brief h1");
+    if(!h1 || reduce) return;
+    var idx = 0;
+    var parts = h1.innerHTML.split(/<br\s*\/?\s*>/i);
+    h1.innerHTML = parts.map(function(line){
+      return line.trim().split(/\s+/).map(function(word){
+        return '<span class="bw" style="animation-delay:' + (120 + (idx++) * 70) + 'ms">' + word + '</span>';
+      }).join(" ");
+    }).join("<br>");
+  })();
+
+  /* ---------- lens specular follows the cursor on the capsule ---------- */
+  (function(){
+    var cap = document.querySelector(".topnav .icotabs");
+    if(!cap) return;
+    cap.addEventListener("pointermove", function(e){
+      var r = cap.getBoundingClientRect();
+      cap.style.setProperty("--mx", (e.clientX - r.left) + "px");
+      cap.style.setProperty("--my", (e.clientY - r.top) + "px");
+    });
+  })();
+
+  /* ---------- the agent leans in: one whisper, once ---------- */
+  var whisperDone = false;
+  function hideWhisper(){ $("#whisper").classList.remove("show"); }
+  setTimeout(function(){
+    if(whisperDone) return;
+    if(document.querySelector("#view-home").classList.contains("show")){
+      whisperDone = true;
+      $("#whisper").classList.add("show");
+      var f = $("#fab"); f.classList.add("breathe");
+      setTimeout(function(){ f.classList.remove("breathe"); }, 5400);
+    }
+  }, 3200);
+  $("#whisper").addEventListener("click", function(e){
+    if(e.target.closest(".wx")) return;
+    hideWhisper();
+    document.querySelector('button[data-open="hartwell"]').click(); /* rides the name flight */
+  });
+  $("#whisperX").addEventListener("click", function(e){ e.stopPropagation(); hideWhisper(); });
+
+  /* ---------- expanding icon tabs ---------- */
+  $("#tabs").addEventListener("click", function(e){
+    var b = e.target.closest(".itab"); if(!b) return;
+    document.querySelectorAll("#tabs .itab").forEach(function(t){ t.classList.toggle("active", t === b); });
+    var pane = b.getAttribute("data-pane");
+    document.querySelectorAll(".pane").forEach(function(p){ p.classList.toggle("show", p.id === "pane-"+pane); });
+    if(pane === "graph"){ requestAnimationFrame(function(){ requestAnimationFrame(drawFlow); }); }
+  });
+
+  /* ---------- the radial: actions + chat fan out of the mark ---------- */
+  var fabwrap = $("#fabwrap");
+  function closeArc(){ fabwrap.classList.remove("open"); }
+  $("#fab").addEventListener("click", function(e){
+    e.stopPropagation();
+    var onClient = document.querySelector("#view-account").classList.contains("show");
+    if(!onClient){ closeArc(); toggleChat(); return; } /* landing: no actions here, just the assist */
+    fabwrap.classList.toggle("open");
+  });
+  document.addEventListener("click", function(e){
+    if(!fabwrap.contains(e.target)) closeArc();
+  });
+  var ARC_LABELS = { chat:"Assist", modify:"Modification", renewal:"Renewal", annual:"Annual review", covenant:"Covenant review" };
+  document.querySelectorAll(".arcbtn").forEach(function(b){
+    b.addEventListener("mouseenter", function(){ $("#arcLbl").textContent = ARC_LABELS[b.getAttribute("data-act")]; });
+    b.addEventListener("mouseleave", function(){ $("#arcLbl").textContent = "Client actions"; });
+    b.addEventListener("click", function(e){
+      e.stopPropagation();
+      var act = b.getAttribute("data-act");
+      closeArc();
+      if(act === "chat"){ toggleChat(); return; }
+      if(act === "modify"){
+        if(curClient !== "hartwell"){ toast("The modification ritual is scripted on Hartwell in this dummy"); return; }
+        var br = b.getBoundingClientRect();
+        wkOrigin = { x: br.left + br.width/2, y: br.top + br.height/2 };
+        if(!document.querySelector("#view-account").classList.contains("show")){ show("account"); }
+        setTimeout(openRoom, 220);
+        return;
+      }
+      var labels = { renewal: "Renewal staging", annual: "The annual review", covenant: "Bulk covenant review" };
+      toast(labels[act] + " is scripted in the live cockpit");
+    });
+  });
+
+  /* ============================================================
+     THE WORKROOM — a guided ritual. One live exchange at a time;
+     the past collapses behind "earlier steps". The agent greets,
+     looks up packages (shimmer chip), briefs the selection, and
+     every commit lands with details on the right, an Existing /
+     Proposed switcher, and a chat confirmation on execute.
+     ============================================================ */
+  var wkRoom = $("#wkRoom"), wkScrim = $("#wkScrim"), wkThread = $("#wkThread");
+  var wkStarted = false, wkExecuted = false, curStep = null, hiddenSteps = 0, histOpen = false;
+  var selectedFac = null;
+
+  /* the subtle type-icon language */
+  var TICO = {
+    revolver: '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.7 1.8v2.6h-2.6"/></svg>',
+    term: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4"/></svg>',
+    equipment: '<svg viewBox="0 0 16 16"><path d="M2.5 5.5 8 2.5l5.5 3v5L8 13.5l-5.5-3z"/><path d="M8 8v5.5M2.5 5.5 8 8l5.5-2.5"/></svg>',
+    covenant: '<svg viewBox="0 0 16 16"><path d="M8 1.5 13.5 3.8V8c0 3.4-2.3 5.6-5.5 6.7C4.8 13.6 2.5 11.4 2.5 8V3.8Z"/><path d="M5.6 8l1.8 1.8 3.2-3.4"/></svg>',
+    pricing: '<svg viewBox="0 0 16 16"><path d="M12.5 3.5l-9 9"/><circle cx="4.8" cy="4.8" r="1.8"/><circle cx="11.2" cy="11.2" r="1.8"/></svg>',
+    maturity: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.6 1.6"/></svg>',
+    commit: '<svg viewBox="0 0 16 16"><rect x="1.8" y="4" width="12.4" height="8" rx="2"/><circle cx="8" cy="8" r="1.9"/><path d="M4.2 8h.01M11.8 8h.01"/></svg>',
+    collateral: '<svg viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+    package: '<svg viewBox="0 0 16 16"><path d="M8 1.8 14 4.6 8 7.4 2 4.6Z"/><path d="M2 7.6 8 10.4 14 7.6"/><path d="M2 10.6 8 13.4 14 10.6"/></svg>'
+  };
+  function tico(kind){ return '<span class="tico">' + (TICO[kind] || TICO.commit) + '</span>'; }
+
+  var FACS = {
+    "HIG-2041": { name: "HIG-2041 · Revolver", amt: "$15.0M", icon: "revolver", head: "HIG-2041 · Revolver",
+      rows: [["Commitment","$15.0M"],["Outstanding","$12.1M"],["Pricing","SOFR + 275"],["Maturity","2027-03"],["DSC floor","1.30×"]] },
+    "HIG-2044": { name: "HIG-2044 · Term loan", amt: "$22.0M", icon: "term", head: "HIG-2044 · Term loan",
+      rows: [["Commitment","$22.0M"],["Outstanding","$19.6M"],["Pricing","SOFR + 240"],["Maturity","2029-06"],["Renewal","window open"]] },
+    "HIG-2051": { name: "HIG-2051 · Equipment", amt: "$9.2M", icon: "equipment", head: "HIG-2051 · Equipment",
+      rows: [["Commitment","$9.2M"],["Outstanding","$8.0M"],["Pricing","Fixed 6.1%"],["Maturity","2028-11"]] }
+  };
+
+  var wkOrigin = null; /* where the workroom was summoned from */
+  var curExposure = 46.2; /* the live total the write-back moves */
+  var washQueue = []; /* anchors the next glass-lift washes violet */
+  function openRoom(){
+    closeArc();
+    if(wkOrigin && !reduce){ /* a glass seed ripples out of the button you pressed */
+      var seed = document.createElement("div");
+      seed.className = "wkseed";
+      seed.style.left = wkOrigin.x + "px"; seed.style.top = wkOrigin.y + "px";
+      seed.style.width = "340px"; seed.style.height = "340px";
+      document.body.appendChild(seed);
+      seed.getBoundingClientRect();
+      seed.classList.add("go");
+      setTimeout(function(){ seed.remove(); }, 600);
+    }
+    wkScrim.classList.add("show"); wkRoom.classList.add("show");
+    document.body.style.overflow = "hidden";
+    if(!wkStarted){ wkStarted = true; greetFlow(); }
+  }
+  function closeRoom(){
+    wkScrim.classList.remove("show"); wkRoom.classList.remove("show");
+    document.body.style.overflow = "";
+    if(washQueue.length){ /* the glass lifts and the wash settles on what changed */
+      washQueue.forEach(function(el){
+        if(!el) return;
+        el.classList.add("washed");
+        setTimeout(function(){ el.classList.remove("washed"); }, 1900);
+      });
+      washQueue = [];
+    }
+  }
+  $("#wkClose").addEventListener("click", closeRoom);
+  wkScrim.addEventListener("click", closeRoom);
+
+  function wkScroll(){ wkThread.scrollTop = wkThread.scrollHeight; }
+  function setStage(n){
+    document.querySelectorAll("#wkDots i").forEach(function(dot, i){
+      dot.classList.toggle("done", i < n);
+      dot.classList.toggle("on", i === n);
+    });
+  }
+  setStage(1);
+
+  /* ---- steps: only the live exchange is visible ---- */
+  function updateHist(){
+    var h = $("#wkHist");
+    if(hiddenSteps < 1){ h.classList.remove("show"); wkThread.classList.remove("has-hist"); return; }
+    h.classList.add("show"); wkThread.classList.add("has-hist");
+    h.textContent = histOpen ? "↓ hide earlier steps" : "↑ earlier steps (" + hiddenSteps + ")";
+  }
+  function newStep(){
+    if(curStep){ curStep.classList.add("gone"); hiddenSteps++; }
+    curStep = document.createElement("div");
+    curStep.className = "wk-step";
+    wkThread.appendChild(curStep);
+    histOpen = false;
+    wkThread.classList.remove("masked");
+    document.querySelectorAll(".wk-step.gone").forEach(function(st){ st.style.display = ""; });
+    document.querySelectorAll(".wk-step.reveal").forEach(function(x){ x.classList.remove("reveal"); });
+    updateHist();
+    return curStep;
+  }
+  $("#wkHist").addEventListener("click", function(){
+    histOpen = !histOpen;
+    document.querySelectorAll(".wk-step.gone").forEach(function(st){
+      st.style.display = histOpen ? "flex" : "";
+    });
+    wkThread.classList.toggle("masked", histOpen);
+    updateHist();
+    if(histOpen){ wkThread.scrollTop = 0; } else { wkScroll(); }
+  });
+
+  /* ---- thread primitives ---- */
+  function streamMsg(m){ /* words condense out of the glass, layout already settled */
+    if(reduce) return;
+    var words = [];
+    (function walk(n){
+      Array.prototype.slice.call(n.childNodes).forEach(function(c){
+        if(c.nodeType === 3){
+          var frag = document.createDocumentFragment();
+          c.nodeValue.split(/(\s+)/).forEach(function(tok){
+            if(!tok) return;
+            if(/^\s+$/.test(tok)){ frag.appendChild(document.createTextNode(tok)); return; }
+            var sp = document.createElement("span"); sp.className = "wk-w"; sp.textContent = tok;
+            frag.appendChild(sp); words.push(sp);
+          });
+          n.replaceChild(frag, c);
+        } else if(c.nodeType === 1){ walk(c); }
+      });
+    })(m);
+    words.forEach(function(sp, i){ sp.style.animationDelay = (i * 26) + "ms"; });
+  }
+  function agentMsg(html){
+    var m = document.createElement("div");
+    m.className = "wk-msg agent"; m.setAttribute("data-who","Agent"); m.innerHTML = html;
+    streamMsg(m);
+    curStep.appendChild(m); wkScroll(); return m;
+  }
+  function bankerMsg(text){
+    var m = document.createElement("div");
+    m.className = "wk-msg banker"; m.setAttribute("data-who","You"); m.textContent = text;
+    curStep.appendChild(m); wkScroll(); return m;
+  }
+  function composeBeat(done, ms){
+    var c = document.createElement("div");
+    c.className = "wk-compose";
+    c.innerHTML = '<span class="liquidmark mini"><span class="goo" aria-hidden="true"><i></i><i></i><i></i></span>' +
+      '<svg class="gtb gt gtbreathe" width="13" height="14" style="position:relative;z-index:1"><use href="#acn-gt"/></svg></span><span>Composing…</span>';
+    curStep.appendChild(c); wkScroll();
+    setTimeout(function(){ c.remove(); done(); wkScroll(); }, reduce ? 0 : (ms || 1100));
+  }
+  function shimmerChip(done, ms){
+    var c = document.createElement("div");
+    c.className = "wk-loadchip";
+    c.innerHTML = '<span class="liquidmark mini"><span class="goo" aria-hidden="true"><i></i><i></i><i></i></span>' +
+      '<svg class="gtb gt gtbreathe" width="13" height="14" style="position:relative;z-index:1"><use href="#acn-gt"/></svg></span>' +
+      '<span class="bars"><i></i><i></i></span>';
+    curStep.appendChild(c); wkScroll();
+    setTimeout(function(){ c.remove(); done(); wkScroll(); }, reduce ? 0 : (ms || 1500));
+  }
+
+  /* ---- the guided opening ---- */
+  function greetFlow(){
+    newStep();
+    agentMsg("Hey Fabian, you’re working on <b>Hartwell Industrial Group</b>. Let me look up the eligible product packages…");
+    shimmerChip(function(){
+      var wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;flex-direction:column;gap:9px";
+      wrap.innerHTML =
+        '<button class="wk-pkg" id="pkgBooked"><span><b>Hartwell package · Booked</b><span>3 facilities · $46.2M committed · active covenants</span></span><span class="go">→</span></button>' +
+        '<button class="wk-pkg" disabled><span><b>2019 facility package · Closed</b><span>Not eligible · superseded 2023</span></span></button>';
+      curStep.appendChild(wrap); wkScroll();
+      $("#pkgBooked").addEventListener("click", pkgBrief);
+    }, 1600);
+  }
+
+  function pkgBrief(){
+    newStep();
+    bankerMsg("Open the booked package");
+    composeBeat(function(){
+      agentMsg("The <b>Booked package</b> carries <b>3 facilities</b> · $46.2M committed · <b>4 covenants</b>, all passing with DSC on watch at 1.38× · the renewal window is open on HIG-2044. Pick a facility to work on.");
+      var row = document.createElement("div");
+      row.className = "wk-faclist";
+      Object.keys(FACS).forEach(function(fid){
+        var f = FACS[fid];
+        var b = document.createElement("button");
+        b.className = "wk-fac num";
+        b.innerHTML = tico(f.icon) + '<span>' + f.name + '</span><span class="amt">' + f.amt + '</span>';
+        b.addEventListener("click", function(){
+          row.querySelectorAll(".wk-fac").forEach(function(x){ x.classList.remove("sel"); });
+          b.classList.add("sel");
+          selectFacility(fid);
+        });
+        row.appendChild(b);
+      });
+      curStep.appendChild(row); wkScroll();
+    }, 900);
+  }
+
+  function selectFacility(fid){
+    selectedFac = fid;
+    renderDetail();
+    $("#wkDetail").classList.add("show");
+    if(!document.getElementById("facReady")){
+      var m = agentMsg("<b>" + FACS[fid].head + "</b> selected · details on the right. Say what changes.");
+      m.id = "facReady";
+      $("#wkSuggest").style.display = "";
+      $("#wkInput").disabled = false;
+      $("#wkInput").focus();
+    } else {
+      $("#facReady").innerHTML = "<b>" + FACS[fid].head + "</b> selected · details on the right. Say what changes.";
+    }
+  }
+
+  /* ---- right lane: detail card with Existing / Proposed views ---- */
+  var OVR = {};        /* per-facility proposed overrides, keyed by row label */
+  var pkgCovenant = null; /* package-level covenant proposal */
+  function renderDetail(){
+    if(!selectedFac) return;
+    var f = FACS[selectedFac];
+    var ovr = OVR[selectedFac] || {};
+    var pending = Object.keys(ovr).length > 0 || pkgCovenant;
+    var html = '<div class="dh">' + tico(f.icon) + '<span>' + f.head + (pending ? ' · proposed' : '') + '</span></div>';
+    f.rows.forEach(function(r){
+      var label = r[0], val = r[1];
+      if(ovr[label]){
+        html += '<div class="drow"><span>' + label + '</span><b data-roll="' + ovr[label] + '">' + val + '<span class="was">was ' + val + '</span></b></div>';
+      } else {
+        html += '<div class="drow"><span>' + label + '</span><b>' + val + '</b></div>';
+      }
+    });
+    if(pkgCovenant){
+      html += '<div class="drow"><span>Leverage covenant</span><b>≤ ' + pkgCovenant + '×<span class="was">new · quarterly</span></b></div>';
+    }
+    $("#wkDetail").innerHTML = html;
+    $("#wkDetail").querySelectorAll("b[data-roll]").forEach(function(el){ /* the proposal rolls in from the old figure */
+      odoRoll(el, el.getAttribute("data-roll"));
+    });
+  }
+
+  /* ---- manifest ---- */
+  var manifestCount = 0;
+  function addManifest(title, sub, fromEl, iconKind){
+    function land(){
+      var e = document.createElement("div");
+      e.className = "wk-mentry num";
+      e.innerHTML = tico(iconKind || "commit") + '<span class="mtx"><b>' + title + "</b><span>" + sub + "</span></span>";
+      $("#wkMchips").appendChild(e);
+      manifestCount++;
+      showPropose();
+    }
+    land();
+  }
+
+  /* ---- compose loop: the room READS the line and files what it says ---- */
+  function currentVal(label){
+    var hit = null;
+    FACS[selectedFac].rows.forEach(function(r){ if(r[0] === label) hit = r[1]; });
+    return hit;
+  }
+  function parseLine(t){
+    var amt = t.match(/\$?\s*(\d+(?:[.,]\d+)?)\s*(?:m\b|mm\b|million)/i);
+    var thr = t.match(/(\d(?:\.\d+)?)\s*[x×]/i);
+    var bps = t.match(/(?:sofr|spread|pricing|margin)[^\d]{0,8}(\d{2,3})\b/i);
+    var dat = t.match(/(20\d{2})\s*[-\/]\s*(\d{1,2})/);
+    if(/covenant|leverage/i.test(t)) return { kind:"covenant", thr: thr ? thr[1] : "4.25" };
+    if(/pricing|sofr|spread|margin|bps/i.test(t)) return bps ? { kind:"pricing", bps: bps[1] } : { kind:"clarify" };
+    if(/matur|extend/i.test(t)) return dat ? { kind:"maturity", to: dat[1] + "-" + ("0"+dat[2]).slice(-2) } : { kind:"clarify" };
+    if(/increase|decrease|reduce|raise|commit|revolver|upsize/i.test(t) && amt){
+      return { kind:"commit", to: "$" + parseFloat(amt[1].replace(",", ".")).toFixed(1) + "M" };
+    }
+    return { kind:"clarify" };
+  }
+  function deltaCard(intent){
+    if(intent.kind === "clarify"){
+      agentMsg("I can file commitment, pricing, maturity or covenant changes on this package. Try “increase the revolver to $18M”, “pricing to SOFR + 250”, “extend maturity to 2028-03” or “add a leverage covenant max 4.25×”.");
+      return;
+    }
+    var f = FACS[selectedFac];
+    var d = document.createElement("div");
+    d.className = "wk-delta num";
+    var body = "", ovrLabel = null, ovrVal = null, mTitle = "", mSub = "";
+    if(intent.kind === "covenant"){
+      body = '<div class="dl">' + tico("covenant") + '<span>Covenant · add · package level</span></div><div class="dv">Leverage ≤ ' + intent.thr + '× · tested quarterly</div>' +
+        '<div class="adv">Sits inside the current 3.85× actual, tighter than the existing 4.50× test.</div>';
+      mTitle = "Add covenant · Leverage ≤ " + intent.thr + "×"; mSub = "Package-level · quarterly test";
+    } else if(intent.kind === "commit"){
+      ovrLabel = "Commitment"; ovrVal = intent.to;
+      body = '<div class="dl">' + tico("commit") + '<span>' + f.head + ' · commitment</span></div><div class="dv">' + currentVal("Commitment") + ' → ' + intent.to + ' · pricing + maturity unchanged</div>' +
+        '<div class="adv">All four covenants pass pro-forma at the new commitment.</div>';
+      mTitle = selectedFac + " · Commitment " + currentVal("Commitment") + " → " + intent.to; mSub = "Pricing + maturity unchanged";
+    } else if(intent.kind === "pricing"){
+      ovrLabel = "Pricing"; ovrVal = "SOFR + " + intent.bps;
+      body = '<div class="dl">' + tico("pricing") + '<span>' + f.head + ' · pricing</span></div><div class="dv">' + currentVal("Pricing") + ' → SOFR + ' + intent.bps + '</div>' +
+        '<div class="adv">Yield impact flows to the pricing model; committee sees the delta on the proposal.</div>';
+      mTitle = selectedFac + " · Pricing → SOFR + " + intent.bps; mSub = "Commitment + maturity unchanged";
+    } else if(intent.kind === "maturity"){
+      ovrLabel = "Maturity"; ovrVal = intent.to;
+      body = '<div class="dl">' + tico("maturity") + '<span>' + f.head + ' · maturity</span></div><div class="dv">' + currentVal("Maturity") + ' → ' + intent.to + '</div>' +
+        '<div class="adv">Extension stays inside policy tenor for this asset class.</div>';
+      mTitle = selectedFac + " · Maturity → " + intent.to; mSub = "Commitment + pricing unchanged";
+    }
+    d.innerHTML = body +
+      '<div class="row"><button class="btn-p" style="padding:7px 16px;font-size:12px">Confirm</button>' +
+      '<button class="btn-q" style="padding:7px 14px;font-size:12px">Discard</button></div>';
+    var btns = d.querySelectorAll("button");
+    btns[0].addEventListener("click", function(){
+      d.classList.add("confirmed");
+      if(intent.kind === "covenant"){ pkgCovenant = intent.thr; }
+      else { OVR[selectedFac] = OVR[selectedFac] || {}; OVR[selectedFac][ovrLabel] = ovrVal; }
+      addManifest(mTitle, mSub, d, intent.kind === "covenant" ? "covenant" : intent.kind === "pricing" ? "pricing" : intent.kind === "maturity" ? "maturity" : "commit");
+      setStage(2);
+      renderDetail();
+    });
+    btns[1].addEventListener("click", function(){
+      d.remove();
+      agentMsg("Discarded. It stays off the manifest.");
+    });
+    curStep.appendChild(d); wkScroll();
+  }
+  function sendLine(text){
+    var t = text.trim(); if(!t || $("#wkInput").disabled) return;
+    newStep();
+    bankerMsg(t);
+    $("#wkInput").value = "";
+    var intent = parseLine(t);
+    composeBeat(function(){ deltaCard(intent); });
+  }
+  document.querySelectorAll(".wk-chipbtn").forEach(function(c){
+    c.addEventListener("click", function(){ sendLine(c.getAttribute("data-say")); });
+  });
+  $("#wkSend").addEventListener("click", function(){ sendLine($("#wkInput").value); });
+  $("#wkInput").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); sendLine(e.target.value); } });
+  /* input + suggestions sleep until the briefing is done */
+  $("#wkInput").disabled = true;
+  $("#wkSuggest").style.display = "none";
+
+  /* ---- THE PROPOSAL IN THE CHAT: icon appears -> pops open -> creation runs inline ---- */
+  var proposeBtn = null, flowCard = null;
+  function showPropose(){
+    if(flowCard) return;
+    if(proposeBtn){ proposeBtn.remove(); }
+    proposeBtn = document.createElement("button");
+    proposeBtn.className = "wk-propose";
+    proposeBtn.innerHTML = tico("commit") + '<span>' + manifestCount + (manifestCount === 1 ? " change" : " changes") + ' on the manifest · <b>Review & execute</b></span>';
+    proposeBtn.addEventListener("click", expandFlow);
+    curStep.appendChild(proposeBtn); wkScroll();
+  }
+  function expandFlow(){
+    if(proposeBtn){ proposeBtn.remove(); proposeBtn = null; }
+    flowCard = document.createElement("div");
+    flowCard.className = "wk-flowcard num";
+    flowCard.innerHTML =
+      '<h5>' + tico("commit") + '<span>Execute against nCino?</span></h5>' +
+      '<p>' + manifestCount + (manifestCount === 1 ? " staged change" : " staged changes") + ' on the Hartwell package · runs on the live org</p>' +
+      '<span class="tok">decision token · single use · 4f8a…c21e</span>' +
+      '<div class="row"><button class="btn-q">Cancel</button><button class="btn-p">Execute write</button></div>';
+    curStep.appendChild(flowCard); wkScroll();
+    var btns = flowCard.querySelectorAll(".row button");
+    btns[0].addEventListener("click", function(){ flowCard.remove(); flowCard = null; showPropose(); });
+    btns[1].addEventListener("click", runExec);
+  }
+  function runExec(){
+    setStage(3);
+    flowCard.innerHTML =
+      '<div class="flowload lit"><span class="aura" aria-hidden="true"></span>' +
+      '<div class="top">' +
+      '<span class="liquidmark mini"><span class="goo" aria-hidden="true"><i></i><i></i><i></i></span>' +
+      '<svg class="gtbreathe gt" width="13" height="14" style="position:relative;z-index:1"><use href="#acn-gt"/></svg></span>' +
+      '<div class="lstat" id="flowStat">' +
+      '<span class="on">Verifying write against nCino…</span>' +
+      '<span>Pulling latest facility position…</span>' +
+      '<span>Recomputing covenant headroom…</span></div></div>' +
+      '<div class="skel"><i></i><i></i><i></i></div></div>';
+    wkScroll();
+    var spans = flowCard.querySelectorAll("#flowStat span"), i = 0;
+    var rot = setInterval(function(){
+      spans[i].classList.remove("on"); i = (i+1) % spans.length; spans[i].classList.add("on");
+    }, reduce ? 999999 : 1500);
+    setTimeout(function(){
+      clearInterval(rot);
+      finishExecute();
+    }, reduce ? 400 : 4600);
+  }
+  function finishExecute(){
+    /* compute the result summary BEFORE merging */
+    var loanCount = Object.keys(OVR).length;
+    var covAdded = !!pkgCovenant;
+    var parts = [];
+    var resRows = [];
+    var commitDelta = 0;
+    Object.keys(OVR).forEach(function(fid){
+      Object.keys(OVR[fid]).forEach(function(label){
+        var oldVal = null;
+        FACS[fid].rows = FACS[fid].rows.map(function(r){
+          if(r[0] === label){ oldVal = r[1]; return [label, OVR[fid][label]]; }
+          return r;
+        });
+        if(label === "Commitment" && oldVal){
+          commitDelta += (parseFloat(OVR[fid][label].replace(/[^\d.]/g,"")) || 0) - (parseFloat(oldVal.replace(/[^\d.]/g,"")) || 0);
+        }
+        resRows.push({k:"commit", l: fid + " · " + label.toLowerCase(), v: OVR[fid][label]});
+        parts.push(fid + " " + label.toLowerCase() + " is now <b>" + OVR[fid][label] + "</b> (was " + oldVal + ")");
+      });
+    });
+    if(pkgCovenant){
+      resRows.push({k:"covenant", l:"Leverage covenant · new", v:"≤ " + pkgCovenant + "×"});
+      parts.push("a <b>Leverage ≤ " + pkgCovenant + "×</b> covenant was added, tested quarterly");
+    }
+    OVR = {}; pkgCovenant = null;
+    renderDetail();
+    manifestCount = 0;
+    /* the flow card MORPHS into a compact glass dossier that CONSTRUCTS itself:
+       header lands, a hairline draws, each change row materializes with its value,
+       then the check pops - all under a faint iridescent aura */
+    if(flowCard){
+      var chip = document.createElement("div");
+      chip.className = "wk-rescard num lit";
+      var t = 140;
+      var html = '<span class="aura" aria-hidden="true"></span>' +
+        '<div class="rc-h" style="animation-delay:' + t + 'ms">' + tico("package") + '<b>Product Package</b>&nbsp;· Hartwell</div>';
+      t += 280;
+      html += '<div class="rc-line" style="animation-delay:' + t + 'ms"></div>';
+      t += 220;
+      resRows.forEach(function(r){
+        html += '<div class="rc-r" style="animation-delay:' + t + 'ms">' + tico(r.k) + '<span>' + r.l + '</span><b>' + r.v + '</b></div>';
+        t += 300;
+      });
+      html += '<div class="rc-line" style="animation-delay:' + t + 'ms"></div>';
+      t += 200;
+      html += '<div class="rc-f" style="animation-delay:' + t + 'ms"><span class="ok" style="animation-delay:' + (t + 180) + 'ms">✓</span>Written to nCino · verification re-query passed</div>';
+      chip.innerHTML = html;
+      flowCard.replaceWith(chip);
+      flowCard = null;
+      setTimeout(function(){ chip.classList.remove("lit"); }, 5600); /* the light breathes out */
+    }
+    /* THE WRITE-BACK, SEEN THROUGH THE GLASS: the cockpit changes behind the
+       blur while the room is still open, and a violet wash settles when it lifts */
+    if(commitDelta){
+      curExposure = Math.round((curExposure + commitDelta) * 10) / 10;
+      var nv = "$" + curExposure.toFixed(1);
+      odoRoll($("#ancExpV"), nv);
+      odoRoll($("#wlHartAmt"), nv + "M");
+      odoRoll($("#tblExpTotal"), nv + "M");
+      washQueue.push($("#ancExposure"));
+    }
+    /* the finale stays in the LIVE exchange: chip + confirmation together */
+    agentMsg("Done. On the <b>Hartwell package</b>: " + (parts.join("; ") || "the staged changes were applied") +
+      ". Verification re-query passed · plan <span class=\"num\">9c41…e08b</span>.");
+    if(!wkExecuted){
+      wkExecuted = true;
+      var tli = document.createElement("div");
+      tli.className = "tli hot";
+      tli.innerHTML = '<b>Modification executed</b><span class="m">F. Goetzens · today</span><p>Commitment applied on HIG-2041; verification re-query passed.</p>';
+      var tl = document.querySelector("#pane-activity .tl");
+      tl.insertBefore(tli, tl.firstChild);
+    }
+    toast("Executed · logged to the activity trail");
+  }
+
+  /* ---------- chat: thinking -> word-stream -> source ---------- */
+  var FULL = "Yes. Utilization has held above 90% for three consecutive weeks, the strongest evidence yet for the staged $5.0M increase. Leverage headroom stays comfortable at 3.85× against the 4.50× covenant. ";
+  var THINKS = ["Reading AFS utilization history…","Checking covenant headroom in Boom…","Composing recommendation…"];
+  var chatOpen = false, chatRan = false;
+  function toggleChat(){
+    chatOpen = !chatOpen;
+    if(chatOpen) hideWhisper();
+    $("#chatpanel").classList.toggle("show", chatOpen);
+    $("#chatMini").classList.remove("show");
+    fabwrap.classList.toggle("tucked", chatOpen); /* the mark yields while the assist is open */
+    if(chatOpen){ closeArc(); }
+    if(chatOpen && !chatRan){ chatRan = true; runChat(); }
+  }
+  $("#chatX").addEventListener("click", function(){ if(chatOpen) toggleChat(); });
+  $("#chatMin").addEventListener("click", function(){ /* minimize: panel folds into the Assist pill, conversation kept */
+    chatOpen = false;
+    $("#chatpanel").classList.remove("show");
+    $("#chatMini").classList.add("show"); /* pill holds the spot; FAB stays tucked */
+  });
+  $("#chatMini").addEventListener("click", function(){ /* restore */
+    chatOpen = true;
+    $("#chatMini").classList.remove("show");
+    $("#chatpanel").classList.add("show");
+  });
+  function runChat(){
+    var think = $("#chatThink"), line = $("#chatThinkLine"), msg = $("#chatMsg");
+    if(reduce){
+      think.style.display = "none";
+      msg.innerHTML = FULL + '<span class="src">AFS · revolver_utilization</span>';
+      return;
+    }
+    var ti = 0;
+    var t = setInterval(function(){
+      ti++;
+      if(ti < THINKS.length){ line.textContent = THINKS[ti]; }
+      else {
+        clearInterval(t); think.style.display = "none";
+        msg.innerHTML = '<span class="caret"></span>';
+        var caret = msg.querySelector(".caret");
+        var words = FULL.trim().split(" "), i = 0;
+        var s = setInterval(function(){
+          if(i >= words.length){
+            clearInterval(s); caret.remove();
+            var src = document.createElement("span");
+            src.className = "src"; src.textContent = "AFS · revolver_utilization";
+            msg.appendChild(src);
+            return;
+          }
+          var w = document.createElement("span");
+          w.className = "w"; w.textContent = words[i] + " ";
+          msg.insertBefore(w, caret);
+          requestAnimationFrame(function(){ requestAnimationFrame(function(){ w.classList.add("in"); }); });
+          i++;
+        }, 60);
+      }
+    }, 1400);
+  }
+
+  /* ---------- odometer: a figure never swaps, it rolls ---------- */
+  function odoRoll(el, newText){
+    var tn = el.firstChild;
+    if(!tn || tn.nodeType !== 3){ el.insertBefore(document.createTextNode(""), el.firstChild); tn = el.firstChild; }
+    var old = tn.nodeValue;
+    if(reduce || old.length !== newText.length || old === newText){ tn.nodeValue = newText; return; }
+    var wrap = document.createElement("span");
+    for(var i = 0; i < old.length; i++){
+      if(old[i] === newText[i]){ wrap.appendChild(document.createTextNode(old[i])); continue; }
+      var col = document.createElement("span"); col.className = "odo";
+      var strip = document.createElement("span"); strip.className = "strip";
+      strip.style.transitionDelay = (i * 45) + "ms";
+      var o = document.createElement("span"); o.textContent = old[i];
+      var n = document.createElement("span"); n.textContent = newText[i];
+      strip.appendChild(o); strip.appendChild(n); col.appendChild(strip); wrap.appendChild(col);
+    }
+    el.replaceChild(wrap, tn);
+    wrap.getBoundingClientRect();
+    requestAnimationFrame(function(){
+      wrap.querySelectorAll(".odo").forEach(function(c){ c.classList.add("go"); });
+    });
+    setTimeout(function(){ el.replaceChild(document.createTextNode(newText), wrap); }, 1100);
+  }
+
+  /* ---------- command palette ---------- */
+  var cmdk = $("#cmdkWrap");
+  function toggleCmdk(on){
+    cmdk.classList.toggle("show", on);
+    document.body.classList.toggle("lensed", on); /* the world falls into depth of field */
+    if(on) $("#cmdkInput").focus();
+  }
+  $("#cmdkOpen").addEventListener("click", function(){ toggleCmdk(true); });
+  $("#cmdkInput").addEventListener("input", function(){
+    var q = this.value.trim().toLowerCase(), any = false;
+    document.querySelectorAll(".cmdk .r").forEach(function(r){
+      var hit = !q || r.textContent.toLowerCase().indexOf(q) !== -1;
+      r.classList.toggle("hid", !hit);
+      if(hit) any = true;
+    });
+    $("#cmdkNores").classList.toggle("on", !any);
+  });
+  cmdk.addEventListener("click", function(e){ if(e.target === cmdk) toggleCmdk(false); });
+  addEventListener("keydown", function(e){
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k"){ e.preventDefault(); toggleCmdk(!cmdk.classList.contains("show")); }
+    if(cmdk.classList.contains("show") && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter")){
+      var rows = Array.prototype.slice.call(document.querySelectorAll(".cmdk .r:not(.hid)"));
+      if(!rows.length) return;
+      e.preventDefault();
+      var idx = rows.findIndex(function(r){ return r.classList.contains("sel"); });
+      if(e.key === "Enter"){ (rows[idx] || rows[0]).click(); return; }
+      var next = e.key === "ArrowDown" ? Math.min(idx + 1, rows.length - 1) : Math.max(idx - 1, 0);
+      if(idx === -1) next = 0;
+      document.querySelectorAll(".cmdk .r").forEach(function(r){ r.classList.remove("sel"); });
+      rows[next].classList.add("sel");
+    }
+    if(e.key === "Escape"){
+      if(wkRoom.classList.contains("show")){ closeRoom(); return; }
+      toggleCmdk(false); closeArc();
+    }
+  });
+  document.querySelectorAll(".cmdk .r").forEach(function(r){
+    r.addEventListener("mouseenter", function(){
+      document.querySelectorAll(".cmdk .r").forEach(function(x){ x.classList.remove("sel"); });
+      r.classList.add("sel");
+    });
+    r.addEventListener("click", function(){
+      toggleCmdk(false);
+      var cmd = r.getAttribute("data-cmd");
+      if(cmd === "home"){ show("home"); }
+      if(cmd === "account"){ applyClient("hartwell"); show("account"); }
+      if(cmd === "drawer"){ applyClient("hartwell"); show("account"); setTimeout(openRoom, 250); }
+    });
+  });
+
+  /* ---------- ownership flow: curves float INTO the relationship ----------
+     Measured from the real node positions, so any number of related entities
+     draws correctly — new relationships inherit the same flow. */
+  function drawFlow(){
+    var svg = $("#oflowSvg"); if(!svg) return;
+    var tree = svg.closest(".otree");
+    var tb = tree.getBoundingClientRect();
+    if(tb.width === 0) return; /* pane hidden */
+    var target = $("#oBorrower").getBoundingClientRect();
+    var tx = target.left + target.width/2 - tb.left;
+    var ty = target.top - tb.top - 2; /* stop ABOVE the card, never inside */
+    var NS = "http://www.w3.org/2000/svg";
+    Array.prototype.slice.call(svg.children).forEach(function(c){ if(c.tagName.toLowerCase() !== "defs") c.remove(); });
+    var nodes = tree.querySelectorAll(".onode");
+    nodes.forEach(function(n, idx){
+      var r = n.getBoundingClientRect();
+      var sx = r.left + r.width/2 - tb.left;
+      var sy = r.bottom - tb.top + 2; /* start BELOW the node, never inside */
+      /* EDGED, not curved: a metro route — down, crisp 4px corner, across,
+         crisp corner, down into the borrower. Sharp and technical. */
+      var mid = (sy + ty) / 2;
+      var cr = 4;
+      var dir = tx > sx ? 1 : -1;
+      var d;
+      if(Math.abs(tx - sx) < cr * 2 + 2){
+        d = "M" + sx + "," + sy + " L" + sx + "," + ty;
+      } else {
+        d = "M" + sx + "," + sy +
+            " L" + sx + "," + (mid - cr) +
+            " Q" + sx + "," + mid + " " + (sx + dir * cr) + "," + mid +
+            " L" + (tx - dir * cr) + "," + mid +
+            " Q" + tx + "," + mid + " " + tx + "," + (mid + cr) +
+            " L" + tx + "," + ty;
+      }
+      var path = document.createElementNS(NS, "path");
+      path.setAttribute("class", "fl");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+      if(reduce) return;
+      /* one quiet particle per route, slow */
+      var c = document.createElementNS(NS, "circle");
+      c.setAttribute("class", "flp");
+      c.setAttribute("r", "1.8");
+      var m = document.createElementNS(NS, "animateMotion");
+      m.setAttribute("dur", (4.2 + idx * 0.7).toFixed(1) + "s");
+      m.setAttribute("repeatCount", "indefinite");
+      m.setAttribute("begin", (idx * 1.1).toFixed(1) + "s");
+      m.setAttribute("path", d);
+      c.appendChild(m);
+      svg.appendChild(c);
+    });
+  }
+  var flowTimer;
+  addEventListener("resize", function(){ clearTimeout(flowTimer); flowTimer = setTimeout(drawFlow, 200); });
+
+  /* ---------- KPI count-up: the numbers arrive alive ---------- */
+  document.querySelectorAll("[data-count]").forEach(function(el){
+    var target = parseFloat(el.getAttribute("data-count"));
+    var dec = +(el.getAttribute("data-dec") || 0);
+    var pre = el.getAttribute("data-pre") || "";
+    if(reduce){ el.textContent = pre + target.toFixed(dec); return; }
+    var t0 = null, dur = 900;
+    function tick(t){
+      if(t0 === null) t0 = t;
+      var p = Math.min(1, (t - t0) / dur);
+      var e = 1 - Math.pow(1 - p, 3);
+      el.textContent = pre + (target * e).toFixed(dec);
+      if(p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+
+  /* ---------- toast ---------- */
+  var toastTimer;
+  function toast(m){
+    var t = $("#toast");
+    t.textContent = m; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 3200);
+  }
+})();
+</script>
