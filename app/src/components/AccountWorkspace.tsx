@@ -1,56 +1,46 @@
-import { useApp, ACCOUNT_TABS, type AccountTab } from "../state/appState";
+import { useEffect, useRef } from "react";
+import { useApp } from "../state/appState";
 import { readAnchors, type Anchor, type BorrowerBundle } from "../data/contract";
 import { STATUS } from "../data/finance";
-import { PageContainer } from "./ui";
-import { AccentureCaretWatermark, AmbientWash } from "./brand";
 import { gradeColor } from "./RiskGrade";
 import { PackageStageChip } from "./PackageStage";
 import { ACTIONS_TRIGGER_ID } from "./actionsTrigger";
 import { TabContent } from "./tabs";
 import { SyncButton } from "./SyncSweep";
+import { prefersReducedMotion } from "../data/motion";
 
-/** One cell of the anchor/stat strip. Every cell shares this shape; the rating
- *  cell differs ONLY by status-toned value text plus the tick scale (founder
- *  feedback 2026-07-25 — no pill, no box, no orphan header element).
- *  Cells are top-aligned on a fixed min-height so values share a baseline and
- *  the tick row cannot push its neighbours out of line. */
-function StatCell({
-  label,
-  value,
-  sub,
-  arrow,
-  arrowColor,
-  valueColor,
-  title,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  arrow?: string;
-  arrowColor?: string;
-  valueColor?: string;
-  title?: string;
-}) {
-  return (
-    <div
-      className="flex min-h-[46px] flex-col justify-center rounded-[9px] px-3 py-2"
-      style={{ background: "var(--surface-overlay)" }}
-      title={title}
-    >
-      <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-label">{label}</span>
-      <span className="mt-0.5 flex items-baseline gap-1.5">
-        <span className="tnum text-[14px] font-bold" style={valueColor ? { color: valueColor } : undefined}>
-          {value}
-        </span>
-        {arrow && (
-          <span className="text-[12px] font-bold" style={{ color: arrowColor }}>
-            {arrow}
-          </span>
-        )}
-        {sub && <span className="text-[11px] text-ink-faint">{sub}</span>}
-      </span>
-    </div>
-  );
+/* =============================================================================
+   SURFACE 2 — THE CLIENT HERO.
+
+   Rule 8: the client identity is its OWN floating glass hero panel — bloom
+   inside the glass, an oversized > watermark leaning against the cursor, the
+   crumb, the name, the verdict and the anchor strip. The frosted verdict BAR it
+   replaces was the app's one glass census violation (0 rims, an 18px blur of its
+   own, sticky at the top of an inner scroller); the hero takes the `.eg-glass`
+   recipe, so the rims are structural now rather than remembered.
+
+   THE TAB RAIL IS GONE FROM HERE. Rule 11 moved the workspace nav into the
+   header capsule, dead centre, where TopBar renders it from the same
+   ACCOUNT_TABS this file used to lay out along a border. What is left here is
+   the pane the capsule selects.
+   ============================================================================= */
+
+/** The circumference the mint draws the grade ring on: 2πr at r=19. */
+const RING_CIRCUMFERENCE = 119.4;
+/**
+ * The rating scale the ring reads against. The mint draws grade 3 at offset
+ * 74.6 and grade 7 at 14.9 on that circumference, which is exactly g/8 of the
+ * ring in both cases; its third client (grade 5) is authored at 41.8, three
+ * pixels off the line those two define and the one hand-typed figure in the
+ * set. The rule the pair agree on is the rule.
+ */
+const GRADE_SCALE = 8;
+
+function ringOffset(grade: string | null): number {
+  const n = grade == null ? NaN : parseInt(grade, 10);
+  if (Number.isNaN(n)) return RING_CIRCUMFERENCE;
+  const filled = Math.max(0, Math.min(1, n / GRADE_SCALE));
+  return +(RING_CIRCUMFERENCE * (1 - filled)).toFixed(1);
 }
 
 /** True for the strip's rating cell, whatever the agent labelled it. */
@@ -58,18 +48,111 @@ function isRatingAnchor(a: Anchor): boolean {
   return /^(risk\s*)?(rating|grade)$/i.test(a.label.trim());
 }
 
-function AnchorCell({ a, grade }: { a: Anchor; grade: string | null }) {
+/** Split "$12.5M" / "1.42×" / "75 days" into the figure and its unit. Purple
+ *  discipline allows exactly one violet on a number, and it is the unit. */
+function splitUnit(value: string): [string, string] {
+  const m = value.match(/^(.*?\d)(\s*[^\d]+)$/);
+  return m ? [m[1], m[2]] : [value, ""];
+}
+
+function AnchorCell({ a }: { a: Anchor }) {
+  const [figure, unit] = splitUnit(a.value);
   const arrow = a.dir === "down" ? "↓" : a.dir === "up" ? "↑" : "";
-  const arrowColor = a.dir === "down" ? STATUS.red.fg : a.dir === "up" ? STATUS.green.fg : "transparent";
+  const arrowColor = a.dir === "down" ? STATUS.red.fg : STATUS.green.fg;
+  return (
+    <div className="anchor">
+      <div className="l">{a.label}</div>
+      <div className="v num">
+        {figure}
+        {unit && <span className="u">{unit}</span>}
+        {arrow && (
+          <span className="dn" style={{ color: arrowColor }}>
+            {arrow}
+          </span>
+        )}
+      </div>
+      {a.sub && <div className="s">{a.sub}</div>}
+    </div>
+  );
+}
 
-  if (!isRatingAnchor(a)) {
-    return <StatCell label={a.label} value={a.value} sub={a.sub} arrow={arrow} arrowColor={arrowColor} />;
-  }
+/** The grade cell: the ring states the rating as a quantity, the text states it
+ *  as a word. A28.2 keeps the package STAGE out of here — it is a different
+ *  fact about a different object and it has its own chip beside the name — so
+ *  the anchor's own `sub` is dropped and provenance stays where it has always
+ *  been, on the cell's title. The mint spells a source and a rating date on
+ *  this line; this book carries neither, and a caption is not worth inventing
+ *  one for. */
+function GradeCell({ anchor, grade }: { anchor: Anchor | undefined; grade: string | null }) {
+  if (!anchor) return null;
+  return (
+    <div className="anchor grade-cell" title="nCino risk rating">
+      <svg className="gr" viewBox="0 0 46 46" aria-hidden="true">
+        <circle className="bg" cx="23" cy="23" r="19" fill="none" strokeWidth="4" />
+        <circle
+          className="fg"
+          cx="23"
+          cy="23"
+          r="19"
+          fill="none"
+          strokeWidth="4"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={ringOffset(grade)}
+          transform="rotate(-90 23 23)"
+        />
+        <text x="23" y="28" textAnchor="middle">
+          {grade ?? "—"}
+        </text>
+      </svg>
+      <div>
+        <div className="l">{anchor.label}</div>
+        <div className="v" style={{ fontSize: 13, color: gradeColor(grade) ?? undefined }}>
+          {anchor.value}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  // Rating cell. The agent's `sub` here is the package STAGE, which A28.2 moved
-  // out to its own labelled chip beside the borrower name — so it is not
-  // repeated inside this cell. The caption slot carries provenance instead.
-  return <StatCell label={a.label} value={a.value} valueColor={gradeColor(grade) ?? undefined} title="nCino risk rating" />;
+/** Rule 62.1 — the ring DRAWS itself on every client entry: pinned back to the
+ *  full circumference with the transition off, then released to the grade over
+ *  1s. Without the reflow between the two writes the browser coalesces them and
+ *  nothing moves. */
+function useRingDraw(accountId: string | null) {
+  useEffect(() => {
+    const fg = document.querySelector<SVGCircleElement>("#view-account .gr .fg");
+    if (!fg || prefersReducedMotion()) return;
+    const target = fg.getAttribute("stroke-dashoffset") ?? "";
+    fg.style.transition = "none";
+    fg.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
+    fg.getBoundingClientRect();
+    fg.style.transition = "";
+    const raf = requestAnimationFrame(() => {
+      fg.style.strokeDashoffset = target;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [accountId]);
+}
+
+/** Rule 62.3 — hero depth. The watermark leans up to 6px/4px AGAINST the
+ *  cursor over a 1.2s settle. Depth, never a gimmick wobble, so the pointer has
+ *  to be near the panel for it to answer at all. */
+function useWatermarkLean(hero: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    const onMove = (e: PointerEvent) => {
+      const el = hero.current;
+      const wm = el?.querySelector<HTMLElement>(".acct-wm");
+      if (!el || !wm) return;
+      const r = el.getBoundingClientRect();
+      if (e.clientY < r.top - 80 || e.clientY > r.bottom + 80) return;
+      const dx = ((e.clientX - r.left) / r.width - 0.5) * -6;
+      const dy = ((e.clientY - r.top) / r.height - 0.5) * -4;
+      wm.style.transform = `translate(${dx.toFixed(1)}px,${dy.toFixed(1)}px)`;
+    };
+    document.addEventListener("pointermove", onMove, { passive: true });
+    return () => document.removeEventListener("pointermove", onMove);
+  }, [hero]);
 }
 
 export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
@@ -80,110 +163,69 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
   const sector = [snap?.industry, snap?.naicsCode ? `NAICS ${snap.naicsCode}` : null].filter(Boolean).join(" · ") || "—";
   const grade = snap?.primaryRiskRating ?? null;
 
-  return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      {/* Verdict bar — frosted, un-transformed at the top level (Safari
-          backdrop-filter rule: never nest blur in a rounded+transformed box). */}
-      <div
-        className="sticky top-0"
-        style={{
-          zIndex: "var(--z-verdict)",
-          background: "var(--frost-bar)",
-          backdropFilter: "blur(18px) saturate(1.5)",
-          WebkitBackdropFilter: "blur(18px) saturate(1.5)",
-          boxShadow: "var(--frost-shadow)",
-        }}
-      >
-        <PageContainer className="relative overflow-hidden py-4">
-          <AmbientWash />
-          <AccentureCaretWatermark />
-          <div className="relative min-w-0 flex-1">
-            <div className="mb-2.5 flex items-center gap-2 text-[12px] font-semibold text-ink-label">
-              {/* `goHome` is the mint's own id for this control (design/probes
-                  addresses it by that name). The hero it sits in is Surface 2's
-                  to re-cut; the hook is here now so the acceptance harness can
-                  walk back to the worklist between surfaces. */}
-              <button
-                type="button"
-                id="goHome"
-                onClick={() => dispatch({ type: "GO_HOME" })}
-                className="inline-flex items-center gap-1.5 font-bold"
-                style={{ color: "var(--accent)" }}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14">
-                  <path d="M9 3L5 7l4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Worklist
-              </button>
-              <span style={{ color: "var(--crumb-sep)" }}>/</span>
-              <span>{sector}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-[28px] font-extrabold leading-tight tracking-tight">{name}</span>
-              <PackageStageChip snapshot={snap} />
-            </div>
-            {bundle.verdict && (
-              <div className="my-2 max-w-[760px] text-[14px] leading-relaxed text-ink-body" style={{ textWrap: "pretty" as never }}>
-                {bundle.verdict}
-              </div>
-            )}
-            {/* Stat strip + the two triggers on ONE row, right-aligned to the
-                same grid so nothing floats free (founder feedback 2026-07-25).
-                Sync is secondary; Client Actions keeps the accent. */}
-            <div className="mt-3 flex flex-wrap items-stretch gap-2.5">
-              {readAnchors(bundle).map((a) => (
-                <AnchorCell key={a.label} a={a} grade={grade} />
-              ))}
-              <span className="ml-auto flex items-center gap-2 self-center">
-                <SyncButton accountId={snap.accountId} accountName={name} bundle={bundle} />
-                <button
-                  id={ACTIONS_TRIGGER_ID}
-                  type="button"
-                  onClick={() => dispatch({ type: "SET_PANEL", panel: state.panel === "actions" ? "none" : "actions" })}
-                  aria-expanded={state.panel === "actions"}
-                  className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
-                >
-                  <svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true">
-                    <path d="M3 5.4h12M3 9h12M3 12.6h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  Client Actions
-                </button>
-              </span>
-            </div>
-          </div>
-        </PageContainer>
+  const anchors = readAnchors(bundle);
+  const ratingAnchor = anchors.find(isRatingAnchor);
+  const rest = anchors.filter((a) => a !== ratingAnchor);
 
-        {/* Tab rail */}
-        <div className="border-t border-divider">
-          <PageContainer className="no-scrollbar flex gap-1 overflow-x-auto">
-            {ACCOUNT_TABS.map((t) => {
-              const active = state.tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => dispatch({ type: "SET_TAB", tab: t.id as AccountTab })}
-                  className="c360-press whitespace-nowrap px-3 pb-3 pt-3.5 text-[13.5px]"
-                  style={{
-                    fontWeight: active ? 700 : 500,
-                    color: active ? "var(--accent)" : "var(--ink-muted)",
-                    borderBottom: `2px solid ${active ? "var(--accent)" : "transparent"}`,
-                  }}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </PageContainer>
+  const hero = useRef<HTMLDivElement | null>(null);
+  useRingDraw(state.accountId);
+  useWatermarkLean(hero);
+
+  return (
+    <>
+      <div className="page" style={{ paddingTop: 22 }}>
+        <div className="hero eg-glass" ref={hero}>
+          {/* Rule 40: the hero watermark is one of the six sanctioned mark
+              sites, and it is the SAME typographic ">" the rest of the app
+              uses — never a second, drawn rendition of the shape. */}
+          <span aria-hidden="true" className="c360-glyph acct-wm">
+            &gt;
+          </span>
+          <div className="crumb">
+            <button type="button" id="goHome" onClick={() => dispatch({ type: "GO_HOME" })}>
+              ‹ Worklist
+            </button>
+            <span>/</span>
+            <span>{sector}</span>
+          </div>
+          <div className="acct-name-row">
+            <span className="acct-name">{name}</span>
+            <PackageStageChip snapshot={snap} />
+            {/* Sync is secondary; Client Actions keeps the accent. Both are on
+                loan from the FAB arc, which claims them in Surface 4. */}
+            <span className="hero-controls">
+              <SyncButton accountId={snap.accountId} accountName={name} bundle={bundle} />
+              <button
+                id={ACTIONS_TRIGGER_ID}
+                type="button"
+                onClick={() => dispatch({ type: "SET_PANEL", panel: state.panel === "actions" ? "none" : "actions" })}
+                aria-expanded={state.panel === "actions"}
+                className="c360-press c360-accent-btn inline-flex flex-none items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
+              >
+                <svg width="13" height="13" viewBox="0 0 18 18" aria-hidden="true">
+                  <path d="M3 5.4h12M3 9h12M3 12.6h7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                Client Actions
+              </button>
+            </span>
+          </div>
+          {bundle.verdict && <p className="verdict">{bundle.verdict}</p>}
+          <div className="anchors num">
+            <GradeCell anchor={ratingAnchor} grade={grade} />
+            {rest.map((a) => (
+              <AnchorCell key={a.label} a={a} />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Tab content — re-keyed per tab so the cross-fade replays on switch */}
-      <PageContainer className="py-6">
-        <div key={state.tab} className="c360-tab-in">
+      {/* The pane the capsule selected. Re-keyed per tab so `panein` replays:
+          a 3px settle, never the view-level 8px jump (rule 61). */}
+      <div className="page">
+        <section className="pane show" id={`pane-${state.tab}`} key={state.tab}>
           <TabContent tab={state.tab} bundle={bundle} />
-        </div>
-      </PageContainer>
-    </div>
+        </section>
+      </div>
+    </>
   );
 }
