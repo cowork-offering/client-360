@@ -13,7 +13,15 @@ import { bookedFacilities, facilityProduct, facilityStagesStaged, shortFacilityL
 import { fmtDate, fmtMoney } from "../data/format";
 import { isActiveFacility, MATURITY_NEAR_WINDOW_DAYS } from "../data/worklist";
 import type { BorrowerBundle, C360Data, Covenant, Facility } from "../data/contract";
-import type { PackageChoice, WorkroomBrief, WorkroomEngine, WorkroomSuggestion } from "./engine";
+import {
+  holdComposed,
+  recallComposed,
+  releaseComposed,
+  type PackageChoice,
+  type WorkroomBrief,
+  type WorkroomEngine,
+  type WorkroomSuggestion,
+} from "./engine";
 import { catalogField, chainFor, type CatalogField } from "./fieldCatalog";
 import { gatewayRestate, type Restate } from "./gatewayRestate";
 import { WorkroomRefusalError } from "./modifyEngine";
@@ -290,7 +298,12 @@ export function createRenewEngine(args: {
   let asked = false;
   let staged: StagedWorkroomPlan | null = null;
   let stagedDeltas: WorkroomDelta[] = [];
-  let idempotencyKey: string | null = null;
+  /** What this package was left composing when the room last closed. Read
+   *  once, at construction: the room asks for it and starts on it. */
+  const held = recallComposed(context.mode, context.productPackageId);
+  /** Carried across a close with the manifest, so reopening and approving
+   *  files ONE action, replayed, rather than a second one beside the first. */
+  let idempotencyKey: string | null = held.idempotencyKey;
   const spent = new Set<string>();
   let deltaSeq = 0;
   let awaiting: { field: CatalogField; facility: Facility | null } | null = null;
@@ -1093,6 +1106,9 @@ export function createRenewEngine(args: {
     acknowledge,
     stagePlan,
     execute,
+    resume: () => held.entries,
+    hold: (entries) => holdComposed(context.mode, context.productPackageId, { entries, idempotencyKey }),
+    release: () => releaseComposed(context.mode, context.productPackageId),
   };
 }
 

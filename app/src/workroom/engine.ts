@@ -126,6 +126,100 @@ export interface WorkroomSuggestion {
   say: string;
 }
 
+/* ------------------------------------------------- the composed manifest holds
+
+   THE ROOM CLOSES; THE WORK DOES NOT.
+
+   The shell holds its entries in component state and the component unmounts on
+   close, so a banker who shut the room to check a figure on the cockpit behind
+   it came back to a blank manifest and had to say every change again. What
+   survives a close is held HERE, in the engine layer, rather than in the
+   component that dies.
+
+   KEYED BY THE PACKAGE, and by the mode that composed it. The package anchor IS
+   the governance boundary — one session is one package is one plan is one
+   approval — so a manifest composed against one package may never reappear
+   under another; and a renewal's terms are not a modification's changes even on
+   the same package.
+
+   A PAGE SESSION, and no longer. This is module scope, not storage: a reload
+   starts clean, which is the honest lifetime for a change set that has not been
+   filed and whose staging token the org may since have expired.               */
+
+export interface ComposedHold {
+  /** The confirmed manifest, in landing order. */
+  entries: WorkroomDelta[];
+  /** The key the org ties a restage to. Carried across the close so a banker
+   *  who reopens and approves files ONE credit action, replayed, rather than a
+   *  second one beside the first. */
+  idempotencyKey: string | null;
+}
+
+const holds = new Map<string, ComposedHold>();
+
+const holdKey = (mode: WorkroomMode, packageId: string | null | undefined): string | null =>
+  packageId ? `${mode}:${packageId}` : null;
+
+/** What this package was left composing. Empty on a first visit, and empty
+ *  again once a plan has filed. A package that does not exist yet — the account
+ *  door of `create` — has no anchor to hold anything against. */
+export function recallComposed(mode: WorkroomMode, packageId: string | null | undefined): ComposedHold {
+  const key = holdKey(mode, packageId);
+  return (key && holds.get(key)) || { entries: [], idempotencyKey: null };
+}
+
+export function holdComposed(mode: WorkroomMode, packageId: string | null | undefined, hold: ComposedHold): void {
+  const key = holdKey(mode, packageId);
+  if (!key) return;
+  if (!hold.entries.length && !hold.idempotencyKey) {
+    holds.delete(key);
+    return;
+  }
+  holds.set(key, { entries: [...hold.entries], idempotencyKey: hold.idempotencyKey });
+}
+
+/** The plan filed. There is nothing left to pick up, and offering the filed
+ *  entries again as if they were still composing would be a lie. */
+export function releaseComposed(mode: WorkroomMode, packageId: string | null | undefined): void {
+  const key = holdKey(mode, packageId);
+  if (key) holds.delete(key);
+}
+
+/** Module state outlives a test file. Tests that compose a manifest drop it. */
+export function clearComposed(): void {
+  holds.clear();
+}
+
+/* ----------------------------------------------------------- readable errors
+
+   A THROWN THING IS NOT ALWAYS AN ERROR. The transport rejects with a plain
+   `McpFailure` object, and `String(that)` is "[object Object]" — which is
+   exactly what a live run put in the thread as the agent's whole answer to a
+   43-second execute. Anything the room says out loud goes through here first. */
+
+/** How much of an unrecognised shape is worth reading. Past this it is a dump,
+ *  not a sentence. */
+const ERROR_CHARS = 300;
+
+export function readableError(e: unknown): string {
+  if (typeof e === "string" && e.trim()) return e.trim();
+  const message = (e as { message?: unknown } | null | undefined)?.message;
+  if (typeof message === "string" && message.trim()) return message.trim();
+  try {
+    const json = JSON.stringify(e);
+    if (json && json !== "{}" && json !== "null") {
+      return json.length > ERROR_CHARS ? `${json.slice(0, ERROR_CHARS)}…` : json;
+    }
+  } catch {
+    // Circular, or a shape JSON refuses. The fallback below still says something.
+  }
+  const text = String(e);
+  // THE ONE STRING THAT MAY NEVER REACH THE THREAD. A shape that carries nothing
+  // readable is an unreadable error, and saying so is the honest answer; putting
+  // "[object Object]" in front of a banker is not.
+  return text === "[object Object]" ? "The room got back an error it could not read." : text;
+}
+
 export interface WorkroomEngine {
   readonly mode: WorkroomMode;
   /** TRUE while the room runs on a storyline and reaches no tool. The header
@@ -145,6 +239,14 @@ export interface WorkroomEngine {
   acknowledge(delta: WorkroomDelta, staged: WorkroomDelta[]): WorkroomAcknowledgement;
   stagePlan(deltas: WorkroomDelta[], context: WorkroomContext): Promise<StagedWorkroomPlan>;
   execute(approval: WorkroomApproval): Promise<WorkroomExecution>;
+  /** The manifest this package was left composing when the room last closed,
+   *  read at construction. Empty on a first visit. */
+  resume(): WorkroomDelta[];
+  /** The room hands its manifest back on every landing and every removal, so a
+   *  close cannot lose it. */
+  hold(entries: WorkroomDelta[]): void;
+  /** The plan filed; there is nothing left to pick up. */
+  release(): void;
 }
 
 /* ------------------------------------------------------------------ scripted */
@@ -187,9 +289,12 @@ function planSteps(deltas: WorkroomDelta[]): PlanStep[] {
  * and the plan it last staged. Both are conversation state, not domain state —
  * the room writes nothing, so there is nothing else to hold.
  */
-export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "door" | "approver">): WorkroomEngine {
+export function createScriptedEngine(
+  context: Pick<WorkroomContext, "mode" | "door" | "approver" | "productPackageId">,
+): WorkroomEngine {
   const script: WorkroomScript = scriptFor(context.mode, context.door);
   const vocabulary = vocabularyFor(context);
+  const held = recallComposed(context.mode, context.productPackageId);
   let beatIndex = 0;
   let staged: StagedWorkroomPlan | null = null;
   /** What the last plan was staged FROM, so execution can report per delta. */
@@ -214,6 +319,12 @@ export function createScriptedEngine(context: Pick<WorkroomContext, "mode" | "do
   return {
     mode: script.mode,
     scripted: true,
+
+    resume: () => held.entries,
+    // The shell engine stages no org plan, so it holds no idempotency key with
+    // the entries: there is no credit action for a replay to land on.
+    hold: (entries) => holdComposed(context.mode, context.productPackageId, { entries, idempotencyKey: null }),
+    release: () => releaseComposed(context.mode, context.productPackageId),
 
     brief() {
       return {

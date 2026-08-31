@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createScriptedEngine } from "./engine";
+import { createScriptedEngine, readableError } from "./engine";
 import { vocabularyFor, doorFor } from "./modes";
 import { scriptFor } from "./scripts";
 import { assertNoRecordIds } from "../actions/stagedPlan";
@@ -203,5 +203,40 @@ describe("the workroom engine, per mode", () => {
   it("modify and renew are package-anchored whatever they are handed", () => {
     expect(doorFor("modify", null)).toBe("package");
     expect(doorFor("renew", null)).toBe("package");
+  });
+});
+
+/* =============================================================================
+   ANYTHING THE ROOM SAYS OUT LOUD IS A SENTENCE.
+
+   A live run had the org's execute SUCCEED after 43 seconds while the thread
+   showed "[object Object]" as the agent's whole reply. The transport rejects
+   with a plain failure OBJECT, not an Error, and `String(that)` is that string.
+   ============================================================================= */
+
+describe("a thrown thing, read as a sentence", () => {
+  it("takes the message where there is one", () => {
+    expect(readableError(new Error("The org holds execution of this plan."))).toBe("The org holds execution of this plan.");
+    expect(readableError({ code: "TOKEN_REFUSED", message: "This confirmation has already been used." })).toBe(
+      "This confirmation has already been used.",
+    );
+    expect(readableError("nothing has been staged")).toBe("nothing has been staged");
+  });
+
+  it("never renders an object as [object Object]", () => {
+    const failure = { code: "upstream_error", server: "customer360", retryable: false };
+    expect(readableError(failure)).not.toContain("[object Object]");
+    expect(readableError(failure)).toContain("upstream_error");
+  });
+
+  it("caps a dump rather than filling the thread with one", () => {
+    const huge = readableError({ errors: Array.from({ length: 200 }, (_, i) => `field ${i} is required`) });
+    expect(huge.length).toBeLessThanOrEqual(301);
+    expect(huge.endsWith("…")).toBe(true);
+  });
+
+  it("says so plainly for a shape that carries nothing readable at all", () => {
+    expect(readableError({})).toBe("The room got back an error it could not read.");
+    expect(readableError(undefined)).toBe("undefined");
   });
 });
