@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useApp } from "../state/appState";
 import { TopBar } from "./TopBar";
 import { Landing } from "./Landing";
@@ -10,10 +10,34 @@ import { EmptyState } from "./ui";
 import { WorkroomHost } from "./workroom/WorkroomHost";
 import { buildWorklistRows } from "../data/worklistRows";
 
+type ViewRef = React.RefObject<HTMLDivElement | null>;
+
+/**
+ * The mint's `show()`, translated. Both views stay mounted; one of them carries
+ * `show`. The class work is imperative rather than rendered because the name
+ * flight writes `noanim` onto the client view from OUTSIDE React, between the
+ * two measurements of its ghost — a rendered className would overwrite it on the
+ * very next commit.
+ *
+ * TRAP 2 IS THE ORDER OF THESE TWO LINES. `noanim` comes off a view that is
+ * about to be hidden, never one that is visible: clearing it while the view is
+ * shown flips animation none -> viewin and restarts the whole entry animation.
+ */
+function useViewSwitch(home: ViewRef, account: ViewRef, current: "home" | "account") {
+  useEffect(() => {
+    for (const [name, ref] of [["home", home], ["account", account]] as const) {
+      const el = ref.current;
+      if (!el) continue;
+      if (name !== current) el.classList.remove("noanim");
+      el.classList.toggle("show", name === current);
+    }
+  }, [home, account, current]);
+}
+
 export function AppShell() {
   const { data, worklist, state } = useApp();
   const staged =
-    state.view === "account" && state.accountId
+    state.accountId
       ? (data.borrowers ?? {})[state.accountId] ??
         (data.borrower?.snapshot?.accountId === state.accountId ? data.borrower : undefined)
       : undefined;
@@ -23,7 +47,7 @@ export function AppShell() {
   const bundle = staged && patch ? { ...staged, ...patch } : staged;
   const home = state.view === "home";
 
-  // The header capsule appears only on a client (rule 45). The flag is a body
+  // The header capsule appears only on a client (rule 11). The flag is a body
   // class rather than a prop because the capsule is positioned chrome, and CSS
   // is where its enter and exit live.
   useEffect(() => {
@@ -31,30 +55,44 @@ export function AppShell() {
     return () => document.body.classList.remove("on-client");
   }, [home]);
 
+  const homeRef = useRef<HTMLDivElement | null>(null);
+  const accountRef = useRef<HTMLDivElement | null>(null);
+  useViewSwitch(homeRef, accountRef, state.view);
+
   const topRow = useMemo(() => buildWorklistRows(data, worklist)[0], [data, worklist]);
 
   return (
-    /* THE LANDING IS A DOCUMENT, THE CLIENT VIEW IS A PANE. The landing flows
-       past the fold and lets the WINDOW scroll it, which is the only way the
-       sticky bar can know content has slid beneath it (rule 70.5). The client
-       view keeps its viewport-locked shell with its own inner scroller until
-       Surface 2 re-cuts it. */
-    <div className={home ? "flex min-h-screen flex-col" : "flex h-screen flex-col"}>
+    /* THE WINDOW SCROLLS BOTH VIEWS. The client view used to be a
+       viewport-locked shell with its own inner scroller, which meant the sticky
+       bar could never learn that content had slid beneath it (rule 70.5) and the
+       hero could never leave the top of the screen. Both views are documents
+       now, exactly as the mint has them. */
+    <div className="flex min-h-screen flex-col">
       <TopBar />
-      <div className={home ? "flex flex-1" : "flex min-h-0 flex-1"}>
-        <main className={home ? "flex flex-1 flex-col" : "flex min-h-0 flex-1 flex-col"}>
-          {home ? (
-            <Landing />
-          ) : bundle ? (
-            <AccountWorkspace bundle={bundle} />
-          ) : (
-            <div className="flex flex-1 items-center justify-center">
-              <EmptyState
-                title="Account not staged"
-                body="This account has no bundle in the current snapshot. Return to the worklist and open it via the agent."
-              />
-            </div>
-          )}
+      <div className="flex flex-1">
+        <main className="flex flex-1 flex-col">
+          {/* EACH VIEW'S CONTENT MOUNTS ON ENTRY and unmounts on the way out,
+              while the view element itself stays. That is what makes the anchor
+              cascade and the grade ring replay on EVERY entry (rules 60 and
+              62.1) instead of once per session, it leaves the flight and trap 2
+              an element to write their classes onto, and it stops the weave's
+              rAF loop from breathing a band nobody is looking at. */}
+          <div className="view" id="view-home" ref={homeRef}>
+            {home && <Landing />}
+          </div>
+          <div className="view" id="view-account" ref={accountRef}>
+            {!home &&
+              (bundle ? (
+                <AccountWorkspace bundle={bundle} />
+              ) : (
+                <div className="flex flex-1 items-center justify-center">
+                  <EmptyState
+                    title="Account not staged"
+                    body="This account has no bundle in the current snapshot. Return to the worklist and open it via the agent."
+                  />
+                </div>
+              ))}
+          </div>
         </main>
       </div>
       {home && <Whisper row={topRow} />}
