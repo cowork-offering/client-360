@@ -252,6 +252,68 @@ describe("the deterministic parse", () => {
     expect(out.amendments[0].field.category).toBe("fee");
   });
 
+  it("resolves a percentage fee into the org's own fee type, with no amount beside it", () => {
+    const out = parseModify("add a 1% origination fee", single);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    const value = out.amendments[0].value;
+    if (value?.kind !== "fee") throw new Error(String(value?.kind));
+    expect(value.feeType).toBe("Loan Origination");
+    expect(value.calculationType).toBe("Percentage");
+    expect(value.percentage).toBe(1);
+    // The org's FeeTrigger derives the money; a figure here would contradict it.
+    expect(value.amount).toBeUndefined();
+    expect(value.recordType).toBe("Fees");
+  });
+
+  it("resolves a flat fee into an amount, and reads basis points as a percentage", () => {
+    const flat = parseModify("add a $5,000 attorney fee", single);
+    if (flat.kind !== "amendments") throw new Error(flat.kind);
+    const flatValue = flat.amendments[0].value;
+    if (flatValue?.kind !== "fee") throw new Error(String(flatValue?.kind));
+    expect(flatValue).toMatchObject({ feeType: "Attorney", calculationType: "Flat Amount", amount: 5000 });
+
+    const bps = parseModify("add a 25bps unused fee", single);
+    if (bps.kind !== "amendments") throw new Error(bps.kind);
+    const bpsValue = bps.amendments[0].value;
+    if (bpsValue?.kind !== "fee") throw new Error(String(bpsValue?.kind));
+    // No commitment or unused value exists on this org's fee picklist.
+    expect(bpsValue).toMatchObject({ feeType: "Other", calculationType: "Percentage", percentage: 0.25 });
+  });
+
+  it("classes a third-party pass-through as a COST rather than fee income", () => {
+    const out = parseModify("add a $12,500 appraisal fee", single);
+    if (out.kind !== "amendments") throw new Error(out.kind);
+    const value = out.amendments[0].value;
+    if (value?.kind !== "fee") throw new Error(String(value?.kind));
+    expect(value).toMatchObject({ feeType: "Appraisal", recordType: "Costs" });
+  });
+
+  it("asks for the fee's KIND, and completes on the kind alone", () => {
+    const asked = parseModify("add a 1% fee", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(asked.question).toMatch(/what kind of fee/i);
+    expect(asked.options).toContain("Origination fee");
+    expect(asked.awaiting?.fee?.percentage).toBe(1);
+
+    const answered = parseAnswer(asked.awaiting!, "origination fee", single);
+    if (answered?.kind !== "amendments") throw new Error(String(answered?.kind));
+    expect(answered.amendments[0].value).toMatchObject({ feeType: "Loan Origination", percentage: 1 });
+  });
+
+  it("asks HOW MUCH a fee is, and will not read a percentage and an amount as one fee", () => {
+    const asked = parseModify("add an origination fee", single);
+    if (asked.kind !== "clarify") throw new Error(asked.kind);
+    expect(asked.question).toMatch(/how much is the origination fee/i);
+    expect(asked.awaiting?.fee?.typeName).toBe("Loan Origination");
+
+    const both = parseModify("add a 1% origination fee of $150,000", single);
+    if (both.kind !== "clarify") throw new Error(both.kind);
+    expect(both.question).toMatch(/1% or \$150,000\.00/);
+    // Neither reading survives: keeping one would answer the question asked.
+    expect(both.awaiting?.fee?.percentage).toBeUndefined();
+    expect(both.awaiting?.fee?.amount).toBeUndefined();
+  });
+
   it("says nothing rather than guessing at a line with no amendment in it", () => {
     expect(parseModify("what is the weather in Kokomo", single).kind).toBe("none");
     expect(parseModify("", single).kind).toBe("none");

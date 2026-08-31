@@ -1653,6 +1653,232 @@ private class StageExecuteLoanModificationTest {
         System.assertEquals(48, clone.LLC_BI__Term_Months__c);
     }
 
+    // -------------------------------------------------------------------------------------------
+    // Net-new fees (2026-08-31).
+    // -------------------------------------------------------------------------------------------
+
+    @IsTest
+    static void aFlatFeeIsAuthoredOnTheCloneAndTheParentKeepsItsOwnFees() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('flatfee');
+
+        // A fee the parent ALREADY charges, so this proves the two paths land in one insert and are
+        // still counted apart: one carried replica, one authored row.
+        insert new LLC_BI__Fee__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Record_Type__c = 'Fees',
+            LLC_BI__Fee_Type__c = 'Attorney',
+            LLC_BI__Calculation_Type__c = 'Flat Amount',
+            LLC_BI__Amount__c = 25000,
+            LLC_BI__Status__c = 'Active'
+        );
+
+        StageLoanModification.Request r = stageReq(k);
+        r.feeAddsJson = '[{"feeType":"Loan Origination","description":"Origination fee - $5,000.00",' +
+            '"calculationType":"Flat Amount","amount":5000,"recordType":"Fees"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('net-new fee'),
+            'The banker confirms a plan that NAMES the fee it will create: ' + staged.result.summary);
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(1, done.result.fees.size(), 'One fee add, one fee result');
+
+        ExecuteLoanModification.FeeResult fr = done.result.fees[0];
+        System.assertNotEquals(null, fr.feeId, 'The fee id is the receipt');
+        System.assertNotEquals(null, fr.feeName, 'And the org-assigned autonumber is read back, never submitted');
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        System.assertEquals(cloneId, (Id) fr.cloneLoanId, 'The result names the clone it was authored on');
+        LLC_BI__Fee__c row = [
+            SELECT LLC_BI__Loan__c, LLC_BI__Fee_Type__c, LLC_BI__Fee_Type_Description__c,
+                   LLC_BI__Calculation_Type__c, LLC_BI__Amount__c, LLC_BI__Status__c,
+                   LLC_BI__Record_Type__c, LLC_BI__Is_Income__c, RecordTypeId
+            FROM LLC_BI__Fee__c WHERE Id = :fr.feeId
+        ];
+        System.assertEquals(cloneId, row.LLC_BI__Loan__c, 'The fee sits on the CLONE');
+        System.assertEquals('Loan Origination', row.LLC_BI__Fee_Type__c);
+        System.assertEquals('Origination fee - $5,000.00', row.LLC_BI__Fee_Type_Description__c,
+            'The human label rides the description: Name on a fee is an autonumber');
+        System.assertEquals(5000, row.LLC_BI__Amount__c, 'A flat fee carries the amount this plan staged');
+        System.assertEquals('Active', row.LLC_BI__Status__c, 'The guard\'s only legal birth state');
+        System.assertEquals('Fees', row.LLC_BI__Record_Type__c, 'The independent picklist, not a record type id');
+        System.assertEquals(true, row.LLC_BI__Is_Income__c, 'A "Fees" row is the bank\'s own income');
+        System.assertEquals(null, row.RecordTypeId,
+            'RecordTypeId is never written: no Fee record type is assigned to this profile (recon Task 1)');
+
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :before.Id],
+            'The booked parent keeps exactly the fee it charged, and gains nothing');
+        System.assertEquals(2, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :cloneId],
+            'The clone carries the parent\'s fee AND the new one');
+
+        Boolean addOk = false;
+        Boolean verifyOk = false;
+        Boolean carryNamesBoth = false;
+        for (ExecuteLoanModification.StepResult s : done.result.steps) {
+            if (s.id == 'fee_add_0') { addOk = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'fee_verify_0') { verifyOk = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'carry_junctions') { carryNamesBoth = s.detail.contains('1 carried, 1 net-new'); }
+        }
+        System.assertEquals(true, addOk && verifyOk, 'The add and its verification are each their own settled step: ' +
+            JSON.serialize(done.result.steps));
+        System.assertEquals(true, carryNamesBoth,
+            'The carry counts the authored fee apart from the copied one: ' + JSON.serialize(done.result.steps));
+    }
+
+    @IsTest
+    static void aPercentageFeeCarriesItsBasisAndLetsTheOrgComputeTheMoney() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('pctfee');
+
+        StageLoanModification.Request r = stageReq(k);
+        // No basisSource: the tool defaults it, because the org's Percentage_Fee_Required_Fields
+        // rule refuses the row without one and there is exactly one sensible default.
+        r.feeAddsJson = '[{"feeType":"Loan Origination","description":"Origination fee - 1.00% of the committed amount",' +
+            '"calculationType":"Percentage","percentage":1,"recordType":"Fees"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        Boolean planSaysComputed = false;
+        for (StageLoanModification.PlanStep ps : staged.result.steps) {
+            if (ps.id == 'fee_add_0') { planSaysComputed = ps.label.contains('computed by the org'); }
+        }
+        System.assertEquals(true, planSaysComputed,
+            'The plan tells the banker the money is the ORG\'s arithmetic: ' + JSON.serialize(staged.result.steps));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(1, done.result.fees.size());
+
+        LLC_BI__Fee__c row = [
+            SELECT LLC_BI__Calculation_Type__c, LLC_BI__Percentage__c, LLC_BI__Basis_Source__c, LLC_BI__Loan__c
+            FROM LLC_BI__Fee__c WHERE Id = :done.result.fees[0].feeId
+        ];
+        System.assertEquals('Percentage', row.LLC_BI__Calculation_Type__c);
+        System.assertEquals(1, row.LLC_BI__Percentage__c);
+        System.assertEquals('LLC_BI__Amount__c', row.LLC_BI__Basis_Source__c,
+            'The basis is set, or the org\'s Percentage_Fee_Required_Fields rule refuses the row');
+        System.assertEquals((Id) done.result.cloneLoanId, row.LLC_BI__Loan__c);
+        // The AMOUNT is deliberately not asserted to a figure: it is nCino's FeeTrigger's answer,
+        // derived from the clone's own commitment, and this suite never asserts the managed
+        // package's arithmetic. The verification sentence reports whatever the org settled on.
+        System.assertNotEquals(null, done.result.fees[0].verification, 'What the org settled on is reported either way');
+    }
+
+    @IsTest
+    static void aFeeAimsAtItsOwnMemberInAMixedPlan() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('mixedfee');
+
+        LLC_BI__Loan__c first = parent();
+        LLC_BI__Loan__c second = installSecondBookedFacility();
+
+        StageLoanModification.Request r = stageReq(k);
+        r.loanId = null;
+        r.requestedAmount = null;
+        r.facilityIds = new List<Id>{ first.Id, second.Id };
+        r.scalarChangesJson = '[{"key":"requestedAmount","value":1500000,"targetLoanId":"' + first.Id + '"}]';
+        r.feeAddsJson = '[{"feeType":"Attorney","description":"Attorney fee - $5,000.00",' +
+            '"calculationType":"Flat Amount","amount":5000,"targetLoanId":"' + second.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+
+        Id firstClone = (Id) resultFor(done.result, first.Id).cloneLoanId;
+        Id secondClone = (Id) resultFor(done.result, second.Id).cloneLoanId;
+
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :firstClone],
+            'The fee was staged on the OTHER member, so this clone charges nothing new');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :secondClone],
+            'And it lands on exactly the clone it named');
+        System.assertEquals(1500000, [SELECT LLC_BI__Amount__c FROM LLC_BI__Loan__c WHERE Id = :firstClone].LLC_BI__Amount__c,
+            'The scalar likewise reached only its own clone');
+        System.assertEquals(second.LLC_BI__Amount__c, [SELECT LLC_BI__Amount__c FROM LLC_BI__Loan__c WHERE Id = :secondClone].LLC_BI__Amount__c,
+            'The fee\'s member kept the commitment it carries today');
+    }
+
+    @IsTest
+    static void aMalformedFeeIsRefusedAtStageTimeWithTheOrgsOwnRule() {
+        C360TestFixture.armCalloutMock();
+
+        // A percentage fee with an amount: the org would derive one and replace it, so accepting
+        // the caller's figure would be accepting a number about to be thrown away.
+        StageLoanModification.Request withAmount = stageReq(key('fee-pctamt'));
+        withAmount.feeAddsJson = '[{"feeType":"Loan Origination","description":"Origination fee",' +
+            '"calculationType":"Percentage","percentage":1,"amount":150000}]';
+        // A percentage fee with no percentage: the org's own validation rule refuses the row.
+        StageLoanModification.Request noPct = stageReq(key('fee-nopct'));
+        noPct.feeAddsJson = '[{"feeType":"Loan Origination","description":"Origination fee","calculationType":"Percentage"}]';
+        // A flat fee with no amount.
+        StageLoanModification.Request noAmount = stageReq(key('fee-noamt'));
+        noAmount.feeAddsJson = '[{"feeType":"Attorney","description":"Attorney fee","calculationType":"Flat Amount"}]';
+        // A fee type this org's picklist does not carry. It IS a real commercial fee, which is the
+        // whole point: the caller must send Other plus a description instead.
+        StageLoanModification.Request badType = stageReq(key('fee-badtype'));
+        badType.feeAddsJson = '[{"feeType":"Commitment","description":"Commitment fee",' +
+            '"calculationType":"Percentage","percentage":0.25}]';
+        // No description. Name is an autonumber, so this fee would have no readable identity at all.
+        StageLoanModification.Request noLabel = stageReq(key('fee-nolabel'));
+        noLabel.feeAddsJson = '[{"feeType":"Attorney","calculationType":"Flat Amount","amount":5000}]';
+
+        Test.startTest();
+        StageLoanModification.Response r1 = stage(withAmount);
+        StageLoanModification.Response r2 = stage(noPct);
+        StageLoanModification.Response r3 = stage(noAmount);
+        StageLoanModification.Response r4 = stage(badType);
+        StageLoanModification.Response r5 = stage(noLabel);
+        Test.stopTest();
+
+        System.assertEquals(false, r1.ok, 'A percentage fee carrying an amount is refused');
+        System.assert(r1.error.message.contains('percentage fee carries no amount'), r1.error.message);
+        System.assertEquals(false, r2.ok, 'A percentage fee with no percentage is refused');
+        System.assert(r2.error.message.contains('Percentage_Fee_Required_Fields'), r2.error.message);
+        System.assertEquals(false, r3.ok, 'A flat fee with no amount is refused');
+        System.assert(r3.error.message.contains('flat fee needs an amount'), r3.error.message);
+        System.assertEquals(false, r4.ok, 'A fee type the org does not carry is refused');
+        System.assert(r4.error.message.contains('The org offers:'),
+            'And the refusal carries the org\'s own legal list: ' + r4.error.message);
+        System.assertEquals(false, r5.ok, 'A fee with no description is refused');
+        System.assert(r5.error.message.contains('autonumber'),
+            'And says WHY the description is the label: ' + r5.error.message);
+
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Fee__c WHERE LLC_BI__Loan__c = :parent().Id],
+            'None of them wrote anything');
+    }
+
+    @IsTest
+    static void aFeeAimedAtAFacilityOutsideThePlanIsRefused() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('fee-stranger'));
+        r.feeAddsJson = '[{"feeType":"Attorney","description":"Attorney fee - $5,000.00",' +
+            '"calculationType":"Flat Amount","amount":5000,"targetLoanId":"' +
+            C360Wave2Fixture.fakeId(LLC_BI__Loan__c.SObjectType) + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A fee lands on the clone of a facility THIS plan modifies, or nowhere');
+        System.assert(res.error.message.contains('not one of the selected facilities'), res.error.message);
+    }
+
     /**
      * The one test that runs the REAL bean. It cannot assert success, because a managed-package
      * credit action inside a test context is not something this suite controls, and a green assertion
