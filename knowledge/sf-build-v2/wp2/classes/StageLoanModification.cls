@@ -83,6 +83,8 @@ global with sharing class StageLoanModification {
         global String feeAddsJson;
         @InvocableVariable(label='Pledge Adds JSON' description='Optional. COLLATERAL PLEDGES authored on the CLONE: [{"collateralId"? (an existing LLC_BI__Collateral__c the BORROWER owns), "newCollateral"? {"description", "collateralType", "value"}, "advanceRate"?, "advanceRateReason"?, "amountPledged"?, "lienPosition"?, "targetLoanId"?}]. EXACTLY ONE of collateralId and newCollateral per entry. An existing collateral must be owned by the borrower through LLC_BI__Account_Collateral__c (LLC_BI__Collateral__c carries no account lookup at all) and must not already be pledged to that facility. A newCollateral is authored as asset, then ownership junction, then pledge; collateralType is resolved against the org\'s live LLC_BI__Collateral_Type__c catalog and a type whose own advance rate is null is refused before the org\'s Advance_Rate_should_not_be_null rule fires on the insert. advanceRate is REQUIRED on a create and rides LLC_BI__Advance_Rate_Override__c (the plain advance rate is a formula), which makes the org\'s Advance_Rate_Override rule demand a reason beside it. targetLoanId may be omitted when exactly one facility is selected.')
         global String pledgeAddsJson;
+        @InvocableVariable(label='Policy Exception Adds JSON' description='Optional. POLICY EXCEPTIONS authored on the CLONE and anchored on the borrower: [{"title" (the exception\'s readable name, <=80 chars), "status" (Waived|Mitigated|Unmitigated), "mitigationReasons"? (up to 3, <=100 chars each), "severity"?, "severityValue"?, "code"?, "type"? (defaults to "Policy"), "targetLoanId"?}]. TITLE IS REQUIRED: Name on this object is plain text rather than an autonumber, and the org\'s trigger stack backfills an omitted one with the record\'s own 15-character Id, so an unnamed exception is a row nobody can find. STATUS IS REQUIRED: the org defaults a new row to Unmitigated, which reads as a decision rather than as an absent value. A Mitigated exception needs at least one mitigation reason and an Unmitigated one may carry none, because "nothing mitigates this" and "here is what mitigates it" cannot both be true on one record. Over-long reasons are refused with their length, never truncated. WARNING: a committed write here fires the org-local PolicyExceptionCDC trigger, which POSTs the serialised record to an external AWS EventBridge endpoint. No approval starts and no email fires (probed 2026-08-31), but the record\'s data leaves the org. targetLoanId may be omitted when exactly one facility is selected.')
+        global String policyExceptionAddsJson;
     }
 
     /** One of the four scalars, aimed at ONE selected facility. */
@@ -162,6 +164,24 @@ global with sharing class StageLoanModification {
         public Decimal collateralValue;
         /** The asset as the plan names it, which is the description or the autonumber. */
         public String assetLabel;
+        public Id targetLoanId;
+    }
+
+    /** One parsed policy exception, resolved against the org's own status picklist. */
+    public class PolicyExceptionAdd {
+        /** The row's readable identity. `Name` is plain text here, and an omitted one is
+         *  backfilled by the org with the record's own Id. */
+        public String title;
+        public String status;
+        /** Free text, and the object's only required field. Every row this org holds reads
+         *  "Policy"; the guard fences it to that. */
+        public String exceptionType;
+        public String code;
+        /** Free text on this org too: "Major" is a data convention, not a picklist. */
+        public String severity;
+        public Decimal severityValue;
+        /** Laid onto `LLC_BI__Mitigation_Reason_1..3__c`, in order. */
+        public List<String> reasons;
         public Id targetLoanId;
     }
 
@@ -315,8 +335,9 @@ global with sharing class StageLoanModification {
         if (req.requestedAmount == null && req.requestedMaturityDate == null && req.requestedRate == null &&
             req.requestedTermMonths == null && String.isBlank(req.scalarChangesJson) && String.isBlank(req.covenantAddsJson) &&
             String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson) &&
-            String.isBlank(req.feeAddsJson) && String.isBlank(req.pledgeAddsJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, a field change, a fee add, or a collateral pledge.');
+            String.isBlank(req.feeAddsJson) && String.isBlank(req.pledgeAddsJson) &&
+            String.isBlank(req.policyExceptionAddsJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, a field change, a fee add, a collateral pledge, or a policy exception.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -354,6 +375,7 @@ global with sharing class StageLoanModification {
         List<FeeAdd> feeAdds = parseFeeAdds(req, facilities);
         List<PledgeAdd> pledgeAdds = parsePledgeAdds(req, facilities);
         Integer createdAssets = newCollaterals(pledgeAdds);
+        List<PolicyExceptionAdd> policyExceptionAdds = parsePolicyExceptionAdds(req, facilities);
 
         // What each member's own clone will take, so the plan steps and the summary can name the
         // figures per facility instead of describing one broadcast the banker did not ask for.
@@ -703,6 +725,55 @@ global with sharing class StageLoanModification {
         }
         resolved.put('pledgeAddCount', pledgeAdds.size());
 
+        // Policy exceptions: authored on the CLONE of the targeted member and anchored on the
+        // borrower, so the bank reads the exception both on the facility it applies to and at
+        // relationship level, which is where a credit officer looks for them. The three mitigation
+        // reasons ride flat keys rather than a list: everything else in `resolved` is a scalar, the
+        // plan hash covers String.valueOf of each value, and the org's own storage IS three fields.
+        for (Integer i = 0; i < policyExceptionAdds.size(); i++) {
+            PolicyExceptionAdd px = policyExceptionAdds[i];
+            String s7 = String.valueOf(i);
+            resolved.put('policyException' + s7 + '.title', px.title);
+            resolved.put('policyException' + s7 + '.type', px.exceptionType);
+            resolved.put('policyException' + s7 + '.status', px.status);
+            resolved.put('policyException' + s7 + '.code', px.code);
+            resolved.put('policyException' + s7 + '.severity', px.severity);
+            resolved.put('policyException' + s7 + '.severityValue', px.severityValue);
+            resolved.put('policyException' + s7 + '.reason1', px.reasons.size() > 0 ? px.reasons[0] : null);
+            resolved.put('policyException' + s7 + '.reason2', px.reasons.size() > 1 ? px.reasons[1] : null);
+            resolved.put('policyException' + s7 + '.reason3', px.reasons.size() > 2 ? px.reasons[2] : null);
+            resolved.put('policyException' + s7 + '.targetLoanId', String.valueOf(px.targetLoanId));
+            String targetName6 = facilityById.get(px.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('policy_exception_add_' + s7, C360Plan.TYPE_WRITE,
+                    'Log the policy exception "' + px.title + '" against the clone of ' + targetName6 +
+                    ' and the borrower: ' + exceptionPhrase(px))
+                    .onObject('LLC_BI__Policy_Exception__c', new List<String>{
+                        'Name', 'LLC_BI__Type__c', 'LLC_BI__Status__c', 'LLC_BI__Loan__c',
+                        'LLC_BI__Relationship__c', 'LLC_BI__Code__c', 'LLC_BI__Severity__c',
+                        'LLC_BI__Severity_Value__c', 'LLC_BI__Mitigation_Reason_1__c',
+                        'LLC_BI__Mitigation_Reason_2__c', 'LLC_BI__Mitigation_Reason_3__c'
+                    })
+                    .wakes(new List<String>{
+                        'PolicyExceptionTrigger (nCino managed); and the ORG-LOCAL PolicyExceptionCDC ' +
+                        'trigger, which enqueues an EventBridgeCallout POSTing the serialised record to ' +
+                        'an external AWS endpoint. No approval process targets this object and no email ' +
+                        'fires (both probed 2026-08-31), but the record\'s data leaves the org'
+                    })
+                    .provenBy('SELECT Id, Name, LLC_BI__Status__c FROM LLC_BI__Policy_Exception__c WHERE Id = :createdId')
+            );
+            steps.add(
+                new C360Plan.Step('policy_exception_verify_' + s7, C360Plan.TYPE_VERIFICATION,
+                    'Re-read the exception on the clone of ' + targetName6 +
+                    ', with the name, the status and the mitigants the org holds')
+                    .onObject('LLC_BI__Policy_Exception__c', new List<String>{
+                        'Id', 'Name', 'LLC_BI__Status__c', 'LLC_BI__Loan__c', 'LLC_BI__Relationship__c'
+                    })
+                    .provenBy('SELECT Id, Name, LLC_BI__Status__c FROM LLC_BI__Policy_Exception__c WHERE LLC_BI__Loan__c = :cloneId')
+            );
+        }
+        resolved.put('policyExceptionAddCount', policyExceptionAdds.size());
+
         // The per-target scalars ride the resolved values, which is what the plan hash covers: the
         // banker confirms the figure AND the clone it lands on, and execute reads back exactly that.
         for (Integer i = 0; i < scalarChanges.size(); i++) {
@@ -795,6 +866,29 @@ global with sharing class StageLoanModification {
                     ' NO lien position: nobody said one, and priority is a perfection question this tool does not settle.')
             );
         }
+        if (!policyExceptionAdds.isEmpty()) {
+            // THE EGRESS IS ITS OWN WARNING, and it leads. Everything else this plan does stays
+            // inside the org; this is the one write whose data goes somewhere the bank's own
+            // Salesforce audit trail cannot follow it.
+            warnings.add(
+                'DATA LEAVES THE ORG. Every committed write to LLC_BI__Policy_Exception__c fires the org-local ' +
+                'PolicyExceptionCDC trigger, which enqueues an EventBridgeCallout POSTing the serialised record to ' +
+                'an external AWS endpoint. That is not an approval and not an email - of the 16 approval processes ' +
+                'in this org none targets this object, and a rollback probe on 2026-08-31 moved the email counter by ' +
+                'zero - but the ' + String.valueOf(policyExceptionAdds.size()) + ' exception' +
+                (policyExceptionAdds.size() == 1 ? '' : 's') + ' below will be transmitted. All of them are inserted ' +
+                'in ONE DML, which is one callout for the plan rather than one per exception.'
+            );
+            warnings.add(
+                String.valueOf(policyExceptionAdds.size()) + ' policy exception' +
+                (policyExceptionAdds.size() == 1 ? ' is' : 's are') + ' authored on the CLONE only and anchored on the ' +
+                'borrower, so the bank reads ' + (policyExceptionAdds.size() == 1 ? 'it' : 'them') + ' both on the ' +
+                'facility and at relationship level. The booked facility carries no new exception, and the exceptions ' +
+                'it already holds do NOT travel: an exception records what the bank decided about the facility as it ' +
+                'stands, and copying one onto a version nobody has approved would restate a decision about terms that ' +
+                'do not exist yet.'
+            );
+        }
         if (n > 1) {
             warnings.add(
                 'This is one plan over ' + n + ' facilities on the same package, under a single confirmation and a single decision token. ' +
@@ -853,6 +947,11 @@ global with sharing class StageLoanModification {
                 (createdAssets == 0 ? ', each on an asset the borrower already owns. '
                     : ', creating ' + String.valueOf(createdAssets) + ' new asset' + (createdAssets == 1 ? '' : 's') +
                       ' and the ownership junction that ties ' + (createdAssets == 1 ? 'it' : 'them') + ' to the borrower. ')) +
+            (policyExceptionAdds.isEmpty() ? '' : String.valueOf(policyExceptionAdds.size()) + ' policy exception' +
+                (policyExceptionAdds.size() == 1 ? ' is' : 's are') + ' logged against the ' +
+                (policyExceptionAdds.size() == 1 ? 'clone' : 'clones') + ' and the borrower, each with the status the ' +
+                'banker decided rather than the org\'s Unmitigated default; a committed exception is transmitted to the ' +
+                'bank\'s own external change-stream endpoint. ') +
             'NOTHING IS WRITTEN BY THIS CALL: staging computes and holds the plan, and execute_loan_modification runs it behind the decision token. ' +
             bookingHandoff;
 
@@ -1149,9 +1248,23 @@ global with sharing class StageLoanModification {
         if (supplied == null || String.isBlank(String.valueOf(supplied))) {
             throw new ToolException('Each fee add names its ' + what + '.');
         }
+        return orgPicklist(
+            Schema.SObjectType.LLC_BI__Fee__c.fields.getMap().get(fieldName.toLowerCase()).getDescribe(), supplied, what
+        );
+    }
+
+    /**
+     * Resolves one value against a LIVE picklist on any object this tool writes, by value or by
+     * label, and refuses with the org's own legal list.
+     *
+     * ONE BODY, THREE ARMS. Fees, pledges and policy exceptions each resolve caller words against a
+     * picklist and each refuses with the org's candidates; three copies of these fifteen lines is
+     * three places for the refusal wording, the isActive() filter and the label fallback to drift
+     * apart. The describe is the authority in all three: this org's picklists are configured rather
+     * than standard, and a near-miss written blind is a row the bank cannot report on.
+     */
+    private static String orgPicklist(Schema.DescribeFieldResult dfr, Object supplied, String what) {
         String sv = String.valueOf(supplied).trim();
-        Schema.DescribeFieldResult dfr =
-            Schema.SObjectType.LLC_BI__Fee__c.fields.getMap().get(fieldName.toLowerCase()).getDescribe();
         List<String> legal = new List<String>();
         for (Schema.PicklistEntry pe : dfr.getPicklistValues()) {
             if (!pe.isActive()) {
@@ -1513,21 +1626,10 @@ global with sharing class StageLoanModification {
 
     /** Resolves one value against a LIVE picklist on the pledge junction. */
     private static String pledgePicklist(String fieldName, Object supplied, String what) {
-        String sv = String.valueOf(supplied).trim();
-        Schema.DescribeFieldResult dfr =
-            Schema.SObjectType.LLC_BI__Loan_Collateral2__c.fields.getMap().get(fieldName.toLowerCase()).getDescribe();
-        List<String> legal = new List<String>();
-        for (Schema.PicklistEntry pe : dfr.getPicklistValues()) {
-            if (!pe.isActive()) {
-                continue;
-            }
-            legal.add(pe.getValue());
-            if (pe.getValue().equalsIgnoreCase(sv) || pe.getLabel().equalsIgnoreCase(sv)) {
-                return pe.getValue();
-            }
-        }
-        throw new ToolException(
-            '"' + sv + '" is not a legal ' + what + ' on this org. The org offers: ' + String.join(legal, ', ') + '.'
+        return orgPicklist(
+            Schema.SObjectType.LLC_BI__Loan_Collateral2__c.fields.getMap().get(fieldName.toLowerCase()).getDescribe(),
+            supplied,
+            what
         );
     }
 
@@ -1549,6 +1651,210 @@ global with sharing class StageLoanModification {
             }
         }
         return n;
+    }
+
+    /* ---------------------------------------------------------------------- policy exceptions */
+
+    /**
+     * FIVE, AND THE REASON IS EGRESS RATHER THAN GOVERNORS. Every exception in a plan is inserted
+     * in ONE DML, so the CDC queueable costs the same whether there is one or twenty and the 50-job
+     * ceiling is nowhere near. What the cap bounds is the PAYLOAD: that one callout POSTs every row
+     * it carries to an external endpoint, and a plan that could ship twenty exceptions in a single
+     * transmission is a plan whose blast radius nobody read before confirming.
+     */
+    private static final Integer POLICY_EXCEPTION_MAX = 5;
+    /** `Name` is string(80) on this object, and it is plain text rather than an autonumber. */
+    private static final Integer EXCEPTION_TITLE_MAX = 80;
+    /** Each of the three `LLC_BI__Mitigation_Reason_N__c` fields is string(100). */
+    private static final Integer MITIGATION_REASON_MAX = 100;
+    /** `LLC_BI__Code__c` and `LLC_BI__Severity__c` are both string(50) on this org. */
+    private static final Integer EXCEPTION_SHORT_TEXT_MAX = 50;
+    /** The org holds exactly three mitigation reasons; a fourth has nowhere to go. */
+    private static final Integer MITIGATION_SLOTS = 3;
+    /** Every one of this org's 81 exceptions carries it, and it is the only required field. */
+    private static final String EXCEPTION_TYPE_DEFAULT = 'Policy';
+    private static final String STATUS_MITIGATED = 'Mitigated';
+    private static final String STATUS_UNMITIGATED = 'Unmitigated';
+
+    /**
+     * Parses and RESOLVES the policy exceptions against the org's OWN exception model. Every
+     * refusal below is a live finding from the 2026-08-31 rollback probe rather than a convention:
+     *
+     *   - `Name` is PLAIN TEXT here, not an autonumber, and omitting it is worse than either: the
+     *     org's trigger stack backfills it with the record's own 15-character Id (probe variant A
+     *     read back "a4rbb000003OwSX" as its own name). So a title is required, and a title over
+     *     80 characters is refused with its length rather than cut.
+     *   - `LLC_BI__Status__c` DEFAULTS TO UNMITIGATED, which reads as a decision rather than as an
+     *     absent value: a credit file cannot tell "nobody said" from "nobody mitigated it". So the
+     *     status is required and is resolved against the org's live picklist.
+     *   - A MITIGATED exception with no mitigant is a claim with nothing under it, and an
+     *     UNMITIGATED one carrying mitigants says both "nothing mitigates this" and "here is what
+     *     mitigates it" on one record. Both are refused.
+     *   - The three `LLC_BI__Mitigation_Reason_N__c` fields are 100 characters EACH. A longer one
+     *     is refused with its length: truncating leaves a mitigant that stops mid-clause on a credit
+     *     record, and splitting one across the three fields would file one mitigant as three, which
+     *     is the distinction the org's own hand-authored Hartwell row uses those fields to make.
+     *   - `LLC_BI__Severity__c` is FREE TEXT (string(50)); "Major" is a data convention in this org
+     *     rather than an enforced value, so a severity is length-checked and passed through rather
+     *     than validated against a picklist that does not exist.
+     *
+     * Nothing is created here. The arm hop of the execute pair writes the rows.
+     */
+    private static List<PolicyExceptionAdd> parsePolicyExceptionAdds(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<PolicyExceptionAdd> out = new List<PolicyExceptionAdd>();
+        if (String.isBlank(req.policyExceptionAddsJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.policyExceptionAddsJson);
+        } catch (Exception e) {
+            throw new ToolException('policyExceptionAddsJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        if (raw.size() > POLICY_EXCEPTION_MAX) {
+            throw new ToolException(
+                'At most ' + POLICY_EXCEPTION_MAX + ' policy exceptions in one plan; this one carries ' + raw.size() +
+                '. Every committed exception is POSTed to the bank\'s external change-stream endpoint in a single ' +
+                'transmission, and a plan carrying more than a handful is one whose blast radius nobody read. Split it.'
+            );
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        Schema.DescribeFieldResult statusField =
+            Schema.SObjectType.LLC_BI__Policy_Exception__c.fields.getMap().get('llc_bi__status__c').getDescribe();
+
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            PolicyExceptionAdd px = new PolicyExceptionAdd();
+
+            px.title = m.get('title') == null ? null : String.valueOf(m.get('title')).trim();
+            if (String.isBlank(px.title)) {
+                throw new ToolException(
+                    'Each policy exception needs a title. Name on this object is plain text rather than an autonumber, ' +
+                    'and the org\'s trigger stack backfills an omitted one with the record\'s own Id - so an exception ' +
+                    'without a title is a row nobody can find and nobody can read.'
+                );
+            }
+            if (px.title.length() > EXCEPTION_TITLE_MAX) {
+                throw new ToolException(
+                    'A policy exception\'s title is at most ' + EXCEPTION_TITLE_MAX + ' characters on this org; this ' +
+                    'one is ' + px.title.length() + '. It is refused rather than cut: a name that stops mid-word is ' +
+                    'how an exception becomes unfindable.'
+                );
+            }
+
+            if (m.get('status') == null || String.isBlank(String.valueOf(m.get('status')))) {
+                throw new ToolException(
+                    'Each policy exception names its status. The org DEFAULTS a new row to ' + STATUS_UNMITIGATED +
+                    ', which reads as a decision rather than as an absent value, so this tool will not take that ' +
+                    'default on the bank\'s behalf.'
+                );
+            }
+            px.status = orgPicklist(statusField, m.get('status'), 'policy exception status');
+
+            px.exceptionType = m.get('type') == null || String.isBlank(String.valueOf(m.get('type')))
+                ? EXCEPTION_TYPE_DEFAULT
+                : String.valueOf(m.get('type')).trim();
+
+            px.reasons = readMitigationReasons(m.get('mitigationReasons'));
+            if (px.status == STATUS_MITIGATED && px.reasons.isEmpty()) {
+                throw new ToolException(
+                    'A ' + STATUS_MITIGATED + ' policy exception needs at least one mitigation reason. Recording the ' +
+                    'status without the mitigant is a claim the credit file cannot stand on.'
+                );
+            }
+            if (px.status == STATUS_UNMITIGATED && !px.reasons.isEmpty()) {
+                throw new ToolException(
+                    'An ' + STATUS_UNMITIGATED + ' policy exception carries no mitigation reasons: the record would ' +
+                    'say both that nothing mitigates this and here is what mitigates it. Send it as ' + STATUS_MITIGATED +
+                    ' if the mitigants are real.'
+                );
+            }
+
+            px.code = trimmedWithin(m.get('code'), EXCEPTION_SHORT_TEXT_MAX, 'policy exception code');
+            px.severity = trimmedWithin(m.get('severity'), EXCEPTION_SHORT_TEXT_MAX, 'policy exception severity');
+            px.severityValue = C360Plan.asDecimal(m.get('severityValue'));
+
+            px.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            if (px.targetLoanId == null) {
+                if (facilities.size() != 1) {
+                    throw new ToolException('targetLoanId is required on each policy exception when more than one facility is selected.');
+                }
+                px.targetLoanId = facilities[0].Id;
+            }
+            if (!byId.containsKey(px.targetLoanId)) {
+                throw new ToolException(
+                    'A policy exception targets facility ' + px.targetLoanId + ', which is not one of the selected ' +
+                    'facilities. An exception is logged against the CLONE of a facility this plan modifies.'
+                );
+            }
+            out.add(px);
+        }
+        return out;
+    }
+
+    /**
+     * Reads the mitigation reasons off one entry, refusing anything the org's three 100-character
+     * fields cannot hold. Nothing is truncated and nothing is merged: both would put words on a
+     * credit record in a shape nobody wrote them in.
+     */
+    private static List<String> readMitigationReasons(Object supplied) {
+        List<String> out = new List<String>();
+        if (supplied == null) {
+            return out;
+        }
+        if (!(supplied instanceof List<Object>)) {
+            throw new ToolException(
+                'mitigationReasons is a list of strings, one per mitigant: the org holds ' + MITIGATION_SLOTS +
+                ' of them as separate fields and a single joined string would file three mitigants as one.'
+            );
+        }
+        for (Object r : (List<Object>) supplied) {
+            if (r == null) {
+                continue;
+            }
+            String reason = String.valueOf(r).trim();
+            if (String.isBlank(reason)) {
+                continue;
+            }
+            if (reason.length() > MITIGATION_REASON_MAX) {
+                throw new ToolException(
+                    'A mitigation reason is at most ' + MITIGATION_REASON_MAX + ' characters on this org; "' +
+                    reason.abbreviate(60) + '" is ' + reason.length() + '. Shorten it or split it into separate ' +
+                    'mitigants - it is refused rather than truncated, because a mitigant that stops mid-clause reads ' +
+                    'as a different mitigant.'
+                );
+            }
+            out.add(reason);
+        }
+        if (out.size() > MITIGATION_SLOTS) {
+            throw new ToolException(
+                'The org holds ' + MITIGATION_SLOTS + ' mitigation reasons on a policy exception and this entry ' +
+                'carries ' + out.size() + '. The extras are refused rather than dropped quietly.'
+            );
+        }
+        return out;
+    }
+
+    /** One optional free-text field, trimmed and held to the org's own length. */
+    private static String trimmedWithin(Object supplied, Integer max, String what) {
+        if (supplied == null || String.isBlank(String.valueOf(supplied))) {
+            return null;
+        }
+        String s = String.valueOf(supplied).trim();
+        if (s.length() > max) {
+            throw new ToolException('A ' + what + ' is at most ' + max + ' characters on this org; this one is ' + s.length() + '.');
+        }
+        return s;
+    }
+
+    /** One policy exception as the banker should read it in a plan step. */
+    private static String exceptionPhrase(PolicyExceptionAdd px) {
+        return px.status +
+            (px.reasons.isEmpty()
+                ? ', with no mitigant recorded'
+                : ', mitigated by ' + String.join(px.reasons, '; ')) +
+            (String.isBlank(px.severity) ? '' : ', severity ' + px.severity) +
+            (String.isBlank(px.code) ? '' : ', policy code ' + px.code);
     }
 
     /**

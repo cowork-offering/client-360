@@ -269,6 +269,7 @@ function valueLabel(value: ParsedValue | null): string {
     case "covenant":
     case "fee":
     case "pledge":
+    case "policyException":
       return value.text;
     default:
       return value.text;
@@ -323,13 +324,18 @@ function fieldWireValue(v: ParsedValue): string | number | null {
 
 function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): WorkroomDelta {
   const { field, facility, value, op } = a;
-  // A FEE, AND AN ASSET, NAME THEMSELVES. The catalog entries are called
-  // "Facility fee" and "Collateral pledge", which are the categories rather than
-  // the things: a chip reading "Collateral pledge → Duluth warehouse" says the
-  // category and buries the asset. The banker's own word for it is the better
-  // title, and the category is already on the badge.
+  // A FEE, AN ASSET AND AN EXCEPTION NAME THEMSELVES. The catalog entries are
+  // called "Facility fee", "Collateral pledge" and "Policy exception", which are
+  // the categories rather than the things: a chip reading "Policy exception →
+  // mitigated by the personal guaranty" says the category and buries WHAT IS OUT
+  // OF POLICY, which is the whole point of the record. The banker's own words
+  // are the better title, and the category is already on the badge.
   const title =
-    op === "add" && (value?.kind === "fee" || value?.kind === "pledge") ? value.noun : deltaTitle(field, op);
+    op === "add" && (value?.kind === "fee" || value?.kind === "pledge")
+      ? value.noun
+      : op === "add" && value?.kind === "policyException"
+        ? value.title
+        : deltaTitle(field, op);
   // The handoff badge leads with the op, so a title that already carries the
   // word must not say it twice ("Remove remove a legal entity").
   const noun = title.replace(/^(?:Add|Remove)\s+/, "");
@@ -427,6 +433,22 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
           facilityId: facility.loanId,
         }
       : undefined;
+  // A POLICY EXCEPTION files as a structured record on the member's CLONE and
+  // anchored on the borrower — the two anchors together are what make it visible
+  // both on the facility and at relationship level, which is where a credit
+  // officer looks for the bank's exceptions. The title, the status and the
+  // mitigants ride ONE entry because they are one record.
+  const policyExceptionWire =
+    field.recordWire === "policyExceptionAdd" && op === "add" && facility?.loanId !== undefined &&
+    value?.kind === "policyException"
+      ? {
+          title: value.title,
+          status: value.status,
+          reasons: value.reasons,
+          severity: value.severity,
+          facilityId: facility.loanId,
+        }
+      : undefined;
   // A CURATED LOAN FIELD files through fieldChangesJson: the room sends the API
   // name and the typed value, and the ORG resolves the name against its own live
   // describe at stage time — updateable, non-formula, off the deny-list — then
@@ -458,7 +480,72 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
    *  because every wave added since has had to be threaded through the same
    *  eight places, and one of them being missed is a chip that reads as filed
    *  and travels as a handoff. */
-  const files = Boolean(wire || covenantWire || involvementWire || fieldWire || feeWire || pledgeWire);
+  const files = Boolean(
+    wire || covenantWire || involvementWire || fieldWire || feeWire || pledgeWire || policyExceptionWire,
+  );
+
+  /* WHAT THE ORG ACTUALLY RECORDS, in its own words. One branch per wave, in
+     the order the waves shipped, and the fall-through is the honest "nothing".
+     A chain of nested ternaries got this to six deep and unreadable, which is
+     the state a seventh wave must not add to: the one thing this line has to be
+     is checkable against what the arm really writes. */
+  const writtenAs = (): string => {
+    if (wire) return `${field.apiName} on the modification clone. The booked facility is untouched.`;
+    if (fieldWire) {
+      return `${fieldWire.field} on the modification clone, resolved against the org's live describe. The booked facility is untouched.`;
+    }
+    if (covenantWire) {
+      return "LLC_BI__Covenant2__c created Pending/Active on the borrower, LLC_BI__Loan_Covenant__c junction attached to the CLONE on the new package version. No compliance row is minted and no approval starts.";
+    }
+    if (involvementWire) {
+      return involvementWire.op === "add"
+        ? "LLC_BI__Legal_Entities__c authored on the CLONE with the new package anchor, under the guard's five-role birth state."
+        : "A CARRY EXCLUSION: the named row never travels to the new version. The booked facility keeps it; nothing is deleted anywhere.";
+    }
+    if (feeWire) {
+      return feeWire.calculationType === "Percentage"
+        ? `LLC_BI__Fee__c created on the CLONE as a Percentage fee: ${feeWire.percentage}% against LLC_BI__Amount__c. The org's own FeeTrigger computes the basis and the money from the clone's commitment; this room sets no figure.`
+        : "LLC_BI__Fee__c created on the CLONE as a Flat Amount fee. The label rides LLC_BI__Fee_Type_Description__c, because Name on a fee is an autonumber.";
+    }
+    if (pledgeWire) {
+      return pledgeWire.newCollateral
+        ? `LLC_BI__Collateral__c created, LLC_BI__Account_Collateral__c recording the borrower's ownership (the asset has no account lookup of its own), then LLC_BI__Loan_Collateral2__c pledging it to the CLONE at ${pledgeWire.advanceRate}% as an override with its reason. The booked facility keeps exactly the security it has today.`
+        : "LLC_BI__Loan_Collateral2__c pledging the borrower's existing asset to the CLONE, beside the pledges the carry replicates. The booked facility keeps exactly the security it has today.";
+    }
+    if (policyExceptionWire) {
+      // THE EGRESS BELONGS ON THE CHIP. Every committed write to this object
+      // fires the org's own PolicyExceptionCDC trigger, which POSTs the whole
+      // serialised record to an AWS endpoint. It is not an approval and not an
+      // email, but it is the borrower's data leaving the org, and a banker
+      // confirming this chip is the person entitled to know.
+      return (
+        `LLC_BI__Policy_Exception__c created against the CLONE (LLC_BI__Loan__c) and the borrower (LLC_BI__Relationship__c), ` +
+        `LLC_BI__Type__c "Policy" like every row this org holds, LLC_BI__Status__c ${policyExceptionWire.status}` +
+        (policyExceptionWire.reasons.length
+          ? `, ${policyExceptionWire.reasons.length} mitigant${policyExceptionWire.reasons.length === 1 ? "" : "s"} on LLC_BI__Mitigation_Reason_1..3__c`
+          : "") +
+        ". The booked facility carries no exception of its own. Note: a committed write here fires the org's PolicyExceptionCDC trigger, which POSTs the record to the bank's EventBridge endpoint."
+      );
+    }
+    return "Nothing. No tool files this today; it travels as a handoff on the filed summary.";
+  };
+
+  /** How the write is proved, per wave. Same shape and same reason as above. */
+  const verification = (): string => {
+    if (wire || fieldWire) return "Re-queried on the clone after the write";
+    if (covenantWire) return "Covenant and junction re-queried on the clone after creation";
+    if (feeWire) return "Fee re-queried on the clone after creation, with the figure the org computed";
+    if (pledgeWire) return "Pledge re-queried on the clone after creation, with the lendable value the org derived";
+    if (policyExceptionWire) {
+      return "Exception re-queried on the clone after creation, with the name, status and mitigants the org holds";
+    }
+    if (involvementWire) {
+      return involvementWire.op === "add"
+        ? "Involvement re-queried on the clone after creation"
+        : "Proven by absence on the clone and presence on the parent";
+    }
+    return "Handed off — nothing was written";
+  };
 
   return {
     id: `${field.id}:${facility?.loanId ?? a.party ?? "package"}:${seq}`,
@@ -478,51 +565,19 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     map: [
       ["Object", field.object],
       ["Field", field.apiName ?? "not established on this org — a live describe supplies it"],
-      [
-        "Written as",
-        wire
-          ? `${field.apiName} on the modification clone. The booked facility is untouched.`
-          : fieldWire
-            ? `${fieldWire.field} on the modification clone, resolved against the org's live describe. The booked facility is untouched.`
-            : covenantWire
-              ? "LLC_BI__Covenant2__c created Pending/Active on the borrower, LLC_BI__Loan_Covenant__c junction attached to the CLONE on the new package version. No compliance row is minted and no approval starts."
-              : involvementWire
-                ? involvementWire.op === "add"
-                  ? "LLC_BI__Legal_Entities__c authored on the CLONE with the new package anchor, under the guard's five-role birth state."
-                  : "A CARRY EXCLUSION: the named row never travels to the new version. The booked facility keeps it; nothing is deleted anywhere."
-                : feeWire
-                  ? feeWire.calculationType === "Percentage"
-                    ? `LLC_BI__Fee__c created on the CLONE as a Percentage fee: ${feeWire.percentage}% against LLC_BI__Amount__c. The org's own FeeTrigger computes the basis and the money from the clone's commitment; this room sets no figure.`
-                    : "LLC_BI__Fee__c created on the CLONE as a Flat Amount fee. The label rides LLC_BI__Fee_Type_Description__c, because Name on a fee is an autonumber."
-                  : pledgeWire
-                    ? pledgeWire.newCollateral
-                      ? `LLC_BI__Collateral__c created, LLC_BI__Account_Collateral__c recording the borrower's ownership (the asset has no account lookup of its own), then LLC_BI__Loan_Collateral2__c pledging it to the CLONE at ${pledgeWire.advanceRate}% as an override with its reason. The booked facility keeps exactly the security it has today.`
-                      : "LLC_BI__Loan_Collateral2__c pledging the borrower's existing asset to the CLONE, beside the pledges the carry replicates. The booked facility keeps exactly the security it has today."
-                    : "Nothing. No tool files this today; it travels as a handoff on the filed summary.",
-      ],
+      ["Written as", writtenAs()],
     ],
     fields: field.apiName ? [`${field.object}.${field.apiName}`] : [field.object],
     caveat: files ? undefined : field.gap,
     filed: {
       recordId:
-        wire || covenantWire || fieldWire || feeWire || pledgeWire || involvementWire?.op === "add"
+        wire || covenantWire || fieldWire || feeWire || pledgeWire || policyExceptionWire ||
+        involvementWire?.op === "add"
           ? "assigned by the org on execution"
           : involvementWire
             ? "a carry exclusion writes nothing"
             : "not filed",
-      verification: wire || fieldWire
-        ? "Re-queried on the clone after the write"
-        : covenantWire
-          ? "Covenant and junction re-queried on the clone after creation"
-          : feeWire
-            ? "Fee re-queried on the clone after creation, with the figure the org computed"
-            : pledgeWire
-              ? "Pledge re-queried on the clone after creation, with the lendable value the org derived"
-              : involvementWire
-              ? involvementWire.op === "add"
-                ? "Involvement re-queried on the clone after creation"
-                : "Proven by absence on the clone and presence on the parent"
-              : "Handed off — nothing was written",
+      verification: verification(),
     },
     fileable: files,
     wire,
@@ -531,6 +586,7 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     fieldWire,
     feeWire,
     pledgeWire,
+    policyExceptionWire,
     // Only a FILEABLE entry carries a basis: drift is the check that a figure
     // reaching the org has not moved, and a handoff sends no figure.
     basis: wire && facility?.loanId ? { facilityId: facility.loanId, fieldId: field.id, before } : undefined,
@@ -539,6 +595,16 @@ function toDelta(a: Amendment, seq: number, name: (f: Facility) => string): Work
     // composed without it: a create with no junctions never becomes steps.
     chainLinks: op === "add" ? chainFor(field) : undefined,
   };
+}
+
+/** Whether ANY wave carries this delta to the org. ONE definition, because the
+ *  list of waves is now seven long and it was written out at three call sites:
+ *  a wave missed at one of them is a chip that reads as filed and travels as a
+ *  handoff, which is the exact failure `files` above exists to prevent. */
+function carriesWire(d: WorkroomDelta): boolean {
+  return Boolean(
+    d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire || d.pledgeWire || d.policyExceptionWire,
+  );
 }
 
 /** The member a fileable delta lands on. Every wire anchors on exactly one, and
@@ -550,7 +616,8 @@ function wireTarget(d: WorkroomDelta): string | undefined {
     d.involvementWire?.facilityId ??
     d.fieldWire?.facilityId ??
     d.feeWire?.facilityId ??
-    d.pledgeWire?.facilityId
+    d.pledgeWire?.facilityId ??
+    d.policyExceptionWire?.facilityId
   );
 }
 
@@ -1049,7 +1116,7 @@ export function createModifyEngine(args: {
     const summary = catalogSummary();
     rows.push({
       label: "What this room can file",
-      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower, borrowing-structure changes, net-new fees and collateral pledges, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
+      detail: `${FILING_FIELDS.length} of ${summary.total} indexed amendments file through stage_loan_modification — the four terms, the field wave, net-new covenants on the borrower, borrowing-structure changes, net-new fees, collateral pledges and policy exceptions, all landing on the clone — and the live-describe index proposes the loan's remaining writable fields on demand. What no wave carries is staged into the manifest and handed off with the reason.`,
     });
     return rows;
   }
@@ -1412,7 +1479,7 @@ export function createModifyEngine(args: {
     // difference between a refusal the banker can answer and a dead end.
     const named = membersNamedIn(text, parseContext());
     const scope =
-      "Commitment, rate, maturity, term, covenants, entities, fees and collateral all file on the clone; pricing I stage and hand off with the reason.";
+      "Commitment, rate, maturity, term, covenants, entities, fees, collateral and policy exceptions all file on the clone; pricing I stage and hand off with the reason.";
     asked = true;
     return {
       kind: "unparsed",
@@ -1459,7 +1526,7 @@ export function createModifyEngine(args: {
       .join(", ");
     return {
       kind: "unparsed",
-      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity, term, covenants, entities, fees and collateral all file on the clone; pricing I stage and hand off with the reason.`,
+      reply: `${label}${held ? `: ${held}` : ""}. What should change on it? Commitment, rate, maturity, term, covenants, entities, fees, collateral and policy exceptions all file on the clone; pricing I stage and hand off with the reason.`,
     };
   }
 
@@ -1746,6 +1813,19 @@ export function createModifyEngine(args: {
         ...(d.pledgeWire!.advanceRate !== undefined ? { advanceRate: d.pledgeWire!.advanceRate } : {}),
         targetLoanId: d.pledgeWire!.facilityId,
       }));
+    // A POLICY EXCEPTION IS PER TARGET TOO. The mitigants travel as a LIST and
+    // the org lays them onto its three fields: three reasons is an org storage
+    // fact, not a shape the banker should have to know, and a list is also what
+    // lets the tool refuse a fourth by name instead of dropping it.
+    const policyExceptionAdds = fileable
+      .filter((d) => d.policyExceptionWire)
+      .map((d) => ({
+        title: d.policyExceptionWire!.title,
+        status: d.policyExceptionWire!.status,
+        ...(d.policyExceptionWire!.reasons.length ? { mitigationReasons: d.policyExceptionWire!.reasons } : {}),
+        ...(d.policyExceptionWire!.severity ? { severity: d.policyExceptionWire!.severity } : {}),
+        targetLoanId: d.policyExceptionWire!.facilityId,
+      }));
     // The flat keys carry a value only on the channel that owns them; on the
     // per-target channel they stay null, which is what the org requires to read
     // `scalarChangesJson` at all.
@@ -1767,6 +1847,7 @@ export function createModifyEngine(args: {
       ...(fieldChanges.length ? { fieldChangesJson: JSON.stringify(fieldChanges) } : {}),
       ...(feeAdds.length ? { feeAddsJson: JSON.stringify(feeAdds) } : {}),
       ...(pledgeAdds.length ? { pledgeAddsJson: JSON.stringify(pledgeAdds) } : {}),
+      ...(policyExceptionAdds.length ? { policyExceptionAddsJson: JSON.stringify(policyExceptionAdds) } : {}),
     };
   }
 
@@ -1777,7 +1858,7 @@ export function createModifyEngine(args: {
     if (!deps.available()) throw new WorkroomRefusalError(NO_CONNECTOR_REFUSAL);
     if (!context.productPackageId) throw new WorkroomRefusalError(NO_PACKAGE_REFUSAL);
 
-    const fileable = deltas.filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire || d.pledgeWire));
+    const fileable = deltas.filter((d) => d.fileable && carriesWire(d));
     const handed = deltas.filter((d) => !d.fileable);
     if (!fileable.length) {
       throw new WorkroomRefusalError(
@@ -1892,7 +1973,7 @@ export function createModifyEngine(args: {
     const verified = (result.steps ?? []).filter((s) => s.state === "verified").length;
 
     const filed = stagedDeltas
-      .filter((d) => d.fileable && (d.wire || d.covenantWire || d.involvementWire || d.fieldWire || d.feeWire || d.pledgeWire))
+      .filter((d) => d.fileable && carriesWire(d))
       .map((d) => {
         const row = perFacility.get(wireTarget(d)!);
         const cloneId = row?.cloneLoanId ?? result.cloneLoanId;

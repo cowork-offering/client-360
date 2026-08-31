@@ -624,4 +624,82 @@ private class C360WriteGuardTest {
         }
         System.assertEquals(true, carryRefused, 'A clone shares its parent\'s assets; it does not get copies of them');
     }
+
+    @IsTest
+    static void aPolicyExceptionIsAdmittedOnCreateInAnyOfItsThreeDecisions() {
+        C360TestFixture.armCalloutMock();
+
+        // ALL THREE STATUSES ARE LEGAL BIRTHS. Waived, mitigated and standing unmitigated are three
+        // real outcomes of logging an exception, and an allowlist expressing only one would force
+        // the banker out of the tool with the decision unrecorded.
+        for (String status : new List<String>{ 'Waived', 'Mitigated', 'Unmitigated' }) {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_POLICY_EXCEPTION, C360WriteGuard.OP_CREATE,
+                new Map<String, Object>{
+                    'Name' => 'Advance rate above guideline',
+                    'LLC_BI__Type__c' => 'Policy',
+                    'LLC_BI__Status__c' => status,
+                    'LLC_BI__Loan__c' => 'a', 'LLC_BI__Relationship__c' => 'b',
+                    'LLC_BI__Mitigation_Reason_1__c' => 'A personal guaranty'
+                });
+        }
+
+        // THE STATUS MUST BE PRESENT, which is the point of fencing it at all: the org defaults a
+        // new row to Unmitigated, and a defaulted Unmitigated reads as a decision nobody made.
+        // And the type is "Policy", which is what all 81 rows in this org carry.
+        for (Map<String, Object> wrong : new List<Map<String, Object>>{
+            new Map<String, Object>{ 'LLC_BI__Type__c' => 'Policy' },
+            new Map<String, Object>{ 'LLC_BI__Type__c' => 'Policy', 'LLC_BI__Status__c' => 'Tolerated' },
+            new Map<String, Object>{ 'LLC_BI__Status__c' => 'Waived' },
+            new Map<String, Object>{ 'LLC_BI__Type__c' => 'Exception', 'LLC_BI__Status__c' => 'Waived' }
+        }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_POLICY_EXCEPTION, C360WriteGuard.OP_CREATE, wrong);
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'An exception is born Policy plus a stated decision. Tried: ' + wrong);
+        }
+
+        // Automatically_Added is the org's own provenance flag: a tool-authored exception claiming
+        // to be one of the 76 auto-generated exposure rows would misstate where it came from.
+        // RecordTypeId does not exist on this object at all.
+        for (String f : new List<String>{ 'LLC_BI__Automatically_Added__c', 'RecordTypeId' }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_POLICY_EXCEPTION, C360WriteGuard.OP_CREATE,
+                    new Map<String, Object>{
+                        'LLC_BI__Type__c' => 'Policy', 'LLC_BI__Status__c' => 'Waived', f => 'x'
+                    });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'The org owns it, or it does not exist. Tried: ' + f);
+        }
+
+        // Logged and never touched again: amending an exception someone already filed is a
+        // different arm, and every write on this object costs an egress.
+        for (String op : new List<String>{ C360WriteGuard.OP_UPDATE, C360WriteGuard.OP_DELETE }) {
+            Boolean refused = false;
+            try {
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_POLICY_EXCEPTION, op,
+                    new Map<String, Object>{ 'LLC_BI__Status__c' => 'Waived' });
+            } catch (C360WriteGuard.GuardException e) {
+                refused = true;
+            }
+            System.assertEquals(true, refused, 'This wave logs exceptions and stops. Operation: ' + op);
+        }
+
+        // AND IT IS NOT CARRYABLE. An exception records what the bank decided about the facility as
+        // it stands; replicating one onto a version nobody has approved would restate a decision
+        // about terms that do not exist yet.
+        Boolean carryRefused = false;
+        try {
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_POLICY_EXCEPTION, C360WriteGuard.OP_CARRY,
+                new Map<String, Object>{ 'LLC_BI__Status__c' => 'Mitigated' });
+        } catch (C360WriteGuard.GuardException e) {
+            carryRefused = true;
+        }
+        System.assertEquals(true, carryRefused, 'A clone carries only the exceptions this plan logs on it');
+    }
 }

@@ -686,6 +686,31 @@ export interface StagePayloads {
      *  supply `advanceRateReason` or the tool composes a provenance one.
      *  Counts toward the tool's at-least-one-change rule. */
     pledgeAddsJson?: string | null;
+    /** POLICY EXCEPTIONS (2026-08-31), JSON-encoded:
+     *  [{title, status (Waived|Mitigated|Unmitigated), mitigationReasons?,
+     *    severity?, severityValue?, code?, targetLoanId?}]. Each is authored on
+     *  the CLONE of the targeted facility (`LLC_BI__Loan__c`) and anchored on the
+     *  borrower (`LLC_BI__Relationship__c`), born `LLC_BI__Type__c` = "Policy"
+     *  like every row this org holds.
+     *
+     *  `title` is REQUIRED and rides `Name`, which is plain text rather than an
+     *  autonumber: the org's trigger stack backfills an omitted one with the
+     *  record's own 15-character Id, so an unnamed exception is a row nobody can
+     *  find. `status` is validated against the live picklist — the org DEFAULTS a
+     *  new row to Unmitigated, which reads as a decision rather than as an absent
+     *  value, so the tool demands the status rather than accepting that default.
+     *  `mitigationReasons` is a list laid onto the three
+     *  `LLC_BI__Mitigation_Reason_N__c` fields, at most three and at most 100
+     *  characters each; a longer one is refused with its length rather than
+     *  truncated, and Mitigated with none is refused outright.
+     *
+     *  ⚠ EGRESS. This object carries the org-local `PolicyExceptionCDC` trigger,
+     *  which enqueues an EventBridge callout POSTing the serialised records to an
+     *  AWS endpoint on EVERY committed DML. No approval process targets the
+     *  object and no email fires (recon Task 3d), but the borrower's data leaves
+     *  the org. The whole plan's exceptions are inserted in ONE DML for exactly
+     *  that reason. Counts toward the tool's at-least-one-change rule. */
+    policyExceptionAddsJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;

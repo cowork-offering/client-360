@@ -143,7 +143,7 @@ export function whyHandoff(delta: WorkroomDelta): string {
     case "pricing":
       return "Pricing is neither read nor written here, so the room can name the change but not show today's value — it rides the plan as a handoff so nothing is silently dropped.";
     case "exception":
-      return "A policy exception has no deployed write here — it rides the plan as a handoff naming the facility it would sit on.";
+      return "Logging an exception files on the modification — what is out of policy, what the bank decided about it, and what stands behind that decision. This one the room could not settle into that shape, so it rides the plan as a handoff rather than as a record named after its own Id.";
     default:
       return "The credit action carries four terms — commitment, rate, maturity and term — and this is not one of them, so it rides the plan as a handoff with the field named.";
   }
@@ -168,6 +168,11 @@ type HandoffKind =
 function handoffKind(delta: WorkroomDelta): HandoffKind {
   const remove = delta.op === "remove";
   const add = delta.op === "add";
+  // AN EXCEPTION FILES UNDER THE COVENANT HEADING, and the group switch below
+  // therefore read every one of them as a covenant — which left the exception
+  // reading unreachable and a handed-off exception explained as a covenant. The
+  // kind badge carries the category the group cannot.
+  if (delta.kind.toLowerCase().includes("policy exception")) return "exception";
   switch (delta.group) {
     case "covenants":
       return remove ? "covenant-remove" : add ? "covenant-add" : "covenant-change";

@@ -93,8 +93,10 @@ export interface CatalogField {
    *  clone, removes as carry exclusions). Both 2026-08-30. "feeAdd" rides
    *  feeAddsJson and authors LLC_BI__Fee__c on the clone; "pledgeAdd" rides
    *  pledgeAddsJson and attaches a collateral to the clone, creating the asset
-   *  and its ownership junction first where it is net-new. Both 2026-08-31. */
-  recordWire?: "covenantAdd" | "involvementChange" | "feeAdd" | "pledgeAdd";
+   *  and its ownership junction first where it is net-new; "policyExceptionAdd"
+   *  rides policyExceptionAddsJson and authors LLC_BI__Policy_Exception__c on
+   *  the clone, anchored on the borrower. All three 2026-08-31. */
+  recordWire?: "covenantAdd" | "involvementChange" | "feeAdd" | "pledgeAdd" | "policyExceptionAdd";
   /** A DYNAMIC FIELD wire: the entry files through `stage_loan_modification`'s
    *  `fieldChangesJson` under this API name, and the ORG resolves it against its
    *  own live describe at stage time — updateable, non-formula, off the
@@ -1163,6 +1165,16 @@ const FEE_FIELDS: CatalogField[] = [
   },
 ];
 
+/* THE EXCEPTION ITSELF FILES since 2026-08-31; the two entries under it are
+   attributes OF a row that already exists, which is a different arm. Logging an
+   exception AUTHORS a record with its status and its mitigants on it; moving the
+   status of one already on the deal AMENDS a record, and the guard admits this
+   object on the create side only. */
+const EXCEPTION_AMEND_ONLY =
+  "Logging an exception files, and it carries its own status and mitigants; this entry MOVES one that is already on the record, and the arm only ever authors an exception, never amends one.";
+const EXCEPTION_AMEND_FIX =
+  "An exception-amend arm, scoped to rows this plan created on a clone it created. Every write on this object POSTs the record to the bank's own EventBridge endpoint (PolicyExceptionCDC), so an update costs an egress exactly as a create does.";
+
 const EXCEPTION_FIELDS: CatalogField[] = [
   {
     id: "exception.record",
@@ -1173,17 +1185,28 @@ const EXCEPTION_FIELDS: CatalogField[] = [
     category: "exception",
     group: "covenants",
     source: "live-verified",
-    gap: "LLC_BI__Policy_Exception__c is not on C360WriteGuard's allowlist and has no tool. Hartwell carries one today (Major / Mitigated on the construction facility), read-only.",
-    closes: "An exceptions[] block on the modification pair, with a new guard object and create state. The describe settles the anchors: LLC_BI__Loan__c for the facility, LLC_BI__Covenant_Mgmt__c for the covenant it arises from, LLC_BI__Relationship__c for the account.",
+    // FILES since 2026-08-31: policyExceptionAddsJson authors the row on the
+    // CLONE of the targeted member and anchors it on the borrower account. The
+    // title, the status and the mitigants all ride the one entry, because they
+    // are one record rather than three amendments.
+    recordWire: "policyExceptionAdd",
+    gap: "An exception this room could not settle travels as a handoff rather than as a half-written record: the title is the row's ONLY readable identity (an omitted Name is backfilled by the org with the record's own Id), the status is a credit judgement between Waived, Mitigated and Unmitigated, and a Mitigated exception with no mitigant beside it is a claim with nothing behind it.",
+    closes: "Nothing structural. What stays handed off is the object's other two anchors — LLC_BI__Covenant_Mgmt__c and LLC_BI__Collateral_Mgmt__c — which on a modification would have to point at the covenant junction or the pledge that this same run is creating on the clone, and that ordering is a design question rather than a field to fill in.",
     chain: [
       {
         object: "LLC_BI__Policy_Exception__c",
         via: "LLC_BI__Loan__c + LLC_BI__Relationship__c",
         label: "Create the exception against the clone and the relationship",
-        note: "Where the exception arises from a covenant, LLC_BI__Covenant_Mgmt__c ties it to that covenant and is set in the same insert.",
+        note: "LLC_BI__Type__c is the object's only required field and every row this org holds carries \"Policy\". Name is plain text rather than an autonumber, and omitting it is worse than an autonumber would be: the trigger stack backfills it with the record's own Id.",
       },
     ],
-    synonyms: ["policy exception", "exception", "raise an exception", "grant an exception", "out of policy"],
+    synonyms: [
+      "log a policy exception", "record a policy exception", "raise a policy exception",
+      "log an exception", "record an exception", "note an exception",
+      "raise an exception", "grant an exception", "policy exception",
+      "policy waiver", "exception to policy", "out of policy", "outside policy",
+      "exception",
+    ],
   },
   {
     id: "exception.status",
@@ -1195,8 +1218,8 @@ const EXCEPTION_FIELDS: CatalogField[] = [
     group: "covenants",
     source: "live-verified",
     values: ["Waived", "Mitigated", "Unmitigated"],
-    gap: "Same object, same wall.",
-    closes: "The same exceptions[] block.",
+    gap: EXCEPTION_AMEND_ONLY + " The org defaults a new row to Unmitigated, which reads as a decision rather than as an absent value, so the create arm asks for the status instead of accepting that default.",
+    closes: EXCEPTION_AMEND_FIX,
     synonyms: ["mitigated", "unmitigated", "waive the exception"],
   },
   {
@@ -1208,8 +1231,8 @@ const EXCEPTION_FIELDS: CatalogField[] = [
     category: "exception",
     group: "covenants",
     source: "live-verified",
-    gap: "Same object, same wall. Probe-verified detail: the three mitigation reason fields are 100 characters each.",
-    closes: "The same exceptions[] block.",
+    gap: EXCEPTION_AMEND_ONLY + " Probe-verified detail the create arm enforces too: the three mitigation reason fields are 100 characters EACH, so a longer mitigant is refused with its length rather than truncated into a sentence that stops mid-clause.",
+    closes: EXCEPTION_AMEND_FIX,
     synonyms: ["mitigation", "mitigant", "mitigating factor"],
   },
 ];
