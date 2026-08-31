@@ -1,12 +1,12 @@
 {
   "target": "port",
-  "note": "STUB for the React port. Fill every selector in with the port's own stable hooks (prefer data-probe attributes or role+text over class names) and leave the KEYS untouched: probe.mjs only ever addresses the app through these keys. Values below are the dummy's, kept as a starting point - anything the port renames MUST be changed here, never in the probes.",
+  "note": "The React port's own hooks. Only VALUES change; the KEYS are the contract probe.mjs addresses the app through. Filled for SURFACE 1 (the landing + the app header) as of the mint-landing wave: the weave, the worklist rows, the KPI band, the whisper, the header and its hidden capsule. Everything below that belongs to a later surface still carries the dummy's value and will fail until that surface is minted - that is the gate working, not a broken map. THE BOOK IS THE APP'S BOOK: the port serves the injected C360 bundle, not the dummy's three authored clients, so the client rows name the port's real accounts.",
   "viewport": {
     "width": 1360,
     "height": 900
   },
   "sel": {
-    "topbar": "header.topbar",
+    "topbar": ".topbar",
     "topbarInner": ".topbar-in",
     "navWrap": ".topnav",
     "navCapsule": ".topnav .icotabs",
@@ -25,10 +25,10 @@
     "weaveNodes": "#hweaveG g",
     "worklistRow": ".wlrow",
     "worklistRowName": ".who b",
-    "worklistHartwellAmount": "#wlHartAmt",
-    "rowHartwell": "[data-open=\"hartwell\"]",
-    "rowPiedmont": "[data-open=\"piedmont\"]",
-    "rowMeridian": "[data-open=\"meridian\"]",
+    "worklistHartwellAmount": "[data-open=\"001bb00001DLtRMAA1\"] .amt b",
+    "rowHartwell": "[data-open=\"001SAMPLE0000STRL\"]",
+    "rowPiedmont": "[data-open=\"001bb00001DLtRMAA1\"]",
+    "rowMeridian": "[data-open=\"001SAMPLE0000BRWT\"]",
     "heroName": ".acct-name",
     "flyName": ".flyname",
     "gradeRingFg": "#view-account .gr .fg",
@@ -44,7 +44,7 @@
     "graphRoute": "#oflowSvg path.fl",
     "graphParticle": "#oflowSvg circle.flp",
     "paneMeterFill": ".meter i",
-    "fabWrap": "#fabwrap",
+    "fabWrap": "#fab",
     "fabWrapOpenClass": "open",
     "fab": "#fab",
     "fabMark": "#fab .gt",
@@ -109,15 +109,15 @@
     "arcLabelAtRest": "Client actions",
     "cmdkBackToWorklist": "Back to worklist",
     "cmdkNoMatch": "Nothing matches.",
-    "heroNameHartwell": "Hartwell Industrial Group",
-    "heroNamePiedmont": "Piedmont Fabrication Co.",
-    "heroNameMeridian": "Meridian Logistics LLC",
+    "heroNameHartwell": "Sterling Fabrication Co.",
+    "heroNamePiedmont": "Piedmont Precision Components, Inc.",
+    "heroNameMeridian": "Brightwater Foods Group",
     "workroomIncreaseLine": "Increase the revolver to $19M",
     "workroomConfirm": "Confirm",
     "workroomExecute": "Execute write"
   },
   "keyframes": {
-    "viewEntry": "viewin",
+    "viewEntry": "eg-viewin",
     "paneEntry": "panein",
     "navTabEntry": "navtabin",
     "odoBlur": "odoblur",
@@ -128,21 +128,21 @@
   },
   "clients": [
     {
-      "id": "hartwell",
-      "row": "[data-open=\"hartwell\"]",
-      "name": "Hartwell Industrial Group",
+      "id": "sterling",
+      "row": "[data-open=\"001SAMPLE0000STRL\"]",
+      "name": "Sterling Fabrication Co.",
       "ringTargetOffsetPx": 41.8
     },
     {
       "id": "piedmont",
-      "row": "[data-open=\"piedmont\"]",
-      "name": "Piedmont Fabrication Co.",
+      "row": "[data-open=\"001bb00001DLtRMAA1\"]",
+      "name": "Piedmont Precision Components, Inc.",
       "ringTargetOffsetPx": 74.6
     },
     {
-      "id": "meridian",
-      "row": "[data-open=\"meridian\"]",
-      "name": "Meridian Logistics LLC",
+      "id": "brightwater",
+      "row": "[data-open=\"001SAMPLE0000BRWT\"]",
+      "name": "Brightwater Foods Group",
       "ringTargetOffsetPx": 14.9
     }
   ]

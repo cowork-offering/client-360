@@ -1,117 +1,87 @@
 import { useMemo, useState } from "react";
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type SortingState,
-} from "@tanstack/react-table";
 import { useApp } from "../state/appState";
 import { buildWorklistRows, type WorklistRow } from "../data/worklistRows";
-import { fmtMoney, fmtDate, fmtDays } from "../data/format";
+import { fmtMoney, fmtDays } from "../data/format";
+import { gradeTone } from "../data/finance";
 import type { ReasonCode } from "../data/contract";
 import { REASON_META } from "./reasons";
-import { ReasonChips } from "./ReasonChip";
-import { GradeBadge } from "./GradeBadge";
 import { CopyPromptDialog } from "./CopyPromptDialog";
-import { Card, EmptyState } from "./ui";
-import { staggerDelay } from "../data/motion";
 
-const ALL_REASONS = Object.keys(REASON_META) as ReasonCode[];
-const col = createColumnHelper<WorklistRow>();
-const GRID_COLS = "minmax(220px,2.4fr) minmax(150px,1.4fr) 104px 108px 132px 132px 120px";
+/* =============================================================================
+   THE WORKLIST — the landing's third beat.
 
-function DayCell({ days, date, warnAt }: { days: number | null; date: string | null; warnAt: number }) {
-  if (days == null && !date) return <span className="text-ink-faint">—</span>;
-  const tone = days == null ? "var(--ink-muted)" : days < 0 ? "var(--critical)" : days <= warnAt ? "var(--warning)" : "var(--ink)";
-  return (
-    <div className="leading-tight">
-      <div className="tnum text-[12.5px] font-semibold" style={{ color: tone }}>{fmtDays(days)}</div>
-      <div className="text-[10.5px] text-ink-faint">{fmtDate(date)}</div>
-    </div>
-  );
+   ROWS, NOT A TABLE. The mint's queue is a stack of solid white cards: who,
+   what is wrong in words, what it is worth, and an arrow. The sortable
+   tanstack header, the search field and the reason-filter rail are gone from
+   this surface; rule 45 put search behind the header's ⌘K chip, which is the
+   palette this app already ships. The DATA is untouched — the same
+   buildWorklistRows over the same derived worklist, in the same severity order.
+
+   STATUS IS TYPOGRAPHY (systemNonNegotiable), never pill soup: a coloured word
+   with a 5px dot. Rule 20: hover is LIFT + SHADOW only — an inset accent bar
+   reads as a spine and is banned. Rule 13: no per-row meters, no sparklines.
+   The numbers carry it.
+   ============================================================================= */
+
+interface Status {
+  tone: "good" | "warn" | "bad" | "acc" | "mut";
+  text: string;
+}
+
+const REASON_TONE: Record<ReasonCode, Status["tone"]> = {
+  CLIENT_REQUEST: "acc",
+  COVENANT_BREACH: "bad",
+  COVENANT_EXCEPTION: "warn",
+  COVENANT_DUE: "warn",
+  MATURITY_NEAR: "acc",
+  MODIFICATION_CLUSTER: "mut",
+  GUARANTOR_SIGNAL: "warn",
+  RECENTLY_MODIFIED: "mut",
+};
+
+const GRADE_TONE: Record<string, Status["tone"]> = {
+  green: "good",
+  amber: "warn",
+  red: "bad",
+  purple: "acc",
+  neutral: "mut",
+};
+
+/** The row's status line. A reason that HAS a date says the date: "Test due" on
+ *  its own is a category, "Test due · 2d ago" is the reason you are looking at
+ *  this row. Reasons the data carries no clock for stay bare rather than
+ *  borrowing one. */
+function statusesFor(r: WorklistRow): Status[] {
+  const out: Status[] = [];
+  if (r.riskRating != null) {
+    out.push({ tone: GRADE_TONE[gradeTone(r.riskRating)] ?? "mut", text: `Grade ${r.riskRating}` });
+  }
+  for (const code of r.reasons) {
+    const short = REASON_META[code].short;
+    let text = short;
+    let tone = REASON_TONE[code];
+    if ((code === "COVENANT_DUE" || code === "COVENANT_EXCEPTION") && r.nextTestDays != null) {
+      text = `${short} · ${fmtDays(r.nextTestDays)}`;
+      if (r.nextTestDays < 0) tone = "bad";
+    } else if (code === "MATURITY_NEAR" && r.maturityDays != null) {
+      text = `${short} · ${fmtDays(r.maturityDays)}`;
+    }
+    out.push({ tone, text });
+  }
+  if (!r.staged) out.push({ tone: "mut", text: "not staged" });
+  if (r.sample) out.push({ tone: "mut", text: "sample" });
+  return out;
+}
+
+function initialsOf(name: string): string {
+  const words = name.replace(/[^A-Za-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  return (words[0]?.[0] ?? "?").toUpperCase() + (words[1]?.[0] ?? "").toUpperCase();
 }
 
 export function Worklist() {
   const { data, worklist, dispatch } = useApp();
   const rows = useMemo(() => buildWorklistRows(data, worklist), [data, worklist]);
-
-  const [search, setSearch] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [reasonFilter, setReasonFilter] = useState<Set<ReasonCode>>(new Set());
   const [unstaged, setUnstaged] = useState<WorklistRow | null>(null);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (q && !`${r.name} ${r.industry} ${r.naicsCode ?? ""}`.toLowerCase().includes(q)) return false;
-      if (reasonFilter.size && !r.reasons.some((c) => reasonFilter.has(c))) return false;
-      return true;
-    });
-  }, [rows, search, reasonFilter]);
-
-  const columns = useMemo(
-    () => [
-      col.accessor("name", {
-        header: "Account",
-        cell: (c) => {
-          const r = c.row.original;
-          return (
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-[14px] font-bold text-ink">{r.name}</span>
-                {r.sample && (
-                  <span className="flex-none rounded bg-wash-2 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-label">sample</span>
-                )}
-                {!r.staged && (
-                  <span className="flex-none rounded border border-border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-ink-faint">not staged</span>
-                )}
-              </div>
-              <div className="mt-0.5 truncate text-[12px] text-ink-muted">
-                {r.industry}
-                {r.naicsCode ? ` · NAICS ${r.naicsCode}` : ""}
-              </div>
-            </div>
-          );
-        },
-      }),
-      col.accessor("reasons", { header: "Reasons", enableSorting: false, cell: (c) => <ReasonChips codes={c.getValue()} /> }),
-      col.accessor("riskRating", { header: "Rating", sortUndefined: "last", cell: (c) => <GradeBadge grade={c.getValue()} /> }),
-      col.accessor("tce", {
-        header: "TCE",
-        meta: { align: "right" as const },
-        cell: (c) => <span className="tnum block text-right text-[13.5px] font-bold text-ink">{fmtMoney(c.getValue())}</span>,
-      }),
-      col.accessor("nextTestDays", {
-        header: "Next test",
-        sortingFn: (a, b) => (a.original.nextTestDays ?? Infinity) - (b.original.nextTestDays ?? Infinity),
-        cell: (c) => <DayCell days={c.row.original.nextTestDays} date={c.row.original.nextTestDate} warnAt={45} />,
-      }),
-      col.accessor("maturityDays", {
-        header: "Maturity",
-        sortingFn: (a, b) => (a.original.maturityDays ?? Infinity) - (b.original.maturityDays ?? Infinity),
-        cell: (c) => <DayCell days={c.row.original.maturityDays} date={c.row.original.maturityDate} warnAt={270} />,
-      }),
-      // A11: last-modified is not carried in the data contract — render an honest gap.
-      col.display({ id: "lastModified", header: "Last modified", cell: () => <span className="text-ink-faint">—</span> }),
-    ],
-    [],
-  );
-
-  const table = useReactTable({
-    data: filtered,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  const tableRows = table.getRowModel().rows;
-  // Re-key the row set on any filter/sort change so the entrance animation
-  // replays — the queue visibly re-forms instead of snapping (A25.4/A26.2).
-  const animKey = `${search}|${[...reasonFilter].sort().join(",")}|${sorting.map((s) => s.id + (s.desc ? "d" : "a")).join(",")}`;
 
   function openRow(r: WorklistRow) {
     if (r.staged) dispatch({ type: "OPEN_ACCOUNT", accountId: r.accountId });
@@ -119,111 +89,60 @@ export function Worklist() {
   }
 
   return (
-    <Card>
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-divider px-6 py-4">
-        <div>
-          <div className="kicker">Worklist</div>
-          <div className="mt-0.5 text-[17px] font-bold text-ink">Needs action</div>
+    <div style={{ marginTop: 36 }}>
+      <div className="eyebrow">
+        <span className="kicker">Worklist</span>
+      </div>
+      <div className="wl-head">Needs action</div>
+
+      {rows.length === 0 ? (
+        <div className="card wl-empty">
+          Queue clear. No relationship in the book is outside tolerance on this snapshot.
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-[12px] text-ink-muted">
-            {filtered.length} of {rows.length} · by severity
-          </span>
-          <SearchInput value={search} onChange={setSearch} />
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-1.5">
-          {ALL_REASONS.map((code) => {
-            const active = reasonFilter.has(code);
+      ) : (
+        <div className="wl">
+          {rows.map((r, i) => {
+            const breach = r.reasons.includes("COVENANT_BREACH");
             return (
-              <button
-                key={code}
-                type="button"
-                onClick={() =>
-                  setReasonFilter((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(code)) next.delete(code);
-                    else next.add(code);
-                    return next;
-                  })
-                }
-                aria-pressed={active}
-                className="c360-press rounded-[6px] px-2 py-[3px] text-[10.5px] font-bold uppercase tracking-wide"
-                style={{
-                  background: active ? REASON_META[code].bg : "transparent",
-                  color: active ? REASON_META[code].fg : "var(--ink-faint)",
-                  border: `1px solid ${active ? "transparent" : "var(--border)"}`,
+              <div
+                key={r.accountId}
+                role="button"
+                tabIndex={0}
+                data-open={r.accountId}
+                onClick={() => openRow(r)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openRow(r);
+                  }
                 }}
+                className="wlrow"
+                style={{ animationDelay: `${i * 45}ms` }}
               >
-                {REASON_META[code].short}
-              </button>
+                <span className={`mono${breach ? " bad" : ""}`}>{initialsOf(r.name)}</span>
+                <span className="who">
+                  <b>{r.name}</b>
+                  <span>
+                    {r.industry}
+                    {r.naicsCode ? ` · NAICS ${r.naicsCode}` : ""}
+                  </span>
+                </span>
+                <span className="sts">
+                  {statusesFor(r).map((s) => (
+                    <span key={s.text} className={`st ${s.tone}`}>
+                      {s.text}
+                    </span>
+                  ))}
+                </span>
+                <span className="amt num">
+                  <b>{fmtMoney(r.tce)}</b>
+                  <span>total exposure</span>
+                </span>
+                <span className="go">→</span>
+              </div>
             );
           })}
-          {reasonFilter.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setReasonFilter(new Set())}
-              className="text-[10.5px] font-medium text-ink-faint underline underline-offset-2 hover:text-ink-muted"
-            >
-              clear
-            </button>
-          )}
         </div>
-      </div>
-
-      {/* Header row */}
-      <div
-        className="grid items-center gap-4 border-b border-divider px-6 py-2.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-faint"
-        style={{ gridTemplateColumns: GRID_COLS }}
-      >
-        {table.getHeaderGroups()[0].headers.map((h) => {
-          const sortable = h.column.getCanSort();
-          const dir = h.column.getIsSorted();
-          return (
-            <button
-              key={h.id}
-              type="button"
-              disabled={!sortable}
-              onClick={h.column.getToggleSortingHandler()}
-              className={`flex items-center gap-1 ${(h.column.columnDef.meta as { align?: string } | undefined)?.align === "right" ? "justify-end" : ""} ${sortable ? "c360-press cursor-pointer hover:text-ink-muted" : "cursor-default"}`}
-            >
-              {flexRender(h.column.columnDef.header, h.getContext())}
-              {sortable && <SortGlyph dir={dir} />}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Body — plain render (A21: no virtualization; ~30 rows) */}
-      {tableRows.length === 0 ? (
-        <EmptyState
-          title="Queue clear"
-          body="No relationship matches the current filter. Every staged account is within tolerance."
-        />
-      ) : (
-        tableRows.map((row, i) => {
-          const r = row.original;
-          return (
-            <div
-              key={`${animKey}|${row.id}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => openRow(r)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  openRow(r);
-                }
-              }}
-              className="c360-row-in c360-row grid cursor-pointer items-center gap-4 border-b border-divider px-6 py-3.5"
-              style={{ gridTemplateColumns: GRID_COLS, animationDelay: staggerDelay(i) }}
-            >
-              {row.getVisibleCells().map((cell) => (
-                <div key={cell.id} className="min-w-0">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
-              ))}
-            </div>
-          );
-        })
       )}
 
       {unstaged && (
@@ -234,31 +153,6 @@ export function Worklist() {
           onClose={() => setUnstaged(null)}
         />
       )}
-    </Card>
-  );
-}
-
-function SortGlyph({ dir }: { dir: false | "asc" | "desc" }) {
-  return (
-    <span className="text-[9px] leading-none" style={{ color: dir ? "var(--accent)" : "var(--ink-faint)" }}>
-      {dir === "asc" ? "▲" : dir === "desc" ? "▼" : "↕"}
-    </span>
-  );
-}
-
-function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border-strong bg-raised px-2.5 py-1.5">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="flex-none text-ink-faint">
-        <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search book…"
-        className="w-44 bg-transparent text-[12.5px] text-ink placeholder:text-ink-faint focus:outline-none"
-      />
     </div>
   );
 }

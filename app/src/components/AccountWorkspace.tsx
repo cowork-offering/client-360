@@ -99,8 +99,13 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
           <AccentureCaretWatermark />
           <div className="relative min-w-0 flex-1">
             <div className="mb-2.5 flex items-center gap-2 text-[12px] font-semibold text-ink-label">
+              {/* `goHome` is the mint's own id for this control (design/probes
+                  addresses it by that name). The hero it sits in is Surface 2's
+                  to re-cut; the hook is here now so the acceptance harness can
+                  walk back to the worklist between surfaces. */}
               <button
                 type="button"
+                id="goHome"
                 onClick={() => dispatch({ type: "GO_HOME" })}
                 className="inline-flex items-center gap-1.5 font-bold"
                 style={{ color: "var(--accent)" }}

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Portal } from "./Portal";
 import { useApp } from "../state/appState";
 
+/** The header's ⌘K chip opens the same palette the shortcut does (rule 45 puts
+ *  search in that chip). An event rather than lifted state: the palette owns its
+ *  own open/close and the header should not have to hold it. */
+export const CMDK_OPEN_EVENT = "c360:cmdk-open";
+
 /** Cmd/Ctrl+K palette to jump to any staged account (SPEC §6.2). */
 export function CommandPalette() {
   const { data, dispatch } = useApp();
@@ -36,8 +41,13 @@ export function CommandPalette() {
         setOpen(false);
       }
     };
+    const onChip = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(CMDK_OPEN_EVENT, onChip);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(CMDK_OPEN_EVENT, onChip);
+    };
   }, []);
 
   useEffect(() => {
