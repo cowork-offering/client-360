@@ -205,11 +205,11 @@ function fixCopy(code: McpErrorCode, server: string, tool: string): string {
     case "server_not_connected":
       return `Add ${server} in claude.ai Settings → Connectors.`;
     case "selection_required":
-      return `You have more than one ${server} connector — choose one when claude.ai prompts.`;
+      return `You have more than one ${server} connector. Choose one when claude.ai prompts.`;
     case "server_not_found":
       return `${server} no longer exists upstream. Check the connector in claude.ai Settings.`;
     case "server_unavailable":
-      return `${server} is briefly unreachable. Showing the last good data — try again in a moment.`;
+      return `${server} is briefly unreachable. Showing the last good data. Try again in a moment.`;
     case "not_in_manifest":
       return `This cockpit isn't authorised to call ${tool} on ${server}.`;
     case "blocked_by_policy":
@@ -220,16 +220,16 @@ function fixCopy(code: McpErrorCode, server: string, tool: string): string {
       // Blaming "your organisation's policy" alarmed bankers and sent them
       // hunting a non-existent IT ticket, so the copy names the real cause and
       // the real fix.
-      return "The workspace paused AI chat for this page session — a platform safety limit, not the Gateway and not your bank's policy. Reload the cockpit to continue; your place is kept.";
+      return "The workspace paused AI chat for this page session. That is a platform safety limit, not the Gateway and not your bank's policy. Reload the cockpit to continue; your place is kept.";
     case "approval_required":
       return `${tool} needs per-call approval, which artifacts don't support yet.`;
     case "tool_error":
       return `${server} ran ${tool} but reported a failure.`;
     case "bad_request":
     case "transform_error":
-      return `The cockpit sent a malformed request to ${server} — this is a bug, not your setup.`;
+      return `The cockpit sent a malformed request to ${server}. This is a bug, not your setup.`;
     case "cancelled":
-      return `Cancelled before it finished — it may still have run.`;
+      return `Cancelled before it finished. It may still have run.`;
     case "rate_limited":
       return `Too many connector calls just now. Wait a moment and retry.`;
     case "not_granted":

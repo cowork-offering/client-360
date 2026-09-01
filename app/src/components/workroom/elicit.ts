@@ -1,4 +1,4 @@
-import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
+import type { BorrowerBundle, Covenant, Facility, LegalEntity } from "../../data/contract";
 import { isActiveFacility } from "../../data/worklist";
 import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
 
@@ -44,9 +44,9 @@ import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
 
 /* ------------------------------------------------------------- the surfaces */
 
-/** The create surfaces this room knows. Phase 2 adds a member here and a
- *  {@link SurfaceSpec} beside it; nothing else in the machine changes. */
-export type SurfaceId = "covenant" | "collateral";
+/** The create surfaces this room knows. Phase 2 added `involvement`; nothing
+ *  else in the machine changed for it. */
+export type SurfaceId = "covenant" | "collateral" | "involvement";
 
 /** Every slot any surface can need. A surface declares which ones it uses; the
  *  machine never invents one, and a slot no surface declares is inert. */
@@ -58,7 +58,9 @@ export type SlotId =
   | "asset"
   | "assetKind"
   | "assetValue"
-  | "lien";
+  | "lien"
+  | "party"
+  | "role";
 
 /** What a create has settled so far. Every field is optional because a create
  *  arrives in pieces and the room asks for the piece it is missing. */
@@ -94,6 +96,14 @@ export interface Slots {
   assetDescription?: string;
   /** First, second, third. The bank's decision, and no wire carries it. */
   lien?: string;
+  /** The party, spelled the way the ORG spells it wherever the book carries the
+   *  name. The org has to find the row, so the spelling is the book's. */
+  party?: string;
+  /** The party is already on this book somewhere. A net-new name is a legitimate
+   *  add and is kept verbatim; this is what tells the two apart. */
+  partyOnBook?: boolean;
+  /** One of the five legal borrowing-structure roles, in the org's own words. */
+  role?: string;
 }
 
 /* ------------------------------------------------------------- the members */
@@ -118,6 +128,17 @@ export interface ElicitMember {
    * to the label and verification catches a fan-out.
    */
   orgName: string | null;
+  /**
+   * THE ORG'S OWN NAME WITH THE BORROWER'S NAME OFF THE FRONT.
+   *
+   * `<Product> - <$Amount>`, which resolves exactly one member inside the parser
+   * (it is one of the member's own identity tokens) AND carries no account name.
+   * The involvement surface composes with this rather than with `orgName`
+   * because the party reader resolves the first account name it finds in the
+   * line, and a full loan name begins with the borrower's. Null where the read
+   * carries no name.
+   */
+  shortName: string | null;
   committed: number | null;
 }
 
@@ -145,14 +166,34 @@ export interface BookAsset {
   loanIds: string[];
 }
 
+/**
+ * ONE INVOLVEMENT ROW, as the org holds it.
+ *
+ * The org holds involvement as ROWS, one per facility, so the same name carries
+ * one row per facility and a name can hold different roles on different
+ * facilities. That is why the role is read PER FACILITY and never per party:
+ * "Elena Hartwell is a guarantor" is not a fact this book carries, and treating
+ * it as one is what put the wrong role on the wire (E8, 2026-09-01).
+ */
+export interface BookParty {
+  /** The account name, spelled the way the org spells it. */
+  name: string;
+  /** The org's own role word for THIS row. */
+  role: string;
+  /** The facility the row sits on. Null where the row is relationship-wide. */
+  loanId: string | null;
+}
+
 export interface Book {
   covenants: BookCovenant[];
   assets: BookAsset[];
   /** The lien positions this relationship actually uses, most common first. */
   liens: string[];
+  /** Who is on the deal, per facility, in the org's own roles. */
+  parties: BookParty[];
 }
 
-export const EMPTY_BOOK: Book = { covenants: [], assets: [], liens: [] };
+export const EMPTY_BOOK: Book = { covenants: [], assets: [], liens: [], parties: [] };
 
 /**
  * THE BOOK, READ OFF THE BUNDLE THE ROOM IS ALREADY HOLDING.
@@ -209,11 +250,96 @@ export function buildBook(bundle: BorrowerBundle | null | undefined, memberIds: 
     }
   }
 
+  /* THE PARTIES, PER FACILITY. `relationshipType` is the graph read's own role
+     word and `borrowerType` is what the same rows carry when it is blank; a row
+     carrying neither has no role this room may assert, so it is dropped rather
+     than defaulted to Borrower. Rows off every in-scope facility are kept with a
+     null loan id: a relationship-wide row still names somebody on the deal. */
+  const parties: BookParty[] = [];
+  for (const e of (bundle.graph?.legalEntities ?? []) as LegalEntity[]) {
+    const name = (e.accountName ?? "").trim();
+    const role = ((e.relationshipType ?? "").trim() || (e.borrowerType ?? "").trim()).trim();
+    if (!name || !role) continue;
+    const loanId = (e.loanId ?? "").trim() || null;
+    if (loanId && !inScope.has(loanId)) continue;
+    parties.push({ name, role, loanId });
+  }
+
   return {
     covenants,
     assets: [...byId.values()],
     liens: [...lienCount.entries()].sort((a, b) => b[1] - a[1]).map(([lien]) => lien),
+    parties,
   };
+}
+
+/* ------------------------------------------------------- reading the parties
+
+   Two names are the same party when the org would resolve them to the same
+   account. Case and the legal suffix are noise a banker drops in speech
+   ("Hartwell Industrial Holdings" for "Hartwell Industrial Holdings LLC"), and
+   an exact-string rule would miss every one of them.                        */
+
+const ENTITY_SUFFIX = /[\s,.]*\b(?:llc|l\.l\.c\.|inc|inc\.|incorporated|ltd|ltd\.|limited|lp|llp|corp|corp\.|corporation|co|co\.|company|plc)\b[\s,.]*$/i;
+
+/** A name reduced to what identifies it: lower case, no legal suffix, no
+ *  punctuation. Never shown; only compared. */
+function partyKey(name: string): string {
+  return name
+    .trim()
+    .replace(ENTITY_SUFFIX, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export const samePartyName = (a: string, b: string): boolean => {
+  const [x, y] = [partyKey(a), partyKey(b)];
+  return Boolean(x) && x === y;
+};
+
+/** Every distinct name this book carries, longest first so a line naming
+ *  "Hartwell Industrial Holdings LLC" is never read as "Hartwell". */
+function bookPartyNames(book: Book): string[] {
+  const seen = new Map<string, string>();
+  for (const p of book.parties) {
+    const key = partyKey(p.name);
+    const held = seen.get(key);
+    if (!held || p.name.length > held.length) seen.set(key, p.name);
+  }
+  return [...seen.values()].sort((a, b) => b.length - a.length);
+}
+
+/** The roles this book holds for one name on one facility. */
+export function rolesOnFacility(book: Book, name: string, loanId: string): string[] {
+  const held = book.parties.filter((p) => p.loanId === loanId && samePartyName(p.name, name));
+  return [...new Set(held.map((p) => p.role))];
+}
+
+/** The facilities this book holds this name on, with the role each row carries. */
+export function facilitiesFor(book: Book, name: string): Array<{ loanId: string; role: string }> {
+  return book.parties
+    .filter((p) => p.loanId && samePartyName(p.name, name))
+    .map((p) => ({ loanId: p.loanId as string, role: p.role }));
+}
+
+/**
+ * THE PARTY THIS LINE NAMES, resolved against the book FIRST.
+ *
+ * The book's spelling wins wherever the book carries the name, because the org
+ * has to find the row. A name the book does not carry is kept verbatim: putting
+ * somebody new on the deal is exactly what an add is.
+ */
+function readPartyName(line: string, book: Book): { name: string; onBook: boolean } | null {
+  const lower = ` ${line.toLowerCase()} `;
+  for (const name of bookPartyNames(book)) {
+    const key = partyKey(name);
+    if (!key) continue;
+    if (lower.includes(` ${key} `) || lower.includes(` ${name.toLowerCase()} `)) return { name, onBook: true };
+  }
+  const fresh = NEW_PARTY_NAMED.exec(line)?.[1]?.trim();
+  if (!fresh || NOT_A_PARTY_NAME.test(fresh)) return null;
+  return { name: fresh, onBook: false };
 }
 
 /* ---------------------------------------------------------------- the plan */
@@ -265,6 +391,12 @@ export interface Draft {
    * been typed.
    */
   notInCatalog?: string;
+  /**
+   * A ROLE THE OBJECT HOLDS AND THIS ROOM REFUSES. `Grantor` and `Contractor`
+   * are collateral and construction semantics rather than borrowing structure,
+   * and the banker's own word is held so the refusal can name it.
+   */
+  refusedRole?: string;
 }
 
 export interface Ask {
@@ -560,6 +692,19 @@ function readThreshold(line: string): { value: number; unit?: "ratio" | "money" 
   const lower = line.toLowerCase();
   const ratio = /(\d+(?:\.\d+)?)\s*x\b/.exec(lower);
   if (ratio) return { value: Number(ratio[1]), unit: "ratio" };
+  /* AN OPERATOR IN FRONT OF A FIGURE IS THE THRESHOLD, and it is the strongest
+     anchor there is: it is how the credit agreement writes it. Found on the
+     founder's own line, "add a Debt Service Coverage of Borrower covenant >=
+     1.30 on the 8M equipment loan": with no operator in the anchor list the
+     reader fell through to the single money token, filed $8,000,000 as the
+     THRESHOLD and took the facility's own figure out of the scope reading with
+     it, so the room then asked which facility a fully-specified line meant. */
+  const operator = /(?:>=|<=|=>|=<|≥|≤|>|<)\s*(\$?)\s*(\d[\d,]*(?:\.\d+)?)\s*(mm|m|k|bn|b|million|thousand|billion)?/i.exec(lower);
+  if (operator) {
+    const suffix = (operator[3] ?? "").toLowerCase();
+    const value = Number(operator[2].replace(/,/g, "")) * (MAGNITUDE[suffix] ?? 1);
+    if (Number.isFinite(value)) return { value, unit: operator[1] || suffix ? "money" : undefined };
+  }
   const money = moneyIn(lower);
   if (money.length === 1) return { value: money[0], unit: "money" };
   /* "ACTUALLY MAKE IT 1.30" IS THE FOUNDER'S OWN CORRECTION, and it carries no
@@ -747,6 +892,64 @@ const ASSET_KINDS: Array<{ match: RegExp; word: string }> = [
 
 const ASSET_KIND_OPTIONS = ["Equipment", "Real estate", "Inventory", "Accounts receivable", "Vehicles", "Securities"];
 
+/* ==================================================== the involvement surface
+
+   THE HUMAN SUPPLIES the party, the role and the facility. THE ORG OWNS
+   everything else on the row: the entity type, the guaranty amount type and the
+   ownership/contingent pair (mutually exclusive by validation rule), none of
+   which this room asks for and none of which it invents.
+
+   FIVE ROLES ARE LEGAL HERE. `Grantor` and `Contractor` exist on the object and
+   are refused: they are collateral and construction semantics, not borrowing
+   structure. Naming one is answered by name rather than by silence.
+
+   AN ADD IS A ROW, NOT AN EDIT. The org holds involvement as rows, so adding a
+   party already involved stages a SECOND row for the same name rather than
+   correcting the first. That is the trap {@link awarenessFor} exists to catch on
+   this surface, and it is why the role is compared per FACILITY.             */
+
+/** The five roles a borrowing-structure change may carry, in the org's own
+ *  words. Offered in the order a banker reads them. */
+export const INVOLVEMENT_ROLES = ["Borrower", "Co-Borrower", "Guarantor", "Limited Guarantor", "Related Entity"];
+
+/** On the object, refused here. Named rather than silently dropped. */
+const REFUSED_ROLES: Array<{ match: RegExp; word: string; why: string }> = [
+  { match: /\bgrantor\b/i, word: "Grantor", why: "collateral semantics" },
+  { match: /\bcontractor\b/i, word: "Contractor", why: "construction semantics" },
+];
+
+/** Longest first, so "limited guarantor" is never read as "guarantor" with a
+ *  stray word in front. The same order the parser under this room uses. */
+const ROLE_WORDS: Array<{ match: RegExp; word: string }> = [
+  { match: /\blimited\s+guarantor\b/i, word: "Limited Guarantor" },
+  { match: /\bco[-\s]?borrower\b/i, word: "Co-Borrower" },
+  { match: /\brelated\s+entity\b/i, word: "Related Entity" },
+  { match: /\bguarantor\b/i, word: "Guarantor" },
+  { match: /\bborrower\b/i, word: "Borrower" },
+];
+
+function readRoleWord(line: string): string | null {
+  for (const r of ROLE_WORDS) if (r.match.test(line)) return r.word;
+  return null;
+}
+
+const refusedRole = (line: string) => REFUSED_ROLES.find((r) => r.match.test(line)) ?? null;
+
+/** A line that puts somebody ON the deal. A REMOVE is not a create: it has its
+ *  own lane and files as a carry exclusion. */
+const INVOLVEMENT_OPENS =
+  /\b(?:add|bring\s+in|put)\b[^.]{0,60}?\b(?:as\s+(?:an?\s+|the\s+)?)?(?:limited\s+guarantor|co[-\s]?borrower|related\s+entity|guarantor|borrower|grantor|contractor)\b|\badd\b[^.]{0,20}\b(?:legal\s+entity|entity|party|obligor)\b/i;
+
+/** Verb, optional article, optional role, then the capitalised name. The shell's
+ *  own reading of the shape the parser also walks: a banker writes the role in
+ *  lower case and the entity name capitalised. */
+const NEW_PARTY_NAMED =
+  /\b(?:add|bring\s+in|put|remove|release|drop|take)\s+(?:(?:the|an?)\s+)?(?:(?:limited\s+guarantor|co[-\s]?borrower|related\s+entity|guarantor|borrower)\s+)?([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)*)/;
+
+/** Not a name, whatever the capitalisation. */
+const NOT_A_PARTY_NAME =
+  /^(?:an?|the|entity|party|second|new|another|limited\s+guarantor|co[-\s]?borrower|related\s+entity|guarantor|borrower|grantor|contractor)$/i;
+
 /* ========================================================== opening a create */
 
 /**
@@ -759,11 +962,36 @@ export function openCreate(line: string, ctx: ElicitContext): Draft | null {
   const text = line.trim();
   if (!text) return null;
 
-  const surface: SurfaceId | null = COVENANT_OPENS.test(text)
+  /* THE INVOLVEMENT SURFACE IS TESTED FIRST, and the order is load-bearing. A
+     line naming a legal ROLE beside a party verb is a borrowing-structure line
+     and nothing else, while "add Elena Hartwell as limited guarantor on the 8M
+     equipment loan" carries the word "equipment" and would otherwise open a
+     collateral pledge on it. The role word is what makes it unambiguous.
+
+     AND SO IS A NAME THE BOOK CARRIES. "add Elena Hartwell to the 8M equipment
+     loan" names no role at all, and the only thing in the line that says what
+     kind of change it is, is that Elena Hartwell is a party on this deal. That
+     is grounded rather than guessed: a name the book does not carry does NOT
+     open this surface, because there the line could be anything. */
+  /* A COVENANT LINE IS A COVENANT LINE, whatever role word its TEST NAME
+     happens to carry. "add a Debt Service Coverage of Borrower covenant >= 1.30
+     on the 8M equipment loan" names the org's own catalog entry, and the word
+     "Borrower" inside it is part of that name rather than a borrowing-structure
+     role. So the covenant surface is decided first, and the involvement surface
+     stands down on any line naming a covenant or a pledge at all. */
+  const covenantLine = COVENANT_OPENS.test(text);
+  const namedParty = /\b(?:add|adds|bring\s+in|put)\b/i.test(text) && readPartyName(text, ctx.book)?.onBook;
+  const involvementLine =
+    !covenantLine &&
+    (INVOLVEMENT_OPENS.test(text) || namedParty) &&
+    !/\b(covenants?|tests?|collateral|pledges?|liens?|security)\b/i.test(text);
+  const surface: SurfaceId | null = covenantLine
     ? "covenant"
-    : COLLATERAL_OPENS.test(text)
-      ? "collateral"
-      : null;
+    : involvementLine
+      ? "involvement"
+      : COLLATERAL_OPENS.test(text)
+        ? "collateral"
+        : null;
   if (!surface) return null;
   // A REMOVAL IS NOT A CREATE, and neither is a question. Both have lanes of
   // their own and both would be ruined by being gathered for.
@@ -822,6 +1050,30 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     }
   }
 
+  if (next.surface === "involvement") {
+    /* THE NAME FIRST, AGAINST THE BOOK. The org has to find the row, so a name
+       the deal already carries travels spelled the way the org spells it; a
+       name the book does not carry is kept verbatim, because putting somebody
+       new on the deal is exactly what an add is. */
+    const party = readPartyName(text, ctx.book);
+    if (party) {
+      next.slots.party = party.name;
+      next.slots.partyOnBook = party.onBook;
+    }
+    const refused = refusedRole(text);
+    const role = readRoleWord(text);
+    if (role) {
+      next.slots.role = role;
+      next.refusedRole = undefined;
+    } else if (refused) {
+      /* HE NAMED A ROLE THE OBJECT HOLDS AND THIS ROOM WILL NOT WRITE. Asking
+         "which role?" over a line that already said one would be the room
+         pretending nothing was typed. The name and the facility he gave stay on
+         the draft and travel onto whichever legal role he names. */
+      next.refusedRole = refused.word;
+    }
+  }
+
   if (/\bsecond\b/i.test(text)) next.slots.second = true;
 
   if (next.surface === "collateral") {
@@ -839,9 +1091,15 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
         if (hits[0].lien && next.slots.lien === undefined) next.slots.lien = hits[0].lien;
       }
     }
+    /* FREE TEXT WINS ON THE TYPE (E3, the founder's own line: "Kokomo plant
+       expansion, real estate, valued at 6,500,000" was answered with "what kind
+       of asset is it?"). The typed type is read against the catalog on EVERY
+       line and before the net-new flag is known, because a banker who wrote the
+       type has answered the question whether or not the room had got round to
+       deciding the asset was new. */
+    const kind = ASSET_KINDS.find((k) => k.match.test(text));
+    if (kind) next.slots.assetKind = kind.word;
     if (next.slots.isNew) {
-      const kind = ASSET_KINDS.find((k) => k.match.test(text));
-      if (kind) next.slots.assetKind = kind.word;
       const money = moneyIn(text);
       if (money.length) {
         next.slots.assetValue = money[money.length - 1];
@@ -887,8 +1145,16 @@ export function nextAsk(draft: Draft, ctx: ElicitContext): Ask | null {
      test, and a room that asked for the threshold first would have parked the
      word it could not read. Where the line carried no scope word the scope is
      the LAST question, because by then the room can say what it is scoping. */
+  /* THE REFUSED ROLE IS ANSWERED BEFORE ANYTHING ELSE, for the same reason the
+     catalog gap is: a banker who typed "grantor" has said what he wants, and
+     asking which facility it lands on before telling him the room will not
+     write that role at all would spend his gesture on a decision that turns out
+     not to exist. */
+  if (draft.surface === "involvement" && !draft.slots.role && draft.refusedRole) return refusedRoleAsk(draft);
+
   if (draft.scopeWord && !draft.scope.length) return scopeAskFor(draft, ctx);
   if (draft.surface === "covenant") return covenantAsk(draft, ctx);
+  if (draft.surface === "involvement") return involvementAsk(draft, ctx);
   return collateralAsk(draft, ctx);
 }
 
@@ -1026,6 +1292,69 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
   return null;
 }
 
+/**
+ * A ROLE THE OBJECT HOLDS AND THIS ROOM WILL NOT WRITE, said plainly.
+ *
+ * The refusal names the word, names why it is not a borrowing-structure role,
+ * and offers the five that are. Nothing the banker already gave is thrown away.
+ */
+function refusedRoleAsk(draft: Draft): Ask {
+  const refused = REFUSED_ROLES.find((r) => r.word === draft.refusedRole)!;
+  const held = draft.slots.party ? ` I am holding ${draft.slots.party} and will carry the name onto whichever of those you name.` : "";
+  return {
+    slot: "role",
+    text:
+      `${refused.word} is on the object, and it is ${refused.why} rather than borrowing structure, so I will not file it as an involvement here. ` +
+      `The five roles a borrowing-structure change carries are ${sentenceList(INVOLVEMENT_ROLES)}.${held}`,
+    options: INVOLVEMENT_ROLES.map((role) => ({ label: role, say: `as a ${role.toLowerCase()}` })),
+  };
+}
+
+/**
+ * THE ONE QUESTION A BORROWING-STRUCTURE ADD STILL NEEDS.
+ *
+ * The party by NAME, grounded in the book (who is already on this deal comes
+ * first, because a guaranty restructure usually moves somebody who is already
+ * here), then the role from the five legal ones, then the facility. Never a
+ * sentence fragment as a value (D1, and E4b on this surface).
+ */
+function involvementAsk(draft: Draft, ctx: ElicitContext): Ask | null {
+  const s = draft.slots;
+
+  if (!s.party) {
+    const household = bookPartyNames(ctx.book);
+    return {
+      slot: "party",
+      text:
+        "Who goes on the deal? An involvement row names one account, so I need the name before anything else. " +
+        (household.length
+          ? `This relationship already carries ${sentenceList(household.slice(0, 4))}${household.length > 4 ? " and others" : ""}, and somebody new is a legitimate add: name them either way.`
+          : "This read carries no parties on the deal, so name them and I will take it from there."),
+      options: household.slice(0, 5).map((name) => ({ label: name, say: `add ${name}` })),
+    };
+  }
+
+  if (!s.role) {
+    /* WHAT THE BOOK ALREADY HOLDS THIS NAME AS comes first: a party already on
+       the deal in one role is almost always going onto another facility in the
+       same one, and the book is the grounded answer rather than a guess. */
+    const held = [...new Set(facilitiesFor(ctx.book, s.party).map((f) => f.role))];
+    const ordered = [...INVOLVEMENT_ROLES].sort((a, b) => Number(held.includes(b)) - Number(held.includes(a)));
+    return {
+      slot: "role",
+      text:
+        `What role does ${s.party} take? The org holds involvement as rows and the role is the row, so I will not pick one. ` +
+        (held.length
+          ? `This book already carries ${s.party} as ${sentenceList(held)} elsewhere on the package.`
+          : `The five a borrowing-structure change carries are ${sentenceList(INVOLVEMENT_ROLES)}.`),
+      options: ordered.map((role) => ({ label: role, say: `as a ${role.toLowerCase()}` })),
+    };
+  }
+
+  if (!draft.scope.length) return scopeAskFor(draft, ctx);
+  return null;
+}
+
 function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
   const s = draft.slots;
 
@@ -1042,9 +1371,14 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
 
   if (s.isNew) {
     if (!s.assetKind) {
+      /* THE CATALOG IS NAMED IN THE QUESTION. A banker whose word the catalog
+         does not carry needs to see what it does carry, not be asked the same
+         question again. */
       return {
         slot: "assetKind",
-        text: "What kind of asset is it? The bank keeps its own collateral-type catalog and resolves the word against it, so I will not invent a type.",
+        text:
+          "What kind of asset is it? The bank keeps its own collateral-type catalog and resolves the word against it, so I will not invent a type. " +
+          `The kinds I can resolve a word against are ${sentenceList(ASSET_KIND_OPTIONS.map((k) => k.toLowerCase()))}.`,
         options: ASSET_KIND_OPTIONS.map((k) => ({ label: k, say: `a new ${k.toLowerCase()} asset` })),
       };
     }
@@ -1180,13 +1514,14 @@ export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendmen
   if (draft.slots.second || draft.scope.length !== 1) return null;
   const memberId = draft.scope[0];
   const s = draft.slots;
-  const entry = ctx.plan.find(
-    (p) =>
-      !p.open &&
-      p.surface === draft.surface &&
-      p.memberId === memberId &&
-      (draft.surface === "covenant" ? p.slots.test === s.test && Boolean(s.test) : p.slots.assetId === s.assetId && Boolean(s.assetId)),
-  );
+  const sameSubject = (p: PlanEntry): boolean => {
+    if (draft.surface === "covenant") return Boolean(s.test) && p.slots.test === s.test;
+    if (draft.surface === "involvement") {
+      return Boolean(s.party) && Boolean(p.slots.party) && samePartyName(p.slots.party!, s.party!);
+    }
+    return Boolean(s.assetId) && p.slots.assetId === s.assetId;
+  };
+  const entry = ctx.plan.find((p) => !p.open && p.surface === draft.surface && p.memberId === memberId && sameSubject(p));
   if (!entry) return null;
 
   const changed: string[] = [];
@@ -1195,6 +1530,8 @@ export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendmen
       changed.push(`the threshold is now ${thresholdText(s.threshold, s.unit)}`);
     }
     if (s.frequency && s.frequency !== entry.slots.frequency) changed.push(`it is tested ${s.frequency.toLowerCase()}`);
+  } else if (draft.surface === "involvement") {
+    if (s.role && s.role !== entry.slots.role) changed.push(`the role is now ${s.role}`);
   } else if (s.lien && s.lien !== entry.slots.lien) {
     changed.push(`the lien position is now ${s.lien}`);
   }
@@ -1235,6 +1572,68 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
               { label: "A different test", say: "a different test" },
             ]
           : [],
+    };
+  }
+
+  /* ============================ THE BORROWING-STRUCTURE DUPLICATE (E4a)
+
+     "add Hartwell Industrial Holdings as guarantor on the construction loan"
+     when Holdings IS already Guarantor there. The room staged a second row and
+     said "not on the facility today", which is false twice over: the org holds
+     involvement as ROWS, so the second row is a duplicate rather than a
+     correction, and the book already answered the question.
+
+     THE ROLE IS COMPARED PER FACILITY, because that is how the org holds it.
+     Same name, same role, same facility is a duplicate and is named. Same name,
+     DIFFERENT role on that facility is a role change and is named as one: an
+     add would put a second, contradicting row beside the first.             */
+  if (draft.surface === "involvement" && draft.slots.party && draft.slots.role) {
+    const party = draft.slots.party;
+    const role = draft.slots.role;
+    const sameRole: string[] = [];
+    const otherRole: Array<{ id: string; roles: string[] }> = [];
+    for (const id of draft.scope) {
+      const roles = rolesOnFacility(ctx.book, party, id);
+      if (!roles.length) continue;
+      if (roles.some((r) => r.toLowerCase() === role.toLowerCase())) sameRole.push(id);
+      else otherRole.push({ id, roles });
+    }
+    const staged = ctx.plan.filter(
+      (p) =>
+        p.surface === "involvement" &&
+        p.slots.party &&
+        samePartyName(p.slots.party, party) &&
+        p.slots.role === role &&
+        p.memberId &&
+        draft.scope.includes(p.memberId),
+    );
+    const onPlan = staged.map((p) => p.memberId!).filter((id, i, all) => all.indexOf(id) === i);
+    const blocked = new Set([...sameRole, ...otherRole.map((o) => o.id), ...onPlan]);
+
+    const duplicate = sameRole.length
+      ? `${party} is already ${role} on ${sentenceList(sameRole.map(label))}, and a modification carries the row onto the clone. The org holds involvement as rows, so adding the same name again stages a SECOND row rather than correcting the first.`
+      : null;
+    const roleChange = otherRole.length
+      ? `${party} is already ${sentenceList([...new Set(otherRole.flatMap((o) => o.roles))])} on ${sentenceList(otherRole.map((o) => label(o.id)))}. Putting them on as ${role} is a ROLE CHANGE rather than an addition, and no tool here files a role change: the way it is done is to take the row off the clone as a carry exclusion and put the new one on beside it. Confirm that is what you mean and I will take them off first.`
+      : null;
+
+    return {
+      onTheBook: [duplicate, roleChange].filter(Boolean).join(" ") || null,
+      onThePlan: onPlan.length ? `That involvement is already on this plan for ${sentenceList(onPlan.map(label))}.` : null,
+      fresh: draft.scope.filter((id) => !blocked.has(id)),
+      options: blocked.size
+        ? [
+            ...(sameRole.length || otherRole.length
+              ? [
+                  {
+                    label: `Take ${party} off that facility`,
+                    say: `remove ${party} from the ${label([...sameRole, ...otherRole.map((o) => o.id)][0])}`,
+                  },
+                ]
+              : []),
+            { label: "A different facility", say: "a different facility" },
+          ]
+        : [],
     };
   }
 
@@ -1318,6 +1717,27 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
     };
   }
 
+  if (draft.surface === "involvement") {
+    /* THE FACILITY COMES FIRST AND THE ROLE COMES LAST, and both halves of that
+       are load-bearing. The parser reads the value as the tail after the phrase
+       it matched, so a sentence ending on the role leaves NO tail at all - which
+       is what keeps a sentence fragment off the chip (E4b). And the facility is
+       named by the org's own short label rather than by the loan's full name,
+       because the full name begins with the BORROWER's name and the party
+       reader would resolve the borrower instead of the party. */
+    for (const id of draft.scope) {
+      const named = member(id).shortName ?? member(id).label;
+      lines.push({ memberId: id, say: `on the ${named} add ${s.party} as a ${s.role!.toLowerCase()}` });
+    }
+    return {
+      lines,
+      gaps,
+      lede:
+        `${s.party} as ${s.role} on ${sentenceList(draft.scope.map((id) => member(id).label))}. ` +
+        "The row is authored on the clone; the booked facility keeps exactly the structure it has today.",
+    };
+  }
+
   for (const id of draft.scope) {
     const lead = s.second ? "add a second pledge of" : "pledge";
     lines.push({ memberId: id, say: `${lead} ${s.assetName ?? s.assetId} to the ${target(id)}` });
@@ -1386,11 +1806,17 @@ const ROUTE_FILES: Record<WorkroomMode, string | null> = {
 
 /** Why this route cannot file this create, in the route's own words, or null
  *  where it can. */
+const SURFACE_NOUN: Record<SurfaceId, string> = {
+  covenant: "A covenant",
+  collateral: "A pledge",
+  involvement: "A borrowing-structure change",
+};
+
 export function routeGap(surface: SurfaceId, mode: WorkroomMode): string | null {
   const files = ROUTE_FILES[mode];
   if (!files) return null;
   return (
-    `${files} ${surface === "covenant" ? "A covenant" : "A pledge"} is not one of them, so this rides the plan for the credit file ` +
+    `${files} ${SURFACE_NOUN[surface]} is not one of them, so this rides the plan for the credit file ` +
     "and nothing about it is written to the bank's systems."
   );
 }
@@ -1413,28 +1839,38 @@ export function handoffEntry(
   const member = ctx.members.find((m) => m.id === memberId)!;
   const s = draft.slots;
   const covenant = draft.surface === "covenant";
+  const involvement = draft.surface === "involvement";
   const asset = ctx.book.assets.find((a) => a.id === s.assetId);
   const after = covenant
     ? `${s.test} at ${thresholdText(s.threshold!, s.unit)}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}`
-    : `${shortLabel(asset ?? ({ label: s.assetLabel ?? "the asset" } as BookAsset))}${s.lien ? ` at ${s.lien} position` : ""}`;
+    : involvement
+      ? `${s.party} as ${s.role}`
+      : `${shortLabel(asset ?? ({ label: s.assetLabel ?? "the asset" } as BookAsset))}${s.lien ? ` at ${s.lien} position` : ""}`;
+  const noun = covenant ? "New covenant" : involvement ? "New involvement" : "New pledge";
+  const object = covenant
+    ? "LLC_BI__Covenant2__c"
+    : involvement
+      ? "LLC_BI__Legal_Entities__c"
+      : "LLC_BI__Loan_Collateral2__c";
+  const fieldId = covenant ? "covenant.add" : involvement ? "party.add" : "collateral.pledge";
   return {
-    id: `${covenant ? "covenant.add" : "collateral.pledge"}:${memberId}:handoff:${seq}`,
-    group: covenant ? "covenants" : "security",
+    id: `${fieldId}:${memberId}:handoff:${seq}`,
+    group: covenant ? "covenants" : involvement ? "structure" : "security",
     op: "add",
-    kind: covenant ? "New covenant" : "New pledge",
+    kind: noun,
     kindTone: "refusal",
-    badge: `${covenant ? "New covenant" : "New pledge"} handed off`,
-    title: covenant ? "New covenant" : "New pledge",
+    badge: `${noun} handed off`,
+    title: involvement ? (s.party ?? noun) : noun,
     target: member.label,
     before: "not on the facility today",
     after,
     member: memberId,
     map: [
-      ["Object", covenant ? "LLC_BI__Covenant2__c" : "LLC_BI__Loan_Collateral2__c"],
+      ["Object", object],
       ["Field", "not established on this route"],
       ["Written as", "Nothing. This route's own tool does not carry it, so it travels as a handoff on the staged plan."],
     ],
-    fields: [covenant ? "LLC_BI__Covenant2__c" : "LLC_BI__Loan_Collateral2__c"],
+    fields: [object],
     caveat: reason,
     filed: { recordId: "not filed", verification: "Handed off. Nothing was written." },
     fileable: false,
@@ -1456,8 +1892,26 @@ export function handoffEntry(
 export type Verdict = { ok: true; delta: WorkroomDelta } | { ok: false; why: string };
 
 export function verify(draft: Draft, memberId: string, deltas: WorkroomDelta[]): Verdict {
-  const mine = deltas.filter((d) => (d.member ?? d.covenantWire?.facilityId ?? d.pledgeWire?.facilityId) === memberId);
+  const mine = deltas.filter(
+    (d) => (d.member ?? d.covenantWire?.facilityId ?? d.pledgeWire?.facilityId ?? d.involvementWire?.facilityId) === memberId,
+  );
   const others = deltas.filter((d) => !mine.includes(d));
+
+  if (draft.surface === "involvement") {
+    const wired = mine.filter((d) => d.involvementWire?.op === "add");
+    if (wired.length !== 1) {
+      return { ok: false, why: "the borrowing-structure change did not resolve to one party on one facility" };
+    }
+    const wire = wired[0].involvementWire!;
+    if (!samePartyName(wire.accountName, draft.slots.party ?? "")) {
+      return { ok: false, why: `the sentence resolved ${wire.accountName} rather than ${draft.slots.party}, and filing one party as another is not something I will do` };
+    }
+    if (wire.role !== draft.slots.role) {
+      return { ok: false, why: `the role came back as ${wire.role ?? "nothing"} rather than ${draft.slots.role}, so the role did not survive the reading` };
+    }
+    if (others.length) return { ok: false, why: "that sentence reached more facilities than the one it named" };
+    return { ok: true, delta: wired[0] };
+  }
 
   if (draft.surface === "covenant") {
     const wired = mine.filter((d) => d.covenantWire);
@@ -1492,6 +1946,37 @@ export function verify(draft: Draft, memberId: string, deltas: WorkroomDelta[]):
   }
   if (others.length) return { ok: false, why: "that sentence reached more facilities than the one it named" };
   return { ok: true, delta: wired[0] };
+}
+
+/**
+ * THE CHIP SAYS WHAT WAS ELICITED (E4b).
+ *
+ * The parser reads a record amendment's VALUE as the tail of the sentence after
+ * the phrase it matched, which is the right rule for a line a banker typed and
+ * the wrong one for a sentence this room composed: an involvement chip came back
+ * reading "on the construction loan", a sentence fragment sitting where the role
+ * belongs. The wire is untouched - it already carries the party and the role,
+ * verified - and only the two strings a banker READS are restated, from the
+ * slots that were elicited and nothing else.
+ */
+export function restateEntry(draft: Draft, ctx: ElicitContext, delta: WorkroomDelta): WorkroomDelta {
+  if (draft.surface !== "involvement") return delta;
+  const { party, role } = draft.slots;
+  if (!party || !role) return delta;
+  /* AND THE "BEFORE" IS ONLY CLAIMED WHERE THE READ SUPPORTS IT. "not on the
+     facility today" is an assertion about the bank's record, and the drive
+     caught the room making it about a party that WAS on the facility. Where
+     this read carries no borrowing structure for the facility at all, the room
+     says what it actually knows instead. */
+  const facilityId = delta.involvementWire?.facilityId ?? delta.member;
+  const carried = ctx.book.parties.some((p) => p.loanId === facilityId);
+  return {
+    ...delta,
+    title: party,
+    after: role,
+    badge: `${party} → ${role}`,
+    before: carried ? "not on the facility today" : "not carried on this read",
+  };
 }
 
 /* =============================================================== amendment
@@ -1563,6 +2048,8 @@ export function amendmentOf(line: string, draft: Draft, ctx: ElicitContext): Ame
   if (after.slots.frequency !== before.frequency && after.slots.frequency) {
     changed.push(`it is tested ${after.slots.frequency.toLowerCase()}`);
   }
+  if (after.slots.party !== before.party && after.slots.party) changed.push(`the party is now ${after.slots.party}`);
+  if (after.slots.role !== before.role && after.slots.role) changed.push(`the role is now ${after.slots.role}`);
   if (after.slots.assetId !== before.assetId && after.slots.assetId) changed.push("the asset has changed");
   if (after.slots.lien !== before.lien && after.slots.lien) changed.push(`the lien position is now ${after.slots.lien}`);
   if (after.scope.join("|") !== draft.scope.join("|") && after.scope.length) {
@@ -1579,6 +2066,9 @@ function isBareValue(text: string, draft: Draft, ctx: ElicitContext): boolean {
   if (/^\s*\$?[\d,.]+\s*x?\s*$/i.test(text)) return true;
   if (readScope(text, ctx.members).ids.length === 1 && !/\b(add|pledge|change|set)\b/i.test(text)) return true;
   if (draft.surface === "covenant" && readTest(text, ctx.book)) return true;
+  // "limited guarantor" answered into an open involvement card is a complete
+  // correction, and so is a bare name the book carries.
+  if (draft.surface === "involvement" && (readRoleWord(text) || readPartyName(text, ctx.book)?.onBook)) return true;
   return false;
 }
 

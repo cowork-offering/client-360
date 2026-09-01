@@ -1,5 +1,7 @@
 import { fmtMoney } from "../../data/format";
-import type { IntentResult, WorkroomAdvisory, WorkroomDelta } from "../../workroom/types";
+import { catalogField } from "../../workroom/fieldCatalog";
+import type { IntentResult, WorkroomAdvisory, WorkroomDelta, WorkroomRefusal } from "../../workroom/types";
+import { facilitiesFor, readScope, rolesOnFacility, samePartyName, type Book, type BookAsset, type ElicitMember } from "./elicit";
 
 /* =============================================================================
    THE DISPATCH RULE, AND THE TWO SAFETY LAYERS BESIDE IT.
@@ -302,6 +304,438 @@ function correction(
     }
   }
   return undefined;
+}
+
+/* ================================================== the borrowing-structure layers
+
+   THREE POST-PARSE CORRECTIONS AND ONE PRE-PARSE REWRITE, all on the same
+   material: what the BOOK says about who is on which facility in what role. The
+   engines under `app/src/workroom/` resolve none of it - a party amendment
+   carries whatever role the LINE happened to name - so the corrections live
+   here, beside the qualifier filter, for exactly the reason that one does.
+   ============================================================================= */
+
+/** The role words a borrowing-structure change may carry. Two names for the same
+ *  role differ only by case in this org's reads, so the comparison is case-
+ *  insensitive and nothing else. */
+const sameRole = (a: string | undefined, b: string | undefined): boolean =>
+  Boolean(a) && Boolean(b) && a!.trim().toLowerCase() === b!.trim().toLowerCase();
+
+export interface RoleStamp {
+  /** The deltas that may go on the table. A removal the book cannot ground is
+   *  NOT among them: nothing is staged against a row the org will not find. */
+  deltas: WorkroomDelta[];
+  /** What the room says about the roles it read. Never silent. */
+  said: string[];
+  /** The question that has to be answered before the removal can be staged. */
+  ask: { text: string; options: Array<{ label: string; say: string }> } | null;
+}
+
+/**
+ * THE ROLE ON A CARRY EXCLUSION COMES FROM THE BOOK (E8, the drive's blocker).
+ *
+ * "take Elena Hartwell off the 15M line of credit" staged the exclusion with
+ * role Guarantor. Her actual role on that facility is LIMITED Guarantor, so the
+ * org found no Guarantor row for her, answered "nothing to remove" and REFUSED
+ * THE WHOLE PLAN - nine sound changes lost to one wrong word.
+ *
+ * The org holds involvement as rows, one per facility, so the role is a fact
+ * about a NAME ON A FACILITY and never about a name. This resolves it from the
+ * involvements the room is already holding and stamps the wire before the chip
+ * is drawn:
+ *
+ *   exactly one role  - use it, and SAY it, because a role the banker did not
+ *                       type is a fact he is entitled to see before he signs;
+ *   several           - ask which, because taking the wrong row off a guaranty
+ *                       is not a mistake to make quietly;
+ *   none              - say so, and name the facilities the party IS on, rather
+ *                       than staging a removal the org would refuse.
+ */
+export function stampRemovalRoles(args: {
+  deltas: WorkroomDelta[];
+  book: Book;
+  /** The member's own display label, for a sentence a banker can read. */
+  label: (loanId: string) => string;
+}): RoleStamp {
+  const out: WorkroomDelta[] = [];
+  const said: string[] = [];
+  let ask: RoleStamp["ask"] = null;
+
+  for (const delta of args.deltas) {
+    const wire = delta.involvementWire;
+    if (!wire || wire.op !== "remove") {
+      out.push(delta);
+      continue;
+    }
+    const where = args.label(wire.facilityId);
+    const roles = rolesOnFacility(args.book, wire.accountName, wire.facilityId);
+
+    if (roles.length === 1) {
+      const role = roles[0];
+      if (!sameRole(wire.role, role)) {
+        said.push(
+          wire.role
+            ? `${wire.accountName} is ${role} on the ${where}, not ${wire.role}. I am taking the row the book actually holds.`
+            : `${wire.accountName}, ${role} on the ${where}.`,
+        );
+      } else {
+        said.push(`${wire.accountName}, ${role} on the ${where}.`);
+      }
+      out.push({
+        ...delta,
+        involvementWire: { ...wire, role },
+        // The role belongs where the banker signs, not only in the sentence
+        // above it: the exclusion takes THIS row off the clone and no other.
+        before: `${role}, carried over from the parent`,
+      });
+      continue;
+    }
+
+    if (roles.length > 1) {
+      ask = {
+        text: `${wire.accountName} holds ${roles.length} roles on the ${where}: ${roles.join(" and ")}. A carry exclusion takes one row off the clone, so which of them comes off?`,
+        options: roles.map((role) => ({ label: role, say: `remove the ${role.toLowerCase()} ${wire.accountName} from the ${where}` })),
+      };
+      continue;
+    }
+
+    /* NOT ON THAT FACILITY, or NOT IN THIS READ AT ALL. They are two different
+       facts and only one of them is a refusal.
+
+       Where the read carries the name somewhere else on the package, the room
+       KNOWS they are not on this facility, and the honest answer names where
+       they are: a banker restructuring a guaranty is holding the whole
+       relationship in mind, and "no" on its own sends them back to a read they
+       should not need.
+
+       Where the read carries the name NOWHERE, the room knows nothing about it
+       and the ORG is the authority on who is on a facility. Refusing there
+       would be the cockpit's own thin read overruling the bank's record. So the
+       exclusion goes up, and the unverified role comes OFF the wire: a remove
+       needs no role (the org resolves the exact row at stage time and refuses
+       ambiguity), and a role nothing corroborates is exactly what blocked the
+       drive. */
+    const elsewhere = facilitiesFor(args.book, wire.accountName);
+    if (elsewhere.length) {
+      said.push(
+        `${wire.accountName} is not on the ${where} today, so there is nothing there to take off. This book carries ${wire.accountName} on ${elsewhere
+          .map((f) => `${args.label(f.loanId)} as ${f.role}`)
+          .join(", ")}.`,
+      );
+      continue;
+    }
+    said.push(
+      `This read does not carry ${wire.accountName} on the borrowing structure, so I cannot tell you which row comes off: the exclusion goes up naming ${wire.accountName} and the facility, and the org resolves the row itself when it is filed.`,
+    );
+    out.push({
+      ...delta,
+      involvementWire: { ...wire, role: undefined },
+      before: "carried over from the parent",
+    });
+  }
+
+  return { deltas: out, said, ask };
+}
+
+/* ------------------------------- "take X off Y" AND THE SENTENCE IT BECOMES
+   (E5 + E8, rung 0, in front of a fenced engine.)
+
+   TWO DEFECTS, ONE PHRASE. parseModify.ts puts `take off` in the collateral
+   verb class (457) and in the party verb class (477), and collateral wins, so
+   "take Elena Hartwell off the 15M line of credit" was read as an unpledge
+   (E5). And the party catalog matches a removal on "remove the <role>", so even
+   restated with the right verb the line names no role, resolves both lines of
+   credit and comes back as an honest miss.
+
+   SO THE SHELL COMPOSES THE SENTENCE THE ENGINE ALREADY STAGES ON, and it takes
+   the role from the BOOK rather than from the banker's words - which is E8's
+   rule applied one step earlier, where it can also fix the verb. Everything it
+   composes is a sentence a banker could have typed, it goes through the same
+   parser every typed line goes through, and `stampRemovalRoles` still checks
+   the delta that comes back.
+
+   IT IS SILENT ABOUT ITSELF. A banker does not need to be told the room
+   reworded his sentence to itself; what he needs to be told is the ROLE it
+   read, and that is said on the chip and in the sentence above it.          */
+
+/** The phrase, and where its object sits inside it. */
+const OFF_PHRASE = /\b(?:take|takes|taking)\s+(.+?)\s+off(?:\s+of)?\s+/i;
+const FROM_PHRASE = /\b(?:drop|drops|dropping|remove|removes|release|releases)\s+(.+?)\s+(?:from|off)\s+/i;
+
+/** Words that name nothing in particular, so a hit on one proves nothing. */
+const OBJECT_STOP = new Set(["the", "a", "an", "this", "that", "our", "their", "his", "her", "its"]);
+
+const objectWords = (object: string): string[] =>
+  object
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 2 && !OBJECT_STOP.has(w));
+
+/** Does the object name an asset the deal already carries? Same reading the
+ *  create grammar makes: the distinctive words of the asset's own label. */
+function namesAsset(object: string, assets: BookAsset[]): boolean {
+  const words = objectWords(object);
+  if (!words.length) return false;
+  return assets.some((a) => {
+    const tokens = `${a.label} ${a.name ?? ""} ${a.kind ?? ""}`.toLowerCase();
+    return words.some((w) => tokens.includes(w));
+  });
+}
+
+/** Does the object name a party on the book? The book's spelling comes back,
+ *  because the org has to find the row. */
+function namesParty(object: string, book: Book): string | null {
+  const lower = ` ${object.toLowerCase()} `;
+  for (const p of book.parties) {
+    if (lower.includes(` ${p.name.toLowerCase()} `) || samePartyName(object, p.name)) return p.name;
+  }
+  return null;
+}
+
+export type PartyRemoval =
+  /** The line the parser is given instead. Same party, same facility, same op. */
+  | { kind: "rewrite"; line: string }
+  /** The object names a party AND something pledged, or a party holding two
+   *  roles on the facility. Neither reading is safe to pick. */
+  | { kind: "ask"; text: string; options: Array<{ label: string; say: string }> }
+  /** The book carries the party, and not on that facility. Nothing is staged. */
+  | { kind: "refusal"; text: string }
+  | null;
+
+export function readPartyRemoval(args: { line: string; book: Book; members: ElicitMember[] }): PartyRemoval {
+  const { line, book, members } = args;
+  const match = OFF_PHRASE.exec(line) ?? FROM_PHRASE.exec(line);
+  if (!match) return null;
+  const object = match[1].trim();
+  if (!object) return null;
+
+  const party = namesParty(object, book);
+  if (!party) return null;
+
+  const plain: PartyRemoval = { kind: "rewrite", line: line.replace(match[0], `remove ${party} from `) };
+
+  if (namesAsset(object, book.assets)) {
+    return {
+      kind: "ask",
+      text: `"${object}" names both a party on this deal and something the deal has pledged, and those are two different changes. Which did you mean?`,
+      options: [
+        { label: `${party}, the party`, say: plain.line },
+        { label: "The pledged asset", say: `release ${object}` },
+      ],
+    };
+  }
+
+  /* WHICH FACILITY, AND THEREFORE WHICH ROW. The role is a fact about a name ON
+     A FACILITY, so the facility has to resolve before the role can. Where it
+     does not, the plain restatement goes through and the post-parse layer takes
+     whatever the engine makes of it. */
+  const scope = readScope(line, members);
+  if (scope.ids.length !== 1) return plain;
+  const member = members.find((m) => m.id === scope.ids[0]);
+  if (!member) return plain;
+  const named = member.shortName ?? member.label;
+
+  const roles = rolesOnFacility(book, party, member.id);
+  if (roles.length === 1) {
+    return { kind: "rewrite", line: `on the ${named} remove the ${roles[0].toLowerCase()} ${party}` };
+  }
+  if (roles.length > 1) {
+    return {
+      kind: "ask",
+      text: `${party} holds ${roles.length} roles on the ${member.label}: ${roles.join(" and ")}. A carry exclusion takes one row off the clone, so which of them comes off?`,
+      options: roles.map((role) => ({ label: role, say: `on the ${named} remove the ${role.toLowerCase()} ${party}` })),
+    };
+  }
+
+  const elsewhere = facilitiesFor(book, party);
+  if (elsewhere.length) {
+    return {
+      kind: "refusal",
+      text: `${party} is not on the ${member.label} today, so there is nothing there to take off. This book carries ${party} on ${elsewhere
+        .map((f) => `${members.find((m) => m.id === f.loanId)?.label ?? f.loanId} as ${f.role}`)
+        .join(", ")}.`,
+    };
+  }
+  return plain;
+}
+
+/* ------------------------------------------------------ reading the plan back
+
+   "WHAT IS ON THE PLAN" IS THE FOUNDER'S OWN CEREMONY LINE (step 14 of the
+   everything-plan script) and the rail's own phrase list does not carry it, so
+   it went to the desk and came back as a round trip the room did not need. The
+   phrases the rail already knows stay where they are; these are the ones it
+   misses, recognised here because the rail lives behind the fence.          */
+
+const PLAN_PHRASES = [
+  "what is on the plan",
+  "what's on the plan",
+  "whats on the plan",
+  "what is on this plan",
+  "read the plan back",
+  "read me the plan",
+  "show me the plan",
+  "what have we got on the plan",
+  "what is on the manifest",
+];
+
+export const readsThePlan = (line: string): boolean => {
+  const lower = line.toLowerCase().trim();
+  return PLAN_PHRASES.some((p) => lower.includes(p));
+};
+
+/* ------------------------------------------------- what a REMOVE line is about
+
+   THE MANIFEST-ADDRESS HANDLER UN-STAGED THE BANKER'S OWN COVENANT (E1, the
+   destructive one). "remove the Minimum Liquidity covenant from the 15M line of
+   credit" matched the word "covenant" against a staged covenant on a DIFFERENT
+   facility and quietly took it off the manifest. Nothing about that line named
+   the entry it removed.
+
+   SO A REMOVE IS ROUTED, AND THE ROUTING IS EXPLICIT:
+
+     manifest  - the line names a STAGED entry by TITLE and by TARGET. Both, and
+                 the target is what E1 failed on;
+     fence     - the line names a BOOK item: an existing covenant on a facility
+                 (detach is fenced) or an existing pledge (deletes are fenced).
+                 Nothing is un-staged and the room refuses by name;
+     null      - the parser's line. A party removal lives there, because an
+                 involvement remove FILES as a carry exclusion.
+
+   A BOOK ITEM BEATS A STAGED ENTRY UNLESS THE STAGED ENTRY IS THAT ITEM. A
+   banker who names a covenant the book already carries is talking about the
+   book, whatever else happens to be on the manifest.                        */
+
+const REMOVAL_VERB = /\b(remove|removing|drop|dropping|delete|detach|unpledge|strike|take\s+off|take\s+out|scrap)\b/i;
+
+/** The words of a staged entry a banker can actually see on it. */
+const entryWords = (text: string): string[] =>
+  text
+    .toLowerCase()
+    .split(/[^a-z0-9$.]+/)
+    .filter((w) => w.length > 2 && !REMOVAL_VERB.test(w));
+
+/** Does the line name this side of the entry at all? One distinctive word is
+ *  enough on its own; what makes the rule safe is that BOTH sides are required. */
+const names = (line: string, words: string[]): boolean => {
+  const lower = line.toLowerCase();
+  return words.some((w) => lower.includes(w));
+};
+
+export type RemoveRead =
+  | { kind: "manifest"; entry: WorkroomDelta }
+  | { kind: "ambiguous"; reason: string }
+  | { kind: "fence"; scope: "covenant" | "pledge"; name: string }
+  | null;
+
+export function readRemove(line: string, entries: WorkroomDelta[], book: Book): RemoveRead {
+  if (!REMOVAL_VERB.test(line)) return null;
+  const lower = line.toLowerCase();
+
+  /* A BOOK COVENANT, NAMED BY THE CATALOG'S OWN NAME. Nothing looser: "covenant"
+     on its own names no covenant, and a line that carries only the category word
+     is talking about whatever is on the manifest. */
+  const covenant =
+    [...book.covenants]
+      .sort((a, b) => b.type.length - a.type.length)
+      .find((c) => lower.includes(c.type.toLowerCase())) ?? null;
+
+  /* A BOOK ASSET. Its own COL autonumber names one row outright. Otherwise the
+     line has to carry a COLLATERAL NOUN and at least two distinctive words of
+     the asset's label: "equipment" on its own sits inside half the package's
+     vocabulary, and fencing a covenant line on it would be the mirror of E1. */
+  const collateralNoun = /\b(pledge|pledges|pledged|collateral|security|lien|liens)\b/i.test(line);
+  const scored = book.assets
+    .map((a) => {
+      const tokens = [...new Set(`${a.label} ${a.kind ?? ""}`.toLowerCase().split(/[^a-z0-9]+/))].filter((t) => t.length > 3);
+      return { asset: a, score: tokens.filter((t) => lower.includes(t)).length };
+    })
+    .filter((s) => s.score >= 2)
+    .sort((a, b) => b.score - a.score);
+  const asset =
+    book.assets.find((a) => (a.name ? lower.includes(a.name.toLowerCase()) : false)) ??
+    (collateralNoun && scored.length ? scored[0].asset : null);
+
+  const named = entries.filter(
+    (e) => names(line, entryWords(`${e.title} ${e.kind}`)) && names(line, entryWords(`${e.target} ${e.after}`)),
+  );
+  /* THE STAGED ENTRY MUST BE THE THING NAMED. Where the line names a book item,
+     only a staged entry carrying that same item can be the one the banker means;
+     everything else is the book's line and the fence answers it. */
+  const subject = covenant?.type ?? asset?.name ?? asset?.label ?? null;
+  const claimed = subject
+    ? named.filter((e) => `${e.title} ${e.after} ${e.before}`.toLowerCase().includes(subject.toLowerCase()))
+    : named;
+
+  if (claimed.length === 1) return { kind: "manifest", entry: claimed[0] };
+  if (claimed.length > 1) {
+    return {
+      kind: "ambiguous",
+      reason: `That could be ${claimed.map((e) => `${e.title} on ${e.target}`).join(" or ")}. Name one.`,
+    };
+  }
+  if (covenant) return { kind: "fence", scope: "covenant", name: covenant.type };
+  if (asset) return { kind: "fence", scope: "pledge", name: asset.label };
+  return null;
+}
+
+/**
+ * THE FENCE, REFUSED BY NAME, WITH THE ROUTE THAT EXISTS.
+ *
+ * A fence is not a gap (WORKROOM-BRAIN 2.11): the room names the constraint and
+ * the route that does exist. The CONSTRAINT is quoted from the field catalog
+ * rather than restated here, so a change behind the fence changes this refusal
+ * too instead of leaving it stale.
+ */
+export function fenceRefusal(scope: "covenant" | "pledge", name: string): WorkroomRefusal & { why: string } {
+  const field = catalogField(scope === "covenant" ? "covenant.remove" : "collateral.release");
+  return {
+    id: `fence:${scope}:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    target: name,
+    title: scope === "covenant" ? `Detach ${name}` : `Release ${name}`,
+    why:
+      scope === "covenant"
+        ? `Taking ${name} off a facility is a covenant DETACH, and this room does not file one: every field on the loan-covenant junction is non-updateable, so detaching means deleting the row and no delete is filed on any object here. ${name} stays on the facility and carries onto the clone with everything else. What the bank does have is a covenant compliance update, to Compliant, Waived or Exception, and it runs as its own credit action rather than on this modification. Nothing has been staged and nothing has come off the manifest.`
+        : `Releasing ${name} means taking a pledge off, and this room files no release: no deployed tool carries one. The booked facility keeps exactly the security it has today, and the clone carries the same pledges onto the new version. What I can do here is pledge something additional onto a facility. Nothing has been staged and nothing has come off the manifest.`,
+    reason: field?.gap ?? "No tool files this today.",
+    detail: field?.closes ?? "",
+  };
+}
+
+/* --------------------------------------------- the committed total, per entry
+
+   "THAT TAKES THE PACKAGE FROM $49M TO $54M" AFTER A LEGAL-ENTITY ADD (E4c).
+   The engines compose the confirm's closing sentence over the WHOLE manifest
+   (modifyEngine.ts:1593, createEngine.ts:655), so a covenant, an involvement, a
+   pledge, a fee or an exception confirmed after a commitment change inherits
+   that change's arithmetic and reads as though it had moved the money itself. A
+   demo that shows a wrong number is the one defect a banker cannot unsee.
+
+   THE SENTENCE IS ABOUT THE ENTRY THE BANKER JUST CONFIRMED, so it is composed
+   here from the shell's own figures: what the package read at before this entry
+   landed, and what it reads at after. A non-monetary entry moves neither, and
+   says so. The manifest-wide sentence on the filed summary is untouched - there
+   it is the whole plan being described, and there it is right.              */
+
+/** `(?:[^.]|\.\d)*` lets the decimal point inside a figure ("$54.5M") stay part
+ *  of the sentence, so the match ends on the full stop that ends it rather than
+ *  on the one inside the money. Same reading `FANOUT_ANNOUNCEMENT` makes. */
+const PACKAGE_MOVED = /That takes the package from (?:[^.]|\.\d)*\.\s*/;
+const PACKAGE_HELD = /The package total holds at (?:[^.]|\.\d)*\.\s*/;
+
+export function committedSentence(args: {
+  reply: string;
+  delta: WorkroomDelta;
+  /** The package's committed total before this entry landed, in dollars. */
+  before: number;
+}): string {
+  const moved = (args.delta.committedDeltaMM ?? 0) * 1_000_000;
+  const sentence = moved
+    ? `That takes the package from ${fmtMoney(args.before)} to ${fmtMoney(args.before + moved)}. `
+    : `The package total holds at ${fmtMoney(args.before)}. `;
+  if (PACKAGE_MOVED.test(args.reply)) return args.reply.replace(PACKAGE_MOVED, sentence).trim();
+  if (PACKAGE_HELD.test(args.reply)) return args.reply.replace(PACKAGE_HELD, sentence).trim();
+  return args.reply;
 }
 
 /* ------------------------------------------------------------- the fast path */

@@ -174,10 +174,10 @@ export const ACTIONS: ClientAction[] = [
     label: "Loan Modification",
     category: "Service",
     description:
-      "Open a modification against a booked facility — rate, amortisation, covenant or maturity changes. Routes to credit for approval.",
+      "Open a modification against a booked facility: rate, amortisation, covenant or maturity changes. Routes to credit for approval.",
     icon: "modify",
     promptTemplate:
-      "Start a loan modification for {account} ({accountId}) — summarise the booked facilities and the modification options.",
+      "Start a loan modification for {account} ({accountId}): summarise the booked facilities and the modification options.",
     // nCino accepts a credit action only against a BOOKED facility, so the
     // action is withheld where none exists and the real reason is shown (A27.3).
     availability: (data, accountId) => withBundle(data, accountId, (b) => bookedFacilityAvailability(b, "modifications")),
@@ -192,7 +192,7 @@ export const ACTIONS: ClientAction[] = [
       "Start the renewal workflow for a maturing facility, carrying forward terms and the current risk position.",
     icon: "renew",
     promptTemplate:
-      "Begin the renewal workflow for {account} ({accountId}) — start with the facility closest to maturity.",
+      "Begin the renewal workflow for {account} ({accountId}): start with the facility closest to maturity.",
     availability: (data, accountId) => withBundle(data, accountId, (b) => bookedFacilityAvailability(b, "renewals")),
     apexAction: { tool: "ncino_create_renewal", params: { accountId: "{accountId}" } },
      hasPanel: true,
@@ -202,10 +202,10 @@ export const ACTIONS: ClientAction[] = [
     label: "Covenant Review",
     category: "Risk",
     description:
-      "Review every active covenant — cushion, next test date, and any divergence between the nCino evaluation and the spread.",
+      "Review every active covenant: cushion, next test date, and any divergence between the nCino evaluation and the spread.",
     icon: "covenant",
     promptTemplate:
-      "Run a covenant review for {account} ({accountId}) — cushions, next test dates, and any divergence from the spread.",
+      "Run a covenant review for {account} ({accountId}): cushions, next test dates, and any divergence from the spread.",
     availability: (data, accountId) =>
       withBundle(data, accountId, (b) =>
         (b.covenants?.covenants?.length ?? 0) > 0
@@ -267,7 +267,7 @@ export const ACTIONS: ClientAction[] = [
     label: "New Facility Request",
     category: "Originate",
     description:
-      "Structure a new facility for this borrower — amount, purpose, tenor, pricing and collateral.",
+      "Structure a new facility for this borrower: amount, purpose, tenor, pricing and collateral.",
     icon: "facility",
     promptTemplate: "Structure a new facility request for {account} ({accountId}).",
     availability: (data, accountId) => withBundle(data, accountId, () => STAGED_ONLY),

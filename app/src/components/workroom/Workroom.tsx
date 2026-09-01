@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion, staggerDelay } from "../../data/motion";
+import { shortFacilityName } from "../../data/facilityStage";
 import { CLIENT_EMAIL, GOVERNANCE, HAVE } from "../../workroom/fixture";
 import { readableError, type PackageChoice, type WorkroomEngine, type WorkroomSuggestion } from "../../workroom/engine";
 import { addEntry, addressManifest, figuresFor, removeEntry } from "../../workroom/manifest";
@@ -36,11 +37,23 @@ import {
   readRouteSwitch,
   type SmartOpening,
 } from "./route";
-import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
+import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
 import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
-import { magnitudeAdvisories, provablyClean, qualifierFilter, reconcileNarrative, type QualifierMember } from "./dispatch";
+import {
+  committedSentence,
+  fenceRefusal,
+  magnitudeAdvisories,
+  provablyClean,
+  qualifierFilter,
+  readRemove,
+  readPartyRemoval,
+  readsThePlan,
+  reconcileNarrative,
+  stampRemovalRoles,
+  type QualifierMember,
+} from "./dispatch";
 import {
   advance,
   amendedPlanLine,
@@ -54,6 +67,7 @@ import {
   openCreate,
   planAmendmentFor,
   readInto,
+  restateEntry,
   routeGap,
   verify,
   type Draft,
@@ -61,6 +75,7 @@ import {
   type ElicitMember,
   type PlanAmendment,
   type PlanEntry,
+  type Slots,
 } from "./elicit";
 import { bareMemberPick, readSteer } from "./steer";
 import {
@@ -503,7 +518,7 @@ function ChallengeMath({ challenge }: { challenge: WorkroomChallenge }) {
           </div>
         ))}
       </div>
-      <div className="wk-saynote">{challenge.say}</div>
+      <div className="wk-saynote">{bankerly(challenge.say)}</div>
     </>
   );
 }
@@ -1002,9 +1017,19 @@ export function Workroom({
         key: m.key,
         label: facilityLabel(m, brief.members),
         orgName: named.get(m.id) ?? null,
+        // The same rule the parser's own identity tokens use, so a composed
+        // sentence carrying this resolves exactly one member and carries no
+        // account name for the party reader to trip over.
+        shortName: shortFacilityName(named.get(m.id), context.accountName) || null,
         committed: committed.get(m.id) ?? null,
       }));
-  }, [brief.members, isEligible, qualifierMembers, reads?.bundle]);
+  }, [brief.members, context.accountName, isEligible, qualifierMembers, reads?.bundle]);
+
+  /** A member's own display label, for every sentence the room says about one. */
+  const memberLabel = useCallback(
+    (id: string) => elicitMembers.find((m) => m.id === id)?.label ?? "that facility",
+    [elicitMembers],
+  );
 
   /** THE BOOK: what the relationship already carries, read off the bundle the
    *  room is already holding. No read is issued for it. */
@@ -1019,19 +1044,22 @@ export function Workroom({
     const out: PlanEntry[] = [];
     const add = (d: WorkroomDelta, open: boolean) => {
       const held = draftsRef.current.get(d.id);
-      const surface = held?.surface ?? (d.covenantWire ? "covenant" : d.pledgeWire ? "collateral" : null);
+      const surface =
+        held?.surface ??
+        (d.covenantWire ? "covenant" : d.pledgeWire ? "collateral" : d.involvementWire?.op === "add" ? "involvement" : null);
       if (!surface) return;
+      const fromWire: Slots = d.covenantWire
+        ? { test: d.covenantWire.typeName, threshold: d.covenantWire.threshold, frequency: d.covenantWire.frequency }
+        : d.involvementWire
+          ? { party: d.involvementWire.accountName, role: d.involvementWire.role }
+          : { assetId: d.pledgeWire?.collateralId };
       out.push({
         deltaId: d.id,
         surface,
-        memberId: d.member ?? d.covenantWire?.facilityId ?? d.pledgeWire?.facilityId ?? null,
+        memberId: d.member ?? d.covenantWire?.facilityId ?? d.pledgeWire?.facilityId ?? d.involvementWire?.facilityId ?? null,
         title: d.title,
         target: d.target,
-        slots:
-          held?.slots ??
-          (d.covenantWire
-            ? { test: d.covenantWire.typeName, threshold: d.covenantWire.threshold, frequency: d.covenantWire.frequency }
-            : { assetId: d.pledgeWire?.collateralId }),
+        slots: held?.slots ?? fromWire,
         open,
       });
     };
@@ -1111,13 +1139,24 @@ export function Workroom({
       const qualifier = qualifierFilter(instruction, sound, qualifierMembers);
       const shown = qualifier.keep;
 
+      /* -------------------------------------- THE ROLE ON AN EXCLUSION (E8)
+
+         The role a carry exclusion carries decides which ROW the org takes off
+         the clone, and the engine takes it from whatever word the line happened
+         to use. "take Elena Hartwell off the 15M line of credit" staged it as
+         Guarantor when the book holds her as LIMITED Guarantor there, the org
+         found no such row and refused the whole plan. The book has the answer
+         and the room is already holding it. */
+      const roleRead = stampRemovalRoles({ deltas: shown, book, label: memberLabel });
+      const staged = roleRead.deltas;
+
       /* ------------------------------------------ THE MAGNITUDE BOUND (F5)
 
          Staged, and challenged. Same tier as the drawn-balance advisory: the
          chip still arrives open with its Confirm on it, and the room says the
          thing a credit officer would say across the desk. */
       const kept = new Set<string>();
-      for (const d of shown) {
+      for (const d of staged) {
         kept.add(d.id);
         const loan = d.member ?? d.wire?.facilityId;
         if (loan) kept.add(loan);
@@ -1129,7 +1168,7 @@ export function Workroom({
           : [];
       const advisories = [
         ...engineAdvice,
-        ...magnitudeAdvisories({ deltas: shown, members: qualifierMembers, committed: committedTotal }),
+        ...magnitudeAdvisories({ deltas: staged, members: qualifierMembers, committed: committedTotal }),
       ];
 
       // The reply and the chips it puts on the table land TOGETHER, in one
@@ -1145,19 +1184,34 @@ export function Workroom({
           // follows it with the members it no longer reaches taken out of it.
           // A reply that announced a fan-out the filter had just undone was the
           // room contradicting itself over a card the banker was about to sign.
+          // AND THE ROLE READ OWNS THE SENTENCE WHERE IT REFUSED TO STAGE: a
+          // removal the book cannot ground puts no chip on the table, so the
+          // engine's own "staged on the clone" account must not survive it.
           text: allDropped
             ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
-            : qualifier.said
-              ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
-              : result.reply,
+            : roleRead.ask
+              ? roleRead.ask.text
+              : !staged.length && roleRead.said.length
+                ? roleRead.said.join(" ")
+                : [
+                    roleRead.said.join(" "),
+                    qualifier.said
+                      ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
+                      : result.reply,
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
           // CLICKABLE ANSWERS ride BOTH reply kinds: an "unparsed" clarify and
           // a "deltas" reply that still ends on a closed-set question.
-          options: allDropped ? undefined : result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined,
+          options: allDropped
+            ? undefined
+            : (roleRead.ask?.options ??
+              (result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined)),
         },
       ];
       const chips: ChipModel[] =
         result.kind === "deltas"
-          ? shown.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
+          ? staged.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
           : result.kind === "refusal"
             ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
             : [];
@@ -1173,7 +1227,7 @@ export function Workroom({
       setItems((prev) => [...prev, ...landed]);
       setSuggestion(engine.suggest());
     },
-    [committedTotal, context.accountName, engine, qualifierMembers],
+    [book, committedTotal, context.accountName, engine, memberLabel, qualifierMembers],
   );
 
   /**
@@ -1425,11 +1479,6 @@ export function Workroom({
      NOTHING HERE IS A NEW WRITE PATH. Everything it composes is a sentence the
      engines already file, and `app/src/workroom/` is untouched by all of it. */
 
-  const memberLabel = useCallback(
-    (id: string) => elicitMembers.find((m) => m.id === id)?.label ?? "that facility",
-    [elicitMembers],
-  );
-
   /**
    * AN ENTRY ALREADY ON THE PLAN IS MOVED, NEVER DOUBLED.
    *
@@ -1467,7 +1516,7 @@ export function Workroom({
             result?.kind === "deltas"
               ? verify(d, composed.memberId, result.deltas)
               : { ok: false as const, why: "it did not come back as a change" };
-          if (verdict.ok) taken = verdict.delta;
+          if (verdict.ok) taken = restateEntry(d, elicitCtx, verdict.delta);
           else engine.pick(composed.memberId);
         }
         await beat(started);
@@ -1595,7 +1644,7 @@ export function Workroom({
             engine.pick(line.memberId);
             continue;
           }
-          got.push(verdict.delta);
+          got.push(restateEntry(scoped, elicitCtx, verdict.delta));
         }
         await beat(started);
       } finally {
@@ -1727,7 +1776,7 @@ export function Workroom({
             result?.kind === "deltas"
               ? verify(scoped, composed.memberId, result.deltas)
               : { ok: false as const, why: "it did not come back as a change" };
-          if (verdict.ok) got.push(verdict.delta);
+          if (verdict.ok) got.push(restateEntry(scoped, elicitCtx, verdict.delta));
           else engine.pick(composed.memberId);
         }
         await beat(started);
@@ -1792,7 +1841,7 @@ export function Workroom({
          nothing: asking what is on a package is not choosing what to do to it. */
       if (ask && router) {
         const readAsk = readTopic(trimmed);
-        const preCard = readAsk !== null && reads ? buildReadCard(readAsk, reads) : null;
+        const preCard = readAsk !== null && reads ? buildReadCard(readAsk, reads, { role: readRole(trimmed) ?? undefined }) : null;
         if (!preCard) {
           const route = readRouteIntent(trimmed);
           if (route) {
@@ -1886,7 +1935,31 @@ export function Workroom({
          once, here, because every lane below it acts on the line without the
          courtesy: the create grammar, the steer and the parser alike. */
       const commanded = politeCommand(instruction);
-      const line = commanded ?? instruction;
+
+      /* ================================ "TAKE X OFF Y" IS TWO DIFFERENT MOVES
+         (E5, fenced engine, shell workaround at rung 0.)
+
+         parseModify.ts puts `take off` in the collateral verb class AND in the
+         party verb class, and collateral wins the race, so "take Elena Hartwell
+         off the 15M line" was read as an unpledge. The engine is fenced. So
+         BEFORE it sees the line: where the object of the phrase is a PARTY on
+         this book, the line is restated with the verb the engine already stages
+         a carry exclusion on. Where it is an ASSET it is left alone, because
+         there the collateral reading is the right one, and where it is both the
+         room asks rather than picking.
+
+         THE REWRITE IS SILENT. Same party, same facility, same op; only the verb
+         moves, and every layer below it still runs. */
+      const removalOf = readPartyRemoval({ line: commanded ?? instruction, book, members: elicitMembers });
+      if (removalOf?.kind === "ask") {
+        answer({ kind: "agent", id: nextId("agent"), text: removalOf.text, options: removalOf.options });
+        return;
+      }
+      if (removalOf?.kind === "refusal") {
+        answer({ kind: "agent", id: nextId("agent"), text: removalOf.text });
+        return;
+      }
+      const line = removalOf?.line ?? commanded ?? instruction;
 
       // The acknowledgment said everything it came to say. The checks are
       // settled above; there is no instruction left in the line to parse.
@@ -1922,6 +1995,24 @@ export function Workroom({
            it, because a room that swallowed every following sentence would be a
            form wearing a conversation's clothes. */
         if (creating && !reading) {
+          /* A CREATE THE ROOM CANNOT COMPOSE AT ALL MUST NOT TRAP THE NEXT LINE.
+             `blockedReason` is not a question the room is waiting on an answer
+             to: it is the room saying it will not author this thing without a
+             figure the credit terms carry. Every line after it still READS into
+             the draft, though, so a blocked create swallowed the whole rest of
+             the drive - the fence probes, the borrowing structure, all of it -
+             and answered each of them with the same block. So a blocked create
+             holds the room for exactly one shape of line, the one that answers
+             it, and lets everything else past. (Found driving the founder's own
+             Part 1, 2026-09-01.) */
+          if (blockedReason(creating) && !/\d+(?:\.\d+)?\s*%/.test(line)) {
+            setCreating(null);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: "That one is still waiting on the rate the credit terms carry, so I am leaving it where it stands and taking this line as it reads.",
+            });
+          } else {
           const next = readInto(creating, line, elicitCtx);
           const moved =
             JSON.stringify(next.slots) !== JSON.stringify(creating.slots) ||
@@ -1940,6 +2031,7 @@ export function Workroom({
             id: nextId("agent"),
             text: "Nothing in that answered what the new one still needs, so I am leaving it where it stands and taking the line as it reads.",
           });
+          }
         }
 
         /* ==================================================== A CREATE OPENS
@@ -2036,33 +2128,57 @@ export function Workroom({
         return;
       }
 
-      // THE LANE IS ADDRESSABLE IN THE CONVERSATION. "what is staged" and "drop
-      // the rate change" are answered here, before the parser sees them: they
-      // are moves on the manifest, not new amendments.
+      // THE LANE IS ADDRESSABLE IN THE CONVERSATION. "what is staged" is
+      // answered here, before the parser sees it: it is a move on the manifest,
+      // not a new amendment.
       const address = addressManifest(instruction, entries);
-      if (address) {
-        if (address.kind === "remove") {
-          setEntries((prev) => removeEntry(prev, address.entry.id));
-          setToast("Removed from the manifest");
-          answer({
-            kind: "agent",
-            id: nextId("agent"),
-            text: `${address.entry.title} on ${address.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
-          });
-          return;
-        }
+      if (address?.kind === "list" || readsThePlan(instruction)) {
+        const staged = address?.kind === "list" ? address.entries : entries;
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text:
-            address.kind === "list"
-              ? address.entries.length
-                ? `The manifest holds ${address.entries.length}: ${address.entries
-                    .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
-                    .join("; ")}.`
-                : "Nothing is staged yet. Confirmed changes land here, grouped."
-              : address.reason,
+          text: staged.length
+            ? `The manifest holds ${staged.length}: ${staged
+                .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
+                .join("; ")}.`
+            : "Nothing is staged yet. Confirmed changes land here, grouped.",
         });
+        return;
+      }
+
+      /* ================================================ WHAT A REMOVE IS ABOUT
+         (E1, the destructive one, founder drive 2026-09-01.)
+
+         "remove the Minimum Liquidity covenant from the 15M line of credit" was
+         claimed by the manifest address on the bare word "covenant" and took the
+         banker's OWN staged covenant off Equipment ($8M) - a different covenant
+         on a different facility, un-staged in silence. So a removal is ROUTED
+         now: it un-stages only where the line names a staged entry by title AND
+         target, it goes to the fence where the line names something the BOOK
+         carries, and it goes to the parser otherwise, where an involvement
+         removal files as the carry exclusion it is. */
+      const removal = readRemove(instruction, entries, book);
+      if (removal?.kind === "manifest") {
+        setEntries((prev) => removeEntry(prev, removal.entry.id));
+        setToast("Removed from the manifest");
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${removal.entry.title} on ${removal.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
+        });
+        return;
+      }
+      if (removal?.kind === "ambiguous") {
+        answer({ kind: "agent", id: nextId("agent"), text: removal.reason });
+        return;
+      }
+      if (removal?.kind === "fence") {
+        const fence = fenceRefusal(removal.scope, removal.name);
+        setItems((prev) => [
+          ...prev,
+          { kind: "agent", id: nextId("agent"), step: mine, text: fence.why },
+          { kind: "chips", id: nextId("chips"), step: mine, chips: [{ key: nextId("chip"), refusal: fence, state: "open" }] },
+        ]);
         return;
       }
 
@@ -2084,7 +2200,7 @@ export function Workroom({
 
          A polite COMMAND is never a read: it asked for a change. */
       const topic = commanded ? null : readTopic(instruction);
-      const localCard = topic !== null && reads ? buildReadCard(topic, reads) : null;
+      const localCard = topic !== null && reads ? buildReadCard(topic, reads, { role: readRole(instruction) ?? undefined }) : null;
       if (localCard) {
         answer({ kind: "read", id: nextId("read"), card: localCard });
         return;
@@ -2121,6 +2237,7 @@ export function Workroom({
       ask,
       askCreate,
       awake,
+      book,
       brain,
       brief.members,
       context.accountName,
@@ -2251,6 +2368,16 @@ export function Workroom({
     (blockId: string, chipKey: string, delta: WorkroomDelta) => {
       const staged = addEntry(entries, delta);
       const { reply, challenge, options } = engine.acknowledge(delta, staged);
+      /* ------------------------------- THE COMMITTED TOTAL IS THIS ENTRY'S (E4c)
+
+         The engines close every confirm on the package figure, composed over the
+         WHOLE manifest — so a legal-entity add confirmed after a commitment
+         change said "that takes the package from $49M to $54M" about a change
+         that moved no money at all. Reproduced twice in the drive. The sentence
+         is about the entry the banker just confirmed, so it is composed here
+         from the room's own figures: what the package read at before this entry
+         landed, and what it reads at now. */
+      const said = committedSentence({ reply, delta, before: figures.committedMM * 1e6 });
       setEntries(staged);
       settleChip(blockId, chipKey, "confirmed");
       setToast(delta.badge);
@@ -2258,7 +2385,7 @@ export function Workroom({
         const mine = prev.length ? prev[prev.length - 1].step : 0;
         return [
           ...prev,
-          { kind: "agent", id: nextId("agent"), step: mine, text: reply, options },
+          { kind: "agent", id: nextId("agent"), step: mine, text: said, options },
           // CHECKS COME TO YOU. The check a confirm trips arrives back in the
           // conversation the moment it becomes true, never in a separate tab.
           ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), step: mine, challenge, acked: false }] : []),
@@ -2266,7 +2393,7 @@ export function Workroom({
       });
       setSuggestion(engine.suggest());
     },
-    [engine, entries, settleChip],
+    [engine, entries, figures.committedMM, settleChip],
   );
 
   /**
@@ -3384,10 +3511,10 @@ function ThreadBlock({
             <span className={`wk-vchip ${item.challenge.tone === "warn" ? "wk-warn" : ""}`}>{item.challenge.verdict}</span>
             <span className="wk-vk">{item.challenge.kicker}</span>
           </div>
-          <div className="wk-vtxt">{item.challenge.line}</div>
+          <div className="wk-vtxt">{bankerly(item.challenge.line)}</div>
           {/* WHY THIS CHECK MATTERS HERE. The figures above are what moved; this
               is the one sentence that says why they moved that way. */}
-          {item.challenge.why && <div className="wk-vwhy">{item.challenge.why}</div>}
+          {item.challenge.why && <div className="wk-vwhy">{bankerly(item.challenge.why)}</div>}
           <div className="wk-vact">
             {item.acked ? (
               <span className="wk-acked">

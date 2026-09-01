@@ -16,10 +16,15 @@ import {
   planAmendmentFor,
   readInto,
   readScope,
+  restateEntry,
   routeGap,
+  rolesOnFacility,
+  facilitiesFor,
+  samePartyName,
   settleFromBook,
   thresholdText,
   verify,
+  INVOLVEMENT_ROLES,
   type Draft,
   type ElicitContext,
   type ElicitMember,
@@ -55,12 +60,12 @@ const EQ35 = "a4Zbb0000027MsHEAU";
 const LOC25 = "a4Zbb0000027MttEAE";
 
 const MEMBERS: ElicitMember[] = [
-  { id: LOC15, key: "Line of Credit", label: "$15.0MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00", committed: 15_000_000 },
-  { id: CONSTRUCTION, key: "Construction", label: "Construction", orgName: "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00", committed: 12_000_000 },
-  { id: EQ8, key: "Equipment", label: "$8.0MM Equipment", orgName: "Hartwell Precision Manufacturing LLC - Equipment - $8,000,000.00", committed: 8_000_000 },
-  { id: PURCHASE, key: "Purchase", label: "Purchase", orgName: "Hartwell Precision Manufacturing LLC - Purchase - $5,000,000.00", committed: 5_000_000 },
-  { id: EQ35, key: "Equipment", label: "$3.5MM Equipment", orgName: "Hartwell Precision Manufacturing LLC - Equipment - $3,500,000.00", committed: 3_500_000 },
-  { id: LOC25, key: "Line of Credit", label: "$2.5MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00", committed: 2_500_000 },
+  { id: LOC15, key: "Line of Credit", label: "$15.0MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00", shortName: "Line of Credit - $15,000,000.00", committed: 15_000_000 },
+  { id: CONSTRUCTION, key: "Construction", label: "Construction", orgName: "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00", shortName: "Construction - $12,000,000.00", committed: 12_000_000 },
+  { id: EQ8, key: "Equipment", label: "$8.0MM Equipment", orgName: "Hartwell Precision Manufacturing LLC - Equipment - $8,000,000.00", shortName: "Equipment - $8,000,000.00", committed: 8_000_000 },
+  { id: PURCHASE, key: "Purchase", label: "Purchase", orgName: "Hartwell Precision Manufacturing LLC - Purchase - $5,000,000.00", shortName: "Purchase - $5,000,000.00", committed: 5_000_000 },
+  { id: EQ35, key: "Equipment", label: "$3.5MM Equipment", orgName: "Hartwell Precision Manufacturing LLC - Equipment - $3,500,000.00", shortName: "Equipment - $3,500,000.00", committed: 3_500_000 },
+  { id: LOC25, key: "Line of Credit", label: "$2.5MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00", shortName: "Line of Credit - $2,500,000.00", committed: 2_500_000 },
 ];
 
 const book = buildBook(bundle, MEMBERS.map((m) => m.id));
@@ -692,5 +697,231 @@ describe("the founder's own correction, without a unit on it", () => {
     expect(draft.slots.test).toBe("Leverage");
     expect(draft.slots.threshold).toBeUndefined();
     expect(advance(draft, ctx).ask?.slot).toBe("threshold");
+  });
+});
+
+/* =============================================================================
+   THE INVOLVEMENT SURFACE (phase 2, closing E4a and E4b from the everything-plan
+   drive).
+
+   THE BOOK IT IS HELD AGAINST is the org's own pre-flight: Hartwell Industrial
+   Holdings is Guarantor on all six eligible loans, and Elena Hartwell is
+   Limited Guarantor on Construction and on the $15M line only.
+   ============================================================================= */
+
+const HOLDINGS = "Hartwell Industrial Holdings LLC";
+const ELENA = "Elena Hartwell";
+
+/** The bundle's own read, with the borrowing structure the org actually holds
+ *  folded in. `buildBook` reads it exactly as it reads the live one. */
+const structured = buildBook(
+  {
+    ...bundle,
+    graph: {
+      ...bundle.graph,
+      legalEntities: [
+        ...[LOC15, EQ8, CONSTRUCTION, PURCHASE, EQ35, LOC25].map((loanId) => ({
+          accountName: "Hartwell Precision Manufacturing LLC",
+          borrowerType: "Borrower",
+          loanId,
+        })),
+        ...[LOC15, EQ8, CONSTRUCTION, PURCHASE, EQ35, LOC25].map((loanId) => ({
+          accountName: HOLDINGS,
+          borrowerType: "Guarantor",
+          loanId,
+        })),
+        { accountName: ELENA, borrowerType: "Limited Guarantor", loanId: LOC15 },
+        { accountName: ELENA, borrowerType: "Limited Guarantor", loanId: CONSTRUCTION },
+      ],
+    },
+  } as BorrowerBundle,
+  MEMBERS.map((m) => m.id),
+);
+
+const structuredCtx = (over: Partial<ElicitContext> = {}): ElicitContext => ctxWith({ book: structured, ...over });
+
+describe("the book carries who is on the deal, per facility", () => {
+  it("reads the role PER FACILITY, because that is how the org holds it", () => {
+    expect(rolesOnFacility(structured, ELENA, LOC15)).toEqual(["Limited Guarantor"]);
+    expect(rolesOnFacility(structured, ELENA, EQ8)).toEqual([]);
+    expect(rolesOnFacility(structured, HOLDINGS, CONSTRUCTION)).toEqual(["Guarantor"]);
+  });
+
+  it("matches a name across the legal suffix a banker drops in speech", () => {
+    expect(rolesOnFacility(structured, "Hartwell Industrial Holdings", CONSTRUCTION)).toEqual(["Guarantor"]);
+    expect(samePartyName("Hartwell Industrial Holdings", HOLDINGS)).toBe(true);
+    expect(samePartyName(ELENA, HOLDINGS)).toBe(false);
+  });
+
+  it("names every facility a party is on, with the role each row carries", () => {
+    expect(facilitiesFor(structured, ELENA).map((f) => f.loanId).sort()).toEqual([LOC15, CONSTRUCTION].sort());
+  });
+});
+
+describe("a complete borrowing-structure line stages directly (E4b)", () => {
+  it("reads the party, the role and the facility off one sentence", () => {
+    const draft = openCreate("add Elena Hartwell as limited guarantor on the 8M equipment loan", structuredCtx())!;
+    expect(draft.surface).toBe("involvement");
+    expect(draft.slots.party).toBe(ELENA);
+    expect(draft.slots.role).toBe("Limited Guarantor");
+    expect(draft.scope).toEqual([EQ8]);
+    expect(advance(draft, structuredCtx()).ask).toBeNull();
+  });
+
+  it("composes a sentence the real parser stages, with the ROLE as the value and never a fragment", async () => {
+    const { engine, context } = realEngine();
+    const draft = openCreate("add Elena Hartwell as limited guarantor on the 8M equipment loan", structuredCtx())!;
+    const composed = compose(draft, structuredCtx());
+    const result = await engine.parseIntent(composed.lines[0].say, context);
+    const verdict = verify(draft, EQ8, result.kind === "deltas" ? result.deltas : []);
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) return;
+    expect(verdict.delta.involvementWire).toMatchObject({ op: "add", role: "Limited Guarantor", accountName: ELENA, facilityId: EQ8 });
+    // THE CHIP SAYS THE ROLE, not the tail of the sentence (E4b: the value was
+    // "on the construction loan").
+    const chip = restateEntry(draft, structuredCtx(), verdict.delta);
+    expect(chip.title).toBe(ELENA);
+    expect(chip.after).toBe("Limited Guarantor");
+    expect(chip.after).not.toMatch(/on the/);
+    expect(chip.before).toBe("not on the facility today");
+  });
+
+  it("claims nothing about a facility whose structure this read does not carry", () => {
+    // "not on the facility today" is an assertion about the bank's record, and
+    // the drive caught the room making it about a party that WAS on it. With a
+    // read carrying no structure at all the room says what it actually knows.
+    const blind = ctxWith({ book: buildBook(null, MEMBERS.map((m) => m.id)) });
+    const draft = openCreate("add Elena Hartwell as limited guarantor on the 8M equipment loan", blind)!;
+    const chip = restateEntry(draft, blind, {
+      ...handoffEntry(draft, blind, EQ8, "reason", 0),
+      involvementWire: { op: "add", role: "Limited Guarantor", accountName: ELENA, facilityId: EQ8 },
+    });
+    expect(chip.before).toBe("not carried on this read");
+  });
+
+  it("elicits rather than staging when the line names nobody", () => {
+    const draft = openCreate("add a guarantor", structuredCtx())!;
+    expect(draft.slots.party).toBeUndefined();
+    const step = advance(draft, structuredCtx());
+    expect(step.ask?.slot).toBe("party");
+    expect(step.ask?.text).toContain("An involvement row names one account");
+    expect(step.ask?.options.map((o) => o.label)).toContain(HOLDINGS);
+  });
+
+  it("asks for the role, book first, when the line names only a party", () => {
+    const draft = openCreate("add Elena Hartwell to the 8M equipment loan", structuredCtx())!;
+    const step = advance(draft, structuredCtx());
+    expect(step.ask?.slot).toBe("role");
+    expect(step.ask?.options.map((o) => o.label)[0]).toBe("Limited Guarantor");
+    expect(step.ask?.text).toContain("already carries Elena Hartwell as Limited Guarantor");
+  });
+
+  it("refuses Grantor and Contractor by name and offers the five that are legal", () => {
+    const draft = openCreate("add Hartwell Logistics LLC as grantor on the construction loan", structuredCtx())!;
+    const step = advance(draft, structuredCtx());
+    expect(step.ask?.slot).toBe("role");
+    expect(step.ask?.text).toContain("Grantor is on the object");
+    expect(step.ask?.text).toContain("collateral semantics");
+    expect(step.ask?.options.map((o) => o.label)).toEqual(INVOLVEMENT_ROLES);
+  });
+
+  it("keeps a name the book does not carry, because that is what an add is", () => {
+    const draft = openCreate("add Hartwell Logistics LLC as a guarantor on the construction loan", structuredCtx())!;
+    expect(draft.slots.party).toBe("Hartwell Logistics LLC");
+    expect(draft.slots.partyOnBook).toBe(false);
+  });
+});
+
+describe("a party already on the facility is named, never staged twice (E4a)", () => {
+  it("names the duplicate and offers a way through it", () => {
+    // The founder's own trap line. Holdings IS already Guarantor on
+    // Construction, and the room staged a second row saying "not on the
+    // facility today".
+    const draft = openCreate("add Hartwell Industrial Holdings as guarantor on the construction loan", structuredCtx())!;
+    expect(draft.scope).toEqual([CONSTRUCTION]);
+    const aware = awarenessFor(draft, structuredCtx());
+    expect(aware.fresh).toEqual([]);
+    expect(aware.onTheBook).toContain("already Guarantor on Construction");
+    expect(aware.onTheBook).toContain("stages a SECOND row");
+    expect(aware.options.map((o) => o.label)).toContain("Take Hartwell Industrial Holdings LLC off that facility");
+    expect(aware.options.map((o) => o.label)).toContain("A different facility");
+  });
+
+  it("calls a different role on that facility a role change, not an addition", () => {
+    const draft = openCreate("add Elena Hartwell as a guarantor on the 15M line of credit", structuredCtx())!;
+    expect(draft.scope).toEqual([LOC15]);
+    const aware = awarenessFor(draft, structuredCtx());
+    expect(aware.fresh).toEqual([]);
+    expect(aware.onTheBook).toContain("already Limited Guarantor");
+    expect(aware.onTheBook).toContain("ROLE CHANGE rather than an addition");
+    expect(aware.onTheBook).toContain("carry exclusion");
+  });
+
+  it("lets a clean facility through untouched", () => {
+    const draft = openCreate("add Elena Hartwell as limited guarantor on the 8M equipment loan", structuredCtx())!;
+    const aware = awarenessFor(draft, structuredCtx());
+    expect(aware.fresh).toEqual([EQ8]);
+    expect(aware.onTheBook).toBeNull();
+    expect(aware.options).toEqual([]);
+  });
+
+  it("does not propose the same involvement twice in one session", () => {
+    const draft = openCreate("add Elena Hartwell as limited guarantor on the 8M equipment loan", structuredCtx())!;
+    const plan = [
+      { deltaId: "d", surface: "involvement" as const, memberId: EQ8, title: ELENA, target: "$8.0MM Equipment", slots: { party: ELENA, role: "Limited Guarantor" }, open: false },
+    ];
+    const aware = awarenessFor(draft, structuredCtx({ plan }));
+    expect(aware.fresh).toEqual([]);
+    expect(aware.onThePlan).toContain("already on this plan");
+  });
+});
+
+describe("a typed collateral type wins over the question (E3)", () => {
+  it("takes \"real estate\" off the founder's own line and never asks the kind", () => {
+    const line = "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000";
+    const draft = openCreate(line, ctxWith())!;
+    expect(draft.surface).toBe("collateral");
+    expect(draft.slots.isNew).toBe(true);
+    expect(draft.slots.assetKind).toBe("Real Estate");
+    expect(draft.slots.assetValue).toBe(6_500_000);
+    const step = advance(draft, ctxWith());
+    expect(step.ask?.slot).not.toBe("assetKind");
+  });
+
+  it("names the catalog it resolves a word against when it does have to ask", () => {
+    const draft = readInto({ surface: "collateral", slots: { isNew: true, assetValue: 1_000_000 }, scope: [LOC15], scopeWord: true, unused: null }, "a new asset", ctxWith());
+    const ask = advance(draft, ctxWith()).ask!;
+    expect(ask.slot).toBe("assetKind");
+    expect(ask.text).toContain("collateral-type catalog");
+    expect(ask.text).toContain("real estate");
+    expect(ask.text).toContain("accounts receivable");
+  });
+});
+
+describe("an operator in front of a figure is the threshold", () => {
+  it("reads \">= 1.30\" and leaves the facility's own figure to the scope", () => {
+    // The founder's own line 5. With no operator in the anchor list the reader
+    // fell through to the single money token, filed $8,000,000 as the threshold
+    // and left the scope unresolved, so a fully-specified line was asked about.
+    const line = "add a Debt Service Coverage of Borrower covenant >= 1.30 on the 8M equipment loan";
+    const draft = openCreate(line, ctxWith())!;
+    expect(draft.slots.test).toBe("Debt Service Coverage of Borrower");
+    expect(draft.slots.threshold).toBe(1.3);
+    expect(draft.slots.unit).toBeUndefined();
+    expect(draft.scope).toEqual([EQ8]);
+    expect(advance(draft, ctxWith()).ask).toBeNull();
+  });
+
+  it("still reads a money threshold as money", () => {
+    const draft = openCreate("add a Minimum Liquidity covenant >= $5,000,000 on the construction loan", ctxWith())!;
+    expect(draft.slots.threshold).toBe(5_000_000);
+    expect(draft.slots.unit).toBe("money");
+    expect(draft.scope).toEqual([CONSTRUCTION]);
+  });
+
+  it("still reads a ratio written with an x", () => {
+    const draft = openCreate("add a Maximum Debt to Worth covenant of 3.5x on the construction loan", ctxWith())!;
+    expect(draft.slots.threshold).toBe(3.5);
+    expect(draft.slots.unit).toBe("ratio");
   });
 });
