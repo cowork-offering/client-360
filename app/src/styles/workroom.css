@@ -240,11 +240,95 @@ body.wk-open #root {
    38px thread gap above it, and once history exists rule 39's 58px of clearance
    covers the case as well; only item zero was ever short. 8px + 14px = 22px,
    one pixel of air past the chip. */
-.wk-thread > .wk-step:first-child > .wk-msg:first-child {
+.wk-thread > .wk-step:first-child > .wk-msg:first-child,
+.wk-thread > .wk-step:first-child > .wk-tier:first-child > .wk-msg:first-child {
   margin-top: 8px;
 }
 .wk-step.wk-gone {
   display: none;
+}
+
+/* ======================================================= THE ENTRY CHOREOGRAPHY
+   Progressive reveal on entry (founder, 2026-09-01). The question stands alone,
+   the identity blends in under it, the facilities follow, and as each tier
+   arrives the tier above LEAVES THE STAGE. It is never lost: the node stays
+   mounted, carries data-tier-state="faded", and the summon brings it back.
+
+   THE EXIT SPEAKS THE ROOM'S OWN LANGUAGE: the arrival run backwards with the
+   word-speech's blur on it. No hard cut, no instant unmount, and nothing here
+   is a new vocabulary. */
+.wk-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.wk-tier-in {
+  animation: wk-tier-in 520ms var(--ease-settle) both;
+}
+/* THE ARRIVAL IS CARRIED ONCE. The question tier is a bubble and already has
+   the room's own entrance; the facilities are rows and stagger themselves. Only
+   the identity card has no arrival of its own, so only it takes the wrapper's.
+   Two entrances on one piece of content blur it twice. */
+.wk-tier-in[data-tier="question"],
+.wk-tier-in[data-tier="detail"] {
+  animation: none;
+}
+@keyframes wk-tier-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.985);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+/* Mid-exit: still laid out, shimmering out, and taking no clicks on its way. */
+.wk-tier-out {
+  animation: wk-tier-out 520ms var(--ease-out) both;
+  pointer-events: none;
+}
+@keyframes wk-tier-out {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0) scale(0.985);
+    filter: blur(4px);
+  }
+}
+/* Off stage. Collapsed, NOT unmounted, and one gesture away from coming back. */
+.wk-tier-gone {
+  display: none;
+}
+/* Summoned back. Quieter than the first arrival: it is a re-read, not news. */
+.wk-tier-back {
+  animation: wk-tier-in 340ms var(--ease-settle) both;
+}
+/* The one control that brings them back. Same glass as the history chip, in
+   the thread rather than floating over it, because it is about THIS read. */
+.wk-summon {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--glass-hairline);
+  border-radius: 999px;
+  padding: 4px 12px;
+  box-shadow: var(--glass-rim);
+}
+.wk-summon:hover {
+  color: var(--ink);
+}
+/* The facilities blend in one after the other (delay set per row in the room). */
+.wk-mchips .wk-mchip {
+  animation: wk-in 420ms var(--ease-settle) both;
 }
 
 /* the hint that history lives above */

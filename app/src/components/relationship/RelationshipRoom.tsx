@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion } from "../../data/motion";
@@ -17,6 +17,13 @@ import { ReadCard } from "../workroom/ReadCardView";
 import { isQuestion, readTopic } from "../workroom/ask";
 import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "../workroom/readCard";
 import { toReadCardModel } from "../workroom/brainRoute";
+import {
+  TIER_STAGGER_MS,
+  summonLabel,
+  tierAttrs,
+  useEntryChoreography,
+  type EntryTier,
+} from "../workroom/entryChoreography";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
@@ -153,6 +160,21 @@ type RelItem = { id: string; step: number } & (
 
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type NewRelItem = DistOmit<RelItem, "step">;
+
+/**
+ * WHICH ENTRY TIER A THREAD ITEM BELONGS TO (the entry choreography).
+ *
+ * One grammar with the facility room, in this room's own nouns: the question,
+ * then the review's scope as the identity the ritual runs against, then the
+ * first collected question as the thing being decided on. `detailId` names the
+ * ONE agent bubble that is a tier; every later step is an exchange.
+ */
+function relTierOf(item: RelItem, detailId: string | null): EntryTier | null {
+  if (item.kind === "opening") return "question";
+  if (item.kind === "brief") return "identity";
+  if (item.kind === "agent" && item.id === detailId) return "detail";
+  return null;
+}
 
 /** The composed beat. A floor, not a delay: the room waits for the slower of
  *  the flow and the beat. Zero under reduced motion. */
@@ -483,6 +505,13 @@ export function RelationshipRoom({
   const [draft, setDraft] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [lit, setLit] = useState(false);
+  /* THE ENTRY CHOREOGRAPHY, IN THIS ROOM'S VOCABULARY (founder, 2026-09-01).
+     One grammar, both rooms: question, then the identity the action runs
+     against, then the thing being decided on. Here the identity is the review's
+     own scope brief and the detail is the first collected question, because
+     that is what this room's tiers ARE. */
+  const choreo = useEntryChoreography(reduced);
+  const { arrive: tierArrived } = choreo;
   const { peek, openPeek, closePeek } = usePeek();
 
   const roomRef = useRef<HTMLDivElement | null>(null);
@@ -525,6 +554,7 @@ export function RelationshipRoom({
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
     ]);
+    tierArrived("question");
     /* THE LOOKUP LANDS ON THE POSITION, and nothing else. The route's brief is
        pushed by the BIND effect below, which owns it whether the route was bound
        before the room opened or chosen inside it. Landing one here as well put
@@ -539,7 +569,7 @@ export function RelationshipRoom({
     }
     const t = window.setTimeout(land, LOOKUP_MS);
     return () => clearTimeout(t);
-  }, [reduced]);
+  }, [reduced, tierArrived]);
 
   useEffect(() => {
     if (!toast) return;
@@ -600,30 +630,64 @@ export function RelationshipRoom({
       const mine = prev.length ? prev[prev.length - 1].step : 0;
       return [...prev, { kind: "brief", id: nextId("brief"), step: mine }];
     });
-  }, [awake, route]);
+    // THE IDENTITY TIER. The scope blends in and the question above it leaves
+    // the stage: the banker is deciding on the review now, not on which one.
+    tierArrived("identity");
+  }, [awake, route, tierArrived]);
 
   /* ---- AND THE NEXT QUESTION FOLLOWS IT. The step machine decides; the room
           asks. One question at a time, numbered, and never re-asked. */
   const askedRef = useRef<string | null>(null);
+  /** The third tier has been claimed, and the beat it is waiting on. */
+  const detailedRef = useRef(false);
+  const detailTimer = useRef(0);
+  /** The one agent bubble that IS the third tier (the first question). */
+  const [detailId, setDetailId] = useState<string | null>(null);
+  useEffect(() => () => window.clearTimeout(detailTimer.current), []);
   useEffect(() => {
     if (!route || !awake || !live || thinking || phase === "filed") return;
     if (askedRef.current === live.key) return;
     askedRef.current = live.key;
-    setItems((prev) => {
-      const mine = prev.length ? prev[prev.length - 1].step : 0;
-      return [
-        ...prev,
-        {
-          kind: "agent",
-          id: nextId("step"),
-          step: mine,
-          text: live.ask,
-          kicker: `Step ${order.length + 1} of ${planned}`,
-          options: optionsFor(live),
-        },
-      ];
-    });
-  }, [awake, live, order.length, phase, planned, route, thinking]);
+    const push1 = (id: string) =>
+      setItems((prev) => {
+        const mine = prev.length ? prev[prev.length - 1].step : 0;
+        return [
+          ...prev,
+          {
+            kind: "agent",
+            id,
+            step: mine,
+            text: live.ask,
+            kicker: `Step ${order.length + 1} of ${planned}`,
+            options: optionsFor(live),
+          },
+        ];
+      });
+    /* THE DETAIL TIER, ONE BEAT LATER (the entry choreography). The FIRST
+       question is the third tier and it gets its own arrival, so the scope
+       above it is read before it retires. Every question after it opens a step
+       of its own and is an exchange, not a tier: it lands immediately.
+
+       THE BEAT IS HELD IN A REF, NOT IN A CLEANUP. This effect re-runs on every
+       answer; a cleanup that cleared the timer would swallow the first question
+       whenever anything moved underneath it. */
+    if (detailedRef.current) {
+      push1(nextId("step"));
+      return;
+    }
+    detailedRef.current = true;
+    const id = nextId("step");
+    const land = () => {
+      push1(id);
+      setDetailId(id);
+      tierArrived("detail");
+    };
+    if (reduced) {
+      land();
+      return;
+    }
+    detailTimer.current = window.setTimeout(land, TIER_STAGGER_MS);
+  }, [awake, live, order.length, phase, planned, reduced, route, thinking, tierArrived]);
 
   /* ---- the review chip's own beat: once the last step is answered the room
           says so rather than leaving the banker to notice the chip. */
@@ -1251,6 +1315,9 @@ export function RelationshipRoom({
      would hide the five chips in the same gesture that said "pick one". */
   const shows = (g: { step: number }) => g.step === liveStep || (!!ask && g.step === 0);
   const hidden = grouped.filter((g) => !shows(g));
+  /** The tiers that left the stage, and whether they are back on it. */
+  const tiersLeft = choreo.left;
+  const tiersShown = choreo.summoned || histOpen;
   const laneFolded = Math.max(0, laneRows.length - LANE_VISIBLE);
 
   const openingItem = (
@@ -1363,25 +1430,52 @@ export function RelationshipRoom({
                     className={`wk-step ${shows(group) || histOpen ? "" : "wk-gone"}`}
                     key={`step-${group.step}-${group.items[0].id}`}
                   >
-                    {group.items.map((item) => (
-                      <RelBlock
-                        key={item.id}
-                        item={item}
-                        opening={openingItem}
-                        spec={flowSpec}
-                        lit={lit}
-                        onOpenPeek={openPeek}
-                        onOption={(sayText, label) => void say(sayText, label)}
-                        onRestart={(restart) => {
-                          setAnswers({});
-                          setOrder([]);
-                          askedRef.current = null;
-                          readyRef.current = false;
-                          briefedRef.current = null;
-                          routerRef.current?.onRestart(restart.route, restart.say);
-                        }}
-                      />
-                    ))}
+                    {/* THE SUMMON (the entry choreography). Earlier tiers are
+                        never lost: one quiet control brings back every one that
+                        left the stage, in both rooms, with the same words. */}
+                    {group.items.some((i) => relTierOf(i, detailId)) && tiersLeft.length > 0 && !histOpen && (
+                      <button
+                        type="button"
+                        className="wk-summon"
+                        data-summon="tiers"
+                        aria-expanded={tiersShown}
+                        onClick={() => choreo.setSummoned(!choreo.summoned)}
+                      >
+                        {summonLabel(tiersLeft.length, tiersShown)}
+                      </button>
+                    )}
+                    {group.items.map((item) => {
+                      const block = (
+                        <RelBlock
+                          item={item}
+                          opening={openingItem}
+                          spec={flowSpec}
+                          lit={lit}
+                          onOpenPeek={openPeek}
+                          onOption={(sayText, label) => void say(sayText, label)}
+                          onRestart={(restart) => {
+                            setAnswers({});
+                            setOrder([]);
+                            askedRef.current = null;
+                            readyRef.current = false;
+                            briefedRef.current = null;
+                            detailedRef.current = false;
+                            setDetailId(null);
+                            choreo.reset();
+                            routerRef.current?.onRestart(restart.route, restart.say);
+                          }}
+                        />
+                      );
+                      const tier = relTierOf(item, detailId);
+                      if (!tier) return <Fragment key={item.id}>{block}</Fragment>;
+                      /* A TIER THAT LEFT THE STAGE STAYS MOUNTED, so an absence
+                         contract can tell "faded out" from "gone". */
+                      return (
+                        <div key={item.id} {...tierAttrs(tier, choreo.stateOf(tier), tiersShown)}>
+                          {block}
+                        </div>
+                      );
+                    })}
                     {/* THE REVIEW CHIP, in the live exchange. It is the only way
                         to the plan and it never leaves the thread. */}
                     {group.step === liveStep && approvalOpen && !flow && flowSpec && (

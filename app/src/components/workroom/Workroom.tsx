@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
-import { prefersReducedMotion } from "../../data/motion";
+import { prefersReducedMotion, staggerDelay } from "../../data/motion";
 import { CLIENT_EMAIL, GOVERNANCE, HAVE } from "../../workroom/fixture";
 import { readableError, type PackageChoice, type WorkroomEngine, type WorkroomSuggestion } from "../../workroom/engine";
 import { addEntry, addressManifest, figuresFor, removeEntry } from "../../workroom/manifest";
@@ -41,6 +41,13 @@ import { buildEnvelope, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { magnitudeAdvisories, provablyClean, qualifierFilter, type QualifierMember } from "./dispatch";
+import {
+  TIER_STAGGER_MS,
+  summonLabel,
+  tierAttrs,
+  useEntryChoreography,
+  type EntryTier,
+} from "./entryChoreography";
 import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
@@ -214,6 +221,20 @@ const HALO_LIFE_MS = 5600;
 const RAIL_VISIBLE = 6;
 /** The word stagger of the agent's speech (rule 65). */
 const WORD_STAGGER_MS = 26;
+
+/**
+ * WHICH ENTRY TIER A THREAD ITEM BELONGS TO (the entry choreography).
+ *
+ * Only the three entry blocks are tiers. Everything the conversation puts in
+ * the thread afterwards is an exchange, and an exchange never leaves the stage
+ * on a tier's account.
+ */
+function tierOf(item: ThreadItem): EntryTier | null {
+  if (item.kind === "opening") return "question";
+  if (item.kind === "packages") return "identity";
+  if (item.kind === "brief") return "detail";
+  return null;
+}
 
 /** Omit that DISTRIBUTES over the union. A plain `Omit<ThreadItem, "step">`
  *  collapses the discriminated union to its common keys, which makes every
@@ -622,6 +643,7 @@ export function Workroom({
   onExecuted?: (committedDeltaMM: number) => void;
 }) {
   const brief = useMemo(() => engine.brief(context), [engine, context]);
+  const packageChoiceCount = brief.packageChoices.length;
   const vocabulary = useMemo(() => vocabularyFor(context), [context]);
   const reduced = prefersReducedMotion();
   const isEligible = useCallback(
@@ -691,6 +713,13 @@ export function Workroom({
   const [railFolded, setRailFolded] = useState(0);
   /** The halo is execute's ONLY light, and it breathes out ~5s after landing. */
   const [lit, setLit] = useState(false);
+  /** THE LOOKUP CAME BACK. The tiers below it are earned one at a time from
+   *  here; before it the stage carries the question and nothing else. */
+  const [lookedUp, setLookedUp] = useState(false);
+  /** The tiers under the question have been claimed for this ritual. */
+  const tieredRef = useRef(false);
+  const choreo = useEntryChoreography(reduced);
+  const { arrive: tierArrived, reset: resetTiers } = choreo;
   const { peek, openPeek, closePeek } = usePeek();
 
   /* ---- the page behind the room does not scroll while it is open. */
@@ -715,22 +744,28 @@ export function Workroom({
           lands with the members under it, and only then does the room take an
           instruction. Under reduced motion the whole ritual is simply there. */
   useEffect(() => {
-    const choosing = brief.packageChoices.length > 0;
+    const choosing = packageChoiceCount > 0;
     const opening: ThreadItem[] = [
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
     ];
     setItems(opening);
+    // THE STAGE IS CALM AGAIN. A bound route rebuilds this room on a new
+    // engine and replays the ritual, so the tiers start over with it. The tier
+    // effect below does not re-run on this pass - none of its deps moved yet -
+    // so clearing the latch here cannot land the tiers ahead of the lookup.
+    setLookedUp(false);
+    tieredRef.current = false;
+    resetTiers();
+    tierArrived("question");
     const land = () => {
-      // THE LOOKUP ALWAYS COMES BACK WITH A CARD. A relationship carrying
-      // several packages gets the choice; a book with one gets that one,
-      // rendered SELECTED — the room says which package it is standing in
-      // rather than silently assuming the only one it found.
-      setItems((prev) => [
-        ...prev.filter((i) => i.kind !== "lookup"),
-        { kind: "packages" as const, id: nextId("pkgs"), step: 0 },
-        ...(choosing ? [] : [{ kind: "brief" as const, id: nextId("brief"), step: 0 }]),
-      ]);
+      // THE LOOKUP COMES BACK, AND NOTHING ELSE DOES YET (the entry
+      // choreography, founder 2026-09-01). The package card and the facilities
+      // are the two tiers below the question and they are earned in turn by the
+      // effect underneath this one, which is also what keeps them off a stage
+      // that is still asking which room this is.
+      setItems((prev) => prev.filter((i) => i.kind !== "lookup"));
+      setLookedUp(true);
       // A room still waiting for a package to be chosen has nothing to take an
       // instruction about, so the composer stays asleep through that beat.
       if (choosing) return;
@@ -765,7 +800,52 @@ export function Workroom({
     }
     const t = window.setTimeout(land, LOOKUP_MS);
     return () => clearTimeout(t);
-  }, [brief.packageChoices.length, context.mode, engine, reduced, vocabulary.changeWord]);
+  }, [context.mode, engine, packageChoiceCount, reduced, resetTiers, tierArrived, vocabulary.changeWord]);
+
+  /* ---- THE TWO TIERS UNDER THE QUESTION (the entry choreography, founder
+          2026-09-01).
+
+          The identity blends in FIRST: which package this action runs against
+          is the anchor, and it is the one thing a banker needs before the
+          facilities mean anything. The facilities follow a beat later, and as
+          each tier lands the tier above it leaves the stage.
+
+          NEITHER LANDS WHILE THE ROUTE IS OPEN. A package card and six
+          facilities beside three route chips is exactly the dump the founder
+          asked us to take apart: the question stands alone until it is
+          answered, which is also the only moment the tiers below it are worth
+          reading. */
+  /** THE BEAT IS HELD IN A REF, NOT IN A CLEANUP. A cleanup would clear the
+   *  facilities' own beat every time anything under this effect moved. */
+  const tierTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(tierTimer.current), []);
+  useEffect(() => {
+    if (!lookedUp || ask) return;
+    if (tieredRef.current) return;
+    tieredRef.current = true;
+    const choosing = packageChoiceCount > 0;
+    // A tier lands with the entry blocks, never after the conversation: the
+    // room reads question, then package, then facilities, top to bottom.
+    const afterTiers = (prev: ThreadItem[], item: ThreadItem): ThreadItem[] => {
+      let at = 0;
+      for (let i = 0; i < prev.length; i += 1) if (tierOf(prev[i])) at = i + 1;
+      return [...prev.slice(0, at), item, ...prev.slice(at)];
+    };
+    setItems((prev) => afterTiers(prev, { kind: "packages", id: nextId("pkgs"), step: 0 }));
+    tierArrived("identity");
+    // A book with several packages stops here: the banker has a card to choose
+    // from and the facilities belong to whichever one they take.
+    if (choosing) return;
+    const facilities = () => {
+      setItems((prev) => afterTiers(prev, { kind: "brief", id: nextId("brief"), step: 0 }));
+      tierArrived("detail");
+    };
+    if (reduced) {
+      facilities();
+      return;
+    }
+    tierTimer.current = window.setTimeout(facilities, TIER_STAGGER_MS);
+  }, [ask, lookedUp, packageChoiceCount, reduced, tierArrived]);
 
   /* ---- and the room hands the manifest back. Every landing and every removal,
           so a close at any moment loses nothing. Not once it has FILED. */
@@ -1838,6 +1918,11 @@ export function Workroom({
   const shows = (g: { step: number; items: ThreadItem[] }) =>
     g.step === liveStep || g.items.some(isLive) || (!!ask && g.step === 0);
   const hidden = grouped.filter((g) => !shows(g));
+  /** The tiers that left the stage, and whether they are back on it. Opening
+   *  the earlier steps brings them with it: one gesture for "show me what I
+   *  already read", never two competing ones. */
+  const tiersLeft = choreo.left;
+  const tiersShown = choreo.summoned || histOpen;
   const railEntries = entries.slice(railFolded);
 
   /* The lane never grows past the room: past the visible cap the OLDEST fold
@@ -1945,11 +2030,16 @@ export function Workroom({
 
   const membersItem = brief.showsMembers ? (
     <div className="wk-mchips" key="members">
-      {brief.members.map((m) => {
+      {brief.members.map((m, i) => {
         const ineligible = !isEligible(m);
         return (
           <button
             type="button"
+            /* THE FACILITIES BLEND IN, STAGGERED (the entry choreography). The
+               rows condense one after the other rather than appearing as a
+               block, which is the same 45ms cadence the odometer's columns and
+               the pane anchors already use. */
+            style={{ animationDelay: staggerDelay(i, 45, 320) }}
             /* The org's loan id, because two members of one package legitimately
                share a product word and a label cannot tell them apart. */
             key={m.id}
@@ -2047,27 +2137,55 @@ export function Workroom({
                     className={`wk-step ${shows(group) || histOpen ? "" : "wk-gone"}`}
                     key={`step-${group.step}-${group.items[0].id}`}
                   >
-                    {group.items.map((item) => (
-                      <ThreadBlock
-                        key={item.id}
-                        item={item}
-                        entries={entries}
-                        filedWord={vocabulary.filedWord}
-                        opening={openingItem}
-                        members={membersItem}
-                        packages={brief.packageChoices}
-                        anchored={anchoredPackage}
-                        lit={lit}
-                        onAnchor={onAnchor}
-                        onOpenPeek={openPeek}
-                        onConfirm={confirmChip}
-                        onDiscard={settleOpenChip}
-                        onAcknowledge={acknowledge}
-                        onTakeAdvice={takeAdvice}
-                        onOption={(sayText, label) => void say(sayText, label)}
-                        onRestartRoute={restartRoute}
-                      />
-                    ))}
+                    {/* THE SUMMON (the entry choreography). Earlier tiers are
+                        never lost: this brings back every one that left the
+                        stage, and it is the only control that does. It rides
+                        ABOVE the tiers, so with the faded ones collapsed it
+                        sits directly over whatever is on stage. */}
+                    {group.items.some((i) => tierOf(i)) && tiersLeft.length > 0 && !histOpen && (
+                      <button
+                        type="button"
+                        className="wk-summon"
+                        data-summon="tiers"
+                        aria-expanded={tiersShown}
+                        onClick={() => choreo.setSummoned(!choreo.summoned)}
+                      >
+                        {summonLabel(tiersLeft.length, tiersShown)}
+                      </button>
+                    )}
+                    {group.items.map((item) => {
+                      const block = (
+                        <ThreadBlock
+                          item={item}
+                          entries={entries}
+                          filedWord={vocabulary.filedWord}
+                          opening={openingItem}
+                          members={membersItem}
+                          packages={brief.packageChoices}
+                          anchored={anchoredPackage}
+                          lit={lit}
+                          onAnchor={onAnchor}
+                          onOpenPeek={openPeek}
+                          onConfirm={confirmChip}
+                          onDiscard={settleOpenChip}
+                          onAcknowledge={acknowledge}
+                          onTakeAdvice={takeAdvice}
+                          onOption={(sayText, label) => void say(sayText, label)}
+                          onRestartRoute={restartRoute}
+                        />
+                      );
+                      const tier = tierOf(item);
+                      if (!tier) return <Fragment key={item.id}>{block}</Fragment>;
+                      /* A TIER THAT LEFT THE STAGE STAYS MOUNTED. The wrapper
+                         carries its state, so "faded out" and "gone" are two
+                         different readings and an absence contract can tell
+                         them apart. */
+                      return (
+                        <div key={item.id} {...tierAttrs(tier, choreo.stateOf(tier), tiersShown)}>
+                          {block}
+                        </div>
+                      );
+                    })}
                     {/* THE REVIEW CHIP, in the live exchange. It is the only way
                         to the plan and it never leaves the thread. */}
                     {group.step === liveStep && approvalOpen && !flow && (
