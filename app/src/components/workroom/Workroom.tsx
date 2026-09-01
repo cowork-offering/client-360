@@ -36,7 +36,11 @@ import {
   type SmartOpening,
 } from "./route";
 import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
+import { buildEnvelope, politeCommand, toReadCardModel } from "./brainRoute";
+import type { BrainEnvelope, BrainReply } from "../../channel/brainLane";
+import { restateProposal } from "../../channel/brainLane";
 import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "./readCard";
+import { packageDeepLink } from "../DeepLink";
 import { overdueCovenantTip, useMailTip } from "./tips";
 import "../../styles/workroom.css";
 
@@ -90,6 +94,15 @@ interface DossierModel {
   footer: string;
   /** The single-use token, said once, under the card. */
   tokenNote: string;
+  /**
+   * THE PACKAGE THE PLAN FILED AGAINST, in nCino.
+   *
+   * Null where the view carries no org address (`meta.instanceUrl`) or no
+   * package anchor. NO LINK IS RENDERED IN THAT STATE: a guessed My Domain host
+   * is the one failure worse than no link at all (A29, and DeepLink.tsx says it
+   * at the helper). Never hardcoded, never reconstructed from an org id.
+   */
+  packageHref: string | null;
   /** What the filing did NOT do. A renewal is handed into the bank's own
    *  approval process and never booked by this room, and it says so here. */
   handoff?: string;
@@ -499,6 +512,9 @@ export function Workroom({
   eligibleMemberIds,
   reads,
   onOpenAssist,
+  brain,
+  instanceUrl,
+  onFiled,
   onClose,
   onAnchor,
   onExecuted,
@@ -536,6 +552,30 @@ export function Workroom({
    * cannot do its one thing has no business being on screen.
    */
   onOpenAssist?: (prompt: string) => void;
+  /**
+   * THE BRAIN LANE — the room's second lane.
+   *
+   * The deterministic parser is the FAST LANE and it is untouched. This is
+   * where a line the fast lane cannot claim goes: every question the guard
+   * catches, and every line the parser hands back unparsed. It is the
+   * artifact<->session bridge, and it answers in exactly one of the three
+   * contract shapes (channel/brainLane.ts).
+   *
+   * ABSENT IS NO BRAIN LANE, and that is a real state, not a degraded one: with
+   * no connector the composer keeps the fast lane, the loud notice stands, and
+   * a routed question is answered honestly rather than left hanging on a bridge
+   * that was never there.
+   */
+  brain?: (envelope: BrainEnvelope) => Promise<BrainReply>;
+  /** The org's own Lightning host, for the dossier's link to the package the
+   *  plan filed against. Absent renders NO link (A29), never a guessed host. */
+  instanceUrl?: string;
+  /**
+   * A PLAN FILED. The room hands over what it holds at dossier time — nothing
+   * is read back from the org for this — and the caller writes the Activity
+   * trail entry, exactly as the Action Panel does for a panel action (A30).
+   */
+  onFiled?: (filed: { execution: WorkroomExecution; changeCount: number; packageHref: string | null }) => void;
   /** Present only for the UNIFIED entry, where the room was opened on a
    *  relationship rather than on a route. Absent for every caller that already
    *  named a mode — the command palette, a deep link, a render test — and the
@@ -787,6 +827,174 @@ export function Workroom({
   );
 
   /**
+   * THE FAST LANE, RUN. The deterministic parser reads the line, the value
+   * bounds hold, and the reply plus whatever chips it puts on the table land
+   * together in the step that owns them.
+   *
+   * Extracted from `say` UNCHANGED so the brain lane can enter it too. A
+   * validated delta-proposal is restated as the sentence a banker could have
+   * typed and comes through here — the same parse, the same org-side
+   * re-validation, the same plan, confirm and single-use token. The brain has
+   * no path to the org that does not run through this function.
+   */
+  const runParser = useCallback(
+    async (instruction: string, mine: number) => {
+      // THE COMPOSED BEAT. The glyph fills while the engine reads the line — and
+      // on a wired room the engine may be waiting on the gateway, so this is
+      // also the only thing standing between the banker and a blank pause.
+      const started = Date.now();
+      setThinking(true);
+      try {
+        const result = await engine.parseIntent(instruction, context);
+        await beat(started);
+        /* ------------------------------------------------ THE VALUE BOUNDS
+
+           A STAGED VALUE HAS TO LOOK LIKE A VALUE (founder repro 11b). The
+           free-field wave takes everything after the label it matched, with no
+           shape check of its own, and staged a fifteen-word question tail as
+           the new value of "Product". The room refuses to draw a chip like
+           that: the delta is dropped and the room says WHY, because a delta
+           silently swallowed is the same silence from the other direction.
+
+           Scoped to the FIELD WAVE (`fieldWire`). Commitments, rates and
+           maturities are parsed into typed values by their own waves. */
+        const unsound =
+          result.kind === "deltas"
+            ? result.deltas
+                .map((d) => ({ d, why: unsoundFieldChange(instruction, d) }))
+                .filter((x): x is { d: WorkroomDelta; why: string } => !!x.why)
+            : [];
+        const sound = result.kind === "deltas" ? result.deltas.filter((d) => !unsound.some((u) => u.d.id === d.id)) : [];
+        const dropped = unsound.length > 0 && sound.length === 0;
+
+        // The reply and the chips it puts on the table land TOGETHER, in one
+        // commit, so there is no frame in between where the room looks finished
+        // and the chips have not arrived.
+        const landed: ThreadItem[] = [
+          {
+            kind: "agent",
+            id: nextId("agent"),
+            step: mine,
+            text: dropped
+              ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
+              : result.reply,
+            // CLICKABLE ANSWERS ride BOTH reply kinds: an "unparsed" clarify and
+            // a "deltas" reply that still ends on a closed-set question.
+            options: dropped ? undefined : result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined,
+          },
+        ];
+        const chips: ChipModel[] =
+          result.kind === "deltas"
+            ? sound.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
+            : result.kind === "refusal"
+              ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
+              : [];
+        if (chips.length) {
+          landed.push({
+            kind: "chips",
+            id: nextId("chips"),
+            step: mine,
+            chips,
+            advisories: result.kind === "deltas" ? result.advisories : undefined,
+          });
+        }
+        setItems((prev) => [...prev, ...landed]);
+        setSuggestion(engine.suggest());
+      } finally {
+        setThinking(false);
+      }
+    },
+    [beat, context, engine],
+  );
+
+  /**
+   * THE BRAIN LANE, RUN. One round trip over the artifact<->session bridge.
+   *
+   * The envelope is built from what the room is already holding; no read is
+   * issued for it. The reply is one of the three contract shapes or it is
+   * nothing: `askBrain` degrades every failure — no bridge, a timeout, a
+   * transport error, a malformed reply — to a clarify before it gets here, so
+   * this function has no failure branch of its own to draw.
+   *
+   * THE THINKING PULSE RIDES THE ROUND TRIP, and the composed beat is the same
+   * floor the fast lane holds: an answer that snaps back reads as a lookup.
+   */
+  const runBrain = useCallback(
+    async (instruction: string, mine: number) => {
+      if (!brain) return;
+      const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
+      const started = Date.now();
+      setThinking(true);
+      let reply: BrainReply;
+      try {
+        reply = await brain(
+          buildEnvelope({
+            line: instruction,
+            mode: context.mode,
+            accountName: context.accountName,
+            packageName: brief.packageName,
+            productPackageId: context.productPackageId,
+            members: brief.members,
+            eligible: isEligible,
+            focused,
+            entries,
+          }),
+        );
+        await beat(started);
+      } finally {
+        setThinking(false);
+      }
+
+      if (reply.type === "read-card") {
+        // THE ROOM HAS ONE CARD LANGUAGE. A brain answer renders through the
+        // same component a locally built read does; nothing is forked for it.
+        answer({ kind: "read", id: nextId("read"), card: toReadCardModel(reply) });
+        return;
+      }
+      if (reply.type === "clarify") {
+        answer({ kind: "agent", id: nextId("agent"), text: reply.text, options: reply.options });
+        return;
+      }
+
+      /* A DELTA-PROPOSAL RE-ENTERS THE FAST LANE. It is restated as the
+         sentence a banker could have typed and goes through `runParser`, which
+         is the only path this room has to a staged change. The brain never
+         reaches a tool, never mints a token and never sees the approval.
+
+         ONE change goes straight through, because the banker asked a question
+         and is owed the chip rather than a second gesture. SEVERAL arrive as
+         chips: the room takes one decision at a time (rule 2), and a tap says
+         exactly the sentence shown on it. */
+      const { lines, dropped } = restateProposal(reply, (loanId) =>
+        loanId ? (brief.members.find((m) => m.id === loanId)?.key ?? null) : (focused?.key ?? null),
+      );
+      if (!lines.length) {
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${reply.rationale} I could not put that up as a change from here. Say it the way you would write it and I will stage it.`,
+        });
+        return;
+      }
+      const held = dropped
+        ? ` ${dropped} other ${dropped === 1 ? "part" : "parts"} of that could not be put up from here.`
+        : "";
+      if (lines.length === 1) {
+        answer({ kind: "agent", id: nextId("agent"), text: `${reply.rationale} Reading that as: ${lines[0].say}.${held}` });
+        await runParser(lines[0].say, mine);
+        return;
+      }
+      answer({
+        kind: "agent",
+        id: nextId("agent"),
+        text: `${reply.rationale} That is ${lines.length} changes. One at a time.${held}`,
+        options: lines.map((l) => ({ label: l.label, say: l.say })),
+      });
+    },
+    [beat, brain, brief.members, brief.packageName, context, entries, focused, isEligible, runParser],
+  );
+
+  /**
    * The banker said something. EVERY SEND STARTS A STEP (rule 31).
    *
    * `heard` is what the engine parses; `said` is what the thread shows. They
@@ -964,88 +1172,83 @@ export function Workroom({
            any other question    -> an honest account of the work it takes.
 
          Nothing here parses, resolves or stages. It decides whether the line is
-         a question, and a question is answered rather than filed. */
+         a question, and a question is answered rather than filed.
+
+         ============================================ THE POLITE COMMAND (2026-09-01)
+
+         ask.ts recorded the KNOWN CONSEQUENCE of the blunt reading: "can you
+         increase the Line of Credit to $20M" opens on `can`, so it was
+         ANSWERED rather than staged. The founder's call is that this is the
+         wrong side of the trade. A courtesy in front of an imperative is a
+         COMMAND: the prefix is stripped and the fast lane takes it, exactly as
+         if the courtesy had never been typed.
+
+         The asymmetry is narrow on purpose (see brainRoute.ts): the remainder
+         must open on an action verb the parser already stages on. "can you
+         tell me what covenants are on this" opens on `tell`, and stays a
+         question. The mirror of that judgement is the bug this guard exists
+         for, so the verb list is a list and never a pattern. */
+      const commanded = politeCommand(instruction);
+      if (commanded) {
+        await runParser(commanded, mine);
+        return;
+      }
+
       const topic = readTopic(instruction);
-      if (topic) {
-        const card = reads ? buildReadCard(topic, reads) : null;
-        answer(
-          card
-            ? { kind: "read", id: nextId("read"), card }
-            : { kind: "agent", id: nextId("agent"), text: readGap(topic, context.accountName) },
-        );
-        return;
-      }
-      if (isQuestion(instruction)) {
-        answer({ kind: "agent", id: nextId("agent"), text: whatICanDo(context.accountName) });
-        return;
-      }
+      if (topic !== null || isQuestion(instruction)) {
+        /* ================================================== THE SECOND LANE
 
-      // THE COMPOSED BEAT. The glyph fills while the engine reads the line — and
-      // on a wired room the engine may be waiting on the gateway, so this is
-      // also the only thing standing between the banker and a blank pause.
-      const started = Date.now();
-      setThinking(true);
-      try {
-        const result = await engine.parseIntent(instruction, context);
-        await beat(started);
-        /* ------------------------------------------------ THE VALUE BOUNDS
+           A QUESTION GOES TO THE DESK when there is a desk to go to. The
+           brain reads the live org through its own tools, knows this bank's
+           nCino and answers in the room's own card language — which is more
+           than the bundle in this page can carry: the founder's second failure
+           transcript wants covenants at BOTH levels in one card, and no read
+           on this cockpit holds the loan-level junction.
 
-           A STAGED VALUE HAS TO LOOK LIKE A VALUE (founder repro 11b). The
-           free-field wave takes everything after the label it matched, with no
-           shape check of its own, and staged a fifteen-word question tail as
-           the new value of "Product". The room refuses to draw a chip like
-           that: the delta is dropped and the room says WHY, because a delta
-           silently swallowed is the same silence from the other direction.
-
-           Scoped to the FIELD WAVE (`fieldWire`). Commitments, rates and
-           maturities are parsed into typed values by their own waves. */
-        const unsound =
-          result.kind === "deltas"
-            ? result.deltas
-                .map((d) => ({ d, why: unsoundFieldChange(instruction, d) }))
-                .filter((x): x is { d: WorkroomDelta; why: string } => !!x.why)
-            : [];
-        const sound = result.kind === "deltas" ? result.deltas.filter((d) => !unsound.some((u) => u.d.id === d.id)) : [];
-        const dropped = unsound.length > 0 && sound.length === 0;
-
-        // The reply and the chips it puts on the table land TOGETHER, in one
-        // commit, so there is no frame in between where the room looks finished
-        // and the chips have not arrived.
-        const landed: ThreadItem[] = [
-          {
-            kind: "agent",
-            id: nextId("agent"),
-            step: mine,
-            text: dropped
-              ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
-              : result.reply,
-            // CLICKABLE ANSWERS ride BOTH reply kinds: an "unparsed" clarify and
-            // a "deltas" reply that still ends on a closed-set question.
-            options: dropped ? undefined : result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined,
-          },
-        ];
-        const chips: ChipModel[] =
-          result.kind === "deltas"
-            ? sound.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
-            : result.kind === "refusal"
-              ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
-              : [];
-        if (chips.length) {
-          landed.push({
-            kind: "chips",
-            id: nextId("chips"),
-            step: mine,
-            chips,
-            advisories: result.kind === "deltas" ? result.advisories : undefined,
-          });
+           WITH NO BRIDGE the composer keeps the fast lane exactly as merged:
+           the deterministic card where the bundle answers it, the honest gap
+           sentence where it does not, and the not-connected note on the rest.
+           Nothing waits on a bridge that was never there. */
+        if (brain) {
+          await runBrain(instruction, mine);
+          return;
         }
-        setItems((prev) => [...prev, ...landed]);
-        setSuggestion(engine.suggest());
-      } finally {
-        setThinking(false);
+        if (topic !== null) {
+          const card = reads ? buildReadCard(topic, reads) : null;
+          answer(
+            card
+              ? { kind: "read", id: nextId("read"), card }
+              : { kind: "agent", id: nextId("agent"), text: readGap(topic, context.accountName) },
+          );
+          return;
+        }
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${whatICanDo(context.accountName)} This view is not connected to the bank's systems, so I cannot take the question itself any further than that.`,
+        });
+        return;
       }
+
+      await runParser(instruction, mine);
     },
-    [ask, awake, beat, context, engine, entries, items, openGates, router, step, vocabulary.changeWord, vocabulary.nextMove],
+    [
+      ask,
+      awake,
+      brain,
+      context.accountName,
+      context.mode,
+      entries,
+      items,
+      openGates,
+      reads,
+      router,
+      runBrain,
+      runParser,
+      step,
+      vocabulary.changeWord,
+      vocabulary.nextMove,
+    ],
   );
 
   /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it
@@ -1290,6 +1493,11 @@ export function Workroom({
         // write it cannot see.
         footer: result.filed[0]?.verification ?? result.tokenNote,
         tokenNote: result.tokenNote,
+        // THE PACKAGE THE PLAN FILED AGAINST. Resolved at runtime from the
+        // bundle's own `meta.instanceUrl`; null where the view carries none,
+        // and the card then states the filing without offering a link it would
+        // have had to invent a host for.
+        packageHref: packageDeepLink(instanceUrl, context.productPackageId ?? undefined),
         handoff: result.handoff,
         handoffs: result.handoffs,
       };
@@ -1309,6 +1517,12 @@ export function Workroom({
         return [...prev, ...tail];
       });
       setToast(`${vocabulary.filedWord} · logged to the activity trail`);
+      // AND THE TRAIL IS TOLD (A30, extended to the room). The toast has said
+      // "logged to the activity trail" since the room shipped; this is the
+      // entry it was promising. Built from what the room ALREADY HOLDS — the
+      // execution result and its own manifest — so nothing is read back from
+      // the org to write it.
+      onFiled?.({ execution: result, changeCount: dossier.rows.length, packageHref: dossier.packageHref });
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
       if (committedDeltaMM) onExecuted?.(committedDeltaMM);
@@ -1330,7 +1544,7 @@ export function Workroom({
     } finally {
       setFiling(false);
     }
-  }, [agent, brief.baselineCommittedMM, brief.packageName, context.approver, engine, entries, figures.committedMM, filing, flow, onExecuted, sealed, vocabulary.filedWord]);
+  }, [agent, brief.baselineCommittedMM, brief.packageName, context.approver, context.productPackageId, engine, entries, figures.committedMM, filing, flow, instanceUrl, onExecuted, onFiled, sealed, vocabulary.filedWord]);
 
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
   useEffect(() => {
@@ -2407,6 +2621,25 @@ function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
           ✓
         </span>
         {dossier.footer}
+        {/* THE RECORD IS ONE CLICK AWAY. A banker who just filed a change wants
+            to look at what it landed on, and the room was making them go find
+            it. Quiet by construction: it is a dotted underline inside the
+            card's own last line, not a button competing with the halo.
+
+            NO HOST, NO LINK. `packageHref` is null where the view carries no
+            `meta.instanceUrl`, and nothing renders — a guessed My Domain is
+            worse than no link at all (A29). */}
+        {dossier.packageHref && (
+          <a
+            className="wk-reslink"
+            href={dossier.packageHref}
+            target="_blank"
+            rel="noreferrer"
+            data-deeplink="workroom-package"
+          >
+            Open the package in nCino
+          </a>
+        )}
       </div>
     </div>
   );

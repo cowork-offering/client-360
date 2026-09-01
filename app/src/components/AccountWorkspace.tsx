@@ -6,6 +6,7 @@ import { gradeColor } from "./RiskGrade";
 import { PackageStageChip } from "./PackageStage";
 import { TabContent } from "./tabs";
 import { SyncButton } from "./SyncSweep";
+import { OpenAccountInNcino } from "./DeepLink";
 import { prefersReducedMotion } from "../data/motion";
 import { Odo } from "./Odometer";
 
@@ -236,6 +237,13 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
                 night): the > FAB arc owns client actions now, full stop. Sync
                 stays as the hero's one quiet secondary control. */}
             <span className="hero-controls">
+              {/* THE CLIENT, IN nCINO. A banker standing on a relationship
+                  wants the account record itself sometimes, and the cockpit was
+                  making them go and find it. Ink-quiet on purpose: it is the
+                  hero's second quiet control, never a third button competing
+                  with Sync. NO HOST, NO LINK — `meta.instanceUrl` absent
+                  renders nothing rather than a guessed My Domain (A29). */}
+              <OpenAccountInNcino accountId={snap.accountId} />
               <SyncButton accountId={snap.accountId} accountName={name} bundle={bundle} />
             </span>
           </div>

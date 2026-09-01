@@ -136,6 +136,35 @@ export function OpenInNcino({ snapshot, secondary }: { snapshot: Snapshot | unde
 }
 
 
+/**
+ * THE CLIENT'S OWN ACCOUNT RECORD, from the hero.
+ *
+ * The quietest link in the cockpit and deliberately so: the hero is the
+ * client's identity, not a toolbar, and this is one dotted word beside Sync.
+ * It renders NOTHING where the view carries no org address — a disabled chip in
+ * the hero would be a control that exists to say it does not work.
+ */
+export function OpenAccountInNcino({ accountId }: { accountId: string | undefined }) {
+  const { data } = useApp();
+  const href = recordDeepLink(data.meta?.instanceUrl, "Account", accountId);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      data-deeplink="account"
+      className="hero-ncino"
+      title="Open this client's Account record in nCino"
+    >
+      Open in nCino
+      <svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M6 3h7v7M13 3L7 9M11 9.5V13H3V5h3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </a>
+  );
+}
+
 /** The credit package a plan created, when it created one. Secondary to the
  *  facility itself: the banker filed a facility and got a package with it. */
 export function OpenCreatedPackage({ packageId }: { packageId: string }) {

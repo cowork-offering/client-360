@@ -44,7 +44,12 @@ export interface ReadGroup {
 }
 
 export interface ReadCardModel {
-  topic: ReadTopic;
+  /** The card style slug. A locally built card carries a {@link ReadTopic}; a
+   *  card the BRAIN answered with carries the pack's own topic vocabulary
+   *  (`involvements`, `exposure`, `decisions`, …). It reaches the DOM as
+   *  `data-topic` and keys nothing, so the wider type costs nothing and lets
+   *  both lanes render through the same component instead of forking it. */
+  topic: string;
   /** The agent's own sentence above the card. */
   lede: string;
   groups: ReadGroup[];
