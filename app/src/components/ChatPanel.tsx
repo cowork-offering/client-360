@@ -9,8 +9,44 @@ import { ActionPanel } from "./ActionPanel";
 import { suggestActions, type Suggestion } from "../actions/suggest";
 import { ACTIONS_BY_ID } from "../actions/registry";
 import { BrandGlyph } from "./brand";
+import { GooFilter, LiquidMark } from "./workroom/Liquid";
 
 type SendState = "idle" | "sending" | "handedOff" | "answered" | "error";
+
+/** The chat's own word cadence (rule 9): ~60ms apart, each word 340ms. The
+ *  room's is faster (26ms) because the room speaks in one short sentence and
+ *  the assist answers in paragraphs. */
+const CHAT_WORD_MS = 60;
+
+/**
+ * THE ANSWER ARRIVES, IT DOES NOT APPEAR (rule 9).
+ *
+ * Words condense in one at a time — opacity, a 4px rise and a blur clearing —
+ * so a long answer reads as being said rather than pasted in one block. The
+ * whitespace stays as plain text nodes, which keeps `textContent` byte-identical
+ * to what the copilot returned: nothing about the animation changes the answer.
+ *
+ * ONLY THE ANSWER THIS SESSION JUST RECEIVED runs it. Injected history is
+ * already-read text, and staggering forty words of it on every panel open would
+ * be a load animation over something that never loaded.
+ */
+function ChatWords({ text }: { text: string }) {
+  const parts = useMemo(() => text.split(/(\s+)/).filter((p) => p !== ""), [text]);
+  let n = -1;
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (/^\s+$/.test(part)) return part;
+        n += 1;
+        return (
+          <span className="chatw" style={{ animationDelay: `${n * CHAT_WORD_MS}ms` }} key={i}>
+            {part}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 
 /** Channel diagnostics disclosure, shown only in the no-channel state.
  *  Collapsed by default; the probe runs on first open (and not before), so a
@@ -125,6 +161,9 @@ export function ChatPanelBody() {
   // A33.1.1 entry point 3 of 3.
   const [panelActionId, setPanelActionId] = useState<string | null>(null);
   const [answerMeta, setAnswerMeta] = useState<{ model?: string; costUsd?: number } | null>(null);
+  /** The one answer that ARRIVED in this session, so only it speaks its words
+   *  (rule 9). Everything else in the thread is history and is simply there. */
+  const [streamedId, setStreamedId] = useState<string | null>(null);
   const canSend = available && !sending && state.draft.trim().length > 0;
 
   // The assist is never unmounted (rule 56 keeps the conversation), so closing
@@ -194,6 +233,7 @@ export function ChatPanelBody() {
           },
         });
         setAnswerMeta({ model: answer.model, costUsd: answer.costUsd });
+        setStreamedId(`${requestId}-answer`);
         setSendState("answered");
       } catch (e) {
         setFailure(e as McpFailure);
@@ -234,10 +274,29 @@ export function ChatPanelBody() {
           <div className="chatmsgs">
             {messages.map((m) => (
               <div key={m.id} className={`chatrow ${m.role === "user" ? "me" : "agent"}`}>
-                {/* PLAIN TEXT ONLY (A13) — React escapes; no HTML/Markdown parsing. */}
-                <div className="chatbub">{m.text}</div>
+                {/* PLAIN TEXT ONLY (A13) — React escapes; no HTML/Markdown parsing.
+                    The word cadence splits the same escaped text into spans and
+                    changes nothing about what it says. */}
+                <div className="chatbub">{m.id === streamedId ? <ChatWords text={m.text} /> : m.text}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* THE ASSIST IS COMPOSING (rule 46: the mark is sanctioned for the
+            chat's thinking beat; rule 65.4 is the breath). Between the send and
+            the answer the panel used to say nothing at all, which reads as a
+            dropped question rather than a question being worked on.
+
+            The goo filter is declared beside the mark that uses it. The room
+            declares an identical one while it is open; two identical `#wk-goo`
+            defs resolve to the same effect, and neither surface may depend on
+            the other being mounted to breathe. */}
+        {sending && (
+          <div className="chatthink" role="status" aria-label="Composing an answer">
+            <GooFilter />
+            <LiquidMark />
+            <span>Composing…</span>
           </div>
         )}
       </div>

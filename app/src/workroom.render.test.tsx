@@ -553,7 +553,13 @@ describe("law 5 — nothing in the room scrolls", () => {
 
   it("opens every disclosure as a peek that floats over the room", async () => {
     const room = open("modify");
-    click(byText(/^Why$/));
+    // The explainer is the quiet "?" in the question bubble's own top-right
+    // corner now (founder, 2026-09-01) rather than a "Why" pill in the row
+    // under the chips. Same peek, same read, one less control in the band.
+    const why = room.querySelector<HTMLButtonElement>(".wk-openbub > .wk-whybtn")!;
+    expect(why.textContent).toBe("?");
+    expect(why.getAttribute("aria-label")).toBe("Why this position");
+    click(why);
     await settle();
     const peek = document.querySelector(".wk-peek-card");
     expect(peek).toBeTruthy();
@@ -1292,5 +1298,341 @@ describe("the router — the room claims no mode until it has one", () => {
     const { room } = openRouted({ question: null });
     expect(room.querySelector(".wk-title")!.textContent).toBe("Modification");
     expect(room.querySelector(".wk-kicker")!.textContent).toBe("This modification");
+  });
+});
+
+/* =============================================================================
+   THE FOUNDER'S LIVE RUN — THE THREE FAILURES, AS REGRESSION FIXTURES.
+
+   Every line the room is given below is the founder's own, verbatim from the
+   2026-09-01 session driving the built app. What each one did then:
+
+     "which borrowers have we already in the package?"
+        -> the parser's refusal boilerplate, over a bundle holding all 21
+           involvements. The canonical demo-loop failure.
+     "what covenants are against this Product Package"
+        -> field="Product", value="Package" on the Line of Credit, staged as a
+           Term change delta. Confidently wrong, which is worse than refusing.
+     "package with information and what exisiting covenants do i have against
+      this relationship i can use ?"
+        -> the same wave, with the ENTIRE fifteen-word tail as the value.
+
+   The human confirm gate held through all three - nothing could be written -
+   so what is asserted here is the intelligence, not the safety.
+   ============================================================================= */
+
+describe("the founder's live run — a question is never a delta", () => {
+  const data = live as unknown as C360Data;
+  const accountId = "001bb00001I7FPNAA3";
+
+  function openAsking() {
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    shut();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={{ bundle, accountName: bundle.snapshot!.name!, productPackageId: context.productPackageId }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  const readCards = () => [...document.querySelectorAll<HTMLElement>(".wk-read")];
+  const lastRead = () => readCards()[readCards().length - 1];
+
+  it("answers the borrowers question from the package, and stages nothing", async () => {
+    const room = openAsking();
+    await settle();
+    await typeInto(room, "which borrowers have we already in the package?");
+    const card = lastRead();
+    expect(card).toBeTruthy();
+    expect(card.dataset.topic).toBe("structure");
+    // Role-grouped involvements per facility, in the room's own card language.
+    expect(card.querySelectorAll(".wk-read-g").length).toBeGreaterThan(0);
+    expect(card.querySelectorAll(".wk-read-r").length).toBeGreaterThan(0);
+    expect(card.querySelectorAll(".tico").length).toBeGreaterThan(0);
+    // The guided follow-up flows into the EXISTING involvement op.
+    expect(card.querySelector(".wk-read-next")!.textContent).toMatch(/which facility/i);
+    // NOT ONE DELTA, and no refusal boilerplate about members.
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+    expect(room.textContent).not.toMatch(/no member I hold/i);
+  });
+
+  it("answers the covenants question that used to stage a term change", async () => {
+    const room = openAsking();
+    await settle();
+    await typeInto(room, "what covenants are against this Product Package");
+    const card = lastRead();
+    expect(card).toBeTruthy();
+    expect(card.dataset.topic).toBe("covenants");
+    // Thresholds and the org's own verdicts, as a compact card.
+    expect(card.textContent).toMatch(/threshold/);
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+    expect(room.textContent).not.toMatch(/Term change/);
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
+  });
+
+  it("stages nothing off the fifteen-word tail of the second repro", async () => {
+    const room = openAsking();
+    await settle();
+    await typeInto(
+      room,
+      "package with information and what exisiting covenants do i have against this relationship i can use ?",
+    );
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
+  });
+
+  it("still parses a real instruction into a proposal", async () => {
+    // The guard must not have cost the room its actual job.
+    const room = openAsking();
+    await settle();
+    await typeInto(room, "increase the Line of Credit to $19M");
+    expect(room.textContent).toMatch(/Line of Credit/);
+    expect(room.querySelectorAll(".wk-read")).toHaveLength(0);
+  });
+
+  it("answers a question it cannot read in plain words, naming what it CAN do", async () => {
+    const room = openAsking();
+    await settle();
+    await typeInto(room, "what is the relationship manager's phone number");
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+    const said = room.textContent ?? "";
+    expect(said).toMatch(/What I can do is change this package/);
+    // Banker language: an example of a line that WOULD work, not parser-speak.
+    expect(said).toMatch(/take the Line of Credit to \$19M/);
+  });
+});
+
+describe("thread compactness — every send collapses what came before", () => {
+  const data = live as unknown as C360Data;
+  const accountId = "001bb00001I7FPNAA3";
+
+  function openWiredRoom() {
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    shut();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={{ bundle, accountName: bundle.snapshot!.name!, productPackageId: context.productPackageId }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  const shown = (room: HTMLElement) =>
+    [...room.querySelectorAll(".wk-step")].filter((s) => !s.classList.contains("wk-gone"));
+
+  it("shows ONE live exchange, however many reads came before it (rule 31)", async () => {
+    const room = openWiredRoom();
+    await settle();
+    expect(shown(room)).toHaveLength(1);
+
+    await typeInto(room, "which borrowers have we already in the package?");
+    expect(shown(room)).toHaveLength(1);
+    expect(room.querySelector(".wk-hist")).toBeTruthy();
+
+    await typeInto(room, "what covenants are against this Product Package");
+    await typeInto(room, "show me the collateral");
+    // Four steps have happened; exactly one of them is on screen, and the chip
+    // above it counts the rest.
+    expect(room.querySelectorAll(".wk-step").length).toBe(4);
+    expect(shown(room)).toHaveLength(1);
+    expect(room.querySelector(".wk-hist")!.textContent).toContain("(3)");
+  });
+
+  it("opening the history shows every step again, and the top fades", async () => {
+    const room = openWiredRoom();
+    await settle();
+    await typeInto(room, "which borrowers have we already in the package?");
+    click(room.querySelector<HTMLButtonElement>(".wk-hist")!);
+    expect(shown(room)).toHaveLength(2);
+    expect(room.querySelector(".wk-thread")!.classList.contains("wk-masked")).toBe(true);
+  });
+
+  it("a REFUSAL never pins the thread, and never blocks the next line", async () => {
+    // The compounding bug behind the founder's report: a refusal card counted
+    // as an open gate, so it pinned its own step open AND answered every later
+    // line with "one decision at a time". A refusal is an answer, not a gate.
+    const room = openWiredRoom();
+    await settle();
+    await typeInto(room, "increase the equipment loan by an amount");
+    await typeInto(room, "which borrowers have we already in the package?");
+    expect(room.textContent).not.toMatch(/One decision at a time/);
+    expect(shown(room)).toHaveLength(1);
+  });
+});
+
+describe("the strip refuses what the engine would refuse", () => {
+  it("renders a non-booked member visible but disabled, with the reason", () => {
+    // Hartwell's 7th fixture member is at Proposal. It was selectable, so the
+    // room looked as if it could work on a loan it then refused in words.
+    const room = open("modify");
+    const rows = [...room.querySelectorAll<HTMLButtonElement>(".wk-mchip")];
+    expect(rows.length).toBeGreaterThan(1);
+    const proposal = rows.find((r) => r.classList.contains("wk-prop"))!;
+    expect(proposal).toBeTruthy();
+    expect(proposal.disabled).toBe(true);
+    expect(proposal.title).toBe("Proposal stage - not modifiable");
+    // Every booked member stays live.
+    for (const row of rows.filter((r) => !r.classList.contains("wk-prop"))) {
+      expect(row.disabled).toBe(false);
+    }
+  });
+
+  it("takes the eligibility the ENGINE computes when the host hands it down", () => {
+    // `eligibleMemberIds` is `bookedFacilities` resolved once where the bundle
+    // lives. A member outside it is disabled whatever its own tag says, so the
+    // strip and the engine's refusal can never drift apart.
+    const context = contextFor("modify");
+    shut();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createScriptedEngine(context)}
+          eligibleMemberIds={new Set(["HW1001"])}
+          onClose={() => {}}
+        />,
+      );
+    });
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(".wk-mchip")];
+    expect(rows.filter((r) => !r.disabled)).toHaveLength(1);
+    expect(rows.filter((r) => !r.disabled)[0].textContent).toContain("Revolver");
+  });
+});
+
+describe("the two quiet tiers under the conversation", () => {
+  const data = live as unknown as C360Data;
+  const accountId = "001bb00001I7FPNAA3";
+
+  function openWithReads(reads: Parameters<typeof Workroom>[0]["reads"]) {
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    shut();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={reads}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  /** The same bundle with one covenant test pushed into the past. */
+  function overdueBundle() {
+    const bundle = data.borrowers![accountId];
+    const covenants = (bundle.covenants?.covenants ?? []).map((c, i) =>
+      i === 0 ? { ...c, covenantType: "DSC", nextEvaluationDate: "2026-07-05", latestComplianceStatus: "Exception" } : c,
+    );
+    return { ...bundle, covenants: { ...bundle.covenants, covenants } };
+  }
+
+  it("says an overdue test out loud, which the opener deliberately does not", async () => {
+    const bundle = overdueBundle();
+    const room = openWithReads({
+      bundle,
+      accountName: bundle.snapshot!.name!,
+      productPackageId: null,
+      generatedAt: data.meta!.generatedAt,
+    });
+    await settle();
+    const tip = room.querySelector(".wk-tips .wk-tip")!;
+    expect(tip).toBeTruthy();
+    expect(tip.querySelector(".wk-tip-l")!.textContent).toMatch(/^The DSC test is \d+ days overdue\.$/);
+  });
+
+  it("renders NOTHING when nothing is overdue and no channel answered", async () => {
+    const bundle = data.borrowers![accountId];
+    const room = openWithReads({
+      bundle,
+      accountName: bundle.snapshot!.name!,
+      productPackageId: null,
+      generatedAt: data.meta!.generatedAt,
+    });
+    await settle();
+    // No placeholder, no spinner, no empty frame: the block is simply absent.
+    expect(room.querySelector(".wk-tips")).toBeNull();
+  });
+
+  it("waits for the route: law 3 owns the opening view", async () => {
+    const bundle = overdueBundle();
+    shut();
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={{
+            bundle,
+            accountName: bundle.snapshot!.name!,
+            productPackageId: null,
+            generatedAt: data.meta!.generatedAt,
+          }}
+          router={{ question: neutralAsk(), say: null, onBind: () => {}, onRestart: () => {} }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    const room = document.querySelector<HTMLElement>(".wk-room")!;
+    await settle();
+    // A tip beside three chips answering a different question is the fourth
+    // chip rule 30 bans, and the opening view is still under sixty words.
+    expect(room.querySelector(".wk-tips")).toBeNull();
+    expect(visibleWords(room).length).toBeLessThan(60);
   });
 });

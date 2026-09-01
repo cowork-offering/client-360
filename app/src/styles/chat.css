@@ -153,6 +153,45 @@
   color: var(--ink-muted);
 }
 
+/* -------------------------------------------------------------- the thinking
+   The mark BREATHES between the send and the answer (rule 46 sanctions it here;
+   rule 65.4 is the recipe, and it arrives with its component in liquid.css).
+   Silence in this gap read as a dropped question. */
+.chatthink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+/* The in-thread mark is 42px square, which is a lot of air beside one line of
+   12px text. The chat's beat is smaller than the room's. */
+.chatthink .liquidmark.mini {
+  width: 28px;
+  height: 28px;
+}
+.chatthink .liquidmark .c360-glyph {
+  font-size: 11px;
+}
+
+/* THE ANSWER IS SAID, NOT PASTED (rule 9): ~60ms apart, each word opacity + a
+   4px rise with the blur clearing over 340ms. */
+.chatw {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(4px);
+  transform: translateY(4px);
+  animation: chatw 340ms var(--ease-out) forwards;
+}
+@keyframes chatw {
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
 /* ------------------------------------------------------------------ the chips
    Quiet grey pills, one row, wrapping. They are shortcuts, not commits, so they
    stay hairline-and-ink and never take a fill. */

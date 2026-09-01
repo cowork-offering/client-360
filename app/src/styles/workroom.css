@@ -22,11 +22,12 @@
    new objects arrive with new names. Renaming a hook the room's own tests and
    `Peek` reach for would be churn with nothing on the other side of it.
 
-   NAMESPACE. Every class is `wk-` prefixed, except five shapes the dummy names
-   bare and this room is the only user of: `tico`, `liquidmark`, `goo`, `skel`,
-   `aura`. The cockpit ships Tailwind, which owns `.grid`, `.card` and a hundred
-   more; a bare utility name landing on one of those would style the whole app
-   from inside an overlay.
+   NAMESPACE. Every class is `wk-` prefixed, except three shapes the dummy names
+   bare and this room is the only user of: `tico`, `skel`, `aura`. The cockpit
+   ships Tailwind, which owns `.grid`, `.card` and a hundred more; a bare utility
+   name landing on one of those would style the whole app from inside an overlay.
+   (`liquidmark` and `goo` are bare too, and moved out with their component to
+   styles/liquid.css when the chat started breathing as well.)
    ============================================================================= */
 
 .wk-root {
@@ -232,6 +233,16 @@ body.wk-open #root {
   flex-direction: column;
   gap: 32px;
 }
+/* HEADROOM FOR THE FIRST ITEM (founder, 2026-09-01). The identity chip hangs
+   21px above its bubble (rule 52) and the column's own 14px of top padding is
+   less than that, so the FIRST bubble in the thread had its chip sliced off by
+   the scroller's edge on hover. Every later item has the 32px step gap or the
+   38px thread gap above it, and once history exists rule 39's 58px of clearance
+   covers the case as well; only item zero was ever short. 8px + 14px = 22px,
+   one pixel of air past the chip. */
+.wk-thread > .wk-step:first-child > .wk-msg:first-child {
+  margin-top: 8px;
+}
 .wk-step.wk-gone {
   display: none;
 }
@@ -375,6 +386,44 @@ body.wk-open #root {
   gap: 7px;
   flex-wrap: wrap;
   margin-top: 10px;
+}
+
+/* -------------------------------------------------- the question's explainer
+   THE "?" IN THE CORNER (founder, 2026-09-01). The explainer used to be a "Why"
+   pill in the row under the option chips, which put the routes, the explainer
+   and the source tray in one band and made the question read busy. It is a
+   quiet icon in the bubble's own top-right corner now, aligned to the bubble's
+   14px radius, and it takes an ink-3 wash on hover and nothing else. */
+.wk-openbub {
+  position: relative;
+}
+.wk-openbub:has(> .wk-whybtn) {
+  padding-right: 34px;
+}
+.wk-whybtn {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-whybtn:hover {
+  color: var(--ink-muted);
+  background: var(--wash-2);
+}
+.wk-whybtn:active {
+  transform: scale(0.94);
 }
 /* THE PACKAGE'S LIVE FIGURES, at the head of the lane. A landed change moves
    them and says what they WERE. */
@@ -561,9 +610,23 @@ body.wk-open #root {
 .wk-mchip.wk-prop .wk-amt {
   color: var(--ink-muted);
 }
+/* NOT MODIFIABLE, AND IT LOOKS IT (founder, 2026-09-01). A member no credit
+   action can run against stays on the strip — what the package holds is what
+   the package holds — but it is greyed to ink-3, takes no hover lift and keeps
+   the default cursor. The reason rides the title. */
 .wk-mchip:disabled {
-  opacity: 0.55;
   cursor: default;
+  color: var(--ink-faint);
+  box-shadow: none;
+}
+.wk-mchip:disabled b,
+.wk-mchip:disabled .wk-amt {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+.wk-mchip:disabled .tico {
+  color: var(--ink-faint);
+  background: var(--wash-2);
 }
 
 /* THE TYPE-ICON LANGUAGE (rule 35) — one shape per credit object, everywhere
@@ -742,9 +805,12 @@ body.wk-open #root {
 
 /* AN HONEST REFUSAL is the same card in the warning key: the banker's reading
    first, then the org's own account of its constraint as the quote it is. */
+/* The refusal card keeps a warning HAIRLINE — a card that files nothing has to
+   be distinguishable from one that does — but loses the amber wash: the reason
+   is already amber ink, and the fill made a refusal louder than an execution. */
 .wk-chip.wk-refuse {
   border-color: color-mix(in srgb, var(--warning) 28%, transparent);
-  background: var(--warning-bg);
+  background: var(--surface-raised);
 }
 .wk-refuse-why {
   margin-top: 6px;
@@ -756,12 +822,19 @@ body.wk-open #root {
   margin-top: 7px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid color-mix(in srgb, var(--warning) 18%, transparent);
+  background: var(--wash-2);
+  border: 1px solid var(--border);
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--warning-prose);
 }
+/* STATUS AS TYPOGRAPHY, NEVER PILL SOUP (system non-negotiable; founder sweep
+   2026-09-01). Every delta and advisory chip in this room wears the SAME calm
+   surface — wash-2 with the standard hairline, no tinted fill of any kind —
+   and the status lives in the INK alone. A tinted fill on "TERM CHANGE" made a
+   routine amendment shout in violet beside a coverage advisory shouting in
+   amber, and the room read as a bag of coloured pills rather than a document.
+   The one purple left on a chip in this room is rule 24's SELECTED wash. */
 .wk-kind {
   font-size: 9.5px;
   font-weight: 700;
@@ -769,19 +842,17 @@ body.wk-open #root {
   text-transform: uppercase;
   border-radius: 999px;
   padding: 2px 8px;
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--wash-2);
+  border: 1px solid var(--border);
+  color: var(--ink-muted);
 }
 .wk-kind.wk-new {
-  background: var(--positive-bg);
   color: var(--positive);
 }
 .wk-kind.wk-collateral {
-  background: var(--neutral-bg);
-  color: var(--neutral-fg);
+  color: var(--ink-muted);
 }
 .wk-kind.wk-refusal {
-  background: var(--warning-bg);
   color: var(--warning);
 }
 .wk-tgt {
@@ -815,7 +886,7 @@ body.wk-open #root {
   animation: wk-pop 450ms var(--ease-settle) both;
 }
 .wk-notice .tico {
-  background: var(--warning-bg);
+  background: var(--wash-2);
   color: var(--warning);
 }
 .wk-notice .wk-nt {
@@ -828,6 +899,98 @@ body.wk-open #root {
   font-size: 12px;
   line-height: 1.55;
   color: var(--ink-body);
+}
+
+/* ---------------------------------------------------------------- the read card
+   A QUESTION ANSWERED FROM THE PACKAGE (founder, 2026-09-01). It is the room's
+   own card language, not a table: solid surface under data (rule 23), the type
+   icon on every row, the figure right-aligned, and the status carried by the
+   INK alone — the same sweep every other chip in this room just took. It is not
+   a proposal, so it carries no Confirm and no fill that would suggest one. */
+.wk-read {
+  align-self: flex-start;
+  max-width: 86%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: 13px;
+  padding: 14px 18px;
+  margin: 4px 0 2px;
+  box-shadow: var(--shadow-card);
+  animation: wk-in 550ms var(--ease-settle) both;
+}
+.wk-read-lede {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-body);
+}
+.wk-read-g {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wk-read-h {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.wk-read-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wk-read-r .tico {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.wk-read-r .tico svg {
+  width: 11px;
+  height: 11px;
+}
+.wk-read-l {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wk-read-l b {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-body-strong);
+}
+.wk-read-d {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.wk-read-v {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+/* Status as typography: the row's verdict is the only thing that takes a
+   colour, and it takes it in the ink. */
+.wk-read-r.wk-warn .wk-read-v {
+  color: var(--warning);
+}
+.wk-read-r.wk-bad .wk-read-v {
+  color: var(--critical);
+}
+/* The guided next move. A sentence, never a chip row: the answer to it goes
+   through the same parser every other line does. */
+.wk-read-next {
+  padding-top: 11px;
+  border-top: 1px dashed var(--row-divider);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
 }
 
 /* ---------------------------------------------------------------- advisories
@@ -888,6 +1051,9 @@ body.wk-open #root {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* The check's verdict takes the same sweep: neutral surface, the verdict in
+   the ink. A green pill and an amber pill side by side were the loudest thing
+   in a room whose whole subject is a figure. */
 .wk-vchip {
   font-size: 9.5px;
   font-weight: 700;
@@ -895,11 +1061,11 @@ body.wk-open #root {
   text-transform: uppercase;
   border-radius: 999px;
   padding: 2px 8px;
-  background: var(--positive-bg);
+  background: var(--wash-2);
+  border: 1px solid var(--border);
   color: var(--positive);
 }
 .wk-vchip.wk-warn {
-  background: var(--warning-bg);
   color: var(--warning);
 }
 .wk-vk {
@@ -933,11 +1099,51 @@ body.wk-open #root {
    The next natural move, offered. Never a gate: a suggestion still on the table
    is an offer, and composing more or filing what is staged are both legitimate.
    The row SLEEPS until the brief lands (rule 30). */
+/* ------------------------------------------------------------- the two tiers
+   What the deal already says, and what the client is still waiting on. Quiet
+   by construction: one line of ink-3 prose and one hairline chip each, no
+   surface of their own, nothing that competes with the conversation above or
+   the composer below. Neither renders when there is nothing to say. */
+.wk-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 0;
+}
+.wk-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.wk-tip-l {
+  min-width: 0;
+}
+.wk-tip-b {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  padding: 0 0 1px;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.wk-tip-b:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+.wk-tip-b:active {
+  transform: scale(0.97);
+}
+
 .wk-sugg {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 0 8px;
+  padding: 10px 0 0;
 }
 .wk-sugg:empty {
   display: none;
@@ -979,12 +1185,30 @@ body.wk-open #root {
   border-color: rgba(0, 0, 0, 0.16);
   color: var(--ink);
 }
+/* THE ROUTES ARE ONE ROW (founder, 2026-09-01). Three one-word chips answering
+   one question read as a line, not as a wrapping field of pills; tighter, and
+   they never break. Only the routing row takes this — the org's own picklist
+   values legitimately wrap. */
+.wk-opts.wk-routes {
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+.wk-opts.wk-routes .wk-opt {
+  white-space: nowrap;
+  padding: 5px 12px;
+}
 
 /* ---------------------------------------------------------------- composer
    The PILL takes the focus (rule 47) via `.eg-pill`, so the input never draws a
    rectangle inside a rounded shell and the ring is ink, never violet. */
 .wk-composer {
   flex: none;
+  /* AIR ABOVE THE BAR (founder, 2026-09-01: the facility rows "stay pretty
+     close to the chat bar"). The suggestion row used to be the only thing
+     between the thread and the composer, and `.wk-sugg:empty` removes itself —
+     so with no next move offered the last facility row sat directly on the
+     input. The clearance belongs to the composer, which is always there. */
+  margin-top: 14px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1356,100 +1580,11 @@ body.wk-open #root {
   animation-delay: 240ms;
 }
 
-/* THE LIQUID MOMENT — a gooey halo merges and parts behind the breathing mark.
-   The metaball filter is NATIVE SVG (`#wk-goo`, six lines); the system is
-   molten only while it composes and data never melts. */
-.liquidmark {
-  position: relative;
-  width: 92px;
-  height: 92px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.liquidmark.mini {
-  width: 42px;
-  height: 42px;
-  flex: none;
-}
-.goo {
-  position: absolute;
-  inset: 0;
-  filter: url(#wk-goo);
-}
-.goo i {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 34px;
-  height: 34px;
-  margin: -17px 0 0 -17px;
-  border-radius: 50%;
-  background: var(--brand);
-  opacity: 0.14;
-}
-.liquidmark.mini .goo i {
-  width: 17px;
-  height: 17px;
-  margin: -8.5px 0 0 -8.5px;
-  opacity: 0.16;
-}
-.goo i:nth-child(1) {
-  animation: wk-g1 3.4s ease-in-out infinite;
-}
-.goo i:nth-child(2) {
-  animation: wk-g2 4.1s ease-in-out infinite;
-}
-.goo i:nth-child(3) {
-  animation: wk-g3 3.7s ease-in-out infinite;
-}
-@keyframes wk-g1 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(-18px, 10px) scale(1.15);
-  }
-}
-@keyframes wk-g2 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(0.9);
-  }
-  50% {
-    transform: translate(18px, -12px) scale(1.1);
-  }
-}
-@keyframes wk-g3 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1.05);
-  }
-  50% {
-    transform: translate(4px, 18px) scale(0.85);
-  }
-}
-.liquidmark .c360-glyph {
-  position: relative;
-  z-index: 1;
-  color: var(--brand);
-  font-size: 14px;
-  animation: wk-breathe 2.4s var(--ease-out) infinite;
-}
+/* The composing beat runs the mark a touch faster than the shared recipe: the
+   room is answering, not loading. Everything else about the liquid mark lives
+   with its component, in styles/liquid.css. */
 .wk-compose .liquidmark .c360-glyph {
   animation-duration: 1.8s;
-}
-@keyframes wk-breathe {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.97);
-  }
-  50% {
-    opacity: 0.95;
-    transform: none;
-  }
 }
 
 /* ------------------------------------------------------------- THE DOSSIER

@@ -22,8 +22,10 @@ import "../styles/chat.css";
    The mark in the corner is the app's ONE floating control. On the landing it
    opens the assist directly, because credit actions make no sense without a
    client (rule 50). On a client it fans a quarter-circle of FOUR satellites —
-   the assist at the top, then the three credit actions swinging down the arc
-   (rule 49) — narrated by ONE anchored chip beneath the mark (rule 54). Opening
+   the assist at the top, then the three credit actions swinging down to the
+   horizontal (rule 49) — narrated by ONE anchored chip beneath the mark (rule
+   54), over a barely-there radial scrim so the glass discs read against a busy
+   content page rather than dissolving into it (founder, 2026-09-01). Opening
    the assist makes the mark YIELD entirely; the panel takes its exact spot,
    minimize folds it into a glass pill holding that same spot, and close brings
    the mark back (rule 56).
@@ -42,17 +44,23 @@ import "../styles/chat.css";
 
 type ArcAct = "chat" | "facility" | "annual" | "covenant";
 
-/** The arc, measured off the dummy: satellites on a 118px radius with 46px
- *  between neighbouring centres, staggered 28ms apart by index. The offsets are
- *  the dummy's literal --tx/--ty; nothing here is recomputed from trigonometry,
- *  because the founder-approved arc is these numbers and not a formula.
+/** The arc: four satellites on a 96px radius, evenly spread across the quarter,
+ *  staggered 28ms apart by index.
  *
- *  RECOMPUTED FOR FOUR FROM THE SPACING RHYTHM, not from the sweep. The dummy's
- *  five sit at 22.5° steps off vertical, which is what makes the neighbouring
- *  centres 2·118·sin(11.25°) = 46px apart. Dropping a satellite therefore drops
- *  the LAST POSITION and keeps the rhythm — the alternative, spreading four
- *  across the same 90°, opens the gaps to 61px and the arc stops reading as one
- *  swing. The four kept offsets are byte-identical to the dummy's first four. */
+ *  CLOSER TO THE MARK (founder, 2026-09-01). The four kept the five-arc's first
+ *  offsets on r=118, which put the last satellite two thirds of the way round a
+ *  sweep nothing finished — distant from the mark and lopsided in the corner.
+ *  The radius comes back to rule 49's original 96px and the four RESPREAD over
+ *  the full quarter at 30° steps off vertical: chat at the top, covenant review
+ *  at the horizontal, the two credit actions evenly between them. Neighbouring
+ *  centres land 2·96·sin(15°) = 49.7px apart, which holds the ~46px rhythm the
+ *  five-arc read at while making the arc symmetric about its own 45° axis.
+ *
+ *  The offsets below ARE that geometry, rounded to the pixel the transform will
+ *  paint at: (0,-96) (-48,-83) (-83,-48) (-96,0). They are written out rather
+ *  than computed for the same reason the dummy's were — the arc is a set of
+ *  approved positions, and a formula in the source invites the next person to
+ *  re-tune the sweep instead of asking the founder. */
 const ARC: {
   act: ArcAct;
   /** The narrator chip's word for it. One or two words so the centred chip can
@@ -68,10 +76,10 @@ const ARC: {
   icon?: IconName;
   domId?: string;
 }[] = [
-  { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -118 },
-  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -45, ty: -109, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
-  { act: "annual", label: "Annual review", aria: "Annual review", tx: -83, ty: -83, actionId: "annual-review", icon: "review" },
-  { act: "covenant", label: "Covenant review", aria: "Covenant review", tx: -109, ty: -45, actionId: "covenant-review", icon: "covenant" },
+  { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -96 },
+  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -48, ty: -83, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
+  { act: "annual", label: "Annual review", aria: "Annual review", tx: -83, ty: -48, actionId: "annual-review", icon: "review" },
+  { act: "covenant", label: "Covenant review", aria: "Covenant review", tx: -96, ty: 0, actionId: "covenant-review", icon: "covenant" },
 ];
 
 const ARC_LABEL_AT_REST = "Client actions";
@@ -451,6 +459,15 @@ export function ChatFab() {
       {/* One floating surface at a time: the mark stands down while the Client
           Actions panel is open, and returns when it closes (founder feedback
           2026-07-25). */}
+      {/* THE ARC'S GROUND (rule 63's dim family). It fades in under the fanned
+          satellites so they read over a busy content page, and it never takes
+          the pointer: the document listener above is what closes the arc. */}
+      {state.panel !== "actions" && onClient && (
+        <Portal>
+          <div className={`fabscrim${arcOpen ? " show" : ""}`} id="fabScrim" aria-hidden="true" />
+        </Portal>
+      )}
+
       {state.panel !== "actions" && (
         <div ref={wrapRef} className={fabWrapClass} id="fabwrap">
           {onClient &&

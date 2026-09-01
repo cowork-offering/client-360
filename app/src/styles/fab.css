@@ -21,8 +21,40 @@
    should see until they open it — so no local kill-switch is needed.
    ============================================================================= */
 
+/* ----------------------------------------------------------------- the scrim
+   THE ARC NEEDS GROUND TO READ AGAINST (founder, 2026-09-01). Four glass
+   satellites over a dense exposure table are four glass discs over a dense
+   exposure table; the corner has to recede a little for them to be a menu.
+
+   It borrows the cmdk dim family for coherence (rule 63): one radial anchored
+   at the mark's own corner, rgba(16,4,30,.12) at the centre fading to nothing
+   well before the far edge. Barely there on purpose — the DOF work belongs to
+   the palette, and the arc only needs the pointer to know where to look.
+
+   POINTER-EVENTS NONE, ALWAYS. Outside-click closing is the document listener
+   in ChatFab, which already treats anything outside `.fabwrap` as a close; a
+   scrim that swallowed the click would take the underlying control's press
+   with it and would ALSO close, which is one gesture doing two things. */
+.fabscrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-fab) - 1);
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle at calc(100% - var(--fab-right)) calc(100% - var(--fab-bottom)),
+    rgba(16, 4, 30, 0.12) 0%,
+    rgba(16, 4, 30, 0.06) 34%,
+    rgba(16, 4, 30, 0) 68%
+  );
+  transition: opacity 0.3s var(--ease-out);
+}
+.fabscrim.show {
+  opacity: 1;
+}
+
 /* --------------------------------------------------------------- the corner
-   ONE fixed anchor carries the mark, the five satellites and the narrator chip,
+   ONE fixed anchor carries the mark, the four satellites and the narrator chip,
    so "the FAB yields" is one transform on one object rather than four elements
    agreeing to disappear together. */
 .fabwrap {
@@ -119,10 +151,10 @@
 }
 
 /* ------------------------------------------------------- the quarter-circle
-   Rule 49: five 40px glass satellites fan out of the mark on a 118px radius,
-   chat at the top and the four credit actions swinging down to the horizontal,
-   staggered 28ms apart. Each satellite carries its own --tx/--ty (measured off
-   the dummy) and its own --i for the stagger.
+   Rule 49, at its original radius: 40px glass satellites fan out of the mark on
+   a 96px radius, chat at the top and the last credit action at the horizontal,
+   staggered 28ms apart. Each satellite carries its own --tx/--ty (the four
+   positions live in ChatFab's ARC table) and its own --i for the stagger.
 
    THE STAGGER IS A TRANSITION-DELAY AND THAT IS CORRECT HERE. Trap 1 forbids
    transition-delays on ENTRANCE CASCADES of elements that later change state
