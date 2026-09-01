@@ -36,3 +36,20 @@ in the next drive once E1/E5/E8 are fixed.
 
 ## Org state
 Clean. No revert needed. Baseline verified after the refused execute.
+
+---
+
+## Second drive, on the plan-fixes build (headless, integrator, 2026-09-01 late)
+
+Confirmed FIXED on the published build: E1 (both removes refuse by name, nothing un-staged), E2 (ambiguous asset asks), E3 (typed type honoured), E4b (role is the value), E4c (the committed sentence held on non-monetary adds; a real commitment change correctly moves it to $51M and raises the COVERAGE THINS check). Four new findings:
+
+| # | What | Severity | Where | Fix |
+|---|---|---|---|---|
+| N1 | The pledge-remove fence refusal says "covenant DETACH ... loan-covenant junction" - the wrong noun for a collateral pledge. Honest refusal, wrong words. | LOW | SHELL, fenceRefusal copy | Pledge removes quote the deletes fence, not the covenant one. |
+| N2 | Create-then-pledge is REFUSED: "needs an advance rate recorded on the pledge, a credit decision ... rather than something I will set." Wave 2 proved the ORG resolves advance rate and lendable in-transaction, so the block is over-cautious. The plan-fixes agent kept it deliberately and flagged it. | HIGH for the demo | SHELL (elicit / pledge verify) | FOUNDER DECISION: lift the block and file without a rate, trusting the org (the wave-2 fact), or keep it and require a rate from the approved terms. |
+| N3 | "the 15M line of credit" on a FEE line is read by the fenced engine as a $15,000,000 amount ("Is the fee 1% or $15,000,000?"), and the next line was consumed as the answer to that open question and staged a $15M FEE. The dollar-qualifier phrasing only works on commitment lines (post-parse filter). | MEDIUM | FENCED ENGINE money reader; shell can pre-empt | SHELL: where a line carries a dollar qualifier that resolves to exactly one member, set FOCUS to that member and STRIP the qualifier before the engine sees the line. Until then: focus by chip, no figure on fee/exception/party lines. |
+| N4 | ROOT CAUSE of E4a, E8 and E7: Customer360RelationshipGraph.cls queries Legal_Entities WHERE LLC_BI__Account__c = anchor. It returns only rows where the anchor itself is the party (6 Borrower rows) and never the guarantors/owners on the anchor's loans (15 of 21 rows missing). Bundle refresh cannot fix it. | CRITICAL (borrowing structure is a headline feature) | APEX READ TOOL (knowledge/sf-build-v2/Customer360RelationshipGraph.cls:125) | Query by the anchor's loans/packages (the UNION the pack describes). Read tool only: no guard, no write arm. Deploy joint with the founder, then refresh live-data.json, then re-drive 10b, 11, and "any guarantors?". |
+
+Also observed: the Customer 360 connector in the integrator's own session returns INVALID_JWT_FORMAT - re-authorise it in claude.ai connector settings before relying on live reads at the booth.
+
+Drive script that matches the screen: knowledge/MODIFICATION-DRIVE-SCRIPT-20260901.md.
