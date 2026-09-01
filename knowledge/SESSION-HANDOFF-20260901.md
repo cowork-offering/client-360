@@ -245,26 +245,25 @@ post-mint founder directives incl. the arc changes + 3 probe-module artifacts).
 - The Relationship arc satellite icon = a person glyph (new "person" in the icon union).
 - 2249 tests green; released via the full chain.
 
-## IN FLIGHT AT HANDOVER: the Salesforce bubble (branch sf-bubble, worktree
-.claude/worktrees/sf-bubble, agent may or may not have committed before this session ended -
-CHECK `git log sf-bubble` first; if commits exist with green gates, merge; else rebuild from
-this spec):
-- Founder spec verbatim intent: a Salesforce-cloud bubble in the client arc; clicking it fans
-  a SECOND TIER of two smaller glass bubbles: "Account page" and "Latest package", each opening
-  the Salesforce record in a new tab.
-- Build spec: arc back to 4 satellites (30deg steps r=96: (0,-96)(-48,-83)(-83,-48)(-96,0));
-  new "cloud" glyph in ActionIcon (generic cloud, 1.3 stroke, NOT the trademark logo); narrator
-  chip labels "Salesforce" / "Account page" / "Latest package" (rule 54: one chip, never
-  floating labels); second tier ~34px bubbles, lens glass w/ triple rims (census!), 28ms spring,
-  outside-click/Escape collapses; links = <instanceUrl>/lightning/r/Account/<accountId>/view and
-  /LLC_BI__Product_Package__c/<packageId>/view via the EXISTING runtime instanceUrl resolution
-  (brain-wiring pass built it; never hardcode); unresolvable -> disabled bubble (ink-3, title
-  "Not connected to the org"), never a wrong link; trap 5 shared handler; client view only.
-- ALSO in that pass: REMOVE the hero's "Open in nCino" text affordance (founder: never say
-  "open in nCino" - the cloud is the door); the dossier keeps linking the written package via
-  its reference chip without that wording.
-- Arc changes ripple into actionPanel/chatParity entry helpers + probe targets + the
-  INTENT-OVERRIDES post-mint section - the tweaks and arc-integration commits show the pattern.
+## SHIPPED 2026-09-01 morning: the Salesforce bubble (merged efb5993 + reword 013ce68, on main, published)
+- Arc is back to 4 satellites; 4th = generic cloud glyph, branches a second tier of two 34px
+  chip-glass bubbles at +/-24deg/44px off its own radial: Account page + Latest package, new-tab
+  lightning links via runtime instanceUrl, disabled (both) when no host, package bubble also
+  disabled when the bundle stages no package. Tier folds on Escape/outside/mark AND on taking a
+  door. Narrator chip: Salesforce / Account page / Latest package. Census 0 violations in all 4
+  states; 2262 tests; probe FAILs = the 9 directed leaves only (geometry back to the mint's own
+  four-seat spread). New file sfBubble.render.test.tsx (16 tests) carries the doctrine.
+- ALL "Open in nCino" wording is gone app-wide: hero affordance removed (dossier package NAME
+  is the link now, in .rc-h - overrides a mint-era intent comment, flagged in INTENT-OVERRIDES),
+  and the StepTracker created-record links reworded View in Salesforce / View deal in Salesforce.
+- OPEN FOUNDER CALLS from the build (agent flagged, not improvised): (1) "Latest package"
+  resolves as packageRecords(bundle)[0] = the PRIMARY package (same record the workroom anchors
+  on), NOT max-by-date - fine single-package, ask him for multi-package books. (2) Tier folds when
+  a door is taken - reversible if he wants the corner held open behind the new tab. (3) .sfbtn is
+  intentionally NOT on sel.arcButton, so arc-geometry probes measure 4 satellites, never the
+  branch; gating the tier needs NEW probe leaves.
+- Two extra glyphs added for the tier (rule 54 bans labels): building (Account) + package
+  (Product Package, the workroom type-icon redrawn at 18).
 
 ## THE IN-DEPTH TESTING (NOT executed - the founder wants to DRIVE it with the next session):
 The founder explicitly stopped the autonomous sweep: testing is a JOINT activity, him at the
