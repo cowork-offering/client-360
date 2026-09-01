@@ -226,8 +226,29 @@ describe("the fast path is only for a parse that is provably clean", () => {
     expect(clean("take the Line of Credit to $20M and the Equipment Loan to $10M", staged)).toBe(false);
   });
 
-  it("refuses a line whose qualifier contradicts the member set (P6)", () => {
+  /* THE SECOND DRIVE REVERSED THIS ONE (2026-09-01 evening), on evidence.
+     The original assertion read a qualifier conflict as a reason to distrust
+     the parse. But `qualifierFilter` narrows ONLY when exactly one member
+     matches exactly one reading, so it comes out exactly resolved and says so:
+     driven with no channel the room staged the single correct chip instantly,
+     and driven WITH a channel the same line sat waiting on the desk. Punting a
+     resolved line made the connected room worse than the disconnected one, so
+     a resolved qualifier is now clean and only an unresolved one is the
+     brain's. */
+  it("takes a line the qualifier RESOLVED to one member (P6)", () => {
     const staged = [commitment("a", LOC, 4_000_000), commitment("b", SEASONAL, 4_000_000)];
-    expect(clean("take the 2.5M line of credit to 4M", staged)).toBe(false);
+    expect(clean("take the 2.5M line of credit to 4M", staged)).toBe(true);
+  });
+
+  it("still refuses a line the qualifier could not resolve", () => {
+    const staged = [commitment("a", LOC, 4_000_000), commitment("b", SEASONAL, 4_000_000)];
+    expect(
+      provablyClean({
+        line: "take the 2.5M line of credit to 4M",
+        result: deltasResult(staged),
+        sound: staged,
+        qualifier: { keep: [], dropped: staged, said: "dropped everything" },
+      }),
+    ).toBe(false);
   });
 });

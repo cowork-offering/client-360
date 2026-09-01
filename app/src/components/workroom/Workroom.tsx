@@ -37,7 +37,7 @@ import {
   type SmartOpening,
 } from "./route";
 import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
-import { buildEnvelope, politeCommand, toReadCardModel } from "./brainRoute";
+import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { magnitudeAdvisories, provablyClean, qualifierFilter, type QualifierMember } from "./dispatch";
@@ -1184,9 +1184,17 @@ export function Workroom({
          something and is owed the chip rather than a second gesture. SEVERAL
          arrive as chips: the room takes one decision at a time (rule 2), and a
          tap says exactly the sentence shown on it. */
-      const { lines, dropped } = restateProposal(reply, (loanId) =>
-        loanId ? (brief.members.find((m) => m.id === loanId)?.key ?? null) : (focused?.key ?? null),
-      );
+      /* THE RESTATED LINE MUST NAME A FACILITY, NOT A PRODUCT (2026-09-01
+         evening drive). Where two members share a key, `facilityLabel` puts the
+         commitment in front, so the sentence the desk's proposal becomes reads
+         "take the $15.0MM Line of Credit to $20,000,000" and the qualifier the
+         room already trusts resolves it to that one member. Without it the desk
+         resolved correctly and the room still staged both, which is the same
+         wrong reduction the direct lane was fixed for. */
+      const { lines, dropped } = restateProposal(reply, (loanId) => {
+        const member = loanId ? (brief.members.find((m) => m.id === loanId) ?? null) : focused;
+        return member ? facilityLabel(member, brief.members) : null;
+      });
       if (!lines.length) {
         answer({
           kind: "agent",

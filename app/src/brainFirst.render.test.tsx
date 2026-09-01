@@ -185,17 +185,26 @@ describe("a provably clean parse keeps its instant card", () => {
 describe("a dollar qualifier is read, on either lane", () => {
   const LINE = "take the 2.5M line of credit to 4M";
 
-  it("routes the conflicted line to the desk rather than staging both (P6)", async () => {
+  /* REVERSED ON EVIDENCE (2026-09-01 evening drive). This test used to assert
+     that a qualified line went to the desk. Driven for real, that made the
+     connected room WORSE than the disconnected one: with no channel the filter
+     staged the single correct chip instantly, and with a channel the identical
+     line waited on a round trip it did not need. The filter narrows only on an
+     exact one-member reading, so the resolved line now takes the fast lane on
+     BOTH lanes, and the two tests below are deliberately the same assertions. */
+  it("stages the resolved member itself, without asking the desk (P6)", async () => {
     const brain = reply(CLARIFY);
     const { room } = open({ brain });
     await settle();
     await typeInto(room, LINE);
 
-    expect(brain).toHaveBeenCalledTimes(1);
-    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+    expect(brain).not.toHaveBeenCalled();
+    expect(room.textContent).toMatch(/Read that as the \$2\.50M/);
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(1);
+    expect(room.textContent).not.toMatch(/\$15\.0M to \$4\.0M|\$15M to \$4M/);
   });
 
-  it("still drops the sibling, out loud, where there is no desk to ask", async () => {
+  it("drops the sibling, out loud, where there is no desk to ask", async () => {
     const { room } = open();
     await settle();
     await typeInto(room, LINE);

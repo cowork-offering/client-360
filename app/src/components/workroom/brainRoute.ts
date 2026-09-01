@@ -69,9 +69,25 @@ export function politeCommand(text: string): string | null {
 
 /* ------------------------------------------------------------- the envelope */
 
-/** The label a facility carries in the envelope and in a restated proposal.
- *  The member's own key, which is what the parser resolves a member on. */
-const facilityOf = (m: PackageMember): BrainFacility => ({ loanId: m.id, label: m.key, commitment: m.amount });
+/**
+ * The label a facility carries in the envelope. The member's own key, which is
+ * what the parser resolves a member on.
+ *
+ * A SHARED KEY IS NAMED WITH ITS COMMITMENT (2026-09-01 evening drive). This
+ * package carries two Lines of Credit and two Equipment facilities, so a bare
+ * key names a PRODUCT and not a FACILITY: the desk resolved one of the two
+ * correctly and the restated line still landed on both, staging a reduction on
+ * the $15M line nobody asked for. The amount in front is the same qualifier the
+ * banker writes, and `qualifierFilter` resolves it to exactly one member.
+ */
+export const facilityLabel = (m: PackageMember, all: PackageMember[]): string =>
+  all.filter((x) => x.key === m.key).length > 1 ? `${m.amount} ${m.key}` : m.key;
+
+const facilityOf = (m: PackageMember, all: PackageMember[]): BrainFacility => ({
+  loanId: m.id,
+  label: facilityLabel(m, all),
+  commitment: m.amount,
+});
 
 /**
  * WHAT THE ROOM HANDS OVER. Compact, and derived entirely from what the room is
@@ -122,8 +138,8 @@ export function buildEnvelope(args: {
     routeOptions: args.routeOpen ? ["modify", "renew", "create"] : undefined,
     packageName: args.packageName,
     productPackageId: args.productPackageId,
-    selectedFacility: args.focused ? facilityOf(args.focused) : null,
-    facilities: args.members.filter(args.eligible).map(facilityOf),
+    selectedFacility: args.focused ? facilityOf(args.focused, args.members) : null,
+    facilities: args.members.filter(args.eligible).map((m) => facilityOf(m, args.members)),
     staged: entries.map((e) => ({ title: e.title, target: e.target, after: e.after })),
     reads: buildReadBlocks(args.reads),
     thread: args.thread ? threadDigest(args.thread) : undefined,

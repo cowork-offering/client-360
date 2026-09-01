@@ -264,8 +264,18 @@ function correction(
  *
  * Three conditions, and every miss in the 2026-09-01 drive failed at least one:
  * the parser staged something sound (P5 staged nothing), off a single clause
- * (P11 carried three), with no qualifier contradicting the member set it
- * resolved (P6 and P7 both did). A line that fails any of them is the brain's.
+ * (P11 carried three), with a member set the qualifier does not contradict
+ * (P6 and P7 both did). A line that fails any of them is the brain's.
+ *
+ * A QUALIFIER THAT RESOLVED THE LINE IS A STRONGER PARSE, NOT A WEAKER ONE
+ * (the second drive, 2026-09-01 evening). `qualifierFilter` narrows ONLY when
+ * exactly one member matches exactly one reading, so "the 2.5M line of credit"
+ * comes out of it exactly resolved and says so. Treating that as unclean sent
+ * the most precise line shape the banker writes on a round trip it did not
+ * need, and made the connected room WORSE than the disconnected one: with no
+ * channel the filter staged the right single chip instantly, while with a
+ * channel the same line waited on the desk. Unresolved is still the brain's:
+ * where the filter dropped everything it had nothing left to stand on.
  */
 export function provablyClean(args: {
   line: string;
@@ -277,5 +287,6 @@ export function provablyClean(args: {
   if (args.result.kind !== "deltas") return false;
   if (!args.sound.length) return false;
   if (!singleClause(args.line)) return false;
-  return args.qualifier.dropped.length === 0;
+  if (!args.qualifier.dropped.length) return true;
+  return args.qualifier.keep.length > 0;
 }
