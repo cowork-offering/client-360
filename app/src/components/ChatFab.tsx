@@ -99,13 +99,14 @@ const ARC: {
 
 /** THE SECOND TIER — the cloud's own two doors.
  *
- *  A BRANCH, NOT A THIRD ARC. The two bubbles leave the Salesforce satellite
- *  along its OWN radial (the arc's horizontal, pointing away from the mark) and
- *  fan 24 degrees either side of it at 44px, so the pair reads as something
- *  growing out of that one satellite rather than as a second sweep competing
- *  with the first. Written as absolute offsets from the mark, like the arc's,
- *  because that is what the transform paints: (-96,0) + 44·(cos24, ∓sin24)
- *  outward = (-136,-18) and (-136,18).
+ *  A BRANCH, NOT A THIRD ARC. The two bubbles sit on a small bow AROUND the
+ *  Salesforce satellite — the main arc's curvature echoed at r=54 from the
+ *  cloud, sweeping from just above its outward radial up toward the arc's own
+ *  bend. A mirror-symmetric fan put both at the same x and the pair read as a
+ *  straight vertical stack (founder, 2026-09-01); breaking the mirror is what
+ *  makes it a bow. Written as absolute offsets from the mark, like the arc's,
+ *  because that is what the transform paints: (-96,0) + 54·(−cosθ, −sinθ) at
+ *  θ=48° and θ=4° above the radial = (-132,-40) and (-150,-4).
  *
  *  They drive the SAME anchored narrator chip the satellites do (rule 54). A
  *  floating label on a 34px disc would be the exact thing that rule bans. */
@@ -118,8 +119,8 @@ const SF_TIER: {
   ty: number;
   domId: string;
 }[] = [
-  { key: "account", label: "Account page", aria: "Open the Account page in Salesforce", icon: "building", tx: -136, ty: -18, domId: "sfAccount" },
-  { key: "package", label: "Latest package", aria: "Open the latest Product Package in Salesforce", icon: "package", tx: -136, ty: 18, domId: "sfPackage" },
+  { key: "account", label: "Account page", aria: "Open the Account page in Salesforce", icon: "building", tx: -132, ty: -40, domId: "sfAccount" },
+  { key: "package", label: "Latest package", aria: "Open the latest Product Package in Salesforce", icon: "package", tx: -150, ty: -4, domId: "sfPackage" },
 ];
 
 /** The honest reason a tier bubble is dead. It is a title, never a toast: the
