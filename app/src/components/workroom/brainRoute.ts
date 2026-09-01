@@ -1,4 +1,4 @@
-import type { BrainEnvelope, BrainFacility, BrainReadCard, BrainRoute } from "../../channel/brainLane";
+import type { BrainEnvelope, BrainFacility, BrainReadCard } from "../../channel/brainLane";
 import type { PackageMember, WorkroomDelta, WorkroomMode } from "../../workroom/types";
 import type { IconKind } from "./TypeIcon";
 import type { ReadCardModel, ReadGroup, ReadRow } from "./readCard";
@@ -94,7 +94,7 @@ export function buildEnvelope(args: {
     v: 1,
     line: args.line,
     relationship: args.accountName,
-    route: args.mode as BrainRoute,
+    route: args.mode,
     packageName: args.packageName,
     productPackageId: args.productPackageId,
     selectedFacility: args.focused ? facilityOf(args.focused) : null,

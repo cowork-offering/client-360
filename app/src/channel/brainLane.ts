@@ -424,8 +424,8 @@ export function restateProposal(
   const named = (e: Targeted) => nameFor(e.targetLoanId ?? fallbackId);
 
   for (const c of proposal.changes.scalarChangesJson ?? []) {
-    const name = named(c);
-    push(scalarLine(c, name), scalarLine(c, name) ?? "change");
+    const line = scalarLine(c, named(c));
+    push(line, line ?? c.key);
   }
   for (const c of proposal.changes.covenantAddsJson ?? []) {
     push(
@@ -550,16 +550,16 @@ export async function askBrain(envelope: BrainEnvelope, deps: BrainAskDeps = {})
   const timeoutMs = deps.timeoutMs ?? BRAIN_TIMEOUT_MS;
   if (!deps.send && !brainReachable()) return NOT_CONNECTED_CLARIFY;
 
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : undefined;
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), timeoutMs);
   });
 
   try {
-    const raced = await Promise.race([send(composeBrainPrompt(envelope), controller?.signal).catch(() => null), timeout]);
+    const raced = await Promise.race([send(composeBrainPrompt(envelope), controller.signal).catch(() => null), timeout]);
     if (raced === "timeout") {
-      controller?.abort();
+      controller.abort();
       return timeoutClarify(Math.round(timeoutMs / 1000));
     }
     if (typeof raced !== "string") return UNREADABLE_CLARIFY;
