@@ -19,6 +19,7 @@
 
 import type { ActionHistoryRow, ActivityEntry } from "../data/contract";
 import type { ExecuteResult } from "../channel/writeTools";
+import type { WorkroomExecution } from "../workroom/types";
 import { CREATED_OBJECT, recordDeepLink } from "../components/DeepLink";
 
 export interface ExecutedEntryInput {
@@ -153,6 +154,97 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
   };
 }
 
+/* ------------------------------------------- the workroom, in the same trail
+
+   A30, EXTENDED TO THE ROOM (2026-09-01). An executed workroom plan is the same
+   class of event as an executed panel action: a record now exists in the org
+   because a named person approved a hashed plan. It belongs on the client's
+   Activity timeline for the same reason, keyed the same way, and deduped
+   against the org's own durable row by the same `exec-<stagingId>` id.
+
+   FROM WHAT THE ROOM ALREADY HELD. The room hands over the execution result it
+   is standing on at dossier time; no org read is issued to write this entry.
+
+   THE STAGING-RECORD-DRIVEN HISTORICAL READ IS FUTURE WORK. `Customer360-
+   ActionHistory` returns `actionId: "loan-modification"` rows and
+   `historyActivityEntry` above already renders them, so a modification filed in
+   a PREVIOUS session appears after a sync. What is not built is the read that
+   would recover the change COUNT and the approver for such a row: the history
+   tool carries neither, so an org-sourced modification entry states what it
+   knows and no more.                                                         */
+
+export interface WorkroomFiledInput {
+  /** The room's own execution result, verbatim. */
+  execution: WorkroomExecution;
+  /** How many changes actually filed, as the dossier counted them. */
+  changeCount: number;
+  /** The package the plan ran on, in banker language. */
+  packageName: string;
+  /** The identity that took the single approval. */
+  approver?: string;
+  /** The dossier's own resolved link, or null. Passed rather than re-derived so
+   *  the trail entry and the dossier can never disagree about the address. */
+  packageHref?: string | null;
+  /** The package record id, for the reference chip's selectable fallback. */
+  productPackageId?: string | null;
+  /** Session clock: the banker just did this, on this clock (A10 carve-out). */
+  now?: () => Date;
+}
+
+/**
+ * The trail entry for one executed workroom plan, or null where there is
+ * nothing honest to log.
+ *
+ * A plan that filed NOTHING is not an execution to celebrate: it is a plan
+ * whose every entry was handed off, and the room already says so on the
+ * dossier. It gets no `ACTION_EXECUTED` row, because a trail that records a
+ * modification against a package nothing was written to is a trail that lies.
+ */
+export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry | null {
+  const { execution, changeCount, packageName, approver, packageHref, productPackageId } = input;
+  const filed = execution.filed ?? [];
+  if (!filed.length || changeCount < 1) return null;
+  const now = (input.now ?? (() => new Date()))();
+  // The staging id lives inside the token note the org composed; the room does
+  // not carry it separately. Keying on the clone the plan created is the next
+  // most durable thing it holds, and it is stable across a replay.
+  const anchor = filed[0]?.recordId || packageName;
+
+  return {
+    id: `exec-${anchor}`,
+    ts: now.toISOString(),
+    actor: approver ?? "You",
+    sessionLocal: true,
+    kind: "ACTION_EXECUTED",
+    title: `Modification executed on ${packageName}`,
+    summary: `${changeCount} ${changeCount === 1 ? "change" : "changes"} filed${approver ? `, approved by ${approver}` : ""}.`,
+    reference: productPackageId
+      ? {
+          kind: "ncino-record",
+          id: productPackageId,
+          label: "LLC_BI__Product_Package__c",
+          source: "Customer 360",
+          // Absent host leaves this undefined and the popup renders the id as
+          // plain text rather than a fabricated link (A29).
+          webLink: packageHref ?? undefined,
+        }
+      : undefined,
+    detail: {
+      body: [
+        `${changeCount} ${changeCount === 1 ? "change" : "changes"} filed against ${packageName}.`,
+        approver ? `Confirmed by ${approver}.` : null,
+        execution.tokenNote,
+        ...filed.map((f) => `${f.recordId}: ${f.verification}`),
+        execution.handoff ?? null,
+        (execution.handoffs ?? []).length
+          ? `${execution.handoffs!.length} recorded on the plan but not filed.`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    },
+  };
+}
 
 /* ------------------------------------------------- the org's durable trail */
 

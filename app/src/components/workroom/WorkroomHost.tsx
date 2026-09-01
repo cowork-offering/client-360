@@ -1,5 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { resolveBundle } from "../../actions/registry";
+import { workroomActivityEntry } from "../../actions/executedActivity";
+import { askBrain, brainReachable, type BrainEnvelope } from "../../channel/brainLane";
 import { bookedFacilities } from "../../data/facilityStage";
 import { useApp } from "../../state/appState";
 import { createCreateEngine } from "../../workroom/createEngine";
@@ -7,7 +9,7 @@ import { type WorkroomEngine } from "../../workroom/engine";
 import { createModifyEngine } from "../../workroom/modifyEngine";
 import { createRenewEngine } from "../../workroom/renewEngine";
 import { closeWorkroom, openWorkroom, useWorkroom, workroomContextFor } from "../../workroom/openWorkroom";
-import type { WorkroomContext, WorkroomMode } from "../../workroom/types";
+import type { WorkroomContext, WorkroomExecution, WorkroomMode } from "../../workroom/types";
 import { anchorFacilityRoom, bindFacilityRoute, closeFacilityRoom, useFacilityRoom } from "./roomSession";
 import { Workroom, neutralAsk, smartAsk, type WorkroomRouter } from "./Workroom";
 import type { ReadSource } from "./readCard";
@@ -125,6 +127,33 @@ export function WorkroomHost() {
     [dispatch],
   );
 
+  /* THE SECOND LANE, WIRED HERE AND NOWHERE ELSE.
+     The room takes a function and asks nothing about what is on the other end
+     of it, which is what keeps the shell testable against a stub reply and
+     shipping against the live bridge. `brainReachable()` is the mcp capability
+     gate: with no capability there is no arm of the bridge that returns a
+     reply, so the prop is ABSENT and the composer keeps only the fast lane. */
+  const brain = useMemo(() => (brainReachable() ? (envelope: BrainEnvelope) => askBrain(envelope) : undefined), []);
+
+  /* AN EXECUTED PLAN LANDS IN THE TRAIL (A30). The room hands over what it
+     already holds; the entry is minted in actions/ where every other executed
+     action's entry is minted, and dispatched here where the provider is. */
+  const onFiled = useCallback(
+    (filed: { execution: WorkroomExecution; changeCount: number; packageHref: string | null }) => {
+      if (!context) return;
+      const entry = workroomActivityEntry({
+        execution: filed.execution,
+        changeCount: filed.changeCount,
+        packageName: context.packageName,
+        approver: data.meta?.user ?? context.approver,
+        packageHref: filed.packageHref,
+        productPackageId: context.productPackageId,
+      });
+      if (entry) dispatch({ type: "LOG_ACTIVITY", accountId: context.accountId, entry });
+    },
+    [context, data.meta?.user, dispatch],
+  );
+
   const close = useCallback(() => {
     if (!context) return;
     dispatch({ type: "ARM_WASH", accountId: context.accountId });
@@ -162,6 +191,11 @@ export function WorkroomHost() {
       eligibleMemberIds={eligibleMemberIds}
       reads={reads}
       onOpenAssist={openAssist}
+      brain={brain}
+      /* The org's own Lightning host, never a guessed My Domain. Absent leaves
+         the dossier's link unrendered rather than wrong (A29). */
+      instanceUrl={data.meta?.instanceUrl}
+      onFiled={onFiled}
       /* THE GLASS LIFTS, AND THE WASH SETTLES (rule 62). Every route out of the
          room — the close button, Escape, the scrim — comes through this one
          prop, so arming the wash here catches all three. */
