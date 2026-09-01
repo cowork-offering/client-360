@@ -454,11 +454,14 @@ describe("staging and the token", () => {
   });
 
   it("refuses a plan that would write outside the transition allowlist", async () => {
+    // Deliberately an object NOTHING in this cockpit is allowed to write. The
+    // allowlist grows (the wave-2 objects landed on it), so this asserts the
+    // GUARD rather than the membership of any one object.
     const deps = depsFor({
       stage: async () =>
         ({
           ok: true,
-          result: { ...PLAN, steps: [{ id: "s1", type: "write", label: "x", objectName: "LLC_BI__Collateral__c" }] },
+          result: { ...PLAN, steps: [{ id: "s1", type: "write", label: "x", objectName: "LLC_BI__Not_A_Real_Object__c" }] },
         }) as ToolOutcome<StagedOutput>,
     });
     await expect(stageRelPlan("annual", ctx, answers, "k", deps)).rejects.toThrow(/outside what this cockpit permits/);
