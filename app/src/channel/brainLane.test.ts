@@ -280,16 +280,70 @@ describe("a proposal is restated as a sentence the parser already stages on", ()
 });
 
 describe("the wire never hands the room something it cannot draw", () => {
-  it("carries the grounding pointer rather than the pack itself", () => {
+  it("carries the doctrine itself, not a pointer at a pack that never loads", () => {
     const prompt = composeBrainPrompt(envelope);
-    expect(prompt).toMatch(/workroom-brain plugin skill/);
+    // THE MARKER STAYS. A session that HAS loaded the pack should still be told
+    // the pack is the authority.
+    expect(prompt).toMatch(/WORKROOM-BRAIN\.md/);
     expect(prompt).toMatch(/plugin-skill:workroom-brain/);
     // The banker's line travels verbatim.
     expect(prompt).toContain("which borrowers have we already in the package?");
-    // And the contract is restated, so a session without the skill still fails
-    // closed on shape rather than answering ungrounded prose.
+    // And the contract is restated, so a responder that has never seen the pack
+    // still fails closed on shape rather than answering ungrounded prose.
     expect(prompt).toMatch(/EXACTLY ONE JSON object/);
     expect(prompt).toMatch(/Never write/);
+  });
+
+  /* THE PACK NEVER ARRIVES. The gateway calls a model that has never read
+     WORKROOM-BRAIN.md, so the doctrine the answer depends on has to travel in
+     the prompt. What is asserted here is that the slices are IN it: the rules
+     whose absence makes an answer wrong, and the fences of whichever surface
+     the line is about. */
+  describe("the doctrine travels in the prompt", () => {
+    const promptFor = (line: string) => composeBrainPrompt({ ...envelope, line });
+
+    it("never lets an index name be invented, on any line", () => {
+      const prompt = promptFor("what is the rate on the revolver");
+      expect(prompt).toMatch(/IT STORES NO INDEX NAME/);
+      expect(prompt).toMatch(/Never say "SOFR", "Prime", "LIBOR"/);
+    });
+
+    it("carries the covenant bands as proposal guidance on every line", () => {
+      const prompt = promptFor("anything at all");
+      expect(prompt).toMatch(/DSCR minimum 1\.20x to 1\.25x/);
+      expect(prompt).toMatch(/FCCR minimum 1\.15x to 1\.25x/);
+      expect(prompt).toMatch(/Debt to tangible net worth maximum 3\.00x/);
+      // A band is offered. It is never stated as a fact about this borrower and
+      // it is never applied as a threshold.
+      expect(prompt).toMatch(/Bands are PROPOSAL guidance/);
+      expect(prompt).toMatch(/Propose a band, never a threshold/);
+    });
+
+    it("carries the covenant fences on a covenant line", () => {
+      const prompt = promptFor("add another covenant to all of the loans");
+      expect(prompt).toMatch(/covenant ADD is safe/i);
+      expect(prompt).toMatch(/AMEND and DETACH are REFUSED/);
+      expect(prompt).toMatch(/effective date is set once at creation and is never updated/);
+      expect(prompt).toMatch(/Exception alone is never a breach/);
+    });
+
+    it("carries the collateral fences on a collateral line", () => {
+      const prompt = promptFor("pledge the warehouse to the equipment loan");
+      expect(prompt).toMatch(/advance rate on a pledge is a formula/);
+      expect(prompt).toMatch(/Never ask a banker for either and never invent a valuation/);
+    });
+
+    it("carries the fee fences on a fee line", () => {
+      const prompt = promptFor("add a 1% origination fee");
+      expect(prompt).toMatch(/percentage OR a fixed amount, never both/);
+      expect(prompt).toMatch(/Never state a money figure beside a percentage/);
+    });
+
+    it("sends only the slices the line needs, so the envelope keeps its room", () => {
+      const covenant = promptFor("add a DSCR covenant of 1.25x");
+      expect(covenant).not.toMatch(/percentage OR a fixed amount/);
+      expect(covenant).not.toMatch(/INVOLVEMENT ROLES/);
+    });
   });
 
   it("degrades a malformed reply to the neutral clarify", async () => {

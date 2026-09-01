@@ -609,3 +609,38 @@ describe("one live exchange", () => {
     expect(document.body.querySelectorAll(".wk-opts .wk-opt").length).toBeGreaterThanOrEqual(5);
   });
 });
+
+/* ================================= the create grammar, in the second room */
+
+describe("the relationship room answers a create line the same way the workroom does", () => {
+  /* THE FIVE RELATIONSHIP ROUTES FILE NO CREATE AT ALL. There is nothing to
+     gather for, so the room does not gather: it names the gap by name and the
+     org-side gap under it, exactly as the workroom names a route that cannot
+     file. What it must never do is what the modification room was doing before
+     F-CG1 was closed - re-elicit as though nothing had been typed. */
+  it("names the covenant create gap by name, and never re-elicits", async () => {
+    const { room } = open({ route: "covenant" });
+    await settle();
+    await type(room, "add an interest coverage covenant of 3.0x tested quarterly");
+
+    const words = room.textContent ?? "";
+    expect(words).toContain("The room can compose the covenant, and it cannot file it");
+    expect(words).toContain("a covenant authored standalone on the relationship");
+    expect(words).toContain("What would close this");
+    // NOT a gather, and not a capability lecture either.
+    expect(words).not.toContain("To file one I need the test");
+    expect(words).not.toMatch(/what threshold/i);
+  });
+
+  it("names the collateral create gap by name inside the valuation", async () => {
+    const { room } = open({ route: "valuation" });
+    await settle();
+    await type(room, "add a new collateral asset the borrower owns worth $2,000,000");
+
+    const words = room.textContent ?? "";
+    expect(words).toContain("The room can compose the asset and its ownership, and it cannot file them");
+    // AND IT NEVER ASKS FOR WHAT THE ORG WORKS OUT.
+    expect(words).not.toMatch(/what advance rate/i);
+    expect(words).not.toMatch(/lendable value/i);
+  });
+});
