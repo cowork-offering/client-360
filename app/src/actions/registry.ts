@@ -65,6 +65,7 @@ export type ActionIcon =
   | "review"
   | "rating"
   | "facility"
+  | "person"
   | "service";
 
 /* ----------------------------------------------------------------- helpers */

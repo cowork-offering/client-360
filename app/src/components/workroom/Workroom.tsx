@@ -2003,29 +2003,11 @@ export function Workroom({
 
           {/* ============================= THE RIGHT LANE: detail, then manifest */}
           <aside className="wk-col-r" aria-label={manifestHeading}>
-            {/* THE PACKAGE'S LIVE FIGURES. They belong beside the manifest that
-                moves them, not inside a briefing bubble that collapses with its
-                step — a pro-forma total the banker cannot see while composing
-                against it is a figure that may as well not have moved. */}
-            <div className="wk-agg tnum">
-              <div>
-                <span className="wk-l">Members</span>
-                <span className="wk-v">{figures.membersLabel}</span>
-                <span className={`wk-n ${figures.membersNote ? "wk-pro" : ""}`}>{figures.membersNote}</span>
-              </div>
-              <div>
-                <span className="wk-l">Committed</span>
-                <span className="wk-v">{figures.committedLabel}</span>
-                <span className={`wk-n ${figures.committedNote ? "wk-pro" : ""}`}>{figures.committedNote}</span>
-              </div>
-              <div>
-                <span className="wk-l">Covenants</span>
-                <span className="wk-v">{brief.covenantFigure}</span>
-                <span className="wk-n">{figures.covenantNote}</span>
-              </div>
-            </div>
-
-            {focused && laneRows.length > 0 && (
+            {/* THE LANE OPENS EMPTY (founder call, 2026-09-01 morning, matching the
+                dummy): no at-rest figures strip, no placeholder furniture. The lane
+                earns its content - the detail card on focus, the ledger as changes
+                confirm. The position lives in the greeting and the hero. */}
+                        {focused && laneRows.length > 0 && (
               <div className="wk-detail" ref={detailRef}>
                 <div className="wk-dh">
                   <TypeIcon kind={iconForMember(focused)} />
@@ -2050,6 +2032,7 @@ export function Workroom({
               </div>
             )}
 
+            {entries.length > 0 && (
             <div className="wk-man-h">
               <span className="wk-kicker">{manifestHeading}</span>
               <span className="wk-c">{figures.countLine}</span>
@@ -2067,9 +2050,9 @@ export function Workroom({
                 Package today
               </button>
             </div>
+            )}
 
-            {entries.length === 0 && <div className="wk-empty">{vocabulary.emptyLine}</div>}
-            {railFolded > 0 && (
+                        {railFolded > 0 && (
               <button
                 type="button"
                 className="wk-railfold"

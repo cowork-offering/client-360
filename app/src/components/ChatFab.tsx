@@ -83,7 +83,7 @@ const ARC: {
   // Rule 49's rhythm, re-spread for three: 45-degree steps on r=96, so the two
   // rooms and the chat share the quarter evenly. Annual and covenant reviews
   // moved INTO the Relationship room (founder consolidation, 2026-09-01).
-  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -96, ty: 0, icon: "review", domId: "actRelationship" },
+  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -96, ty: 0, icon: "person", domId: "actRelationship" },
 ];
 
 const ARC_LABEL_AT_REST = "Client actions";

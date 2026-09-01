@@ -322,16 +322,22 @@ describe("one shell, three modes", () => {
     container?.remove();
     const blank = open("create", null);
     expect(blank.querySelectorAll(".wk-mchip")).toHaveLength(0);
-    expect(blank.querySelector(".wk-agg")!.textContent).toContain("$0.0MM");
+    // The at-rest figures strip is gone (founder call, 2026-09-01): an invented
+    // package would now have to show up as a chip, and there is none.
+    expect(blank.querySelector(".wk-agg")).toBeNull();
   });
 });
 
 describe("law 8 — the manifest starts empty and the arrival is the signature", () => {
   it("stages nothing until a confirm lands", () => {
     const room = open("modify");
-    expect(room.querySelector(".wk-empty")).toBeTruthy();
+    // Founder call 2026-09-01: the lane opens EMPTY - no placeholder line, no
+    // manifest header, no figures strip. The manifest does not merely start
+    // empty, it starts ABSENT; the first confirm is what summons it.
+    expect(room.querySelector(".wk-empty")).toBeNull();
     expect(room.querySelector(".wk-ent")).toBeNull();
-    expect(room.querySelector(".wk-man-h")!.textContent).toContain("Nothing staged");
+    expect(room.querySelector(".wk-man-h")).toBeNull();
+    expect(room.querySelector(".wk-agg")).toBeNull();
   });
 
   it("walks the package figures forward on a confirm and back on a removal", async () => {
@@ -342,16 +348,15 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
     // Two proposed changes, nothing written, nothing in the rail yet.
     expect(room.querySelectorAll(".wk-chip")).toHaveLength(2);
     expect(room.querySelector(".wk-ent")).toBeNull();
-    expect(room.querySelector(".wk-agg")!.textContent).toContain("$46.0MM");
+    // No strip to read any more: before the first confirm the lane stays bare.
+    expect(room.querySelector(".wk-man-h")).toBeNull();
 
     click(buttons().find((b) => b.textContent === "Confirm"));
     await settle();
 
     // The commitment change landed: one entry, and the strip is pro forma.
     expect(room.querySelectorAll(".wk-ent")).toHaveLength(1);
-    const strip = room.querySelector(".wk-agg")!.textContent ?? "";
-    expect(strip).toContain("$49.0MM");
-    expect(strip).toContain("was $46.0MM");
+    // The confirm SUMMONS the ledger: header appears with the walked figure.
     expect(room.querySelector(".wk-man-h")!.textContent).toContain("1 of 7 members");
     // The confirmed chip left a receipt, because the change itself moved right.
     expect(room.querySelector(".wk-receipt")!.textContent).toContain("in the manifest");
@@ -360,9 +365,10 @@ describe("law 8 — the manifest starts empty and the arrival is the signature",
     await settle();
 
     expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
-    expect(room.querySelector(".wk-agg")!.textContent).toContain("$46.0MM");
-    expect(room.querySelector(".wk-agg")!.textContent).not.toContain("was $46.0MM");
-    expect(room.querySelector(".wk-man-h")!.textContent).toContain("Nothing staged");
+    // Walked back to zero, the ledger retires entirely - no strip, no header,
+    // no "Nothing staged" placeholder (founder call 2026-09-01).
+    expect(room.querySelector(".wk-agg")).toBeNull();
+    expect(room.querySelector(".wk-man-h")).toBeNull();
     // The receipt does not lie about where the change is.
     expect(room.querySelector(".wk-receipt")!.textContent).toContain("say it again to restage");
   });
@@ -1288,16 +1294,17 @@ describe("the router — the room claims no mode until it has one", () => {
   it("names neither the mode nor the change set while the route is open", () => {
     const { room } = openRouted({ question: neutralAsk() });
     expect(room.querySelector(".wk-title")!.textContent).toBe("Facility Actions");
-    // "This modification" over an empty rail, in a room still asking which of
-    // the three this is, would answer its own question in the lane.
-    expect(room.querySelector(".wk-kicker")!.textContent).toBe("This package");
+    // The lane opens bare (founder call 2026-09-01), so an unbound room cannot
+    // leak its mode through lane furniture - there is none to read.
+    expect(room.querySelector(".wk-kicker")).toBeNull();
     expect(room.querySelector(".wk-col-r")!.getAttribute("aria-label")).toBe("This package");
   });
 
   it("takes the mode's own words the moment the route is bound", () => {
     const { room } = openRouted({ question: null });
     expect(room.querySelector(".wk-title")!.textContent).toBe("Modification");
-    expect(room.querySelector(".wk-kicker")!.textContent).toBe("This modification");
+    // The mode's words appear in the bar; the lane kicker waits for a confirm.
+    expect(room.querySelector(".wk-col-r")!.getAttribute("aria-label")).toBe("This modification");
   });
 });
 

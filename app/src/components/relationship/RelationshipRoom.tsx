@@ -1266,24 +1266,9 @@ export function RelationshipRoom({
 
           {/* ======================== THE RIGHT LANE: position, then the ledger */}
           <aside className="wk-col-r" aria-label={laneHeading}>
-            <div className="wk-agg tnum">
-              <div>
-                <span className="wk-l">Committed</span>
-                <span className="wk-v">{brief.committed}</span>
-                <span className="wk-n" />
-              </div>
-              <div>
-                <span className="wk-l">Covenants</span>
-                <span className="wk-v">{brief.covenantCount}</span>
-                <span className="wk-n" />
-              </div>
-              <div>
-                <span className="wk-l">Grade</span>
-                <span className="wk-v">{brief.grade}</span>
-                <span className="wk-n" />
-              </div>
-            </div>
-
+            {/* The lane opens empty (founder call, 2026-09-01): content arrives with
+              the review, never as furniture. */}
+                        {laneRows.length > 0 && (
             <div className="wk-man-h">
               <span className="wk-kicker">{laneHeading}</span>
               <span className="wk-c">
@@ -1319,6 +1304,7 @@ export function RelationshipRoom({
                 Scope
               </button>
             </div>
+            )}
 
             {laneRows.length === 0 && (
               <div className="wk-empty">

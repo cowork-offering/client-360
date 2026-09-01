@@ -1,6 +1,12 @@
 import type { ActionIcon as IconName } from "../actions/registry";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  person: (
+    <>
+      <circle cx="9" cy="6.2" r="2.9" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.8 15.2c.6-3 2.7-4.6 5.2-4.6s4.6 1.6 5.2 4.6" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </>
+  ),
   spread: (
     <>
       <rect x="2.5" y="3" width="13" height="12" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />

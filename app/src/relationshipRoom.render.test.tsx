@@ -418,7 +418,9 @@ describe("the guided steps", () => {
     expect(lane.textContent).toContain("1 answer");
     click(lane.querySelector(".wk-ent-x")!);
     await settle();
-    expect(room.querySelector(".wk-col-r")!.textContent).toContain("0 answers");
+    // Back at zero the header retires with the last row (founder call
+    // 2026-09-01: the lane never shows furniture for nothing).
+    expect(room.querySelector(".wk-man-h")).toBeNull();
     expect(liveAsk()).toBe("Which review is this?");
   });
 });
