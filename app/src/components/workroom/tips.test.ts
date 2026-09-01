@@ -95,8 +95,6 @@ describe("the client mail tier", () => {
       today: TODAY,
     })!;
     expect(tip.line).toBe("2 emails from Hartwell await a reply, oldest 6 days.");
-    expect(tip.count).toBe(2);
-    expect(tip.oldestDays).toBe(6);
     expect(tip.chip.label).toBe("Open the thread");
   });
 

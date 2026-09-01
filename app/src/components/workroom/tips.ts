@@ -97,11 +97,6 @@ export function overdueCovenantTip(args: {
 /** Past this a message is not "recent correspondence" any more. */
 const RECENT_DAYS = 30;
 
-export interface MailTip extends Tip {
-  count: number;
-  oldestDays: number;
-}
-
 /**
  * The mail signal, resolved from hits the matcher already accepted.
  *
@@ -113,7 +108,7 @@ export function mailTipFrom(args: {
   hits: Array<{ from?: string; receivedAt?: string; subject?: string }>;
   accountName: string;
   today: string;
-}): MailTip | null {
+}): Tip | null {
   if (!args.today) return null;
   const ages = args.hits
     .filter((h) => matchesAccount(h, args.accountName))
@@ -127,8 +122,6 @@ export function mailTipFrom(args: {
   // which relationship this is; the line is about the mail.
   const who = args.accountName.split(/\s+/)[0];
   return {
-    count,
-    oldestDays: oldest,
     line: `${count} ${count === 1 ? "email" : "emails"} from ${who} ${count === 1 ? "awaits" : "await"} a reply, oldest ${oldest === 1 ? "1 day" : `${oldest} days`}.`,
     chip: {
       label: "Open the thread",
@@ -145,8 +138,8 @@ export function mailTipFrom(args: {
  * refused call, an empty mailbox — the hook stays null and the room renders one
  * line fewer. The banker is never told the room went looking.
  */
-export function useMailTip(args: { accountName: string; today: string }): MailTip | null {
-  const [tip, setTip] = useState<MailTip | null>(null);
+export function useMailTip(args: { accountName: string; today: string }): Tip | null {
+  const [tip, setTip] = useState<Tip | null>(null);
   const { accountName, today } = args;
 
   useEffect(() => {

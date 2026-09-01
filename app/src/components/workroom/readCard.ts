@@ -257,17 +257,6 @@ function facilitiesCard(src: ReadSource): ReadCardModel | null {
   };
 }
 
-/* --------------------------------------------------------------------- fees
-
-   NO READ TOOL CARRIES FEE ROWS onto the bundle, so the room cannot say what a
-   facility already charges. That is a gap in the read, not an empty package,
-   and listing "no fees" would be a claim nothing supports. The card refuses and
-   says what CAN be done instead — which is the honest half of the answer.    */
-
-function feesCard(): ReadCardModel | null {
-  return null;
-}
-
 /** The honest sentence for a topic the room cannot read, keyed by topic. Used
  *  where the builder returns null: the room says WHY, never nothing. */
 export function readGap(topic: ReadTopic, relationship: string): string {
@@ -304,7 +293,11 @@ export function buildReadCard(topic: ReadTopic, src: ReadSource): ReadCardModel 
       return collateralCard(src);
     case "facilities":
       return facilitiesCard(src);
+    /* NO READ TOOL CARRIES FEE ROWS onto the bundle, so the room cannot say
+       what a facility already charges. That is a gap in the READ, not an empty
+       package, and listing "no fees" would be a claim nothing supports. The
+       gap sentence below is the honest half of the answer. */
     case "fees":
-      return feesCard();
+      return null;
   }
 }
