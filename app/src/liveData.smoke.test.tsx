@@ -128,10 +128,17 @@ describe("the shapes a real bundle is allowed to arrive in", () => {
   });
 
   it("tolerates a bundle with no boom, no verdict and no requests", () => {
+    // Hartwell WAS the live fixture for this guard until 2026-09-01, when the
+    // founder had its missing verdict composed (it was the one borrower
+    // without a hero sentence, and the hole read as lost information). The
+    // tolerance contract survives on a synthetic stripped bundle instead: the
+    // cockpit still cannot depend on a producer always sending all three.
     const hartwell = (live as unknown as C360Data).borrowers?.["001bb00001I7FPNAA3"]!;
     expect(hartwell.boom).toBeUndefined();
-    expect(hartwell.verdict).toBeUndefined();
     expect(hartwell.requests).toBeUndefined();
+    const stripped = { ...hartwell, verdict: undefined };
+    expect(() => readAnchors(stripped)).not.toThrow();
+    expect(stripped.verdict).toBeUndefined();
   });
 });
 

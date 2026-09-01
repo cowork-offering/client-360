@@ -256,9 +256,13 @@ body.on-client .topnav .itab:nth-child(7) {
   pointer-events: none;
   overflow: hidden;
   border-radius: inherit;
-  opacity: 0.4;
-  -webkit-mask-image: linear-gradient(to left, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 46%, transparent 82%);
-  mask-image: linear-gradient(to left, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 46%, transparent 82%);
+  /* Founder round 2: prominent, and BEHIND the >. The linear right-half mask
+     became a radial one seated on the watermark's corner, so the filaments
+     gather where the mark leans and die out before the crumb, the name and
+     the anchor figures instead of merely fading leftward. */
+  opacity: 0.62;
+  -webkit-mask-image: radial-gradient(560px 360px at 86% 6%, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.5) 52%, transparent 80%);
+  mask-image: radial-gradient(560px 360px at 86% 6%, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.5) 52%, transparent 80%);
 }
 .hero-weave svg {
   display: block;

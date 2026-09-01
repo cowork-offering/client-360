@@ -1992,6 +1992,7 @@
         "totalObligorExposure": 31030000,
         "totalOutstanding": 31030000
       },
+      "verdict": "Booked at Grade 4, Hartwell carries $46.0M committed across six facilities with $31.0M drawn and $15.0M of headroom; five of six covenants test compliant (DSC 1.38×, FCC 1.22×). Collateral coverage sits at 1.02× across four pledged assets, so the cushion, not capacity, is the figure to watch.",
       "exposure": {
         "accountId": "001bb00001I7FPNAA3",
         "coverageRatio": 1.02,
