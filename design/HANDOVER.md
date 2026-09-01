@@ -132,3 +132,15 @@ double-fade-masked band behind the briefing headline, reaching past the KPI band
 lead .20 opacity / others .06–.14, widths .5–1.2px, per-thread sine drift via rAF. Landing only,
 z0 behind content, pointer-events none, reduced-motion kill. Acceptance: 12 `#hweaveG g` nodes,
 transforms changing over time, worklist rows clickable through it. Rule 66 in DIRECTION-LOCKED.json.
+
+---
+## Addendum 2 (2026-08-31): the auto-demo + richer Hartwell data
+The dummy now demos itself: 3s after load (skipped if a human already interacted), an incoming CFO
+email card opens Hartwell and the director walks tabs → chat conversation → full workroom ritual →
+write-back → hand-back toast (~70s). Every beat is element-readiness-driven (duntil polling); any
+trusted click/keydown stops it. Beat trail on `window.__demoBeat`. Chat gained a conversational
+engine (chatExchange + canned routes). New Hartwell data: maturity-profile bars (financials),
+deposit signal, rate-hedge opportunity. parseLine fix: commit-with-amount outranks pricing mention.
+Acceptance: full trail mail→…→done in ~70s hands-off; one real click stops it; demo leaves exposure
+at $50.2M with wash. Rule 67. PORT NOTE: this supersedes the parked walkthrough draft — the
+readiness-driven director IS the pattern to port.
