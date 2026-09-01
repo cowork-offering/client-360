@@ -11,6 +11,8 @@ import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
 import { resolveBundle, type ActionIcon as IconName } from "../actions/registry";
 import { openFacilityRoom } from "./workroom/roomSession";
+import { openRelationshipRoom } from "./relationship/relSession";
+import { relOpeningForAccount } from "./relationship/RelationshipRoom";
 import { smartOpeningFor } from "./workroom/route";
 import { sowSeed } from "./workroom/seed";
 import "../styles/fab.css";
@@ -42,7 +44,7 @@ import "../styles/chat.css";
    No satellite here has an onClick of its own.
    ============================================================================= */
 
-type ArcAct = "chat" | "facility" | "annual" | "covenant";
+type ArcAct = "chat" | "facility" | "relationship";
 
 /** The arc: four satellites on a 96px radius, evenly spread across the quarter,
  *  staggered 28ms apart by index.
@@ -77,9 +79,11 @@ const ARC: {
   domId?: string;
 }[] = [
   { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -96 },
-  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -48, ty: -83, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
-  { act: "annual", label: "Annual review", aria: "Annual review", tx: -83, ty: -48, actionId: "annual-review", icon: "review" },
-  { act: "covenant", label: "Covenant review", aria: "Covenant review", tx: -96, ty: 0, actionId: "covenant-review", icon: "covenant" },
+  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -68, ty: -68, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
+  // Rule 49's rhythm, re-spread for three: 45-degree steps on r=96, so the two
+  // rooms and the chat share the quarter evenly. Annual and covenant reviews
+  // moved INTO the Relationship room (founder consolidation, 2026-09-01).
+  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -96, ty: 0, icon: "review", domId: "actRelationship" },
 ];
 
 const ARC_LABEL_AT_REST = "Client actions";
@@ -402,6 +406,18 @@ export function ChatFab() {
           accountId,
           accountName,
           opening: smartOpeningFor({ data, bundle, accountName, productPackageId: null }),
+        });
+        return;
+      }
+      if (act === "relationship") {
+        // Same doctrine as the facility room: seed from the pressed satellite,
+        // opening derived from the data or honestly neutral (rule 58 + the
+        // channel-none discipline), all inside the shared handler's gate.
+        sowSeed(document.querySelector('.arcbtn[data-act="relationship"]'));
+        openRelationshipRoom({
+          accountId,
+          accountName,
+          opening: relOpeningForAccount({ data, accountId }),
         });
         return;
       }

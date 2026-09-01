@@ -9,6 +9,7 @@ import { AppShell } from "./components/AppShell";
 import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import { ACTIONS_BY_ID } from "./actions/registry";
 import { closeActionTicket, openActionTicket } from "./components/actionTicket";
+import { closeRelationshipRoom } from "./components/relationship/relSession";
 import { CHALLENGE_PANEL_INTRO } from "./components/ActionPanel";
 import { vi } from "vitest";
 import sample from "../../artifact/sample-data.json";
@@ -123,10 +124,12 @@ const expandAllFields = () => {
  * module seam the arc's shared handler calls when a satellite names an action.
  * Neither is a test-only door: both are the product's own paths.
  */
-const ARC_SATELLITE: Record<string, RegExp> = {
-  "Annual Review": /^Annual review$/,
-  "Covenant Review": /^Covenant review$/,
-};
+/* The annual and covenant satellites moved INTO the Relationship room
+   (founder consolidation, 2026-09-01): the arc no longer carries per-review
+   satellites, so every panel-machinery test enters through the ticket seam,
+   which is the same product path the room's own flows call. The one-modal
+   entry-point contract is asserted by the room's own render tests now. */
+const ARC_SATELLITE: Record<string, RegExp> = {};
 
 const idForLabel = (label: string) => Object.values(ACTIONS_BY_ID).find((a) => a.label === label)!.id;
 
@@ -153,12 +156,17 @@ describe("A33.1.1 — one modal, three entry points", () => {
      and `openActionTicket` for the rest, which is the same seam the satellite
      handler calls. The contract this describe block exists for is unchanged:
      one modal, whichever door opened it. */
-  it("opens from the arc's own satellite", () => {
+  it("opens the Relationship room from the arc's own satellite", () => {
+    // The per-review satellites are gone; the arc's third seat opens the
+    // Relationship room, and the review flows live inside it.
     mount();
     click(openRow("Sterling Fabrication"));
     click(byLabel(/Client actions/)!);
-    click(byLabel(/^Annual review$/)!);
-    expect(panel("Annual Review")).toBeTruthy();
+    click(byLabel(/^Relationship Actions$/)!);
+    expect(document.querySelector(".rel-room, [data-room=\"relationship\"]")).toBeTruthy();
+    // The room's session store is module-global: close it, or it bleeds into
+    // every later test in this file (found the hard way).
+    act(() => closeRelationshipRoom());
   });
 
   it("opens from the ticket seam the arc's handler calls", () => {
@@ -1867,8 +1875,7 @@ describe("no staged plan can survive a republish", () => {
     // there to reopen it from.
     press("Escape");
     expect(panel("Annual Review")).toBeNull();
-    click(byLabel(/Client actions/)!);
-    click(byLabel(/^Annual review$/)!);
+    act(() => openActionTicket(idForLabel("Annual Review")));
     // Reopened on the briefing, with no plan to step forward to.
     expect(byText(/Back to the plan/)).toBeUndefined();
     expect(byText(/Review the plan/)).toBeTruthy();

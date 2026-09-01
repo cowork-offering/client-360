@@ -7,6 +7,7 @@ import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
 import { AppEntry, dispatchOpenSheet } from "./test/entry";
 import sample from "../../artifact/sample-data.json";
+import { openActionTicket } from "./components/actionTicket";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -124,8 +125,10 @@ describe("C6 — closing returns focus to the trigger that opened the panel", ()
     mount();
     click([...document.querySelectorAll('[role="button"]')].find((r) => r.textContent?.includes("Piedmont Precision"))!);
     const mark = byLabel(/Client actions/)!;
-    click(mark);
-    click(byLabel(/^Annual review$/)!);
+    // The per-review satellites moved into the Relationship room; a ticket now
+    // opens through the seam the room's flows call. The C6 contract is
+    // unchanged: closing hands focus back to the mark that owns client actions.
+    act(() => openActionTicket("annual-review"));
     expect(document.querySelector('[role="dialog"][aria-label="Annual Review"]')).toBeTruthy();
     press("Escape");
     expect(document.activeElement).toBe(mark);
