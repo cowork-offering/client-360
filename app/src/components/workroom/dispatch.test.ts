@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   MAGNITUDE_MULTIPLE,
   clauseCount,
+  committedSentence,
+  fenceRefusal,
   magnitudeAdvisories,
   dollarFigures,
   provablyClean,
   qualifierFilter,
+  readRemove,
+  readPartyRemoval,
+  readsThePlan,
   singleClause,
+  stampRemovalRoles,
   type QualifierMember,
 } from "./dispatch";
+import type { Book } from "./elicit";
 import type { IntentResult, WorkroomDelta } from "../../workroom/types";
 
 /* =============================================================================
@@ -250,5 +257,296 @@ describe("the fast path is only for a parse that is provably clean", () => {
         qualifier: { keep: [], dropped: staged, said: "dropped everything" },
       }),
     ).toBe(false);
+  });
+});
+
+/* =============================================================================
+   THE EVERYTHING-PLAN FIX BATCH (founder drive, 2026-09-01).
+
+   Four findings, four layers, and every case below is a line the founder typed
+   at the panel. The org facts they are held against are the ones the drive was
+   pre-flighted on: Hartwell Industrial Holdings is Guarantor on all six
+   eligible loans, and Elena Hartwell is Limited Guarantor on Construction and
+   on the $15M line ONLY.
+   ============================================================================= */
+
+const CONSTRUCTION = "a4Zbb0000027Mp3EAE";
+
+const HOLDINGS = "Hartwell Industrial Holdings LLC";
+const ELENA = "Elena Hartwell";
+
+/** The book, carrying the org facts the drive was pre-flighted on. */
+const BOOK: Book = {
+  covenants: [
+    { type: "Minimum Liquidity", threshold: 5_000_000, frequency: "Quarterly", loanIds: [LOC], accountLevel: false },
+    { type: "Leverage", threshold: 3, frequency: "Quarterly", loanIds: [EQUIPMENT], accountLevel: false },
+  ],
+  assets: [
+    { id: "a3Ubb00000001AR", label: "Accounts receivable, present and future", name: "COL-000761", kind: "Accounts Receivable", value: 9_000_000, lien: "1st", loanIds: [LOC] },
+    { id: "a3Ubb00000001AS", label: "Blanket equipment lien, Fort Wayne and Kokomo", name: "COL-000762", kind: "Equipment", value: 6_000_000, lien: "1st", loanIds: [EQUIPMENT] },
+  ],
+  liens: ["1st"],
+  parties: [
+    { name: "Hartwell Precision Manufacturing LLC", role: "Borrower", loanId: LOC },
+    { name: "Hartwell Precision Manufacturing LLC", role: "Borrower", loanId: EQUIPMENT },
+    { name: "Hartwell Precision Manufacturing LLC", role: "Borrower", loanId: CONSTRUCTION },
+    { name: HOLDINGS, role: "Guarantor", loanId: LOC },
+    { name: HOLDINGS, role: "Guarantor", loanId: EQUIPMENT },
+    { name: HOLDINGS, role: "Guarantor", loanId: CONSTRUCTION },
+    { name: ELENA, role: "Limited Guarantor", loanId: LOC },
+    { name: ELENA, role: "Limited Guarantor", loanId: CONSTRUCTION },
+  ],
+};
+
+const label = (id: string) => MEMBERS.find((m) => m.id === id)?.label ?? id;
+
+const exclusion = (id: string, loanId: string, party: string, role?: string): WorkroomDelta =>
+  delta({
+    id,
+    member: loanId,
+    op: "remove",
+    title: "Remove a legal entity",
+    target: label(loanId),
+    before: "carried over from the parent",
+    after: "off the modification",
+    involvementWire: { op: "remove", role, accountName: party, facilityId: loanId },
+  });
+
+/* ------------------------------------------------- E8, the drive's blocker */
+
+describe("the role on a carry exclusion comes from the book (E8)", () => {
+  it("corrects Guarantor to Limited Guarantor on the 15M line, and says so", () => {
+    // The line that refused the whole plan: her role there is LIMITED
+    // Guarantor, the org found no Guarantor row, and nine sound changes died.
+    const read = stampRemovalRoles({ deltas: [exclusion("x", LOC, ELENA, "Guarantor")], book: BOOK, label });
+    expect(read.deltas).toHaveLength(1);
+    expect(read.deltas[0].involvementWire?.role).toBe("Limited Guarantor");
+    expect(read.said.join(" ")).toContain("Limited Guarantor");
+    expect(read.said.join(" ")).toContain("not Guarantor");
+    expect(read.ask).toBeNull();
+  });
+
+  it("stamps the role the book holds when the line named none, and says it", () => {
+    const read = stampRemovalRoles({ deltas: [exclusion("x", LOC, ELENA)], book: BOOK, label });
+    expect(read.deltas[0].involvementWire?.role).toBe("Limited Guarantor");
+    expect(read.said[0]).toContain("Elena Hartwell, Limited Guarantor on the");
+    expect(read.deltas[0].before).toContain("Limited Guarantor");
+  });
+
+  it("asks which row comes off where the book holds two", () => {
+    const twoRoles: Book = { ...BOOK, parties: [...BOOK.parties, { name: ELENA, role: "Co-Borrower", loanId: LOC }] };
+    const read = stampRemovalRoles({ deltas: [exclusion("x", LOC, ELENA, "Guarantor")], book: twoRoles, label });
+    expect(read.deltas).toHaveLength(0);
+    expect(read.ask?.text).toContain("Limited Guarantor and Co-Borrower");
+    expect(read.ask?.options.map((o) => o.label)).toEqual(["Limited Guarantor", "Co-Borrower"]);
+  });
+
+  it("refuses honestly where the party is on the book but not on that facility", () => {
+    // Elena is on Construction and the $15M line only. Nothing is staged, and
+    // the answer names the facilities she IS on.
+    const read = stampRemovalRoles({ deltas: [exclusion("x", EQUIPMENT, ELENA, "Guarantor")], book: BOOK, label });
+    expect(read.deltas).toHaveLength(0);
+    expect(read.said[0]).toContain("is not on the");
+    expect(read.said[0]).toContain("Limited Guarantor");
+  });
+
+  it("strips an unverified role rather than refusing where the read carries the name nowhere", () => {
+    // The org is the authority on who is on a facility. A thin read must not
+    // overrule it — but it must not send a role nothing corroborates either,
+    // which is exactly what refused the plan.
+    const thin: Book = { ...BOOK, parties: BOOK.parties.filter((p) => p.role === "Borrower") };
+    const read = stampRemovalRoles({ deltas: [exclusion("x", LOC, ELENA, "Guarantor")], book: thin, label });
+    expect(read.deltas).toHaveLength(1);
+    expect(read.deltas[0].involvementWire?.role).toBeUndefined();
+    expect(read.said[0]).toContain("does not carry Elena Hartwell");
+  });
+
+  it("leaves every other delta exactly as it found it", () => {
+    const staged = [commitment("a", LOC, 20_000_000)];
+    const read = stampRemovalRoles({ deltas: staged, book: BOOK, label });
+    expect(read.deltas).toEqual(staged);
+    expect(read.said).toEqual([]);
+  });
+});
+
+/* ------------------------------------------ E5, "take X off Y" at rung zero */
+
+describe("\"take X off Y\" is routed by what X is, and composed from the book (E5 + E8)", () => {
+  const MEM = [
+    { id: LOC, key: "Line of Credit", label: "$15.0MM Line of Credit", orgName: null, shortName: "Line of Credit - $15,000,000.00", committed: 15_000_000 },
+    { id: SEASONAL, key: "Line of Credit", label: "$2.5MM Line of Credit", orgName: null, shortName: "Line of Credit - $2,500,000.00", committed: 2_500_000 },
+    { id: EQUIPMENT, key: "Equipment", label: "$8.0MM Equipment", orgName: null, shortName: "Equipment - $8,000,000.00", committed: 8_000_000 },
+    { id: CONSTRUCTION, key: "Construction", label: "Construction", orgName: null, shortName: "Construction - $12,000,000.00", committed: 12_000_000 },
+  ];
+  const read = (line: string, book: Book = BOOK) => readPartyRemoval({ line, book, members: MEM });
+
+  it("composes the sentence the engine stages on, with the role the BOOK holds", () => {
+    // The line that refused the whole plan. The verb moves off the collateral
+    // class AND the role comes from the book, so the org gets the row it has.
+    expect(read("take Elena Hartwell off the 15M line of credit")).toEqual({
+      kind: "rewrite",
+      line: "on the Line of Credit - $15,000,000.00 remove the limited guarantor Elena Hartwell",
+    });
+  });
+
+  it("leaves a collateral line exactly as it is", () => {
+    expect(read("take the Fort Wayne equipment off the 8M equipment loan")).toBeNull();
+    expect(read("drop the accounts receivable from the 15M line of credit")).toBeNull();
+  });
+
+  it("reads the same removal out of \"drop X from Y\" and out of \"remove X from Y\"", () => {
+    expect(read("drop Hartwell Industrial Holdings LLC from the construction loan")).toEqual({
+      kind: "rewrite",
+      line: "on the Construction - $12,000,000.00 remove the guarantor Hartwell Industrial Holdings LLC",
+    });
+    expect(read("remove Elena Hartwell from the 15M line of credit")).toEqual({
+      kind: "rewrite",
+      line: "on the Line of Credit - $15,000,000.00 remove the limited guarantor Elena Hartwell",
+    });
+  });
+
+  it("refuses honestly where the book carries the party, and not on that facility", () => {
+    const out = read("take Elena Hartwell off the 8M equipment loan");
+    expect(out?.kind).toBe("refusal");
+    expect(out?.kind === "refusal" && out.text).toContain("is not on the $8.0MM Equipment today");
+    expect(out?.kind === "refusal" && out.text).toContain("Limited Guarantor");
+  });
+
+  it("asks which row comes off where the book holds two", () => {
+    const twoRoles: Book = { ...BOOK, parties: [...BOOK.parties, { name: ELENA, role: "Co-Borrower", loanId: LOC }] };
+    const out = read("take Elena Hartwell off the 15M line of credit", twoRoles);
+    expect(out?.kind).toBe("ask");
+    expect(out?.kind === "ask" && out.options.map((o) => o.label)).toEqual(["Limited Guarantor", "Co-Borrower"]);
+  });
+
+  it("restates the verb and nothing else where the read carries the party nowhere", () => {
+    const thin: Book = { ...BOOK, parties: BOOK.parties.filter((p) => p.role === "Borrower") };
+    // The org is the authority on who is on a facility; a thin read must not
+    // refuse. It also must not invent a role, so the plain restatement goes.
+    expect(read("take Hartwell Precision Manufacturing LLC off the 15M line of credit", thin)).toEqual({
+      kind: "rewrite",
+      line: "on the Line of Credit - $15,000,000.00 remove the borrower Hartwell Precision Manufacturing LLC",
+    });
+  });
+
+  it("touches nothing that is not a party removal", () => {
+    expect(read("increase the 15M line of credit to 20M")).toBeNull();
+    expect(read("add a 1% origination fee on the 15M line of credit")).toBeNull();
+  });
+});
+
+/* ------------------------------------------------ E1, the destructive one */
+
+describe("a remove is routed, and it un-stages nothing it was not told to (E1)", () => {
+  const stagedCovenant = delta({
+    id: "covenant.add:eq:0",
+    member: EQUIPMENT,
+    group: "covenants",
+    kind: "Add Covenant",
+    title: "New covenant",
+    target: "Equipment Loan",
+    before: "not on the facility today",
+    after: "Debt Service Coverage of Borrower >= 1.30",
+  });
+
+  it("does NOT un-stage the banker's own covenant on another facility", () => {
+    // The destructive case, verbatim from the drive: this line matched the bare
+    // word "covenant" and took a DIFFERENT covenant off a DIFFERENT facility.
+    const read = readRemove("remove the Minimum Liquidity covenant from the 15M line of credit", [stagedCovenant], BOOK);
+    expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Minimum Liquidity" });
+  });
+
+  it("refuses a book covenant by name, with the route that exists", () => {
+    const fence = fenceRefusal("covenant", "Minimum Liquidity");
+    expect(fence.title).toBe("Detach Minimum Liquidity");
+    expect(fence.why).toContain("Minimum Liquidity");
+    expect(fence.why).toContain("covenant compliance update");
+    expect(fence.why).toContain("Nothing has been staged");
+    expect(fence.reason).toContain("no updateable field");
+  });
+
+  it("still un-stages a manifest entry the line names by title AND target", () => {
+    const read = readRemove("drop the new covenant on the Equipment Loan", [stagedCovenant], BOOK);
+    expect(read).toEqual({ kind: "manifest", entry: stagedCovenant });
+  });
+
+  it("refuses a book pledge as a delete rather than un-staging anything", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], BOOK);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" && read.scope).toBe("pledge");
+    const fence = fenceRefusal("pledge", "Accounts receivable, present and future");
+    expect(fence.why).toContain("files no release");
+    expect(fence.why).toContain("Nothing has been staged");
+  });
+
+  it("leaves a party removal to the parser, where it files as a carry exclusion", () => {
+    expect(readRemove("remove Elena Hartwell from the 15M line of credit", [stagedCovenant], BOOK)).toBeNull();
+  });
+
+  it("names both rather than choosing where two staged entries fit", () => {
+    const second = { ...stagedCovenant, id: "covenant.add:eq:1", after: "Leverage <= 3.00" };
+    const read = readRemove("drop the new covenant on the Equipment Loan", [stagedCovenant, second], BOOK);
+    expect(read?.kind).toBe("ambiguous");
+  });
+});
+
+/* ------------------------------------------------- E4c, figure integrity */
+
+describe("the committed total moves only on a commitment change (E4c)", () => {
+  const reply = (sentence: string) => `Legal entity on Construction: staged on the clone. ${sentence} What else should change?`;
+
+  it("holds the total on an involvement add, whatever else is staged", () => {
+    // The drive: "That takes the package from $49M to $54M" after a legal-entity
+    // add, because a $5M commitment change was already on the manifest.
+    const said = committedSentence({
+      reply: reply("That takes the package from $49M to $54M."),
+      delta: exclusion("x", CONSTRUCTION, HOLDINGS),
+      before: 54_000_000,
+    });
+    expect(said).toContain("The package total holds at $54M.");
+    expect(said).not.toContain("from $49M to $54M");
+  });
+
+  it("holds it on a covenant, a pledge, a fee and an exception add too", () => {
+    for (const d of [
+      delta({ id: "c", group: "covenants", title: "New covenant" }),
+      delta({ id: "p", group: "security", title: "Collateral pledge" }),
+      delta({ id: "f", group: "terms", title: "Facility fee" }),
+      delta({ id: "x", group: "terms", title: "Policy exception" }),
+    ]) {
+      const said = committedSentence({ reply: reply("That takes the package from $49M to $54M."), delta: d, before: 49_000_000 });
+      expect(said).toContain("The package total holds at $49M.");
+    }
+  });
+
+  it("moves it, from the shell's own figures, on a commitment change", () => {
+    const said = committedSentence({
+      reply: reply("The package total holds at $49M."),
+      delta: { ...commitment("a", LOC, 20_000_000), committedDeltaMM: 5 },
+      before: 49_000_000,
+    });
+    expect(said).toContain("That takes the package from $49M to $54M.");
+  });
+
+  it("leaves a reply that carries no package sentence alone", () => {
+    expect(committedSentence({ reply: "Staged on the clone.", delta: delta({ id: "a" }), before: 49_000_000 })).toBe(
+      "Staged on the clone.",
+    );
+  });
+});
+
+describe("the plan is read back locally", () => {
+  it("takes the founder's own ceremony line", () => {
+    // Step 14 of the everything-plan script. The rail's own phrase list does not
+    // carry it, so it went to the desk and came back as a round trip the room
+    // did not need.
+    expect(readsThePlan("what is on the plan")).toBe(true);
+    expect(readsThePlan("what's on the plan?")).toBe(true);
+    expect(readsThePlan("read the plan back to me")).toBe(true);
+  });
+
+  it("is not a line that CHANGES the plan", () => {
+    expect(readsThePlan("add a covenant to the plan")).toBe(false);
+    expect(readsThePlan("increase the 15M line of credit to 20M")).toBe(false);
   });
 });

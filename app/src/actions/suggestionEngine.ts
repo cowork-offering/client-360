@@ -270,7 +270,7 @@ function ruleCoverageShortfall(
       // "all 3 pledges are Abundance-of-Caution" is actionable; "present but
       // null" sends a banker to look for a defect that is not there.
       const who = f.name ?? "one facility";
-      const detail = f.coverageNote ? `${g.gap.detail} — ${who}: ${f.coverageNote}` : g.gap.detail;
+      const detail = f.coverageNote ? `${g.gap.detail}. ${who}: ${f.coverageNote}` : g.gap.detail;
       const note = f.coverageNote
         ? `${who} carries no lendable collateral figure: ${f.coverageNote}. Coverage could not be computed for this relationship.`
         : `${who} carries no lendable collateral figure, so coverage could not be computed for this relationship.`;

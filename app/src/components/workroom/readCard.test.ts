@@ -132,3 +132,59 @@ describe("fees are a gap in the read, and the room says so", () => {
     expect(gap).toMatch(/percentage of the commitment|flat amount/i);
   });
 });
+
+/* =============================================================================
+   THE STRUCTURE CARD, NARROWED BY THE QUESTION (E7, drive 2026-09-01).
+
+   "Any guarantors?" is a question about a ROLE, and a card that answers it with
+   the borrowers as well has not answered it. Both `Guarantor` and `Limited
+   Guarantor` are guarantors: a limited guaranty is a guaranty with a cap on it.
+   ============================================================================= */
+
+const HARTWELL = (live as unknown as C360Data).borrowers!["001bb00001I7FPNAA3"] as BorrowerBundle;
+
+/** The same read with the borrowing structure the org actually holds folded in. */
+const withGuarantors: BorrowerBundle = {
+  ...HARTWELL,
+  graph: {
+    ...HARTWELL.graph,
+    legalEntities: [
+      ...(HARTWELL.graph?.legalEntities ?? []),
+      { accountName: "Hartwell Industrial Holdings LLC", borrowerType: "Guarantor", loanId: "a4Zbb0000027MaYEAU" },
+      { accountName: "Elena Hartwell", borrowerType: "Limited Guarantor", loanId: "a4Zbb0000027MaYEAU" },
+    ],
+  },
+};
+
+describe("a question about guarantors is answered with the guarantors", () => {
+  const src = (bundle: BorrowerBundle): ReadSource => ({
+    bundle,
+    accountName: "Hartwell Precision Manufacturing LLC",
+    productPackageId: null,
+  });
+
+  it("keeps the limited guarantor in the answer", () => {
+    const card = buildReadCard("structure", src(withGuarantors), { role: "guarantor" })!;
+    const rows = card.groups.flatMap((g) => g.rows);
+    expect(rows.map((r) => r.label)).toEqual(["Hartwell Industrial Holdings LLC", "Elena Hartwell"]);
+    expect(rows.map((r) => r.value)).toEqual(["Guarantor", "Limited Guarantor"]);
+    expect(card.lede).toContain("guaranty rows");
+    expect(card.lede).toContain("Limited guarantors are guarantors");
+  });
+
+  it("says so, and shows the whole structure, where the read carries no guaranty row", () => {
+    // The pinned read carries six BORROWER rows and nothing else. An empty card
+    // under a "Guarantors" heading is the frame of an answer with no answer in
+    // it; this names the gap and shows what the read does carry.
+    const card = buildReadCard("structure", src(HARTWELL), { role: "guarantor" })!;
+    expect(card.lede).toContain("no guaranty rows");
+    expect(card.groups.flatMap((g) => g.rows).length).toBeGreaterThan(0);
+  });
+
+  it("answers an unqualified structure question with every party, as it always has", () => {
+    const card = buildReadCard("structure", src(withGuarantors))!;
+    const rows = card.groups.flatMap((g) => g.rows);
+    expect(rows.length).toBe((withGuarantors.graph?.legalEntities ?? []).length);
+    expect(card.lede).toContain("parties are on this package today");
+  });
+});

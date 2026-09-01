@@ -18,9 +18,9 @@ const CONSTRUCTION = "a4Zbb0000027Mp3EAE";
 const LOC25 = "a4Zbb0000027MttEAE";
 
 const MEMBERS: ElicitMember[] = [
-  { id: LOC15, key: "Line of Credit", label: "$15.0MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00", committed: 15_000_000 },
-  { id: CONSTRUCTION, key: "Construction", label: "Construction", orgName: "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00", committed: 12_000_000 },
-  { id: LOC25, key: "Line of Credit", label: "$2.5MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00", committed: 2_500_000 },
+  { id: LOC15, key: "Line of Credit", label: "$15.0MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00", shortName: "Line of Credit - $15,000,000.00", committed: 15_000_000 },
+  { id: CONSTRUCTION, key: "Construction", label: "Construction", orgName: "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00", shortName: "Construction - $12,000,000.00", committed: 12_000_000 },
+  { id: LOC25, key: "Line of Credit", label: "$2.5MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00", shortName: "Line of Credit - $2,500,000.00", committed: 2_500_000 },
 ];
 
 describe("a navigational line is answered with the choice", () => {

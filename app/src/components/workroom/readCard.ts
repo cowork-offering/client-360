@@ -58,6 +58,11 @@ export interface ReadCardModel {
   followUp: string;
 }
 
+/** What the QUESTION narrowed the card to, where it narrowed it to anything. */
+export interface ReadOptions {
+  role?: "guarantor";
+}
+
 export interface ReadSource {
   bundle: BorrowerBundle | null;
   accountName: string;
@@ -98,12 +103,24 @@ function roleOf(e: LegalEntity): string {
   return (e.relationshipType ?? "").trim() || (e.borrowerType ?? "").trim() || "Involved";
 }
 
-function structureCard(src: ReadSource): ReadCardModel | null {
+/** IS THIS ROW A GUARANTY. Both `Guarantor` and `Limited Guarantor` are, and so
+ *  is the graph read's own "Personal Guaranty" wording: a limited guaranty is a
+ *  guaranty with a cap on it, and answering "who guarantees this" without the
+ *  limited ones would leave a real obligor off the answer. */
+const isGuaranty = (e: LegalEntity): boolean => /guarant/i.test(roleOf(e));
+
+function structureCard(src: ReadSource, opts: ReadOptions = {}): ReadCardModel | null {
   const entities = src.bundle?.graph?.legalEntities ?? [];
   if (!entities.length) return null;
   const facilities = scoped(src);
   const byLoan = new Map(facilities.map((f) => [f.loanId ?? "", f]));
-  const inScope = entities.filter((e) => !e.loanId || byLoan.has(e.loanId));
+  const all = entities.filter((e) => !e.loanId || byLoan.has(e.loanId));
+  /* THE QUESTION NARROWS THE CARD (E7). A question about guarantors is answered
+     with the guarantors; where the read carries none, the card says so with the
+     whole structure under it rather than rendering a heading over no rows. */
+  const asked = opts.role === "guarantor" ? all.filter(isGuaranty) : all;
+  const narrowed = opts.role === "guarantor" && asked.length > 0;
+  const inScope = narrowed ? asked : all;
 
   const groups: ReadGroup[] = [];
   const row = (e: LegalEntity): ReadRow => ({
@@ -132,7 +149,11 @@ function structureCard(src: ReadSource): ReadCardModel | null {
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   return {
     topic: "structure",
-    lede: `${total} ${total === 1 ? "party is" : "parties are"} on this package today, by facility.`,
+    lede: narrowed
+      ? `${total} ${total === 1 ? "guaranty row is" : "guaranty rows are"} on this package today, by facility. Limited guarantors are guarantors: the cap is on the amount, not on the obligation.`
+      : opts.role === "guarantor"
+        ? `This read carries no guaranty rows on these facilities. What it does carry is ${total} ${total === 1 ? "party" : "parties"}, by facility.`
+        : `${total} ${total === 1 ? "party is" : "parties are"} on this package today, by facility.`,
     groups,
     followUp: "Who should be added or taken off, and on which facility?",
   };
@@ -288,10 +309,10 @@ export function readGap(topic: ReadTopic, relationship: string): string {
  * Null is answered by `readGap` rather than by an empty card. Both are honest;
  * only one of them is useful.
  */
-export function buildReadCard(topic: ReadTopic, src: ReadSource): ReadCardModel | null {
+export function buildReadCard(topic: ReadTopic, src: ReadSource, opts: ReadOptions = {}): ReadCardModel | null {
   switch (topic) {
     case "structure":
-      return structureCard(src);
+      return structureCard(src, opts);
     case "covenants":
       return covenantsCard(src);
     case "collateral":

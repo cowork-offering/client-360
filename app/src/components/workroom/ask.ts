@@ -75,6 +75,33 @@ const TOPICS: Array<[ReadTopic, RegExp]> = [
   ["facilities", /\b(facilit(?:y|ies)|members?|loans?|lines?\s+of\s+credit)\b/i],
 ];
 
+/* ------------------------------------------------------- the shortest reads
+
+   "ANY GUARANTORS?" WENT TO THE DESK (E7, founder drive 2026-09-01). It carries
+   no opener from the list above, so `readTopic` returned null, the question
+   guard sent it over the bridge, and a blind desk answered with a card holding
+   the heading "Guarantors" and no rows under it — while the room was holding
+   the involvements the whole time.
+
+   A BARE TOPIC IS A READ. "any guarantors?", "guarantors?", "covenants?" are
+   how a banker asks at a screen, and each of them is a question this room can
+   answer from the bundle. The rule stays narrow so an instruction can never
+   fall into it: no verb the room stages on, a handful of words, and either an
+   "any" in front or a question mark behind. */
+
+/** Anything that makes the line an instruction rather than a question. */
+const ACTS = /\b(add|adds|remove|removes|drop|drops|pledge|pledges|change|changes|set|sets|move|moves|increase|decrease|reduce|raise|lower|extend|take|make|put|file|stage|log|waive|release|renew|reprice)\b/i;
+
+/** Past this it is a sentence, not a bare topic. */
+const BARE_WORD_CAP = 4;
+
+function bareTopic(line: string): boolean {
+  const words = line.replace(/[?.!]+$/, "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > BARE_WORD_CAP) return false;
+  if (ACTS.test(line)) return false;
+  return line.trim().endsWith("?") || /^any\b/i.test(line.trim());
+}
+
 /**
  * THE TOPIC A READ QUESTION IS ABOUT, or null.
  *
@@ -85,9 +112,27 @@ const TOPICS: Array<[ReadTopic, RegExp]> = [
  */
 export function readTopic(text: string): ReadTopic | null {
   const line = text.trim();
-  if (!line || !READ_OPENER.test(line)) return null;
+  if (!line) return null;
+  if (!READ_OPENER.test(line) && !bareTopic(line)) return null;
   for (const [topic, re] of TOPICS) if (re.test(line)) return topic;
   return null;
+}
+
+/** The GUARANTOR words, which name a role rather than a topic. */
+const GUARANTOR_ASK = /\bguarantor|guarant(?:y|ies|ees?)\b/i;
+
+/**
+ * WHAT THE QUESTION NARROWS THE STRUCTURE CARD TO, or null for the whole of it.
+ *
+ * "Any guarantors?" is a question about a ROLE, and a card that answers it with
+ * the borrowers as well has not answered it. Both `Guarantor` and `Limited
+ * Guarantor` are guarantors: a limited guaranty is a guaranty with a cap on it,
+ * and leaving Elena Hartwell out of an answer about guarantors because her row
+ * says "Limited" would be the cockpit inventing a distinction the credit file
+ * does not make.
+ */
+export function readRole(text: string): "guarantor" | null {
+  return GUARANTOR_ASK.test(text) ? "guarantor" : null;
 }
 
 /* --------------------------------------------------------------- value bounds
@@ -155,11 +200,34 @@ const PHRASES: Array<[RegExp, string]> = [
   [/\bnot staged in this view\b/gi, "not carried in this view"],
 ];
 
+/**
+ * NO EM DASH REACHES THE GLASS (founder's house rule, and the drive found one).
+ *
+ * The split-offer sentence came back reading "The line names two changes—one I
+ * can file, one I cannot". It is not a string in this codebase: the desk wrote
+ * it, which is exactly why the rule belongs on the presentation filter every
+ * agent sentence already passes through rather than on a string somewhere. An
+ * engine sentence and a desk sentence are held to the same rule here.
+ *
+ * A dash BETWEEN WORDS becomes a comma, because that is what it was standing in
+ * for; one with a space either side becomes a full stop and a capital where the
+ * clause after it can carry one, and a comma where it cannot. A lone "—" is the
+ * cockpit's placeholder for a figure a read does not carry, and it is left
+ * exactly as it is: it is a value, not prose.
+ */
+function noEmDash(text: string): string {
+  return text
+    .replace(/\s+[—–]\s+/g, ", ")
+    .replace(/(\w)[—–](\w)/g, "$1, $2")
+    .replace(/\s+[—–](\w)/g, ", $1")
+    .replace(/(\w)[—–]\s+/g, "$1, ");
+}
+
 /** The same sentence, in the words a credit officer uses. */
 export function bankerly(text: string): string {
   let out = text;
   for (const [re, to] of PHRASES) out = out.replace(re, to);
-  return out;
+  return noEmDash(out);
 }
 
 /* ------------------------------------------------------- the honest fallback */

@@ -15,9 +15,9 @@ export type CopyPromptCause =
 
 const EXPLAINER: Record<CopyPromptCause, string> = {
   unstaged:
-    "This relationship is on the book but not staged in this cockpit snapshot. Ask the agent to open it — it will reload the cockpit anchored on this account.",
+    "This relationship is on the book but not staged in this cockpit snapshot. Ask the agent to open it: it will reload the cockpit anchored on this account.",
   "no-channel":
-    "This view isn't connected to the agent. In a live session this action runs automatically — here it's a prompt you can carry over.",
+    "This view isn't connected to the agent. In a live session this action runs automatically. Here it's a prompt you can carry over.",
 };
 
 /** Copy-prompt fallback: never a dead end. Offers a copyable prompt plus a

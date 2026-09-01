@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
+import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
 import type { WorkroomDelta } from "../../workroom/types";
 
 /* =============================================================================
@@ -194,5 +194,51 @@ describe("the room talks like a banker", () => {
     expect(said).toContain("$19M");
     // House style: no em dashes anywhere in UI copy.
     expect(said).not.toContain("—");
+  });
+});
+
+/* =============================================================================
+   THE SHORTEST READS, AND THE HOUSE RULE ON DASHES (E7 + COPY, drive
+   2026-09-01).
+   ============================================================================= */
+
+describe("a bare topic is a read, and it is answered locally (E7)", () => {
+  it("takes \"Any guarantors?\" the way it takes \"who are the guarantors?\"", () => {
+    // The drive: "Any guarantors?" carried no opener, so it went to the desk and
+    // came back as a card with the heading and no rows under it.
+    expect(readTopic("Any guarantors?")).toBe("structure");
+    expect(readTopic("who are the guarantors?")).toBe("structure");
+    expect(readTopic("guarantors?")).toBe("structure");
+    expect(readTopic("any covenants?")).toBe("covenants");
+    expect(readTopic("collateral?")).toBe("collateral");
+  });
+
+  it("never takes an instruction, however short", () => {
+    expect(readTopic("add a guarantor")).toBeNull();
+    expect(readTopic("remove the guarantor?")).toBeNull();
+    expect(readTopic("pledge collateral")).toBeNull();
+    expect(readTopic("take Elena Hartwell off the 15M line of credit")).toBeNull();
+    // A sentence is not a bare topic, whatever it ends on.
+    expect(readTopic("this facility has guarantors on it already, doesn't it?")).toBeNull();
+  });
+
+  it("reads a question about GUARANTORS as a question about a role", () => {
+    expect(readRole("Any guarantors?")).toBe("guarantor");
+    expect(readRole("who are the guarantors?")).toBe("guarantor");
+    expect(readRole("which borrowers are on the package?")).toBeNull();
+  });
+});
+
+describe("no em dash reaches the glass", () => {
+  it("turns the split-offer sentence the desk wrote into house style", () => {
+    const desk = "The line names two changes—one I can file, one I cannot.";
+    expect(bankerly(desk)).toBe("The line names two changes, one I can file, one I cannot.");
+    expect(bankerly(desk)).not.toContain("—");
+  });
+
+  it("turns a spaced dash into a comma too, and leaves the null placeholder alone", () => {
+    expect(bankerly("Staged on the clone — nothing is filed yet.")).toBe("Staged on the clone, nothing is filed yet.");
+    expect(bankerly("—")).toBe("—");
+    expect(bankerly("Grade —")).toBe("Grade —");
   });
 });
