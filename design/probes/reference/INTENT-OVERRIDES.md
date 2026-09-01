@@ -96,3 +96,70 @@ The arc SCRIM added in the same pass registers on no baseline leaf: it is a `poi
 radial behind the satellites at `z-index: calc(var(--z-fab) - 1)` with no backdrop-filter, so the
 census does not see it and no arc geometry moves. Verified directly instead - opacity 0 closed,
 1 open, back to 0 on the outside click that already closed the arc.
+
+### The Salesforce bubble (founder, 2026-09-01, directed)
+
+Founder, verbatim: *"we add another bubble with the salesforce cloud... when clicking onto this
+bubble it should give me either another tree of bubbles for: latest Product Package, Account page"*.
+
+The arc's fourth seat is a CLOUD, and it is the first satellite that routes nowhere. Pressing it
+fans a SECOND TIER of two smaller glass bubbles which open the client's Account record and their
+Product Package in the org, in a new tab. The corner stays open behind it; Escape, an outside
+click, a second press on the cloud, or taking either door folds the whole thing.
+
+**The arc returns to the geometry this file already documents.** Between 668b840 and 86f0c35 the
+arc ran at THREE satellites (45deg steps on r=96) after annual and covenant review moved into the
+Relationship room, and that interlude was never minted here - the section above still described
+four at 30deg. The cloud takes the seat back, so the recorded offsets `(0,-96) (-48,-83) (-83,-48)
+(-96,0)`, `arcRadiiPx: [96,95.88,95.88,96]`, `arcRadiusPx: 95.94` and
+`arcNeighbourSpacingPx: [49.73,49.5,49.73]` are true of the app again rather than aspirational.
+**Measured, sf-bubble vs main @ 86f0c35, 3 runs each, `--target port --stub-connector`, both
+assembled with `artifact/live-data.json`: 348 compared, 332 OK, 7 WARN, 9 FAIL.** Every FAIL is
+founder-directed and listed here; nothing else in this pass moved a probe leaf.
+
+- `fab.arc.arcSatelliteCount: 3 -> 4`
+- `fab.arc.arcRadiiPx: [96,96.17,96] -> [96,95.88,95.88,96]`
+- `fab.arc.arcNeighbourSpacingPx: [73.54,73.54] -> [49.73,49.5,49.73]`
+- `fab.arc.arcNeighbourSpacingMeanPx: 73.54 -> 49.65` - the three-satellite build ran 45deg steps,
+  which spaced neighbours 73.5px apart; the four are back on the approved 49.7px rhythm
+- `fab.arc.arcRadiusPx: 96.06 -> 95.94` does NOT fail: the radius never moved, only the spread
+- `glass.{client,cmdk,workroom}.glassSurfaceCount: +3` and `glass.hairlines.glassSurfaceCountForBorders:
+  8 -> 11` - one more `.arcbtn` satellite and the tier's two `.sfbtn` bubbles, which mount with the
+  corner rather than with the tier state so the fan is a transition and not a mount.
+  `glassRimViolationCount` is **0 in all four page states** and `glassWhiteBorderCount` is 0:
+  `.sfbtn` takes `.eg-glass .eg-glass-chip`, so the triple rim and the dark hairline are structural
+- `workroom.execute.haloBoxSizeStablePx: 8.91 -> 58.8` - the known nondeterministic leaf recorded in
+  the unify-router section above (two 3-run passes of the SAME build gave 58.8 and 23.11). Not this
+  pass: nothing here touches the room's aura
+- `fab.arc.narratorHoverLabels` gains a trailing `"Salesforce"` (SOFT/WARN) - one word, rule 54, and
+  `narratorLabelsFitViewport` stays true at 1360w with the tier's two labels hovered as well
+- Traps 1-4 and `glassCensus_pass` all PASS; `glass.landing` is untouched at 4 surfaces, which is
+  the landing FAB staying chat-direct
+
+**The tier is deliberately NOT on `sel.arcButton`.** It keeps `.arcbtn`, so every arc geometry leaf
+measures the four satellites and never the branch. The tier gets its own hooks:
+`sfTierButton` (`.sfbtn`), `sfTierAccount` (`#sfAccount`), `sfTierPackage` (`#sfPackage`),
+`sfTierOpenClass` (`tier`, on #fabwrap beside `open`) and `sfTierDeadClass` (`is-dead`).
+
+**Tier geometry, and why.** The two bubbles leave the Salesforce satellite along its OWN radial -
+the arc's horizontal, pointing away from the mark - and fan 24deg either side of it at 44px, so the
+pair reads as something growing out of one satellite rather than as a second sweep competing with
+the first. Absolute offsets from the mark, the way the arc's are written:
+`(-96,0) + 44*(cos24, -/+sin24)` = `(-136,-18)` and `(-136,18)`. 34px discs at the CHIP blur tier
+rather than the satellite's, because size decides depth of field and nothing else (rule 71). Same
+0.42s settle spring, same 28ms stagger, one tier deeper. Reduced motion is handled where it always
+is - the global switch in electric-glass.css turns the fan into an instant show/hide.
+
+**NEVER A WRONG LINK.** The host is `meta.instanceUrl` at RUNTIME, never hardcoded and never
+rebuilt from an org id; the package is `packageRecords(bundle)[0]`, which is the same record the
+workroom anchors on, so the corner and the room can never disagree about which deal "the package"
+means. Missing either and the bubble renders VISIBLE BUT DEAD - a `.sfbtn.is-dead` span at ink-3,
+no hover, no press, `title="Not connected to the org"` - because a guessed My Domain takes a banker
+to a login page for an org they are not in (A29).
+
+**The hero's "Open in nCino" is REMOVED** in the same pass: *"the cloud is the door now"*. The
+`.hero-ncino` link, its CSS and its `OpenAccountInNcino` component are gone, and the hero's control
+row is back to Sync alone. The dossier's package link SURVIVES but no longer says "Open in nCino"
+anywhere: the package's own NAME in the result card's header carries the href, which is the founder's
+"the package reference itself is the link". `sel` has no hook on either, so no probe leaf moves;
+the contract is asserted in `sfBubble.render.test.tsx` and `ncinoLinks.render.test.tsx` instead.

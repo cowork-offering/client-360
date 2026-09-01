@@ -204,6 +204,74 @@
   transform: translate(var(--tx), var(--ty)) scale(0.9);
 }
 
+/* -------------------------------------------------------- the second tier
+   THE CLOUD'S BRANCH (founder, 2026-09-01). The Salesforce satellite is the one
+   seat on the arc that opens nothing: it fans TWO smaller discs — the client's
+   Account page and their latest Product Package — which leave its position
+   along the arc's own horizontal and spread 24deg either side of it. Same
+   spring, same 28ms stagger, one tier deeper.
+
+   34px, and at the CHIP blur rather than the satellite's: depth of field is the
+   only thing size decides here (rule 71), and a smaller disc belongs on the
+   shallower tier. The triple rim and the dark hairline come from `.eg-glass`
+   by construction, so the census passes without this block remembering it.
+
+   The centre maths: `right`/`bottom` are half the 34px disc off the mark's own
+   26px centre, so `--tx`/`--ty` are measured from the SAME origin the arc's
+   offsets are. Change the diameter and both numbers move with it. */
+.sfbtn {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translate(0, 0) scale(0.4);
+  pointer-events: none;
+  transition:
+    transform 0.42s var(--ease-settle),
+    opacity 0.3s var(--ease-out);
+  transition-delay: calc(var(--i) * 28ms);
+}
+.sfbtn svg {
+  width: 13px;
+  height: 13px;
+}
+.fabwrap.tier .sfbtn {
+  opacity: 1;
+  transform: translate(var(--tx), var(--ty)) scale(1);
+  pointer-events: auto;
+}
+.fabwrap.tier .sfbtn:hover {
+  color: var(--ink-strong);
+  background: #ffffff;
+}
+/* Rule 60, and the same clause the satellites get wrong: the press PRESERVES
+   the translate, or the bubble flings back onto the mark for the press. */
+.fabwrap.tier .sfbtn:active {
+  transform: translate(var(--tx), var(--ty)) scale(0.9);
+}
+
+/* THE DOOR THAT ISN'T THERE. No `meta.instanceUrl`, or no package id on the
+   bundle, and the bubble still renders — the banker should know the door
+   exists — but at ink-3, inert, and saying so in its title. It never hovers and
+   it never gives under the finger, because there is nothing behind it. */
+.sfbtn.is-dead {
+  color: var(--ink-faint);
+  cursor: default;
+}
+.fabwrap.tier .sfbtn.is-dead:hover,
+.fabwrap.tier .sfbtn.is-dead:active {
+  color: var(--ink-faint);
+  background: var(--eg-tint);
+  transform: translate(var(--tx), var(--ty)) scale(1);
+}
+
 /* ---------------------------------------------------------- the narrator chip
    Rule 54: ONE anchored chip beneath the mark says what you are on. The
    satellites stay unlabeled icons; per-satellite floating labels are BANNED.
