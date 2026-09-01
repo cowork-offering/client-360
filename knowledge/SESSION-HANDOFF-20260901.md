@@ -310,3 +310,30 @@ panel, the session verifying org-side. The next session's testing script:
   Snapshot + pane reads -> hydrates a NEW client into the running cockpit through the channel
   (extend the Sync path to load-not-just-refresh), loading choreography + name flight included.
   Pairs with the auto-sync item; together they end the snapshot era.
+
+## FINAL MORNING TWEAKS (shipped 2026-09-01 ~07:00, all on main, artifact republished)
+- Tier bow (107b26a): the cloud's two doors arc AROUND it, r=54 from the cloud at 48deg/4deg
+  above its radial = (-132,-40)/(-150,-4). Mirror-symmetric fans read as a vertical stack
+  (same x by symmetry) - that is WHY the geometry is asymmetric. The bow cannot continue
+  below the cloud: mark hugs the bottom edge, positive ty spills the viewport.
+- Hero round (03c4cd8 + 2ae8f42):
+  - Package stage chip RETIRED from the hero row (founder: hero is the RELATIONSHIP; package
+    facts live with the package). Absence contract in actions.ui A28: hero text must never
+    contain "Package".
+  - The landing's weave now breathes INSIDE the hero glass: Weave takes a className prop
+    ("hero-weave"), probe ids #hweave/#hweaveG stay landing-only, layer at z -1 (works because
+    .hero's backdrop-filter creates the stacking context), radial mask seated on the > corner
+    at opacity .62 so filaments gather behind the watermark and die before the words. The >
+    watermark stays.
+  - HARTWELL VERDICT COMPOSED (was the ONE borrower with no verdict in live-data across all 8
+    data revisions - the chip had been papering over an empty hero). Sentence composed from its
+    own bundle figures per the borrower.verdict contract (46.0M/6 facilities, 31.0M drawn,
+    coverage 1.02x/4 assets, cov 5/6, DSC 1.38x FCC 1.22x). liveData smoke guard that used
+    Hartwell as the no-verdict fixture now strips a synthetic bundle instead.
+- Wording sweep (013ce68): ZERO "Open in nCino"/"View deal in nCino" strings anywhere;
+  StepTracker created-record links say View in Salesforce / View deal in Salesforce.
+- State at handover: main = 2ae8f42 pushed, 2262 tests green, artifact
+  91b5e835-5536-4f23-950e-4cde7941cf7f republished (label hartwell-verdict), sf-bubble
+  branch+worktree deleted. BRAIN STATUS, honestly: WIRED, NOT LIVE-PROVEN - contract, validator,
+  skill + WORKROOM-BRAIN.md pack all built and synced to plugin assets, but no real claude.ai
+  panel session has done the round trip; that is testing item 2 and it is the founder's drive.
