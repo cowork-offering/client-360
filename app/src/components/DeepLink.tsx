@@ -5,7 +5,7 @@ import { useApp } from "../state/appState";
    REFINED after Fabian's live run (2026-07-26): once a record has actually been
    filed, the HERO link opens THAT RECORD. The banker just created something and
    wants to look at it, not at the container it hangs off. The Product Package
-   link stays as a secondary "View deal in nCino": the package perspective is
+   link stays as a secondary "View deal in Salesforce": the package perspective is
    still useful, it is simply no longer the first thing offered.
 
    The host is NEVER hardcoded and never reconstructed from an org id or a
@@ -62,7 +62,7 @@ export function OpenCreatedRecord({
         data-deeplink="record"
         className="c360-press c360-accent-btn inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
       >
-        Open in nCino
+        View in Salesforce
         <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M6 3h7v7M13 3L7 9M11 9.5V13H3V5h3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -79,7 +79,7 @@ export function OpenCreatedRecord({
         aria-disabled="true"
         title="The org address is not available in this view"
       >
-        Open in nCino
+        View in Salesforce
       </span>
       {recordId && (
         <span className="select-all font-mono text-[10.5px] text-ink-muted" title={`${target?.label ?? "Record"} id`}>
@@ -94,7 +94,7 @@ export function OpenInNcino({ snapshot, secondary }: { snapshot: Snapshot | unde
   const { data } = useApp();
   const id = snapshot?.productPackageId;
   const href = packageDeepLink(data.meta?.instanceUrl, id);
-  const label = secondary ? "View deal in nCino" : "Open in nCino";
+  const label = secondary ? "View deal in Salesforce" : "View in Salesforce";
 
   if (href) {
     return (

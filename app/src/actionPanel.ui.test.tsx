@@ -1568,7 +1568,7 @@ describe("WP7.4 — the execution", () => {
     const p = panel("Annual Review")!;
     expect(p.textContent).toContain("Filed REV-0000000012 against Sterling Fabrication Co.");
     expect(p.textContent).toContain("a5nbb000000ABCDEAA");
-    expect(p.textContent).toContain("Open in nCino");
+    expect(p.textContent).toContain("View in Salesforce");
   });
 
   it("shows every step in the state the executor returned", async () => {
@@ -1625,7 +1625,7 @@ describe("the terminal deep link targets the record that was just filed", () => 
     const p = await fileIt("Annual Review");
     const hero = p.querySelector('[data-deeplink="record"]') as HTMLAnchorElement;
     expect(hero.getAttribute("href")).toBe(`${INSTANCE}/lightning/r/LLC_BI__Review__c/a5nbb000000ABCDEAA/view`);
-    expect(hero.textContent).toContain("Open in nCino");
+    expect(hero.textContent).toContain("View in Salesforce");
   });
 
   it("keeps the deal as a secondary link on the same terminal state", async () => {
@@ -1633,7 +1633,7 @@ describe("the terminal deep link targets the record that was just filed", () => 
     // The sample stages no productPackageId, so the package affordance is the
     // honest disabled chip. It is still SECONDARY copy, and still present.
     const secondary = p.querySelector('[data-deeplink="package"]')!;
-    expect(secondary.textContent).toContain("View deal in nCino");
+    expect(secondary.textContent).toContain("View deal in Salesforce");
     expect(secondary.querySelector('[aria-disabled="true"]')).toBeTruthy();
   });
 
@@ -1685,7 +1685,7 @@ describe("the terminal deep link targets the record that was just filed", () => 
       },
     });
     expect(p.querySelector('[data-deeplink="record"]')).toBeNull();
-    expect(p.querySelector('[data-deeplink="package"]')!.textContent).toContain("Open in nCino");
+    expect(p.querySelector('[data-deeplink="package"]')!.textContent).toContain("View in Salesforce");
   });
 });
 
