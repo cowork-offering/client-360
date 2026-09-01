@@ -308,6 +308,25 @@ body.on-client .topnav .itab:nth-child(7) {
   align-items: center;
   gap: 8px;
 }
+/* THE QUIETEST CONTROL IN THE COCKPIT. The hero is the client's identity, so
+   the link to the client's own record is typography and not a button: muted
+   ink, a dotted underline, and the arrow at label weight. It must never read as
+   a peer of Sync, which is the one thing in this row that DOES something. */
+.hero-ncino {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-label);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.hero-ncino:hover {
+  color: var(--ink);
+}
 .verdict {
   max-width: 74ch;
   font-size: 13.5px;
