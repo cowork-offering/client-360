@@ -299,6 +299,76 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
       "any write other than the primary loan purpose the resume sets",
     ],
   },
+
+  /* WAVE-2 ARMS (2026-09-01): the Apex guard (C360WriteGuard) learned five
+     objects the day the fee, collateral and policy-exception arms shipped;
+     this mirror did not, so the first fee plan through the panel's confirm
+     gate was refused by our own belt-and-braces - found live by the founder.
+     These entries mirror the Apex guard's OP_CREATE semantics: all five are
+     CREATE-ONLY on the clone/account, never updated, never transitioned. */
+
+  "LLC_BI__Fee__c": {
+    object: "LLC_BI__Fee__c",
+    label: "fee",
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [{ field: "LLC_BI__Status__c", value: "Active" }],
+    transitions: [],
+    refusedFields: [
+      { field: "Name", reason: "autonumber, org-assigned" },
+      { field: "RecordTypeId", reason: "no Fee record type is assigned to the integration user; LLC_BI__Record_Type__c is the picklist we set" },
+      { field: "LLC_BI__Basis_Amount__c", reason: "the org's FeeTrigger derives it from the loan amount" },
+    ],
+    refusedOperations: ["updates of any kind", "deletes", "setting Amount on a percentage fee: the org computes it"],
+  },
+
+  "LLC_BI__Loan_Collateral2__c": {
+    object: "LLC_BI__Loan_Collateral2__c",
+    label: "collateral pledge",
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [{ field: "LLC_BI__Active__c", value: "true" }],
+    transitions: [],
+    refusedFields: [
+      { field: "LLC_BI__Advance_Rate__c", reason: "formula: override then auto-applied then type default; the banker's rate lands as the override" },
+    ],
+    refusedOperations: ["updates of any kind", "deletes", "aggregate shells: the carry mints one per clone, never one per pledge"],
+  },
+
+  "LLC_BI__Collateral__c": {
+    object: "LLC_BI__Collateral__c",
+    label: "collateral asset",
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [],
+    transitions: [],
+    refusedFields: [{ field: "Name", reason: "autonumber COL-000n, org-assigned" }],
+    refusedOperations: ["updates of any kind", "deletes"],
+  },
+
+  "LLC_BI__Account_Collateral__c": {
+    object: "LLC_BI__Account_Collateral__c",
+    label: "collateral ownership",
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [],
+    transitions: [],
+    refusedFields: [],
+    refusedOperations: ["updates of any kind", "deletes"],
+  },
+
+  "LLC_BI__Policy_Exception__c": {
+    object: "LLC_BI__Policy_Exception__c",
+    label: "policy exception",
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [],
+    transitions: [],
+    refusedFields: [
+      { field: "LLC_BI__Automatically_Added__c", reason: "hand-authored exceptions are exactly not that" },
+    ],
+    refusedOperations: ["updates of any kind", "deletes", "omitting Name: the trigger backfills the record's own Id, unreadable in any UI"],
+  },
 };
 
 /* ------------------------------------------------------------- validation */
