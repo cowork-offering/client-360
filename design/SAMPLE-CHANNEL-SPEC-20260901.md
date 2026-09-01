@@ -58,8 +58,33 @@ that rung 3 is RARE by construction.
    something current or something the book does not carry. When in doubt, answer from the envelope
    and say what it is based on.
 4. **Expose FEW tools, each narrow.** A short tool list the model can reason about, not the whole
-   connector surface. Start with two: current Boom ratios, and the covenant-type catalog. Add only
-   on evidence a line needs it.
+   connector surface. Candidates, each a READ: current Boom ratios (via the gateway),
+   the covenant-type catalog, and a scoped LIVE SALESFORCE read (Customer 360 read tools, or a
+   narrow soqlQuery) for a fact the snapshot does not carry or that may have moved. Start with the
+   two cheapest and add the Salesforce read only on evidence a line needs it.
+
+### Live Salesforce, the honest boundary
+
+A rung-3 call-out CAN hit Salesforce live - the room already holds the Customer 360 and sObject
+connectors, on the VIEWER's own credentials, so a live read sees exactly what the banker can see.
+Two lines govern it:
+
+- **The snapshot already IS Salesforce.** The envelope's reads were built from a Customer 360 read
+  moments ago, so almost every org fact is already loaded at rung 2 for free. A live re-check earns
+  its 30-90s ONLY for a fact the snapshot does not carry, or one that could have changed since it
+  was taken (a just-booked facility, a fresh compliance row, a valuation dated after the snapshot).
+  "Check Salesforce" is not a reflex; it is for the delta between the snapshot and now. If a fact is
+  always needed, it belongs IN the envelope (rung 2), never as a call-out.
+- **READS only. The write fence is absolute.** A live Salesforce call-out may READ. It may never
+  WRITE. Every mutation stays on the governed path - propose, restate through proven phrasings,
+  human confirm, single-use token, execute - and the brain never touches that path through a tool.
+  This is the SR 11-7 fence and the whole reason a banker trusts the room: the model can look, only
+  the human can commit. A read tool that could mutate is not exposed.
+
+(Distinct from this: loading an ARBITRARY org account into the cockpit - the "dynamic book" via
+Customer360SearchAccounts - is a live-Salesforce read too, but it is a separate feature that
+hydrates a new relationship, not a brain call-out inside an open room. Backlog item, pairs with
+this but not part of this switch.)
 5. **`quick` tier for restatement, `default` only where judgment is needed.** A fuzzy line that just
    needs resolving into a proven phrasing is a `quick` call. A genuine credit-judgment question
    ("which covenant has the least cushion, and why") earns `default`. The router picks the tier.
