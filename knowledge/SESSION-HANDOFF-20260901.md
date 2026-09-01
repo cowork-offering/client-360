@@ -295,3 +295,13 @@ panel, the session verifying org-side. The next session's testing script:
   (Addendum 2 build). Do not clobber; coordinate through the contract docs.
 - Org watcher may still run (/tmp/org-watch.sh); kill via `fuser -k` style, never
   `pkill -f` with the pattern in your own command line (self-match kills your shell).
+
+## Two founder questions answered at handover (2026-09-01, add to backlog D/F)
+- SPREADING + CREDIT MEMO INTEGRATION: hand-off pattern per the 2026-07-25 ownership boundary -
+  cockpit entries (cmdk rows first) ask the SESSION to run Noland's tools/skills (Credit Memo
+  MCP, boom_show_spread) through whichever door serves them; the cockpit never rebuilds them.
+  In-cockpit spreading DATA = the round-2 Financials amendment (Boom via the gateway).
+- LIVE AUTO-UPDATING ARTIFACT: layer 1 exists (mcp capability + Sync = live on demand in a
+  panel). Layer 2 = channel-gated AUTO-SYNC backlog item: poll interval while connected,
+  last-refreshed stamp, changed figures odometer-roll, silent on channel-none, static host
+  stays snapshot-honest. Booth moment: change the org, watch the cockpit tick over itself.
