@@ -68,14 +68,20 @@ appears. Call out the step number to the session as you go.
 9. `remove the accounts receivable pledge from the 15M line of credit`
    expect: HONEST REFUSAL (deletes are fenced) naming the constraint. Nothing staged. PASS = refusal.
 
-### Borrowing structure: one ADD, one REMOVE (both file)
-10. `add Hartwell Industrial Holdings as guarantor on the construction loan`
-    expect: ONE chip, involvement ADD, role Guarantor, on Construction. If Holdings is already a
-    guarantor there the room should SAY so (a second row for the same name is the documented trap)
-    - then choose a facility where it is not.
-11. `take Elena Hartwell off the 2.5M line of credit`
-    expect: ONE chip, carry-exclusion REMOVE on Line of Credit ($2.50M). If she is not involved on
-    that facility the room says "not on the deal" - honest, pick one where she is.
+### Borrowing structure: one clean ADD, one duplicate-trap probe, one REMOVE
+Org facts (SOQL, pre-flight): Hartwell Industrial Holdings is already Guarantor on ALL six
+eligible loans. Elena Hartwell is Limited Guarantor on Construction and on the $15M line only.
+10. `add Elena Hartwell as limited guarantor on the 8M equipment loan`
+    expect: ONE chip, involvement ADD, role Limited Guarantor, on Equipment ($8M). Clean: she is
+    not on that facility today. (Limited Guarantor is one of the five legal roles.)
+10b. `add Hartwell Industrial Holdings as guarantor on the construction loan`
+    expect: the room SAYS Holdings is already Guarantor on Construction and does NOT quietly stage
+    a second row for the same name (the documented trap). It may offer a role change instead.
+    Score: naming the duplicate = PASS; a silent second row = FAIL. Do not confirm a second row.
+11. `take Elena Hartwell off the 15M line of credit`
+    expect: ONE chip, carry-exclusion REMOVE on Line of Credit ($15M). She IS Limited Guarantor
+    there, so this is a real exclusion, not a "not on the deal" refusal. Together with 10 this is
+    a realistic guaranty restructure: she moves from the line to the equipment loan.
 
 ### Fee and policy exception (both file)
 12. `add a 1% origination fee on the 15M line of credit`
