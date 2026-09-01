@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { resolveBundle } from "../../actions/registry";
+import { bookedFacilities } from "../../data/facilityStage";
 import { useApp } from "../../state/appState";
 import { createCreateEngine } from "../../workroom/createEngine";
 import { type WorkroomEngine } from "../../workroom/engine";
@@ -9,6 +10,7 @@ import { closeWorkroom, openWorkroom, useWorkroom, workroomContextFor } from "..
 import type { WorkroomContext, WorkroomMode } from "../../workroom/types";
 import { anchorFacilityRoom, bindFacilityRoute, closeFacilityRoom, useFacilityRoom } from "./roomSession";
 import { Workroom, neutralAsk, smartAsk, type WorkroomRouter } from "./Workroom";
+import type { ReadSource } from "./readCard";
 
 /** The one mount. Anything, anywhere, calls `openWorkroom(context)` (a caller
  *  that already knows its mode) or `openFacilityRoom(...)` (the FAB, which does
@@ -87,6 +89,28 @@ export function WorkroomHost() {
     }
   }, [context, data, bundle]);
 
+  /* WHICH MEMBERS A CREDIT ACTION CAN RUN AGAINST. `bookedFacilities` is the
+     function the engines themselves gate on, called once here where the bundle
+     lives, so the strip's disabled state and the engine's refusal are the same
+     judgement rather than two that agree today. */
+  const eligibleMemberIds = useMemo(
+    () => new Set(bookedFacilities(bundle).map((f) => f.loanId).filter((id): id is string => !!id)),
+    [bundle],
+  );
+
+  /* THE READ A QUESTION IS ANSWERED FROM. The same bundle the engine stands on,
+     handed to the room so "which borrowers are already in the package" is
+     answered from what was read rather than sent to a parser that can only
+     propose changes. */
+  const reads = useMemo<ReadSource>(
+    () => ({
+      bundle,
+      accountName: context?.accountName ?? sessionAccountName ?? "this relationship",
+      productPackageId: context?.productPackageId ?? null,
+    }),
+    [bundle, context?.accountName, context?.productPackageId, sessionAccountName],
+  );
+
   const close = useCallback(() => {
     if (!context) return;
     dispatch({ type: "ARM_WASH", accountId: context.accountId });
@@ -121,6 +145,8 @@ export function WorkroomHost() {
       context={context}
       engine={engine}
       router={router}
+      eligibleMemberIds={eligibleMemberIds}
+      reads={reads}
       /* THE GLASS LIFTS, AND THE WASH SETTLES (rule 62). Every route out of the
          room — the close button, Escape, the scrim — comes through this one
          prop, so arming the wash here catches all three. */

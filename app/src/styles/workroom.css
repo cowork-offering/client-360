@@ -233,6 +233,16 @@ body.wk-open #root {
   flex-direction: column;
   gap: 32px;
 }
+/* HEADROOM FOR THE FIRST ITEM (founder, 2026-09-01). The identity chip hangs
+   21px above its bubble (rule 52) and the column's own 14px of top padding is
+   less than that, so the FIRST bubble in the thread had its chip sliced off by
+   the scroller's edge on hover. Every later item has the 32px step gap or the
+   38px thread gap above it, and once history exists rule 39's 58px of clearance
+   covers the case as well; only item zero was ever short. 8px + 14px = 22px,
+   one pixel of air past the chip. */
+.wk-thread > .wk-step:first-child > .wk-msg:first-child {
+  margin-top: 8px;
+}
 .wk-step.wk-gone {
   display: none;
 }
@@ -376,6 +386,44 @@ body.wk-open #root {
   gap: 7px;
   flex-wrap: wrap;
   margin-top: 10px;
+}
+
+/* -------------------------------------------------- the question's explainer
+   THE "?" IN THE CORNER (founder, 2026-09-01). The explainer used to be a "Why"
+   pill in the row under the option chips, which put the routes, the explainer
+   and the source tray in one band and made the question read busy. It is a
+   quiet icon in the bubble's own top-right corner now, aligned to the bubble's
+   14px radius, and it takes an ink-3 wash on hover and nothing else. */
+.wk-openbub {
+  position: relative;
+}
+.wk-openbub:has(> .wk-whybtn) {
+  padding-right: 34px;
+}
+.wk-whybtn {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wk-whybtn:hover {
+  color: var(--ink-muted);
+  background: var(--wash-2);
+}
+.wk-whybtn:active {
+  transform: scale(0.94);
 }
 /* THE PACKAGE'S LIVE FIGURES, at the head of the lane. A landed change moves
    them and says what they WERE. */
@@ -562,9 +610,23 @@ body.wk-open #root {
 .wk-mchip.wk-prop .wk-amt {
   color: var(--ink-muted);
 }
+/* NOT MODIFIABLE, AND IT LOOKS IT (founder, 2026-09-01). A member no credit
+   action can run against stays on the strip — what the package holds is what
+   the package holds — but it is greyed to ink-3, takes no hover lift and keeps
+   the default cursor. The reason rides the title. */
 .wk-mchip:disabled {
-  opacity: 0.55;
   cursor: default;
+  color: var(--ink-faint);
+  box-shadow: none;
+}
+.wk-mchip:disabled b,
+.wk-mchip:disabled .wk-amt {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+.wk-mchip:disabled .tico {
+  color: var(--ink-faint);
+  background: var(--wash-2);
 }
 
 /* THE TYPE-ICON LANGUAGE (rule 35) — one shape per credit object, everywhere
@@ -839,6 +901,98 @@ body.wk-open #root {
   color: var(--ink-body);
 }
 
+/* ---------------------------------------------------------------- the read card
+   A QUESTION ANSWERED FROM THE PACKAGE (founder, 2026-09-01). It is the room's
+   own card language, not a table: solid surface under data (rule 23), the type
+   icon on every row, the figure right-aligned, and the status carried by the
+   INK alone — the same sweep every other chip in this room just took. It is not
+   a proposal, so it carries no Confirm and no fill that would suggest one. */
+.wk-read {
+  align-self: flex-start;
+  max-width: 86%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  border-radius: 13px;
+  padding: 14px 18px;
+  margin: 4px 0 2px;
+  box-shadow: var(--shadow-card);
+  animation: wk-in 550ms var(--ease-settle) both;
+}
+.wk-read-lede {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-body);
+}
+.wk-read-g {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wk-read-h {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.wk-read-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wk-read-r .tico {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+.wk-read-r .tico svg {
+  width: 11px;
+  height: 11px;
+}
+.wk-read-l {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wk-read-l b {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-body-strong);
+}
+.wk-read-d {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.wk-read-v {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+/* Status as typography: the row's verdict is the only thing that takes a
+   colour, and it takes it in the ink. */
+.wk-read-r.wk-warn .wk-read-v {
+  color: var(--warning);
+}
+.wk-read-r.wk-bad .wk-read-v {
+  color: var(--critical);
+}
+/* The guided next move. A sentence, never a chip row: the answer to it goes
+   through the same parser every other line does. */
+.wk-read-next {
+  padding-top: 11px;
+  border-top: 1px dashed var(--row-divider);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
 /* ---------------------------------------------------------------- advisories
    Advice comes BEFORE the decision and stops being advice once the decision is
    made. It is never a gate: the Confirm below is live whether it is read
@@ -949,7 +1103,7 @@ body.wk-open #root {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 0 8px;
+  padding: 10px 0 0;
 }
 .wk-sugg:empty {
   display: none;
@@ -991,12 +1145,30 @@ body.wk-open #root {
   border-color: rgba(0, 0, 0, 0.16);
   color: var(--ink);
 }
+/* THE ROUTES ARE ONE ROW (founder, 2026-09-01). Three one-word chips answering
+   one question read as a line, not as a wrapping field of pills; tighter, and
+   they never break. Only the routing row takes this — the org's own picklist
+   values legitimately wrap. */
+.wk-opts.wk-routes {
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+.wk-opts.wk-routes .wk-opt {
+  white-space: nowrap;
+  padding: 5px 12px;
+}
 
 /* ---------------------------------------------------------------- composer
    The PILL takes the focus (rule 47) via `.eg-pill`, so the input never draws a
    rectangle inside a rounded shell and the ring is ink, never violet. */
 .wk-composer {
   flex: none;
+  /* AIR ABOVE THE BAR (founder, 2026-09-01: the facility rows "stay pretty
+     close to the chat bar"). The suggestion row used to be the only thing
+     between the thread and the composer, and `.wk-sugg:empty` removes itself —
+     so with no next move offered the last facility row sat directly on the
+     input. The clearance belongs to the composer, which is always there. */
+  margin-top: 14px;
   display: flex;
   align-items: center;
   gap: 10px;

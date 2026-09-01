@@ -35,6 +35,8 @@ import {
   readRouteSwitch,
   type SmartOpening,
 } from "./route";
+import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
+import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "./readCard";
 import "../../styles/workroom.css";
 
 /* =============================================================================
@@ -155,6 +157,9 @@ type ThreadItem = { id: string; step: number } & (
   | { kind: "packages" }
   /** The lookup, running. */
   | { kind: "lookup" }
+  /** A READ QUESTION, ANSWERED FROM THE PACKAGE. Not a proposal and not a
+   *  gate: nothing on it is waiting for a decision. */
+  | { kind: "read"; card: ReadCardModel }
   /** THE ADVICE TRAVELS WITH THE CHIPS IT IS ABOUT. It is not a block of its
    *  own: an advisory that could collapse while the change it warns about
    *  stayed on screen would be worse than no advisory. */
@@ -225,9 +230,32 @@ export function smartAsk(opening: SmartOpening): RouterQuestion {
   };
 }
 
-/** A block is LIVE while something in it is still waiting on the banker. */
+/**
+ * WHY A MEMBER CANNOT BE WORKED ON, in the strip's own words.
+ *
+ * The member already carries the org's stage as its tag, so this states that
+ * rather than inventing a second vocabulary for it. The one tag that is not a
+ * stage is the honest "Stage not staged" fallback, which reads as a sentence on
+ * its own and must not be suffixed into "Stage not staged stage".
+ */
+function ineligibleReason(m: PackageMember): string {
+  return /not staged/i.test(m.tag) ? `${m.tag} in this read - not modifiable` : `${m.tag} stage - not modifiable`;
+}
+
+/**
+ * A block is LIVE while something in it is still waiting on a DECISION.
+ *
+ * A PROPOSAL IS A GATE; A REFUSAL IS AN ANSWER (founder, 2026-09-01). An open
+ * delta card is holding Confirm and Discard and the room genuinely cannot take
+ * a new instruction past it. A refusal card holds neither — it staged nothing,
+ * it says why, and its "Understood" is a courtesy. Counting it as a gate meant
+ * one unreadable line poisoned everything after it: the room answered every
+ * subsequent question with "one decision at a time" over a card that was never
+ * a decision, and pinned that step open while the thread grew underneath it.
+ * That is the accumulation the founder saw.
+ */
 function isLive(item: ThreadItem): boolean {
-  if (item.kind === "chips") return item.chips.some((c) => c.state === "open");
+  if (item.kind === "chips") return item.chips.some((c) => c.state === "open" && !!c.delta);
   if (item.kind === "challenge") return !item.acked;
   return false;
 }
@@ -467,11 +495,36 @@ export function Workroom({
   context,
   engine,
   router,
+  eligibleMemberIds,
+  reads,
   onClose,
   onAnchor,
   onExecuted,
 }: {
   context: WorkroomContext;
+  /**
+   * THE MEMBERS A CREDIT ACTION CAN RUN AGAINST, by loan id.
+   *
+   * Read from the SAME `bookedFacilities` the engines gate on (data/
+   * facilityStage.ts), resolved by WorkroomHost where the bundle lives — not
+   * re-derived here. A second copy of "what is eligible" in the presentation
+   * layer is the next thing to drift out of step with the engine that refuses.
+   *
+   * Absent for callers with no bundle behind them (the render tests, the shell
+   * engine), and the strip then falls back to the member's OWN `proposed` flag,
+   * which the engine set from the org's stage on the same rule.
+   */
+  eligibleMemberIds?: ReadonlySet<string>;
+  /**
+   * THE READ A QUESTION IS ANSWERED FROM.
+   *
+   * The bundle the room is already standing on, handed down so a read question
+   * is answered from what the room HOLDS rather than sent to a parser that can
+   * only propose changes. Absent means the room has no read behind it and every
+   * read question gets the honest account of what it can do instead — which is
+   * the shell engines, and is still better than a refusal about members.
+   */
+  reads?: ReadSource;
   /** Present only for the UNIFIED entry, where the room was opened on a
    *  relationship rather than on a route. Absent for every caller that already
    *  named a mode — the command palette, a deep link, a render test — and the
@@ -497,6 +550,10 @@ export function Workroom({
   const brief = useMemo(() => engine.brief(context), [engine, context]);
   const vocabulary = useMemo(() => vocabularyFor(context), [context]);
   const reduced = prefersReducedMotion();
+  const isEligible = useCallback(
+    (m: PackageMember) => (eligibleMemberIds ? eligibleMemberIds.has(m.id) : !m.proposed),
+    [eligibleMemberIds],
+  );
 
   /** THE ROUTE IS STILL OPEN. Non-null while the room is asking which of the
    *  three this is; the answer clears it and nothing puts it back. */
@@ -746,6 +803,51 @@ export function Workroom({
         return;
       }
 
+      /* ONE DECISION PER VIEW, AND IT IS DECIDED BEFORE THE STEP OPENS.
+         (founder, 2026-09-01 — tweak 8, the compactness gap.)
+
+         While a gate is open the room does not take a new instruction; it says
+         so rather than quietly queueing one. What it must NOT do is open a
+         STEP for the line it just refused: a refused line is not an exchange,
+         and a step that starts on one pushes the still-open card into history's
+         territory while rule 31 keeps it on screen — which is how the thread
+         grew instead of collapsing. The refusal lands IN the step that owns the
+         card it is about, so the room is never showing more than the live
+         exchange plus the one decision it is waiting on.
+
+         `settled` is the one exception and it is not a loophole: taking an
+         advisory's resolution settles the cards it is about IN THE SAME
+         GESTURE. A TYPED ACKNOWLEDGMENT is the second — "acknowledged" is the
+         same decision the Acknowledge button makes, and where the only thing
+         waiting is a CHECK, the word settles it exactly as the button does. */
+      let instruction = trimmed;
+      /** How many checks the line settled on its way in, where it was an
+       *  acknowledgment. Zero for every other line. */
+      let acknowledged = 0;
+      if (openGates > 0 && !opts?.settled) {
+        const ack = readAcknowledgment(trimmed);
+        const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
+        if (!ack || !checks.length || checks.length !== openGates) {
+          setItems((prev) => {
+            const here = prev.length ? prev[prev.length - 1].step : 0;
+            return [
+              ...prev,
+              { kind: "banker", id: nextId("banker"), step: here, text: (said ?? heard).trim() },
+              {
+                kind: "agent",
+                id: nextId("agent"),
+                step: here,
+                text: "One decision at a time. The open card above, or the review chip under it, carries the next move.",
+              },
+            ];
+          });
+          return;
+        }
+        setItems((prev) => prev.map((i) => (i.kind === "challenge" && !i.acked ? { ...i, acked: true } : i)));
+        instruction = ack.rest;
+        acknowledged = checks.length;
+      }
+
       const mine = step + 1;
       setStep(mine);
       setHistOpen(false);
@@ -753,36 +855,15 @@ export function Workroom({
       setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
       const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
 
-      // ONE DECISION PER VIEW. While a gate is open the room does not take a new
-      // instruction; it says so rather than quietly queueing one. `settled` is
-      // the one exception and it is not a loophole: taking an advisory's
-      // resolution settles the cards it is about IN THE SAME GESTURE.
-      //
-      // A TYPED ACKNOWLEDGMENT IS THE SECOND. "acknowledged" is the same
-      // decision the Acknowledge button makes, and where the only thing waiting
-      // is a CHECK, the word settles it exactly as the button does.
-      let instruction = trimmed;
-      if (openGates > 0 && !opts?.settled) {
-        const ack = readAcknowledgment(trimmed);
-        const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
-        if (!ack || !checks.length || checks.length !== openGates) {
-          answer({
-            kind: "agent",
-            id: nextId("agent"),
-            text: "One decision at a time. The open cards above, or the review chip under them, carry the next move.",
-          });
-          return;
-        }
-        setItems((prev) => prev.map((i) => (i.kind === "challenge" && !i.acked ? { ...i, acked: true } : i)));
-        if (!ack.rest) {
-          answer({
-            kind: "agent",
-            id: nextId("agent"),
-            text: `${checks.length === 1 ? "That check is" : `Those ${checks.length} checks are`} acknowledged. ${vocabulary.nextMove}`,
-          });
-          return;
-        }
-        instruction = ack.rest;
+      // The acknowledgment said everything it came to say. The checks are
+      // settled above; there is no instruction left in the line to parse.
+      if (acknowledged && !instruction) {
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${acknowledged === 1 ? "That check is" : `Those ${acknowledged} checks are`} acknowledged. ${vocabulary.nextMove}`,
+        });
+        return;
       }
 
       /* ROUTE BINDING IS FINAL PER PLAN (rule 4, founder 2026-08-31).
@@ -848,6 +929,36 @@ export function Workroom({
         return;
       }
 
+      /* ===================================================== THE QUESTION GUARD
+
+         BEFORE THE PARSER IS CONSULTED AT ALL (founder, 2026-09-01). A question
+         is not an instruction, and the parser has no way to tell: it matched
+         field="Product" value="Package" out of "what covenants are against this
+         Product Package" and staged a term change on the Line of Credit. So a
+         question never reaches it.
+
+         Three outcomes, in order of how much the room actually knows:
+           a READ it can answer  -> the card, from the bundle it already holds;
+           a READ it cannot      -> why not, and what CAN be done instead;
+           any other question    -> an honest account of the work it takes.
+
+         Nothing here parses, resolves or stages. It decides whether the line is
+         a question, and a question is answered rather than filed. */
+      const topic = readTopic(instruction);
+      if (topic) {
+        const card = reads ? buildReadCard(topic, reads) : null;
+        answer(
+          card
+            ? { kind: "read", id: nextId("read"), card }
+            : { kind: "agent", id: nextId("agent"), text: readGap(topic, context.accountName) },
+        );
+        return;
+      }
+      if (isQuestion(instruction)) {
+        answer({ kind: "agent", id: nextId("agent"), text: whatICanDo(context.accountName) });
+        return;
+      }
+
       // THE COMPOSED BEAT. The glyph fills while the engine reads the line — and
       // on a wired room the engine may be waiting on the gateway, so this is
       // also the only thing standing between the banker and a blank pause.
@@ -856,6 +967,26 @@ export function Workroom({
       try {
         const result = await engine.parseIntent(instruction, context);
         await beat(started);
+        /* ------------------------------------------------ THE VALUE BOUNDS
+
+           A STAGED VALUE HAS TO LOOK LIKE A VALUE (founder repro 11b). The
+           free-field wave takes everything after the label it matched, with no
+           shape check of its own, and staged a fifteen-word question tail as
+           the new value of "Product". The room refuses to draw a chip like
+           that: the delta is dropped and the room says WHY, because a delta
+           silently swallowed is the same silence from the other direction.
+
+           Scoped to the FIELD WAVE (`fieldWire`). Commitments, rates and
+           maturities are parsed into typed values by their own waves. */
+        const unsound =
+          result.kind === "deltas"
+            ? result.deltas
+                .map((d) => ({ d, why: unsoundFieldChange(instruction, d) }))
+                .filter((x): x is { d: WorkroomDelta; why: string } => !!x.why)
+            : [];
+        const sound = result.kind === "deltas" ? result.deltas.filter((d) => !unsound.some((u) => u.d.id === d.id)) : [];
+        const dropped = unsound.length > 0 && sound.length === 0;
+
         // The reply and the chips it puts on the table land TOGETHER, in one
         // commit, so there is no frame in between where the room looks finished
         // and the chips have not arrived.
@@ -864,15 +995,17 @@ export function Workroom({
             kind: "agent",
             id: nextId("agent"),
             step: mine,
-            text: result.reply,
+            text: dropped
+              ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
+              : result.reply,
             // CLICKABLE ANSWERS ride BOTH reply kinds: an "unparsed" clarify and
             // a "deltas" reply that still ends on a closed-set question.
-            options: result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined,
+            options: dropped ? undefined : result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined,
           },
         ];
         const chips: ChipModel[] =
           result.kind === "deltas"
-            ? result.deltas.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
+            ? sound.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
             : result.kind === "refusal"
               ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
               : [];
@@ -1270,9 +1403,36 @@ export function Workroom({
     figure: `${brief.baselineMembers} members · $${brief.baselineCommittedMM.toFixed(1)}MM committed · ${brief.covenantFigure} covenants`,
   };
 
+  /** WHY THE ROOM IS SAYING THIS. One quiet control, and it opens the same read
+   *  whether the bubble is carrying the routing question or the position. */
+  const openWhy = (anchor: HTMLElement) =>
+    openPeek(anchor, {
+      kicker: "Why this position",
+      width: 520,
+      content: (
+        <>
+          {brief.why.map((row) => (
+            <div className="wk-have-row" key={row.label}>
+              <div className="wk-l">{row.label}</div>
+              <div className="wk-d">{row.detail}</div>
+            </div>
+          ))}
+          <div className="wk-cav">{brief.whyCaveat}</div>
+        </>
+      ),
+    });
+
   const openingItem = (
     <div className="wk-msg wk-agent" data-who="Agent" key="opening">
-      <div className="wk-bub">
+      <div className="wk-bub wk-openbub">
+        {/* THE EXPLAINER LEAVES THE ROW (founder, 2026-09-01). It used to be a
+            "Why" pill sitting under the option chips, which put three kinds of
+            control in one band and made the question read busy. It is a quiet
+            "?" in the bubble's own top-right corner now: available to anyone
+            who wants it, and out of the way of the decision. */}
+        <button type="button" className="wk-whybtn" aria-label="Why this position" onClick={(e) => openWhy(e.currentTarget)}>
+          ?
+        </button>
         {brief.askPin && <span className="wk-askpin tnum">{brief.askPin}</span>}
         {/* THE ROOM OPENS BY NAME. The greeting is a real read or it is absent;
             it is never a label, and it is never a record id. */}
@@ -1295,8 +1455,11 @@ export function Workroom({
         </div>
         {/* The routes, in the room's own option-pill style. A chip does nothing
             a typed line could not: both land in `readRouteIntent`'s answer. */}
+        {/* ONE ROW, tighter (founder, 2026-09-01): the three routes are one
+            decision, so they read as one line rather than a wrapping field of
+            pills. Two or three one-word labels always fit. */}
         {ask && (
-          <div className="wk-opts">
+          <div className="wk-opts wk-routes">
             {ask.chips.map((chip) => (
               <button type="button" className="wk-opt" key={chip.label} onClick={() => chooseRoute(chip)}>
                 {chip.label}
@@ -1305,29 +1468,6 @@ export function Workroom({
           </div>
         )}
         <div className="wk-posfoot">
-          <button
-            type="button"
-            className="wk-dt"
-            onClick={(e) =>
-              openPeek(e.currentTarget, {
-                kicker: "Why this position",
-                width: 520,
-                content: (
-                  <>
-                    {brief.why.map((row) => (
-                      <div className="wk-have-row" key={row.label}>
-                        <div className="wk-l">{row.label}</div>
-                        <div className="wk-d">{row.detail}</div>
-                      </div>
-                    ))}
-                    <div className="wk-cav">{brief.whyCaveat}</div>
-                  </>
-                ),
-              })
-            }
-          >
-            Why
-          </button>
           <div className="wk-srctray">
             {brief.sources.map((s) => (
               <button
@@ -1355,35 +1495,45 @@ export function Workroom({
 
   const membersItem = brief.showsMembers ? (
     <div className="wk-mchips" key="members">
-      {brief.members.map((m) => (
-        <button
-          type="button"
-          /* The org's loan id, because two members of one package legitimately
-             share a product word and a label cannot tell them apart. */
-          key={m.id}
-          /* A member that is NOT booked renders dashed. Pre-work display must
-             never read as done work, and unknown is not booked. */
-          className={`wk-mchip ${m.proposed ? "wk-prop" : ""} ${focused?.id === m.id ? "wk-sel" : ""}`}
-          title={`${m.product} · ${m.tag}`}
-          /* THE STRIP IS THE WAY IN. Clicking a member starts the conversation
-             on it; where the engine has no read behind the strip, the member
-             detail opens instead. */
-          onClick={(e) => {
-            const anchor = e.currentTarget;
-            void pickMember(m, () =>
-              openPeek(anchor, {
-                kicker: "Members of the package",
-                width: 760,
-                content: <MemberCards members={brief.members} />,
-              }),
-            );
-          }}
-        >
-          <TypeIcon kind={iconForMember(m)} />
-          <b>{m.key}</b>
-          <span className="wk-amt tnum">{m.amount}</span>
-        </button>
-      ))}
+      {brief.members.map((m) => {
+        const ineligible = !isEligible(m);
+        return (
+          <button
+            type="button"
+            /* The org's loan id, because two members of one package legitimately
+               share a product word and a label cannot tell them apart. */
+            key={m.id}
+            /* A member that is NOT booked renders dashed. Pre-work display must
+               never read as done work, and unknown is not booked. */
+            className={`wk-mchip ${m.proposed ? "wk-prop" : ""} ${focused?.id === m.id ? "wk-sel" : ""}`}
+            /* VISIBLE BUT NOT SELECTABLE (founder, 2026-09-01 + rule 30's own
+               "ineligible ones visible but disabled"). A member no credit
+               action can run against was still offering the hover lift and
+               still taking the click, which made the room look as if it could
+               work on a proposal it then refused in words. The disabled state
+               and the strip's dashed border now say the same thing. */
+            disabled={ineligible}
+            title={ineligible ? ineligibleReason(m) : `${m.product} · ${m.tag}`}
+            /* THE STRIP IS THE WAY IN. Clicking a member starts the conversation
+               on it; where the engine has no read behind the strip, the member
+               detail opens instead. */
+            onClick={(e) => {
+              const anchor = e.currentTarget;
+              void pickMember(m, () =>
+                openPeek(anchor, {
+                  kicker: "Members of the package",
+                  width: 760,
+                  content: <MemberCards members={brief.members} />,
+                }),
+              );
+            }}
+          >
+            <TypeIcon kind={iconForMember(m)} />
+            <b>{m.key}</b>
+            <span className="wk-amt tnum">{m.amount}</span>
+          </button>
+        );
+      })}
     </div>
   ) : null;
 
@@ -1947,12 +2097,18 @@ function ThreadBlock({
     );
   }
 
+  if (item.kind === "read") return <ReadCard card={item.card} />;
+
   if (item.kind === "banker" || item.kind === "agent") {
     const who = item.kind === "banker" ? "You" : "Agent";
     return (
       <div className={`wk-msg wk-${item.kind}`} data-who={who}>
         <div className="wk-bub">
-          {item.kind === "agent" ? <Words text={item.text} /> : item.text}
+          {/* THE ROOM TALKS LIKE A BANKER. The engines compose in their own
+              machinery's vocabulary; `bankerly` rewrites the handful of phrases
+              that never belonged in front of a credit officer, on the way to
+              the glass and nowhere else (the engine strings are untouched). */}
+          {item.kind === "agent" ? <Words text={bankerly(item.text)} /> : item.text}
           {/* CLICKABLE ANSWERS. The org's own legal values, offered as chips a
               banker can tap instead of typing. A tap SAYS the value — it rides
               the same parser, the same staging and the same validation as a
@@ -2200,6 +2356,43 @@ function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
   );
 }
 
+/* --------------------------------------------------------------- the read card
+
+   A QUESTION, ANSWERED FROM THE PACKAGE (founder, 2026-09-01). Same card
+   language as everything else in the room: type icons, grouped rows, one figure
+   right-aligned, and the status in the INK rather than in a fill. It ends on the
+   follow-up, which is a SENTENCE — the banker's answer to it goes through the
+   same parser every other line does, so this card can do nothing they could not
+   have said themselves. */
+function ReadCard({ card }: { card: ReadCardModel }) {
+  return (
+    <div className="wk-read" data-topic={card.topic}>
+      <div className="wk-read-lede">
+        <Words text={card.lede} />
+      </div>
+      {/* Keyed on the INDEX as well as the heading: a package legitimately
+          carries two facilities with the same product word, and the heading
+          alone is not unique across the groups. */}
+      {card.groups.map((group, gi) => (
+        <div className="wk-read-g" key={`${group.heading}-${gi}`}>
+          <div className="wk-read-h">{group.heading}</div>
+          {group.rows.map((row, i) => (
+            <div className={`wk-read-r ${row.tone ? `wk-${row.tone}` : ""}`} key={`${row.label}-${i}`}>
+              <TypeIcon kind={row.icon} />
+              <span className="wk-read-l">
+                <b>{row.label}</b>
+                {row.detail && <span className="wk-read-d">{row.detail}</span>}
+              </span>
+              {row.value && <span className="wk-read-v tnum">{row.value}</span>}
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="wk-read-next">{card.followUp}</div>
+    </div>
+  );
+}
+
 function DeltaCard({
   delta,
   confirmed,
@@ -2293,9 +2486,11 @@ function RefusalCard({
         <span className="wk-fld">{refusal.title}</span>
       </div>
       {/* THE BANKER'S READING LEADS. Why the answer is no and what would work,
-          then the org's own account of its constraint as the quote it is. */}
-      {refusal.why && <div className="wk-refuse-why">{refusal.why}</div>}
-      <div className="wk-quote">{refusal.reason}</div>
+          then the org's own account of its constraint as the quote it is. Both
+          go through the copy filter: a refusal is the one place a banker most
+          needs plain words, and it was the worst offender. */}
+      {refusal.why && <div className="wk-refuse-why">{bankerly(refusal.why)}</div>}
+      <div className="wk-quote">{bankerly(refusal.reason)}</div>
       {!settled && (
         <div className="wk-acts">
           <button type="button" className="eg-btn-ink" onClick={onUnderstood}>
@@ -2309,7 +2504,7 @@ function RefusalCard({
               onOpenPeek(e.currentTarget, {
                 kicker: "Why this cannot be staged here",
                 width: 420,
-                content: <div className="wk-prose">{refusal.detail}</div>,
+                content: <div className="wk-prose">{bankerly(refusal.detail)}</div>,
               })
             }
           >
