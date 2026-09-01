@@ -3,6 +3,8 @@ import { Portal } from "./Portal";
 import { useApp } from "../state/appState";
 import { ACTIONS, resolveBundle } from "../actions/registry";
 import { openWorkroom, workroomContextFor, workroomModeFor } from "../workroom/openWorkroom";
+import { openRelationshipRoom } from "./relationship/relSession";
+import { relOpeningForAccount } from "./relationship/RelationshipRoom";
 import "../styles/cmdk.css";
 
 /* =============================================================================
@@ -73,6 +75,24 @@ export function CommandPalette() {
        disagree with itself about which package a banker is standing in. */
     const accountName = openAccountId ? staged.find((s) => s.id === openAccountId)?.name : null;
     if (openAccountId && accountName) {
+      /* THE RELATIONSHIP ROOM IS ONE ROW, not five. It is a room the banker
+         opens on a relationship and whose first question picks the review, so
+         a palette listing its five routes separately would be answering that
+         question for them. It routes through the SAME opener the arc uses, and
+         it carries the same derived signal — the palette never opens a room on
+         a different read from the one the FAB would. */
+      out.push({
+        id: "action:relationship-actions",
+        label: `Relationship Actions · ${accountName}`,
+        kind: "Action",
+        aka: "annual review covenant review collateral valuation risk rating service request",
+        run: () =>
+          openRelationshipRoom({
+            accountId: openAccountId,
+            accountName,
+            opening: relOpeningForAccount({ data, accountId: openAccountId }),
+          }),
+      });
       for (const action of ACTIONS) {
         const mode = workroomModeFor(action.id);
         if (!mode || !action.availability(data, openAccountId).available) continue;

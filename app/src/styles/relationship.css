@@ -1,0 +1,204 @@
+/* =============================================================================
+   THE RELATIONSHIP ACTIONS ROOM — ONLY WHAT IS NEW.
+
+   THE ROOM IS THE WORKROOM'S SHEET. Every surface it shares with the Facility
+   room is addressed by the SAME class name and styled once, in workroom.css:
+   `.wk-room`, `.wk-head`, `.wk-thread`, `.wk-step`, `.wk-msg`, `.wk-bub`,
+   `.wk-opt`, `.wk-composer`, `.wk-col-r`, `.wk-agg`, `.wk-ent`, `.wk-propose`,
+   `.wk-flowcard`, `.wk-flowload`, `.wk-rescard`, `.wk-toast`, `.wk-notice`.
+   Nothing is restated here, because a second copy of the recipe is how two
+   rooms stop being one room.
+
+   WHAT IS IN THIS FILE is the four surfaces the governance ritual adds and the
+   facility room has no equivalent of:
+
+     .rl-brief   the structured scope brief a route opens with
+     .rl-kicker  the step counter above a question
+     .rl-warn    the org's own warnings, read before the filing
+     .rl-gap     a create the room composes and cannot file
+
+   MATERIAL SPLIT, HONOURED. All four are CONTENT, not chrome, so all four are
+   SOLID: opaque surface, hairline border, the card shadow. Not one of them
+   declares a `backdrop-filter`, which is why the glass census is unchanged by
+   this room — the only blurred surface it opens is `.wk-room` itself, cut from
+   the one sheet by `.eg-glass.eg-glass-workroom`.
+
+   ONE MOTION RULE. Arrivals use `wk-in` on the settle curve, exactly as the
+   thread's other blocks do, and every one of them dies under reduced motion via
+   the global rule in tokens.css.
+   ============================================================================= */
+
+/* ------------------------------------------------------------- the brief
+
+   A GOVERNANCE RITUAL STATES ITS SCOPE BEFORE IT ASKS ANYTHING. Two rows, one
+   label column, read once. It is deliberately NOT a bubble: the brief is what
+   the review IS, not something the agent said, and dressing it as speech would
+   invite the banker to answer it. */
+.rl-brief {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  animation: wk-in 550ms var(--ease-settle) both;
+}
+.rl-brief-h {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.rl-brief-h b {
+  font-weight: 600;
+}
+/* The label column is fixed so the two prose blocks start on one edge. A brief
+   whose second line began further left than its first would read as two
+   unrelated notes rather than as one scope statement. */
+.rl-brief-r {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.rl-brief-k {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.rl-brief-t {
+  font-size: 12.2px;
+  line-height: 1.55;
+  color: var(--ink-body);
+}
+
+/* -------------------------------------------------------- the step counter
+
+   THE RITUAL IS NUMBERED, and the number sits ABOVE the question rather than
+   inside it: "Step 2 of 6" is not part of what the agent asked, and a sentence
+   that carried its own index would be a sentence the banker could not read back
+   as a question. */
+.rl-kicker {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+
+/* ------------------------------------------------------------ chip detail
+
+   A SECOND LINE INSIDE AN OPTION PILL, for the one fact the label cannot carry:
+   a covenant's current verdict, a collateral's type and value, or the registry's
+   reason a route is unavailable. It stacks under the label, which is why the
+   pill relaxes its radius — a two-line pill at 999px is a lozenge. */
+.wk-opt:has(.rl-opt-d) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border-radius: 12px;
+  padding: 7px 12px;
+  text-align: left;
+}
+.rl-opt-d {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ink-label);
+}
+/* A ROUTE THE DATA CANNOT SUPPORT STAYS VISIBLE (A27.3). It reads as unavailable
+   rather than disappearing, because the chip row is the map of what exists. */
+.wk-opt:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.wk-opt:disabled:hover {
+  border-color: var(--border);
+  color: var(--ink-muted);
+}
+
+/* ---------------------------------------------------- before you file
+
+   THE ORG'S OWN WARNINGS, verbatim, above the controls. ADVICE, NEVER A GATE:
+   the ink Execute below is live whether this is read or not, which is the same
+   rule the facility room's advisories follow. Amber because a side effect the
+   banker has not seen is a risk, not an error. */
+.rl-warn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  border: 1px solid color-mix(in srgb, var(--warning) 22%, transparent);
+}
+.rl-warn-k {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.rl-warn-t {
+  font-size: 11.6px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+}
+/* THE ORG IS HOLDING EXECUTION. Louder than a warning and it sits on its own:
+   a plan the org will not run is not a side effect to weigh, it is the answer. */
+.rl-warn-h {
+  margin: 8px 0 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  font-size: 11.8px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+}
+
+/* --------------------------------------------------------------- the gap
+
+   A CREATE THE ROOM COMPOSED AND CANNOT FILE. It borrows the refusal card's
+   grammar deliberately — same `.wk-dl` head, same amber `Not filed` chip — so a
+   banker reads it as the same KIND of answer they already know from the
+   facility room, and not as an error. What it adds is the way to the org-side
+   gap, stated in one button rather than dumped in the card. */
+.rl-gap {
+  align-self: flex-start;
+  max-width: 86%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 13px;
+  background: var(--surface-raised);
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, transparent);
+  box-shadow: var(--shadow-card);
+  animation: wk-in 550ms var(--ease-settle) both;
+}
+.rl-gap-l {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-body);
+}
+
+/* ---------------------------------------------------------- the lane fold
+
+   The ledger never grows past the room. Past the visible cap the OLDEST answers
+   fold away and the count in the lane header always states the whole review, so
+   the fold is never a place a figure can hide. */
+.rl-fold {
+  font-size: 10.5px;
+  color: var(--ink-label);
+  padding: 2px 0 6px;
+}

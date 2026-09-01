@@ -8,6 +8,7 @@ import { ChatFab } from "./ChatFab";
 import { CommandPalette } from "./CommandPalette";
 import { EmptyState } from "./ui";
 import { WorkroomHost } from "./workroom/WorkroomHost";
+import { RelationshipRoomHost } from "./relationship/RelationshipRoom";
 import { buildWorklistRows } from "../data/worklistRows";
 
 type ViewRef = React.RefObject<HTMLDivElement | null>;
@@ -102,6 +103,11 @@ export function AppShell() {
           at the shell rather than inside the panel that opened it: closing that
           panel must not take the room down with it. */}
       <WorkroomHost />
+      {/* The second unified room, mounted beside the first for the same reason:
+          it is a full-surface overlay, so closing whatever opened it must not
+          take the room down. The two sessions are independent stores and only
+          one is ever open. */}
+      <RelationshipRoomHost />
     </div>
   );
 }
