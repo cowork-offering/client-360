@@ -10,6 +10,13 @@ integrator. Never touch main, the release chain or the pinned artifact yourself.
 
 ---
 
+> **FOUNDER PIVOT (2026-09-01, late): ONE AT A TIME, not parallel streams.** "I don't even know if
+> modification, renewal and everything is working - let's get this in the books first." Sequence
+> is now: facility workroom fully PROVEN (the everything plan, new facility, renewal honesty -
+> knowledge/EVERYTHING-PLAN-SCRIPT-20260901.md) -> create-grammar landed and re-driven -> then the
+> next iteration is picked. Streams below remain the inventory; they are NOT running in parallel
+> except G (probes, zero collision, already started) and the A fix agent (the facility room itself).
+
 ## 1. Running multiple orchestrator sessions: the three rules
 
 Yes, multiple Fable sessions can run in parallel on this box and message each other (SendMessage
