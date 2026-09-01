@@ -743,9 +743,12 @@ body.wk-open #root {
 
 /* AN HONEST REFUSAL is the same card in the warning key: the banker's reading
    first, then the org's own account of its constraint as the quote it is. */
+/* The refusal card keeps a warning HAIRLINE — a card that files nothing has to
+   be distinguishable from one that does — but loses the amber wash: the reason
+   is already amber ink, and the fill made a refusal louder than an execution. */
 .wk-chip.wk-refuse {
   border-color: color-mix(in srgb, var(--warning) 28%, transparent);
-  background: var(--warning-bg);
+  background: var(--surface-raised);
 }
 .wk-refuse-why {
   margin-top: 6px;
@@ -757,12 +760,19 @@ body.wk-open #root {
   margin-top: 7px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid color-mix(in srgb, var(--warning) 18%, transparent);
+  background: var(--wash-2);
+  border: 1px solid var(--border);
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--warning-prose);
 }
+/* STATUS AS TYPOGRAPHY, NEVER PILL SOUP (system non-negotiable; founder sweep
+   2026-09-01). Every delta and advisory chip in this room wears the SAME calm
+   surface — wash-2 with the standard hairline, no tinted fill of any kind —
+   and the status lives in the INK alone. A tinted fill on "TERM CHANGE" made a
+   routine amendment shout in violet beside a coverage advisory shouting in
+   amber, and the room read as a bag of coloured pills rather than a document.
+   The one purple left on a chip in this room is rule 24's SELECTED wash. */
 .wk-kind {
   font-size: 9.5px;
   font-weight: 700;
@@ -770,19 +780,17 @@ body.wk-open #root {
   text-transform: uppercase;
   border-radius: 999px;
   padding: 2px 8px;
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--wash-2);
+  border: 1px solid var(--border);
+  color: var(--ink-muted);
 }
 .wk-kind.wk-new {
-  background: var(--positive-bg);
   color: var(--positive);
 }
 .wk-kind.wk-collateral {
-  background: var(--neutral-bg);
-  color: var(--neutral-fg);
+  color: var(--ink-muted);
 }
 .wk-kind.wk-refusal {
-  background: var(--warning-bg);
   color: var(--warning);
 }
 .wk-tgt {
@@ -816,7 +824,7 @@ body.wk-open #root {
   animation: wk-pop 450ms var(--ease-settle) both;
 }
 .wk-notice .tico {
-  background: var(--warning-bg);
+  background: var(--wash-2);
   color: var(--warning);
 }
 .wk-notice .wk-nt {
@@ -889,6 +897,9 @@ body.wk-open #root {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* The check's verdict takes the same sweep: neutral surface, the verdict in
+   the ink. A green pill and an amber pill side by side were the loudest thing
+   in a room whose whole subject is a figure. */
 .wk-vchip {
   font-size: 9.5px;
   font-weight: 700;
@@ -896,11 +907,11 @@ body.wk-open #root {
   text-transform: uppercase;
   border-radius: 999px;
   padding: 2px 8px;
-  background: var(--positive-bg);
+  background: var(--wash-2);
+  border: 1px solid var(--border);
   color: var(--positive);
 }
 .wk-vchip.wk-warn {
-  background: var(--warning-bg);
   color: var(--warning);
 }
 .wk-vk {
