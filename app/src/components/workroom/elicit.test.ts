@@ -1,0 +1,497 @@
+import { describe, expect, it } from "vitest";
+import {
+  advance,
+  amendmentOf,
+  awarenessFor,
+  blockedReason,
+  buildBook,
+  changedLine,
+  compose,
+  mirrorChips,
+  openCreate,
+  readInto,
+  readScope,
+  settleFromBook,
+  thresholdText,
+  verify,
+  type Draft,
+  type ElicitContext,
+  type ElicitMember,
+} from "./elicit";
+import { createModifyEngine } from "../../workroom/modifyEngine";
+import { workroomContextFor } from "../../workroom/openWorkroom";
+import type { BorrowerBundle, C360Data } from "../../data/contract";
+import live from "../../../../artifact/live-data.json";
+
+/* =============================================================================
+   THE CREATE GRAMMAR, IN ISOLATION.
+
+   The room's own behaviour is proved in createGrammar.render.test.tsx. What is
+   proved HERE is the machine: what a scope word resolves to, what the book
+   answers, what a proposal is grounded in, what a composed sentence says, and
+   what verification refuses.
+
+   THE COMPOSED SENTENCES ARE DRIVEN THROUGH THE REAL ENGINE. A composition that
+   only passes against a stub is a composition nobody has proved: the whole
+   point of composing rather than wiring is that the deterministic parser reads
+   it, so the parser reads it here too.
+   ============================================================================= */
+
+const data = live as unknown as C360Data;
+const accountId = "001bb00001I7FPNAA3";
+const bundle = data.borrowers![accountId] as BorrowerBundle;
+
+const LOC15 = "a4Zbb0000027MaYEAU";
+const CONSTRUCTION = "a4Zbb0000027Mp3EAE";
+const EQ8 = "a4Zbb0000027MnREAU";
+const PURCHASE = "a4Zbb0000027MqfEAE";
+const EQ35 = "a4Zbb0000027MsHEAU";
+const LOC25 = "a4Zbb0000027MttEAE";
+
+const MEMBERS: ElicitMember[] = [
+  { id: LOC15, key: "Line of Credit", label: "$15.0MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00", committed: 15_000_000 },
+  { id: CONSTRUCTION, key: "Construction", label: "Construction", orgName: "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00", committed: 12_000_000 },
+  { id: EQ8, key: "Equipment", label: "$8.0MM Equipment", orgName: "Hartwell Precision Manufacturing LLC - Equipment - $8,000,000.00", committed: 8_000_000 },
+  { id: PURCHASE, key: "Purchase", label: "Purchase", orgName: "Hartwell Precision Manufacturing LLC - Purchase - $5,000,000.00", committed: 5_000_000 },
+  { id: EQ35, key: "Equipment", label: "$3.5MM Equipment", orgName: "Hartwell Precision Manufacturing LLC - Equipment - $3,500,000.00", committed: 3_500_000 },
+  { id: LOC25, key: "Line of Credit", label: "$2.5MM Line of Credit", orgName: "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00", committed: 2_500_000 },
+];
+
+const book = buildBook(bundle, MEMBERS.map((m) => m.id));
+
+function ctxWith(over: Partial<ElicitContext> = {}): ElicitContext {
+  return {
+    members: MEMBERS,
+    focused: null,
+    book,
+    plan: [],
+    relationship: "Hartwell Precision Manufacturing LLC",
+    ...over,
+  };
+}
+
+/** The real deterministic parser, on the real read. Every composed sentence in
+ *  this file goes through it. */
+function realEngine() {
+  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+  return { engine: createModifyEngine({ context, data, bundle }), context };
+}
+
+/* ------------------------------------------------------------------ the book */
+
+describe("the book is read off the bundle the room already holds", () => {
+  it("carries the relationship's own covenants with their schedules", () => {
+    const dsc = book.covenants.find((c) => c.type === "Debt Service Coverage of Borrower")!;
+    expect(dsc.threshold).toBe(1.25);
+    expect(dsc.frequency).toBe("Quarterly");
+    // An EMPTY attachedLoans list is the org saying the covenant hangs off the
+    // relationship. It is an answer, not a gap.
+    expect(dsc.accountLevel).toBe(true);
+  });
+
+  it("carries the assets the deal pledges, deduped, with the facilities they reach", () => {
+    const ar = book.assets.find((a) => a.name === "COL-000762" || /accounts receivable/i.test(a.label))!;
+    expect(ar.loanIds).toContain(LOC15);
+    expect(ar.loanIds).toContain(LOC25);
+    expect(ar.lien).toBe("1st");
+  });
+
+  it("is empty with no bundle, and nothing downstream breaks on that", () => {
+    const none = buildBook(null, [LOC15]);
+    expect(none.covenants).toHaveLength(0);
+    expect(none.assets).toHaveLength(0);
+    expect(mirrorChips(none)).toHaveLength(0);
+  });
+
+  it("never prints a unit the org does not store", () => {
+    // The org keeps every threshold on one numeric field with no unit beside
+    // it, so a book-derived figure prints bare.
+    expect(thresholdText(80)).toBe("80");
+    expect(thresholdText(5_000_000)).toBe("5,000,000");
+    // The banker's own words are a different matter.
+    expect(thresholdText(1.25, "ratio")).toBe("1.25x");
+    expect(thresholdText(5_000_000, "money")).toBe("$5,000,000");
+  });
+});
+
+/* ----------------------------------------------------------------- the scope */
+
+describe("a scope word fans out or it asks, and it is never narrowed in silence", () => {
+  it("resolves an unambiguous all-word over a generic noun", () => {
+    const read = readScope("all 6 facilities", MEMBERS);
+    expect(read.word).toBe(true);
+    expect(read.ambiguous).toBe(false);
+    expect(read.ids).toHaveLength(6);
+  });
+
+  it("asks about \"all of the loans\" on a package that also carries lines", () => {
+    // The founder's own line. "Loans" may mean all six or may mean the four
+    // that are not lines, and the room does not pick.
+    const read = readScope("add another covenant to all of the loans", MEMBERS);
+    expect(read.word).toBe(true);
+    expect(read.ambiguous).toBe(true);
+    expect(read.ids).toHaveLength(0);
+  });
+
+  it("resolves a product group when the line counts it", () => {
+    const read = readScope("both lines of credit", MEMBERS);
+    expect(read.ids.sort()).toEqual([LOC15, LOC25].sort());
+  });
+
+  it("asks when a bare product word names more than one facility", () => {
+    const read = readScope("on the line of credit", MEMBERS);
+    expect(read.word).toBe(true);
+    expect(read.ambiguous).toBe(true);
+    expect(read.ids).toHaveLength(0);
+  });
+
+  it("resolves a dollar qualifier to exactly one facility", () => {
+    const read = readScope("on the 15M line of credit", MEMBERS);
+    expect(read.ids).toEqual([LOC15]);
+    expect(read.said).toContain("$15.0MM Line of Credit");
+  });
+
+  it("asks when a stated count disagrees with the package", () => {
+    const read = readScope("all four facilities", MEMBERS);
+    expect(read.ambiguous).toBe(true);
+    expect(read.ids).toHaveLength(0);
+  });
+
+  it("reads no scope word out of a line that carries none", () => {
+    expect(readScope("tested quarterly", MEMBERS)).toMatchObject({ word: false, ids: [] });
+  });
+
+  /* D2. The focused member answers "which one?" ONLY for a line that asked
+     nothing else. A line carrying a scope word never lands on it in silence. */
+  it("D2: a scope word is never narrowed to the focused member", () => {
+    const ctx = ctxWith({ focused: MEMBERS[0] });
+    const draft = openCreate("add another covenant to all of the loans", ctx)!;
+    expect(draft.scopeWord).toBe(true);
+    expect(draft.scope).toHaveLength(0);
+    const step = advance(draft, ctx);
+    expect(step.ask?.slot).toBe("scope");
+  });
+
+  it("uses the focused member only where the line named no scope at all", () => {
+    const ctx = ctxWith({ focused: MEMBERS[1] });
+    const draft = openCreate("add a minimum liquidity covenant of $5,000,000", ctx)!;
+    expect(draft.scopeWord).toBe(false);
+    expect(draft.scope).toEqual([CONSTRUCTION]);
+  });
+});
+
+/* ------------------------------------------------------------ what is asked */
+
+describe("the room asks for what the human owns, and never for what the org computes", () => {
+  it("opens the founder's line on the scope, then on the test", async () => {
+    const ctx = ctxWith();
+    const opened = openCreate("add another covenant to all of the loans", ctx)!;
+    expect(advance(opened, ctx).ask?.slot).toBe("scope");
+
+    const scoped = readInto(opened, "all 6 facilities", ctx);
+    const next = advance(scoped, ctx);
+    expect(next.ask?.slot).toBe("test");
+    // OFFER BEFORE ASKING. The proposals are what this relationship already
+    // tests, and the room says it will not set a threshold itself.
+    expect(next.ask!.text).toContain("Debt Service Coverage of Borrower quarterly");
+    expect(next.ask!.text).toContain("I will not set a threshold myself");
+  });
+
+  it("asks which test when the catalog carries the family twice", () => {
+    const ctx = ctxWith();
+    const draft = openCreate("add a DSCR covenant of 1.25x on the 15M line of credit", ctx)!;
+    const step = advance(draft, ctx);
+    expect(step.ask?.slot).toBe("test");
+    expect(step.ask!.options.map((o) => o.label)).toEqual([
+      "Debt Service Coverage of Borrower",
+      "Debt Service Coverage with and without Distributions",
+    ]);
+  });
+
+  it("never sets a threshold itself, and quotes the band as a band", () => {
+    const ctx = ctxWith();
+    const draft = readInto(openCreate("add a covenant to the Purchase", ctx)!, "a Maximum Debt to Worth covenant", ctx);
+    const step = advance(draft, ctx);
+    expect(step.ask?.slot).toBe("threshold");
+    expect(step.ask!.text).toContain("threshold IS the covenant");
+    expect(step.ask!.text).toContain("approved credit agreement");
+  });
+
+  it("takes the frequency from the book rather than asking a question it can answer", () => {
+    const ctx = ctxWith();
+    const draft = readInto(
+      openCreate("add a covenant to the Purchase", ctx)!,
+      "a Maximum Debt to Worth covenant of 3x",
+      ctx,
+    );
+    const settled = settleFromBook(draft, ctx);
+    expect(settled.slots.frequency).toBe("Quarterly");
+    expect(settled.slots.frequencyFrom).toBe("book");
+    expect(advance(draft, ctx).ask).toBeNull();
+  });
+
+  it("never asks for the advance rate or the lendable value on a pledge", () => {
+    const ctx = ctxWith();
+    let draft = openCreate("pledge the accounts receivable to the Purchase", ctx)!;
+    const asks: string[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const step = advance(draft, ctx);
+      if (!step.ask) break;
+      asks.push(step.ask.slot);
+      draft = { ...step.draft, slots: { ...step.draft.slots, lien: "1st" } };
+    }
+    expect(asks).not.toContain("advanceRate");
+    for (const ask of asks) expect(ask).not.toMatch(/lendable/i);
+    expect(compose(draft, ctx).lede).toContain("no advance rate for you to set here");
+  });
+
+  it("names the net-new asset gap rather than asking for a rate it will not set", () => {
+    const ctx = ctxWith();
+    const draft = openCreate("pledge a new forklift fleet worth $2,000,000 to the Purchase", ctx)!;
+    expect(draft.slots.isNew).toBe(true);
+    const why = blockedReason(draft)!;
+    expect(why).toContain("advance rate");
+    expect(why).toContain("credit decision");
+  });
+});
+
+/* -------------------------------------------------------------- the awareness */
+
+describe("the room reads the book and the plan before it proposes anything", () => {
+  const complete = (over: Partial<Draft["slots"]> = {}, scope = [PURCHASE]): Draft => ({
+    surface: "covenant",
+    slots: { test: "Debt Service Coverage of Borrower", threshold: 1.25, unit: "ratio", frequency: "Quarterly", ...over },
+    scope,
+    scopeWord: true,
+    unused: null,
+  });
+
+  it("names a relationship-level covenant rather than staging a duplicate", () => {
+    const aware = awarenessFor(complete(), ctxWith());
+    expect(aware.onTheBook).toContain("already runs at the relationship level");
+    expect(aware.fresh).toHaveLength(0);
+    expect(aware.options.map((o) => o.label)).toContain("Put a second one on the facility");
+  });
+
+  it("stages the second when the banker asks for one anyway", () => {
+    const aware = awarenessFor(complete({ second: true }), ctxWith());
+    expect(aware.onTheBook).toBeNull();
+    expect(aware.fresh).toEqual([PURCHASE]);
+  });
+
+  it("names a pledge the deal already carries, and offers the second", () => {
+    const ar = book.assets.find((a) => /accounts receivable/i.test(a.label))!;
+    const draft: Draft = {
+      surface: "collateral",
+      slots: { assetId: ar.id, assetName: ar.name ?? undefined, lien: "1st" },
+      scope: [LOC15, PURCHASE],
+      scopeWord: true,
+      unused: null,
+    };
+    const aware = awarenessFor(draft, ctxWith());
+    expect(aware.onTheBook).toContain("already pledged to $15.0MM Line of Credit");
+    // The facility it is NOT on survives. Awareness removes a question, never a
+    // change the banker asked for.
+    expect(aware.fresh).toEqual([PURCHASE]);
+    expect(aware.options.map((o) => o.label)).toContain("Add a second");
+  });
+
+  it("never proposes what this session already put on the plan", () => {
+    const ctx = ctxWith({
+      plan: [
+        {
+          deltaId: "d1",
+          surface: "covenant",
+          memberId: PURCHASE,
+          title: "New covenant",
+          target: "Purchase",
+          slots: { test: "Maximum Debt to Worth" },
+          open: true,
+        },
+      ],
+    });
+    const aware = awarenessFor(complete({ test: "Maximum Debt to Worth" }), ctx);
+    expect(aware.onThePlan).toContain("already on this plan");
+    expect(aware.fresh).toHaveLength(0);
+  });
+});
+
+/* --------------------------------------------------- composing and verifying */
+
+describe("the composed sentence goes through the real parser, and is verified", () => {
+  const covenant = (test: string, threshold: number, unit: "ratio" | "money", scope: string[]): Draft => ({
+    surface: "covenant",
+    slots: { test, threshold, unit, frequency: "Quarterly", second: true },
+    scope,
+    scopeWord: true,
+    unused: null,
+  });
+
+  it("names the facility by the org's own loan name, so nothing fans out", async () => {
+    const ctx = ctxWith();
+    const draft = covenant("Debt Service Coverage of Borrower", 1.25, "ratio", [LOC15]);
+    const { lines } = compose(draft, ctx);
+    expect(lines[0].say).toBe(
+      "on the Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00 add a debt service coverage of borrower covenant of 1.25x",
+    );
+    const { engine, context } = realEngine();
+    const result = await engine.parseIntent(lines[0].say, context);
+    expect(result.kind).toBe("deltas");
+    const verdict = verify(draft, LOC15, result.kind === "deltas" ? result.deltas : []);
+    expect(verdict.ok).toBe(true);
+    // One facility, not both lines of credit.
+    expect(result.kind === "deltas" && result.deltas).toHaveLength(1);
+  });
+
+  it("puts the facility first so the facility's own size cannot become the threshold", async () => {
+    const ctx = ctxWith();
+    const draft = covenant("Minimum Liquidity", 5_000_000, "money", [LOC15]);
+    const { lines } = compose(draft, ctx);
+    const { engine, context } = realEngine();
+    const result = await engine.parseIntent(lines[0].say, context);
+    const wire = result.kind === "deltas" ? result.deltas.find((d) => d.covenantWire)?.covenantWire : undefined;
+    expect(wire?.threshold).toBe(5_000_000);
+    expect(verify(draft, LOC15, result.kind === "deltas" ? result.deltas : []).ok).toBe(true);
+  });
+
+  it("D1: refuses a test the bank's catalog does not settle rather than staging the leftover words", async () => {
+    const ctx = ctxWith();
+    const draft = covenant("Accounts Receivable", 80, "ratio", [PURCHASE]);
+    const { lines } = compose(draft, ctx);
+    const { engine, context } = realEngine();
+    const result = await engine.parseIntent(lines[0].say, context);
+    // The parser DOES come back with a delta. It is a hollow one: no wire, and
+    // the leftover words as its value. This is exactly the chip the founder
+    // saw, and verification is what stops it reaching the glass.
+    expect(result.kind).toBe("deltas");
+    const verdict = verify(draft, PURCHASE, result.kind === "deltas" ? result.deltas : []);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.why).toContain("catalog did not settle");
+  });
+
+  it("D1: refuses a test the catalog resolved to a DIFFERENT test", async () => {
+    const ctx = ctxWith();
+    const draft = covenant("Debt Service Coverage with and without Distributions", 1.15, "ratio", [PURCHASE]);
+    const { lines } = compose(draft, ctx);
+    const { engine, context } = realEngine();
+    const result = await engine.parseIntent(lines[0].say, context);
+    const verdict = verify(draft, PURCHASE, result.kind === "deltas" ? result.deltas : []);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok === false && verdict.why).toContain("Debt Service Coverage of Borrower");
+  });
+
+  it("composes a pledge on the org's own collateral record, and verifies the asset", async () => {
+    const ctx = ctxWith();
+    const ar = book.assets.find((a) => /accounts receivable/i.test(a.label))!;
+    const draft: Draft = {
+      surface: "collateral",
+      slots: { assetId: ar.id, assetName: ar.name ?? undefined, lien: "1st" },
+      scope: [PURCHASE],
+      scopeWord: true,
+      unused: null,
+    };
+    const { lines, gaps } = compose(draft, ctx);
+    const { engine, context } = realEngine();
+    const result = await engine.parseIntent(lines[0].say, context);
+    const verdict = verify(draft, PURCHASE, result.kind === "deltas" ? result.deltas : []);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.ok === true && verdict.delta.pledgeWire?.collateralId).toBe(ar.id);
+    // THE LIEN POSITION IS THE BANK'S DECISION AND NO WIRE CARRIES IT, so it is
+    // named rather than dropped.
+    expect(gaps.join(" ")).toContain("lien position");
+  });
+
+  it("names a covenant schedule the modification cannot file", () => {
+    const ctx = ctxWith();
+    const draft = covenant("Minimum Liquidity", 5_000_000, "money", [PURCHASE]);
+    const monthly: Draft = { ...draft, slots: { ...draft.slots, frequency: "Monthly" } };
+    expect(compose(monthly, ctx).gaps.join(" ")).toContain("monthly");
+    expect(compose(draft, ctx).gaps).toHaveLength(0);
+  });
+
+  /* THE HINT IS CHECKED AGAINST THE REAL PARSER. A mirror chip that leads to a
+     refusal is a wasted gesture at a booth, so every one the room offers is
+     driven through the engine here. If the catalog map inside the fence moves,
+     this test fails rather than the demo. */
+  it("every mirror it offers resolves against the bank's catalog", async () => {
+    const ctx = ctxWith();
+    const { engine, context } = realEngine();
+    for (const mirror of mirrorChips(book)) {
+      const draft = readInto(
+        { surface: "covenant", slots: { second: true }, scope: [PURCHASE], scopeWord: true, unused: null },
+        mirror.say,
+        ctx,
+      );
+      // "with and without Distributions" is the one the catalog collapses onto
+      // another test. It is still offered, because refusing to offer it would
+      // hide a test the relationship genuinely runs, and verification names the
+      // collision precisely when it happens.
+      if (draft.slots.test === "Debt Service Coverage with and without Distributions") continue;
+      const { lines } = compose(draft, ctx);
+      const result = await engine.parseIntent(lines[0].say, context);
+      const verdict = verify(draft, PURCHASE, result.kind === "deltas" ? result.deltas : []);
+      expect(verdict.ok, `${mirror.label} did not resolve`).toBe(true);
+    }
+  });
+});
+
+/* ------------------------------------------------------------- the amendment */
+
+describe("a correction lands on the open create rather than beside it", () => {
+  const open = (): Draft => ({
+    surface: "covenant",
+    slots: { test: "Debt Service Coverage of Borrower", threshold: 1.25, unit: "ratio", frequency: "Quarterly" },
+    scope: [LOC15],
+    scopeWord: true,
+    unused: null,
+  });
+
+  it("reads \"actually make it 1.30x\" as the same decision, corrected", () => {
+    const amend = amendmentOf("actually make it 1.30x", open(), ctxWith())!;
+    expect(amend.draft.slots.threshold).toBe(1.3);
+    expect(changedLine(amend.changed)).toBe("Updated on the card: the threshold is now 1.3x.");
+  });
+
+  it("reads a bare schedule as a correction", () => {
+    const amend = amendmentOf("no, quarterly", { ...open(), slots: { ...open().slots, frequency: "Monthly" } }, ctxWith())!;
+    expect(amend.draft.slots.frequency).toBe("Quarterly");
+    expect(amend.changed.join(" ")).toContain("tested quarterly");
+  });
+
+  it("reads \"on the construction loan instead\" as a change of scope", () => {
+    const amend = amendmentOf("on the construction loan instead", open(), ctxWith())!;
+    expect(amend.draft.scope).toEqual([CONSTRUCTION]);
+    expect(amend.changed.join(" ")).toContain("Construction");
+  });
+
+  it("is not a correction when nothing actually changed", () => {
+    expect(amendmentOf("actually make it 1.25x", open(), ctxWith())).toBeNull();
+  });
+
+  it("is not a correction when the line is a new instruction", () => {
+    expect(amendmentOf("take the line of credit to $20,000,000", open(), ctxWith())).toBeNull();
+  });
+});
+
+/* ------------------------------------------------------------ what it ignores */
+
+describe("what the create grammar deliberately does not claim", () => {
+  it("does not open on a removal, a waiver or a question", () => {
+    const ctx = ctxWith();
+    expect(openCreate("waive the covenant on the Purchase", ctx)).toBeNull();
+    expect(openCreate("drop the liquidity covenant", ctx)).toBeNull();
+    expect(openCreate("what covenants are on this package", ctx)).toBeNull();
+  });
+
+  it("does not open on a commitment change", () => {
+    expect(openCreate("take the 2.5M line of credit to $4,000,000", ctxWith())).toBeNull();
+  });
+
+  it("says nothing in banker copy with an em dash in it", () => {
+    const ctx = ctxWith();
+    const draft = openCreate("add another covenant to all of the loans", ctx)!;
+    const step = advance(draft, ctx);
+    const copy = [step.ask!.text, ...step.ask!.options.map((o) => `${o.label} ${o.say}`)].join(" ");
+    expect(copy).not.toMatch(/—/);
+  });
+});

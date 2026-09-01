@@ -681,20 +681,113 @@ export function brainReachable(): boolean {
   return mcpAvailable();
 }
 
+/* ------------------------------------------------------- the doctrine, inline
+
+   THE PACK NEVER ARRIVES, SO THE DOCTRINE TRAVELS IN THE PROMPT.
+
+   The envelope has always declared `grounding: "plugin-skill:workroom-brain"`
+   and the preamble has always said "obey it". No channel loads it. The
+   completion door is a one-shot gateway call into a model that has never seen
+   WORKROOM-BRAIN.md, so the instruction pointed at a document the responder
+   could not read, and P3 of the 2026-09-01 drive degraded for exactly that
+   reason: an unfed model handed a JSON contract with no doctrine complies
+   inconsistently.
+
+   WHAT TRAVELS IS THE SLICE, NOT THE PACK. Twenty-seven pages in every prompt
+   would crowd out the envelope it is supposed to ground. So: the rules that
+   produce a WRONG ANSWER when absent travel always, and the fences of a
+   SURFACE travel when the line is about that surface. The marker in the
+   envelope stays, because a session that HAS loaded the pack should still be
+   told the pack is the authority; the prompt simply no longer depends on it.
+
+   Sources, by section of brain/WORKROOM-BRAIN.md: 1.5 hard rules, 2.4
+   covenants, 2.5 involvement roles, 2.6 collateral chain and advance rates,
+   2.7 fees, 2.8 policy exceptions, 4.2 covenant families.                    */
+
+/** What is wrong in EVERY answer when it is absent. Always sent. */
+const DOCTRINE_CORE = [
+  "DOCTRINE. These rules travel with this prompt and are binding on this reply.",
+  "Never fabricate a figure, a record, a covenant, a correspondence or an id. Missing data is an answer.",
+  "Figures come from the live read in CONTEXT, never from memory and never from an earlier turn.",
+  "One or two sentences, then the card. Never a capability lecture. No em dashes.",
+  "Bands are PROPOSAL guidance, offered and labelled as such. They are never stated as facts about this borrower.",
+  "COVENANT BANDS (typical C&I, tested quarterly): DSCR minimum 1.20x to 1.25x. FCCR minimum 1.15x to 1.25x.",
+  "Debt to tangible net worth maximum 3.00x. Total leverage 2.5x to 3.5x is typical middle market.",
+  "A threshold comes from the approved credit agreement. Propose a band, never a threshold.",
+];
+
+/** The fences of one surface, sent when the line is about that surface. */
+const DOCTRINE_SURFACE: Array<{ id: string; match: RegExp; lines: string[] }> = [
+  {
+    id: "covenant",
+    match: /\b(covenants?|tests?|dscr|fccr|leverage|liquidity|debt service|debt to worth|current ratio|net worth|capex)\b/i,
+    lines: [
+      "COVENANTS. A covenant ADD is safe: it mints no compliance row, starts no approval and sends no email.",
+      "Covenant AMEND and DETACH are REFUSED, because every junction field is non-updateable. Say so rather than proposing one.",
+      "The effective date is set once at creation and is never updated. Getting a covenant right at creation is the whole game.",
+      "An empty attachedLoans list means the covenant is relationship-level. That is an answer, not a gap.",
+      'Exception alone is never a breach. Check reasonForException (Breached or Overdue) before you use the word "breach".',
+    ],
+  },
+  {
+    id: "collateral",
+    match: /\b(collateral|security|pledges?|pledged|lien|advance rate|lendable|coverage|receivables?|inventory|equipment|real\s*estate|warehouse)\b/i,
+    lines: [
+      "COLLATERAL. The advance rate on a pledge is a formula and the lendable value is derived from it.",
+      "Both resolve in-transaction. Never ask a banker for either and never invent a valuation.",
+      "The chain has no shortcut: the asset, then the ownership junction that is its only link to the borrower, then the pledge.",
+      "Hartwell liens are 1st position and flagged out of availability. Do not quietly treat an excluded lien as included.",
+    ],
+  },
+  {
+    id: "fee",
+    match: /\bfees?\b|\bbasis points?\b|\bbps\b/i,
+    lines: [
+      "FEES. A fee is a percentage OR a fixed amount, never both. On a percentage fee the org computes the money from the commitment.",
+      "Never state a money figure beside a percentage: it would contradict what the org works out.",
+      "The fee-type list on this org is residential, so a commercial fee files as Other with the banker's own words as the label.",
+    ],
+  },
+  {
+    id: "involvement",
+    match: /\b(borrowers?|guarantors?|co-?borrowers?|involvements?|parties|obligors?|ownership)\b/i,
+    lines: [
+      "INVOLVEMENT ROLES. Five are legal: Borrower, Co-Borrower, Guarantor, Limited Guarantor, Related Entity.",
+      "Adding a party already on the deal stages a SECOND row rather than correcting the first. If a role is what changed, say so.",
+    ],
+  },
+  {
+    id: "exception",
+    match: /\b(policy exceptions?|exceptions?|out of policy|waiver|mitigant)\b/i,
+    lines: [
+      "POLICY EXCEPTIONS. Status is Waived, Mitigated or Unmitigated, and an omitted status silently states a position.",
+      "Every committed exception POSTs the whole record to an external endpoint. Surface that egress in the proposal.",
+    ],
+  },
+];
+
+/** The doctrine this line needs: the core, plus the fences of whatever surfaces
+ *  it touches. Deterministic, so the suite can assert what a line carries. */
+export function doctrineFor(line: string): string[] {
+  const out = [...DOCTRINE_CORE];
+  for (const surface of DOCTRINE_SURFACE) {
+    if (surface.match.test(line)) out.push(...surface.lines);
+  }
+  return out;
+}
+
 /**
  * THE PROMPT THE ENVELOPE TRAVELS IN.
  *
  * The completion door takes a string, so the envelope is serialised into one.
- * The preamble states the CONTRACT and points at the grounding; it does not
- * restate the pack. Where the session has loaded the plugin skill, the skill is
- * the authority and this is a reminder; where it has not, the reply will fail
- * validation and the banker gets the neutral clarify rather than an ungrounded
- * answer wearing a card's clothes.
+ * The preamble states the CONTRACT, carries the doctrine slices the line needs,
+ * and then hands over the envelope. The plugin-skill marker stays on the
+ * envelope, but nothing here depends on the skill having been loaded any more.
  */
 export function composeBrainPrompt(envelope: BrainEnvelope): string {
   return [
     "You are the credit brain of a relationship workroom, answering one banker line.",
-    "Your grounding is the workroom-brain plugin skill (WORKROOM-BRAIN.md). Obey it.",
+    "The workroom-brain pack (WORKROOM-BRAIN.md) is the authority. The slices you need are below.",
     "",
     "Reply with EXACTLY ONE JSON object and no prose outside it. One of three shapes:",
     '  {"type":"read-card","topic":…,"title":…,"rows":[{"icon":…,"label":…,"value":…,"sub":…}],"followUp":…}',
@@ -723,6 +816,8 @@ export function composeBrainPrompt(envelope: BrainEnvelope): string {
     "rather than proposing a change no deployed tool accepts.",
     'If CONTEXT.routeOpen is true you may add "route" to your reply, naming ONE of CONTEXT.routeOptions,',
     "where the line makes the intent plain. Where it does not, clarify and let the banker pick.",
+    "",
+    ...doctrineFor(envelope.line),
     "",
     "CONTEXT:",
     JSON.stringify(envelope),

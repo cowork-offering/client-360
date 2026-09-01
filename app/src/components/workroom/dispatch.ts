@@ -177,6 +177,53 @@ export function qualifierFilter(
   };
 }
 
+/* ------------------------------------------------- the narrative, reconciled
+
+   THE SENTENCE CONTRADICTED THE CHIPS (D3). "add a DSCR covenant of 1.25x on
+   the 15M line of credit" put ONE chip on the table, correctly narrowed, over a
+   sentence that said "it lands on all of them: Line of Credit ($15M), Line of
+   Credit ($2.50M)". The chips were right and the words were wrong, which is
+   worse than either being wrong alone: a banker reads the words.
+
+   The engine composed that sentence before the filter ran and cannot know the
+   filter ran, so the reconciliation is here, with the filter. THREE MOVES, and
+   none of them invents a claim:
+
+     1. the fan-out ANNOUNCEMENT goes. It exists only to say a line reached
+        every facility of a product, and the filter has just made that untrue;
+     2. a member the filter dropped comes out of every list that names it;
+     3. the count of what goes on the clone is restated from what survived.
+
+   A PRESENTATION FILTER, LIKE `bankerly`. No engine string changed, the engine
+   tests still assert the engine's own words, and a reply with no fan-out in it
+   comes back byte-identical.                                                 */
+
+/** The engine's own fan-out sentence. `(?:[^.]|\.\d)*` lets a decimal point
+ *  inside a figure ("$2.50M") stay part of the sentence, so the match ends on
+ *  the full stop that ends it rather than on the one inside the money. */
+const FANOUT_ANNOUNCEMENT = /That names a product this package carries \d+ of, so it lands on all of them:(?:[^.]|\.\d)*\.\s*/g;
+const ON_THE_CLONE = /\b\d+ of these go on the clone\b/g;
+
+const escapeLiteral = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function reconcileNarrative(reply: string, kept: WorkroomDelta[], dropped: WorkroomDelta[]): string {
+  if (!dropped.length) return reply;
+  const droppedLabels = [...new Set(dropped.map((d) => d.target).filter(Boolean))];
+  const keptLabels = new Set(kept.map((d) => d.target));
+  let out = reply.replace(FANOUT_ANNOUNCEMENT, "");
+  for (const label of droppedLabels) {
+    if (keptLabels.has(label)) continue;
+    const l = escapeLiteral(label);
+    out = out
+      .replace(new RegExp(`\\s+and\\s+${l}(?![\\w(])`, "g"), "")
+      .replace(new RegExp(`,\\s*${l}(?![\\w(])`, "g"), "")
+      .replace(new RegExp(`${l}\\s+and\\s+`, "g"), "")
+      .replace(new RegExp(`${l},\\s*`, "g"), "");
+  }
+  const survivors = new Set(kept.map((d) => d.id)).size;
+  return out.replace(ON_THE_CLONE, `${survivors} of these go on the clone`).trim();
+}
+
 /* ---------------------------------------------------------- the magnitude bound
 
    $900M STAGED ON A $49MM PACKAGE, with no objection of any kind (F5). The

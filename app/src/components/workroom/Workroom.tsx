@@ -40,7 +40,24 @@ import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from 
 import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
-import { magnitudeAdvisories, provablyClean, qualifierFilter, type QualifierMember } from "./dispatch";
+import { magnitudeAdvisories, provablyClean, qualifierFilter, reconcileNarrative, type QualifierMember } from "./dispatch";
+import {
+  advance,
+  awarenessFor,
+  amendmentOf,
+  blockedReason,
+  buildBook,
+  changedLine,
+  compose,
+  openCreate,
+  readInto,
+  verify,
+  type Draft,
+  type ElicitContext,
+  type ElicitMember,
+  type PlanEntry,
+} from "./elicit";
+import { bareMemberPick, readSteer } from "./steer";
 import {
   TIER_STAGGER_MS,
   summonLabel,
@@ -696,6 +713,24 @@ export function Workroom({
   const [phase, setPhase] = useState<"work" | "filed">("work");
   /** The member the conversation is standing on, so the lane can show it. */
   const [focused, setFocused] = useState<PackageMember | null>(null);
+  /**
+   * THE CREATE BEING GATHERED. Non-null while the room is asking what a create
+   * still needs; it becomes chips the moment nothing is missing and it is never
+   * a form. A create that has not resolved never reaches a chip (D1), so this
+   * is where an underspecified one waits instead.
+   */
+  const [creating, setCreating] = useState<Draft | null>(null);
+  /**
+   * WHICH CREATE PRODUCED WHICH CHIP.
+   *
+   * A card is amendable, and a staged entry is amendable, so the room has to be
+   * able to get back from a delta to the create that composed it. Held in a ref
+   * rather than in state because it is a lookup, never a render input.
+   */
+  const draftsRef = useRef(new Map<string, Draft>());
+  /** The room just offered the facilities as chips, so a bare facility name is
+   *  the answer to that question rather than an instruction with nothing on it. */
+  const [steerPending, setSteerPending] = useState(false);
   /** The room is composing an answer. It drives the beat, and it holds the
    *  review chip closed: a chip that appeared for one frame between a confirm
    *  landing and the check it trips is an approval offered too early. */
@@ -944,6 +979,76 @@ export function Workroom({
   /** The relationship's committed total, in dollars, for the magnitude bound. */
   const committedTotal = brief.baselineCommittedMM * 1e6;
 
+  /* ---- THE MEMBERS, AS THE CREATE GRAMMAR READS THEM. The org's own loan name
+          rides along because a product word lands on every facility of that
+          product and a composed sentence has to be exact rather than narrowed
+          afterwards. Null where the read carries no name, and the composition
+          then falls back to the label with verification behind it. */
+  const elicitMembers = useMemo<ElicitMember[]>(() => {
+    const named = new Map<string, string>();
+    for (const f of reads?.bundle?.exposure?.facilities ?? []) {
+      if (f.loanId && f.name) named.set(f.loanId, f.name);
+    }
+    const committed = new Map(qualifierMembers.map((q) => [q.id, q.committed]));
+    return brief.members
+      .filter(isEligible)
+      .map((m) => ({
+        id: m.id,
+        key: m.key,
+        label: facilityLabel(m, brief.members),
+        orgName: named.get(m.id) ?? null,
+        committed: committed.get(m.id) ?? null,
+      }));
+  }, [brief.members, isEligible, qualifierMembers, reads?.bundle]);
+
+  /** THE BOOK: what the relationship already carries, read off the bundle the
+   *  room is already holding. No read is issued for it. */
+  const book = useMemo(
+    () => buildBook(reads?.bundle ?? null, elicitMembers.map((m) => m.id)),
+    [elicitMembers, reads?.bundle],
+  );
+
+  /** THE PLAN: what this session already put up, open on a chip or staged on
+   *  the manifest, read back as context rather than only written. */
+  const plan = useMemo<PlanEntry[]>(() => {
+    const out: PlanEntry[] = [];
+    const add = (d: WorkroomDelta, open: boolean) => {
+      const held = draftsRef.current.get(d.id);
+      const surface = held?.surface ?? (d.covenantWire ? "covenant" : d.pledgeWire ? "collateral" : null);
+      if (!surface) return;
+      out.push({
+        deltaId: d.id,
+        surface,
+        memberId: d.member ?? d.covenantWire?.facilityId ?? d.pledgeWire?.facilityId ?? null,
+        title: d.title,
+        target: d.target,
+        slots:
+          held?.slots ??
+          (d.covenantWire
+            ? { test: d.covenantWire.typeName, threshold: d.covenantWire.threshold, frequency: d.covenantWire.frequency }
+            : { assetId: d.pledgeWire?.collateralId }),
+        open,
+      });
+    };
+    for (const e of entries) add(e, false);
+    for (const item of items) {
+      if (item.kind !== "chips") continue;
+      for (const c of item.chips) if (c.state === "open" && c.delta) add(c.delta, true);
+    }
+    return out;
+  }, [entries, items]);
+
+  const elicitCtx = useMemo<ElicitContext>(
+    () => ({
+      members: elicitMembers,
+      focused: focused ? (elicitMembers.find((m) => m.id === focused.id) ?? null) : null,
+      book,
+      plan,
+      relationship: context.accountName,
+    }),
+    [book, context.accountName, elicitMembers, focused, plan],
+  );
+
   /** THE CONVERSATION SO FAR, for the envelope. The banker's words verbatim,
    *  the room's clipped: this is what makes the second lane a conversation
    *  rather than a series of first questions. */
@@ -1030,10 +1135,15 @@ export function Workroom({
           kind: "agent",
           id: nextId("agent"),
           step: mine,
+          // THE SENTENCE AND THE CHIPS AGREE (D3). Where the qualifier narrowed,
+          // the room says what it read FIRST and the engine's own account
+          // follows it with the members it no longer reaches taken out of it.
+          // A reply that announced a fan-out the filter had just undone was the
+          // room contradicting itself over a card the banker was about to sign.
           text: allDropped
             ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
             : qualifier.said
-              ? `${result.reply} ${qualifier.said}`
+              ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
               : result.reply,
           // CLICKABLE ANSWERS ride BOTH reply kinds: an "unparsed" clarify and
           // a "deltas" reply that still ends on a closed-set question.
@@ -1299,6 +1409,247 @@ export function Workroom({
     [askTheDesk, beat, brain, context, engine, landBrainReply, qualifierMembers, renderParse, runParser],
   );
 
+  /* ========================================================= THE CREATE GRAMMAR
+
+     A create that has not resolved never reaches a chip (D1). It is gathered
+     for, one question at a time, with what the room can already ground offered
+     as the answers; only when nothing the human owns is missing is a sentence
+     composed, run through the SAME parser every typed line goes through, and
+     VERIFIED against what was elicited before a chip is drawn.
+
+     NOTHING HERE IS A NEW WRITE PATH. Everything it composes is a sentence the
+     engines already file, and `app/src/workroom/` is untouched by all of it. */
+
+  const memberLabel = useCallback(
+    (id: string) => elicitMembers.find((m) => m.id === id)?.label ?? "that facility",
+    [elicitMembers],
+  );
+
+  /**
+   * A COMPLETE CREATE, PUT UP.
+   *
+   * One composed sentence per member, each verified before it is allowed to
+   * become a chip. What could not be composed is said BY NAME, and what a
+   * complete create still cannot file rides the entry's own caveat so it
+   * travels with the entry onto the plan rather than living in one sentence
+   * that scrolls away.
+   */
+  const landCreate = useCallback(
+    async (d: Draft, mine: number): Promise<WorkroomDelta[]> => {
+      const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
+
+      /* THE BOOK AND THE PLAN, READ BACK BEFORE ANYTHING GOES UP. A create the
+         relationship already carries is NAMED and offered rather than staged a
+         second time in silence. */
+      const aware = awarenessFor(d, elicitCtx);
+      const notes = [aware.onThePlan, aware.onTheBook].filter((n): n is string => Boolean(n));
+      if (!aware.fresh.length) {
+        // THE CREATE STAYS ALIVE. The banker was offered a way through it, so
+        // the next line is an answer to that offer rather than a new sentence
+        // that has to say everything again.
+        setCreating(d);
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${notes.join(" ")} Nothing here needs putting up twice.`,
+          options: aware.options.length ? aware.options : undefined,
+        });
+        return [];
+      }
+      const scoped: Draft = { ...d, scope: aware.fresh };
+      const composition = compose(scoped, elicitCtx);
+
+      const started = Date.now();
+      setThinking(true);
+      const got: WorkroomDelta[] = [];
+      const refused: string[] = [];
+      try {
+        for (const line of composition.lines) {
+          let result: IntentResult | null = null;
+          try {
+            result = await engine.parseIntent(line.say, context);
+          } catch {
+            result = null;
+          }
+          const verdict =
+            result?.kind === "deltas"
+              ? verify(scoped, line.memberId, result.deltas)
+              : { ok: false as const, why: "the sentence did not come back as a change at all" };
+          if (!verdict.ok) {
+            refused.push(`on the ${memberLabel(line.memberId)}, ${verdict.why}`);
+            // THE ENGINE'S OWN QUESTION STATE IS LEFT CLEAN. A composed sentence
+            // that ended in a clarify would make the banker's NEXT line an
+            // answer to a question they never saw. `pick` is the engine's own
+            // documented way back to a settled state, and it lands the room on
+            // the member the create was about, which is where it belongs.
+            engine.pick(line.memberId);
+            continue;
+          }
+          got.push(verdict.delta);
+        }
+        await beat(started);
+      } finally {
+        setThinking(false);
+      }
+
+      if (!got.length) {
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text:
+            `I gathered all of that and I am not putting it up, because ${refused[0] ?? "it did not resolve"}. ` +
+            "Nothing is staged and the package has not moved. Name a test the bank's catalog carries and I will compose it again.",
+        });
+        return [];
+      }
+
+      /* WHAT A COMPLETE CREATE STILL CANNOT FILE rides the entry, so it reaches
+         the plan with the entry rather than only the conversation. */
+      const withGaps = composition.gaps.length
+        ? got.map((x) => ({ ...x, caveat: [x.caveat, ...composition.gaps].filter(Boolean).join(" ") }))
+        : got;
+      for (const x of withGaps) draftsRef.current.set(x.id, scoped);
+
+      const said = [
+        notes.join(" "),
+        composition.lede,
+        composition.gaps.length ? `Not all of that reaches the bank's systems. ${composition.gaps.join(" ")}` : "",
+        refused.length ? `What I could not put up: ${refused.join("; ")}.` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      setItems((prev) => [
+        ...prev,
+        { kind: "agent", id: nextId("agent"), step: mine, text: said },
+        {
+          kind: "chips",
+          id: nextId("chips"),
+          step: mine,
+          chips: withGaps.map((x) => ({ key: nextId("chip"), delta: x, state: "open" as ChipState })),
+        },
+      ]);
+      setSuggestion(engine.suggest());
+      return withGaps;
+    },
+    [beat, context, elicitCtx, engine, memberLabel],
+  );
+
+  /**
+   * THE ONE QUESTION THIS CREATE STILL NEEDS, or the create itself.
+   *
+   * One question at a time, in chips, in the room's own vocabulary. Free text
+   * always wins: the chips are an offer and a banker who types the whole answer
+   * skips every one of them.
+   */
+  const askCreate = useCallback(
+    async (d: Draft, mine: number) => {
+      const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
+
+      const blocked = blockedReason(d);
+      if (blocked) {
+        setCreating(d);
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: blocked,
+          options: [{ label: "Pledge something the deal already carries", say: "pledge an asset the deal already carries" }],
+        });
+        return;
+      }
+
+      const step = advance(d, elicitCtx);
+      if (step.ask) {
+        setCreating(step.draft);
+        answer({ kind: "agent", id: nextId("agent"), text: step.ask.text, options: step.ask.options });
+        return;
+      }
+      setCreating(null);
+      await landCreate(step.draft, mine);
+    },
+    [elicitCtx, landCreate],
+  );
+
+  /**
+   * THE CARD IS AMENDED IN PLACE.
+   *
+   * "actually make it 1.30x" corrects the open card and says what changed. It
+   * never stages a second, contradicting chip: amending the open card IS the
+   * one decision, so this does not violate one decision at a time. The old
+   * chips come out of the block and the new ones go into the SAME block, in the
+   * same step, so the card the banker is reading is the card that moved.
+   */
+  const amendOpenCard = useCallback(
+    async (line: string, mine: number): Promise<boolean> => {
+      const block = [...items].reverse().find(
+        (i) => i.kind === "chips" && i.chips.some((c) => c.state === "open" && c.delta && draftsRef.current.has(c.delta.id)),
+      );
+      if (!block || block.kind !== "chips") return false;
+      const mineChips = block.chips.filter((c) => c.state === "open" && c.delta && draftsRef.current.has(c.delta.id));
+      const held = draftsRef.current.get(mineChips[0].delta!.id)!;
+      const amend = amendmentOf(line, held, elicitCtx);
+      if (!amend) return false;
+
+      const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
+      const aware = awarenessFor(amend.draft, elicitCtx);
+      const scoped: Draft = { ...amend.draft, scope: aware.fresh.length ? aware.fresh : amend.draft.scope };
+      const composition = compose(scoped, elicitCtx);
+
+      const started = Date.now();
+      setThinking(true);
+      const got: WorkroomDelta[] = [];
+      try {
+        for (const composed of composition.lines) {
+          let result: IntentResult | null = null;
+          try {
+            result = await engine.parseIntent(composed.say, context);
+          } catch {
+            result = null;
+          }
+          const verdict =
+            result?.kind === "deltas"
+              ? verify(scoped, composed.memberId, result.deltas)
+              : { ok: false as const, why: "it did not come back as a change" };
+          if (verdict.ok) got.push(verdict.delta);
+          else engine.pick(composed.memberId);
+        }
+        await beat(started);
+      } finally {
+        setThinking(false);
+      }
+
+      if (!got.length) {
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: "That correction does not resolve against the bank's own catalog, so the card is unchanged and nothing has been staged beside it.",
+        });
+        return true;
+      }
+
+      const replacements = composition.gaps.length
+        ? got.map((x) => ({ ...x, caveat: [x.caveat, ...composition.gaps].filter(Boolean).join(" ") }))
+        : got;
+      for (const x of replacements) draftsRef.current.set(x.id, scoped);
+      const oldIds = new Set(mineChips.map((c) => c.delta!.id));
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.kind !== "chips" || item.id !== block.id) return item;
+          const keys = mineChips.map((c) => c.key);
+          const fresh: ChipModel[] = replacements.map((delta, i) => ({
+            key: keys[i] ?? nextId("chip"),
+            delta,
+            state: "open" as ChipState,
+          }));
+          const rest = item.chips.filter((c) => !c.delta || !oldIds.has(c.delta.id));
+          return { ...item, chips: [...rest, ...fresh] };
+        }),
+      );
+      answer({ kind: "agent", id: nextId("agent"), text: changedLine(amend.changed) });
+      return true;
+    },
+    [beat, context, elicitCtx, engine, items],
+  );
+
   /**
    * The banker said something. EVERY SEND STARTS A STEP (rule 31).
    *
@@ -1382,19 +1733,23 @@ export function Workroom({
         const ack = readAcknowledgment(trimmed);
         const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
         if (!ack || !checks.length || checks.length !== openGates) {
-          setItems((prev) => {
-            const here = prev.length ? prev[prev.length - 1].step : 0;
-            return [
-              ...prev,
-              { kind: "banker", id: nextId("banker"), step: here, text: (said ?? heard).trim() },
-              {
-                kind: "agent",
-                id: nextId("agent"),
-                step: here,
-                text: "One decision at a time. The open card above, or the review chip under it, carries the next move.",
-              },
-            ];
-          });
+          const here = items.length ? items[items.length - 1].step : 0;
+          setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: here, text: (said ?? heard).trim() }]);
+          /* THE OPEN CARD IS AMENDABLE, AND THAT IS NOT A SECOND DECISION.
+             "actually make it 1.30x" is the SAME decision, corrected, so it
+             lands on the card that is already open instead of being refused
+             with "one decision at a time" over a figure the banker has just
+             told the room is wrong. */
+          if (await amendOpenCard(trimmed, here)) return;
+          setItems((prev) => [
+            ...prev,
+            {
+              kind: "agent",
+              id: nextId("agent"),
+              step: here,
+              text: "One decision at a time. The open card above, or the review chip under it, carries the next move.",
+            },
+          ]);
           return;
         }
         setItems((prev) => prev.map((i) => (i.kind === "challenge" && !i.acked ? { ...i, acked: true } : i)));
@@ -1409,6 +1764,12 @@ export function Workroom({
       setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
       const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
 
+      /* A COURTESY IN FRONT OF AN IMPERATIVE IS A COMMAND (2026-09-01). Read
+         once, here, because every lane below it acts on the line without the
+         courtesy: the create grammar, the steer and the parser alike. */
+      const commanded = politeCommand(instruction);
+      const line = commanded ?? instruction;
+
       // The acknowledgment said everything it came to say. The checks are
       // settled above; there is no instruction left in the line to parse.
       if (acknowledged && !instruction) {
@@ -1418,6 +1779,105 @@ export function Workroom({
           text: `${acknowledged === 1 ? "That check is" : `Those ${acknowledged} checks are`} acknowledged. ${vocabulary.nextMove}`,
         });
         return;
+      }
+
+
+      /* THE GRAMMAR STANDS ON A READ, OR IT STANDS DOWN. Every proposal the
+         create grammar makes is grounded in the book and every scope it
+         resolves is grounded in the org's own loan names, so a room holding no
+         bundle has neither and keeps exactly the lane it always had. The
+         channel-none doctrine, applied to awareness. */
+      if (reads?.bundle) {
+        /* A READ BINDS NOTHING AND SETTLES NOTHING. Asking what is on the book
+           while a create is being gathered is not an answer to the question the
+           room asked, and it must not drop the create either. The read lanes
+           below take it and the create waits where it stands. */
+        const reading = !commanded && (readTopic(instruction) !== null || isQuestion(instruction));
+
+        /* ====================================== THE CREATE BEING GATHERED FOR
+
+           A create in flight owns the next line: it is the answer to the one
+           question the room asked. FREE TEXT ALWAYS WINS, so the whole line is
+           read for every slot rather than only for the slot just asked about, and
+           a line that settles nothing at all is not trapped here - the room says
+           it is leaving the create where it stands and the ordinary lanes take
+           it, because a room that swallowed every following sentence would be a
+           form wearing a conversation's clothes. */
+        if (creating && !reading) {
+          const next = readInto(creating, line, elicitCtx);
+          const moved =
+            JSON.stringify(next.slots) !== JSON.stringify(creating.slots) || next.scope.join("|") !== creating.scope.join("|");
+          if (moved) {
+            await askCreate(next, mine);
+            return;
+          }
+          setCreating(null);
+          answer({
+            kind: "agent",
+            id: nextId("agent"),
+            text: "Nothing in that answered what the new one still needs, so I am leaving it where it stands and taking the line as it reads.",
+          });
+        }
+
+        /* ==================================================== A CREATE OPENS
+
+           An underspecified create does not become a chip. It becomes the room
+           asking, with what it can already ground offered as the answers.
+
+           IT RUNS BEFORE THE STEER, and that order is load-bearing: "add another
+           covenant to all of the loans" carries "another" and "loans", which read
+           as navigation if nothing looks at the noun in between. A create is what
+           the banker asked for; where to put it is the create's own first
+           question. */
+        const opened = reading ? null : openCreate(line, elicitCtx);
+        if (opened) {
+          setSteerPending(false);
+          await askCreate(opened, mine);
+          return;
+        }
+
+        /* ================================================ NAVIGATIONAL INTENT
+
+           "let's modify a new loan" and "a different facility" are the banker
+           saying WHERE to work, and they are answered with the choice rather than
+           with a capability lecture. This runs after the route switch, so "renew
+           instead" still moves the room, and it keeps "modify a new loan" out of
+           the origination room over a line that asked to change something that is
+           already booked. */
+        const steer = reading ? null : readSteer(line, elicitMembers);
+        if (steer) {
+          if (steer.kind === "new-facility") {
+            if (router) {
+              router.onRestart("create", line);
+              return;
+            }
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: `${steer.text} This room is already bound to a route, so start a new facility from the actions above.`,
+            });
+            return;
+          }
+          setSteerPending(true);
+          answer({ kind: "agent", id: nextId("agent"), text: steer.text, options: steer.options });
+          return;
+        }
+
+        if (steerPending && !reading) {
+          const picked = bareMemberPick(line, elicitMembers);
+          const member = picked ? brief.members.find((m) => m.id === picked) : null;
+          if (member) {
+            setSteerPending(false);
+            setFocused(member);
+            const result = engine.pick(member.id);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: result?.reply ?? `Standing on the ${facilityLabel(member, brief.members)}. What should change on it?`,
+            });
+            return;
+          }
+        }
       }
 
       /* ROUTE BINDING IS FINAL PER PLAN (rule 4, founder 2026-08-31).
@@ -1491,8 +1951,6 @@ export function Workroom({
          remainder must open on an action verb the parser already stages on.
          "can you tell me what covenants are on this" opens on `tell`, and stays
          a question. The verb list is a list and never a pattern. */
-      const commanded = politeCommand(instruction);
-
       /* ================================================ READS ARE LOCAL, AND FIRST
 
          (F1 + F2 read half, founder 2026-09-01.) A topic the bundle answers is
@@ -1533,14 +1991,21 @@ export function Workroom({
         return;
       }
 
-      await runLine(commanded ?? instruction, mine);
+      await runLine(line, mine);
     },
     [
+      amendOpenCard,
       ask,
+      askCreate,
       awake,
       brain,
+      brief.members,
       context.accountName,
       context.mode,
+      creating,
+      elicitCtx,
+      elicitMembers,
+      engine,
       entries,
       items,
       openGates,
@@ -1548,6 +2013,7 @@ export function Workroom({
       router,
       runBrain,
       runLine,
+      steerPending,
       step,
       vocabulary.changeWord,
       vocabulary.nextMove,
