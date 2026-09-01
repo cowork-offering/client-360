@@ -3,8 +3,8 @@ import { useApp } from "../state/appState";
 import { readAnchors, type Anchor, type BorrowerBundle } from "../data/contract";
 import { STATUS } from "../data/finance";
 import { gradeColor } from "./RiskGrade";
-import { PackageStageChip } from "./PackageStage";
 import { TabContent } from "./tabs";
+import { Weave } from "./Weave";
 import { SyncButton } from "./SyncSweep";
 
 import { prefersReducedMotion } from "../data/motion";
@@ -108,7 +108,7 @@ function AnchorCell({ a, deltaMM, washed }: { a: Anchor; deltaMM: number; washed
 
 /** The grade cell: the ring states the rating as a quantity, the text states it
  *  as a word. A28.2 keeps the package STAGE out of here — it is a different
- *  fact about a different object and it has its own chip beside the name — so
+ *  fact about a different object, and package facts live with the package — so
  *  the anchor's own `sub` is dropped and provenance stays where it has always
  *  been, on the cell's title. The mint spells a source and a rating date on
  *  this line; this book carries neither, and a caption is not worth inventing
@@ -217,6 +217,13 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
     <>
       <div className="page" style={{ paddingTop: 22 }}>
         <div className="hero eg-glass" ref={hero}>
+          {/* THE LANDING'S WEAVE, INSIDE THE GLASS (founder, 2026-09-01): the
+              same generated threads the home page breathes, clipped to the
+              hero's radius and masked hard toward the name so the identity
+              texture carries over without ever competing with the words. It
+              paints at z -1 — above the hero's own bloom, below everything
+              written. The > watermark stays; the two share the corner. */}
+          <Weave className="hero-weave" />
           {/* Rule 40: the hero watermark is one of the six sanctioned mark
               sites, and it is the SAME typographic ">" the rest of the app
               uses — never a second, drawn rendition of the shape. */}
@@ -232,7 +239,10 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
           </div>
           <div className="acct-name-row">
             <span className="acct-name">{name}</span>
-            <PackageStageChip snapshot={snap} />
+            {/* The package STAGE CHIP is RETIRED from this row (founder,
+                2026-09-01): the hero is the RELATIONSHIP, and a package-stage
+                fact against the client's name was the wrong object's status in
+                the wrong place. The stage still lives where the package does. */}
             {/* The Client Actions button is RETIRED (founder call, 2026-08-31
                 night): the > FAB arc owns client actions now, full stop. Sync
                 stays as the hero's one quiet secondary control. */}

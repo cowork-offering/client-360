@@ -325,8 +325,10 @@ describe("verdict bar (A27.4 / A28)", () => {
     const cell = container!.querySelector('[title="nCino risk rating"]')!;
     expect(cell).toBeTruthy();
     expect(cell.textContent).toContain("Grade 5");
-    // Stage is a labelled package chip, never stacked inside the rating cell.
-    expect(text).toContain("Package");
+    // The package STAGE CHIP is retired from the hero (founder, 2026-09-01):
+    // the hero is the relationship, and package stage never appears in it —
+    // neither as a chip beside the name nor stacked inside the rating cell.
+    expect(text).not.toContain("Package");
     expect(cell.textContent).not.toContain("Credit Decisioning");
   });
 

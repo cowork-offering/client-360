@@ -242,6 +242,35 @@ body.on-client .topnav .itab:nth-child(7) {
     rgba(255, 255, 255, 0.55);
 }
 
+/* THE HERO'S WEAVE (founder, 2026-09-01) — the landing's filaments carried
+   into the client glass. z -1 works because .hero's backdrop-filter makes it a
+   stacking context: the threads paint above the hero's own background and
+   bloom, below every written thing and the watermark. The mask does the
+   elegance: the band lives in the hero's right half and top edge, and dies to
+   nothing under the crumb and the name, so the words never fight a filament.
+   Quieter than the landing on purpose — texture inside glass, not a feature. */
+.hero-weave {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+  opacity: 0.4;
+  -webkit-mask-image: linear-gradient(to left, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 46%, transparent 82%);
+  mask-image: linear-gradient(to left, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.5) 46%, transparent 82%);
+}
+.hero-weave svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.hero-weave path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+}
+
 /* Rule 40 (mark census): the hero watermark is one of the six sanctioned mark
    sites. Rule 62.3 (hero depth): it leans up to 6px/4px AGAINST the cursor over
    a 1.2s settle — depth, never a wobble. AccountWorkspace writes the transform. */

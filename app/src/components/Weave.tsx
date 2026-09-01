@@ -11,11 +11,15 @@ import { buildThreads, WEAVE_VIEWBOX } from "../data/weave";
    data/weave.ts from the dummy's seed; what lives here is the surface they hang
    on and the one rAF loop that breathes them.
 
-   Landing only, and dead under prefers-reduced-motion: CSS can switch off an
+   Landing first, and dead under prefers-reduced-motion: CSS can switch off an
    animation, but nothing in CSS stops a rAF loop, so the loop refuses to start.
+
+   The className prop (founder, 2026-09-01) lets the client hero hang the SAME
+   threads inside its glass as `.hero-weave` — one thread generator, one loop,
+   two surfaces. The texture is identity; it is never redrawn per surface.
    ============================================================================= */
 
-export function Weave() {
+export function Weave({ className = "weave" }: { className?: string }) {
   const threads = useMemo(buildThreads, []);
   const groups = useRef<Array<SVGGElement | null>>([]);
 
@@ -44,9 +48,12 @@ export function Weave() {
   }, [threads]);
 
   return (
-    <div className="weave" aria-hidden="true">
-      <svg id="hweave" viewBox={WEAVE_VIEWBOX} preserveAspectRatio="none">
-        <g id="hweaveG">
+    <div className={className} aria-hidden="true">
+      {/* The probe ids belong to the LANDING instance alone: a second surface
+          reusing the threads must never present a duplicate #hweave to the
+          probes (or the DOM). */}
+      <svg id={className === "weave" ? "hweave" : undefined} viewBox={WEAVE_VIEWBOX} preserveAspectRatio="none">
+        <g id={className === "weave" ? "hweaveG" : undefined}>
           {threads.map((t, i) => (
             <g
               key={i}
