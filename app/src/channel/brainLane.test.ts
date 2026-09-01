@@ -21,8 +21,9 @@ import {
    ============================================================================= */
 
 const envelope: BrainEnvelope = {
-  v: 1,
+  v: 2,
   line: "which borrowers have we already in the package?",
+  room: "facility",
   relationship: "Hartwell Precision Manufacturing LLC",
   route: "modify",
   packageName: "Hartwell Industrial C&I Credit Package",

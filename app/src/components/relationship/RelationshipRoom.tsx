@@ -13,6 +13,13 @@ import { BrandGlyph } from "../brand";
 import { Peek, usePeek } from "../workroom/Peek";
 import { GooFilter, LiquidMark } from "../workroom/Liquid";
 import { TypeIcon, type IconKind } from "../workroom/TypeIcon";
+import { ReadCard } from "../workroom/ReadCardView";
+import { isQuestion, readTopic } from "../workroom/ask";
+import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "../workroom/readCard";
+import { toReadCardModel } from "../workroom/brainRoute";
+import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
+import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
+import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
 import { stepperState } from "../../workroom/stepper";
 import {
   FACILITY_HANDOFF,
@@ -138,6 +145,9 @@ type RelItem = { id: string; step: number } & (
   | { kind: "notice"; title: string; body: string }
   /** A create this room can compose and cannot file, with the gap named. */
   | { kind: "gap"; gap: CreateGap }
+  /** A READ QUESTION, ANSWERED. Not a step and not a gate: nothing on it is
+   *  waiting for a decision, and it does not advance the review. */
+  | { kind: "read"; card: ReadCardModel }
   | { kind: "dossier"; dossier: DossierModel }
 );
 
@@ -433,6 +443,7 @@ export function RelationshipRoom({
   route,
   router,
   onClose,
+  brain,
   deps = defaultRelDeps,
 }: {
   ctx: RelContext;
@@ -440,6 +451,16 @@ export function RelationshipRoom({
   route: RelRoute | null;
   router?: RelRouter;
   onClose: () => void;
+  /**
+   * THE SECOND LANE, IN THIS ROOM TOO.
+   *
+   * The step machine is the fast lane and it is untouched: a line it can read
+   * as the answer to the live step is recorded exactly as it always was. What
+   * routes here is what it cannot claim — a question, and a line the step
+   * refuses. ABSENT IS NO BRAIN LANE, and the room then behaves exactly as it
+   * did before this lane existed: the same re-ask, the same refusals, no wait.
+   */
+  brain?: (envelope: BrainEnvelope) => Promise<BrainReply>;
   deps?: RelFlowDeps;
 }) {
   const reduced = prefersReducedMotion();
@@ -758,6 +779,131 @@ export function RelationshipRoom({
     [],
   );
 
+  /* ==================================================== THE SECOND LANE, HERE
+
+     THE SAME DISPATCH AS THE FACILITY ROOM, in this room's vocabulary. The
+     founder's quick test said this room reads "equally mechanical", and it read
+     that way for the same reason: every line went to the step machine, so a
+     question became an answer and an unreadable line became a re-ask.
+
+     Reads are answered LOCALLY and first. A line the live step can genuinely
+     read is still the step's, straight through, so the ritual keeps its pace.
+     Everything else goes to the desk with this route's FILEABLE MAP in the
+     envelope, so a refusal comes back by name rather than as invented
+     capability. And with no bridge, none of this happens at all.             */
+
+  /** The read a question is answered from. The room's own context, handed to
+   *  the shared builder so both rooms answer a read the same way. */
+  const reads = useMemo<ReadSource>(
+    () => ({
+      bundle: ctx.bundle,
+      accountName: ctx.accountName,
+      productPackageId: ctx.productPackageId,
+      generatedAt: ctx.asOf ?? undefined,
+    }),
+    [ctx.accountName, ctx.asOf, ctx.bundle, ctx.productPackageId],
+  );
+
+  /** The conversation so far, for the envelope. */
+  const conversation = useCallback(
+    (): BrainTurn[] =>
+      items.flatMap<BrainTurn>((item) =>
+        item.kind === "banker"
+          ? [{ who: "banker", text: item.text }]
+          : item.kind === "agent"
+            ? [{ who: "agent", text: item.text }]
+            : item.kind === "read"
+              ? [{ who: "agent", text: `Answered a read on ${item.card.topic}. ${item.card.lede}` }]
+              : [],
+      ),
+    [items],
+  );
+
+  const askTheDesk = useCallback(
+    async (line: string): Promise<BrainReply | null> => {
+      if (!brain) return null;
+      try {
+        return await brain(
+          buildRelEnvelope({
+            line,
+            route,
+            ctx,
+            reads,
+            thread: conversation(),
+            collected: laneRows.map((r) => ({
+              title: r.label,
+              target: route ? REL_ROUTE_WORD[route] : "this relationship",
+              after: r.value,
+            })),
+          }),
+        );
+      } catch {
+        // The lane never throws into the room: a transport that failed past
+        // `askBrain`'s own guard degrades exactly as a malformed reply does.
+        return null;
+      }
+    },
+    [brain, conversation, ctx, laneRows, reads, route],
+  );
+
+  /**
+   * WHAT THE DESK SAID, DRAWN.
+   *
+   * `degrade` is what the room would have done without the lane. Every failure
+   * runs it, so a bad round trip leaves the banker exactly where the
+   * deterministic room would have, never worse.
+   */
+  const landRelReply = useCallback(
+    async (
+      reply: BrainReply | null,
+      line: string,
+      mine: number,
+      opts: { degrade: () => void; routeOpen?: boolean },
+    ) => {
+      const answer = (item: NewRelItem) => setItems((prev) => [...prev, { ...item, step: mine } as RelItem]);
+      if (!reply || isDegrade(reply)) {
+        opts.degrade();
+        return;
+      }
+      /* THE ROUTE, RESOLVED FROM INTENT. Binding still runs through the room's
+         own router, so a named review can do nothing a chip could not. An
+         ambiguous reply names none, and the five-way stands. */
+      if (opts.routeOpen && router && reply.route && REL_ROUTE_WORDS.has(reply.route)) {
+        setAsk(null);
+        router.onBind(reply.route as RelRoute, { say: line });
+        return;
+      }
+      if (reply.type === "read-card") {
+        answer({ kind: "read", id: nextId("read"), card: toReadCardModel(reply) });
+        return;
+      }
+      if (reply.type === "clarify") {
+        answer({ kind: "agent", id: nextId("agent"), text: reply.text, options: reply.options });
+        return;
+      }
+      /* A CHANGE TO A FACILITY IS NOT THIS ROOM'S WORK, whoever proposed it.
+         The desk gets the same answer a banker does, in one line. */
+      answer({ kind: "agent", id: nextId("agent"), text: `${reply.rationale} ${FACILITY_HANDOFF}` });
+    },
+    [router],
+  );
+
+  const runRelBrain = useCallback(
+    async (line: string, mine: number, opts: { degrade: () => void; routeOpen?: boolean }) => {
+      const started = Date.now();
+      setThinking(true);
+      let reply: BrainReply | null = null;
+      try {
+        reply = await askTheDesk(line);
+        await beat(started);
+      } finally {
+        setThinking(false);
+      }
+      await landRelReply(reply, line, mine, opts);
+    },
+    [askTheDesk, beat, landRelReply],
+  );
+
   /**
    * The banker said something.
    *
@@ -770,25 +916,37 @@ export function RelationshipRoom({
       const text = heard.trim();
       if (!text || !awake) return;
 
+      /* A READ DOES NOT PICK A REVIEW (F1). The route gate used to intercept
+         every line, so a question about the book was answered with the five-way
+         rather than with the card the room was already holding. */
       if (ask && router) {
-        const picked = readRelRouteIntent(text);
-        if (picked) {
-          setAsk(null);
-          router.onBind(picked, { say: text });
-          return;
+        const preTopic = readTopic(text);
+        const preCard = preTopic !== null ? buildReadCard(preTopic, reads) : null;
+        if (!preCard) {
+          const picked = readRelRouteIntent(text);
+          if (picked) {
+            setAsk(null);
+            router.onBind(picked, { say: text });
+            return;
+          }
         }
         const mine = step + 1;
+        const five =
+          "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
         setStep(mine);
-        setItems((prev) => [
-          ...prev,
-          { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() },
-          {
-            kind: "agent",
-            id: nextId("agent"),
-            step: mine,
-            text: "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.",
-          },
-        ]);
+        setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        if (preCard) {
+          setItems((prev) => [...prev, { kind: "read", id: nextId("read"), step: mine, card: preCard }]);
+          return;
+        }
+        if (brain) {
+          await runRelBrain(text, mine, {
+            routeOpen: true,
+            degrade: () => setItems((prev) => [...prev, { kind: "agent", id: nextId("agent"), step: mine, text: five }]),
+          });
+          return;
+        }
+        setItems((prev) => [...prev, { kind: "agent", id: nextId("agent"), step: mine, text: five }]);
         return;
       }
       if (!route) return;
@@ -803,6 +961,19 @@ export function RelationshipRoom({
           { ...item, step: mine } as RelItem,
         ]);
       };
+
+      /* READS ARE LOCAL, AND THEY ARE FIRST (F1). A topic the bundle answers is
+         answered from the bundle, before anything else in this room can act on
+         the line. It binds nothing, switches nothing and advances nothing:
+         asking what is on the book is not choosing what to do about it, and the
+         route-switch reader would otherwise have read "which covenants are on
+         this relationship" as a request to change review. */
+      const topic = readTopic(text);
+      const card = topic !== null ? buildReadCard(topic, reads) : null;
+      if (card) {
+        answer({ kind: "read", id: nextId("read"), card });
+        return;
+      }
 
       /* FACILITY WORK LIVES NEXT DOOR, and the room says so in one line rather
          than routing a pledge into the nearest review. */
@@ -857,6 +1028,28 @@ export function RelationshipRoom({
         return;
       }
 
+      /* A QUESTION IS NOT AN ANSWER TO A STEP. Without a bridge the line still
+         reaches the step machine exactly as it did before this lane existed,
+         which is the channel-none contract. */
+      if (isQuestion(text) && brain) {
+        setStep(mine);
+        setHistOpen(false);
+        setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        await runRelBrain(text, mine, {
+          degrade: () =>
+            setItems((prev) => [
+              ...prev,
+              {
+                kind: "agent",
+                id: nextId("agent"),
+                step: mine,
+                text: topic !== null ? readGap(topic, ctx.accountName) : UNREADABLE_CLARIFY.text,
+              },
+            ]),
+        });
+        return;
+      }
+
       if (!live) {
         answer({
           kind: "agent",
@@ -866,9 +1059,20 @@ export function RelationshipRoom({
         return;
       }
 
-      await answerLive(text, said);
+      /* THE FAST LANE: a line the live step can genuinely read is recorded as
+         its answer, straight through, exactly as it always was. A line it
+         cannot read used to be met with a re-ask; it now goes to the desk, and
+         the re-ask is what a bad round trip degrades to. */
+      if (!brain || stepAccepts(live, text)) {
+        await answerLive(text, said);
+        return;
+      }
+      setStep(mine);
+      setHistOpen(false);
+      setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+      await runRelBrain(text, mine, { degrade: () => unreadable(live) });
     },
-    [answerLive, ask, awake, live, order.length, route, router, step],
+    [answerLive, ask, awake, brain, ctx.accountName, live, order.length, reads, route, router, runRelBrain, step, unreadable],
   );
 
   /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it
@@ -1363,6 +1567,28 @@ function optionsFor(step: RelStep): Opt[] | undefined {
 /** Which options a typed line named. Exact value first, then a contained-word
  *  match; "all" takes the whole set, which is what a banker says when the
  *  package survey is the point. */
+/**
+ * CAN THE LIVE STEP GENUINELY READ THIS LINE.
+ *
+ * The same judgement `answerLive` makes when it decides between recording an
+ * answer and re-asking, lifted out so the dispatch can consult it BEFORE the
+ * line is spent. A line the step can read is the step's and goes straight
+ * through; a line it cannot is what the desk is for.
+ *
+ * It reads SHAPES. It resolves nothing, records nothing and stages nothing.
+ */
+function stepAccepts(step: RelStep, text: string): boolean {
+  const line = text.trim();
+  if (!line) return false;
+  if (step.kind === "multi") return matchOptions(step, line).length > 0;
+  if (line === SKIP_LABEL || line.toLowerCase() === "skip") return step.optional === true;
+  if (step.kind === "number") return Number.isFinite(Number(line.replace(/[$,\s]/g, "")));
+  if (step.options?.length && step.kind === "chips") {
+    return step.options.some((o) => o.value.toLowerCase() === line.toLowerCase());
+  }
+  return true;
+}
+
 function matchOptions(step: RelStep, text: string): string[] {
   const opts = step.options ?? [];
   const line = text.trim().toLowerCase();
@@ -1440,6 +1666,11 @@ function RelBlock({
       </div>
     );
   }
+
+  /* A QUESTION, ANSWERED. The SAME card the facility room draws: a banker who
+     has learned one room has learned both, and a read that looked different in
+     the two rooms would be two answers to one question. */
+  if (item.kind === "read") return <ReadCard card={item.card} />;
 
   /* A CREATE THE ROOM CANNOT FILE. The refusal leads, the org-side gap is named
      under it, and no payload was ever composed. */
@@ -1697,6 +1928,12 @@ function RelDossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
    what keeps it testable without a provider above it.
    ============================================================================= */
 
+/** The lane, or nothing. Built once per render rather than per line: the room
+ *  takes a function and asks nothing about what is on the other end of it. */
+function relBrainLane(): ((envelope: BrainEnvelope) => Promise<BrainReply>) | undefined {
+  return brainReachable() ? (envelope: BrainEnvelope) => askBrain(envelope) : undefined;
+}
+
 export function RelationshipRoomHost() {
   const session = useRelationshipRoom();
   const { data, state, dispatch } = useApp();
@@ -1743,6 +1980,11 @@ export function RelationshipRoomHost() {
       ctx={ctx}
       route={session.route}
       router={router}
+      /* THE SECOND LANE, WIRED HERE AND NOWHERE ELSE, on the same capability
+         gate the facility room uses: with no mcp capability there is no arm of
+         the bridge that returns a reply, so the prop is ABSENT and the room
+         keeps the step machine alone. */
+      brain={relBrainLane()}
       onClose={close}
     />
   );

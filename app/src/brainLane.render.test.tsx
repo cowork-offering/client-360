@@ -293,13 +293,20 @@ describe("the polite command still stages, and the question still asks", () => {
     expect(room.querySelector(".wk-chip")).toBeTruthy();
   });
 
-  it("takes a courtesy-prefixed QUESTION to the desk, and stages nothing", async () => {
+  /* THE READ IS LOCAL NOW (brain-first inversion, 2026-09-01). This assertion
+     used to be "goes to the desk"; the drive proved that order wrong three
+     times over, with the brain reporting "data not carried" on covenants the
+     bundle was holding. A topic the room can answer is answered from the room,
+     and the desk is kept for what the bundle cannot carry. */
+  it("answers a courtesy-prefixed READ from the bundle, without troubling the desk", async () => {
     const brain = reply(STRUCTURE);
     const room = openWithBrain(brain);
     await settle();
     await typeInto(room, "can you tell me what covenants are against this Product Package");
 
-    expect(brain).toHaveBeenCalledTimes(1);
+    expect(brain).not.toHaveBeenCalled();
+    const card = document.querySelector<HTMLElement>(".wk-read");
+    expect(card?.dataset.topic).toBe("covenants");
     // The founder's second failure, in its courtesy form: still not a delta.
     expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
     expect(room.textContent).not.toMatch(/Term change/);

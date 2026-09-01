@@ -1,7 +1,9 @@
-import type { BrainEnvelope, BrainFacility, BrainReadCard } from "../../channel/brainLane";
+import type { BrainEnvelope, BrainFacility, BrainFileable, BrainReadCard, BrainTurn } from "../../channel/brainLane";
+import { capEnvelope } from "../../channel/brainLane";
 import type { PackageMember, WorkroomDelta, WorkroomMode } from "../../workroom/types";
+import { buildReadBlocks, threadDigest } from "./readBlocks";
 import type { IconKind } from "./TypeIcon";
-import type { ReadCardModel, ReadGroup, ReadRow } from "./readCard";
+import type { ReadCardModel, ReadGroup, ReadRow, ReadSource } from "./readCard";
 
 /* =============================================================================
    WHICH LANE A LINE TAKES, and what a brain answer looks like in this room.
@@ -89,19 +91,45 @@ export function buildEnvelope(args: {
   eligible: (m: PackageMember) => boolean;
   focused: PackageMember | null;
   entries: WorkroomDelta[];
+  /**
+   * WHAT THE ROOM HAS ALREADY READ (F2). The blind envelope is what made the
+   * brain look stupid three times in the 2026-09-01 drive. Absent where the
+   * room stands on no read, and the blocks are then simply not there.
+   */
+  reads?: ReadSource;
+  /** The conversation so far, so the desk holds context across turns. */
+  thread?: BrainTurn[];
+  /** TRUE while the room is still asking which of the three routes this is. */
+  routeOpen?: boolean;
 }): BrainEnvelope {
-  return {
-    v: 1,
+  const entries = args.entries;
+  const fileable: BrainFileable = {
+    files: ["a commitment, a rate, a maturity or a term on a booked facility", "a covenant, a fee, collateral or who is on the deal"],
+    // WHAT THIS ROUTE CANNOT FILE, from the manifest's own honesty rather than
+    // from a list written twice: an entry the engines marked un-fileable is
+    // already carrying the reason it is handed off.
+    cannot: entries
+      .filter((e) => e.fileable === false)
+      .map((e) => ({ what: e.title, why: e.handoff?.reason ?? e.caveat ?? "No deployed tool files this today." })),
+  };
+  return capEnvelope({
+    v: 2,
     line: args.line,
+    room: "facility",
     relationship: args.accountName,
-    route: args.mode,
+    route: args.routeOpen ? "unbound" : args.mode,
+    routeOpen: args.routeOpen || undefined,
+    routeOptions: args.routeOpen ? ["modify", "renew", "create"] : undefined,
     packageName: args.packageName,
     productPackageId: args.productPackageId,
     selectedFacility: args.focused ? facilityOf(args.focused) : null,
     facilities: args.members.filter(args.eligible).map(facilityOf),
-    staged: args.entries.map((e) => ({ title: e.title, target: e.target, after: e.after })),
+    staged: entries.map((e) => ({ title: e.title, target: e.target, after: e.after })),
+    reads: buildReadBlocks(args.reads),
+    thread: args.thread ? threadDigest(args.thread) : undefined,
+    fileable,
     grounding: "plugin-skill:workroom-brain",
-  };
+  });
 }
 
 /* ------------------------------------------------------- the answer, drawn

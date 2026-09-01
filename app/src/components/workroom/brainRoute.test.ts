@@ -102,7 +102,8 @@ describe("the envelope carries what the room holds, and no more", () => {
       focused: MEMBERS[0],
       entries: [entry("Commitment", "Line of Credit", "$20.0M")],
     });
-    expect(envelope.v).toBe(1);
+    expect(envelope.v).toBe(2);
+    expect(envelope.room).toBe("facility");
     expect(envelope.line).toBe("what covenants are on this");
     expect(envelope.route).toBe("modify");
     expect(envelope.grounding).toBe("plugin-skill:workroom-brain");

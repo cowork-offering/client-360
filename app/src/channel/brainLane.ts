@@ -31,8 +31,6 @@ import { callTool, mcpAvailable, SERVERS, TOOLS, unwrapLlm } from "./mcp";
 
 /* ------------------------------------------------------------ the envelope */
 
-export type BrainRoute = "modify" | "renew" | "create";
-
 /** One member of the package, named tersely enough for a proposal to target it. */
 export interface BrainFacility {
   loanId: string;
@@ -41,22 +39,103 @@ export interface BrainFacility {
   commitment: string;
 }
 
+/* ------------------------------------------------------------ read blocks
+
+   THE ENVELOPE WAS BLIND (F2, proven three times in the 2026-09-01 drive: the
+   covenant read, the rate read and the guarantors read all came back "data not
+   carried" over a bundle that held every one of them). What the room has ALREADY
+   READ now travels with the line, pre-formatted exactly as the room prints it,
+   so an answer is grounded in the same figures the glass shows.
+
+   EVERY BLOCK IS READ, NEVER DERIVED. `notCarried` is the other half and it is
+   load-bearing: a block that is absent because no read on this cockpit carries
+   it must be refusable BY NAME, and an absent block must never be reported as
+   an empty fact.                                                            */
+
+export interface BrainReadBlocks {
+  covenants?: Array<{
+    name: string;
+    threshold: string;
+    measured?: string;
+    lastEvaluated?: string;
+    nextTest?: string;
+    status: string;
+    /** The facility it is attached to, or "across the relationship". */
+    scope: string;
+  }>;
+  involvements?: Array<{
+    name: string;
+    role: string;
+    /** Only where the org's OWN word says so. Absent is not "corporate". */
+    kind?: "corporate" | "person";
+    scope: string;
+    detail?: string;
+  }>;
+  collateral?: Array<{
+    asset: string;
+    type?: string;
+    advanceRate?: string;
+    pledged?: string;
+    lendable?: string;
+    scope: string;
+  }>;
+  exposure?: { committed: string; drawn: string; available?: string; facilities: number };
+  /** Pricing AS STORED. Rate only: this org stores no index name (see the
+   *  prompt's prohibition) and no read on this cockpit carries a spread. */
+  pricing?: Array<{ facility: string; rate: string }>;
+  /** What NO read on this cockpit carries, named so an answer refuses by name
+   *  rather than reporting silence as a fact. */
+  notCarried: string[];
+}
+
+/** One exchange of the conversation so far. The banker's words are verbatim;
+ *  the room's are summarised, because a room quoting itself at length crowds
+ *  out the reads the answer actually needs. */
+export interface BrainTurn {
+  who: "banker" | "agent";
+  text: string;
+}
+
+/** WHAT THIS ROUTE CAN AND CANNOT FILE. The relationship room refuses creates
+ *  by name (CREATE_GAPS, OVERRIDE_NOT_FILEABLE) and the brain must refuse the
+ *  same way rather than inventing a capability the org does not deploy. */
+export interface BrainFileable {
+  files: string[];
+  cannot: Array<{ what: string; why: string }>;
+}
+
 /**
- * WHAT THE ROOM HANDS THE BRAIN. Compact by design.
+ * WHAT THE ROOM HANDS THE BRAIN.
  *
  * It carries the banker's line verbatim, where the room is standing, what it is
- * standing on, and a digest of what is already staged. It does NOT carry the
- * grounding pack: that ships as the plugin skill the session loads, and
- * `grounding` names it so a session without it says so rather than answering
- * ungrounded.
+ * standing on, what it has already READ, the conversation so far, and a digest
+ * of what is staged. It does NOT carry the grounding pack: that ships as the
+ * plugin skill the session loads, and `grounding` names it so a session without
+ * it says so rather than answering ungrounded.
+ *
+ * IT IS CAPPED. `capEnvelope` holds the serialised form under
+ * {@link ENVELOPE_CAP_BYTES} and names in `omitted` whatever it had to drop, so
+ * a trimmed envelope can never be read as an empty one.
  */
 export interface BrainEnvelope {
-  /** Protocol version. A session skill may refuse a shape it does not know. */
-  v: 1;
+  /** Protocol version. A session skill may refuse a shape it does not know.
+   *  v2 added the read blocks, the thread digest and the fileable map. */
+  v: 2;
   /** The banker's line, verbatim. Never rewritten, never summarised. */
   line: string;
+  /** Which room is asking. The two rooms have different route vocabularies and
+   *  different filing surfaces, and an answer must not confuse them. */
+  room: "facility" | "relationship";
   relationship: string;
-  route: BrainRoute;
+  /** The bound route, in the asking room's own vocabulary. "unbound" while the
+   *  room is still asking which route this is. */
+  route: string;
+  /** TRUE while the route question is still open. A reply may then NAME the
+   *  route (see `route` on the three shapes); binding still happens through the
+   *  room's own router, and an ambiguous intent still asks. */
+  routeOpen?: boolean;
+  /** The legal route words, when the route question is open. */
+  routeOptions?: string[];
   packageName: string;
   productPackageId: string | null;
   /** The facility the conversation is standing on, where one is selected. */
@@ -65,14 +144,94 @@ export interface BrainEnvelope {
   facilities: BrainFacility[];
   /** The staged plan, digested. Titles, targets and the proposed reading only. */
   staged: Array<{ title: string; target: string; after: string }>;
+  /** What the room has already read. Absent where it stands on no read. */
+  reads?: BrainReadBlocks;
+  /** The conversation so far, oldest first. This is what makes it chat. */
+  thread?: BrainTurn[];
+  fileable?: BrainFileable;
+  /** Blocks dropped to hold the envelope under its cap. Named, never silent. */
+  omitted?: string[];
   /** WHERE THE GROUNDING IS. The pack is not inlined; the skill carries it. */
   grounding: "plugin-skill:workroom-brain";
 }
 
+/* ------------------------------------------------------------------- the cap
+
+   A PROMPT IS NOT A DATABASE. The read blocks are bounded by the package, but a
+   long conversation is not, so the envelope is trimmed to a budget before it
+   travels. THREAD HISTORY GOES FIRST: an answer without the last six exchanges
+   is a worse conversation, and an answer without the covenant thresholds is a
+   wrong one.                                                                 */
+
+/** The serialised budget. Comfortably inside the completion door's headroom and
+ *  well clear of the grounding pack the skill loads beside it. */
+export const ENVELOPE_CAP_BYTES = 10_000;
+
+/** Read blocks in the order they are given up. Exposure is last: it is four
+ *  figures and it grounds nearly every question a banker asks. */
+export const ENVELOPE_BLOCK_DROP_ORDER = ["pricing", "collateral", "involvements", "covenants", "exposure"] as const;
+
+const sizeOf = (envelope: BrainEnvelope): number => JSON.stringify(envelope).length;
+
+/**
+ * THE ENVELOPE, TRIMMED TO ITS BUDGET, SAYING WHAT IT DROPPED.
+ *
+ * Thread turns go oldest-first, then whole read blocks in
+ * {@link ENVELOPE_BLOCK_DROP_ORDER}. `omitted` names everything given up so a
+ * reply can say "that is not in front of me" rather than "there is none", and
+ * it is measured as it grows: a cap that ignored its own honesty field would
+ * come back over budget by exactly the width of that field.
+ *
+ * THE BANKER'S LINE IS NEVER TRIMMED. Where the line alone is bigger than the
+ * budget, the envelope travels over it with every block named as omitted: a
+ * question cut in half is worse than a prompt that is long.
+ */
+export function capEnvelope(envelope: BrainEnvelope, cap: number = ENVELOPE_CAP_BYTES): BrainEnvelope {
+  if (sizeOf(envelope) <= cap) return envelope;
+  const out: BrainEnvelope = { ...envelope };
+  const omit = (what: string) => {
+    out.omitted = [...(out.omitted ?? []), what];
+  };
+
+  if (out.thread?.length) {
+    const thread = [...out.thread];
+    const before = thread.length;
+    while (thread.length && sizeOf({ ...out, thread, omitted: [...(out.omitted ?? []), "earlier conversation"] }) > cap) {
+      thread.shift();
+    }
+    out.thread = thread.length ? thread : undefined;
+    if (thread.length !== before) omit("earlier conversation");
+  }
+
+  if (sizeOf(out) > cap && out.reads) {
+    const reads: BrainReadBlocks = { ...out.reads };
+    out.reads = reads;
+    for (const block of ENVELOPE_BLOCK_DROP_ORDER) {
+      if (sizeOf(out) <= cap) break;
+      if (reads[block] === undefined) continue;
+      delete reads[block];
+      omit(block);
+    }
+  }
+  return out;
+}
+
 /* --------------------------------------------------------- the three shapes */
 
+/**
+ * THE ROUTE A REPLY NAMES, where the room is still asking which route this is.
+ *
+ * It is the asking room's OWN vocabulary (`routeOptions` on the envelope), and
+ * the ROOM decides whether the word is legal: a route the room does not know is
+ * ignored and the question stands. Binding always runs through the room's own
+ * router, so a named route can do nothing a chip could not.
+ */
+interface Routed {
+  route?: string;
+}
+
 /** (a) An answer, rendered by the room's own read-card components. */
-export interface BrainReadCard {
+export interface BrainReadCard extends Routed {
   type: "read-card";
   /** The card style slug: involvements, covenants, collateral, fees, exposure,
    *  pricing, exceptions, history, decisions. Free text; the room maps it. */
@@ -153,7 +312,7 @@ export interface BrainChanges {
 
 /** (b) A proposed change. It never reaches a tool from here: it is restated as
  *  a sentence and re-enters the deterministic parser. */
-export interface BrainDeltaProposal {
+export interface BrainDeltaProposal extends Routed {
   type: "delta-proposal";
   action: "loan-modification";
   /** REQUIRED by the tool, and by us: it is the credit reason on the ledger. */
@@ -164,13 +323,26 @@ export interface BrainDeltaProposal {
 }
 
 /** (c) An honest question, when intent is genuinely ambiguous. */
-export interface BrainClarify {
+export interface BrainClarify extends Routed {
   type: "clarify";
   text: string;
   /** Present only where the legal answer set is closed and short. `say` is the
    *  sentence the chip types back, so a chip can do nothing the banker could
    *  not have typed. */
   options?: Array<{ label: string; say: string }>;
+  /**
+   * THIS CLARIFY IS A DEGRADE, not an answer.
+   *
+   * Set by this module and NEVER by a model reply (the validator strips it).
+   * It is what lets the room fall back to today's parser reply instead of
+   * showing a lane failure where the fast lane had a real answer to give.
+   */
+  degraded?: true;
+}
+
+/** TRUE where a reply is this module's own degrade rather than a desk answer. */
+export function isDegrade(reply: BrainReply): boolean {
+  return reply.type === "clarify" && reply.degraded === true;
 }
 
 export type BrainReply = BrainReadCard | BrainDeltaProposal | BrainClarify;
@@ -195,6 +367,7 @@ export type BrainParse = { ok: true; reply: BrainReply } | { ok: false; why: Bra
 export const UNREADABLE_CLARIFY: BrainClarify = {
   type: "clarify",
   text: "I could not read that answer. Try asking directly, or say the change you want and I will put it up.",
+  degraded: true,
 };
 
 /** The clarify a round trip that never came back resolves to. It names the
@@ -203,6 +376,7 @@ export function timeoutClarify(seconds: number): BrainClarify {
   return {
     type: "clarify",
     text: `The desk has not come back within ${seconds} seconds, so I am not going to leave you waiting on it. Ask again, or say the change you want and I will put it up.`,
+    degraded: true,
   };
 }
 
@@ -211,6 +385,7 @@ export function timeoutClarify(seconds: number): BrainClarify {
 export const NOT_CONNECTED_CLARIFY: BrainClarify = {
   type: "clarify",
   text: "This view is not connected to the bank's systems, so I cannot take that question to the desk. I can still change this package once a connector is added.",
+  degraded: true,
 };
 
 const isRow = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -266,8 +441,14 @@ function validEntry(key: (typeof CHANGE_KEYS)[number], e: Record<string, unknown
   }
 }
 
+/** A named route is a STRING or it is not there. Whether the word is a legal
+ *  route is the ROOM's judgement, not the validator's: the two rooms have
+ *  different vocabularies and neither one is knowable from here. */
+const validRoute = (o: Record<string, unknown>): boolean => o.route === undefined || str(o.route);
+
 function validDelta(o: Record<string, unknown>): boolean {
   if (o.action !== "loan-modification") return false;
+  if (!validRoute(o)) return false;
   if (!str(o.rationale)) return false;
   // ONE SHAPE OR THE OTHER, never both: the tool refuses a request carrying
   // the package-anchored list and the single-facility back-compat field.
@@ -290,7 +471,7 @@ function validDelta(o: Record<string, unknown>): boolean {
 }
 
 function validReadCard(o: Record<string, unknown>): boolean {
-  if (!str(o.topic) || !str(o.title)) return false;
+  if (!str(o.topic) || !str(o.title) || !validRoute(o)) return false;
   const list = rows(o.rows);
   if (!list) return false;
   if (o.followUp !== undefined && !str(o.followUp)) return false;
@@ -298,7 +479,11 @@ function validReadCard(o: Record<string, unknown>): boolean {
 }
 
 function validClarify(o: Record<string, unknown>): boolean {
-  if (!str(o.text)) return false;
+  if (!str(o.text) || !validRoute(o)) return false;
+  // `degraded` is THIS MODULE'S word for its own fallback. A reply that claims
+  // it would make the room replay the parser over a real desk answer, so it is
+  // stripped rather than trusted.
+  delete o.degraded;
   if (o.options === undefined) return true;
   const list = rows(o.options);
   return !!list && list.every((c) => str(c.label) && str(c.say));
@@ -519,6 +704,26 @@ export function composeBrainPrompt(envelope: BrainEnvelope): string {
     "Never write. Never call an execute_ tool. Never fabricate a figure, a record or an id.",
     "If the read does not carry it, say the read does not carry it, in a clarify.",
     "",
+    /* ------------------------------------------- THE GROUNDING FACTS CONTRACT
+       The envelope is no longer blind, so an answer that ignores it is now a
+       worse failure than one that refuses. These four lines are the whole of
+       what changed for the model between v1 and v2. */
+    "GROUNDING FACTS. CONTEXT.reads carries what this room has already read:",
+    "covenants, involvements, collateral, exposure and pricing, formatted as the glass prints them.",
+    "Answer READS from those blocks and state the figures as they stand there.",
+    "CONTEXT.reads.notCarried names what no read on this cockpit holds, and CONTEXT.omitted names",
+    "what was dropped to fit. Refuse those BY NAME. An absent block is never an empty fact.",
+    "",
+    "PRICING. This org stores a rate and, on floating facilities, a spread. IT STORES NO INDEX NAME.",
+    'Never say "SOFR", "Prime", "LIBOR" or any other index, and never infer one from a rate.',
+    "State the rate or the spread as stored, or say the index is not stored.",
+    "",
+    "CONTEXT.thread is the conversation so far, oldest first. Read it: this is one conversation.",
+    "CONTEXT.fileable names what this route can and cannot file. Refuse what it cannot, by name,",
+    "rather than proposing a change no deployed tool accepts.",
+    'If CONTEXT.routeOpen is true you may add "route" to your reply, naming ONE of CONTEXT.routeOptions,',
+    "where the line makes the intent plain. Where it does not, clarify and let the banker pick.",
+    "",
     "CONTEXT:",
     JSON.stringify(envelope),
   ].join("\n");
@@ -557,7 +762,10 @@ export async function askBrain(envelope: BrainEnvelope, deps: BrainAskDeps = {})
   });
 
   try {
-    const raced = await Promise.race([send(composeBrainPrompt(envelope), controller.signal).catch(() => null), timeout]);
+    // THE BUDGET IS ENFORCED AT THE WIRE, not at the caller: every room that
+    // builds an envelope gets the same cap without having to remember it.
+    const prompt = composeBrainPrompt(capEnvelope(envelope));
+    const raced = await Promise.race([send(prompt, controller.signal).catch(() => null), timeout]);
     if (raced === "timeout") {
       controller.abort();
       return timeoutClarify(Math.round(timeoutMs / 1000));
