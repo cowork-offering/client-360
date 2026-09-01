@@ -230,3 +230,68 @@ post-mint founder directives incl. the arc changes + 3 probe-module artifacts).
 - Screenshot evidence: /tmp/{mint-*,tweaks-round1,relationship-room,brain-wiring}-compare/.
 - Relationship Lens handoff for Noland (separate track, delivered):
   bot.connectry.io/s/4fc7fdc5572c/HANDOFF.md.
+
+---
+# MORNING DELTA (2026-09-01, appended at handover to the next session)
+
+## Shipped this morning (merged, live at label clean-lane, main @ 86f0c35)
+- THE LANE OPENS EMPTY (founder call, second reading - his first phrasing was misread once,
+  reverted, then done right): both rooms drop ALL at-rest lane furniture - the figures strip
+  (Members/Committed/Covenants resp. Committed/Covenants/Grade), the manifest header, the
+  "Nothing staged yet" placeholder. Content is EARNED: detail card on focus, ledger summoned
+  by the first confirm (with walked figures + count), retiring again at zero. Six presentation
+  tests now assert ABSENCE (the stronger law-8 reading). Confirmed-change cards/chips that
+  appear on action are UNTOUCHED - only default furniture died.
+- The Relationship arc satellite icon = a person glyph (new "person" in the icon union).
+- 2249 tests green; released via the full chain.
+
+## IN FLIGHT AT HANDOVER: the Salesforce bubble (branch sf-bubble, worktree
+.claude/worktrees/sf-bubble, agent may or may not have committed before this session ended -
+CHECK `git log sf-bubble` first; if commits exist with green gates, merge; else rebuild from
+this spec):
+- Founder spec verbatim intent: a Salesforce-cloud bubble in the client arc; clicking it fans
+  a SECOND TIER of two smaller glass bubbles: "Account page" and "Latest package", each opening
+  the Salesforce record in a new tab.
+- Build spec: arc back to 4 satellites (30deg steps r=96: (0,-96)(-48,-83)(-83,-48)(-96,0));
+  new "cloud" glyph in ActionIcon (generic cloud, 1.3 stroke, NOT the trademark logo); narrator
+  chip labels "Salesforce" / "Account page" / "Latest package" (rule 54: one chip, never
+  floating labels); second tier ~34px bubbles, lens glass w/ triple rims (census!), 28ms spring,
+  outside-click/Escape collapses; links = <instanceUrl>/lightning/r/Account/<accountId>/view and
+  /LLC_BI__Product_Package__c/<packageId>/view via the EXISTING runtime instanceUrl resolution
+  (brain-wiring pass built it; never hardcode); unresolvable -> disabled bubble (ink-3, title
+  "Not connected to the org"), never a wrong link; trap 5 shared handler; client view only.
+- ALSO in that pass: REMOVE the hero's "Open in nCino" text affordance (founder: never say
+  "open in nCino" - the cloud is the door); the dossier keeps linking the written package via
+  its reference chip without that wording.
+- Arc changes ripple into actionPanel/chatParity entry helpers + probe targets + the
+  INTENT-OVERRIDES post-mint section - the tweaks and arc-integration commits show the pattern.
+
+## THE IN-DEPTH TESTING (NOT executed - the founder wants to DRIVE it with the next session):
+The founder explicitly stopped the autonomous sweep: testing is a JOINT activity, him at the
+panel, the session verifying org-side. The next session's testing script:
+1. ORG REPLAY SWEEP (session-driven, founder watching): every write arm re-proven - the
+   headline probe is THE EVERYTHING PLAN, never yet attempted: one plan carrying all seven
+   wire families at once (two scalar targets + two fees + pledge-existing + create-then-pledge
+   + policy exception), one token, one execute. If it trips a governor, fall back to wave-2
+   groupings and record the boundary. Then the five Relationship staged flows individually.
+   Every filing: SOQL verify + revert (tools in knowledge/sf-build-v2/tools/, NEW_PKG env;
+   collateral runs also delete created Collateral + Account_Collateral by COL number).
+2. FOUNDER PANEL DRIVE (fresh claude.ai session for schema): the brain's LIVE proofs - skill
+   discovery (does the session load workroom-brain + read the pack), the covenant/borrowers
+   questions answered as read-cards, a brain-composed delta proposal restated + staged, contract
+   adherence (degrade frequency), the doors present (C360 reads, soqlQuery, boom_*, outlook_*,
+   recall_decisions); the nCino/Salesforce links resolving; the two rooms end-to-end incl. his
+   multi-loan through the relay on the FINAL build; keyboard-nav retest (rings exist now).
+3. PLAYWRIGHT CLIENT SWEEP on the final assembled artifact + probe suite + census -> one
+   consolidated test report into knowledge/.
+4. Then the remaining backlog per sections B-D above (org arms, Addendum 2 port decision,
+   design round 2).
+
+## Session hygiene at handover
+- Worktrees present under .claude/worktrees/: many from this session (wave2-*, mint-*,
+  tweaks-round1, unify-router, relationship-room, brain-wiring, sf-bubble). Safe to
+  `git worktree remove` the merged ones after confirming their branches are in main.
+- The design session (parallel) is ACTIVE: it edited design/dummy/* on disk this morning
+  (Addendum 2 build). Do not clobber; coordinate through the contract docs.
+- Org watcher may still run (/tmp/org-watch.sh); kill via `fuser -k` style, never
+  `pkill -f` with the pattern in your own command line (self-match kills your shell).
