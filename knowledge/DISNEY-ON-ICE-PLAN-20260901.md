@@ -59,8 +59,11 @@ brainLane.ts (prompt composition), workroom.css.
 - [ ] Channel-none parity for all of it.
 - [ ] Renew + new-facility routes + relationship room: same grammar, honest per-route handoff.
 - [ ] Phase 2: fees, borrowers/involvements, policy exceptions on the same engine.
-- [ ] Inline the doctrine into the prompt (covenant families, fences, index prohibition, shapes).
-- [ ] Addendum written, founder re-drives his own lines, MERGE.
+- [x] Addendum written, MERGED f3da638, published label create-grammar. Founder re-drive pending.
+- [ ] Plan-fixes batch (E1/E4/E5/E7/E8/E3 from the everything-plan drive) - RUNNING.
+- MOVED TO B: inline the doctrine. It was briefed here, slipped when the agent was killed, and
+  by founder decision lands with the transport switch as one build, never as a standalone
+  Bedrock step.
 Depends on: nothing. Blocks: B (same files).
 
 ### Stream B - The sample channel + latency ladder  [S, becomes M if latency proves out]

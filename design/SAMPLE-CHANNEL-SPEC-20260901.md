@@ -116,6 +116,16 @@ numbers decide, not the aspiration.
 - Degrade parity: no sample (declined consent, null capability, rate limit, timeout) falls back to
   today's behavior - the deterministic lanes and local reads still answer, and a fuzzy line gets the
   neutral clarify. The room must be fully usable with the model entirely absent.
-- The doctrine is inlined into the prompt (done in phase 1) regardless of channel - sample has no
-  page-controlled system prompt either, so grounding never depends on a skill load.
+- THE DOCTRINE IS INLINED INTO THE PROMPT IN THIS BUILD. Founder decision 2026-09-01 late: no
+  standalone Bedrock-grounding step; it was briefed to phase 1 but slipped when that agent was
+  killed and the recovery brief carried bugs only, so it is NOT done. It lands here, with the
+  transport switch, as one build. It is required for BOTH doors: `sample` has no page-controlled
+  system prompt and does not auto-load the plugin skill either, so grounding never depends on a
+  skill load. Inline the relevant slices of brain/WORKROOM-BRAIN.md: covenant families and bands
+  (4.2), the org fences (2.11), the involvement roles (2.5), the never-invent-an-index rule, the
+  three output shapes, and the "answer from the envelope, tools are the exception" ladder rule.
+  Budget it inside the envelope cap; doctrine is dropped after thread history and never before
+  the read blocks.
+- Bedrock survives ONLY as the rung-2 fallback if the session door fails the latency gate. No
+  further investment in it beyond carrying the same inlined doctrine.
 - No em dashes in UI copy. Commit trailers. No git add -A.
