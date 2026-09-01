@@ -1,6 +1,6 @@
 import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
 import { isActiveFacility } from "../../data/worklist";
-import type { WorkroomDelta } from "../../workroom/types";
+import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
 
 /* =============================================================================
    THE CREATE GRAMMAR - WHAT THIS CREATE STILL NEEDS.
@@ -255,6 +255,16 @@ export interface Draft {
   /** The catalog names a line matched more than one of. The room asks which
    *  rather than filing one test as another. */
   ambiguousTests?: string[];
+  /**
+   * THE TEST THE BANKER NAMED THAT THE BANK'S CATALOG DOES NOT CARRY.
+   *
+   * The banker's own words, held so the room can say them back. An interest
+   * coverage test is a real covenant family and this org's catalog has no
+   * entry for it, and the difference between those two facts is the whole
+   * answer: the room names the gap rather than asking again as if nothing had
+   * been typed.
+   */
+  notInCatalog?: string;
 }
 
 export interface Ask {
@@ -552,13 +562,94 @@ function readThreshold(line: string): { value: number; unit?: "ratio" | "money" 
   if (ratio) return { value: Number(ratio[1]), unit: "ratio" };
   const money = moneyIn(lower);
   if (money.length === 1) return { value: money[0], unit: "money" };
-  const anchored = /\b(?:max(?:imum)?|min(?:imum)?|at least|at most|no more than|no less than|of|to|above|below|over|under)\s+(\d+(?:\.\d+)?)\b/.exec(lower);
+  /* "ACTUALLY MAKE IT 1.30" IS THE FOUNDER'S OWN CORRECTION, and it carries no
+     unit. The anchor is the verb rather than an operator word: a card is open,
+     the figure on it is the thing being corrected, and the unit already on the
+     card is the unit it keeps. */
+  const anchored =
+    /\b(?:max(?:imum)?|min(?:imum)?|at least|at most|no more than|no less than|of|to|above|below|over|under|make\s+(?:it|that)|set\s+(?:it|that)\s+(?:to|at))\s+(\d+(?:\.\d+)?)\b/.exec(lower);
   return anchored ? { value: Number(anchored[1]) } : null;
 }
 
-/** The covenant type the line names, out of the org's own catalog as the book
- *  carries it. Longest name first, so a specific test beats a generic one. */
-function readTest(line: string, book: Book): { type: string } | { ambiguous: string[] } | null {
+/* ------------------------------------------------------------ the org catalog
+
+   THE TESTS THIS BANK CAN ACTUALLY FILE.
+
+   The org's covenant catalog carries sixty types and several of them duplicate
+   a name, so the deployed write settles only the banker vocabulary that lands
+   on a UNIQUELY-NAMED entry and refuses everything else. That map is the
+   authority; this is a SHELL-SIDE MIRROR of it, and it exists for one reason:
+   the room has to be able to say "the catalog does not carry that" BEFORE it
+   composes a sentence, rather than gathering three more answers and reading the
+   refusal back afterwards.
+
+   A MIRROR IS ONLY HONEST WHILE IT MATCHES. `elicit.test.ts` drives every name
+   below through the real engine and asserts the catalog settles on it, so a
+   change behind the fence breaks a test rather than a demo.                  */
+
+const ORG_CATALOG: Array<{ match: RegExp; type: string }> = [
+  { match: /\bleverage\b/i, type: "Leverage" },
+  { match: /\bliquidity\b/i, type: "Minimum Liquidity" },
+  { match: /\b(dscr|debt service coverage)\b/i, type: "Debt Service Coverage of Borrower" },
+  { match: /\bdebt.to.worth\b/i, type: "Maximum Debt to Worth" },
+  { match: /\bcurrent ratio\b/i, type: "Minimum Current Ratio" },
+  { match: /\bnet worth\b/i, type: "Net Worth" },
+  { match: /\bebitda\b/i, type: "EBITDA" },
+  { match: /\bdebt.to.equity\b/i, type: "Debt to Equity" },
+  { match: /\bnet profit\b/i, type: "Net Profit" },
+];
+
+/** The catalog's own names, in the order the room offers them. */
+export const CATALOG_TESTS: string[] = ORG_CATALOG.map((c) => c.type);
+
+/** Words in front of a test that name no test. Stripped before the leftover is
+ *  read as what the banker called the covenant. */
+const TEST_STOP = new Set([
+  "i", "we", "you", "please", "can", "could", "would", "like", "want", "need", "lets", "let", "us", "to",
+  "add", "adding", "create", "put", "impose", "include", "attach", "set", "up", "write", "another", "second",
+  "third", "new", "additional", "more", "also", "same", "different", "other", "a", "an", "the", "this", "that",
+  "these", "those", "one", "some", "any", "and", "on", "for", "of", "with", "extra", "further", "hard", "financial",
+  "covenant", "covenants", "test", "tests", "facility", "facilities", "loan", "loans", "line", "lines", "it",
+]);
+
+/** The phrase in front of the word "covenant" or "test", which is what a banker
+ *  calls the test. Lazy, so it ends on the FIRST such noun in the line. */
+const TEST_PHRASE = /([a-z][a-z0-9/'\- ]{2,44}?)\s+(?:covenants?|tests?)\b/i;
+
+/**
+ * WHAT THE BANKER CALLED THE TEST, in their own words, or null.
+ *
+ * Null is the honest answer to "add another covenant": that line names no test
+ * at all, and the room's grounded ask is the right answer to it. A phrase comes
+ * back only where words the banker chose sit in front of the noun.
+ */
+export function namedTest(line: string): string | null {
+  const found = TEST_PHRASE.exec(line);
+  if (!found) return null;
+  const words = found[1].toLowerCase().split(/\s+/).filter(Boolean);
+  while (words.length && TEST_STOP.has(words[0])) words.shift();
+  if (!words.length || words.length > 4) return null;
+  if (words.some((w) => TEST_STOP.has(w))) return null;
+  return words.join(" ");
+}
+
+/**
+ * THE COVENANT TYPE THE LINE NAMES.
+ *
+ * Four readings, in the order they should win: a name the BOOK already carries
+ * verbatim, a banker's shorthand over the book's own families, the ORG CATALOG
+ * for a test this relationship does not run yet, and finally the honest fourth
+ * state - the banker named a test and this bank's catalog does not carry it.
+ *
+ * THE BOOK COMES BEFORE THE CATALOG ON PURPOSE. "DSCR" names a family this
+ * relationship runs twice, and answering it out of the catalog would file one
+ * test as another; answering it out of the book asks which, which is the only
+ * safe answer to it.
+ */
+function readTest(
+  line: string,
+  book: Book,
+): { type: string } | { ambiguous: string[] } | { notInCatalog: string } | null {
   const lower = ` ${line.toLowerCase()} `;
   const exact = [...book.covenants]
     .sort((a, b) => b.type.length - a.type.length)
@@ -567,11 +658,14 @@ function readTest(line: string, book: Book): { type: string } | { ambiguous: str
 
   /* A BANKER'S SHORTHAND. "dscr" names a FAMILY, and this book carries two
      tests in that family, so the shorthand resolves to a question rather than
-     to whichever one sorted first. */
+     to whichever one sorted first. Each family is its OWN family: leverage and
+     debt to worth are two different tests in this catalog, and answering one
+     with the other is the memo failure the doctrine names by name. */
   const SHORTHAND: Array<{ match: RegExp; family: RegExp }> = [
     { match: /\b(dscr|debt service coverage|debt service)\b/i, family: /debt service coverage/i },
     { match: /\b(liquidity)\b/i, family: /liquidity/i },
-    { match: /\b(leverage|debt to worth|debt.to.net worth|tnw)\b/i, family: /debt to worth|leverage/i },
+    { match: /\bleverage\b/i, family: /\bleverage\b/i },
+    { match: /\b(debt to worth|debt.to.net worth|tnw)\b/i, family: /debt to worth/i },
     { match: /\b(current ratio)\b/i, family: /current ratio/i },
     { match: /\b(net worth)\b/i, family: /net worth/i },
     { match: /\b(fixed charge|fccr)\b/i, family: /fixed charge/i },
@@ -583,7 +677,15 @@ function readTest(line: string, book: Book): { type: string } | { ambiguous: str
     if (names.length === 1) return { type: names[0] };
     if (names.length > 1) return { ambiguous: names };
   }
-  return null;
+
+  /* THE CATALOG, for a test this relationship does not run today. A banker who
+     types the whole answer skips the questions (rule 3), and a test the bank
+     carries is an answer whether or not this book happens to use it. */
+  const carried = ORG_CATALOG.find((c) => c.match.test(line));
+  if (carried) return { type: carried.type };
+
+  const named = namedTest(line);
+  return named ? { notInCatalog: named } : null;
 }
 
 /* ===================================================== the collateral surface
@@ -691,12 +793,21 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     if (test && "type" in test) {
       next.slots.test = test.type;
       next.ambiguousTests = undefined;
+      next.notInCatalog = undefined;
     } else if (test && "ambiguous" in test) {
       /* THE CATALOG CARRIES THE FAMILY TWICE. "dscr" on this book names two
          different tests, and the parser under this room resolves both to the
          first one it matches, so a room that picked would file one test as
          another. It asks instead, with the catalog's own two names. */
       next.ambiguousTests = test.ambiguous;
+      next.notInCatalog = undefined;
+    } else if (test && "notInCatalog" in test) {
+      /* HE NAMED A TEST AND THE BANK DOES NOT CARRY IT. Re-asking "what is it
+         though" over a line that already said what it is would be the room
+         pretending nothing was typed, which is the defect this branch exists
+         to end. The threshold and the schedule he typed stay on the draft and
+         travel onto whichever test he names. */
+      next.notInCatalog = test.notInCatalog;
     }
     const threshold = readThreshold(text);
     if (threshold) {
@@ -764,6 +875,12 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
    doctrine band, which is quoted as guidance and never applied as a value.  */
 
 export function nextAsk(draft: Draft, ctx: ElicitContext): Ask | null {
+  /* THE CATALOG GAP IS ANSWERED BEFORE ANYTHING ELSE. A banker who typed an
+     interest coverage test has said what he wants; asking him which facilities
+     it lands on before telling him the bank cannot write it at all would spend
+     his gesture on a decision that turns out not to exist. */
+  if (draft.surface === "covenant" && !draft.slots.test && draft.notInCatalog) return catalogAsk(draft, ctx);
+
   /* THE SCOPE WORD IS ANSWERED FIRST WHERE IT IS THE THING IN DOUBT. The
      founder's own line opens on one: "add another covenant to all of the loans"
      is a question about WHICH FACILITIES before it is a question about which
@@ -800,6 +917,41 @@ export function advance(draft: Draft, ctx: ElicitContext): { draft: Draft; ask: 
   const settled = settleFromBook(draft, ctx);
   return { draft: settled, ask: nextAsk(settled, ctx) };
 }
+
+/**
+ * THE BANK DOES NOT CARRY THAT TEST, SAID PLAINLY.
+ *
+ * A room that answered "add an interest coverage covenant of 3.0x tested
+ * quarterly" by listing what the relationship already runs has thrown away
+ * three things the banker typed and told him nothing about why. So the gap is
+ * NAMED, the catalog is offered in its own words, and the figures he already
+ * gave are said back so he can see they are still held: the next line names a
+ * test and nothing else, and the create completes on it.
+ *
+ * WHAT THE RELATIONSHIP ALREADY RUNS COMES FIRST (rule 2), because a test this
+ * book already carries is the grounded answer and the rest of the catalog is
+ * the fallback behind it.
+ */
+function catalogAsk(draft: Draft, ctx: ElicitContext): Ask {
+  const onBook = new Set(ctx.book.covenants.map((c) => c.type));
+  const ordered = [...CATALOG_TESTS].sort((a, b) => Number(onBook.has(b)) - Number(onBook.has(a)));
+  const held = [
+    draft.slots.threshold !== undefined ? thresholdText(draft.slots.threshold, draft.slots.unit) : null,
+    draft.slots.frequency ? `the ${draft.slots.frequency.toLowerCase()} schedule` : null,
+  ].filter((h): h is string => Boolean(h));
+  return {
+    slot: "test",
+    text:
+      `The bank's catalog does not carry ${article(draft.notInCatalog!)} ${draft.notInCatalog} test, so there is nothing for me to file it against. ` +
+      `It carries ${sentenceList(ordered)}. ` +
+      (held.length
+        ? `I am holding ${sentenceList(held)} and will carry ${held.length === 1 ? "it" : "them"} onto whichever of those you name.`
+        : "Name one of those and I will take the threshold from there."),
+    options: ordered.map((name) => ({ label: name, say: `a ${name} covenant` })),
+  };
+}
+
+const article = (word: string) => (/^[aeiou]/i.test(word.trim()) ? "an" : "a");
 
 function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
   const s = draft.slots;
@@ -1005,6 +1157,55 @@ export interface Awareness {
   options: Array<{ label: string; say: string }>;
 }
 
+/**
+ * THE ENTRY ON THE PLAN THIS LINE IS ACTUALLY ABOUT.
+ *
+ * "A line that touches something already staged ACTS ON THAT ENTRY - it amends
+ * it - rather than putting a second, parallel entry beside it." Two entries
+ * moving the same test on the same facility is a contradiction the banker has
+ * to reconcile by hand, which is the work this room exists to remove.
+ *
+ * NARROW ON PURPOSE. It fires only where the line lands on ONE member, that
+ * member already carries a STAGED entry for the same test or the same asset,
+ * and something the banker owns has actually changed. An identical line is not
+ * an amendment and is answered by the awareness ("already on this plan"); an
+ * explicit "a second one" is not an amendment either, and is taken at its word.
+ */
+export interface PlanAmendment {
+  entry: PlanEntry;
+  changed: string[];
+}
+
+export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendment | null {
+  if (draft.slots.second || draft.scope.length !== 1) return null;
+  const memberId = draft.scope[0];
+  const s = draft.slots;
+  const entry = ctx.plan.find(
+    (p) =>
+      !p.open &&
+      p.surface === draft.surface &&
+      p.memberId === memberId &&
+      (draft.surface === "covenant" ? p.slots.test === s.test && Boolean(s.test) : p.slots.assetId === s.assetId && Boolean(s.assetId)),
+  );
+  if (!entry) return null;
+
+  const changed: string[] = [];
+  if (draft.surface === "covenant") {
+    if (s.threshold !== undefined && s.threshold !== entry.slots.threshold) {
+      changed.push(`the threshold is now ${thresholdText(s.threshold, s.unit)}`);
+    }
+    if (s.frequency && s.frequency !== entry.slots.frequency) changed.push(`it is tested ${s.frequency.toLowerCase()}`);
+  } else if (s.lien && s.lien !== entry.slots.lien) {
+    changed.push(`the lien position is now ${s.lien}`);
+  }
+  return changed.length ? { entry, changed } : null;
+}
+
+/** What a correction lands as on an entry that is already staged. */
+export function amendedPlanLine(changed: string[]): string {
+  return `That is already on the plan here, so I have moved the entry rather than putting a second one beside it: ${sentenceList(changed)}.`;
+}
+
 export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
   const label = (id: string) => ctx.members.find((m) => m.id === id)?.label ?? id;
   const none: Awareness = { onTheBook: null, onThePlan: null, fresh: draft.scope, options: [] };
@@ -1156,6 +1357,89 @@ export function blockedReason(draft: Draft): string | null {
     );
   }
   return null;
+}
+
+/* ============================================== what THIS ROUTE can file
+
+   ONE ROOM, THREE ROUTES, THREE DIFFERENT TOOLS UNDER IT.
+
+   The grammar is the shell's and it is the same on every route. The WIRE is
+   the route's, and it is not: a renewal files a new maturity and a repricing,
+   a new facility files four scalars against the package anchor, and neither of
+   them carries a covenant or a pledge. A room that gathered a complete covenant
+   on the renewal route and then said nothing about it would be dropping the
+   whole thing silently (rule 8); a room that staged it as though it were going
+   to be written would be worse.
+
+   SO IT IS NAMED, BY THE ROUTE'S NAME, AFTER GATHERING, AND IT GOES ON THE
+   PLAN. The entry is not fileable and says so: no wire, a handoff reason the
+   staged plan carries into the submitted summary, and a refusal-toned chip.
+   Nothing new is written anywhere, which is exactly the point.               */
+
+/** What the route's own tool files, where it is not the modification. Null is
+ *  the modification: it files covenants and pledges and needs no caveat. */
+const ROUTE_FILES: Record<WorkroomMode, string | null> = {
+  modify: null,
+  renew: "The renewal files a new maturity and a repricing, and nothing else moves onto the clone.",
+  create: "The new facility files the product, the amount, the term and the purpose against the package anchor, and nothing else.",
+};
+
+/** Why this route cannot file this create, in the route's own words, or null
+ *  where it can. */
+export function routeGap(surface: SurfaceId, mode: WorkroomMode): string | null {
+  const files = ROUTE_FILES[mode];
+  if (!files) return null;
+  return (
+    `${files} ${surface === "covenant" ? "A covenant" : "A pledge"} is not one of them, so this rides the plan for the credit file ` +
+    "and nothing about it is written to the bank's systems."
+  );
+}
+
+/**
+ * THE ENTRY A ROUTE THAT CANNOT FILE STILL PUTS ON THE PLAN.
+ *
+ * Everything the banker settled, recorded, with the reason nothing writes it
+ * attached to the entry rather than to a sentence that scrolls away. It carries
+ * no wire and `fileable` is false, so both engines already read it as a handoff
+ * and both staged plans already carry it into the summary as one.
+ */
+export function handoffEntry(
+  draft: Draft,
+  ctx: ElicitContext,
+  memberId: string,
+  reason: string,
+  seq: number,
+): WorkroomDelta {
+  const member = ctx.members.find((m) => m.id === memberId)!;
+  const s = draft.slots;
+  const covenant = draft.surface === "covenant";
+  const asset = ctx.book.assets.find((a) => a.id === s.assetId);
+  const after = covenant
+    ? `${s.test} at ${thresholdText(s.threshold!, s.unit)}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}`
+    : `${shortLabel(asset ?? ({ label: s.assetLabel ?? "the asset" } as BookAsset))}${s.lien ? ` at ${s.lien} position` : ""}`;
+  return {
+    id: `${covenant ? "covenant.add" : "collateral.pledge"}:${memberId}:handoff:${seq}`,
+    group: covenant ? "covenants" : "security",
+    op: "add",
+    kind: covenant ? "New covenant" : "New pledge",
+    kindTone: "refusal",
+    badge: `${covenant ? "New covenant" : "New pledge"} handed off`,
+    title: covenant ? "New covenant" : "New pledge",
+    target: member.label,
+    before: "not on the facility today",
+    after,
+    member: memberId,
+    map: [
+      ["Object", covenant ? "LLC_BI__Covenant2__c" : "LLC_BI__Loan_Collateral2__c"],
+      ["Field", "not established on this route"],
+      ["Written as", "Nothing. This route's own tool does not carry it, so it travels as a handoff on the staged plan."],
+    ],
+    fields: [covenant ? "LLC_BI__Covenant2__c" : "LLC_BI__Loan_Collateral2__c"],
+    caveat: reason,
+    filed: { recordId: "not filed", verification: "Handed off. Nothing was written." },
+    fileable: false,
+    handoff: { reason },
+  };
 }
 
 /* ================================================================ verifying

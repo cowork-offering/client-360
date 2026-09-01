@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   advance,
+  amendedPlanLine,
   amendmentOf,
   awarenessFor,
   blockedReason,
   buildBook,
+  CATALOG_TESTS,
   changedLine,
   compose,
+  handoffEntry,
   mirrorChips,
+  namedTest,
   openCreate,
+  planAmendmentFor,
   readInto,
   readScope,
+  routeGap,
   settleFromBook,
   thresholdText,
   verify,
@@ -493,5 +499,198 @@ describe("what the create grammar deliberately does not claim", () => {
     const step = advance(draft, ctx);
     const copy = [step.ask!.text, ...step.ask!.options.map((o) => `${o.label} ${o.say}`)].join(" ");
     expect(copy).not.toMatch(/—/);
+  });
+});
+
+/* ------------------------------------------------------------- the catalog */
+
+describe("the org's own covenant catalog, mirrored and proved against the engine", () => {
+  /* THE MIRROR IS ONLY HONEST WHILE IT MATCHES. Every name the room offers is
+     driven through the real deterministic parser here, so a change behind the
+     fence breaks this test rather than a demo. */
+  it("every catalog name the room offers is one the bank's own parser settles on", async () => {
+    const { engine, context } = realEngine();
+    for (const name of CATALOG_TESTS) {
+      const draft: Draft = {
+        surface: "covenant",
+        slots: { test: name, threshold: 2, frequency: "Quarterly" },
+        scope: [PURCHASE],
+        scopeWord: true,
+        unused: null,
+      };
+      const [line] = compose(draft, ctxWith()).lines;
+      const result = await engine.parseIntent(line.say, context);
+      expect(result.kind).toBe("deltas");
+      const verdict = verify(draft, PURCHASE, result.kind === "deltas" ? result.deltas : []);
+      expect(verdict.ok, `${name} did not survive the parser`).toBe(true);
+    }
+  });
+
+  it("F-CG1a: a complete in-catalog line the book does not carry is complete, not a question", () => {
+    const ctx = ctxWith();
+    const draft = openCreate("add a leverage covenant of 3.5x tested quarterly on the purchase facility", ctx)!;
+    expect(draft.slots.test).toBe("Leverage");
+    expect(draft.slots.threshold).toBe(3.5);
+    expect(draft.slots.frequency).toBe("Quarterly");
+    expect(draft.scope).toEqual([PURCHASE]);
+    expect(advance(draft, ctx).ask).toBeNull();
+  });
+
+  it("F-CG1b: names a test the catalog does not carry rather than asking again", () => {
+    const ctx = ctxWith({ focused: MEMBERS[3] });
+    const draft = openCreate("add an interest coverage covenant of 3.0x tested quarterly on this facility", ctx)!;
+    expect(draft.notInCatalog).toBe("interest coverage");
+    expect(draft.slots.test).toBeUndefined();
+    // WHAT HE TYPED IS STILL HELD.
+    expect(draft.slots.threshold).toBe(3);
+    expect(draft.slots.frequency).toBe("Quarterly");
+
+    const ask = advance(draft, ctx).ask!;
+    expect(ask.text).toContain("does not carry an interest coverage test");
+    expect(ask.text).toContain("I am holding 3x and the quarterly schedule");
+    expect(ask.options.map((o) => o.label)).toEqual(expect.arrayContaining(CATALOG_TESTS));
+    // GROUNDED IN THE BOOK FIRST: what the relationship already runs leads.
+    expect(book.covenants.some((c) => c.type === ask.options[0].label)).toBe(true);
+  });
+
+  it("keeps the typed threshold and schedule when the banker names a catalog test", () => {
+    const ctx = ctxWith({ focused: MEMBERS[3] });
+    const draft = openCreate("add an interest coverage covenant of 3.0x tested quarterly on this facility", ctx)!;
+    const after = readInto(draft, "a Minimum Current Ratio covenant", ctx);
+    expect(after.slots.test).toBe("Minimum Current Ratio");
+    expect(after.notInCatalog).toBeUndefined();
+    expect(after.slots.threshold).toBe(3);
+    expect(after.slots.frequency).toBe("Quarterly");
+    expect(advance(after, ctx).ask).toBeNull();
+  });
+
+  it("still asks which test when the family names two, rather than reaching for the catalog", () => {
+    const ctx = ctxWith();
+    const draft = openCreate("add a DSCR covenant of 1.25x tested quarterly on the 15M line of credit", ctx)!;
+    expect(draft.slots.test).toBeUndefined();
+    expect(draft.notInCatalog).toBeUndefined();
+    expect(draft.ambiguousTests).toEqual([
+      "Debt Service Coverage of Borrower",
+      "Debt Service Coverage with and without Distributions",
+    ]);
+  });
+
+  it("does not read leverage and debt to worth as the same test", () => {
+    const ctx = ctxWith();
+    expect(openCreate("add a leverage covenant of 3.5x on the purchase facility", ctx)!.slots.test).toBe("Leverage");
+    expect(openCreate("add a debt to worth covenant of 3x on the purchase facility", ctx)!.slots.test).toBe(
+      "Maximum Debt to Worth",
+    );
+  });
+
+  it("reads what the banker called the test, and nothing where he named none", () => {
+    expect(namedTest("add an interest coverage covenant of 3.0x tested quarterly")).toBe("interest coverage");
+    expect(namedTest("put a fixed charge coverage test on the equipment loan")).toBe("fixed charge coverage");
+    // No test named at all. The grounded ask is the right answer to these.
+    expect(namedTest("add another covenant to all of the loans")).toBeNull();
+    expect(namedTest("add a covenant on this facility")).toBeNull();
+    expect(namedTest("add a second covenant")).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------- the plan, amended */
+
+describe("a line touching a staged entry amends it rather than doubling it", () => {
+  const staged = (over: Partial<Draft["slots"]> = {}) => ({
+    deltaId: "covenant.add:purchase:1",
+    surface: "covenant" as const,
+    memberId: PURCHASE,
+    title: "New covenant",
+    target: "Purchase",
+    slots: { test: "Leverage", threshold: 3.5, unit: "ratio" as const, frequency: "Quarterly", ...over },
+    open: false,
+  });
+
+  it("names the staged entry and what moved on it", () => {
+    const ctx = ctxWith({ plan: [staged()] });
+    const draft = openCreate("add a leverage covenant of 2.75x tested quarterly on the purchase facility", ctx)!;
+    const found = planAmendmentFor(draft, ctx)!;
+    expect(found.entry.deltaId).toBe("covenant.add:purchase:1");
+    expect(found.changed).toEqual(["the threshold is now 2.75x"]);
+    expect(amendedPlanLine(found.changed)).toContain("rather than putting a second one beside it");
+  });
+
+  it("is not an amendment when the line says exactly what is already staged", () => {
+    const ctx = ctxWith({ plan: [staged()] });
+    const draft = openCreate("add a leverage covenant of 3.5x tested quarterly on the purchase facility", ctx)!;
+    expect(planAmendmentFor(draft, ctx)).toBeNull();
+  });
+
+  it("is not an amendment when the banker asked for a second one", () => {
+    const ctx = ctxWith({ plan: [staged()] });
+    const draft = readInto(
+      openCreate("add a leverage covenant of 2.75x on the purchase facility", ctx)!,
+      "add a second leverage covenant",
+      ctx,
+    );
+    expect(planAmendmentFor(draft, ctx)).toBeNull();
+  });
+
+  it("leaves a chip that is still open to the card's own amendment", () => {
+    const ctx = ctxWith({ plan: [{ ...staged(), open: true }] });
+    const draft = openCreate("add a leverage covenant of 2.75x tested quarterly on the purchase facility", ctx)!;
+    expect(planAmendmentFor(draft, ctx)).toBeNull();
+  });
+});
+
+/* ------------------------------------------- the routes that cannot file it */
+
+describe("a route whose own tool cannot file the create records it instead", () => {
+  it("says nothing about the modification, which files both surfaces", () => {
+    expect(routeGap("covenant", "modify")).toBeNull();
+    expect(routeGap("collateral", "modify")).toBeNull();
+  });
+
+  it("names what the renewal and the new facility do file", () => {
+    expect(routeGap("covenant", "renew")).toContain("a new maturity and a repricing");
+    expect(routeGap("collateral", "create")).toContain("the product, the amount, the term and the purpose");
+    expect(routeGap("collateral", "renew")).toContain("A pledge is not one of them");
+  });
+
+  it("records the whole create on the plan, with no wire on it", () => {
+    const ctx = ctxWith();
+    const draft = openCreate("add a leverage covenant of 3.5x tested quarterly on the purchase facility", ctx)!;
+    const entry = handoffEntry(draft, ctx, PURCHASE, routeGap("covenant", "renew")!, 0);
+    expect(entry.fileable).toBe(false);
+    expect(entry.wire).toBeUndefined();
+    expect(entry.covenantWire).toBeUndefined();
+    expect(entry.handoff!.reason).toContain("a new maturity and a repricing");
+    expect(entry.after).toBe("Leverage at 3.5x, tested quarterly");
+    expect(entry.target).toBe("Purchase");
+    expect(`${entry.after} ${entry.caveat} ${entry.badge}`).not.toMatch(/—/);
+  });
+});
+
+/* ------------------------------------------------ the founder's own words */
+
+describe("the founder's own correction, without a unit on it", () => {
+  const open = (): Draft => ({
+    surface: "covenant",
+    slots: { test: "Leverage", threshold: 3.5, unit: "ratio", frequency: "Quarterly" },
+    scope: [PURCHASE],
+    scopeWord: true,
+    unused: null,
+  });
+
+  it("reads \"actually make it 1.30\" as the threshold, keeping the unit the card holds", () => {
+    const amend = amendmentOf("actually make it 1.30", open(), ctxWith())!;
+    expect(amend.draft.slots.threshold).toBe(1.3);
+    expect(amend.draft.slots.unit).toBe("ratio");
+    expect(changedLine(amend.changed)).toBe("Updated on the card: the threshold is now 1.3x.");
+  });
+
+  it("still refuses a bare figure that no word anchors as a threshold", () => {
+    // "3.5" sitting loose beside a facility is a figure about the deal, not an
+    // instruction, and the room asks for the threshold rather than taking it.
+    const ctx = ctxWith();
+    const draft = openCreate("add a leverage covenant 3.5 on the purchase facility", ctx)!;
+    expect(draft.slots.test).toBe("Leverage");
+    expect(draft.slots.threshold).toBeUndefined();
+    expect(advance(draft, ctx).ask?.slot).toBe("threshold");
   });
 });

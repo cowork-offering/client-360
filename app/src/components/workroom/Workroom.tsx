@@ -43,18 +43,23 @@ import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/br
 import { magnitudeAdvisories, provablyClean, qualifierFilter, reconcileNarrative, type QualifierMember } from "./dispatch";
 import {
   advance,
+  amendedPlanLine,
   awarenessFor,
   amendmentOf,
   blockedReason,
   buildBook,
   changedLine,
   compose,
+  handoffEntry,
   openCreate,
+  planAmendmentFor,
   readInto,
+  routeGap,
   verify,
   type Draft,
   type ElicitContext,
   type ElicitMember,
+  type PlanAmendment,
   type PlanEntry,
 } from "./elicit";
 import { bareMemberPick, readSteer } from "./steer";
@@ -1426,6 +1431,86 @@ export function Workroom({
   );
 
   /**
+   * AN ENTRY ALREADY ON THE PLAN IS MOVED, NEVER DOUBLED.
+   *
+   * The banker said the same test on the same facility again with a different
+   * figure. That is the entry he already confirmed, corrected, so it takes the
+   * new figure in the manifest position it already holds. Two entries moving
+   * the same test would be a contradiction he has to reconcile by hand, which
+   * is the work this room exists to remove.
+   */
+  const amendPlanEntry = useCallback(
+    async (d: Draft, onPlan: PlanAmendment, mine: number) => {
+      const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
+      // ONE MEMBER, ONE SENTENCE. `planAmendmentFor` only fires on a line that
+      // lands on exactly one facility, so the composition is exactly one line.
+      const composition = compose(d, elicitCtx);
+      const composed = composition.lines[0];
+
+      // A ROUTE THAT COULD NOT FILE IT CANNOT FILE THE CORRECTION EITHER, and
+      // the corrected handoff is what belongs on the plan.
+      const routeSaid = routeGap(d.surface, context.mode);
+      const started = Date.now();
+      setThinking(true);
+      let taken: WorkroomDelta | null = null;
+      try {
+        if (routeSaid) {
+          taken = handoffEntry(d, elicitCtx, composed.memberId, routeSaid, 0);
+        } else {
+          let result: IntentResult | null = null;
+          try {
+            result = await engine.parseIntent(composed.say, context);
+          } catch {
+            result = null;
+          }
+          const verdict =
+            result?.kind === "deltas"
+              ? verify(d, composed.memberId, result.deltas)
+              : { ok: false as const, why: "it did not come back as a change" };
+          if (verdict.ok) taken = verdict.delta;
+          else engine.pick(composed.memberId);
+        }
+        await beat(started);
+      } finally {
+        setThinking(false);
+      }
+
+      if (!taken) {
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: "That correction does not resolve against the bank's own catalog, so the entry on the plan is unchanged and nothing has been staged beside it.",
+        });
+        return;
+      }
+
+      const replacement = composition.gaps.length
+        ? { ...taken, caveat: [taken.caveat, ...composition.gaps].filter(Boolean).join(" ") }
+        : taken;
+      draftsRef.current.delete(onPlan.entry.deltaId);
+      draftsRef.current.set(replacement.id, d);
+      setEntries((prev) => prev.map((e) => (e.id === onPlan.entry.deltaId ? replacement : e)));
+      /* THE CARD THE BANKER ALREADY SIGNED IS THE CARD THAT MOVED. Leaving the
+         old delta on the settled chip would leave it reading "removed" against
+         a manifest it is still in, which is the room telling him something
+         untrue about a decision he made. */
+      setItems((prev) =>
+        prev.map((item) =>
+          item.kind === "chips"
+            ? {
+                ...item,
+                chips: item.chips.map((c) => (c.delta?.id === onPlan.entry.deltaId ? { ...c, delta: replacement } : c)),
+              }
+            : item,
+        ),
+      );
+      setToast(replacement.badge);
+      answer({ kind: "agent", id: nextId("agent"), text: amendedPlanLine(onPlan.changed) });
+    },
+    [beat, context, elicitCtx, engine],
+  );
+
+  /**
    * A COMPLETE CREATE, PUT UP.
    *
    * One composed sentence per member, each verified before it is allowed to
@@ -1437,6 +1522,18 @@ export function Workroom({
   const landCreate = useCallback(
     async (d: Draft, mine: number): Promise<WorkroomDelta[]> => {
       const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
+
+      /* THE PLAN IS ACTED ON, NOT DUPLICATED. A line that lands on a facility
+         this session has already staged this very test on is a CORRECTION of
+         that entry, so it moves the entry rather than putting a second,
+         contradicting one beside it. Book-level duplication is different and is
+         answered below: the book is the bank's record and this room does not
+         edit it. */
+      const onPlan = planAmendmentFor(d, elicitCtx);
+      if (onPlan) {
+        await amendPlanEntry(d, onPlan, mine);
+        return [];
+      }
 
       /* THE BOOK AND THE PLAN, READ BACK BEFORE ANYTHING GOES UP. A create the
          relationship already carries is NAMED and offered rather than staged a
@@ -1459,12 +1556,25 @@ export function Workroom({
       const scoped: Draft = { ...d, scope: aware.fresh };
       const composition = compose(scoped, elicitCtx);
 
+      /* THIS ROUTE FILES SOMETHING ELSE, AND THE ROOM SAYS SO BY NAME.
+         A renewal files a maturity and a repricing; a new facility files four
+         scalars against the package anchor. Neither carries a covenant or a
+         pledge, so there is no sentence worth composing for either engine and
+         none is: the create goes on the plan as a HANDOFF, which is the honest
+         record and writes nothing anywhere. A room that gathered all of it and
+         then went quiet would be dropping the whole thing silently (rule 8). */
+      const routeSaid = routeGap(scoped.surface, context.mode);
+
       const started = Date.now();
       setThinking(true);
       const got: WorkroomDelta[] = [];
       const refused: string[] = [];
       try {
-        for (const line of composition.lines) {
+        for (const [seq, line] of composition.lines.entries()) {
+          if (routeSaid) {
+            got.push(handoffEntry(scoped, elicitCtx, line.memberId, routeSaid, seq));
+            continue;
+          }
           let result: IntentResult | null = null;
           try {
             result = await engine.parseIntent(line.say, context);
@@ -1513,6 +1623,7 @@ export function Workroom({
       const said = [
         notes.join(" "),
         composition.lede,
+        routeSaid ?? "",
         composition.gaps.length ? `Not all of that reaches the bank's systems. ${composition.gaps.join(" ")}` : "",
         refused.length ? `What I could not put up: ${refused.join("; ")}.` : "",
       ]
@@ -1531,7 +1642,7 @@ export function Workroom({
       setSuggestion(engine.suggest());
       return withGaps;
     },
-    [beat, context, elicitCtx, engine, memberLabel],
+    [amendPlanEntry, beat, context, elicitCtx, engine, memberLabel],
   );
 
   /**
@@ -1594,11 +1705,18 @@ export function Workroom({
       const scoped: Draft = { ...amend.draft, scope: aware.fresh.length ? aware.fresh : amend.draft.scope };
       const composition = compose(scoped, elicitCtx);
 
+      // A ROUTE THAT COULD NOT FILE IT CANNOT FILE THE CORRECTION EITHER. The
+      // card is still amendable; what it corrects is the handoff on the plan.
+      const routeSaid = routeGap(scoped.surface, context.mode);
       const started = Date.now();
       setThinking(true);
       const got: WorkroomDelta[] = [];
       try {
-        for (const composed of composition.lines) {
+        for (const [seq, composed] of composition.lines.entries()) {
+          if (routeSaid) {
+            got.push(handoffEntry(scoped, elicitCtx, composed.memberId, routeSaid, seq));
+            continue;
+          }
           let result: IntentResult | null = null;
           try {
             result = await engine.parseIntent(composed.say, context);
@@ -1806,7 +1924,12 @@ export function Workroom({
         if (creating && !reading) {
           const next = readInto(creating, line, elicitCtx);
           const moved =
-            JSON.stringify(next.slots) !== JSON.stringify(creating.slots) || next.scope.join("|") !== creating.scope.join("|");
+            JSON.stringify(next.slots) !== JSON.stringify(creating.slots) ||
+            next.scope.join("|") !== creating.scope.join("|") ||
+            // NAMING A SECOND TEST THE CATALOG DOES NOT CARRY IS STILL AN
+            // ANSWER. It settles no slot, and dropping the create over it would
+            // make the room look like it stopped listening.
+            next.notInCatalog !== creating.notInCatalog;
           if (moved) {
             await askCreate(next, mine);
             return;
