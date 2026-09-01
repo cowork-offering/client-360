@@ -301,6 +301,24 @@ describe("the governance brief", () => {
     expect(document.body.querySelector(".rl-brief .wk-bub")).toBeNull();
   });
 
+  it("lands EXACTLY ONCE on a room that opened already bound", async () => {
+    // The lookup used to land a brief of its own beside the one the bind effect
+    // owns, which put two identical scope statements in the thread.
+    open({ route: "covenant" });
+    await settle();
+    expect(document.body.querySelectorAll(".rl-brief")).toHaveLength(1);
+  });
+
+  it("greets a legal name that already ends in a period without doubling it", async () => {
+    open({ route: "annual" });
+    await settle();
+    // The fixture's relationship is "Hartwell Precision Manufacturing LLC"; the
+    // rule is the general one, so assert the shape rather than the fixture.
+    const greeting = document.body.querySelector(".wk-greet")!.textContent ?? "";
+    expect(greeting.trim()).not.toMatch(/\.\.$/);
+    expect(greeting.trim()).toMatch(/\.$/);
+  });
+
   it("numbers the ritual, above the question rather than inside it", async () => {
     const { room } = open({ route: "annual" });
     await settle();
@@ -458,7 +476,9 @@ describe("the plan, the token and the dossier", () => {
     expect(dossier.textContent).toContain("The review was created and verified.");
     // The halo is the filing's only light, and it is on.
     expect(dossier.classList.contains("wk-lit")).toBe(true);
-    expect(room.querySelector(".wk-tokline")!.textContent).toContain("Single-use decision token redeemed");
+    expect(room.querySelector(".wk-tokline")!.textContent).toBe(
+      "✓Single-use decision token redeemed. Filed against Hartwell Precision Manufacturing LLC.",
+    );
     // The review is filed, NOT approved, and the room says so.
     expect(room.querySelector(".wk-handoff")!.textContent).toContain("filed, not approved");
     expect(room.querySelector(".wk-flowcard")).toBeNull();

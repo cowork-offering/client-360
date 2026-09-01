@@ -283,7 +283,9 @@ function briefFor(ctx: RelContext): RelBrief {
   const breaches = covenants.filter((c) => classifyCovenant(c).financialBreach).length;
   const grade = ctx.bundle?.snapshot?.primaryRiskRating;
   return {
-    greeting: `Relationship Actions on ${ctx.accountName}.`,
+    // A LEGAL NAME OFTEN ENDS IN A PERIOD ("Sterling Fabrication Co."), and the
+    // greeting must not put a second one after it.
+    greeting: `Relationship Actions on ${ctx.accountName}`.replace(/\.?$/, "."),
     position: `${facilities.length} active ${facilities.length === 1 ? "facility" : "facilities"}, ${covenants.length} ${
       covenants.length === 1 ? "covenant" : "covenants"
     }${breaches ? `, ${breaches} in breach` : ""}.`,
@@ -502,11 +504,12 @@ export function RelationshipRoom({
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
     ]);
+    /* THE LOOKUP LANDS ON THE POSITION, and nothing else. The route's brief is
+       pushed by the BIND effect below, which owns it whether the route was bound
+       before the room opened or chosen inside it. Landing one here as well put
+       two identical briefs in the thread on every already-bound open. */
     const land = () => {
-      setItems((prev) => [
-        ...prev.filter((i) => i.kind !== "lookup"),
-        ...(routerRef.current?.question ? [] : [{ kind: "brief" as const, id: nextId("brief"), step: 0 }]),
-      ]);
+      setItems((prev) => prev.filter((i) => i.kind !== "lookup"));
       setAwake(true);
     };
     if (reduced) {
@@ -978,7 +981,7 @@ export function RelationshipRoom({
         title: REL_FLOWS[route].word,
         rows: dossierRowsFor(route, ctx, answers, result),
         footer: dossierFooter(result),
-        tokenNote: `Single-use decision token redeemed. ${REL_FLOWS[route].filedWord.toLowerCase()} against ${ctx.accountName}.`,
+        tokenNote: `Single-use decision token redeemed. ${REL_FLOWS[route].filedWord} against ${ctx.accountName}.`,
         handoff: dossierHandoff(route, result),
       };
       setPhase("filed");
