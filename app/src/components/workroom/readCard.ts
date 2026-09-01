@@ -58,6 +58,11 @@ export interface ReadSource {
   accountName: string;
   /** The package the room is anchored on. Null narrows nothing. */
   productPackageId: string | null;
+  /** `meta.generatedAt` — the artifact's own snapshot instant, and the ONLY
+   *  clock any derivation in the room layer is allowed to read. Absent where
+   *  the caller has no data behind it, and every time-based tier then yields
+   *  nothing rather than reaching `Date.now()`. */
+  generatedAt?: string;
 }
 
 /* ------------------------------------------------------------------ helpers */

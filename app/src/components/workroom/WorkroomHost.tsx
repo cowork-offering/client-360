@@ -107,8 +107,22 @@ export function WorkroomHost() {
       bundle,
       accountName: context?.accountName ?? sessionAccountName ?? "this relationship",
       productPackageId: context?.productPackageId ?? null,
+      // The artifact's own snapshot instant. Every time-based tier in the room
+      // layer reads this and nothing reaches a clock.
+      generatedAt: data.meta?.generatedAt,
     }),
-    [bundle, context?.accountName, context?.productPackageId, sessionAccountName],
+    [bundle, context?.accountName, context?.productPackageId, data.meta?.generatedAt, sessionAccountName],
+  );
+
+  /* THE MAIL TIER HANDS OFF TO THE DESK. The workroom does not read a thread;
+     it opens the assist with the question already typed, which is the surface
+     that can actually answer it. */
+  const openAssist = useCallback(
+    (prompt: string) => {
+      dispatch({ type: "SET_DRAFT", draft: prompt });
+      dispatch({ type: "SET_PANEL", panel: "chat" });
+    },
+    [dispatch],
   );
 
   const close = useCallback(() => {
@@ -147,6 +161,7 @@ export function WorkroomHost() {
       router={router}
       eligibleMemberIds={eligibleMemberIds}
       reads={reads}
+      onOpenAssist={openAssist}
       /* THE GLASS LIFTS, AND THE WASH SETTLES (rule 62). Every route out of the
          room — the close button, Escape, the scrim — comes through this one
          prop, so arming the wash here catches all three. */

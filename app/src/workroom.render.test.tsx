@@ -1532,3 +1532,107 @@ describe("the strip refuses what the engine would refuse", () => {
     expect(rows.filter((r) => !r.disabled)[0].textContent).toContain("Revolver");
   });
 });
+
+describe("the two quiet tiers under the conversation", () => {
+  const data = live as unknown as C360Data;
+  const accountId = "001bb00001I7FPNAA3";
+
+  function openWithReads(reads: Parameters<typeof Workroom>[0]["reads"]) {
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    shut();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={reads}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  /** The same bundle with one covenant test pushed into the past. */
+  function overdueBundle() {
+    const bundle = data.borrowers![accountId];
+    const covenants = (bundle.covenants?.covenants ?? []).map((c, i) =>
+      i === 0 ? { ...c, covenantType: "DSC", nextEvaluationDate: "2026-07-05", latestComplianceStatus: "Exception" } : c,
+    );
+    return { ...bundle, covenants: { ...bundle.covenants, covenants } };
+  }
+
+  it("says an overdue test out loud, which the opener deliberately does not", async () => {
+    const bundle = overdueBundle();
+    const room = openWithReads({
+      bundle,
+      accountName: bundle.snapshot!.name!,
+      productPackageId: null,
+      generatedAt: data.meta!.generatedAt,
+    });
+    await settle();
+    const tip = room.querySelector(".wk-tips .wk-tip")!;
+    expect(tip).toBeTruthy();
+    expect(tip.querySelector(".wk-tip-l")!.textContent).toMatch(/^The DSC test is \d+ days overdue\.$/);
+  });
+
+  it("renders NOTHING when nothing is overdue and no channel answered", async () => {
+    const bundle = data.borrowers![accountId];
+    const room = openWithReads({
+      bundle,
+      accountName: bundle.snapshot!.name!,
+      productPackageId: null,
+      generatedAt: data.meta!.generatedAt,
+    });
+    await settle();
+    // No placeholder, no spinner, no empty frame: the block is simply absent.
+    expect(room.querySelector(".wk-tips")).toBeNull();
+  });
+
+  it("waits for the route: law 3 owns the opening view", async () => {
+    const bundle = overdueBundle();
+    shut();
+    const context = workroomContextFor({
+      mode: "modify",
+      data,
+      bundle,
+      accountId,
+      accountName: bundle.snapshot!.name!,
+    });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={{
+            bundle,
+            accountName: bundle.snapshot!.name!,
+            productPackageId: null,
+            generatedAt: data.meta!.generatedAt,
+          }}
+          router={{ question: neutralAsk(), say: null, onBind: () => {}, onRestart: () => {} }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    const room = document.querySelector<HTMLElement>(".wk-room")!;
+    await settle();
+    // A tip beside three chips answering a different question is the fourth
+    // chip rule 30 bans, and the opening view is still under sixty words.
+    expect(room.querySelector(".wk-tips")).toBeNull();
+    expect(visibleWords(room).length).toBeLessThan(60);
+  });
+});

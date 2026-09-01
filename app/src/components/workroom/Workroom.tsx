@@ -37,6 +37,7 @@ import {
 } from "./route";
 import { bankerly, isQuestion, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
 import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "./readCard";
+import { overdueCovenantTip, useMailTip } from "./tips";
 import "../../styles/workroom.css";
 
 /* =============================================================================
@@ -497,6 +498,7 @@ export function Workroom({
   router,
   eligibleMemberIds,
   reads,
+  onOpenAssist,
   onClose,
   onAnchor,
   onExecuted,
@@ -525,6 +527,15 @@ export function Workroom({
    * the shell engines, and is still better than a refusal about members.
    */
   reads?: ReadSource;
+  /**
+   * OPEN THE ASSIST, WITH THE QUESTION ALREADY IN IT.
+   *
+   * The mail tier's chip hands the correspondence to the desk rather than
+   * pretending the workroom can read a thread. Absent for callers with no app
+   * provider above them, and the chip then does not render: a control that
+   * cannot do its one thing has no business being on screen.
+   */
+  onOpenAssist?: (prompt: string) => void;
   /** Present only for the UNIFIED entry, where the room was opened on a
    *  relationship rather than on a route. Absent for every caller that already
    *  named a mode — the command palette, a deep link, a render test — and the
@@ -554,6 +565,16 @@ export function Workroom({
     (m: PackageMember) => (eligibleMemberIds ? eligibleMemberIds.has(m.id) : !m.proposed),
     [eligibleMemberIds],
   );
+
+  /* ---- THE TWO QUIET TIERS (founder, 2026-09-01). The overdue test is
+          derived from the covenant rows the room already holds; the mail is
+          asked of the channel once, in the background, and stays null through
+          every failure. Both render NOTHING where there is nothing to say. */
+  const overdue = useMemo(
+    () => overdueCovenantTip({ bundle: reads?.bundle ?? null, today: reads?.generatedAt ?? "" }),
+    [reads?.bundle, reads?.generatedAt],
+  );
+  const mail = useMailTip({ accountName: context.accountName, today: reads?.generatedAt ?? "" });
 
   /** THE ROUTE IS STILL OPEN. Non-null while the room is asking which of the
    *  three this is; the answer clears it and nothing puts it back. */
@@ -1659,6 +1680,41 @@ export function Workroom({
                   </div>
                 )}
               </section>
+
+              {/* THE TWO QUIET TIERS (founder, 2026-09-01), under the
+                  conversation and above the offer.
+
+                  WHAT THE DEAL ALREADY SAYS leads: an overdue covenant test is
+                  a fact the room was holding and not saying, because the
+                  opener's own tier deliberately leads on what is coming rather
+                  than on what was missed. The mail is the second voice, and it
+                  is silent unless the channel actually answered with something.
+
+                  BOTH WAIT FOR THE ROUTE. Law 3 governs the opening view and
+                  the routing question owns it; a tip beside three chips
+                  answering a different question is the fourth chip rule 30
+                  bans. They arrive the moment the room knows which room it is,
+                  which is also when they are of any use. */}
+              {awake && !ask && openGates === 0 && phase === "work" && (overdue || (mail && onOpenAssist)) && (
+                <div className="wk-tips">
+                  {overdue && (
+                    <div className="wk-tip">
+                      <span className="wk-tip-l">{overdue.line}</span>
+                      <button type="button" className="wk-tip-b" onClick={() => void say(overdue.chip.say, overdue.chip.label)}>
+                        {overdue.chip.label}
+                      </button>
+                    </div>
+                  )}
+                  {mail && onOpenAssist && (
+                    <div className="wk-tip">
+                      <span className="wk-tip-l">{mail.line}</span>
+                      <button type="button" className="wk-tip-b" onClick={() => onOpenAssist(mail.chip.say)}>
+                        {mail.chip.label}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* THE OFFER SLEEPS WITH THE COMPOSER (rule 30), and it is gone
                   entirely while a gate is open: a next move offered beside an
