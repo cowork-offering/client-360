@@ -1,0 +1,96 @@
+# The sample channel: the latency ladder - build spec (founder direction 2026-09-01)
+
+STATUS: planned, SEPARATE worktree AFTER the create-grammar phase 1 merges. Do NOT start until
+phase 1 is on main (both touch app/src/channel/brainLane.ts). This spec is the contract.
+
+## Why this exists
+
+The recorded decision (handoff line 93) is that the workroom brain runs on the USER's session
+Claude - their identity, their connectors, zero infra - not the IDB Gateway (that is Boom's door).
+The code drifted to the gateway's Bedrock endpoint. The correct door is the artifact runtime's
+`sample` capability: ask Claude on the viewer's own account, with a tool loop
+(`options.tools` = page functions Claude may call). That tool loop is what lets the room answer
+"can you check the latest ratios" - the room already holds Customer 360, Boom (via gateway) and
+M365 connectors.
+
+## The founder's constraint, which governs the whole design
+
+"The brain should know when to make a call-out and when to leverage what is on store, otherwise
+the latency is horrendous."
+
+`sample` latency, from the runtime contract: `quick` tier ~1-2s per round; `default`/`complex`
+5-60s to first text, up to 2 minutes for a long structured prompt; a call that USES TOOLS is
+several rounds back to back, commonly 30-90s. A tool call-out is not a lookup, it is another whole
+round. So the design must push work DOWN the ladder and reserve the model, and above all reserve
+tool call-outs, for where nothing cheaper can answer.
+
+## THE LATENCY LADDER (the core architecture)
+
+Every banker line is answered at the CHEAPEST rung that can answer it. The router decides the rung
+BEFORE the model is ever reached.
+
+| Rung | What answers | Latency | Examples |
+|---|---|---|---|
+| 0 - deterministic parse | the parser fast lane, provably-clean phrasings | instant, no model | "increase the construction loan to 14M" |
+| 1 - local read | the bundle already in the room answers the read | instant, no model | "what covenants do we carry", "who are the guarantors" |
+| 2 - model, envelope-only | model reasons over what the envelope ALREADY carries; ZERO tools | one round (1-2s quick, 5-60s default) | "bump the big revolver by five million", "which covenant has the least cushion" |
+| 3 - model + tool call-out | the fact is genuinely NOT loaded; model calls a page function | several rounds, 30-90s+ | "what is the CURRENT DSCR on the latest Boom spread", "is there a newer valuation than what I see" |
+
+Rungs 0 and 1 already exist and handle the large majority of demo lines. The `sample` switch only
+changes rung 2 (transport moves from gateway to sample) and ADDS rung 3 (the tool loop). The win is
+that rung 3 is RARE by construction.
+
+## The rule that keeps rung 3 rare
+
+1. **The envelope is the model's working memory. Answer from it by default.** The prompt states,
+   explicitly and near the top: you already hold this relationship's covenants with thresholds and
+   frequencies, its collateral with advance rates and lendable, its borrowers and roles, its
+   exposure, its pricing, the staged plan and the last six turns. Answer from these. Do NOT call a
+   tool for anything already here.
+2. **Name what a tool is FOR, and what it is NOT for.** Each exposed tool's description says exactly
+   when to reach for it and tells the model the cheaper source it should prefer. A Boom-ratios tool
+   reads "current market ratios; use ONLY if the banker asks for figures more recent than the
+   pricing already in your context - otherwise answer from that pricing." A covenant-catalog tool
+   reads "the org's full list of covenant TYPES available to create; use ONLY when proposing a
+   covenant whose type is not among the families this relationship already carries."
+3. **Bias against tool use, because models over-call.** The prompt says a tool call costs the banker
+   30 to 90 seconds and is justified only when the answer is not in context and the banker asked for
+   something current or something the book does not carry. When in doubt, answer from the envelope
+   and say what it is based on.
+4. **Expose FEW tools, each narrow.** A short tool list the model can reason about, not the whole
+   connector surface. Start with two: current Boom ratios, and the covenant-type catalog. Add only
+   on evidence a line needs it.
+5. **`quick` tier for restatement, `default` only where judgment is needed.** A fuzzy line that just
+   needs resolving into a proven phrasing is a `quick` call. A genuine credit-judgment question
+   ("which covenant has the least cushion, and why") earns `default`. The router picks the tier.
+6. **Warm the wait honestly.** Thinking pulse from send to first token; a Stop on anything that uses
+   tools. The banker never stares at a frozen card.
+
+## What we must MEASURE before committing (the gate)
+
+The founder decided: switch to sample, but PROVE LATENCY FIRST. In a real panel, on the booth
+network profile:
+- rung 2 `quick` first-token time and full-answer time, ten lines, median and worst;
+- rung 2 `default` same;
+- rung 3 end-to-end for a real "check the latest ratios" line;
+- the consent prompt cost on the first call of a view (it blocks the first answer);
+- how often the model calls a tool when it should NOT have (the over-call rate) - this is the
+  number that decides whether the discipline above actually holds.
+
+If rung 2 `quick` lands a card in a couple of seconds and rung 3 is rare, the booth story holds:
+most lines instant (rungs 0-1), the occasional fuzzy line a short pause, and "let me check that"
+an honest 30-60s with a visible reason. If `quick` is slow or the over-call rate is high, we do NOT
+ship sample for the booth - we keep the gateway for rungs 2 and reconsider rung 3 after. The
+numbers decide, not the aspiration.
+
+## Constraints
+
+- Engine fence untouched; this is the channel and the router, both outside app/src/workroom/.
+- No new write arm. Tools exposed to the model are READ-ONLY call-outs; the write path is unchanged
+  (propose, restate through proven phrasings, human confirm, token, execute).
+- Degrade parity: no sample (declined consent, null capability, rate limit, timeout) falls back to
+  today's behavior - the deterministic lanes and local reads still answer, and a fuzzy line gets the
+  neutral clarify. The room must be fully usable with the model entirely absent.
+- The doctrine is inlined into the prompt (done in phase 1) regardless of channel - sample has no
+  page-controlled system prompt either, so grounding never depends on a skill load.
+- No em dashes in UI copy. Commit trailers. No git add -A.
