@@ -67,6 +67,38 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3 5.4h12M3 9h12M3 12.6h7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </>
   ),
+  /* THE ORG, AS A SHAPE. A generic cloud silhouette drawn in this file's own
+     hand — one closed outline, three lobes over a flat base. It is deliberately
+     NOT the Salesforce trademark: the arc's fourth satellite means "the record
+     lives over there", and a vendor's registered mark in the corner of a bank's
+     cockpit is a licensing question rather than an icon decision. */
+  cloud: (
+    <>
+      <path
+        d="M5.4 13.4h7.5a3.05 3.05 0 0 0 .5-6 4.3 4.3 0 0 0-7.9-1.2 3.65 3.65 0 0 0-.1 7.2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </>
+  ),
+  /* The two records the cloud branches to, in the SAME hand. An Account is the
+     client's own building; a Product Package is the layered container the
+     workroom's type-icon language already draws it as, redrawn at 18. */
+  building: (
+    <>
+      <path d="M3.8 14.6V4.2A1.2 1.2 0 0 1 5 3h3.8a1.2 1.2 0 0 1 1.2 1.2v10.4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M10 8.2h3.2a1.2 1.2 0 0 1 1.2 1.2v5.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M2.4 14.6h13.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </>
+  ),
+  package: (
+    <>
+      <path d="M9 2 15.6 5.2 9 8.4 2.4 5.2Z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M2.4 8.6 9 11.8 15.6 8.6M2.4 11.9 9 15.1 15.6 11.9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
 };
 
 export function ActionGlyph({ name }: { name: IconName }) {

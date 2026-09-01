@@ -66,7 +66,13 @@ export type ActionIcon =
   | "rating"
   | "facility"
   | "person"
-  | "service";
+  | "service"
+  /* The arc's fourth satellite and the two org records it branches to. No
+     registry ACTION wears these — they are doors to a record rather than
+     writes — but the icon language is one union, so they live here (rule 35). */
+  | "cloud"
+  | "building"
+  | "package";
 
 /* ----------------------------------------------------------------- helpers */
 

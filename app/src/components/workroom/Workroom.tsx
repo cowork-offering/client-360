@@ -2586,9 +2586,32 @@ function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
   return (
     <div className={`wk-rescard ${lit ? "wk-lit" : ""}`}>
       <span className="aura" aria-hidden="true" />
+      {/* THE PACKAGE REFERENCE IS THE LINK (founder, 2026-09-01). The card used
+          to name the package at the top and then offer an "Open the package in
+          nCino" affordance on its last line — two mentions of one record, and
+          the affordance was the louder of them. The NAME carries the href now:
+          the banker reads what was filed against and opens it in the same
+          gesture, and the last line goes back to being the org's own
+          verification claim and nothing else.
+
+          NO HOST, NO LINK. `packageHref` is null where the view carries no
+          `meta.instanceUrl`, and the header stays plain text — a guessed My
+          Domain is worse than no link at all (A29). */}
       <div className="rc-h" style={{ animationDelay: `${header}ms` }}>
         <TypeIcon kind="package" />
-        <b>{dossier.packageName}</b>
+        {dossier.packageHref ? (
+          <a
+            className="wk-reslink"
+            href={dossier.packageHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-deeplink="workroom-package"
+          >
+            {dossier.packageName}
+          </a>
+        ) : (
+          <b>{dossier.packageName}</b>
+        )}
       </div>
       <div className="rc-line" style={{ animationDelay: `${firstLine}ms` }} />
       {rows.map((row) => (
@@ -2604,25 +2627,6 @@ function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
           ✓
         </span>
         {dossier.footer}
-        {/* THE RECORD IS ONE CLICK AWAY. A banker who just filed a change wants
-            to look at what it landed on, and the room was making them go find
-            it. Quiet by construction: it is a dotted underline inside the
-            card's own last line, not a button competing with the halo.
-
-            NO HOST, NO LINK. `packageHref` is null where the view carries no
-            `meta.instanceUrl`, and nothing renders — a guessed My Domain is
-            worse than no link at all (A29). */}
-        {dossier.packageHref && (
-          <a
-            className="wk-reslink"
-            href={dossier.packageHref}
-            target="_blank"
-            rel="noreferrer"
-            data-deeplink="workroom-package"
-          >
-            Open the package in nCino
-          </a>
-        )}
       </div>
     </div>
   );

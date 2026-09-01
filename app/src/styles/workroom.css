@@ -1653,21 +1653,24 @@ body.wk-open #root {
   font-size: 11.5px;
   color: var(--ink-faint);
 }
-/* THE RECORD, ONE CLICK AWAY, AND QUIET. Ink-quiet by construction: it sits
-   inside the card's own last line, borrows that line's size, and carries a
-   dotted underline rather than a fill. It must never read as a second button
-   beside the halo — the filing is the event, the link is an affordance. */
-.wk-rescard .wk-reslink {
-  margin-left: auto;
-  color: var(--ink-muted);
+/* THE PACKAGE REFERENCE IS THE LINK (founder, 2026-09-01). The card names the
+   package it filed against in its header, and that NAME is the door to the
+   record — the separate "Open the package in nCino" line on the footer is gone,
+   because it was a second mention of one record and the louder of the two.
+
+   It keeps the header's own ink and weight: a link that restyled the headline
+   would be an affordance wearing the title's clothes. A dotted underline in
+   ink-3 is the whole tell, and it firms up on hover. */
+.wk-rescard .rc-h .wk-reslink {
+  color: var(--ink);
+  font-weight: 600;
   text-decoration: underline;
   text-decoration-style: dotted;
-  text-underline-offset: 2px;
-  font-weight: 600;
-  white-space: nowrap;
+  text-decoration-color: var(--ink-faint);
+  text-underline-offset: 3px;
 }
-.wk-rescard .wk-reslink:hover {
-  color: var(--ink);
+.wk-rescard .rc-h .wk-reslink:hover {
+  text-decoration-color: var(--ink);
 }
 .wk-rescard .rc-h,
 .wk-rescard .rc-r,

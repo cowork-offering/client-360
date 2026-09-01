@@ -10,6 +10,8 @@ import { BrandGlyph } from "./brand";
 import { Portal } from "./Portal";
 import { isTopmost, pushModal } from "./modalStack";
 import { resolveBundle, type ActionIcon as IconName } from "../actions/registry";
+import { packageRecords } from "../actions/schemas";
+import { packageDeepLink, recordDeepLink } from "./DeepLink";
 import { openFacilityRoom } from "./workroom/roomSession";
 import { openRelationshipRoom } from "./relationship/relSession";
 import { relOpeningForAccount } from "./relationship/RelationshipRoom";
@@ -24,18 +26,23 @@ import "../styles/chat.css";
    The mark in the corner is the app's ONE floating control. On the landing it
    opens the assist directly, because credit actions make no sense without a
    client (rule 50). On a client it fans a quarter-circle of FOUR satellites —
-   the assist at the top, then the three credit actions swinging down to the
-   horizontal (rule 49) — narrated by ONE anchored chip beneath the mark (rule
-   54), over a barely-there radial scrim so the glass discs read against a busy
-   content page rather than dissolving into it (founder, 2026-09-01). Opening
-   the assist makes the mark YIELD entirely; the panel takes its exact spot,
-   minimize folds it into a glass pill holding that same spot, and close brings
-   the mark back (rule 56).
+   the assist at the top, the two credit rooms between, and the Salesforce cloud
+   at the horizontal (rule 49) — narrated by ONE anchored chip beneath the mark
+   (rule 54), over a barely-there radial scrim so the glass discs read against a
+   busy content page rather than dissolving into it (founder, 2026-09-01).
+   Opening the assist makes the mark YIELD entirely; the panel takes its exact
+   spot, minimize folds it into a glass pill holding that same spot, and close
+   brings the mark back (rule 56).
 
-   FOUR, NOT FIVE (founder, 2026-08-31). Modification and Renewal collapsed into
-   ONE "Facility Actions" satellite: they are the same room now, and which of
-   the three routes a session takes is the room's own first question rather than
-   a decision the arc makes on the banker's behalf.
+   THREE ROUTE, ONE BRANCHES (founder, 2026-09-01). Modification and Renewal
+   collapsed into ONE "Facility Actions" satellite on 2026-08-31 — they are the
+   same room now, and which route a session takes is the room's own first
+   question rather than a decision the arc makes on the banker's behalf. The
+   seat that freed up went to the CLOUD, which is a door to the org rather than
+   a room: pressing it fans a SECOND TIER of two smaller bubbles, the client's
+   Account page and their latest Product Package, each opening the real record
+   in a new tab. It is the reason the hero no longer carries a text link to the
+   same place: the cloud is the door now.
 
    ONE HANDLER, ONE GATE (HANDOVER §4, trap 5). Every satellite routes through
    `runArcAction`, which resolves the client ONCE and refuses to act without
@@ -44,7 +51,7 @@ import "../styles/chat.css";
    No satellite here has an onClick of its own.
    ============================================================================= */
 
-type ArcAct = "chat" | "facility" | "relationship";
+type ArcAct = "chat" | "facility" | "relationship" | "salesforce";
 
 /** The arc: four satellites on a 96px radius, evenly spread across the quarter,
  *  staggered 28ms apart by index.
@@ -53,8 +60,8 @@ type ArcAct = "chat" | "facility" | "relationship";
  *  offsets on r=118, which put the last satellite two thirds of the way round a
  *  sweep nothing finished — distant from the mark and lopsided in the corner.
  *  The radius comes back to rule 49's original 96px and the four RESPREAD over
- *  the full quarter at 30° steps off vertical: chat at the top, covenant review
- *  at the horizontal, the two credit actions evenly between them. Neighbouring
+ *  the full quarter at 30° steps off vertical: chat at the top, the cloud at
+ *  the horizontal, the two credit rooms evenly between them. Neighbouring
  *  centres land 2·96·sin(15°) = 49.7px apart, which holds the ~46px rhythm the
  *  five-arc read at while making the arc symmetric about its own 45° axis.
  *
@@ -62,7 +69,11 @@ type ArcAct = "chat" | "facility" | "relationship";
  *  paint at: (0,-96) (-48,-83) (-83,-48) (-96,0). They are written out rather
  *  than computed for the same reason the dummy's were — the arc is a set of
  *  approved positions, and a formula in the source invites the next person to
- *  re-tune the sweep instead of asking the founder. */
+ *  re-tune the sweep instead of asking the founder.
+ *
+ *  THE FOURTH SEAT IS THE CLOUD (founder, 2026-09-01). The geometry above was
+ *  minted for four and is unchanged by what sits in the last one; the arc keeps
+ *  its 30° steps and its 49.7px neighbour rhythm. */
 const ARC: {
   act: ArcAct;
   /** The narrator chip's word for it. One or two words so the centred chip can
@@ -79,12 +90,42 @@ const ARC: {
   domId?: string;
 }[] = [
   { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -96 },
-  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -68, ty: -68, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
-  // Rule 49's rhythm, re-spread for three: 45-degree steps on r=96, so the two
-  // rooms and the chat share the quarter evenly. Annual and covenant reviews
-  // moved INTO the Relationship room (founder consolidation, 2026-09-01).
-  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -96, ty: 0, icon: "person", domId: "actRelationship" },
+  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -48, ty: -83, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
+  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -83, ty: -48, icon: "person", domId: "actRelationship" },
+  // THE CLOUD AT THE HORIZONTAL (founder, 2026-09-01). It is not a fourth room:
+  // it is the door to the org, and it opens a second tier rather than routing.
+  { act: "salesforce", label: "Salesforce", aria: "Salesforce records", tx: -96, ty: 0, icon: "cloud", domId: "actSalesforce" },
 ];
+
+/** THE SECOND TIER — the cloud's own two doors.
+ *
+ *  A BRANCH, NOT A THIRD ARC. The two bubbles leave the Salesforce satellite
+ *  along its OWN radial (the arc's horizontal, pointing away from the mark) and
+ *  fan 24 degrees either side of it at 44px, so the pair reads as something
+ *  growing out of that one satellite rather than as a second sweep competing
+ *  with the first. Written as absolute offsets from the mark, like the arc's,
+ *  because that is what the transform paints: (-96,0) + 44·(cos24, ∓sin24)
+ *  outward = (-136,-18) and (-136,18).
+ *
+ *  They drive the SAME anchored narrator chip the satellites do (rule 54). A
+ *  floating label on a 34px disc would be the exact thing that rule bans. */
+const SF_TIER: {
+  key: "account" | "package";
+  label: string;
+  aria: string;
+  icon: IconName;
+  tx: number;
+  ty: number;
+  domId: string;
+}[] = [
+  { key: "account", label: "Account page", aria: "Open the Account page in Salesforce", icon: "building", tx: -136, ty: -18, domId: "sfAccount" },
+  { key: "package", label: "Latest package", aria: "Open the latest Product Package in Salesforce", icon: "package", tx: -136, ty: 18, domId: "sfPackage" },
+];
+
+/** The honest reason a tier bubble is dead. It is a title, never a toast: the
+ *  bubble is visible so the banker knows the door exists, and disabled so they
+ *  never get a wrong record or a login page for an org they are not in (A29). */
+const SF_UNRESOLVED = "Not connected to the org";
 
 const ARC_LABEL_AT_REST = "Client actions";
 
@@ -161,6 +202,91 @@ function ArcSatellite({
         </svg>
       )}
     </button>
+  );
+}
+
+/** One second-tier bubble: an org record, one tab away.
+ *
+ *  IT NARRATES THE SAME WAY ITS PARENT DOES, and for the same reason — the raw
+ *  `mouseenter` React never listens for is what the acceptance probe dispatches,
+ *  and the anchored chip is the only thing that tells a banker what a 34px disc
+ *  opens.
+ *
+ *  NO LISTENER OF ITS OWN (trap 5). The href is resolved ONCE, upstream, behind
+ *  the same client gate every satellite passes through; this renders what it is
+ *  handed. Where the resolver came back null — no `meta.instanceUrl`, or no
+ *  package id on the bundle — it renders as a DISABLED span rather than a link,
+ *  because a guessed host is worse than no door at all (A29). `onPick` is the
+ *  arc's shared fold-the-corner handler, not a second route into the record. */
+function SfBubble({
+  spec,
+  index,
+  open,
+  href,
+  onNarrate,
+  onPick,
+}: {
+  spec: (typeof SF_TIER)[number];
+  index: number;
+  open: boolean;
+  href: string | null;
+  onNarrate: (label: string | null) => void;
+  onPick: () => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  const label = spec.label;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const enter = () => onNarrate(label);
+    const leave = () => onNarrate(null);
+    el.addEventListener("mouseenter", enter);
+    el.addEventListener("mouseleave", leave);
+    return () => {
+      el.removeEventListener("mouseenter", enter);
+      el.removeEventListener("mouseleave", leave);
+    };
+  }, [label, onNarrate]);
+
+  const style = { "--tx": `${spec.tx}px`, "--ty": `${spec.ty}px`, "--i": index } as CSSProperties;
+  const glyph = <ActionGlyph name={spec.icon} />;
+
+  if (!href) {
+    return (
+      <span
+        ref={ref as React.RefObject<HTMLSpanElement>}
+        id={spec.domId}
+        className="sfbtn eg-glass eg-glass-chip is-dead"
+        data-sf={spec.key}
+        role="link"
+        aria-label={`${spec.label}, ${SF_UNRESOLVED.toLowerCase()}`}
+        aria-disabled="true"
+        title={SF_UNRESOLVED}
+        style={style}
+      >
+        {glyph}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      ref={ref as React.RefObject<HTMLAnchorElement>}
+      id={spec.domId}
+      className="sfbtn eg-glass eg-glass-chip"
+      data-sf={spec.key}
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={spec.aria}
+      tabIndex={open ? 0 : -1}
+      aria-hidden={open ? undefined : true}
+      style={style}
+      onClick={onPick}
+    >
+      {glyph}
+    </a>
   );
 }
 
@@ -291,6 +417,9 @@ export function ChatFab() {
   const serverCount = useServerMessageCount();
 
   const [arcOpen, setArcOpen] = useState(false);
+  /** The cloud's second tier. It is a state of the OPEN arc, never a surface of
+   *  its own: folding the arc folds this with it, always. */
+  const [tierOpen, setTierOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   /** The staged-action ticket a satellite opened, if any. Held in a module
    *  store so the arc's shared handler and every other caller reach it the same
@@ -318,18 +447,20 @@ export function ChatFab() {
     if (open && state.seenServerCount !== serverCount) dispatch({ type: "SET_SEEN", count: serverCount });
   }, [open, serverCount, state.seenServerCount, dispatch]);
 
-  // The arc belongs to the client it was fanned on. Leaving takes it with you.
-  useEffect(() => {
-    if (!onClient) setArcOpen(false);
-  }, [onClient]);
-
-  // Folding the arc also puts the narrator back to rest. Clicking a satellite
-  // closes the arc without a mouseleave ever firing, so without this the chip
-  // would still be reading the last thing you touched when it next opens.
+  // Folding the arc also puts the narrator back to rest, and takes the cloud's
+  // second tier down with it. Clicking a satellite closes the arc without a
+  // mouseleave ever firing, so without this the chip would still be reading the
+  // last thing you touched when it next opens.
   const closeArc = useCallback(() => {
     setArcOpen(false);
+    setTierOpen(false);
     setHoverLabel(null);
   }, []);
+
+  // The arc belongs to the client it was fanned on. Leaving takes it with you.
+  useEffect(() => {
+    if (!onClient) closeArc();
+  }, [onClient, closeArc]);
 
   // Outside click and Escape collapse the arc, exactly as the dummy does. The
   // listener is always live and asks whether the click landed inside the mark's
@@ -378,12 +509,26 @@ export function ChatFab() {
    */
   const runArcAction = useCallback(
     (act: ArcAct) => {
+      const accountId = state.view === "account" ? state.accountId : null;
+
+      /* THE CLOUD BRANCHES, IT DOES NOT ROUTE (founder, 2026-09-01). It is the
+         one satellite that leaves the corner open behind it: pressing it fans
+         the second tier, pressing it again folds it. The gate still applies —
+         the records it offers belong to a client, and there is no tier without
+         one — which is why this sits INSIDE the shared handler rather than on
+         the button, where a second listener would be trap 5 all over again. */
+      if (act === "salesforce") {
+        if (!accountId) return; /* the gate */
+        setTierOpen((v) => !v);
+        setHoverLabel(null);
+        return;
+      }
+
       closeArc();
       if (act === "chat") {
         openAssist();
         return;
       }
-      const accountId = state.view === "account" ? state.accountId : null;
       if (!accountId) return; /* the gate */
       const accountName =
         data.portfolio.accounts.find((a) => a.accountId === accountId)?.name ??
@@ -427,6 +572,29 @@ export function ChatFab() {
     [closeArc, openAssist, state.view, state.accountId, data],
   );
 
+  /**
+   * THE TIER'S TWO HREFS, RESOLVED ONCE, HERE.
+   *
+   * Same doctrine the hero and the dossier have always followed: the org's
+   * Lightning host is `meta.instanceUrl` at RUNTIME and is never hardcoded,
+   * never rebuilt from an org id, never guessed at a My Domain (A29). The
+   * package is the one the ROOMS anchor on — `packageRecords` puts the
+   * relationship's own package first — so the cloud and the workroom can never
+   * disagree about which deal "the package" means.
+   *
+   * Either href comes back null when the piece it needs is missing, and the
+   * bubble renders disabled rather than wrong.
+   */
+  const sfHrefs = useMemo(() => {
+    const accountId = state.view === "account" ? state.accountId : null;
+    const instanceUrl = data.meta?.instanceUrl;
+    const packageId = packageRecords(resolveBundle(data, accountId))[0]?.id;
+    return {
+      account: recordDeepLink(instanceUrl, "Account", accountId ?? undefined),
+      package: packageDeepLink(instanceUrl, packageId),
+    };
+  }, [data, state.view, state.accountId]);
+
   const tabLabel =
     state.view === "account" ? (ACCOUNT_TABS.find((t) => t.id === state.tab)?.label ?? null) : "Worklist";
   const subtitle = `${account ? account.name : "Whole book"}${tabLabel ? ` · ${tabLabel}` : ""}`;
@@ -443,6 +611,7 @@ export function ChatFab() {
 
   let fabWrapClass = "fabwrap";
   if (arcOpen) fabWrapClass += " open";
+  if (arcOpen && tierOpen) fabWrapClass += " tier";
   if (open) fabWrapClass += " tucked";
 
   return (
@@ -498,6 +667,25 @@ export function ChatFab() {
               />
             ))}
 
+          {/* The cloud's branch. Mounted with the corner exactly as the
+              satellites are, never with the tier state, so the fan is a
+              TRANSITION out of the mark's own spot rather than a mount — and
+              the global reduced-motion switch in electric-glass.css turns that
+              transition into an instant show/hide without this file needing a
+              kill-switch of its own. */}
+          {onClient &&
+            SF_TIER.map((spec, i) => (
+              <SfBubble
+                key={spec.key}
+                spec={spec}
+                index={i}
+                open={tierOpen}
+                href={sfHrefs[spec.key]}
+                onNarrate={setHoverLabel}
+                onPick={closeArc}
+              />
+            ))}
+
           <button
             ref={fabRef}
             id="fab"
@@ -505,7 +693,7 @@ export function ChatFab() {
             className="fab"
             aria-label={fabLabel}
             aria-expanded={onClient ? arcOpen : open}
-            onClick={() => (onClient ? setArcOpen((v) => !v) : openAssist())}
+            onClick={() => (onClient ? (arcOpen ? closeArc() : setArcOpen(true)) : openAssist())}
           >
             <BrandGlyph className="gt" />
             {unread > 0 && !open && (
