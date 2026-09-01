@@ -305,3 +305,9 @@ panel, the session verifying org-side. The next session's testing script:
   panel). Layer 2 = channel-gated AUTO-SYNC backlog item: poll interval while connected,
   last-refreshed stamp, changed figures odometer-roll, silent on channel-none, static host
   stays snapshot-honest. Booth moment: change the org, watch the cockpit tick over itself.
+- DYNAMIC BOOK ("open relationship XYZ" for ANY org client, founder ask 2026-09-01): in-book
+  clients already open via the deep-link path (verify chat-initiated variant in the testing
+  session). For arbitrary org accounts: session searches via Customer360SearchAccounts ->
+  Snapshot + pane reads -> hydrates a NEW client into the running cockpit through the channel
+  (extend the Sync path to load-not-just-refresh), loading choreography + name flight included.
+  Pairs with the auto-sync item; together they end the snapshot era.
