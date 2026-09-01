@@ -22,11 +22,12 @@
    new objects arrive with new names. Renaming a hook the room's own tests and
    `Peek` reach for would be churn with nothing on the other side of it.
 
-   NAMESPACE. Every class is `wk-` prefixed, except five shapes the dummy names
-   bare and this room is the only user of: `tico`, `liquidmark`, `goo`, `skel`,
-   `aura`. The cockpit ships Tailwind, which owns `.grid`, `.card` and a hundred
-   more; a bare utility name landing on one of those would style the whole app
-   from inside an overlay.
+   NAMESPACE. Every class is `wk-` prefixed, except three shapes the dummy names
+   bare and this room is the only user of: `tico`, `skel`, `aura`. The cockpit
+   ships Tailwind, which owns `.grid`, `.card` and a hundred more; a bare utility
+   name landing on one of those would style the whole app from inside an overlay.
+   (`liquidmark` and `goo` are bare too, and moved out with their component to
+   styles/liquid.css when the chat started breathing as well.)
    ============================================================================= */
 
 .wk-root {
@@ -1356,100 +1357,11 @@ body.wk-open #root {
   animation-delay: 240ms;
 }
 
-/* THE LIQUID MOMENT — a gooey halo merges and parts behind the breathing mark.
-   The metaball filter is NATIVE SVG (`#wk-goo`, six lines); the system is
-   molten only while it composes and data never melts. */
-.liquidmark {
-  position: relative;
-  width: 92px;
-  height: 92px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.liquidmark.mini {
-  width: 42px;
-  height: 42px;
-  flex: none;
-}
-.goo {
-  position: absolute;
-  inset: 0;
-  filter: url(#wk-goo);
-}
-.goo i {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 34px;
-  height: 34px;
-  margin: -17px 0 0 -17px;
-  border-radius: 50%;
-  background: var(--brand);
-  opacity: 0.14;
-}
-.liquidmark.mini .goo i {
-  width: 17px;
-  height: 17px;
-  margin: -8.5px 0 0 -8.5px;
-  opacity: 0.16;
-}
-.goo i:nth-child(1) {
-  animation: wk-g1 3.4s ease-in-out infinite;
-}
-.goo i:nth-child(2) {
-  animation: wk-g2 4.1s ease-in-out infinite;
-}
-.goo i:nth-child(3) {
-  animation: wk-g3 3.7s ease-in-out infinite;
-}
-@keyframes wk-g1 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(-18px, 10px) scale(1.15);
-  }
-}
-@keyframes wk-g2 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(0.9);
-  }
-  50% {
-    transform: translate(18px, -12px) scale(1.1);
-  }
-}
-@keyframes wk-g3 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1.05);
-  }
-  50% {
-    transform: translate(4px, 18px) scale(0.85);
-  }
-}
-.liquidmark .c360-glyph {
-  position: relative;
-  z-index: 1;
-  color: var(--brand);
-  font-size: 14px;
-  animation: wk-breathe 2.4s var(--ease-out) infinite;
-}
+/* The composing beat runs the mark a touch faster than the shared recipe: the
+   room is answering, not loading. Everything else about the liquid mark lives
+   with its component, in styles/liquid.css. */
 .wk-compose .liquidmark .c360-glyph {
   animation-duration: 1.8s;
-}
-@keyframes wk-breathe {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.97);
-  }
-  50% {
-    opacity: 0.95;
-    transform: none;
-  }
 }
 
 /* ------------------------------------------------------------- THE DOSSIER

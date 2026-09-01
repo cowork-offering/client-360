@@ -1,0 +1,105 @@
+/* =============================================================================
+   THE LIQUID MOMENT — the breathing mark, and the goo behind it.
+
+   It lives with its own component (components/workroom/Liquid.tsx) rather than
+   inside workroom.css, because the mark is no longer the room's alone: rule 46
+   sanctions it for the chat's THINKING beat too, and the assist must not have
+   to pull two thousand lines of room CSS in to breathe (founder, 2026-09-01).
+
+   Values are unchanged from the mint. Rule 65.4's recipe is the whole of it:
+   a continuous breath, never a blink, and the system is molten only while it
+   composes — data never melts.
+
+   BARE CLASS NAMES, deliberately: `liquidmark` and `goo` are two of the shapes
+   the dummy names bare, and this component is their only user.
+   ============================================================================= */
+
+.liquidmark {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.liquidmark.mini {
+  width: 42px;
+  height: 42px;
+  flex: none;
+}
+.goo {
+  position: absolute;
+  inset: 0;
+  filter: url(#wk-goo);
+}
+.goo i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: 0.14;
+}
+.liquidmark.mini .goo i {
+  width: 17px;
+  height: 17px;
+  margin: -8.5px 0 0 -8.5px;
+  opacity: 0.16;
+}
+.goo i:nth-child(1) {
+  animation: wk-g1 3.4s ease-in-out infinite;
+}
+.goo i:nth-child(2) {
+  animation: wk-g2 4.1s ease-in-out infinite;
+}
+.goo i:nth-child(3) {
+  animation: wk-g3 3.7s ease-in-out infinite;
+}
+@keyframes wk-g1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-18px, 10px) scale(1.15);
+  }
+}
+@keyframes wk-g2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(0.9);
+  }
+  50% {
+    transform: translate(18px, -12px) scale(1.1);
+  }
+}
+@keyframes wk-g3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate(4px, 18px) scale(0.85);
+  }
+}
+.liquidmark .c360-glyph {
+  position: relative;
+  z-index: 1;
+  color: var(--brand);
+  font-size: 14px;
+  animation: wk-breathe 2.4s var(--ease-out) infinite;
+}
+@keyframes wk-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 0.95;
+    transform: none;
+  }
+}
