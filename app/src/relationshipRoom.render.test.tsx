@@ -825,3 +825,53 @@ describe("the room answers its own three reads locally", () => {
     expect(room.textContent).toContain("Which review is this?");
   });
 });
+
+/* =============================================================================
+   WHAT THE HEADLESS DRIVE CAUGHT, 2026-09-02.
+
+   Two defects that only show up with a real route binding in front of them, so
+   no unit case had ever reached either. Both are the room contradicting itself.
+   ============================================================================= */
+
+describe("the line that named the review is not an answer to its first question", () => {
+  it("does NOT record it as the case subject", async () => {
+    /* THE DRIVE FILED A CASE WHOSE SUBJECT READ "raise a service request".
+       The line bound the route, was replayed into the bound room, and the
+       service route's first step is free TEXT, so it was recorded silently.
+       The banker had not chosen a subject at all. */
+    const { room } = open({ route: "service", say: "raise a service request" });
+    await settle();
+    expect(room.textContent).toContain("What did the client ask for?");
+    // NOTHING COLLECTED. The lane is empty and the first question stands.
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
+  });
+
+  it("does not turn it into a re-ask on a chips route either", async () => {
+    const { room } = open({ route: "annual", say: "annual review" });
+    await settle();
+    expect(room.textContent).toContain("Which review is this?");
+    expect(room.textContent).not.toContain("I could not read that as one of the values above");
+  });
+
+  it("still runs a line that names the route AND asks for something else", async () => {
+    const { room } = open({ route: "covenant", say: "add a covenant on the relationship" });
+    await settle();
+    // The create gap is named: the line did more than bind, so it still runs.
+    expect(room.textContent).toContain("The room can compose the covenant, and it cannot file it");
+  });
+});
+
+describe("a blocked route does not claim everything is collected", () => {
+  it("repeats the refusal rather than pointing at a chip that is not there", async () => {
+    const { room } = open({
+      route: "covenant",
+      bundle: { snapshot: { accountId: "001X", name: "Hartwell" } } as never,
+    });
+    await settle();
+    await type(room, "go on then");
+    await settle();
+    expect(room.textContent).toContain("anchored on the product package");
+    expect(room.textContent).not.toContain("The review chip below carries the next move");
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+});

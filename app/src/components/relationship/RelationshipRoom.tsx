@@ -1307,10 +1307,16 @@ export function RelationshipRoom({
       }
 
       if (!live) {
+        /* A BLOCKED ROUTE HAS NO LIVE STEP AND NOTHING COLLECTED, and telling
+           the banker "everything is collected, the review chip carries the next
+           move" over a refusal with no chip under it is the room contradicting
+           itself twice in one line. Caught by the headless drive, line 4. */
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `Everything the ${REL_ROUTE_WORD[route]} needs is collected. The review chip below carries the next move.`,
+          text:
+            routeBlock ??
+            `Everything the ${REL_ROUTE_WORD[route]} needs is collected. The review chip below carries the next move.`,
         });
         return;
       }
@@ -1328,7 +1334,7 @@ export function RelationshipRoom({
       setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
       await runRelBrain(text, mine, { degrade: () => unreadable(live) });
     },
-    [answerLive, ask, awake, brain, ctx, live, order.length, reads, route, router, runRelBrain, step, unreadable],
+    [answerLive, ask, awake, brain, ctx, live, order.length, reads, route, routeBlock, router, runRelBrain, step, unreadable],
   );
 
   /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it
@@ -1354,8 +1360,22 @@ export function RelationshipRoom({
     const line = router?.say ?? null;
     if (!awake || ask || !line || saidRef.current === line) return;
     saidRef.current = line;
+    /* A LINE THAT NAMED THIS REVIEW IS NOT AN INSTRUCTION ON TOP OF THE
+       BINDING, and replaying it as one is worse than dropping it.
+
+       THE DRIVE CAUGHT THIS FILING A CASE. "raise a service request" bound the
+       route and was then replayed into the bound room, where the first step is
+       FREE TEXT, so it was recorded silently as the answer: the case Subject
+       read "raise a service request". On the annual and rating routes the same
+       replay lands on a chip or a number step and produces a re-ask the banker
+       has to read past. Neither is the banker saying anything the router has
+       not already acted on.
+
+       A line that names the route AND asks for something else still runs: only
+       the bare naming is dropped. */
+    if (route && readRelRouteIntent(line) === route && !readCreateAsk(line, route) && !isQuestion(line)) return;
     void say(line);
-  }, [ask, awake, router?.say, say]);
+  }, [ask, awake, route, router?.say, say]);
 
   /* ---- THE SIGNAL'S COVENANT IS PRESELECTED. Where the opening named one, the
           covenant review opens with it already on the list rather than making
