@@ -27,6 +27,7 @@
 import type { BorrowerBundle, C360Data, Covenant } from "./contract";
 import { fmtDate, fmtMoney } from "./format";
 import { covenantCushion } from "./finance";
+import { aggregateInvolvements, collapseConnections, isGuarantyRole } from "./graphAggregate";
 import { administrativeExceptions, classifyCovenant } from "../domain/covenantStatus";
 import { isActiveFacility } from "./worklist";
 
@@ -216,15 +217,16 @@ function tabSentence(bundle: BorrowerBundle, tab: string | null): string | null 
   }
 
   if (tab === "Relationship Graph") {
-    const conns = bundle.graph?.connections ?? [];
-    const owners = conns.filter((c) => (c.totalOwnershipPercent ?? c.ownershipPercent ?? 0) > 0);
-    const guarantors = (bundle.graph?.legalEntities ?? []).filter((e) =>
-      (e.borrowerType ?? "").toLowerCase().includes("guarantor"),
-    );
+    /* THE ORG STORES BOTH DIRECTIONS AND ONE ROW PER LOAN, so the raw reads
+       count an owner twice and a guarantor once per facility guaranteed: this
+       line said "14 guarantors on file" over three people. Collapse first, the
+       same way every list surface on this tab does. */
+    const owners = collapseConnections(bundle.graph?.connections).filter((c) => (c.ownershipPercent ?? 0) > 0);
+    const guarantors = aggregateInvolvements(bundle.graph?.legalEntities).filter(isGuarantyRole);
     if (!owners.length && !guarantors.length) return null;
     const o = owners
       .slice(0, 2)
-      .map((c) => `${c.counterpartyName ?? "owner"} ${c.totalOwnershipPercent ?? c.ownershipPercent} percent`)
+      .map((c) => `${c.counterpartyName ?? "owner"} ${c.ownershipPercent} percent`)
       .join(", ");
     const g = guarantors.length ? `${guarantors.length} guarantor${guarantors.length === 1 ? "" : "s"} on file` : "";
     return [o ? `Owners: ${o}.` : "", g ? `${g}.` : ""].filter(Boolean).join(" ");

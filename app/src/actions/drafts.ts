@@ -24,6 +24,7 @@ import type { BorrowerBundle, Covenant, ReasonCode } from "../data/contract";
 import type { PanelSchema } from "./panelSchema";
 import { fmtMoney } from "../data/format";
 import { covenantCushion } from "../data/finance";
+import { aggregateInvolvements, isGuarantyRole } from "../data/graphAggregate";
 import { isActiveFacility } from "../data/worklist";
 
 /** One figure rendered inside drafted prose, with where it came from. */
@@ -281,9 +282,17 @@ export function draftFinancialAnalysis(b: BorrowerBundle): Draft {
   return parts.length ? { text: sentences(parts), figures: f } : { text: "No spread financials are staged for this borrower in this view.", figures: f };
 }
 
+/**
+ * THE GUARANTORS, COUNTED AS PEOPLE AND COMPANIES RATHER THAN AS ORG ROWS.
+ *
+ * The org writes the guaranty once per loan, so the pinned Hartwell read
+ * carries 14 guaranty rows for three guarantors. Counted raw this narrative
+ * said "supported by 14 guarantors" and then named the same company six times
+ * in a row - a sentence that would go into a credit memo.
+ */
 export function draftGuarantorNarrative(b: BorrowerBundle): Draft {
   const f: DraftFigure[] = [];
-  const guarantors = (b.graph?.legalEntities ?? []).filter((e) => (e.borrowerType ?? "").toLowerCase().includes("guarantor"));
+  const guarantors = aggregateInvolvements(b.graph?.legalEntities).filter(isGuarantyRole);
   if (!guarantors.length) return { text: "No guarantor is recorded against this relationship in the source system.", figures: f };
   const names = guarantors.map((g) => g.accountName).filter(Boolean).join(", ");
   const types = [...new Set(guarantors.map((g) => g.guarantyAmountType).filter(Boolean))].join(", ");
