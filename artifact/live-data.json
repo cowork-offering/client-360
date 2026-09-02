@@ -1,5 +1,5 @@
 {
-  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note — field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names. UPDATED 2026-07-23 (Sonnet data/assembler agent, Cockpit v3 rebuild, SPEC.md §5): added the full `borrowers` map (4 bundles — anchor Piedmont duplicated from `borrower` verbatim, plus 3 invented-but-realistic C&I bundles: Brightwater Foods Group [COVENANT_BREACH — DSCR 1.05x vs 1.20x floor, both facilities under-collateralized], Sterling Fabrication Co. [MATURITY_NEAR — $8.0M term loan matures in 75 days], Kingsley Precision Works [MODIFICATION_CLUSTER/RECENTLY_MODIFIED — 2 facility mods in 45 days funding expansion]) and the `worklist` block (accountIds + reason codes). portfolio.signals.breachedCount and maturitiesSoon updated to reflect the new bundles. All three new bundles are SAMPLE-ONLY fictitious data, consistent with their pre-existing portfolio.accounts row figures (TCE/TBE/TOE/outstanding/rating/industry unchanged from the original sample rows). UPDATED 2026-07-23 (v1.1 amendments A9/A10): Brightwater's covenant retest date set to 2026-08-16 — an exact 45-day boundary case vs meta.generatedAt (2026-07-02T09:15:00Z) for the COVENANT_DUE ≤45d threshold; its worklist reasons now list both COVENANT_BREACH and COVENANT_DUE. Kingsley gained a 3rd modification (2026-04-08) so MODIFICATION_CLUSTER's ≥3-in-180d threshold is genuinely satisfied (previously only 2 were on file); RECENTLY_MODIFIED (≤30d) remains satisfied by the existing 2026-06-10 entry (22 days before generatedAt). UPDATED 2026-07-23 (Codex round 2 finding 7): every facility now carries an explicit `status` field (\"Active\" for all pre-existing ones). Kingsley gained a 4th, CLOSED facility — \"Kingsley Original Equipment Term Loan\", status \"Paid Off\", matured 2026-01-15 (in the past vs meta.generatedAt) — to prove the client-side active-facility filter (absent/\"Active\" = active; closed + past-maturity never fires MATURITY_NEAR). Excluded from exposure totals and from signals.maturityWatch. UPDATED 2026-07-25 (SPEC A30 + A29 seam): added optional `activity[]` (Sterling: REQUEST_RECEIVED + ANALYSIS_CONCLUDED; Piedmont: COVENANT_EVALUATED + ANALYSIS_CONCLUDED, both reusing figures already on file) and optional `requests[]` (Sterling only — ONE clearly-synthetic client request, revolver $10.0M -> $13.0M, reference.id prefixed SAMPLE- with no webLink per A29's honest-gap rule). Amounts sized against Sterling's REAL facility data (committed/outstanding/lendable-value), not the coordinator's placeholder figure, so validate-c360's data-quality sweep stays silent. UPDATED 2026-07-28 (coverage-correctness release): the Hartwell and Piedmont exposure blocks — and the legacy `borrower` anchor, which is the same Piedmont relationship — are now the VERBATIM observed Customer360Exposure responses from the bankinggpt org (accounts 001bb00001I7FPNAA3 / 001bb00001DLtRMAA1). `outstanding` is real (Principal_Balance-based); facility `totalLendableValue` now carries the facility's PLEDGED SHARE rather than the summed whole-collateral lendable, which double-counted every cross-pledged asset; new members totalPledgedValue, coverageNote, collateral[].amountPledged, collateral[].advanceRateSource and relationship-level coverageRatio / coverageShortfall / totalUniqueCollateralLendableValue / uniqueCollateralCount are carried through. The three SAMPLE-ONLY bundles (Brightwater/Sterling/Kingsley) are reshaped onto the same contract from their OWN existing figures — every ratio recomputed, nothing invented beyond the new members — and remain fictitious.",
+  "_comment": "Sample C360_DATA for Piedmont Precision Components (Account 001bb00001DLtRMAA1, Package a5Fbb000000HA1NEAW, org bankinggpt). Every borrower.* figure below is shaped EXACTLY as the Customer360*.cls @InvocableMethod Response/wrapper classes return it (field names = the @InvocableVariable member names, which are the JSON keys the Salesforce-hosted MCP emits). Verified figures traced to SCHEMA-VERIFIED.md + HANDOVER-2026-07-01.md: TCE/TBE $12.5M, TOE/Outstanding $4.25M, rating 5, 3 facilities, 5 collateral pledges (80% advance, 1st lien, ~$10M lendable), 4 covenants all Compliant (DSC 1.42/1.25, Debt-to-Worth 2.18/3.0, Liquidity $8.2M/$5.0M, Fixed Asset Purchases $1.25M/$7.5M), Margaret Holloway 100% owner, 1 opportunity, revenue $64.5M, NAICS 332710 Manufacturing. Boom block uses the known ratios (revenue $64.5M, EBITDA $5.2M, leverage 3.85x, interest coverage 2.64x) shaped plausibly. Where a real value is not verifiable, the field is omitted/null so the template's gap state renders. portfolio.* is shaped as the VERBATIM Customer360Portfolio response (accounts[], bookTotals, signals, note \u2014 field names from Customer360Portfolio.cls @InvocableVariable members); bookTotals/utilizationPct computed over the sample subset; the Brightwater covenantsDueSoon row is sample-only like its account. NOTE: only the anchor Piedmont account carries verified figures; the three extra portfolio.accounts[] rows are SAMPLE-ONLY fictitious entries (each flagged _sample_only:true) for the L1 book view and must not be treated as real org data. They deliberately avoid the retired reference-mockup borrower names. UPDATED 2026-07-23 (Sonnet data/assembler agent, Cockpit v3 rebuild, SPEC.md \u00a75): added the full `borrowers` map (4 bundles \u2014 anchor Piedmont duplicated from `borrower` verbatim, plus 3 invented-but-realistic C&I bundles: Brightwater Foods Group [COVENANT_BREACH \u2014 DSCR 1.05x vs 1.20x floor, both facilities under-collateralized], Sterling Fabrication Co. [MATURITY_NEAR \u2014 $8.0M term loan matures in 75 days], Kingsley Precision Works [MODIFICATION_CLUSTER/RECENTLY_MODIFIED \u2014 2 facility mods in 45 days funding expansion]) and the `worklist` block (accountIds + reason codes). portfolio.signals.breachedCount and maturitiesSoon updated to reflect the new bundles. All three new bundles are SAMPLE-ONLY fictitious data, consistent with their pre-existing portfolio.accounts row figures (TCE/TBE/TOE/outstanding/rating/industry unchanged from the original sample rows). UPDATED 2026-07-23 (v1.1 amendments A9/A10): Brightwater's covenant retest date set to 2026-08-16 \u2014 an exact 45-day boundary case vs meta.generatedAt (2026-07-02T09:15:00Z) for the COVENANT_DUE \u226445d threshold; its worklist reasons now list both COVENANT_BREACH and COVENANT_DUE. Kingsley gained a 3rd modification (2026-04-08) so MODIFICATION_CLUSTER's \u22653-in-180d threshold is genuinely satisfied (previously only 2 were on file); RECENTLY_MODIFIED (\u226430d) remains satisfied by the existing 2026-06-10 entry (22 days before generatedAt). UPDATED 2026-07-23 (Codex round 2 finding 7): every facility now carries an explicit `status` field (\"Active\" for all pre-existing ones). Kingsley gained a 4th, CLOSED facility \u2014 \"Kingsley Original Equipment Term Loan\", status \"Paid Off\", matured 2026-01-15 (in the past vs meta.generatedAt) \u2014 to prove the client-side active-facility filter (absent/\"Active\" = active; closed + past-maturity never fires MATURITY_NEAR). Excluded from exposure totals and from signals.maturityWatch. UPDATED 2026-07-25 (SPEC A30 + A29 seam): added optional `activity[]` (Sterling: REQUEST_RECEIVED + ANALYSIS_CONCLUDED; Piedmont: COVENANT_EVALUATED + ANALYSIS_CONCLUDED, both reusing figures already on file) and optional `requests[]` (Sterling only \u2014 ONE clearly-synthetic client request, revolver $10.0M -> $13.0M, reference.id prefixed SAMPLE- with no webLink per A29's honest-gap rule). Amounts sized against Sterling's REAL facility data (committed/outstanding/lendable-value), not the coordinator's placeholder figure, so validate-c360's data-quality sweep stays silent. UPDATED 2026-07-28 (coverage-correctness release): the Hartwell and Piedmont exposure blocks \u2014 and the legacy `borrower` anchor, which is the same Piedmont relationship \u2014 are now the VERBATIM observed Customer360Exposure responses from the bankinggpt org (accounts 001bb00001I7FPNAA3 / 001bb00001DLtRMAA1). `outstanding` is real (Principal_Balance-based); facility `totalLendableValue` now carries the facility's PLEDGED SHARE rather than the summed whole-collateral lendable, which double-counted every cross-pledged asset; new members totalPledgedValue, coverageNote, collateral[].amountPledged, collateral[].advanceRateSource and relationship-level coverageRatio / coverageShortfall / totalUniqueCollateralLendableValue / uniqueCollateralCount are carried through. The three SAMPLE-ONLY bundles (Brightwater/Sterling/Kingsley) are reshaped onto the same contract from their OWN existing figures \u2014 every ratio recomputed, nothing invented beyond the new members \u2014 and remain fictitious.",
   "meta": {
     "user": "Fabian Goetzens",
     "dateISO": "2026-07-25T11:49:49",
@@ -131,7 +131,7 @@
         }
       ]
     },
-    "note": "Rollups are package-level (Σ TCE/TBE/TOE/Outstanding — never a loan sum); risk rating + stage are from each account's highest-TCE package. Book totals span all 4 packaged accounts; the account list is truncated to the highest-TCE 4. Signals are bounded by a 90-day window and capped at 25 rows each; overdue covenants (past due, still active) are included and flagged. Financial / behavioral / risk-migration EWS lives elsewhere in the fleet."
+    "note": "Rollups are package-level (\u03a3 TCE/TBE/TOE/Outstanding \u2014 never a loan sum); risk rating + stage are from each account's highest-TCE package. Book totals span all 4 packaged accounts; the account list is truncated to the highest-TCE 4. Signals are bounded by a 90-day window and capped at 25 rows each; overdue covenants (past due, still active) are included and flagged. Financial / behavioral / risk-migration EWS lives elsewhere in the fleet."
   },
   "borrower": {
     "snapshot": {
@@ -185,7 +185,7 @@
           "packageId": "a5Fbb000000HA1NEAW"
         }
       ],
-      "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+      "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
     },
     "exposure": {
       "accountId": "001bb00001DLtRMAA1",
@@ -379,7 +379,7 @@
         }
       ],
       "guarantorSignals": [],
-      "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+      "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
     },
     "boom": {
       "ratios": {
@@ -444,9 +444,9 @@
           }
         ]
       },
-      "note": "Source: Boom spreading — Piedmont_Precision_FY2025_LTM.xlsx"
+      "note": "Source: Boom spreading \u2014 Piedmont_Precision_FY2025_LTM.xlsx"
     },
-    "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+    "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
     "anchors": [
       {
         "label": "Rating",
@@ -462,13 +462,13 @@
       },
       {
         "label": "DSC",
-        "value": "1.42×",
-        "sub": "Floor 1.25×",
+        "value": "1.42\u00d7",
+        "sub": "Floor 1.25\u00d7",
         "dir": null
       },
       {
         "label": "Leverage",
-        "value": "3.85×",
+        "value": "3.85\u00d7",
         "sub": "Debt/EBITDA",
         "dir": "down"
       }
@@ -479,13 +479,13 @@
         "ts": "2026-04-24T04:09:49Z",
         "kind": "COVENANT_EVALUATED",
         "title": "Debt Service Coverage Ratio tested",
-        "summary": "Quarterly DSCR test completed — 1.42x against a 1.25x floor, compliant.",
+        "summary": "Quarterly DSCR test completed \u2014 1.42x against a 1.25x floor, compliant.",
         "reference": {
           "kind": "covenant",
           "id": "a2Cbb000000CV01"
         },
         "detail": {
-          "body": "DSCR tested at 1.42x against a 1.25x floor — 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
+          "body": "DSCR tested at 1.42x against a 1.25x floor \u2014 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
         }
       },
       {
@@ -493,13 +493,13 @@
         "ts": "2026-07-25T20:39:49Z",
         "kind": "ANALYSIS_CONCLUDED",
         "title": "Relationship review concluded",
-        "summary": "Grade 5, fully collateralised, covenants compliant — EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
+        "summary": "Grade 5, fully collateralised, covenants compliant \u2014 EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
         "detail": {
-          "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+          "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
           "nextSteps": [
             {
               "actionId": "covenant-review",
-              "note": "Re-run the covenant review ahead of the next scheduled test — the DSCR test date (2026-06-30) has already passed."
+              "note": "Re-run the covenant review ahead of the next scheduled test \u2014 the DSCR test date (2026-06-30) has already passed."
             }
           ]
         }
@@ -560,7 +560,7 @@
             "packageId": "a5Fbb000000HA1NEAW"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001bb00001DLtRMAA1",
@@ -762,7 +762,7 @@
           }
         ],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -827,9 +827,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading — Piedmont_Precision_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading \u2014 Piedmont_Precision_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+      "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
       "anchors": [
         {
           "label": "Rating",
@@ -845,13 +845,13 @@
         },
         {
           "label": "DSC",
-          "value": "1.42×",
-          "sub": "Floor 1.25×",
+          "value": "1.42\u00d7",
+          "sub": "Floor 1.25\u00d7",
           "dir": null
         },
         {
           "label": "Leverage",
-          "value": "3.85×",
+          "value": "3.85\u00d7",
           "sub": "Debt/EBITDA",
           "dir": "down"
         }
@@ -862,13 +862,13 @@
           "ts": "2026-04-24T04:09:49Z",
           "kind": "COVENANT_EVALUATED",
           "title": "Debt Service Coverage Ratio tested",
-          "summary": "Quarterly DSCR test completed — 1.42x against a 1.25x floor, compliant.",
+          "summary": "Quarterly DSCR test completed \u2014 1.42x against a 1.25x floor, compliant.",
           "reference": {
             "kind": "covenant",
             "id": "a2Cbb000000CV01"
           },
           "detail": {
-            "body": "DSCR tested at 1.42x against a 1.25x floor — 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
+            "body": "DSCR tested at 1.42x against a 1.25x floor \u2014 0.17x cushion, comfortably compliant at last evaluation (2026-03-31)."
           }
         },
         {
@@ -876,13 +876,13 @@
           "ts": "2026-07-25T20:39:49Z",
           "kind": "ANALYSIS_CONCLUDED",
           "title": "Relationship review concluded",
-          "summary": "Grade 5, fully collateralised, covenants compliant — EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
+          "summary": "Grade 5, fully collateralised, covenants compliant \u2014 EBITDA compression flagged, treasury conversation recommended ahead of the next covenant test.",
           "detail": {
-            "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42× vs 1.25×) — but EBITDA has compressed to $5.2M (leverage 3.85×) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
+            "verdict": "Grade 5 and fully collateralised, Piedmont carries $12.5M committed with only $4.25M drawn and all four covenants compliant (DSC 1.42\u00d7 vs 1.25\u00d7) \u2014 but EBITDA has compressed to $5.2M (leverage 3.85\u00d7) and the borrower holds zero operating deposits, so the next best action is the treasury conversation ahead of the June covenant test.",
             "nextSteps": [
               {
                 "actionId": "covenant-review",
-                "note": "Re-run the covenant review ahead of the next scheduled test — the DSCR test date (2026-06-30) has already passed."
+                "note": "Re-run the covenant review ahead of the next scheduled test \u2014 the DSCR test date (2026-06-30) has already passed."
               }
             ]
           }
@@ -941,7 +941,7 @@
             "packageId": "a5FSAMPLE000BRWT1"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001SAMPLE0000BRWT",
@@ -1094,7 +1094,7 @@
       "opportunities": {
         "accountId": "001SAMPLE0000BRWT",
         "opportunities": [],
-        "note": "No open opportunities — account flagged for covenant follow-up ahead of relationship expansion conversations."
+        "note": "No open opportunities \u2014 account flagged for covenant follow-up ahead of relationship expansion conversations."
       },
       "signals": {
         "accountId": "001SAMPLE0000BRWT",
@@ -1103,7 +1103,7 @@
         "renewals": [],
         "maturityWatch": [],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -1168,9 +1168,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading — Brightwater_Foods_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading \u2014 Brightwater_Foods_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 6 and fully drawn at $28.5M, Brightwater Foods tripped its Debt Service Coverage covenant at last test (1.05x vs 1.20x floor) with both facilities running below full collateral coverage — flag for immediate covenant follow-up ahead of the August retest.",
+      "verdict": "Grade 6 and fully drawn at $28.5M, Brightwater Foods tripped its Debt Service Coverage covenant at last test (1.05x vs 1.20x floor) with both facilities running below full collateral coverage \u2014 flag for immediate covenant follow-up ahead of the August retest.",
       "anchors": [
         {
           "label": "Rating",
@@ -1186,13 +1186,13 @@
         },
         {
           "label": "DSC",
-          "value": "1.05×",
-          "sub": "Floor 1.20× — breached",
+          "value": "1.05\u00d7",
+          "sub": "Floor 1.20\u00d7 \u2014 breached",
           "dir": "down"
         },
         {
           "label": "Coverage",
-          "value": "0.97×",
+          "value": "0.97\u00d7",
           "sub": "Blended collateral",
           "dir": "down"
         }
@@ -1251,7 +1251,7 @@
             "packageId": "a5FSAMPLE000STRL1"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001SAMPLE0000STRL",
@@ -1425,7 +1425,7 @@
           }
         ],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -1490,9 +1490,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading — Sterling_Fabrication_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading \u2014 Sterling_Fabrication_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 5 and 94% drawn at $16.9M of $18.0M, Sterling remains covenant-compliant across all three tests, but the $8.0M equipment term loan matures in 75 days (Sep 15) — get the renewal decision in front of committee now to avoid a maturity gap.",
+      "verdict": "Grade 5 and 94% drawn at $16.9M of $18.0M, Sterling remains covenant-compliant across all three tests, but the $8.0M equipment term loan matures in 75 days (Sep 15) \u2014 get the renewal decision in front of committee now to avoid a maturity gap.",
       "anchors": [
         {
           "label": "Rating",
@@ -1508,8 +1508,8 @@
         },
         {
           "label": "DSC",
-          "value": "1.38×",
-          "sub": "Floor 1.30×",
+          "value": "1.38\u00d7",
+          "sub": "Floor 1.30\u00d7",
           "dir": null
         },
         {
@@ -1557,11 +1557,11 @@
           "title": "Headroom analysis concluded",
           "summary": "Prepped brief on the revolver increase ask: borrowing base is already tight, collateral re-valuation recommended before sizing the modification.",
           "detail": {
-            "verdict": "Sterling is drawn to $9.7M against a $10.0M revolver (97% utilized, $0.3M available) and the borrowing base is already tight — pledged AR and inventory support $9.2M in lendable value against $9.7M outstanding (0.95x coverage). Covenants remain compliant (DSC 1.38x vs 1.30x floor) but the requested $13.0M limit would need incremental collateral before it clears — recommend a collateral re-valuation alongside the modification, not a standalone limit increase.",
+            "verdict": "Sterling is drawn to $9.7M against a $10.0M revolver (97% utilized, $0.3M available) and the borrowing base is already tight \u2014 pledged AR and inventory support $9.2M in lendable value against $9.7M outstanding (0.95x coverage). Covenants remain compliant (DSC 1.38x vs 1.30x floor) but the requested $13.0M limit would need incremental collateral before it clears \u2014 recommend a collateral re-valuation alongside the modification, not a standalone limit increase.",
             "nextSteps": [
               {
                 "actionId": "collateral-valuation",
-                "note": "Re-value pledged AR and inventory — current lendable value doesn't fully cover today's $9.7M outstanding, let alone a $13.0M limit."
+                "note": "Re-value pledged AR and inventory \u2014 current lendable value doesn't fully cover today's $9.7M outstanding, let alone a $13.0M limit."
               },
               {
                 "actionId": "loan-modification",
@@ -1644,7 +1644,7 @@
             "packageId": "a5FSAMPLE000KGSL1"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
       },
       "exposure": {
         "accountId": "001SAMPLE0000KGSL",
@@ -1840,7 +1840,7 @@
         "opportunities": [
           {
             "opportunityId": "006SAMPLEKGSL0P1",
-            "name": "Kingsley Precision Works — Equipment Expansion Line",
+            "name": "Kingsley Precision Works \u2014 Equipment Expansion Line",
             "stage": "Qualification",
             "amount": 5000000,
             "closeDate": "2026-12-08T11:49:49",
@@ -1880,7 +1880,7 @@
         "renewals": [],
         "maturityWatch": [],
         "guarantorSignals": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer."
       },
       "boom": {
         "ratios": {
@@ -1945,9 +1945,9 @@
             }
           ]
         },
-        "note": "Source: Boom spreading — Kingsley_Precision_FY2025_LTM.xlsx"
+        "note": "Source: Boom spreading \u2014 Kingsley_Precision_FY2025_LTM.xlsx"
       },
-      "verdict": "Grade 4 and only 43% drawn at $9.4M of $22.0M, Kingsley just added a $4.0M CapEx facility and increased its revolver by $2.0M inside six weeks — two modifications close together worth a relationship check-in, though covenants remain comfortably compliant (DSC 1.85x vs 1.25x floor) and EBITDA continues to grow.",
+      "verdict": "Grade 4 and only 43% drawn at $9.4M of $22.0M, Kingsley just added a $4.0M CapEx facility and increased its revolver by $2.0M inside six weeks \u2014 two modifications close together worth a relationship check-in, though covenants remain comfortably compliant (DSC 1.85x vs 1.25x floor) and EBITDA continues to grow.",
       "anchors": [
         {
           "label": "Rating",
@@ -1963,8 +1963,8 @@
         },
         {
           "label": "DSC",
-          "value": "1.85×",
-          "sub": "Floor 1.25×",
+          "value": "1.85\u00d7",
+          "sub": "Floor 1.25\u00d7",
           "dir": "up"
         },
         {
@@ -1992,7 +1992,7 @@
         "totalObligorExposure": 31030000,
         "totalOutstanding": 31030000
       },
-      "verdict": "Booked at Grade 4, Hartwell carries $46.0M committed across six facilities with $31.0M drawn and $15.0M of headroom; five of six covenants test compliant (DSC 1.38×, FCC 1.22×). Collateral coverage sits at 1.02× across four pledged assets, so the cushion, not capacity, is the figure to watch.",
+      "verdict": "Booked at Grade 4, Hartwell carries $46.0M committed across six facilities with $31.0M drawn and $15.0M of headroom; five of six covenants test compliant (DSC 1.38\u00d7, FCC 1.22\u00d7). Collateral coverage sits at 1.02\u00d7 across four pledged assets, so the cushion, not capacity, is the figure to watch.",
       "exposure": {
         "accountId": "001bb00001I7FPNAA3",
         "coverageRatio": 1.02,
@@ -2347,9 +2347,9 @@
         "accountId": "001bb00001I7FPNAA3",
         "connections": [
           {
-            "totalOwnershipPercent": 100,
+            "totalOwnershipPercent": 100.0,
             "role": "Parent",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "isActive": true,
             "indirectOwnershipPercent": null,
             "direction": "inbound",
@@ -2357,7 +2357,7 @@
             "counterpartyId": "001bb00001I7NZkAAN"
           },
           {
-            "totalOwnershipPercent": 0,
+            "totalOwnershipPercent": 0.0,
             "role": "Child",
             "ownershipPercent": null,
             "isActive": true,
@@ -2367,7 +2367,7 @@
             "counterpartyId": "001bb00001I7NZkAAN"
           },
           {
-            "totalOwnershipPercent": 0,
+            "totalOwnershipPercent": 0.0,
             "role": "Affiliated Company",
             "ownershipPercent": null,
             "isActive": true,
@@ -2377,7 +2377,7 @@
             "counterpartyId": "001bb00001I7VCHAA3"
           },
           {
-            "totalOwnershipPercent": 0,
+            "totalOwnershipPercent": 0.0,
             "role": "Affiliated Company",
             "ownershipPercent": null,
             "isActive": true,
@@ -2387,17 +2387,17 @@
             "counterpartyId": "001bb00001I7VCHAA3"
           },
           {
-            "totalOwnershipPercent": 60,
+            "totalOwnershipPercent": 60.0,
             "role": "Owner",
             "ownershipPercent": null,
             "isActive": true,
-            "indirectOwnershipPercent": 60,
+            "indirectOwnershipPercent": 60.0,
             "direction": "outbound",
             "counterpartyName": "James Hartwell",
             "counterpartyId": "001bb00001I7V2cAAF"
           },
           {
-            "totalOwnershipPercent": 0,
+            "totalOwnershipPercent": 0.0,
             "role": "Company",
             "ownershipPercent": null,
             "isActive": true,
@@ -2407,17 +2407,17 @@
             "counterpartyId": "001bb00001I7V2cAAF"
           },
           {
-            "totalOwnershipPercent": 40,
+            "totalOwnershipPercent": 40.0,
             "role": "Co-Owner",
             "ownershipPercent": null,
             "isActive": true,
-            "indirectOwnershipPercent": 40,
+            "indirectOwnershipPercent": 40.0,
             "direction": "outbound",
             "counterpartyName": "Elena Hartwell",
             "counterpartyId": "001bb00001I7BC0AAN"
           },
           {
-            "totalOwnershipPercent": 0,
+            "totalOwnershipPercent": 0.0,
             "role": "Company",
             "ownershipPercent": null,
             "isActive": true,
@@ -2431,7 +2431,7 @@
           {
             "relationshipType": null,
             "packageId": "a5Fbb000000IHFJEA4",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "loanId": "a4Zbb0000027MaYEAU",
             "guarantyAmountType": null,
             "contingentAmount": null,
@@ -2441,7 +2441,7 @@
           {
             "relationshipType": null,
             "packageId": "a5Fbb000000IHFJEA4",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "loanId": "a4Zbb0000027MnREAU",
             "guarantyAmountType": null,
             "contingentAmount": null,
@@ -2451,7 +2451,7 @@
           {
             "relationshipType": null,
             "packageId": "a5Fbb000000IHFJEA4",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "loanId": "a4Zbb0000027Mp3EAE",
             "guarantyAmountType": null,
             "contingentAmount": null,
@@ -2461,7 +2461,7 @@
           {
             "relationshipType": null,
             "packageId": "a5Fbb000000IHFJEA4",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "loanId": "a4Zbb0000027MqfEAE",
             "guarantyAmountType": null,
             "contingentAmount": null,
@@ -2471,7 +2471,7 @@
           {
             "relationshipType": null,
             "packageId": "a5Fbb000000IHFJEA4",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "loanId": "a4Zbb0000027MsHEAU",
             "guarantyAmountType": null,
             "contingentAmount": null,
@@ -2481,15 +2481,175 @@
           {
             "relationshipType": null,
             "packageId": "a5Fbb000000IHFJEA4",
-            "ownershipPercent": 100,
+            "ownershipPercent": 100.0,
             "loanId": "a4Zbb0000027MttEAE",
             "guarantyAmountType": null,
             "contingentAmount": null,
             "borrowerType": "Borrower",
             "accountName": "Hartwell Precision Manufacturing LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb000002CECXEA4",
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "borrowerType": "Borrower",
+            "accountName": "Hartwell Precision Manufacturing LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MnREAU",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "Hartwell Industrial Holdings LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MqfEAE",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "Hartwell Industrial Holdings LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MttEAE",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "Hartwell Industrial Holdings LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MaYEAU",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "Hartwell Industrial Holdings LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MsHEAU",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "Hartwell Industrial Holdings LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027Mp3EAE",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "Hartwell Industrial Holdings LLC"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MnREAU",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "James Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027Mp3EAE",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "James Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MqfEAE",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "James Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MttEAE",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "James Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MaYEAU",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "James Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MsHEAU",
+            "guarantyAmountType": "Unlimited",
+            "contingentAmount": null,
+            "borrowerType": "Guarantor",
+            "accountName": "James Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027Mp3EAE",
+            "guarantyAmountType": "Limited",
+            "contingentAmount": null,
+            "borrowerType": "Limited Guarantor",
+            "accountName": "Elena Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027MaYEAU",
+            "guarantyAmountType": "Limited",
+            "contingentAmount": null,
+            "borrowerType": "Limited Guarantor",
+            "accountName": "Elena Hartwell"
+          },
+          {
+            "relationshipType": null,
+            "packageId": "a5Fbb000000IHFJEA4",
+            "ownershipPercent": 100.0,
+            "loanId": "a4Zbb0000027Mp3EAE",
+            "guarantyAmountType": null,
+            "contingentAmount": null,
+            "borrowerType": "Related Entity",
+            "accountName": "Hartwell Logistics LLC"
           }
         ],
-        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org — treat as not-on-file unless a dedicated screening source is wired up."
+        "note": "Beneficial ownership = Connection edges with Ownership Percent. Borrower/Guarantor roles = legalEntities. Formal KYC/CDD/OFAC screening records are not modeled separately in this org \u2014 treat as not-on-file unless a dedicated screening source is wired up."
       },
       "opportunities": {
         "accountId": "001bb00001I7FPNAA3",
@@ -2611,7 +2771,7 @@
         ],
         "modificationClusterFlag": false,
         "modifications": [],
-        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer.",
+        "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool \u2014 pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer.",
         "renewals": []
       },
       "activity": [],
@@ -2630,14 +2790,14 @@
         },
         {
           "label": "DSC",
-          "value": "1.38×",
-          "sub": "Floor 1.25×",
+          "value": "1.38\u00d7",
+          "sub": "Floor 1.25\u00d7",
           "dir": null
         },
         {
           "label": "FCC",
-          "value": "1.22×",
-          "sub": "Floor 1.15× tight",
+          "value": "1.22\u00d7",
+          "sub": "Floor 1.15\u00d7 tight",
           "dir": "down"
         }
       ]
