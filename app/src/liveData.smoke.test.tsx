@@ -393,18 +393,25 @@ for (const [fileName, data] of FILES) {
 
 
 describe("a connection with no ownership percent still renders (founder rule)", () => {
-  it("shows Hartwell Logistics as a related party, not nowhere", () => {
+  it("shows Hartwell Logistics on the roster, not nowhere", () => {
     mount(live as unknown as C360Data);
     openAccount("Hartwell Precision Manufacturing LLC");
     const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Relationship Graph")!;
     click(button);
     const text = container!.textContent ?? "";
-    expect(text).toContain("Related parties");
+    // One roster now, because the guarantor card and the legal-entity card were
+    // the SAME parties described from two reads: on the 22-row book that put
+    // one guarantor on the tab three times.
+    expect(text).toContain("Parties & roles");
     expect(text).toContain("Hartwell Logistics LLC");
     expect(text).toContain("Affiliated Company");
-    // The percent-bearing ones stay in the ownership tree where they belong.
+    // The involvement the connection knows nothing about rides the same row.
+    expect(text).toContain("Related Entity");
+    // The percent-bearing ones stay in the ownership tree where they belong,
+    // now carrying the guaranty the involvement read gives them.
     expect(text).toContain("Hartwell Industrial Holdings LLC");
     expect(text).toContain("Parent");
+    expect(text).toMatch(/Parent · Guarantor/);
   });
 });
 
