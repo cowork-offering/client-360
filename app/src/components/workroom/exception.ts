@@ -198,7 +198,15 @@ export function exceptionSay(open: ExceptionOpen, member: ElicitMember): string 
         : " mitigated"
       : open.status
         ? ` ${open.status.toLowerCase()}`
-        : "";
+        : /* NO STATUS YET, SO THE NOTE HAS TO SURVIVE THE ROUND TRIP. The
+             facility chip composes a sentence with no status on it, and the
+             room reads that sentence again on the next turn: a note dropped
+             here is a mitigant the banker typed once and is asked for twice.
+             It travels in the banker's OWN words, which is the phrasing
+             `nameOf` already reads back as a note. */
+          open.note
+          ? ` ${open.note}`
+          : "";
   return `on the ${targetOf(member)} log a policy exception for ${open.name}${tail}`;
 }
 

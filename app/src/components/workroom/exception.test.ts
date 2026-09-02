@@ -156,3 +156,23 @@ describe("the composed sentence is one clause the parser already files", () => {
     expect(exceptionSay({ ...open, status: "Unmitigated" }, focused)).toContain("for Leverage above policy unmitigated");
   });
 });
+
+describe("the note survives the facility chip (drive, 2026-09-02)", () => {
+  it("carries the banker's own aside into the sentence the facility chip types back", () => {
+    const open = readExceptionOpen("log a policy exception for leverage above policy approved by credit committee", MEMBERS)!;
+    const ask = exceptionAsk(open, MEMBERS)!;
+    const facilityChip = ask.options.find((o) => o.label === "$15.0MM Line of Credit")!;
+    expect(facilityChip.say).toContain("approved by credit committee");
+
+    // And the room reads that sentence back with the note still on it, so the
+    // status question offers a mitigant rather than asking for one twice.
+    const again = readExceptionOpen(facilityChip.say, MEMBERS)!;
+    expect(again.name).toBe("Leverage above policy");
+    expect(again.note).toContain("approved by credit committee");
+    expect(again.memberId).toBe(LOC15);
+
+    const statusAsk = exceptionAsk(again, MEMBERS)!;
+    const mitigated = statusAsk.options.find((o) => o.label === "Mitigated")!;
+    expect(mitigated.say).toContain("mitigated by credit committee approval");
+  });
+});
