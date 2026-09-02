@@ -16,7 +16,9 @@ import {
   stampRemovalRoles,
   type QualifierMember,
 } from "./dispatch";
-import type { Book } from "./elicit";
+import { buildBook, type Book } from "./elicit";
+import type { BorrowerBundle, C360Data } from "../../data/contract";
+import live from "../../../../artifact/live-data.json";
 import type { IntentResult, WorkroomDelta } from "../../workroom/types";
 
 /* =============================================================================
@@ -367,6 +369,70 @@ describe("the role on a carry exclusion comes from the book (E8)", () => {
     const read = stampRemovalRoles({ deltas: staged, book: BOOK, label });
     expect(read.deltas).toEqual(staged);
     expect(read.said).toEqual([]);
+  });
+});
+
+/* =============================================================================
+   THE SAME RULE, AGAINST THE BOOK THE ORG ACTUALLY RETURNS (2026-09-02).
+
+   The cases above stand on a hand-built book. The refreshed read carries 22
+   involvement rows for 5 parties, and the role is a fact about a NAME ON A
+   FACILITY: Hartwell Industrial Holdings guarantees all six, Elena Hartwell is
+   LIMITED Guarantor on the Construction loan and the $15M line and on nothing
+   else. A stamp that resolved the role per PARTY rather than per facility would
+   pass every case above and still put the wrong word on the wire here.
+   ============================================================================= */
+
+describe("the role stamp reads the real 22-row book, per facility", () => {
+  const bundle = (live as unknown as C360Data).borrowers!["001bb00001I7FPNAA3"] as BorrowerBundle;
+  const LOAN = {
+    loc15: "a4Zbb0000027MaYEAU",
+    construction: "a4Zbb0000027Mp3EAE",
+    equipment8: "a4Zbb0000027MnREAU",
+  };
+  const realBook = buildBook(bundle, Object.values(LOAN));
+  const say = (id: string) => ({ [LOAN.loc15]: "$15.0MM Line of Credit", [LOAN.construction]: "Construction", [LOAN.equipment8]: "$8.0MM Equipment" })[id] ?? id;
+
+  it("carries one row per party per facility, not one per party", () => {
+    // 22 org rows narrowed to three facilities. The book is rows, deliberately.
+    expect(realBook.parties.filter((p) => p.name === "Elena Hartwell")).toEqual([
+      { name: "Elena Hartwell", role: "Limited Guarantor", loanId: LOAN.construction },
+      { name: "Elena Hartwell", role: "Limited Guarantor", loanId: LOAN.loc15 },
+    ]);
+  });
+
+  it("stamps Elena on the $15M line as Limited Guarantor, correcting the line", () => {
+    const read = stampRemovalRoles({
+      deltas: [exclusion("x", LOAN.loc15, "Elena Hartwell", "Guarantor")],
+      book: realBook,
+      label: say,
+    });
+    expect(read.deltas[0].involvementWire?.role).toBe("Limited Guarantor");
+    expect(read.said.join(" ")).toContain("not Guarantor");
+    expect(read.ask).toBeNull();
+  });
+
+  it("stamps the holding company on the same line as Guarantor", () => {
+    const read = stampRemovalRoles({
+      deltas: [exclusion("x", LOAN.loc15, "Hartwell Industrial Holdings LLC")],
+      book: realBook,
+      label: say,
+    });
+    expect(read.deltas[0].involvementWire?.role).toBe("Guarantor");
+  });
+
+  it("refuses on a facility Elena is not on, and names the ones she is", () => {
+    const read = stampRemovalRoles({
+      deltas: [exclusion("x", LOAN.equipment8, "Elena Hartwell", "Guarantor")],
+      book: realBook,
+      label: say,
+    });
+    expect(read.deltas).toHaveLength(0);
+    expect(read.said[0]).toContain("is not on the $8.0MM Equipment");
+    expect(read.said[0]).toContain("Construction as Limited Guarantor");
+    // Each facility she IS on named ONCE: the org's row-per-loan storage must
+    // not reach the sentence as "Construction, Construction".
+    expect(read.said[0].split("Construction").length - 1).toBe(1);
   });
 });
 
