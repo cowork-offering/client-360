@@ -58,6 +58,8 @@ export type SlotId =
   | "asset"
   | "assetKind"
   | "assetValue"
+  | "assetDescription"
+  | "advanceRate"
   | "lien"
   | "party"
   | "role";
@@ -82,6 +84,17 @@ export interface Slots {
   frequency?: string;
   /** Where the frequency came from, so the card can say it. */
   frequencyFrom?: "said" | "book";
+  /**
+   * THE BANKER CHOSE TO ASSOCIATE THE COVENANT THE BOOK ALREADY CARRIES rather
+   * than create a second record of the same test. In nCino that is a
+   * LLC_BI__Loan_Covenant__c junction create pointing at an existing Covenant2,
+   * which is a create and not a delete - but the deployed covenant wire carries
+   * a TYPE NAME and never an existing covenant id, so the room stages it as a
+   * handoff and says so. {@link associateGap}.
+   */
+  associate?: boolean;
+  /** The covenant record an associate would attach. The org's own id. */
+  existingCovenantId?: string;
   /** An asset the deal already carries. The org's own record id travels. */
   assetId?: string;
   assetLabel?: string;
@@ -93,7 +106,18 @@ export interface Slots {
   isNew?: boolean;
   assetKind?: string;
   assetValue?: number;
+  /** The banker's own words for a net-new asset. What the org files as the
+   *  collateral description, so it is his and never composed. */
   assetDescription?: string;
+  /**
+   * THE ADVANCE RATE ON A NET-NEW PLEDGE, as a percentage.
+   *
+   * Asked for only where the asset is being CREATED, because there the wire
+   * requires it: it rides `LLC_BI__Advance_Rate_Override__c`, the plain rate
+   * being a formula. On an existing asset the org resolves it and this room
+   * never asks.
+   */
+  advanceRate?: number;
   /** First, second, third. The bank's decision, and no wire carries it. */
   lien?: string;
   /** The party, spelled the way the ORG spells it wherever the book carries the
@@ -145,6 +169,10 @@ export interface ElicitMember {
 /* ---------------------------------------------------------------- the book */
 
 export interface BookCovenant {
+  /** The org's own covenant record id, where the read carries one. What an
+   *  ASSOCIATE would have to send: the junction points at THIS record, not at a
+   *  fresh one of the same type. */
+  id: string | null;
   /** The org catalog's own type name. */
   type: string;
   threshold: number | null;
@@ -214,6 +242,7 @@ export function buildBook(bundle: BorrowerBundle | null | undefined, memberIds: 
     const attached = c.attachedLoans;
     const loanIds = (attached ?? []).map((a) => a.loanId ?? "").filter((id) => id && inScope.has(id));
     covenants.push({
+      id: (c.covenantId ?? "").trim() || null,
       type,
       threshold: typeof c.thresholdValue === "number" ? c.thresholdValue : null,
       frequency: (c.frequency ?? "").trim() || null,
@@ -836,11 +865,24 @@ function readTest(
 /* ===================================================== the collateral surface
 
    THE HUMAN SUPPLIES which asset - or, for a net-new one, its description, kind
-   and value - and the lien position. THE ORG RESOLVES THE ADVANCE RATE AND THE
-   LENDABLE VALUE IN-TRANSACTION and this room does not ask for either: the
-   advance rate on the pledge is a formula with an override, the lendable value
-   is derived from it, and asking a banker to type a number the org computes is
-   noise dressed as diligence.                                                */
+   and value - and the lien position.
+
+   ON AN ASSET THE DEAL ALREADY CARRIES the org resolves the advance rate and the
+   lendable value in-transaction and this room asks for neither: the advance rate
+   on the pledge is a formula with an override, the lendable value is derived
+   from it, and asking a banker to type a figure the org computes is noise
+   dressed as diligence.
+
+   ON A NET-NEW ASSET IT IS ASKED FOR, AND NEVER REFUSED (P3, founder
+   2026-09-02). "Pledge something the deal already carries" was offered as the
+   fallback to creating one, which is pointless: the deal's collateral carries
+   onto the clone by itself. Creating an asset and pledging it must be possible.
+   The wire genuinely requires the rate on a create - `advanceRate` rides
+   `LLC_BI__Advance_Rate_Override__c` because the plain rate is a formula, and
+   the org's own Advance_Rate_Override rule demands a written reason beside it -
+   so the room ASKS for it, with the bank's own guideline bands as labelled
+   proposals and the approved credit terms named as the authority. It proposes;
+   it does not set.                                                           */
 
 const COLLATERAL_OPENS =
   /\b(pledge|add|attach|take\s+security|secure)\b[^.]{0,40}\b(collateral|security|asset|lien|receivables?|inventory|equipment|machinery|real\s*estate|warehouse|property|vehicles?|deposits?)\b|\bpledge\b/i;
@@ -881,6 +923,82 @@ function matchAsset(line: string, assets: BookAsset[]): BookAsset[] {
 
 const NEW_ASSET = /\b(new|newly|another|additional|just\s+(?:bought|financed)|not\s+on\s+the\s+deal)\b/i;
 
+/** Fragments that name the KIND and nothing else. A line saying "real estate"
+ *  has answered "what kind", not "what is it". */
+const KIND_ALONE = new Set([
+  "equipment", "machinery", "real estate", "realestate", "property", "land", "inventory",
+  "accounts receivable", "receivables", "a/r", "vehicles", "vehicle", "fleet", "securities",
+  "deposits", "cash", "cash and securities",
+]);
+
+const escapeRe = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * THE BANKER'S OWN WORDS FOR A NET-NEW ASSET (P3).
+ *
+ * "pledge new collateral on the construction loan: Kokomo plant expansion, real
+ * estate, valued at 6,500,000" names the asset "Kokomo plant expansion", and
+ * that phrase is what the org files as the collateral description. It is HIS
+ * and it is never composed, so it is read here rather than derived from the
+ * sentence the room composes back.
+ *
+ * WHAT IS STRIPPED is everything that is not the asset: the facility it lands
+ * on, read off the package's own names; the pledge verb; the words "new
+ * collateral"; the figure; the rate; the lien. What is left is split on the
+ * banker's own punctuation and the first substantive fragment wins, because a
+ * fragment that is only a collateral TYPE is the answer to a different question.
+ */
+export function readAssetDescription(text: string, ctx: ElicitContext): string | undefined {
+  let rest = ` ${text} `;
+
+  // The facility is not the asset. Named off the package, longest name first.
+  const names = ctx.members
+    .flatMap((m) => [m.orgName, m.shortName, m.label, m.key])
+    .filter((n): n is string => Boolean(n))
+    .sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    rest = rest.replace(
+      new RegExp(`\\b(?:on|onto|to|against|for|under)\\s+(?:the\\s+|this\\s+|our\\s+)?(?:[$\\d][\\w.,$]*\\s+)?${escapeRe(name)}(?:\\s+(?:loan|line|facility|note|revolver))?\\b`, "gi"),
+      " ",
+    );
+  }
+  rest = rest
+    .replace(/\b(?:on|onto|to|against|for|under)\s+(?:the|this|our)\s+[^,:;]*?\b(?:loans?|lines?|facilit(?:y|ies)|revolvers?|notes?)\b/gi, " ")
+    .replace(/^\s*(?:please\s+)?(?:add|pledge|attach|include|take\s+security\s+over|secure(?:\s+it)?(?:\s+with)?)\b/i, " ")
+    .replace(/\b(?:a|an|the)?\s*(?:new|net-new|additional|another)\s+(?:piece\s+of\s+)?(?:collateral|asset|security)\b/gi, " ")
+    .replace(/\bas\s+(?:new\s+|additional\s+)*collateral\b/gi, " ")
+    .replace(/\b(?:at|of)\s+an?\s+[\d.]+\s*(?:%|per\s?cent|percent)\s*(?:advance(?:\s+rate)?)?/gi, " ")
+    .replace(/\b(?:advance\s+rate|advance)\s*(?:of|at)?\s*[\d.]+\s*(?:%|per\s?cent|percent)?/gi, " ")
+    .replace(/[\d.]+\s*(?:%|per\s?cent|percent|bps|basis\s+points?)/gi, " ")
+    .replace(/\b(?:worth|valued\s+at|value\s+of|value)\s*(?:\$\s*)?[\d,]+(?:\.\d+)?\s*(?:mm|million|k|thousand|bn|billion)?/gi, " ")
+    .replace(/(?:\$\s*)?\b\d[\d,]*(?:\.\d+)?\s*(?:mm|million|k|thousand|bn|billion)?\b/gi, " ")
+    .replace(/\blien\s+position\b/gi, " ")
+    .replace(/\b(?:first|1st|second|2nd|third|3rd)\s+(?:lien|position|mortgage)(?:\s+position)?\b/gi, " ");
+
+  for (const part of rest.split(/[,:;]/)) {
+    const said = part
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .replace(/^(?:and|of|as|it|is)\s+/i, "")
+      .replace(/^(?:an?|the)\s+/i, "")
+      .replace(/^(?:new|net-new|additional|another)\s+/i, "")
+      .replace(/[.,;:]+$/, "")
+      .trim();
+    if (said.length < 3) continue;
+    // A fragment that is ONLY the collateral kind answers "what kind", not
+    // "what is it". It is not a description. Matched as the WHOLE fragment: a
+    // forklift fleet carries the word "forklift" and is still an asset.
+    if (KIND_ALONE.has(said.toLowerCase().replace(/\s+/g, " "))) continue;
+    if (/^(?:collateral|assets?|security|pledges?|positions?|liens?|it|this|that)$/i.test(said)) continue;
+    return said.length > 200 ? `${said.slice(0, 197).trim()}...` : said[0].toUpperCase() + said.slice(1);
+  }
+  return undefined;
+}
+
+/** THE BANKER TOOK THE ASSOCIATE (P1). "the existing one" on its own is enough:
+ *  the chip says it and it is the only thing in the room that word can mean. */
+const ASSOCIATE_EXISTING = /\b(?:associate|attach|link)\b[^.]*\bexisting\b|\bthe\s+existing\s+one\b|\buse\s+the\s+existing\b/i;
+
 const ASSET_KINDS: Array<{ match: RegExp; word: string }> = [
   { match: /\b(equipment|machine|machines|machinery|tooling|press|lathe|cnc|forklift)\b/i, word: "Equipment" },
   { match: /\b(warehouse|building|plant|premises|real\s*estate|property|land)\b/i, word: "Real Estate" },
@@ -891,6 +1009,24 @@ const ASSET_KINDS: Array<{ match: RegExp; word: string }> = [
 ];
 
 const ASSET_KIND_OPTIONS = ["Equipment", "Real estate", "Inventory", "Accounts receivable", "Vehicles", "Securities"];
+
+/**
+ * THE BANK'S OWN ADVANCE-RATE GUIDELINES, per collateral kind.
+ *
+ * A BAND, NOT A FIGURE. The approved credit terms are the authority on the rate
+ * and the room says so; what it offers is what the bank's guideline carries for
+ * that kind of asset, so the banker is choosing rather than typing blind. A kind
+ * with no guideline offers nothing and the question stands on its own.
+ *
+ * Source: WORKROOM-BRAIN 5.1.
+ */
+const ADVANCE_BANDS: Record<string, { rates: number[]; basis: string }> = {
+  Equipment: { rates: [80], basis: "up to 80 percent of orderly liquidation value, on an approved appraisal" },
+  "Real Estate": { rates: [75, 80], basis: "75 to 80 percent of appraised value on owner-occupied commercial real estate, and 70 percent of cost on construction, which is the tightest line the bank carries" },
+  Inventory: { rates: [50], basis: "up to 50 percent on eligible raw material and finished goods, work in process excluded" },
+  "Accounts Receivable": { rates: [80], basis: "up to 80 percent on eligible receivables aged 90 days or less" },
+  Cash: { rates: [50, 70], basis: "50 to 70 percent by asset class" },
+};
 
 /* ==================================================== the involvement surface
 
@@ -1017,6 +1153,11 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
   const claimed: number[] = [];
 
   if (next.surface === "covenant") {
+    /* ASSOCIATE THE ONE THE BOOK ALREADY CARRIES (P1). The chip says it in
+       these words and a banker may type them; either way it names an EXISTING
+       covenant record rather than a new one, so the record's own id, threshold
+       and schedule come off the book and nothing here is invented. */
+    if (ASSOCIATE_EXISTING.test(text)) next.slots.associate = true;
     const test = readTest(text, ctx.book);
     if (test && "type" in test) {
       next.slots.test = test.type;
@@ -1047,6 +1188,26 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     if (frequency) {
       next.slots.frequency = frequency;
       next.slots.frequencyFrom = "said";
+    }
+
+    /* THE EXISTING RECORD, RESOLVED. An associate that cannot name the record
+       it would attach is not an associate, so the flag comes off rather than
+       travelling as a claim nothing backs. */
+    if (next.slots.associate) {
+      const held = ctx.book.covenants.find((c) => c.type === next.slots.test && c.id);
+      if (held) {
+        next.slots.existingCovenantId = held.id!;
+        if (held.threshold !== null) {
+          next.slots.threshold = held.threshold;
+          delete next.slots.unit;
+        }
+        if (held.frequency) {
+          next.slots.frequency = held.frequency;
+          next.slots.frequencyFrom = "book";
+        }
+      } else {
+        delete next.slots.associate;
+      }
     }
   }
 
@@ -1100,10 +1261,26 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     const kind = ASSET_KINDS.find((k) => k.match.test(text));
     if (kind) next.slots.assetKind = kind.word;
     if (next.slots.isNew) {
-      const money = moneyIn(text);
+      /* THE RATE IS READ BEFORE THE VALUE, and the order is load-bearing: a
+         percentage carries its own mark, so taking it out of the line first
+         stops "75" being read as $75 and filed as what the asset is worth. */
+      const pct = /(\d+(?:\.\d+)?)\s*(?:%|per\s?cent|percent)/i.exec(text);
+      if (pct) next.slots.advanceRate = Number(pct[1]);
+      const money = moneyIn(pct ? text.replace(pct[0], " ") : text);
       if (money.length) {
         next.slots.assetValue = money[money.length - 1];
         claimed.push(money[money.length - 1]);
+      }
+      /* HIS OWN WORDS FOR THE ASSET. Only where the line carries some, and
+         never overwritten by a later line that carries none: the description
+         settles once, the way the lien and the kind do. */
+      /* IT SETTLES ONCE. Every later line still reads for every slot (free text
+         always wins), and "1st lien position" answered into an open create would
+         otherwise overwrite the banker's own words for the asset with the answer
+         to a different question. */
+      if (next.slots.assetDescription === undefined) {
+        const said = readAssetDescription(text, ctx);
+        if (said) next.slots.assetDescription = said;
       }
     }
     const lien = LIEN_WORDS.find((l) => l.match.test(text));
@@ -1252,7 +1429,11 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
     };
   }
 
-  if (s.threshold === undefined) {
+  /* AN ASSOCIATE ASKS FOR NEITHER. The threshold and the schedule are the
+     EXISTING record's, and a room that asked for them would be offering to
+     change a covenant it is only attaching - which is the amend this fence
+     refuses outright. */
+  if (s.threshold === undefined && !s.associate) {
     const band = DOCTRINE_BAND.find((b) => b.match.test(s.test!));
     const held = ctx.book.covenants.filter((c) => c.type === s.test && typeof c.threshold === "number");
     return {
@@ -1270,7 +1451,7 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
     };
   }
 
-  if (!s.frequency) {
+  if (!s.frequency && !s.associate) {
     /* WHERE THE BOOK ANSWERS IT, THE ROOM DOES NOT ASK. A relationship that
        tests this covenant on one schedule everywhere it carries it has already
        answered the question, and the card says where the answer came from. */
@@ -1382,11 +1563,38 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
         options: ASSET_KIND_OPTIONS.map((k) => ({ label: k, say: `a new ${k.toLowerCase()} asset` })),
       };
     }
+    if (!s.assetDescription) {
+      return {
+        slot: "assetDescription",
+        text:
+          "What is the asset, in your own words? The description is the only readable identity the collateral record carries, " +
+          "so it is yours to write and I will not compose one for you.",
+        options: [],
+      };
+    }
     if (s.assetValue === undefined) {
       return {
         slot: "assetValue",
-        text: "What is it worth? Say it in full, $2,000,000 or 2 million; I will not read a bare number as money. What the bank will lend against it is the org's to work out, not yours to type.",
+        text: "What is it worth? Say it in full, $2,000,000 or 2 million; I will not read a bare number as money.",
         options: [],
+      };
+    }
+    /* THE RATE, ASKED FOR RATHER THAN REFUSED (P3). On an asset the bank has
+       never lent against there is no rate for the org to fall back on: the
+       pledge carries it as an override and the org's own validation rule wants
+       a written reason beside it. The approved credit terms are the authority
+       and the bank's guideline is the proposal. */
+    if (s.advanceRate === undefined) {
+      const band = s.assetKind ? ADVANCE_BANDS[s.assetKind] : undefined;
+      return {
+        slot: "advanceRate",
+        text:
+          `The credit terms carry an advance rate for this asset: which? On an asset the bank has never lent against there is nothing for the org to fall back on, ` +
+          `so the rate rides the pledge as an override and travels with its own written reason. ` +
+          (band
+            ? `The bank's guideline for ${(s.assetKind ?? "").toLowerCase()} is ${band.basis}. The approved credit terms are the authority, not the guideline.`
+            : "The approved credit terms are the authority on it, and I will not set one myself."),
+        options: (band?.rates ?? []).map((rate) => ({ label: `${rate} percent`, say: `at a ${rate}% advance rate` })),
       };
     }
   }
@@ -1469,6 +1677,11 @@ export function thresholdText(value: number, unit?: "ratio" | "money"): string {
 
 const shortLabel = (a: BookAsset) => (a.label.length > 44 ? `${a.label.slice(0, 42).trim()}...` : a.label);
 
+/** A figure written the way a credit agreement writes it. Never abbreviated:
+ *  "$6.5M" and "$6,500,000" are the same money and only one of them is what the
+ *  org files. */
+const exactMoney = (value: number) => `$${value.toLocaleString("en-US")}`;
+
 function sentenceList(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
@@ -1489,6 +1702,13 @@ export interface Awareness {
   fresh: string[];
   /** The chips the room offers instead of staging a duplicate blindly. */
   options: Array<{ label: string; say: string }>;
+  /**
+   * THE ROOM'S CLOSING SENTENCE over those chips. Null takes the default, which
+   * is the DUPLICATE's sentence: nothing here needs putting up twice. A test on
+   * the book that is NOT on this loan is not a duplicate and must not be told it
+   * is one (P1), so that state carries its own close.
+   */
+  close: string | null;
 }
 
 /**
@@ -1545,34 +1765,96 @@ export function amendedPlanLine(changed: string[]): string {
 
 export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
   const label = (id: string) => ctx.members.find((m) => m.id === id)?.label ?? id;
-  const none: Awareness = { onTheBook: null, onThePlan: null, fresh: draft.scope, options: [] };
+  const none: Awareness = { onTheBook: null, onThePlan: null, fresh: draft.scope, options: [], close: null };
 
+  /* ================================= THE DEDUPE IS PER LOAN JUNCTION (P1)
+
+     "DSC of Borrower already runs at the relationship level, so it already
+     reaches every facility, nothing needs putting up twice" is WRONG, and the
+     founder said so in the words the model uses: a covenant is relationship-
+     level or loan-level depending on WHICH JUNCTION it carries, and a covenant
+     with an Account_Covenant association and no Loan_Covenant junction is NOT
+     associated to the loan (WORKROOM-BRAIN 2.4). The package VIEW is a union;
+     the association is not.
+
+     SO THERE ARE THREE STATES AND THEY ARE DIFFERENT ANSWERS:
+
+       on THIS loan          - the true duplicate. Named as one, nothing staged;
+       on the book, NOT here - not a duplicate at all. The room says exactly
+                               that and offers three ways through: a new one on
+                               this facility, ASSOCIATING the existing record to
+                               it, or a different test;
+       not on the book       - nothing to say. It stages.
+
+     An ASSOCIATE is a junction create for an existing Covenant2, never a
+     delete, so it is inside the fence. What it is not is fileable by the
+     deployed wire, which carries a type name and no covenant id: that is
+     {@link associateGap}, and the room says it rather than pretending. */
   if (draft.surface === "covenant" && draft.slots.test) {
     const already = ctx.book.covenants.filter((c) => c.type === draft.slots.test);
-    const accountLevel = already.find((c) => c.accountLevel);
-    const onBook = draft.slots.second ? [] : draft.scope.filter((id) => already.some((c) => c.loanIds.includes(id)));
     const staged = ctx.plan.filter(
       (p) => p.surface === "covenant" && p.slots.test === draft.slots.test && p.memberId && draft.scope.includes(p.memberId),
     );
     const onPlan = staged.map((p) => p.memberId!).filter((id, i, all) => all.indexOf(id) === i);
+
+    /* THE JUNCTION, AND NOTHING ELSE. `loanIds` is exactly the covenant's
+       LLC_BI__Loan_Covenant__c set, so this asks the one question that decides
+       it: is this test on THIS facility? */
+    const onBook = draft.slots.second || draft.slots.associate ? [] : draft.scope.filter((id) => already.some((c) => c.loanIds.includes(id)));
     const blocked = new Set([...onBook, ...onPlan]);
     const fresh = draft.scope.filter((id) => !blocked.has(id));
-    return {
-      onTheBook: accountLevel && !draft.slots.second
-        ? `${draft.slots.test} already runs at the relationship level on this book${accountLevel.threshold !== null ? ` at ${thresholdText(accountLevel.threshold)}` : ""}${accountLevel.frequency ? `, tested ${accountLevel.frequency.toLowerCase()}` : ""}, so it already reaches every facility on the package.`
-        : onBook.length
+
+    if (onBook.length || onPlan.length) {
+      return {
+        onTheBook: onBook.length
           ? `${draft.slots.test} is already on ${sentenceList(onBook.map(label))}, and a modification carries it onto the clone.`
           : null,
-      onThePlan: onPlan.length ? `${draft.slots.test} is already on this plan for ${sentenceList(onPlan.map(label))}.` : null,
-      fresh: accountLevel && !draft.slots.second ? [] : fresh,
-      options:
-        (accountLevel && !draft.slots.second) || onBook.length || onPlan.length
-          ? [
-              { label: "Put a second one on the facility", say: `add a second ${draft.slots.test} covenant` },
-              { label: "A different test", say: "a different test" },
-            ]
-          : [],
-    };
+        onThePlan: onPlan.length ? `${draft.slots.test} is already on this plan for ${sentenceList(onPlan.map(label))}.` : null,
+        fresh,
+        options: [
+          { label: "Put a second one on the facility", say: `add a second ${draft.slots.test} covenant` },
+          { label: "A different test", say: "a different test" },
+        ],
+        close: null,
+      };
+    }
+
+    /* ON THE BOOK, NOT ON THIS LOAN. The elsewhere covenant is worth naming
+       because it is what an ASSOCIATE would attach, and because a banker who
+       wrote this test is usually looking at the one the relationship already
+       runs. It is NOT a reason to refuse and it does not narrow the scope. */
+    const elsewhere = draft.slots.second || draft.slots.associate ? null : already[0] ?? null;
+    if (elsewhere && draft.scope.length) {
+      const one = draft.scope.length === 1;
+      const here = one ? "this facility" : "these facilities";
+      const terms = [
+        elsewhere.threshold !== null ? `at ${thresholdText(elsewhere.threshold)}` : null,
+        elsewhere.frequency ? `tested ${elsewhere.frequency.toLowerCase()}` : null,
+      ].filter((t): t is string => Boolean(t));
+      const where = elsewhere.loanIds.length
+        ? `attached to ${sentenceList(elsewhere.loanIds.map(label))}`
+        : "at the relationship level, with no loan junction on it at all";
+      return {
+        onTheBook:
+          `${draft.slots.test} is on this book${terms.length ? ` ${sentenceList(terms)}` : ""}, ${where}, ` +
+          `and it is NOT associated to ${sentenceList(draft.scope.map(label))}. A covenant reaches a facility through its loan junction, ` +
+          `so a test that carries no junction here does not run on ${one ? "this facility" : "these"}, whatever it does elsewhere. ` +
+          `Two ways to put it on ${here}, and they are different records.`,
+        onThePlan: null,
+        fresh: [],
+        options: [
+          { label: `Create a new one on ${here}`, say: `add a second ${draft.slots.test} covenant` },
+          {
+            label: `Associate the existing ${draft.slots.test} to ${here}`,
+            say: `associate the existing ${draft.slots.test} covenant to ${here}`,
+          },
+          { label: "A different test", say: "a different test" },
+        ],
+        close: "Say which and I will put it up.",
+      };
+    }
+
+    return { onTheBook: null, onThePlan: null, fresh, options: [], close: null };
   }
 
   /* ============================ THE BORROWING-STRUCTURE DUPLICATE (E4a)
@@ -1634,6 +1916,7 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
             { label: "A different facility", say: "a different facility" },
           ]
         : [],
+      close: null,
     };
   }
 
@@ -1658,6 +1941,7 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
               { label: "A different facility", say: "a different facility" },
             ]
           : [],
+      close: null,
     };
   }
 
@@ -1713,7 +1997,9 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
     return {
       lines,
       gaps,
-      lede: `${s.test} of ${threshold}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}${s.frequencyFrom === "book" ? " as this relationship already tests it" : ""}, on ${sentenceList(draft.scope.map((id) => member(id).label))}. The effective date is set once when it is created and never updated afterwards.`,
+      lede: s.associate
+        ? `The ${s.test} the book already carries, at ${threshold} tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}, put onto ${sentenceList(draft.scope.map((id) => member(id).label))}. The covenant record is not touched: what this authors is the junction to the facility, so its threshold, its schedule and its effective date stay exactly as they are.`
+        : `${s.test} of ${threshold}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}${s.frequencyFrom === "book" ? " as this relationship already tests it" : ""}, on ${sentenceList(draft.scope.map((id) => member(id).label))}. The effective date is set once when it is created and never updated afterwards.`,
     };
   }
 
@@ -1738,6 +2024,44 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
     };
   }
 
+  /* ============================================ CREATE THEN PLEDGE (P3)
+
+     THE BANKER'S OWN WORDS ARE NOT IN THE COMPOSED SENTENCE, and that is
+     deliberate. The engine reads a description out of the line it is given by
+     stripping the figure, the rate and the pledge clause out of it, which
+     mangles any noun sitting between them - and the words a collateral record
+     is filed under are the one thing here that must not be mangled. So the
+     sentence carries the KIND, the VALUE, the RATE and the TARGET, which are
+     exactly what the wire needs, and {@link restateEntry} puts the banker's own
+     description back onto the entry afterwards.
+
+     "ADDITIONAL" IS IN THE SENTENCE ON PURPOSE. The engine asks its own
+     amend-or-add question when a create's words brush against something already
+     on the facility, and a net-new asset named after a plant the deal already
+     mortgages would trip it. The word says what this is: a new record beside
+     what is there, which is what the banker asked for. */
+  if (s.isNew) {
+    const kind = (s.assetKind ?? "").toLowerCase();
+    for (const id of draft.scope) {
+      lines.push({
+        memberId: id,
+        say: `pledge an additional new ${kind} asset worth ${exactMoney(s.assetValue!)} at a ${s.advanceRate}% advance rate to the ${target(id)}`,
+      });
+    }
+    if (s.lien) {
+      gaps.push(
+        `The ${s.lien} lien position. No deployed write carries a lien position onto a pledge, so it is recorded on the plan for the credit file rather than written to the bank's systems.`,
+      );
+    }
+    return {
+      lines,
+      gaps,
+      lede:
+        `${s.assetDescription}, ${kind} at ${exactMoney(s.assetValue!)}, pledged to ${sentenceList(draft.scope.map((id) => member(id).label))} at a ${s.advanceRate} percent advance rate. ` +
+        "The asset is created, the borrower's ownership is recorded and only then is it pledged: three connected writes, in that order, and the lendable value is the org's to derive from the rate.",
+    };
+  }
+
   for (const id of draft.scope) {
     const lead = s.second ? "add a second pledge of" : "pledge";
     lines.push({ memberId: id, say: `${lead} ${s.assetName ?? s.assetId} to the ${target(id)}` });
@@ -1759,24 +2083,6 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
       `${lien} to ${sentenceList(draft.scope.map((id) => member(id).label))}. ` +
       "What the bank will lend against it is worked out when the change is filed, so there is no advance rate for you to set here.",
   };
-}
-
-/**
- * THE CREATE THAT CANNOT BE COMPOSED AT ALL, named.
- *
- * A net-new asset needs an advance rate on the pledge, which is a credit
- * decision on something the bank has never lent against. The room will not set
- * one and the doctrine forbids asking for it as if it were routine, so this is
- * said BY NAME after everything else is gathered rather than guessed at.
- */
-export function blockedReason(draft: Draft): string | null {
-  if (draft.surface === "collateral" && draft.slots.isNew) {
-    return (
-      "Creating an asset the bank has never lent against and pledging it needs an advance rate recorded on the pledge, and that is a credit decision out of the approved credit terms rather than something I will set. " +
-      "I can pledge an existing asset the deal already carries, or you can give me the rate the credit terms carry and I will compose the whole chain."
-    );
-  }
-  return null;
 }
 
 /* ============================================== what THIS ROUTE can file
@@ -1812,6 +2118,29 @@ const SURFACE_NOUN: Record<SurfaceId, string> = {
   involvement: "A borrowing-structure change",
 };
 
+/**
+ * ASSOCIATING AN EXISTING COVENANT, AND WHY IT RIDES THE PLAN (P1).
+ *
+ * The MODEL is right and inside the fence: a loan junction for a Covenant2 that
+ * already exists is a create, not a delete, and it is exactly what "put the test
+ * the book already runs onto this loan" means in nCino.
+ *
+ * The WIRE is the problem. `covenantAddsJson` carries `typeName` or `typeId` -
+ * a covenant TYPE - and no field on it names an existing covenant RECORD, so
+ * sending this through the deployed path would mint a second Covenant2 of the
+ * same type and call it an association. That is the one thing the room may not
+ * do: pretend. So it stages the decision, names the arm being built, and writes
+ * nothing.
+ */
+export function associateGap(draft: Draft): string | null {
+  if (draft.surface !== "covenant" || !draft.slots.associate) return null;
+  return (
+    "Associating the covenant the book already carries is a loan-covenant junction create for an existing record, which is a create rather than a delete and is inside the fence. " +
+    "What is not there yet is the wire: the deployed covenant path carries a covenant TYPE and no field on it names an existing covenant record, so sending this down it would mint a second covenant of the same type and call it an association. " +
+    "The junction-only arm is being built on the org side. Until it is deployed this rides the plan for the credit file, with the record it would attach named on it, and nothing about it is written to the bank's systems."
+  );
+}
+
 export function routeGap(surface: SurfaceId, mode: WorkroomMode): string | null {
   const files = ROUTE_FILES[mode];
   if (!files) return null;
@@ -1842,16 +2171,21 @@ export function handoffEntry(
   const involvement = draft.surface === "involvement";
   const asset = ctx.book.assets.find((a) => a.id === s.assetId);
   const after = covenant
-    ? `${s.test} at ${thresholdText(s.threshold!, s.unit)}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}`
+    ? `${s.test}${s.threshold !== undefined ? ` at ${thresholdText(s.threshold, s.unit)}` : ""}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}`
     : involvement
       ? `${s.party} as ${s.role}`
       : `${shortLabel(asset ?? ({ label: s.assetLabel ?? "the asset" } as BookAsset))}${s.lien ? ` at ${s.lien} position` : ""}`;
-  const noun = covenant ? "New covenant" : involvement ? "New involvement" : "New pledge";
-  const object = covenant
-    ? "LLC_BI__Covenant2__c"
-    : involvement
-      ? "LLC_BI__Legal_Entities__c"
-      : "LLC_BI__Loan_Collateral2__c";
+  /* AN ASSOCIATE IS NOT A NEW COVENANT, and the card must not call it one: the
+     record exists, and what this would author is the junction to it. */
+  const associate = covenant && Boolean(s.associate);
+  const noun = associate ? "Associate a covenant" : covenant ? "New covenant" : involvement ? "New involvement" : "New pledge";
+  const object = associate
+    ? "LLC_BI__Loan_Covenant__c"
+    : covenant
+      ? "LLC_BI__Covenant2__c"
+      : involvement
+        ? "LLC_BI__Legal_Entities__c"
+        : "LLC_BI__Loan_Collateral2__c";
   const fieldId = covenant ? "covenant.add" : involvement ? "party.add" : "collateral.pledge";
   return {
     id: `${fieldId}:${memberId}:handoff:${seq}`,
@@ -1862,7 +2196,7 @@ export function handoffEntry(
     badge: `${noun} handed off`,
     title: involvement ? (s.party ?? noun) : noun,
     target: member.label,
-    before: "not on the facility today",
+    before: associate ? "on the book, with no junction to this facility" : "not on the facility today",
     after,
     member: memberId,
     map: [
@@ -1960,6 +2294,22 @@ export function verify(draft: Draft, memberId: string, deltas: WorkroomDelta[]):
  * slots that were elicited and nothing else.
  */
 export function restateEntry(draft: Draft, ctx: ElicitContext, delta: WorkroomDelta): WorkroomDelta {
+  /* A NET-NEW ASSET IS FILED UNDER THE BANKER'S OWN WORDS (P3). The composed
+     sentence deliberately carries no description - see {@link compose} - so the
+     one he wrote goes onto the entry and onto the wire here, which is the only
+     place that holds both. Nothing else about the wire is touched. */
+  if (draft.surface === "collateral" && draft.slots.isNew && draft.slots.assetDescription && delta.pledgeWire?.newCollateral) {
+    const said = draft.slots.assetDescription;
+    return {
+      ...delta,
+      title: said,
+      badge: `${said} → ${delta.after}`,
+      pledgeWire: {
+        ...delta.pledgeWire,
+        newCollateral: { ...delta.pledgeWire.newCollateral, description: said },
+      },
+    };
+  }
   if (draft.surface !== "involvement") return delta;
   const { party, role } = draft.slots;
   if (!party || !role) return delta;

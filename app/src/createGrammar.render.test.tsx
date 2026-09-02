@@ -173,8 +173,9 @@ describe("a create whose value did not resolve never reaches a chip", () => {
     await settle();
     await typeInto(room, "add a DSCR covenant of 1.25x on the 15M line of credit");
     await click(byText(/^Debt Service Coverage with and without Distributions$/));
-    // It is on the book at the relationship level, so the room offers the second.
-    await click(byText(/Put a second one on the facility/));
+    // It is on the book at the relationship level and carries no junction to
+    // this line, so the room offers the three ways through (P1).
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
 
     expect(chips(room)).toHaveLength(0);
     expect(said(room)).toContain("Debt Service Coverage of Borrower");
@@ -266,7 +267,7 @@ describe("a scope word is honoured, and never narrowed to the focused member", (
     await typeInto(room, "add another covenant to all of the loans");
     await click(byText(/The 2 Line of Credit facilities/));
     await click(byText(/Maximum Debt to Worth at 3/));
-    await click(byText(/Put a second one on the facility/));
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
 
     // Both lines of credit, and nothing else.
     expect(chips(room)).toHaveLength(2);
@@ -304,27 +305,81 @@ describe("a covenant is gathered, grounded, and put up", () => {
     // The relationship runs this test quarterly everywhere it carries it, so
     // "how often" is not asked. It IS said, with where it came from.
     expect(said(room)).not.toContain("How often is the");
-    expect(said(room)).toContain("already runs at the relationship level");
+    // P1: the book carries the test at the relationship level with no loan
+    // junction, so it is NOT on the Purchase and the room says exactly that.
+    expect(said(room)).toContain("at the relationship level, with no loan junction on it at all");
+    expect(said(room)).toContain("NOT associated to Purchase");
+    expect(said(room)).not.toContain("already reaches every facility");
   });
 
-  it("names the duplicate rather than staging it blindly, and stages the second when asked", async () => {
+  it("offers the three ways through a test the book carries elsewhere, and stages the one he picks", async () => {
     const { room } = open();
     await settle();
     await typeInto(room, "add a maximum debt to worth covenant of 3x on the purchase facility");
     expect(chips(room)).toHaveLength(0);
 
-    await click(byText(/Put a second one on the facility/));
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
     expect(chips(room)).toHaveLength(1);
     expect(room.textContent).toContain("Maximum Debt to Worth <= 3x");
     expect(said(room)).toContain("tested quarterly as this relationship already tests it");
     expect(said(room)).toContain("set once when it is created and never updated");
   });
 
+  /* ------------------------------------------ P1, the founder's own line
+
+     "add a DSC of Borrower covenant on the 8M equipment loan" was answered with
+     "it already runs at the relationship level, so it already reaches every
+     facility, nothing needs putting up twice". The covenant carries NO loan
+     junction, so it is not associated to that loan at all. */
+
+  it("P1: says the relationship-level test is NOT on the loan, and offers the three", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "add a debt service coverage of borrower covenant of 1.25x on the 8M equipment loan");
+
+    expect(chips(room)).toHaveLength(0);
+    const words = said(room);
+    expect(words).toContain("NOT associated to $8.0MM Equipment");
+    expect(words).toContain("reaches a facility through its loan junction");
+    expect(words).not.toContain("already reaches every facility");
+    expect(words).not.toContain("Nothing here needs putting up twice");
+    expect(byText(/^Create a new one on this facility$/)).toBeTruthy();
+    expect(byText(/^Associate the existing Debt Service Coverage of Borrower to this facility$/)).toBeTruthy();
+    expect(byText(/^A different test$/)).toBeTruthy();
+  });
+
+  it("P1: creating a new one on the facility stages a covenant, as it always did", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "add a debt service coverage of borrower covenant of 1.25x on the 8M equipment loan");
+    await click(byText(/^Create a new one on this facility$/));
+
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("Debt Service Coverage of Borrower >= 1.25x");
+  });
+
+  it("P1: associating the existing one rides the plan and names the arm being built", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "add a debt service coverage of borrower covenant of 1.25x on the 8M equipment loan");
+    await click(byText(/^Associate the existing Debt Service Coverage of Borrower to this facility$/));
+
+    // It goes UP: an associate is a junction create, not a delete, and the
+    // room does not refuse it.
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("Debt Service Coverage of Borrower");
+    // And it does not pretend to file. The wire carries a covenant TYPE.
+    const words = said(room) + caveats(room) + (room.textContent ?? "");
+    expect(words).toContain("junction create for an existing record");
+    expect(words).toContain("being built on the org side");
+    expect(words).not.toContain("Nothing here needs putting up twice");
+  });
+
   it("does not propose again what this session already put on the plan", async () => {
     const { room } = open();
     await settle();
     await typeInto(room, "add a maximum debt to worth covenant of 3x on the purchase facility");
-    await click(byText(/Put a second one on the facility/));
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
     await click(byText(/^Confirm$/));
 
     await typeInto(room, "add a maximum debt to worth covenant of 3x on the purchase facility");
@@ -392,26 +447,87 @@ describe("a pledge is gathered without ever asking what the org works out", () =
     expect(words).not.toMatch(/lendable/i);
   });
 
-  it("asks the lien position when the deal does not answer it, and never the advance rate", async () => {
-    const { room } = open();
-    await settle();
-    await typeInto(room, "pledge a new forklift fleet worth $2,000,000 to the purchase facility");
-    // A NET-NEW ASSET is the one shape this room cannot compose, and it says so
-    // rather than asking for a rate it will not set.
-    expect(said(room)).toContain("credit decision");
-    await click(byText(/Pledge something the deal already carries/));
-    expect(said(room)).toContain("Which asset?");
-    expect(said(room)).not.toMatch(/advance rate for you to set|lendable/i);
-  });
+  /* -------------------------------------------- P3, create then pledge
 
-  it("names the net-new asset gap instead of asking for a rate it will not set", async () => {
+     "Pledge something the deal already carries" as the fallback to creating an
+     asset makes no sense: the deal's collateral carries onto the clone by
+     itself. Creating one must be possible, so the room asks for the rate the
+     wire needs, with the bank's own guideline as the proposal, and never
+     refuses. */
+
+  it("P3: asks a net-new asset for the rate rather than refusing it", async () => {
     const { room } = open();
     await settle();
     await typeInto(room, "pledge a new forklift fleet worth $2,000,000 to the purchase facility");
 
     expect(chips(room)).toHaveLength(0);
-    expect(said(room)).toContain("credit decision");
-    expect(said(room)).toContain("advance rate");
+    const words = said(room);
+    expect(words).toContain("The credit terms carry an advance rate for this asset: which?");
+    expect(words).toContain("approved credit terms are the authority");
+    // The refusal is gone, and so is the pointless fallback.
+    expect(words).not.toContain("credit decision out of the approved credit terms");
+    expect(byText(/Pledge something the deal already carries/)).toBeFalsy();
+    // The bank's guideline for equipment, as a chip.
+    expect(byText(/^80 percent$/)).toBeTruthy();
+  });
+
+  it("P3: drives the founder's own create-then-pledge line to a staged card", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000");
+
+    // E3 holds: the typed type is honoured and the kind is never asked.
+    expect(said(room)).not.toContain("What kind of asset is it?");
+    await click(byText(/^75 percent$/));
+    await click(byText(/^1st position$/));
+
+    expect(chips(room)).toHaveLength(1);
+    // The banker's own words, on the card and on the wire.
+    expect(room.textContent).toContain("Kokomo plant expansion");
+    expect(room.textContent).toContain("created and pledged, $6,500,000.00 at 75% advance");
+    const words = said(room);
+    expect(words).toContain("The asset is created, the borrower's ownership is recorded and only then is it pledged");
+    expect(words).not.toContain("I will not set");
+  });
+});
+
+/* ================================== N3, the dollar qualifier as a focus */
+
+describe("a dollar qualifier names the facility on every line, not just a commitment", () => {
+  it("N3: stages ONE fee on the $15M line and never asks 1% or $15,000,000", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "add a 1% origination fee on the 15M line of credit");
+
+    const words = said(room);
+    // THE DEFECT: the fenced engine read "15M" as the fee amount and asked.
+    expect(words).not.toMatch(/1% or \$15,000,000/);
+    expect(words).not.toMatch(/is the .*fee .*or /i);
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("Line of Credit");
+    expect(room.textContent).not.toContain("$15,000,000.00 fee");
+    // The card names the facility, which is why the room says nothing extra.
+    expect(room.textContent).toContain("Line of Credit ($15M)");
+    expect(room.textContent).toContain("1.00% of the committed amount");
+  });
+
+  it("N3: stages the policy exception on the facility the figure named", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(
+      room,
+      "log a policy exception on the 15M line of credit for leverage above policy approved by credit committee",
+    );
+
+    // The narrative survived the strip: the exception is about leverage.
+    expect(said(room).toLowerCase()).toContain("leverage");
+    expect(said(room)).not.toMatch(/1% or|\$15,000,000/);
+    expect(said(room)).toContain("Leverage above policy approved by credit committee");
+
+    await click(byText(/^Waived$/));
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("Line of Credit ($15M)");
+    expect(room.textContent).toContain("Leverage above policy approved by credit committee");
   });
 });
 
@@ -422,7 +538,7 @@ describe("the open card is amended, never contradicted", () => {
     const { room } = open();
     await settle();
     await typeInto(room, "add a maximum debt to worth covenant of 3x on the purchase facility");
-    await click(byText(/Put a second one on the facility/));
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
     expect(chips(room)).toHaveLength(1);
 
     await typeInto(room, "actually make it 2.75x");
@@ -440,7 +556,7 @@ describe("the open card is amended, never contradicted", () => {
     const { room } = open();
     await settle();
     await typeInto(room, "add a maximum debt to worth covenant of 3x on the purchase facility");
-    await click(byText(/Put a second one on the facility/));
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
 
     await typeInto(room, "on the construction loan instead");
 
@@ -500,7 +616,7 @@ describe("the open card is amended, never contradicted", () => {
     const { room } = open();
     await settle();
     await typeInto(room, "add a maximum debt to worth covenant of 3x on the purchase facility");
-    await click(byText(/Put a second one on the facility/));
+    await click(byText(/Create a new one on th(is|ese) facilit(y|ies)/));
 
     await typeInto(room, "take the 2.5M line of credit to $4,000,000");
     expect(said(room)).toContain("One decision at a time");

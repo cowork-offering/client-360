@@ -44,6 +44,7 @@ import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/br
 import {
   committedSentence,
   fenceRefusal,
+  focusQualifier,
   magnitudeAdvisories,
   provablyClean,
   qualifierFilter,
@@ -57,9 +58,9 @@ import {
 import {
   advance,
   amendedPlanLine,
+  associateGap,
   awarenessFor,
   amendmentOf,
-  blockedReason,
   buildBook,
   changedLine,
   compose,
@@ -1597,7 +1598,7 @@ export function Workroom({
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `${notes.join(" ")} Nothing here needs putting up twice.`,
+          text: `${notes.join(" ")} ${aware.close ?? "Nothing here needs putting up twice."}`,
           options: aware.options.length ? aware.options : undefined,
         });
         return [];
@@ -1612,7 +1613,7 @@ export function Workroom({
          none is: the create goes on the plan as a HANDOFF, which is the honest
          record and writes nothing anywhere. A room that gathered all of it and
          then went quiet would be dropping the whole thing silently (rule 8). */
-      const routeSaid = routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
 
       const started = Date.now();
       setThinking(true);
@@ -1705,18 +1706,6 @@ export function Workroom({
     async (d: Draft, mine: number) => {
       const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
 
-      const blocked = blockedReason(d);
-      if (blocked) {
-        setCreating(d);
-        answer({
-          kind: "agent",
-          id: nextId("agent"),
-          text: blocked,
-          options: [{ label: "Pledge something the deal already carries", say: "pledge an asset the deal already carries" }],
-        });
-        return;
-      }
-
       const step = advance(d, elicitCtx);
       if (step.ask) {
         setCreating(step.draft);
@@ -1756,7 +1745,7 @@ export function Workroom({
 
       // A ROUTE THAT COULD NOT FILE IT CANNOT FILE THE CORRECTION EITHER. The
       // card is still amendable; what it corrects is the handoff on the plan.
-      const routeSaid = routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
       const started = Date.now();
       setThinking(true);
       const got: WorkroomDelta[] = [];
@@ -1959,7 +1948,7 @@ export function Workroom({
         answer({ kind: "agent", id: nextId("agent"), text: removalOf.text });
         return;
       }
-      const line = removalOf?.line ?? commanded ?? instruction;
+      let line = removalOf?.line ?? commanded ?? instruction;
 
       // The acknowledgment said everything it came to say. The checks are
       // settled above; there is no instruction left in the line to parse.
@@ -1985,6 +1974,34 @@ export function Workroom({
            below take it and the create waits where it stands. */
         const reading = !commanded && (readTopic(instruction) !== null || isQuestion(instruction));
 
+        /* ============================ THE DOLLAR QUALIFIER IS A FOCUS (N3)
+
+           "on the 15M line of credit" on a FEE line was read by the fenced
+           engine as a $15,000,000 fee. The phrase is a facility name, not a
+           figure, so the room resolves it to the member, stands on that member
+           and takes the phrase out of the line before the engine sees it - and
+           says nothing extra, because the card names the facility exactly as it
+           does after a click on the strip.
+
+           NOT WHILE A CREATE IS BEING GATHERED. There the scope reader already
+           handles the qualifier correctly and owns the answer to its own
+           question, and stripping the phrase out of an answer would leave the
+           room holding nothing. */
+        const focusOn = reading || creating ? null : focusQualifier(line, qualifierMembers);
+        const focusMember = focusOn ? (brief.members.find((m) => m.id === focusOn.memberId) ?? null) : null;
+        if (focusOn && focusMember && elicitMembers.some((m) => m.id === focusMember.id)) {
+          setFocused(focusMember);
+          engine.pick(focusMember.id);
+          line = focusOn.line;
+        }
+        /* THE FOCUS THIS TURN. `focused` is React state and does not move until
+           the next render, so the create grammar is handed the member the line
+           just named rather than the one the room was standing on before it. */
+        const turnCtx: ElicitContext =
+          focusOn && focusMember
+            ? { ...elicitCtx, focused: elicitMembers.find((m) => m.id === focusMember.id) ?? elicitCtx.focused }
+            : elicitCtx;
+
         /* ====================================== THE CREATE BEING GATHERED FOR
 
            A create in flight owns the next line: it is the answer to the one
@@ -1995,24 +2012,6 @@ export function Workroom({
            it, because a room that swallowed every following sentence would be a
            form wearing a conversation's clothes. */
         if (creating && !reading) {
-          /* A CREATE THE ROOM CANNOT COMPOSE AT ALL MUST NOT TRAP THE NEXT LINE.
-             `blockedReason` is not a question the room is waiting on an answer
-             to: it is the room saying it will not author this thing without a
-             figure the credit terms carry. Every line after it still READS into
-             the draft, though, so a blocked create swallowed the whole rest of
-             the drive - the fence probes, the borrowing structure, all of it -
-             and answered each of them with the same block. So a blocked create
-             holds the room for exactly one shape of line, the one that answers
-             it, and lets everything else past. (Found driving the founder's own
-             Part 1, 2026-09-01.) */
-          if (blockedReason(creating) && !/\d+(?:\.\d+)?\s*%/.test(line)) {
-            setCreating(null);
-            answer({
-              kind: "agent",
-              id: nextId("agent"),
-              text: "That one is still waiting on the rate the credit terms carry, so I am leaving it where it stands and taking this line as it reads.",
-            });
-          } else {
           const next = readInto(creating, line, elicitCtx);
           const moved =
             JSON.stringify(next.slots) !== JSON.stringify(creating.slots) ||
@@ -2031,7 +2030,6 @@ export function Workroom({
             id: nextId("agent"),
             text: "Nothing in that answered what the new one still needs, so I am leaving it where it stands and taking the line as it reads.",
           });
-          }
         }
 
         /* ==================================================== A CREATE OPENS
@@ -2044,7 +2042,7 @@ export function Workroom({
            as navigation if nothing looks at the noun in between. A create is what
            the banker asked for; where to put it is the create's own first
            question. */
-        const opened = reading ? null : openCreate(line, elicitCtx);
+        const opened = reading ? null : openCreate(line, turnCtx);
         if (opened) {
           setSteerPending(false);
           await askCreate(opened, mine);

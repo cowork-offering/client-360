@@ -4,6 +4,7 @@ import {
   clauseCount,
   committedSentence,
   fenceRefusal,
+  focusQualifier,
   magnitudeAdvisories,
   dollarFigures,
   provablyClean,
@@ -278,8 +279,8 @@ const ELENA = "Elena Hartwell";
 /** The book, carrying the org facts the drive was pre-flighted on. */
 const BOOK: Book = {
   covenants: [
-    { type: "Minimum Liquidity", threshold: 5_000_000, frequency: "Quarterly", loanIds: [LOC], accountLevel: false },
-    { type: "Leverage", threshold: 3, frequency: "Quarterly", loanIds: [EQUIPMENT], accountLevel: false },
+    { id: "a3Bbb00000000L1", type: "Minimum Liquidity", threshold: 5_000_000, frequency: "Quarterly", loanIds: [LOC], accountLevel: false },
+    { id: "a3Bbb00000000L2", type: "Leverage", threshold: 3, frequency: "Quarterly", loanIds: [EQUIPMENT], accountLevel: false },
   ],
   assets: [
     { id: "a3Ubb00000001AR", label: "Accounts receivable, present and future", name: "COL-000761", kind: "Accounts Receivable", value: 9_000_000, lien: "1st", loanIds: [LOC] },
@@ -435,6 +436,72 @@ describe("\"take X off Y\" is routed by what X is, and composed from the book (E
   });
 });
 
+/* ------------------------------------- N3, the dollar qualifier as focus */
+
+describe("a dollar qualifier names the facility and comes out of the line (N3)", () => {
+  const read = (line: string, ms = MEMBERS) => focusQualifier(line, ms);
+
+  it("takes the facility off a FEE line, where the engine read it as the fee", () => {
+    const out = read("add a 1% origination fee on the 15M line of credit")!;
+    expect(out.memberId).toBe(LOC);
+    expect(out.line).toBe("add a 1% origination fee");
+    expect(out.qualifier).toBe("on the 15M line of credit");
+  });
+
+  it("takes it off a POLICY EXCEPTION line and leaves the narrative whole", () => {
+    const out = read(
+      "log a policy exception on the 15M line of credit for leverage above policy approved by credit committee",
+    )!;
+    expect(out.memberId).toBe(LOC);
+    expect(out.line).toBe("log a policy exception for leverage above policy approved by credit committee");
+  });
+
+  it("takes it off a COVENANT line without touching the threshold", () => {
+    const out = read("add a debt service coverage covenant of 1.25x on the 8M equipment loan")!;
+    expect(out.memberId).toBe(EQUIPMENT);
+    expect(out.line).toBe("add a debt service coverage covenant of 1.25x");
+  });
+
+  it("takes it off a COLLATERAL line and off a PARTY line", () => {
+    expect(read("pledge the Fort Wayne equipment on the 2.5M line of credit")?.line).toBe(
+      "pledge the Fort Wayne equipment",
+    );
+    expect(read("add Elena Hartwell as a limited guarantor on the 8M equipment loan")?.line).toBe(
+      "add Elena Hartwell as a limited guarantor",
+    );
+  });
+
+  it("leaves a COMMITMENT line to the post-parse filter, which already works on it", () => {
+    expect(read("take the 2.5M line of credit to 4M")).toBeNull();
+    expect(read("increase the 15M line of credit to 20M")).toBeNull();
+  });
+
+  it("does NOT focus where the figure names two facilities", () => {
+    const twins: QualifierMember[] = [
+      { id: LOC, label: "Line of Credit", committed: 5_000_000 },
+      { id: EQUIPMENT, label: "Equipment", committed: 5_000_000 },
+    ];
+    expect(read("add a 1% origination fee on the 5M line of credit", twins)).toBeNull();
+  });
+
+  it("does NOT strip a figure that is the change's own value", () => {
+    // No preposition and no facility noun: the figure is the fee, not a name.
+    expect(read("add an origination fee of $15,000,000")).toBeNull();
+    expect(read("add a $15,000,000 origination fee")).toBeNull();
+  });
+
+  it("does NOT touch a line naming two facilities in two clauses", () => {
+    expect(
+      read("add a 1% origination fee on the 15M line of credit and a covenant on the 8M equipment loan"),
+    ).toBeNull();
+  });
+
+  it("does NOT fire where the line carries no figure the package answers to", () => {
+    expect(read("add a 1% origination fee on the 9M line of credit")).toBeNull();
+    expect(read("add a 1% origination fee")).toBeNull();
+  });
+});
+
 /* ------------------------------------------------ E1, the destructive one */
 
 describe("a remove is routed, and it un-stages nothing it was not told to (E1)", () => {
@@ -475,12 +542,67 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     expect(read?.kind).toBe("fence");
     expect(read?.kind === "fence" && read.scope).toBe("pledge");
     const fence = fenceRefusal("pledge", "Accounts receivable, present and future");
-    expect(fence.why).toContain("files no release");
+    expect(fence.why).toContain("COLLATERAL release");
     expect(fence.why).toContain("Nothing has been staged");
   });
 
   it("leaves a party removal to the parser, where it files as a carry exclusion", () => {
     expect(readRemove("remove Elena Hartwell from the 15M line of credit", [stagedCovenant], BOOK)).toBeNull();
+  });
+
+  /* ------------------------------------------- N1 and P4, the pledge fence
+
+     THE ORG'S OWN COVENANT CATALOG CARRIES A TEST CALLED "Accounts Receivable"
+     (a3Bbb000000S0bNEAS on this relationship, 80, monthly) beside an asset
+     described as accounts receivable. That collision is what put the covenant
+     refusal on a collateral line in the drive: both resolved and the covenant
+     won on order alone. */
+  const AR_BOOK: Book = {
+    ...BOOK,
+    covenants: [
+      ...BOOK.covenants,
+      { id: "a3Bbb000000S0bN", type: "Accounts Receivable", threshold: 80, frequency: "Monthly", loanIds: [LOC], accountLevel: false },
+    ],
+  };
+
+  it("reads a pledge line as COLLATERAL even where a covenant type carries the same words (N1)", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], AR_BOOK);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" && read.scope).toBe("pledge");
+  });
+
+  it("still reads the covenant line as a covenant, on the same book", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", [stagedCovenant], AR_BOOK);
+    expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Accounts Receivable" });
+  });
+
+  it("speaks collateral on a pledge and covenant on a covenant, and the two are not the same refusal (P4)", () => {
+    const pledge = fenceRefusal("pledge", "Accounts receivable, present and future");
+    const covenant = fenceRefusal("covenant", "Minimum Liquidity");
+
+    // The collateral fence, in the collateral's own words.
+    expect(pledge.why).toContain("COLLATERAL release");
+    expect(pledge.why).toContain("never deleted on the booked loan");
+    expect(pledge.why).toContain("CARRY EXCLUSION");
+    // And NEVER the covenant's.
+    expect(pledge.why).not.toMatch(/loan-covenant junction/i);
+    expect(pledge.why).not.toMatch(/covenant DETACH/i);
+    expect(pledge.title).not.toMatch(/detach/i);
+
+    // The covenant fence keeps its own constraint and does not borrow the
+    // collateral one.
+    expect(covenant.why).toContain("loan-covenant junction");
+    expect(covenant.why).not.toMatch(/CARRY EXCLUSION/);
+    expect(covenant.title).toBe("Detach Minimum Liquidity");
+  });
+
+  it("titles the refusal with the asset rather than with the whole credit-agreement paragraph", () => {
+    const fence = fenceRefusal(
+      "pledge",
+      "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
+    );
+    expect(fence.title).toBe("Release All present and future accounts receivable");
+    expect(fence.why).not.toContain("concentration cap");
   });
 
   it("names both rather than choosing where two staged entries fit", () => {
