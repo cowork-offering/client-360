@@ -475,12 +475,67 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     expect(read?.kind).toBe("fence");
     expect(read?.kind === "fence" && read.scope).toBe("pledge");
     const fence = fenceRefusal("pledge", "Accounts receivable, present and future");
-    expect(fence.why).toContain("files no release");
+    expect(fence.why).toContain("COLLATERAL release");
     expect(fence.why).toContain("Nothing has been staged");
   });
 
   it("leaves a party removal to the parser, where it files as a carry exclusion", () => {
     expect(readRemove("remove Elena Hartwell from the 15M line of credit", [stagedCovenant], BOOK)).toBeNull();
+  });
+
+  /* ------------------------------------------- N1 and P4, the pledge fence
+
+     THE ORG'S OWN COVENANT CATALOG CARRIES A TEST CALLED "Accounts Receivable"
+     (a3Bbb000000S0bNEAS on this relationship, 80, monthly) beside an asset
+     described as accounts receivable. That collision is what put the covenant
+     refusal on a collateral line in the drive: both resolved and the covenant
+     won on order alone. */
+  const AR_BOOK: Book = {
+    ...BOOK,
+    covenants: [
+      ...BOOK.covenants,
+      { type: "Accounts Receivable", threshold: 80, frequency: "Monthly", loanIds: [LOC], accountLevel: false },
+    ],
+  };
+
+  it("reads a pledge line as COLLATERAL even where a covenant type carries the same words (N1)", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], AR_BOOK);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" && read.scope).toBe("pledge");
+  });
+
+  it("still reads the covenant line as a covenant, on the same book", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", [stagedCovenant], AR_BOOK);
+    expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Accounts Receivable" });
+  });
+
+  it("speaks collateral on a pledge and covenant on a covenant, and the two are not the same refusal (P4)", () => {
+    const pledge = fenceRefusal("pledge", "Accounts receivable, present and future");
+    const covenant = fenceRefusal("covenant", "Minimum Liquidity");
+
+    // The collateral fence, in the collateral's own words.
+    expect(pledge.why).toContain("COLLATERAL release");
+    expect(pledge.why).toContain("never deleted on the booked loan");
+    expect(pledge.why).toContain("CARRY EXCLUSION");
+    // And NEVER the covenant's.
+    expect(pledge.why).not.toMatch(/loan-covenant junction/i);
+    expect(pledge.why).not.toMatch(/covenant DETACH/i);
+    expect(pledge.title).not.toMatch(/detach/i);
+
+    // The covenant fence keeps its own constraint and does not borrow the
+    // collateral one.
+    expect(covenant.why).toContain("loan-covenant junction");
+    expect(covenant.why).not.toMatch(/CARRY EXCLUSION/);
+    expect(covenant.title).toBe("Detach Minimum Liquidity");
+  });
+
+  it("titles the refusal with the asset rather than with the whole credit-agreement paragraph", () => {
+    const fence = fenceRefusal(
+      "pledge",
+      "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
+    );
+    expect(fence.title).toBe("Release All present and future accounts receivable");
+    expect(fence.why).not.toContain("concentration cap");
   });
 
   it("names both rather than choosing where two staged entries fit", () => {

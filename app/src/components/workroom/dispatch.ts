@@ -608,6 +608,10 @@ export const readsThePlan = (line: string): boolean => {
 
 const REMOVAL_VERB = /\b(remove|removing|drop|dropping|delete|detach|unpledge|strike|take\s+off|take\s+out|scrap)\b/i;
 
+/** The words that make a line a COVENANT line. A covenant type whose name
+ *  happens to read like an asset ("Accounts Receivable") does not. */
+const COVENANT_NOUN = /\b(covenants?|tests?|ratios?|thresholds?)\b/i;
+
 /** The words of a staged entry a banker can actually see on it. */
 const entryWords = (text: string): string[] =>
   text
@@ -656,6 +660,16 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
     book.assets.find((a) => (a.name ? lower.includes(a.name.toLowerCase()) : false)) ??
     (collateralNoun && scored.length ? scored[0].asset : null);
 
+  /* THE NOUN THE LINE USES DECIDES BETWEEN THEM (N1/P4, founder 2026-09-02).
+     This book carries a covenant TYPE called "Accounts Receivable" and an asset
+     described as accounts receivable, so "remove the accounts receivable pledge
+     from the 15M line of credit" resolved both and the covenant won on order
+     alone - and the room answered a collateral line with the covenant-detach
+     refusal. A line carrying a COLLATERAL noun and no covenant noun is a
+     collateral line, whatever a covenant type happens to be called. */
+  const covenantNoun = COVENANT_NOUN.test(line);
+  const speaksCollateral = collateralNoun && !covenantNoun;
+
   const named = entries.filter(
     (e) => names(line, entryWords(`${e.title} ${e.kind}`)) && names(line, entryWords(`${e.target} ${e.after}`)),
   );
@@ -674,6 +688,7 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
       reason: `That could be ${claimed.map((e) => `${e.title} on ${e.target}`).join(" or ")}. Name one.`,
     };
   }
+  if (asset && speaksCollateral) return { kind: "fence", scope: "pledge", name: asset.label };
   if (covenant) return { kind: "fence", scope: "covenant", name: covenant.type };
   if (asset) return { kind: "fence", scope: "pledge", name: asset.label };
   return null;
@@ -687,16 +702,27 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
  * rather than restated here, so a change behind the fence changes this refusal
  * too instead of leaving it stale.
  */
+/** THE ASSET, SAID THE WAY A BANKER WOULD SAY IT. A collateral description runs
+ *  to a paragraph in this org ("All present and future accounts receivable.
+ *  Excludes invoices over 90 days past due, ..."), and a refusal titled with the
+ *  paragraph is unreadable. The first sentence names the asset; the exclusions
+ *  behind it are the credit agreement's business, not the refusal's. */
+function assetPhrase(label: string): string {
+  const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
+  return first.length > 64 ? `${first.slice(0, 61).trim()}...` : first;
+}
+
 export function fenceRefusal(scope: "covenant" | "pledge", name: string): WorkroomRefusal & { why: string } {
   const field = catalogField(scope === "covenant" ? "covenant.remove" : "collateral.release");
+  const said = scope === "pledge" ? assetPhrase(name) : name;
   return {
     id: `fence:${scope}:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-    target: name,
-    title: scope === "covenant" ? `Detach ${name}` : `Release ${name}`,
+    target: said,
+    title: scope === "covenant" ? `Detach ${name}` : `Release ${said}`,
     why:
       scope === "covenant"
         ? `Taking ${name} off a facility is a covenant DETACH, and this room does not file one: every field on the loan-covenant junction is non-updateable, so detaching means deleting the row and no delete is filed on any object here. ${name} stays on the facility and carries onto the clone with everything else. What the bank does have is a covenant compliance update, to Compliant, Waived or Exception, and it runs as its own credit action rather than on this modification. Nothing has been staged and nothing has come off the manifest.`
-        : `Releasing ${name} means taking a pledge off, and this room files no release: no deployed tool carries one. The booked facility keeps exactly the security it has today, and the clone carries the same pledges onto the new version. What I can do here is pledge something additional onto a facility. Nothing has been staged and nothing has come off the manifest.`,
+        : `Taking ${said} off a facility is a COLLATERAL release, and this room files none. A pledge is never deleted on the booked loan: the security the facility carries today stays exactly where it is, and on a modification the clone carries the same pledges onto the new version. What this needs is a pledge CARRY EXCLUSION, the same mechanism the borrowing structure already uses, where the parent keeps its pledge and the new version simply starts without it. That arm is being built on the org side and is not deployed, so I will not pretend to file it. What I can file here is a pledge ONTO a facility. Nothing has been staged and nothing has come off the manifest.`,
     reason: field?.gap ?? "No tool files this today.",
     detail: field?.closes ?? "",
   };
