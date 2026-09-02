@@ -461,8 +461,8 @@ const LANE_LABELS: Record<string, string> = {
   overrideComment: "Rationale",
   computedRiskGradeValue: "Proposed grade",
   overriddenRiskGradeValue: "Override",
-  origin: "Origin",
-  subject: "Subject",
+  requestType: "Subject",
+  summary: "Request",
   detail: "Detail",
 };
 

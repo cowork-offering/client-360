@@ -391,44 +391,83 @@ describe("the risk-rating review is account-level and carries no facility scope"
   });
 });
 
-describe("the service request is purely account-level", () => {
+describe("the service request is purely account-level, with its subject and body the right way round", () => {
   const ctx = ctxFor();
 
-  it("takes the org's word for type and origin rather than offering an invented set", () => {
-    // Case.Type and Case.Origin have never been read off this org, so there is
-    // no cached value set and the room must not compose one.
+  /* THREE DEFECTS LIVED ON FOUR LINES OF `serviceStep`, all of them against the
+     deployed StageServiceRequest.cls sitting in this repo. This block is the
+     three of them, pinned. */
+
+  it("asks WHAT THE CLIENT ASKED FOR first, because that is what becomes the Subject", () => {
+    // The Apex: requestType is "Banker-language description of what the client
+    // asked for. Becomes the case subject", and it maps
+    // 'Subject' => req.requestType. The room used to ask "What kind of request
+    // is this?" here, so a CATEGORY landed on the subject line.
     const step = nextStep("service", ctx, {})!;
-    expect(step.key).toBe("type");
+    expect(step.key).toBe("requestType");
     expect(step.kind).toBe("text");
-    expect(step.options).toBeUndefined();
+    expect(step.target).toEqual({ object: "Case", field: "Subject" });
+    expect(step.ask).toContain("What did the client ask for");
   });
 
-  it("composes the one free-text field the wire actually carries", () => {
+  it("then asks for the request IN FULL, because that is what becomes the Description", () => {
+    // summary is "The request in full, as the servicing team needs to read it"
+    // and maps 'Description' => describeWithSource(req). The room used to ask
+    // "State the subject" here, so THE SUBJECT LANDED IN THE BODY.
+    const step = nextStep("service", ctx, { requestType: "Copy of the June covenant certificate" })!;
+    expect(step.key).toBe("summary");
+    expect(step.target).toEqual({ object: "Case", field: "Description" });
+    expect(step.ask).toContain("in full");
+  });
+
+  it("asks TWO questions, not three: there is no origin step and no origin key", () => {
+    // StageServiceRequest declares no `origin` invocable variable at all. It
+    // reads Case.Type and Case.Origin off this org's own picklists through
+    // C360Picklist.preferredOrFallback. The banker answered "How did it reach
+    // us?" and the answer was dropped on the floor.
     const answers = driveTo("service", ctx, {
-      type: "Service Request",
-      origin: "Agent",
-      subject: "Payoff quote for the equipment loan",
-      detail: "Client asked by email on the 29th.",
+      requestType: "Copy of the June covenant certificate",
+      summary: "James Hartwell asked on 28 Aug for the June certificate for his own file.",
+      detail: "No credit action requested.",
     });
+    expect(Object.keys(answers)).toEqual(["requestType", "summary", "detail"]);
+    expect(Object.keys(answers)).not.toContain("origin");
+
     const built = buildStagePayload("service", ctx, answers, "key-1");
     const p = (built as { payload: StagePayloads["create-service-request"] }).payload;
     expect(p.accountId).toBe("001X");
-    expect(p.requestType).toBe("Service Request");
-    expect(p.origin).toBe("Agent");
-    expect(p.summary).toBe("Payoff quote for the equipment loan");
+    expect(p.requestType).toBe("Copy of the June covenant certificate");
+    expect(p.summary).toContain("James Hartwell asked on 28 Aug");
+    expect(p).not.toHaveProperty("origin");
     // The detail rides the AUDIT RATIONALE, which is on the wire. There is no
     // `description` key on this request class and the room does not invent one.
     expect(p).not.toHaveProperty("description");
-    expect(p.rationale).toContain("Client asked by email on the 29th.");
+    expect(p.rationale).toContain("No credit action requested.");
   });
 
-  it("offers the client's own words as a chip where the read staged a request", () => {
+  it("offers the client's own words as the SUBJECT chip, never written silently", () => {
     const withRequest = ctxFor({
       requests: [{ summary: "Please send a payoff quote", reference: { kind: "email", id: "AAM1" } }],
     } as never);
-    const step = nextStep("service", withRequest, { type: "x", origin: "y" })!;
-    expect(step.key).toBe("subject");
+    const step = nextStep("service", withRequest, {})!;
+    expect(step.key).toBe("requestType");
     expect(step.options?.[0].value).toBe("Please send a payoff quote");
+    expect(step.options?.[0].detail).toBe("from the client's request");
+  });
+
+  it("offers NO Case.Type and NO Case.Origin chips, in either state", () => {
+    /* The catalog carries both now, and the wire-arms follow-up says to pass
+       them into this room. Doing so would repeat the origin defect exactly: a
+       chip set from a field that is on no wire is a question that cannot be
+       filed. They are named in `produces` as facts the ORG sets. */
+    const first = nextStep("service", ctx, {})!;
+    const second = nextStep("service", ctx, { requestType: "x" })!;
+    for (const step of [first, second]) {
+      expect(step.options?.some((o) => o.value === "Question" || o.value === "Complaint")).toBeFalsy();
+      expect(step.options?.some((o) => o.value === "Email" || o.value === "Phone" || o.value === "Web")).toBeFalsy();
+    }
+    expect(REL_FLOWS.service.produces).toContain("read off this org's own picklists by the tool");
+    expect(REL_FLOWS.service.produces).toContain("Nobody is assigned, no turnaround is promised");
   });
 });
 

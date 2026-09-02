@@ -218,7 +218,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The service request covers a servicing ask on this relationship: statements, payoff quotes, document requests or account changes.",
     produces:
-      "It creates the request at status New. The tool performs no status transitions and never closes a case.",
+      "It creates the request at status New, with what the client asked for on the subject and the request in full in the body. The type and the origin are read off this org's own picklists by the tool and are not the room's to set; if the org does not offer the honest pair the case still files and the plan says which pair it used. Nobody is assigned, no turnaround is promised, the tool performs no status transitions and it never closes a case.",
     writeObjectLabel: "service request",
     approveLabel: "Log the request",
     filedWord: "Logged",
@@ -854,43 +854,58 @@ export function asksForClassification(text: string, route: RelRoute): boolean {
   return route === "rating" && CLASSIFICATION_ASK.test(text.trim());
 }
 
+/**
+ * THE SERVICE REQUEST, WITH ITS SUBJECT AND ITS BODY THE RIGHT WAY ROUND.
+ *
+ * THREE DEFECTS LIVED ON FOUR LINES OF THIS FUNCTION, all of them against the
+ * deployed `StageServiceRequest.cls` in this repo.
+ *
+ * 1. THE SUBJECT AND THE BODY WERE INVERTED. The Apex is explicit:
+ *    `requestType` is "Banker-language description of what the client asked
+ *    for. Becomes the case subject" and maps `'Subject' => req.requestType`;
+ *    `summary` is "The request in full, as the servicing team needs to read it"
+ *    and maps `'Description' => describeWithSource(req)`. Both are
+ *    required=true. The room asked "What kind of request is this?" for
+ *    `requestType`, so a CATEGORY landed on the subject line, and "State the
+ *    subject" for `summary`, so THE SUBJECT LANDED IN THE DESCRIPTION BODY.
+ *
+ * 2. `origin` IS NOT A WIRE. The class declares no origin invocable variable at
+ *    all. It resolves `Case.Type` and `Case.Origin` itself through
+ *    `C360Picklist.preferredOrFallback` and reports `degradedTypeMode`. The
+ *    banker answered "How did it reach us?" and the answer was dropped on the
+ *    floor. The step and the payload key are gone.
+ *
+ * 3. `Case.Type` AND `Case.Origin` CHIPS WOULD REPEAT DEFECT 2. The catalog now
+ *    carries both, and the wire-arms follow-up says to pass them into this
+ *    room. DO NOT. Neither is on the wire, so a chip set from them is a
+ *    question that cannot be filed. They are named in `produces` as facts the
+ *    ORG sets, and never offered as chips. The catalog reaches this room for
+ *    covenantType and collateralType only.
+ */
 function serviceStep(ctx: RelContext, a: Answers): RelStep | null {
-  /* NO OPTIONS ON THESE TWO, and that is the honest shape. `Case.Type` and
-     `Case.Origin` have never been read off this org — they are absent from the
-     observed-picklist cache by design — so the room takes the banker's own word
-     and lets the tool validate. A refusal comes back carrying the LEGAL LIST,
-     which `legalValuesFrom` lifts out and the room re-offers as chips. Inventing
-     a value set here is the failure the campaign has already paid for twice. */
-  if (!answered(a, "type")) {
-    return {
-      key: "type",
-      ask: "What kind of request is this?",
-      kind: "text",
-      placeholder: "The request type.",
-      target: { object: "Case", field: "Type" },
-    };
-  }
-  if (!answered(a, "origin")) {
-    return {
-      key: "origin",
-      ask: "How did it reach us?",
-      kind: "text",
-      placeholder: "The origin.",
-      target: { object: "Case", field: "Origin" },
-    };
-  }
-  if (!answered(a, "subject")) {
+  if (!answered(a, "requestType")) {
     /* THE CLIENT'S OWN WORDS LEAD, where the read staged an inbound request.
        Offered as a chip, never written silently: a subject the banker did not
        choose is a case nobody can defend at audit. */
     const inbound = (ctx.bundle?.requests ?? [])[0]?.summary?.trim();
     return {
-      key: "subject",
-      ask: "State the subject, as it should read on the case.",
+      key: "requestType",
+      ask: "What did the client ask for? One line, as it should read on the case.",
       kind: "text",
-      options: inbound ? [{ label: inbound.slice(0, 120), value: inbound.slice(0, 120), detail: "from the client's request" }] : undefined,
-      placeholder: "The subject.",
+      options: inbound
+        ? [{ label: inbound.slice(0, 120), value: inbound.slice(0, 120), detail: "from the client's request" }]
+        : undefined,
+      placeholder: "The ask, in one line.",
       target: { object: "Case", field: "Subject" },
+    };
+  }
+  if (!answered(a, "summary")) {
+    return {
+      key: "summary",
+      ask: "And the request in full, as the servicing team needs to read it.",
+      kind: "text",
+      placeholder: "The request, in full.",
+      target: { object: "Case", field: "Description" },
     };
   }
   if (!answered(a, "detail")) {
@@ -1089,9 +1104,13 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
       idempotencyKey,
       accountId: ctx.accountId,
       rationale,
-      requestType: text(a.type),
-      origin: text(a.origin),
-      summary: text(a.subject),
+      // requestType BECOMES THE SUBJECT and summary BECOMES THE DESCRIPTION.
+      // The Apex says so in its own field descriptions; the room used to send
+      // these two the other way round.
+      requestType: text(a.requestType),
+      summary: text(a.summary),
+      // NO `origin`. StageServiceRequest declares no such invocable variable:
+      // it reads Case.Type and Case.Origin off this org's own picklists.
       referenceKind: req?.reference?.kind ?? null,
       referenceId: req?.reference?.id ?? null,
       referenceWebLink: req?.reference?.webLink ?? null,
