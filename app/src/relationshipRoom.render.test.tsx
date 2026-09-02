@@ -282,6 +282,17 @@ describe("the neutral five-way", () => {
      all, so before this it fell to the five-way, which reads the annual review,
      the covenant review, a valuation and the rating back at a banker plainly
      running none of them. */
+  /* THE DRIVE'S LINE 15. The handoff lived only past `if (!route) return`, so a
+     pledge typed at the five-way was answered with a list of four reviews the
+     banker had just asked for none of. */
+  it("hands facility work back in ONE line, before a route is bound", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "pledge the equipment to the 8M loan");
+    expect(bound).toEqual([]);
+    expect(document.body.textContent).toContain("That is facility work.");
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+  });
+
   it("offers the service request in ONE line when the client asked for something", async () => {
     const { room, bound } = open({ question: neutralRelAsk() });
     await type(room, "james wants the june certificate");

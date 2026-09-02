@@ -1194,6 +1194,19 @@ export function RelationshipRoom({
           "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
         setStep(mine);
         setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        /* FACILITY WORK IS FACILITY WORK BEFORE A ROUTE IS BOUND TOO.
+
+           The handoff lived ONLY in the bound branch, past `if (!route) return`,
+           so "pledge the equipment to the 8M loan" typed at the five-way fell
+           through to "I can run the annual review, the covenant review, ..." and
+           listed four reviews at a banker who had just asked for none of them.
+           Caught by the relationship drive on 2026-09-02, line 15, which is
+           where the addendum expects the one-line handoff. The room now says
+           the same sentence wherever the line arrives. */
+        if (!preCard && !preRelTopic && asksForFacilityWork(text)) {
+          setItems((prev) => [...prev, { kind: "agent", id: nextId("agent"), step: mine, text: FACILITY_HANDOFF }]);
+          return;
+        }
         /* THE CLIENT ASKED FOR SOMETHING, AND NAMED NO REVIEW. One line and one
            chip, rather than the five-way read back at a banker who is plainly
            running none of the four reviews. It does not bind: the chip does,
