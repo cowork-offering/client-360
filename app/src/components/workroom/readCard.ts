@@ -1,7 +1,7 @@
 import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
 import { facilityProduct, shortFacilityName } from "../../data/facilityStage";
 import { fmtDate, fmtMoney, fmtPct } from "../../data/format";
-import { aggregateInvolvements, isGuarantyRole, type AggregatedInvolvement } from "../../data/graphAggregate";
+import { aggregateInvolvements, involvementRole, isGuarantyRole, type AggregatedInvolvement } from "../../data/graphAggregate";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
 import type { IconKind } from "./TypeIcon";
@@ -136,9 +136,11 @@ function structureCard(src: ReadSource, opts: ReadOptions = {}): ReadCardModel |
   /* THE QUESTION NARROWS THE FACILITIES. A loan the question named that is not
      on this package narrows nothing: the package is what the room stands on. */
   const named = new Set((opts.loanIds ?? []).filter(Boolean));
-  const onlyOn = named.size ? packageFacilities.filter((f) => f.loanId && named.has(f.loanId)) : packageFacilities;
+  const onlyOn = packageFacilities.filter((f) => f.loanId && named.has(f.loanId));
   const facilities = onlyOn.length ? onlyOn : packageFacilities;
-  const narrowedToFacility = facilities.length < packageFacilities.length;
+  const label = (f: Facility) => labelFor(f, packageFacilities, src.accountName);
+  /** The one loan the question named, where it named exactly one of ours. */
+  const only = onlyOn.length === 1 && packageFacilities.length > 1 ? onlyOn[0] : null;
 
   const byLoan = new Map(facilities.map((f) => [f.loanId ?? "", f]));
   // A row with no loan id is relationship-wide: it is on every facility of the
@@ -152,19 +154,19 @@ function structureCard(src: ReadSource, opts: ReadOptions = {}): ReadCardModel |
   const narrowed = opts.role === "guarantor" && asked.length > 0;
   const rows = aggregateInvolvements(narrowed ? asked : all);
 
-  const where = narrowedToFacility && facilities.length === 1 ? `the ${labelFor(facilities[0], packageFacilities, src.accountName)}` : "this package";
+  const where = only ? `the ${label(only)}` : "this package";
 
   const row = (e: AggregatedInvolvement): ReadRow => {
     const loans = e.loanIds
       .map((id) => byLoan.get(id))
       .filter((f): f is Facility => Boolean(f))
-      .map((f) => labelFor(f, packageFacilities, src.accountName));
+      .map(label);
     return {
       icon: "package",
       label: e.accountName ?? "Unnamed party",
       // The role the org wrote, on the row, because a card that groups by scope
       // has to say what each party IS or it has not answered the question.
-      value: e.relationshipType ?? e.borrowerType ?? "Involved",
+      value: involvementRole(e),
       detail:
         [
           e.guarantyAmountType || null,
@@ -183,7 +185,7 @@ function structureCard(src: ReadSource, opts: ReadOptions = {}): ReadCardModel |
      loan and a row hung off the relationship. */
   const groups: ReadGroup[] = [];
   const onFacilities = rows.filter((e) => e.loanIds.length).map(row);
-  if (onFacilities.length) groups.push({ heading: narrowedToFacility && facilities.length === 1 ? labelFor(facilities[0], packageFacilities, src.accountName) : "On this package", rows: onFacilities });
+  if (onFacilities.length) groups.push({ heading: only ? label(only) : "On this package", rows: onFacilities });
   const relationshipWide = rows.filter((e) => !e.loanIds.length).map(row);
   if (relationshipWide.length) groups.push({ heading: "Across the relationship", rows: relationshipWide });
   if (!groups.length) return null;
@@ -198,7 +200,7 @@ function structureCard(src: ReadSource, opts: ReadOptions = {}): ReadCardModel |
       ? `${total} ${total === 1 ? "guarantor is" : "guarantors are"} on ${where} today, each once with the role the org wrote. Limited guarantors are guarantors: the cap is on the amount, not on the obligation.`
       : opts.role === "guarantor"
         ? `This read carries no guaranty rows on ${where}. What it does carry is ${total} ${total === 1 ? "party" : "parties"}, with the role each holds.`
-        : `${total} ${total === 1 ? "party is" : "parties are"} on ${narrowedToFacility && facilities.length === 1 ? where : "this package"} today, each once, with the role it holds and the facilities behind it.`,
+        : `${total} ${total === 1 ? "party is" : "parties are"} on ${where} today, each once, with the role it holds and the facilities behind it.`,
     groups,
     followUp: "Who should be added or taken off, and on which facility?",
   };

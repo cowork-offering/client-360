@@ -34,7 +34,7 @@ function rolesOf(p: RosterParty, opts: { ownershipShown?: boolean } = {}): strin
   const own = p.connection
     ? [p.connection.role ?? "Related", !opts.ownershipShown && equity != null ? fmtPct(equity, 0) : null].filter(Boolean).join(" · ")
     : null;
-  return [own, ...p.involvements.map((e) => roleLine(e, equity === null))].filter(Boolean).join(" · ") || "Related";
+  return [own, ...p.involvements.map((e) => roleLine(e, equity === null))].filter(Boolean).join(" · ");
 }
 
 export function GraphTab({ bundle }: { bundle: BorrowerBundle }) {

@@ -131,6 +131,12 @@ export interface AggregatedInvolvement {
   loanIds: string[];
 }
 
+/** The two fields any involvement row carries a role in, raw or aggregated. */
+export interface RoleWords {
+  relationshipType?: string | null;
+  borrowerType?: string | null;
+}
+
 /**
  * The role an involvement row plays, in the org's own word.
  *
@@ -138,7 +144,7 @@ export interface AggregatedInvolvement {
  * what the same rows carry when it is blank. "Involved" is the honest last
  * resort: a role we cannot read is not a borrower by default.
  */
-export function involvementRole(e: LegalEntity): string {
+export function involvementRole(e: RoleWords): string {
   return (e.relationshipType ?? "").trim() || (e.borrowerType ?? "").trim() || "Involved";
 }
 
@@ -146,7 +152,7 @@ export function involvementRole(e: LegalEntity): string {
  *  read's own "Personal Guaranty" wording all are: a limited guaranty is a
  *  guaranty with a cap on it, and answering "who guarantees this" without the
  *  limited ones would leave a real obligor off the answer. */
-export const isGuarantyRole = (e: LegalEntity): boolean => /guarant/i.test(involvementRole(e));
+export const isGuarantyRole = (e: RoleWords): boolean => /guarant/i.test(involvementRole(e));
 
 /**
  * One row per (party, role), with the facility count and the loans behind it.
