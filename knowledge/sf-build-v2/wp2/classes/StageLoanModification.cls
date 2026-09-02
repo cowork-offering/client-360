@@ -83,6 +83,12 @@ global with sharing class StageLoanModification {
         global String feeAddsJson;
         @InvocableVariable(label='Pledge Adds JSON' description='Optional. COLLATERAL PLEDGES authored on the CLONE: [{"collateralId"? (an existing LLC_BI__Collateral__c the BORROWER owns), "newCollateral"? {"description", "collateralType", "value"}, "advanceRate"?, "advanceRateReason"?, "amountPledged"?, "lienPosition"?, "targetLoanId"?}]. EXACTLY ONE of collateralId and newCollateral per entry. An existing collateral must be owned by the borrower through LLC_BI__Account_Collateral__c (LLC_BI__Collateral__c carries no account lookup at all) and must not already be pledged to that facility. A newCollateral is authored as asset, then ownership junction, then pledge; collateralType is resolved against the org\'s live LLC_BI__Collateral_Type__c catalog and a type whose own advance rate is null is refused before the org\'s Advance_Rate_should_not_be_null rule fires on the insert. advanceRate is REQUIRED on a create and rides LLC_BI__Advance_Rate_Override__c (the plain advance rate is a formula), which makes the org\'s Advance_Rate_Override rule demand a reason beside it. targetLoanId may be omitted when exactly one facility is selected.')
         global String pledgeAddsJson;
+        @InvocableVariable(label='Covenant Exclusions JSON' description='Optional. COVENANT CARRY EXCLUSIONS: [{"covenantId" or "junctionId", "targetLoanId"?}]. On a modification nothing is deleted on the booked loan: the new VERSION simply does not carry that LLC_BI__Loan_Covenant__c junction onto the clone. The parent keeps its junction and the covenant record itself is untouched, so the delete fence and the covenant-detach fence both stay intact. The exact junction row is resolved at stage time against the target parent, so the banker confirms a named covenant rather than a description. targetLoanId may be omitted when exactly one facility is selected.')
+        global String covenantExclusionsJson;
+        @InvocableVariable(label='Pledge Exclusions JSON' description='Optional. PLEDGE CARRY EXCLUSIONS: [{"pledgeId" or "collateralId", "targetLoanId"?}]. The collateral counterpart of a covenant exclusion: the named LLC_BI__Loan_Collateral2__c pledge does not travel onto the clone. The booked facility keeps the pledge it holds today, the asset and its ownership junction are untouched, and nothing is deleted. The exact pledge row is resolved at stage time against the target parent. targetLoanId may be omitted when exactly one facility is selected.')
+        global String pledgeExclusionsJson;
+        @InvocableVariable(label='Covenant Attaches JSON' description='Optional. ASSOCIATE AN EXISTING COVENANT to a facility: [{"covenantId", "targetLoanId"?}]. A junction-only create. No covenant is inserted, nothing is deleted: an LLC_BI__Loan_Covenant__c row ties a covenant the borrower already holds to the CLONE of the targeted facility, which is the instrument for a relationship-level covenant that carries no loan junction and is therefore NOT associated to the loan. The covenant must belong to the borrower on this package, and a covenant already attached to the target is refused by name rather than junctioned twice. targetLoanId may be omitted when exactly one facility is selected.')
+        global String covenantAttachesJson;
         @InvocableVariable(label='Policy Exception Adds JSON' description='Optional. POLICY EXCEPTIONS authored on the CLONE and anchored on the borrower: [{"title" (the exception\'s readable name, <=80 chars), "status" (Waived|Mitigated|Unmitigated), "mitigationReasons"? (up to 3, <=100 chars each), "severity"?, "severityValue"?, "code"?, "type"? (defaults to "Policy"), "targetLoanId"?}]. TITLE IS REQUIRED: Name on this object is plain text rather than an autonumber, and the org\'s trigger stack backfills an omitted one with the record\'s own 15-character Id, so an unnamed exception is a row nobody can find. STATUS IS REQUIRED: the org defaults a new row to Unmitigated, which reads as a decision rather than as an absent value. A Mitigated exception needs at least one mitigation reason and an Unmitigated one may carry none, because "nothing mitigates this" and "here is what mitigates it" cannot both be true on one record. Over-long reasons are refused with their length, never truncated. WARNING: a committed write here fires the org-local PolicyExceptionCDC trigger, which POSTs the serialised record to an external AWS EventBridge endpoint. No approval starts and no email fires (probed 2026-08-31), but the record\'s data leaves the org. targetLoanId may be omitted when exactly one facility is selected.')
         global String policyExceptionAddsJson;
     }
@@ -118,6 +124,56 @@ global with sharing class StageLoanModification {
         public Id targetLoanId;
         /** The involvement row a REMOVE excludes from the carry, resolved at stage time. */
         public Id sourceRowId;
+    }
+
+    /**
+     * One covenant junction the clone will NOT carry, resolved to its exact row at stage time.
+     *
+     * A modification never deletes anything on the booked loan. The diff the manifest expresses is
+     * a CARRY diff: everything not named travels onto the new version, and what is named as removed
+     * simply never reaches it. The covenant record itself, its account association and the parent's
+     * own junction are all untouched, which is why this does not breach the delete fence or the
+     * covenant-detach fence (detach would be a delete of a junction whose every field is
+     * non-updateable; this writes nothing at all).
+     */
+    public class CovenantExclusion {
+        /** The LLC_BI__Loan_Covenant__c row on the PARENT that the carry will skip. */
+        public Id junctionId;
+        public Id covenantId;
+        /** The covenant's org-assigned autonumber, so the plan names a record the banker can find. */
+        public String covenantName;
+        public String typeName;
+        public Decimal threshold;
+        public Id targetLoanId;
+    }
+
+    /** One pledge the clone will NOT carry. Same doctrine as a covenant exclusion, on collateral. */
+    public class PledgeExclusion {
+        /** The LLC_BI__Loan_Collateral2__c row on the PARENT that the carry will skip. */
+        public Id pledgeId;
+        public Id collateralId;
+        /** The asset as the org names it: its description where it has one, else the autonumber. */
+        public String assetLabel;
+        public Decimal amountPledged;
+        public Id targetLoanId;
+    }
+
+    /**
+     * One EXISTING covenant to associate to a facility: a junction-only create.
+     *
+     * The founder's correction (2026-09-02): a relationship-level covenant carries no loan junction,
+     * so it is not associated to the loan, and "the relationship level already covers it" is wrong.
+     * Dedupe is per loan-covenant junction. When the covenant is not on that loan the room offers
+     * three instruments, and this is the second: associate the existing covenant rather than mint a
+     * near-duplicate of it.
+     */
+    public class CovenantAttach {
+        public Id covenantId;
+        public String covenantName;
+        public String typeName;
+        public Decimal threshold;
+        public String operator;
+        public Id targetLoanId;
     }
 
     /** One parsed net-new fee, resolved against the org's own fee picklists. */
@@ -336,8 +392,9 @@ global with sharing class StageLoanModification {
             req.requestedTermMonths == null && String.isBlank(req.scalarChangesJson) && String.isBlank(req.covenantAddsJson) &&
             String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson) &&
             String.isBlank(req.feeAddsJson) && String.isBlank(req.pledgeAddsJson) &&
-            String.isBlank(req.policyExceptionAddsJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a borrowing-structure change, a field change, a fee add, a collateral pledge, or a policy exception.');
+            String.isBlank(req.policyExceptionAddsJson) && String.isBlank(req.covenantExclusionsJson) &&
+            String.isBlank(req.pledgeExclusionsJson) && String.isBlank(req.covenantAttachesJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a covenant association, a covenant or pledge carry exclusion, a borrowing-structure change, a field change, a fee add, a collateral pledge, or a policy exception.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -376,6 +433,24 @@ global with sharing class StageLoanModification {
         List<PledgeAdd> pledgeAdds = parsePledgeAdds(req, facilities);
         Integer createdAssets = newCollaterals(pledgeAdds);
         List<PolicyExceptionAdd> policyExceptionAdds = parsePolicyExceptionAdds(req, facilities);
+        List<CovenantExclusion> covenantExclusions = parseCovenantExclusions(req, facilities);
+        List<PledgeExclusion> pledgeExclusions = parsePledgeExclusions(req, facilities);
+        List<CovenantAttach> covenantAttaches = parseCovenantAttaches(req, facilities, covenantWarnings);
+        // A plan that excludes a covenant from a facility's carry AND associates the same covenant
+        // to that facility's clone says two opposite things about one junction. The arm would honour
+        // both in order and the banker would read "removed" beside a covenant that is there.
+        Set<String> excludedPairs = new Set<String>();
+        for (CovenantExclusion ce : covenantExclusions) {
+            excludedPairs.add(String.valueOf(ce.covenantId) + ':' + String.valueOf(ce.targetLoanId));
+        }
+        for (CovenantAttach ca : covenantAttaches) {
+            if (excludedPairs.contains(String.valueOf(ca.covenantId) + ':' + String.valueOf(ca.targetLoanId))) {
+                throw new ToolException(
+                    'This plan both excludes ' + ca.covenantName + ' from the carry and associates it to the same ' +
+                    'facility. Those are opposite instructions about one junction. Name one or the other.'
+                );
+            }
+        }
 
         // What each member's own clone will take, so the plan steps and the summary can name the
         // figures per facility instead of describing one broadcast the banker did not ask for.
@@ -541,6 +616,40 @@ global with sharing class StageLoanModification {
         }
         resolved.put('covenantAddCount', covenantAdds.size());
 
+        // ASSOCIATE AN EXISTING COVENANT. A junction-only create: no covenant is inserted and
+        // nothing is deleted. This is the instrument for a covenant the borrower already holds at
+        // relationship level, which carries no loan junction and is therefore NOT on the loan,
+        // whatever the relationship view suggests (founder correction 2026-09-02). The account
+        // association is minted only if the covenant does not already carry one, because a
+        // relationship-level covenant has its own and a second row would be a duplicate.
+        for (Integer i = 0; i < covenantAttaches.size(); i++) {
+            CovenantAttach ca = covenantAttaches[i];
+            String s8 = String.valueOf(i);
+            resolved.put('covenantAttach' + s8 + '.covenantId', String.valueOf(ca.covenantId));
+            resolved.put('covenantAttach' + s8 + '.covenantName', ca.covenantName);
+            resolved.put('covenantAttach' + s8 + '.typeName', ca.typeName);
+            resolved.put('covenantAttach' + s8 + '.threshold', ca.threshold);
+            resolved.put('covenantAttach' + s8 + '.operator', ca.operator);
+            resolved.put('covenantAttach' + s8 + '.targetLoanId', String.valueOf(ca.targetLoanId));
+            String attachTarget = facilityById.get(ca.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('covenant_associate_' + s8, C360Plan.TYPE_WRITE,
+                    'Associate the existing covenant ' + ca.covenantName + ' (' + ca.typeName +
+                    ') to the clone of ' + attachTarget +
+                    ': a junction only, no covenant is created and none is amended')
+                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'LLC_BI__Loan__c', 'LLC_BI__Covenant2__c' })
+                    .provenBy('SELECT Id FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :covenantId')
+            );
+            steps.add(
+                new C360Plan.Step('covenant_associate_verify_' + s8, C360Plan.TYPE_VERIFICATION,
+                    'Re-read the junction on the clone of ' + attachTarget +
+                    ' and prove the covenant record itself is unchanged')
+                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'Id' })
+                    .provenBy('SELECT Id FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :covenantId')
+            );
+        }
+        resolved.put('covenantAttachCount', covenantAttaches.size());
+
         // Borrowing-structure amendments. An ADD is authored on the clone; a REMOVE is a carry
         // exclusion — the roll-over diff made literal: everything not named is KEPT, and what is
         // named as removed simply never reaches the new version. Nothing is deleted anywhere.
@@ -584,6 +693,71 @@ global with sharing class StageLoanModification {
             );
         }
         resolved.put('involvementChangeCount', involvementChanges.size());
+
+        // COVENANT CARRY EXCLUSIONS. The founder's requirement, in the only shape nCino allows:
+        // "remove the covenant from the open loan when the modification happens" is not a delete
+        // and not a detach. The booked loan keeps its junction, the covenant record keeps every
+        // field it has, and the NEW VERSION simply starts without that junction. The delete fence
+        // is untouched because there is no delete, and the covenant-detach fence is untouched
+        // because nothing on the parent's junction is written.
+        for (Integer i = 0; i < covenantExclusions.size(); i++) {
+            CovenantExclusion ce = covenantExclusions[i];
+            String s9 = String.valueOf(i);
+            resolved.put('covenantExclusion' + s9 + '.junctionId', String.valueOf(ce.junctionId));
+            resolved.put('covenantExclusion' + s9 + '.covenantId', String.valueOf(ce.covenantId));
+            resolved.put('covenantExclusion' + s9 + '.covenantName', ce.covenantName);
+            resolved.put('covenantExclusion' + s9 + '.typeName', ce.typeName);
+            resolved.put('covenantExclusion' + s9 + '.threshold', ce.threshold);
+            resolved.put('covenantExclusion' + s9 + '.targetLoanId', String.valueOf(ce.targetLoanId));
+            String exTarget = facilityById.get(ce.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('covenant_exclusion_' + s9, C360Plan.TYPE_WRITE,
+                    'Carry the covenants of ' + exTarget + ' WITHOUT ' + ce.covenantName + ' (' + ce.typeName +
+                    '): the booked facility keeps its junction, the clone starts without it, and the covenant ' +
+                    'record itself is not touched')
+                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'carry exclusion: the replica is simply not written' })
+                    .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :covenantId')
+            );
+            steps.add(
+                new C360Plan.Step('covenant_exclusion_verify_' + s9, C360Plan.TYPE_VERIFICATION,
+                    'Prove the clone of ' + exTarget + ' carries no junction for ' + ce.covenantName +
+                    ' and the parent still carries its own')
+                    .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'Id' })
+                    .provenBy('re-query on the clone and the parent junction row')
+            );
+        }
+        resolved.put('covenantExclusionCount', covenantExclusions.size());
+
+        // PLEDGE CARRY EXCLUSIONS. The same instrument on collateral, which is what line 9 of the
+        // everything plan actually asked for. The asset and its ownership junction are relationship
+        // records and survive whatever the bank decides about this version; only the PLEDGE, which
+        // is per facility, fails to travel.
+        for (Integer i = 0; i < pledgeExclusions.size(); i++) {
+            PledgeExclusion pe = pledgeExclusions[i];
+            String s10 = String.valueOf(i);
+            resolved.put('pledgeExclusion' + s10 + '.pledgeId', String.valueOf(pe.pledgeId));
+            resolved.put('pledgeExclusion' + s10 + '.collateralId', String.valueOf(pe.collateralId));
+            resolved.put('pledgeExclusion' + s10 + '.assetLabel', pe.assetLabel);
+            resolved.put('pledgeExclusion' + s10 + '.amountPledged', pe.amountPledged);
+            resolved.put('pledgeExclusion' + s10 + '.targetLoanId', String.valueOf(pe.targetLoanId));
+            String pxTarget = facilityById.get(pe.targetLoanId).Name;
+            steps.add(
+                new C360Plan.Step('pledge_exclusion_' + s10, C360Plan.TYPE_WRITE,
+                    'Carry the collateral of ' + pxTarget + ' WITHOUT the pledge of ' + pe.assetLabel +
+                    ': the booked facility keeps its pledge, the clone starts without it, and the asset ' +
+                    'and its ownership junction are not touched')
+                    .onObject('LLC_BI__Loan_Collateral2__c', new List<String>{ 'carry exclusion: the replica is simply not written' })
+                    .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Collateral__c = :collateralId')
+            );
+            steps.add(
+                new C360Plan.Step('pledge_exclusion_verify_' + s10, C360Plan.TYPE_VERIFICATION,
+                    'Prove the clone of ' + pxTarget + ' carries no pledge of ' + pe.assetLabel +
+                    ' and the parent still carries its own')
+                    .onObject('LLC_BI__Loan_Collateral2__c', new List<String>{ 'Id' })
+                    .provenBy('re-query on the clone and the parent pledge row')
+            );
+        }
+        resolved.put('pledgeExclusionCount', pledgeExclusions.size());
 
         // The field wave: any field the org's own describe says is writable, outside the deny-list,
         // applied to the clone with the same discipline as the four scalars. The banker's sentence
@@ -823,6 +997,36 @@ global with sharing class StageLoanModification {
                 'bank\'s own approval books that version.'
             );
         }
+        if (!covenantExclusions.isEmpty() || !pledgeExclusions.isEmpty()) {
+            List<String> what = new List<String>();
+            if (!covenantExclusions.isEmpty()) {
+                what.add(String.valueOf(covenantExclusions.size()) + ' covenant junction' +
+                    (covenantExclusions.size() == 1 ? '' : 's'));
+            }
+            if (!pledgeExclusions.isEmpty()) {
+                what.add(String.valueOf(pledgeExclusions.size()) + ' collateral pledge' +
+                    (pledgeExclusions.size() == 1 ? '' : 's'));
+            }
+            warnings.add(
+                'REMOVED MEANS NOT CARRIED, not deleted. ' + String.join(what, ' and ') +
+                ' will not travel onto the new version. The booked facility keeps every junction and every pledge ' +
+                'it holds today, the covenant records and the collateral assets are untouched, and nothing anywhere ' +
+                'is deleted. This is why the removal is possible at all: covenant DETACH is fenced (every junction ' +
+                'field is non-updateable, so a detach would be a delete) and deletes are fenced on every object. ' +
+                'The removal binds when the bank\'s own approval books the new version.'
+            );
+        }
+        if (!covenantAttaches.isEmpty()) {
+            warnings.add(
+                String.valueOf(covenantAttaches.size()) + ' EXISTING covenant' +
+                (covenantAttaches.size() == 1 ? ' is' : 's are') + ' associated to the ' +
+                (covenantAttaches.size() == 1 ? 'clone' : 'clones') + ' by a junction only. No covenant is created ' +
+                'and none is amended: the threshold, the frequency and the schedule stay exactly as the borrower ' +
+                'holds them. A covenant that sits at relationship level carries NO loan junction, so it is not ' +
+                'associated to the facility however it reads at relationship level, and this is the write that ' +
+                'associates it.'
+            );
+        }
         if (!covenantAdds.isEmpty()) {
             warnings.add(
                 'Net-new covenants are created Pending and Active on the borrower account and attached to the CLONE only. ' +
@@ -935,6 +1139,20 @@ global with sharing class StageLoanModification {
             (involvementChanges.isEmpty() ? '' : String.valueOf(involvementChanges.size()) + ' borrowing-structure ' +
                 (involvementChanges.size() == 1 ? 'change lands' : 'changes land') + ' on the new version: adds are authored on the ' +
                 'clone, removes are carry exclusions — the booked facilities keep every row they have today. ') +
+            (covenantAttaches.isEmpty() ? '' : String.valueOf(covenantAttaches.size()) + ' existing covenant' +
+                (covenantAttaches.size() == 1 ? ' is' : 's are') + ' associated to the ' +
+                (covenantAttaches.size() == 1 ? 'clone' : 'clones') + ' by a junction only, with no covenant created ' +
+                'and none amended. ') +
+            (covenantExclusions.isEmpty() && pledgeExclusions.isEmpty() ? '' :
+                String.valueOf(covenantExclusions.size() + pledgeExclusions.size()) + ' carry exclusion' +
+                (covenantExclusions.size() + pledgeExclusions.size() == 1 ? ' means' : 's mean') + ' the new version ' +
+                'starts without ' +
+                (covenantExclusions.isEmpty() ? '' : String.valueOf(covenantExclusions.size()) + ' covenant junction' +
+                    (covenantExclusions.size() == 1 ? '' : 's')) +
+                (covenantExclusions.isEmpty() || pledgeExclusions.isEmpty() ? '' : ' and ') +
+                (pledgeExclusions.isEmpty() ? '' : String.valueOf(pledgeExclusions.size()) + ' pledge' +
+                    (pledgeExclusions.size() == 1 ? '' : 's')) +
+                ' the booked facilities keep. Nothing is deleted and no covenant is detached. ') +
             (fieldChanges.isEmpty() ? '' : String.valueOf(fieldChanges.size()) + ' field ' +
                 (fieldChanges.size() == 1 ? 'change is' : 'changes are') + ' applied to the clone, each resolved against the ' +
                 'org\'s own describe and named with its value in the plan. ') +
@@ -2301,6 +2519,370 @@ global with sharing class StageLoanModification {
         ic.accountName = rows[0].LLC_BI__Account__r.Name;
         ic.role = rows[0].LLC_BI__Borrower_Type__c;
         ic.ownership = rows[0].LLC_BI__Ownership__c;
+    }
+
+    /**
+     * A cap on each carry-exclusion list, and it is a governor cap rather than a policy one: each
+     * entry resolves its exact row with its own query, and a plan naming dozens of removals is a
+     * different conversation from a modification.
+     */
+    private static final Integer EXCLUSION_MAX = 10;
+
+    /**
+     * Reads an id out of the request and refuses a malformed one BY NAME rather than letting
+     * Id.valueOf throw a platform exception the banker cannot read.
+     */
+    private static Id exclusionId(Object raw, String fieldName) {
+        if (raw == null || String.isBlank(String.valueOf(raw))) {
+            return null;
+        }
+        try {
+            return Id.valueOf(String.valueOf(raw));
+        } catch (Exception e) {
+            throw new ToolException('"' + String.valueOf(raw) + '" is not a Salesforce id, so it cannot be a ' + fieldName + '.');
+        }
+    }
+
+    /** The target facility for one exclusion entry, with the same rule the other arms use. */
+    private static Id exclusionTarget(Object raw, List<LLC_BI__Loan__c> facilities, Map<Id, LLC_BI__Loan__c> byId, String what) {
+        Id targetId = exclusionId(raw, 'targetLoanId');
+        if (targetId == null) {
+            if (facilities.size() != 1) {
+                throw new ToolException('targetLoanId is required on each ' + what + ' when more than one facility is selected.');
+            }
+            return facilities[0].Id;
+        }
+        if (!byId.containsKey(targetId)) {
+            throw new ToolException(
+                'A ' + what + ' targets facility ' + targetId + ', which is not one of the selected facilities. ' +
+                'This plan can only touch a facility it is versioning.'
+            );
+        }
+        return targetId;
+    }
+
+    /**
+     * Parses and RESOLVES the covenant carry exclusions.
+     *
+     * The doctrine, and the reason this arm exists at all: on a modification nothing is deleted on
+     * the booked loan. The banker who says "remove the Minimum Liquidity covenant from the line"
+     * means the new version should not carry it, and the correct nCino instrument is the CARRY
+     * DIFF, exactly as it already is for involvements. So this resolves the EXACT
+     * LLC_BI__Loan_Covenant__c row on the target PARENT at stage time, so the banker confirms a
+     * named covenant rather than a description, and execute simply does not replicate that row.
+     *
+     * An entry names the covenant (`covenantId`) or the junction itself (`junctionId`). An id that
+     * resolves to no junction on that facility is refused BY NAME: the facility does not carry that
+     * covenant, and "nothing to remove" is an answer, never a silent no-op.
+     */
+    private static List<CovenantExclusion> parseCovenantExclusions(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<CovenantExclusion> out = new List<CovenantExclusion>();
+        if (String.isBlank(req.covenantExclusionsJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.covenantExclusionsJson);
+        } catch (Exception e) {
+            throw new ToolException('covenantExclusionsJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        if (raw.size() > EXCLUSION_MAX) {
+            throw new ToolException(
+                'This plan names ' + raw.size() + ' covenant exclusions. ' + EXCLUSION_MAX +
+                ' is the cap: each one resolves its own junction row, and a plan removing more than that is a ' +
+                'restructure rather than a modification.'
+            );
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        Set<Id> seen = new Set<Id>();
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            CovenantExclusion ce = new CovenantExclusion();
+            Id covenantId = exclusionId(m.get('covenantId'), 'covenant id');
+            Id junctionId = exclusionId(m.get('junctionId'), 'covenant junction id');
+            if (covenantId == null && junctionId == null) {
+                throw new ToolException('Each covenant exclusion names what is not carried: covenantId or junctionId.');
+            }
+            ce.targetLoanId = exclusionTarget(m.get('targetLoanId'), facilities, byId, 'covenant exclusion');
+            resolveCovenantExclusion(ce, covenantId, junctionId, byId.get(ce.targetLoanId).Name);
+            if (seen.contains(ce.junctionId)) {
+                throw new ToolException(
+                    ce.covenantName + ' is named twice in this plan\'s covenant exclusions. One junction, one exclusion.'
+                );
+            }
+            seen.add(ce.junctionId);
+            out.add(ce);
+        }
+        return out;
+    }
+
+    /** Resolves the EXACT covenant junction a carry exclusion skips, on the target parent. */
+    private static void resolveCovenantExclusion(CovenantExclusion ce, Id covenantId, Id junctionId, String targetName) {
+        List<LLC_BI__Loan_Covenant__c> rows;
+        try {
+            if (junctionId != null) {
+                rows = [
+                    SELECT Id, LLC_BI__Loan__c, LLC_BI__Covenant2__c, LLC_BI__Covenant2__r.Name,
+                           LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__r.Name,
+                           LLC_BI__Covenant2__r.LLC_BI__Financial_Indicator_Value__c
+                    FROM LLC_BI__Loan_Covenant__c
+                    WHERE Id = :junctionId AND LLC_BI__Loan__c = :ce.targetLoanId
+                    WITH USER_MODE
+                ];
+            } else {
+                rows = [
+                    SELECT Id, LLC_BI__Loan__c, LLC_BI__Covenant2__c, LLC_BI__Covenant2__r.Name,
+                           LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__r.Name,
+                           LLC_BI__Covenant2__r.LLC_BI__Financial_Indicator_Value__c
+                    FROM LLC_BI__Loan_Covenant__c
+                    WHERE LLC_BI__Covenant2__c = :covenantId AND LLC_BI__Loan__c = :ce.targetLoanId
+                    WITH USER_MODE
+                ];
+            }
+        } catch (QueryException e) {
+            throw new ToolException(
+                String.valueOf(junctionId == null ? covenantId : junctionId) +
+                ' is not an id this org can read as a covenant junction on ' + targetName + '.'
+            );
+        }
+        if (rows.isEmpty()) {
+            throw new ToolException(
+                (junctionId == null
+                    ? 'Covenant ' + covenantId + ' is not attached to ' + targetName
+                    : 'Covenant junction ' + junctionId + ' is not on ' + targetName) +
+                ', so there is nothing for the new version to leave behind. The clone starts from what the parent ' +
+                'carries today, and the parent does not carry this one. A covenant that reads at relationship level ' +
+                'has no loan junction at all, which is exactly this answer.'
+            );
+        }
+        if (rows.size() > 1) {
+            List<String> ids = new List<String>();
+            for (LLC_BI__Loan_Covenant__c j : rows) {
+                ids.add(String.valueOf(j.Id));
+            }
+            throw new ToolException(
+                targetName + ' carries ' + rows.size() + ' junctions for this covenant. Name the junction with ' +
+                'junctionId so exactly one is excluded: ' + String.join(ids, ', ') + '.'
+            );
+        }
+        ce.junctionId = rows[0].Id;
+        ce.covenantId = rows[0].LLC_BI__Covenant2__c;
+        ce.covenantName = rows[0].LLC_BI__Covenant2__r == null ? String.valueOf(rows[0].LLC_BI__Covenant2__c) : rows[0].LLC_BI__Covenant2__r.Name;
+        ce.typeName = rows[0].LLC_BI__Covenant2__r != null && rows[0].LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__r != null
+            ? rows[0].LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__r.Name : null;
+        ce.threshold = rows[0].LLC_BI__Covenant2__r == null ? null : rows[0].LLC_BI__Covenant2__r.LLC_BI__Financial_Indicator_Value__c;
+    }
+
+    /**
+     * Parses and RESOLVES the pledge carry exclusions: the collateral counterpart, same doctrine.
+     *
+     * An entry names the pledge (`pledgeId`) or the asset (`collateralId`). The asset itself and its
+     * LLC_BI__Account_Collateral__c ownership junction are RELATIONSHIP records and are never
+     * touched here: what fails to travel is the per-facility pledge alone.
+     */
+    private static List<PledgeExclusion> parsePledgeExclusions(Request req, List<LLC_BI__Loan__c> facilities) {
+        List<PledgeExclusion> out = new List<PledgeExclusion>();
+        if (String.isBlank(req.pledgeExclusionsJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.pledgeExclusionsJson);
+        } catch (Exception e) {
+            throw new ToolException('pledgeExclusionsJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        if (raw.size() > EXCLUSION_MAX) {
+            throw new ToolException(
+                'This plan names ' + raw.size() + ' pledge exclusions. ' + EXCLUSION_MAX +
+                ' is the cap: each one resolves its own pledge row, and a plan releasing more than that is a ' +
+                'collateral restructure rather than a modification.'
+            );
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        Set<Id> seen = new Set<Id>();
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            PledgeExclusion pe = new PledgeExclusion();
+            Id pledgeId = exclusionId(m.get('pledgeId'), 'pledge id');
+            Id collateralId = exclusionId(m.get('collateralId'), 'collateral id');
+            if (pledgeId == null && collateralId == null) {
+                throw new ToolException('Each pledge exclusion names what is not carried: pledgeId or collateralId.');
+            }
+            pe.targetLoanId = exclusionTarget(m.get('targetLoanId'), facilities, byId, 'pledge exclusion');
+            resolvePledgeExclusion(pe, pledgeId, collateralId, byId.get(pe.targetLoanId).Name);
+            if (seen.contains(pe.pledgeId)) {
+                throw new ToolException(
+                    pe.assetLabel + ' is named twice in this plan\'s pledge exclusions. One pledge, one exclusion.'
+                );
+            }
+            seen.add(pe.pledgeId);
+            out.add(pe);
+        }
+        return out;
+    }
+
+    /** Resolves the EXACT pledge row a carry exclusion skips, on the target parent. */
+    private static void resolvePledgeExclusion(PledgeExclusion pe, Id pledgeId, Id collateralId, String targetName) {
+        List<LLC_BI__Loan_Collateral2__c> rows;
+        try {
+            if (pledgeId != null) {
+                rows = [
+                    SELECT Id, LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Collateral__r.Name,
+                           LLC_BI__Collateral__r.LLC_BI__Description__c, LLC_BI__Amount_Pledged__c
+                    FROM LLC_BI__Loan_Collateral2__c
+                    WHERE Id = :pledgeId AND LLC_BI__Loan__c = :pe.targetLoanId
+                    WITH USER_MODE
+                ];
+            } else {
+                rows = [
+                    SELECT Id, LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Collateral__r.Name,
+                           LLC_BI__Collateral__r.LLC_BI__Description__c, LLC_BI__Amount_Pledged__c
+                    FROM LLC_BI__Loan_Collateral2__c
+                    WHERE LLC_BI__Collateral__c = :collateralId AND LLC_BI__Loan__c = :pe.targetLoanId
+                    WITH USER_MODE
+                ];
+            }
+        } catch (QueryException e) {
+            throw new ToolException(
+                String.valueOf(pledgeId == null ? collateralId : pledgeId) +
+                ' is not an id this org can read as a pledge on ' + targetName + '.'
+            );
+        }
+        if (rows.isEmpty()) {
+            throw new ToolException(
+                (pledgeId == null
+                    ? 'Asset ' + collateralId + ' is not pledged to ' + targetName
+                    : 'Pledge ' + pledgeId + ' is not on ' + targetName) +
+                ', so there is nothing for the new version to leave behind. The clone starts from the security the ' +
+                'parent holds today, and this is not part of it.'
+            );
+        }
+        if (rows.size() > 1) {
+            List<String> ids = new List<String>();
+            for (LLC_BI__Loan_Collateral2__c pl : rows) {
+                ids.add(String.valueOf(pl.Id));
+            }
+            throw new ToolException(
+                targetName + ' carries ' + rows.size() + ' pledges of this asset. Name the pledge with pledgeId so ' +
+                'exactly one is excluded: ' + String.join(ids, ', ') + '.'
+            );
+        }
+        pe.pledgeId = rows[0].Id;
+        pe.collateralId = rows[0].LLC_BI__Collateral__c;
+        pe.amountPledged = rows[0].LLC_BI__Amount_Pledged__c;
+        pe.assetLabel = assetLabelOf(rows[0]);
+    }
+
+    /** The asset as the org names it: its description where it has one, else its autonumber. */
+    private static String assetLabelOf(LLC_BI__Loan_Collateral2__c pledge) {
+        if (pledge.LLC_BI__Collateral__r == null) {
+            return String.valueOf(pledge.LLC_BI__Collateral__c);
+        }
+        return String.isNotBlank(pledge.LLC_BI__Collateral__r.LLC_BI__Description__c)
+            ? pledge.LLC_BI__Collateral__r.LLC_BI__Description__c
+            : pledge.LLC_BI__Collateral__r.Name;
+    }
+
+    /**
+     * Parses and RESOLVES the covenant associations: attaching an EXISTING covenant to a facility.
+     *
+     * P1, the founder's correction of 2026-09-02. "It already runs at relationship level, nothing
+     * needs putting up twice" is wrong: a relationship-level covenant carries NO loan junction, so
+     * it is not associated to the loan at all. Dedupe is per junction, and when a covenant is not on
+     * the loan the honest offer is three instruments, of which this is the middle one.
+     *
+     * Everything is checked here so the banker confirms a real record: the covenant must exist, it
+     * must belong to the BORROWER on this package (a covenant from another relationship is refused
+     * rather than quietly cross-linked), and it must not already be attached to the target, because
+     * the carry will bring an attached one onto the clone by itself and a second junction would be
+     * a duplicate nobody asked for.
+     */
+    private static List<CovenantAttach> parseCovenantAttaches(Request req, List<LLC_BI__Loan__c> facilities, List<String> warnings) {
+        List<CovenantAttach> out = new List<CovenantAttach>();
+        if (String.isBlank(req.covenantAttachesJson)) {
+            return out;
+        }
+        List<Object> raw;
+        try {
+            raw = (List<Object>) JSON.deserializeUntyped(req.covenantAttachesJson);
+        } catch (Exception e) {
+            throw new ToolException('covenantAttachesJson could not be read as a JSON list: ' + e.getMessage());
+        }
+        if (raw.size() > EXCLUSION_MAX) {
+            throw new ToolException(
+                'This plan associates ' + raw.size() + ' existing covenants. ' + EXCLUSION_MAX + ' is the cap.'
+            );
+        }
+        Map<Id, LLC_BI__Loan__c> byId = new Map<Id, LLC_BI__Loan__c>(facilities);
+        Id borrowerId = facilities[0].LLC_BI__Account__c;
+        Set<String> seen = new Set<String>();
+        for (Object o : raw) {
+            Map<String, Object> m = (Map<String, Object>) o;
+            CovenantAttach ca = new CovenantAttach();
+            ca.covenantId = exclusionId(m.get('covenantId'), 'covenant id');
+            if (ca.covenantId == null) {
+                throw new ToolException(
+                    'Each covenant association names the covenant it associates: covenantId. A covenant to be ' +
+                    'CREATED goes in covenantAddsJson instead, with its type and threshold.'
+                );
+            }
+            ca.targetLoanId = exclusionTarget(m.get('targetLoanId'), facilities, byId, 'covenant association');
+            resolveCovenantAttach(ca, borrowerId, byId.get(ca.targetLoanId).Name);
+            String pairKey = String.valueOf(ca.covenantId) + ':' + String.valueOf(ca.targetLoanId);
+            if (seen.contains(pairKey)) {
+                throw new ToolException(
+                    ca.covenantName + ' is associated twice to the same facility in this plan. One junction, once.'
+                );
+            }
+            seen.add(pairKey);
+            out.add(ca);
+        }
+        return out;
+    }
+
+    /** Resolves an association's covenant and refuses everything that would make the junction wrong. */
+    private static void resolveCovenantAttach(CovenantAttach ca, Id borrowerId, String targetName) {
+        List<LLC_BI__Covenant2__c> covs;
+        try {
+            covs = [
+                SELECT Id, Name, LLC_BI__Account__c, LLC_BI__Account__r.Name, LLC_BI__Active__c,
+                       LLC_BI__Financial_Indicator_Value__c, Acnpex_Operator__c,
+                       LLC_BI__Covenant_Type__r.Name
+                FROM LLC_BI__Covenant2__c WHERE Id = :ca.covenantId WITH USER_MODE LIMIT 1
+            ];
+        } catch (QueryException e) {
+            throw new ToolException(String.valueOf(ca.covenantId) + ' is not an id this org can read as a covenant.');
+        }
+        if (covs.isEmpty()) {
+            throw new ToolException(
+                'No covenant exists with id ' + ca.covenantId + '. Associate a covenant the read returned, or create ' +
+                'a new one with covenantAddsJson.'
+            );
+        }
+        LLC_BI__Covenant2__c cov = covs[0];
+        if (cov.LLC_BI__Account__c != borrowerId) {
+            throw new ToolException(
+                'Covenant ' + cov.Name + ' belongs to ' +
+                (cov.LLC_BI__Account__r == null ? String.valueOf(cov.LLC_BI__Account__c) : cov.LLC_BI__Account__r.Name) +
+                ', not to the borrower on this package. A covenant is not moved between relationships by a junction.'
+            );
+        }
+        Integer already = [
+            SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+            WHERE LLC_BI__Loan__c = :ca.targetLoanId AND LLC_BI__Covenant2__c = :ca.covenantId
+            WITH USER_MODE
+        ];
+        if (already > 0) {
+            throw new ToolException(
+                targetName + ' is ALREADY associated to covenant ' + cov.Name +
+                ', and the carry brings that junction onto the clone by itself. A second junction would be a ' +
+                'duplicate. Nothing needs doing for this covenant on this facility.'
+            );
+        }
+        ca.covenantName = cov.Name;
+        ca.typeName = cov.LLC_BI__Covenant_Type__r == null ? null : cov.LLC_BI__Covenant_Type__r.Name;
+        ca.threshold = cov.LLC_BI__Financial_Indicator_Value__c;
+        ca.operator = cov.Acnpex_Operator__c;
     }
 
     /** Resolves the covenant type by id or exact name against the org's own catalog. */

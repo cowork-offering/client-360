@@ -247,8 +247,22 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     // in this org (verified live: every related-lists copy default on, engine
     // run, zero rows landed), so the execute tool replicates each rolled
     // member's junctions onto its clone and proves the counts by re-query. The
-    // carry may only REPLICATE rows that exist on a version parent; it authors
-    // nothing, which is why no create state is fenced here.
+    // carry may only REPLICATE rows that exist on a version parent, so no
+    // create state is fenced here.
+    //
+    // WIDENED 2026-09-02, mirroring C360WriteGuard's OP_CREATE doctrine (founder
+    // P1): a junction may also be authored for a covenant the BORROWER already
+    // holds, to associate a relationship-level covenant to the facility. Such a
+    // covenant carries no loan junction, so it is not on the loan however it
+    // reads at relationship level. It is a junction create and nothing else:
+    // covenant AMEND and DETACH stay fenced, here and in the org.
+    //
+    // A CARRY EXCLUSION NEEDS NOTHING FROM THIS TABLE (founder P2). Removing a
+    // covenant from the open loan on a modification is the new version not
+    // carrying that junction. The parent keeps its row, the covenant record is
+    // never written, and the carry simply writes fewer rows. There is no
+    // "remove" entry here and there must never be: that would be a doorway to
+    // the delete this fence exists to refuse.
     mayCreate: true,
     mayUpdate: false,
     createStates: [],
@@ -332,6 +346,11 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     refusedFields: [
       { field: "LLC_BI__Advance_Rate__c", reason: "formula: override then auto-applied then type default; the banker's rate lands as the override" },
     ],
+    // A PLEDGE CARRY EXCLUSION needs nothing from this table either (founder P2,
+    // 2026-09-02): releasing collateral on a modification is the new version not
+    // carrying that pledge. The booked facility keeps the pledge it holds today,
+    // the asset and its ownership junction are relationship records and are
+    // untouched, and nothing is deleted anywhere.
     refusedOperations: ["updates of any kind", "deletes", "aggregate shells: the carry mints one per clone, never one per pledge"],
   },
 

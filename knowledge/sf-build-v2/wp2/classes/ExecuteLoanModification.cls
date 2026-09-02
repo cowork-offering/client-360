@@ -1377,8 +1377,12 @@ global with sharing class ExecuteLoanModification {
         out.terminalState = armed.terminalState;
         out.outcome = 'New package version ' + (newPkgName == null ? String.valueOf(newPkgId) : newPkgName) +
             ' created: ' + rollMembers.size() + ' members rolled, ' + armed.facilities.size() + ' modified' +
-            (armed.covenants.isEmpty() ? '' : ', ' + armed.covenants.size() + ' net-new covenant' +
-                (armed.covenants.size() == 1 ? '' : 's') + ' attached to the clone' + (armed.covenants.size() == 1 ? '' : 's')) +
+            (armed.covenants.size() - armed.covenantAttachCount <= 0 ? '' :
+                ', ' + (armed.covenants.size() - armed.covenantAttachCount) + ' net-new covenant' +
+                (armed.covenants.size() - armed.covenantAttachCount == 1 ? '' : 's') + ' attached to the clone' +
+                (armed.covenants.size() - armed.covenantAttachCount == 1 ? '' : 's')) +
+            (armed.covenantAttachCount == 0 ? '' : ', ' + armed.covenantAttachCount + ' existing covenant' +
+                (armed.covenantAttachCount == 1 ? '' : 's') + ' associated by junction only') +
             (armed.involvements.isEmpty() ? '' : ', ' + armed.involvements.size() + ' borrowing-structure change' +
                 (armed.involvements.size() == 1 ? '' : 's') + ' on the new version') +
             (armed.fieldChanges.isEmpty() ? '' : ', ' + armed.fieldChanges.size() + ' field change' +
@@ -1492,6 +1496,13 @@ global with sharing class ExecuteLoanModification {
     public class ArmOutcome {
         public List<C360Plan.Step> steps;
         public List<CovenantResult> covenants;
+        /**
+         * How many of `covenants` are ASSOCIATIONS of an existing covenant rather than net-new
+         * creates. They share the wire shape because a banker reads one list of covenants on the
+         * new version, and they are counted apart because calling an association "net-new" would be
+         * a claim about a record this run did not author. Internal: the wire is unchanged.
+         */
+        public Integer covenantAttachCount = 0;
         public List<InvolvementResult> involvements;
         public List<FieldChangeResult> fieldChanges;
         public List<FeeResult> fees;
@@ -1633,6 +1644,27 @@ global with sharing class ExecuteLoanModification {
                 }
             }
         }
+        // The founder's requirement of 2026-09-02, in the only shape nCino allows: a covenant or a
+        // pledge is "removed from the open loan" by the new VERSION not carrying it. The parent's
+        // junction, the covenant record, the asset and the ownership junction are all untouched, so
+        // no delete happens and no covenant is detached. Stage resolved each row to an exact id,
+        // which is why the skip below can be an id test rather than a description match.
+        Integer covenantExclusionCount = intCount(v.get('covenantExclusionCount'));
+        Set<Id> excludedCovenantJunctionIds = new Set<Id>();
+        for (Integer i = 0; i < covenantExclusionCount; i++) {
+            Id jId = C360Plan.asId(v.get('covenantExclusion' + i + '.junctionId'));
+            if (jId != null) {
+                excludedCovenantJunctionIds.add(jId);
+            }
+        }
+        Integer pledgeExclusionCount = intCount(v.get('pledgeExclusionCount'));
+        Set<Id> excludedPledgeIds = new Set<Id>();
+        for (Integer i = 0; i < pledgeExclusionCount; i++) {
+            Id pId = C360Plan.asId(v.get('pledgeExclusion' + i + '.pledgeId'));
+            if (pId != null) {
+                excludedPledgeIds.add(pId);
+            }
+        }
 
         // ---- The NET-NEW FEES ride the carry's own fee insert (governor, 2026-08-31).
         //
@@ -1735,7 +1767,8 @@ global with sharing class ExecuteLoanModification {
         }
 
         String carryReport = carryJunctionGraph(
-            job.rollMembers, job.cloneByParent, job.newPkgId, excludedInvolvementIds, netNewFees, netNewPledges
+            job.rollMembers, job.cloneByParent, job.newPkgId, excludedInvolvementIds,
+            excludedCovenantJunctionIds, excludedPledgeIds, netNewFees, netNewPledges
         );
         C360Plan.setState(
             steps,
@@ -1964,6 +1997,154 @@ global with sharing class ExecuteLoanModification {
             }
         }
 
+        // ---- CARRY EXCLUSIONS, covenant and pledge (plan values covenantExclusion{i}.* and
+        // pledgeExclusion{i}.*). Nothing was written for these: carryJunctionGraph simply did not
+        // replicate the named rows. They are PROVEN here the way an involvement exclusion is, by
+        // absence on the clone and presence on the parent, because a removal nobody can see is
+        // indistinguishable from a removal that did not happen.
+        for (Integer i = 0; i < covenantExclusionCount; i++) {
+            String xs = String.valueOf(i);
+            Id exCovenantId = C360Plan.asId(v.get('covenantExclusion' + xs + '.covenantId'));
+            Id exJunctionId = C360Plan.asId(v.get('covenantExclusion' + xs + '.junctionId'));
+            Id exParent = C360Plan.asId(v.get('covenantExclusion' + xs + '.targetLoanId'));
+            String exName = String.valueOf(v.get('covenantExclusion' + xs + '.covenantName'));
+            Id exClone = job.cloneByParent.get(exParent);
+            if (exClone == null || exCovenantId == null) {
+                String exWhy = exClone == null
+                    ? 'No modification clone could be read for the facility this exclusion targets, so nothing was proven.'
+                    : 'The staged exclusion is incomplete (no resolved covenant), so nothing was proven. Re-stage the action.';
+                C360Plan.setState(steps, 'covenant_exclusion_' + xs, C360Plan.STATE_FAILED, exWhy);
+                C360Plan.setState(steps, 'covenant_exclusion_verify_' + xs, C360Plan.STATE_FAILED, exWhy);
+                continue;
+            }
+            Integer covOnClone = [
+                SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+                WHERE LLC_BI__Loan__c = :exClone AND LLC_BI__Covenant2__c = :exCovenantId
+                WITH USER_MODE
+            ];
+            Integer covOnParent = exJunctionId == null ? 0 : [
+                SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE Id = :exJunctionId WITH USER_MODE
+            ];
+            Boolean covExcluded = covOnClone == 0 && covOnParent == 1;
+            C360Plan.setState(steps, 'covenant_exclusion_' + xs,
+                covExcluded ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                'The carry ran without junction ' + exJunctionId + ' (' + exName + '). Nothing was deleted and the covenant was not amended.');
+            C360Plan.setState(steps, 'covenant_exclusion_verify_' + xs,
+                covExcluded ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                covExcluded
+                    ? 'The clone carries no junction for ' + exName + ', and the parent still carries its own.'
+                    : 'Not proven: the clone reads ' + covOnClone + ' junctions for this covenant and the parent junction count is ' + covOnParent + '.');
+        }
+
+        for (Integer i = 0; i < pledgeExclusionCount; i++) {
+            String ps = String.valueOf(i);
+            Id exPledgeId = C360Plan.asId(v.get('pledgeExclusion' + ps + '.pledgeId'));
+            Id exCollateralId = C360Plan.asId(v.get('pledgeExclusion' + ps + '.collateralId'));
+            Id exPledgeParent = C360Plan.asId(v.get('pledgeExclusion' + ps + '.targetLoanId'));
+            String exAsset = String.valueOf(v.get('pledgeExclusion' + ps + '.assetLabel'));
+            Id exPledgeClone = job.cloneByParent.get(exPledgeParent);
+            if (exPledgeClone == null || exCollateralId == null) {
+                String exWhy = exPledgeClone == null
+                    ? 'No modification clone could be read for the facility this exclusion targets, so nothing was proven.'
+                    : 'The staged exclusion is incomplete (no resolved asset), so nothing was proven. Re-stage the action.';
+                C360Plan.setState(steps, 'pledge_exclusion_' + ps, C360Plan.STATE_FAILED, exWhy);
+                C360Plan.setState(steps, 'pledge_exclusion_verify_' + ps, C360Plan.STATE_FAILED, exWhy);
+                continue;
+            }
+            Integer plOnClone = [
+                SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c
+                WHERE LLC_BI__Loan__c = :exPledgeClone AND LLC_BI__Collateral__c = :exCollateralId
+                WITH USER_MODE
+            ];
+            Integer plOnParent = exPledgeId == null ? 0 : [
+                SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE Id = :exPledgeId WITH USER_MODE
+            ];
+            Boolean plExcluded = plOnClone == 0 && plOnParent == 1;
+            C360Plan.setState(steps, 'pledge_exclusion_' + ps,
+                plExcluded ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                'The carry ran without pledge ' + exPledgeId + ' (' + exAsset + '). Nothing was deleted, and the asset and its ownership junction are untouched.');
+            C360Plan.setState(steps, 'pledge_exclusion_verify_' + ps,
+                plExcluded ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                plExcluded
+                    ? 'The clone carries no pledge of ' + exAsset + ', and the parent still carries its own.'
+                    : 'Not proven: the clone reads ' + plOnClone + ' pledges of this asset and the parent pledge count is ' + plOnParent + '.');
+        }
+
+        // ---- COVENANT ASSOCIATIONS (plan values covenantAttach{i}.*). A junction-only create for a
+        // covenant the borrower ALREADY holds: no LLC_BI__Covenant2__c is inserted, nothing is
+        // amended and nothing is deleted. The account association is minted only where the covenant
+        // does not already carry one, because a relationship-level covenant has its own and a
+        // second row would be the duplicate the association law never asked for.
+        Integer covenantAttachCount = intCount(v.get('covenantAttachCount'));
+        List<CovenantResult> covenantAttachResults = new List<CovenantResult>();
+        for (Integer i = 0; i < covenantAttachCount; i++) {
+            String ats = String.valueOf(i);
+            CovenantResult ar = new CovenantResult();
+            ar.covenantId = String.valueOf(v.get('covenantAttach' + ats + '.covenantId'));
+            ar.covenantName = String.valueOf(v.get('covenantAttach' + ats + '.covenantName'));
+            ar.typeName = String.valueOf(v.get('covenantAttach' + ats + '.typeName'));
+            ar.threshold = C360Plan.asDecimal(v.get('covenantAttach' + ats + '.threshold'));
+            ar.operator = String.valueOf(v.get('covenantAttach' + ats + '.operator'));
+            covenantAttachResults.add(ar);
+
+            Id attachCovenantId = C360Plan.asId(v.get('covenantAttach' + ats + '.covenantId'));
+            Id attachParent = C360Plan.asId(v.get('covenantAttach' + ats + '.targetLoanId'));
+            Id attachClone = job.cloneByParent.get(attachParent);
+            if (attachClone == null || attachCovenantId == null) {
+                String attachWhy = attachClone == null
+                    ? 'No modification clone could be read for the facility this association targets, so the junction was not created.'
+                    : 'The staged association is incomplete (no resolved covenant), so nothing was created. Re-stage the action.';
+                C360Plan.setState(steps, 'covenant_associate_' + ats, C360Plan.STATE_FAILED, attachWhy);
+                C360Plan.setState(steps, 'covenant_associate_verify_' + ats, C360Plan.STATE_FAILED, attachWhy);
+                ar.verification = attachWhy;
+                continue;
+            }
+            ar.cloneLoanId = attachClone;
+
+            Map<String, Object> associateFields = new Map<String, Object>{
+                'LLC_BI__Loan__c' => attachClone,
+                'LLC_BI__Covenant2__c' => attachCovenantId
+            };
+            C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN_COVENANT, C360WriteGuard.OP_CREATE, associateFields);
+            LLC_BI__Loan_Covenant__c associate = new LLC_BI__Loan_Covenant__c(
+                LLC_BI__Loan__c = attachClone,
+                LLC_BI__Covenant2__c = attachCovenantId
+            );
+            insert as user associate;
+
+            Integer acctCovExisting = [
+                SELECT COUNT() FROM LLC_BI__Account_Covenant__c
+                WHERE LLC_BI__Account__c = :job.accountId AND LLC_BI__Covenant2__c = :attachCovenantId
+                WITH USER_MODE
+            ];
+            if (acctCovExisting == 0) {
+                Map<String, Object> assocAcctFields = new Map<String, Object>{
+                    'LLC_BI__Covenant2__c' => attachCovenantId,
+                    'LLC_BI__Account__c' => job.accountId
+                };
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_ACCOUNT_COVENANT, C360WriteGuard.OP_CREATE, assocAcctFields);
+                insert as user new LLC_BI__Account_Covenant__c(
+                    LLC_BI__Covenant2__c = attachCovenantId,
+                    LLC_BI__Account__c = job.accountId
+                );
+            }
+            C360Plan.setState(steps, 'covenant_associate_' + ats, C360Plan.STATE_VERIFIED,
+                'Junction ' + associate.Id + ' associates ' + ar.covenantName + ' to clone ' + attachClone +
+                (acctCovExisting == 0 ? '; the account association was minted beside it.' : '; the covenant already carried its account association.'));
+
+            Integer attachedBack = [
+                SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+                WHERE LLC_BI__Loan__c = :attachClone AND LLC_BI__Covenant2__c = :attachCovenantId
+                WITH USER_MODE
+            ];
+            ar.verification = attachedBack == 1
+                ? ar.covenantName + ' reads back on the clone, once, with the covenant record unchanged.'
+                : 'Not proven: the clone reads ' + attachedBack + ' junctions for this covenant.';
+            C360Plan.setState(steps, 'covenant_associate_verify_' + ats,
+                attachedBack == 1 ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, ar.verification);
+        }
+        covenantResults.addAll(covenantAttachResults);
+
         // ---- POLICY EXCEPTIONS (plan values policyException{i}.*). Logged against the CLONE and
         // anchored on the borrower, so the bank reads each one both on the facility it applies to
         // and at relationship level - which is where a credit officer goes looking for the bank's
@@ -2072,6 +2253,7 @@ global with sharing class ExecuteLoanModification {
         ArmOutcome outcome = new ArmOutcome();
         outcome.steps = steps;
         outcome.covenants = covenantResults;
+        outcome.covenantAttachCount = covenantAttachResults.size();
         outcome.involvements = involvementResults;
         outcome.fieldChanges = fieldChangeResults;
         outcome.fees = feeResults;
@@ -2527,6 +2709,18 @@ global with sharing class ExecuteLoanModification {
             ids.add('covenant_attach_' + i);
             ids.add('covenant_verify_' + i);
         }
+        for (Integer i = 0; i < intCount(v.get('covenantAttachCount')); i++) {
+            ids.add('covenant_associate_' + i);
+            ids.add('covenant_associate_verify_' + i);
+        }
+        for (Integer i = 0; i < intCount(v.get('covenantExclusionCount')); i++) {
+            ids.add('covenant_exclusion_' + i);
+            ids.add('covenant_exclusion_verify_' + i);
+        }
+        for (Integer i = 0; i < intCount(v.get('pledgeExclusionCount')); i++) {
+            ids.add('pledge_exclusion_' + i);
+            ids.add('pledge_exclusion_verify_' + i);
+        }
         for (Integer i = 0; i < intCount(v.get('involvementChangeCount')); i++) {
             ids.add('involvement_change_' + i);
             ids.add('involvement_verify_' + i);
@@ -2569,6 +2763,18 @@ global with sharing class ExecuteLoanModification {
             cr.typeName = String.valueOf(v.get('covenantAdd' + i + '.typeName'));
             cr.threshold = C360Plan.asDecimal(v.get('covenantAdd' + i + '.threshold'));
             cr.operator = String.valueOf(v.get('covenantAdd' + i + '.operator'));
+            cr.verification = ARM_WAITING;
+            out.add(cr);
+        }
+        // The associations belong in the same list for the same reason they do after the arm runs:
+        // a banker reads one set of covenants on the new version, whoever authored each record.
+        for (Integer i = 0; i < intCount(v.get('covenantAttachCount')); i++) {
+            CovenantResult cr = new CovenantResult();
+            cr.covenantId = String.valueOf(v.get('covenantAttach' + i + '.covenantId'));
+            cr.covenantName = String.valueOf(v.get('covenantAttach' + i + '.covenantName'));
+            cr.typeName = String.valueOf(v.get('covenantAttach' + i + '.typeName'));
+            cr.threshold = C360Plan.asDecimal(v.get('covenantAttach' + i + '.threshold'));
+            cr.operator = String.valueOf(v.get('covenantAttach' + i + '.operator'));
             cr.verification = ARM_WAITING;
             out.add(cr);
         }
@@ -2930,6 +3136,12 @@ global with sharing class ExecuteLoanModification {
      *        no shell of its own until an authored pledge asks for one. They then ride the SAME DML
      *        as the copies, because nCino's collateral aggregate automation is bulkified and a
      *        second insert would pay its whole pass again. Counted apart below.
+     * @param excludedCovenantJunctionIds Junction rows the plan named as NOT carried. They are
+     *        skipped here and nowhere else: the parent keeps its junction, the covenant record is
+     *        never written, and no delete happens anywhere. That is what makes "remove the covenant
+     *        from the loan" possible while covenant DETACH stays fenced.
+     * @param excludedPledgeIds Pledge rows the plan named as NOT carried, on the same doctrine. The
+     *        asset and its ownership junction are relationship records and are not touched.
      * @return 'CARRIED <detail>' when every replica read back by count; a plain detail otherwise.
      */
     private static String carryJunctionGraph(
@@ -2937,6 +3149,8 @@ global with sharing class ExecuteLoanModification {
         Map<Id, Id> cloneByParent,
         Id newPkgId,
         Set<Id> excludedInvolvementIds,
+        Set<Id> excludedCovenantJunctionIds,
+        Set<Id> excludedPledgeIds,
         List<LLC_BI__Fee__c> netNewFees,
         List<LLC_BI__Loan_Collateral2__c> netNewPledges
     ) {
@@ -2946,8 +3160,8 @@ global with sharing class ExecuteLoanModification {
         // into one here and five count re-reads into one at the bottom.
         List<LLC_BI__Loan__c> sources = [
             SELECT Id,
-                (SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__c FROM LLC_BI__Loan_Covenants__r),
-                (SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Lien_Position__c, LLC_BI__Pledged_Status__c,
+                (SELECT Id, LLC_BI__Loan__c, LLC_BI__Covenant2__c FROM LLC_BI__Loan_Covenants__r),
+                (SELECT Id, LLC_BI__Loan__c, LLC_BI__Collateral__c, LLC_BI__Lien_Position__c, LLC_BI__Pledged_Status__c,
                         LLC_BI__Active__c, LLC_BI__Is_Primary__c, LLC_BI__Amount_Pledged__c,
                         LLC_BI__Advance_Rate_Override__c, LLC_BI__Override_Reason__c, LLC_BI__Start_Date__c,
                         LLC_BI__End_Date__c, LLC_BI__Is_Excluded__c, LLC_BI__Is_Leased_Asset__c,
@@ -2981,9 +3195,19 @@ global with sharing class ExecuteLoanModification {
                 continue;
             }
             for (LLC_BI__Loan_Covenant__c j : src.LLC_BI__Loan_Covenants__r) {
+                // A staged covenant exclusion: the junction is named in the plan and simply not
+                // replicated. The parent's own row is left exactly as it is.
+                if (excludedCovenantJunctionIds.contains(j.Id)) {
+                    continue;
+                }
                 covCopies.add(new LLC_BI__Loan_Covenant__c(LLC_BI__Loan__c = cloneId, LLC_BI__Covenant2__c = j.LLC_BI__Covenant2__c));
             }
             for (LLC_BI__Loan_Collateral2__c pl : src.LLC_BI__Loan_Collateral__r) {
+                // A staged pledge exclusion, same doctrine. The aggregate shell is still minted for
+                // this clone by any pledge that DOES travel; an excluded one asks for nothing.
+                if (excludedPledgeIds.contains(pl.Id)) {
+                    continue;
+                }
                 pledgeSources.add(pl);
                 if (!aggByClone.containsKey(cloneId)) {
                     aggByClone.put(cloneId, new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'Collateral Aggregate'));
