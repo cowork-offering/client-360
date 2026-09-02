@@ -123,7 +123,7 @@ describe("one involvement repeated once per facility", () => {
   });
 });
 
-describe("Hartwell — 22 org rows, five parties, four roles", () => {
+describe("Hartwell: 22 org rows, five parties, four roles", () => {
   const raw = HARTWELL.graph?.legalEntities ?? [];
   const rows = aggregateInvolvements(raw);
 
