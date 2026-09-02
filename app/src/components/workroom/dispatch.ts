@@ -426,6 +426,91 @@ function correction(
   return undefined;
 }
 
+/* ============================== THE FIGURE THAT CAME OUT WRONG (B, the drive)
+
+   "COMMITMENT AMOUNT $15M -> $1", STAGED, WITH A WARNING BESIDE IT. The banker
+   was answering the pricing gate's date question ("actually change it to
+   Oct 1, 2026"), the line went through the general parser and the "1" was read
+   as a commitment. The room put the card up anyway, with a magnitude advisory
+   under it, and a remark on top claiming a date had moved.
+
+   AN ADVISORY IS THE WRONG TIER FOR THIS ONE. The magnitude rule speaks up
+   about a figure that is TOO BIG, and it stages it, because $900M on a $46M
+   package is a decision a banker could conceivably be making badly. A limit
+   UNDER WHAT IS ALREADY DRAWN, or under a hundredth of what the facility
+   carries today, is not a decision at all: no bank commits a dollar against a
+   drawn line. It is a misread, and a misread does not become a chip.
+
+   TWO FACTS, BOTH FROM THE READ. The facility's own commitment and its
+   outstanding balance. Where the read carries neither, this rule says nothing
+   and the magnitude advisory has the line, which is the same discipline every
+   rule in the advisory tier is held to.
+
+   A NEGATIVE KEEPS ITS ADVISORY. Below zero is already named, loudly, by the
+   magnitude rule, and moving it here would only change which tier says so.  */
+
+/** How small a new commitment may be, against what the facility carries today,
+ *  before the room reads it as a figure that came out wrong. */
+export const MISREAD_FRACTION = 0.01;
+
+export interface MisreadMember extends QualifierMember {
+  /** What is already drawn on it. Null or absent where no read carries it. */
+  drawn?: number | null;
+}
+
+export interface MisreadRead {
+  /** The deltas that may still go on the table. */
+  keep: WorkroomDelta[];
+  /** The ones the room will not stage, as refusals it can draw. */
+  refusals: Array<WorkroomRefusal & { why: string }>;
+}
+
+/** The commitment moves this line asked for that the room reads as misreads. */
+export function misreadCommitments(args: { deltas: WorkroomDelta[]; members: MisreadMember[] }): MisreadRead {
+  const keep: WorkroomDelta[] = [];
+  const refusals: Array<WorkroomRefusal & { why: string }> = [];
+  for (const delta of args.deltas) {
+    const why = misreadOf(delta, args.members);
+    if (!why) {
+      keep.push(delta);
+      continue;
+    }
+    refusals.push({
+      id: `misread:${delta.id}`,
+      target: delta.target,
+      title: delta.title,
+      why,
+      reason: "The room does not stage a commitment it reads as a mistyped figure. Nothing has been staged and nothing has come off the manifest.",
+      detail: "",
+    });
+  }
+  return { keep, refusals };
+}
+
+/** Why this delta is a misread, in the banker's own terms, or "". */
+function misreadOf(delta: WorkroomDelta, members: MisreadMember[]): string {
+  if (delta.wire?.key !== "requestedAmount" || typeof delta.wire.value !== "number") return "";
+  const limit = delta.wire.value;
+  if (limit < 0) return "";
+  const member = members.find((m) => m.id === loanOf(delta));
+  const name = member?.label ?? delta.target ?? "that facility";
+  const drawn = member?.drawn;
+  if (typeof drawn === "number" && drawn > 0 && limit < drawn) {
+    return (
+      `${fmtMoney(limit)} on the ${name} is under the ${fmtMoney(drawn)} already drawn on it, so it is not a limit this bank could set. ` +
+      "I read that as a figure that came out wrong rather than as a decision, and I am not putting it up as a change. Say the commitment again and it goes straight on the plan."
+    );
+  }
+  const held = member?.committed;
+  if (typeof held === "number" && held > 0 && limit < held * MISREAD_FRACTION) {
+    return (
+      `${fmtMoney(limit)} on the ${name} is under a hundredth of the ${fmtMoney(held)} it carries today. ` +
+      "That is a mistyped figure rather than a reduction, so I am not putting it up as a change. Say the commitment again and it goes straight on the plan."
+    );
+  }
+  return "";
+}
+
 /* ================================================== the borrowing-structure layers
 
    THREE POST-PARSE CORRECTIONS AND ONE PRE-PARSE REWRITE, all on the same
@@ -1174,6 +1259,34 @@ export function committedSentence(args: {
   if (PACKAGE_MOVED.test(args.reply)) return args.reply.replace(PACKAGE_MOVED, sentence).trim();
   if (PACKAGE_HELD.test(args.reply)) return args.reply.replace(PACKAGE_HELD, sentence).trim();
   return args.reply;
+}
+
+/* ================================================ ONE VOICE PER MOMENT (A)
+
+   THE BANKER READ THE ROOM TWICE (founder drive, 2026-09-02: "a lot of chat
+   coming through, like two chats simultaneously"). Under a staged card the room
+   put up its own paragraph - what a modification does to the package, what
+   confirming stages, what rides as a handoff - and the model then said the same
+   thing in its own words directly underneath it.
+
+   THE CARD IS THE FACT AND THE SENTENCE IS THE JUDGEMENT, so where the model
+   speaks the room's own explanation steps back to the ADDRESS: what is staged,
+   on which facility, from what to what. The Before-you-confirm advisory is NOT
+   part of that paragraph and never was: it renders on the chip block, it is a
+   CHECK rather than a comment, and it stays exactly where it is.
+
+   DEGRADE PARITY. Where the model is absent, declines or fails, the room's own
+   paragraph is what the banker reads, byte for byte as today. The reduction is
+   keyed on the remark, never on the feature being switched on.               */
+
+/** THE ONE-LINE ADDRESS of what a card stages, or "" where the chips carry no
+ *  staged delta (a refusal has its own reason on the chip). */
+export function stagedAddress(deltas: WorkroomDelta[]): string {
+  const said = deltas
+    .filter((d) => d.title && d.target)
+    .slice(0, 3)
+    .map((d) => `${d.title} on ${d.target}: ${d.before} → ${d.after}.`);
+  return said.join(" ");
 }
 
 /* ------------------------------------------------------------- the fast path */

@@ -283,19 +283,105 @@ export function readPricingOther(line: string, members: ElicitMember[]): Pricing
   return { memberId: member.id, slot: /amortisation/i.test(hit[1]) ? "amortisedTerm" : "firstPaymentDate" };
 }
 
-/** The banker's own free-text answer to a held question. A bare number is a
- *  count of months; a bare date is a date. Anything else is not an answer, and
- *  the room lets its ordinary lanes take the line. */
-export function readPricingFreeText(line: string, slot: PricingSlot): string | null {
-  const text = (line ?? "").trim();
-  if (slot === "amortisedTerm") {
-    const months = /^(\d{1,3})(?:\s*months?)?$/i.exec(text);
-    if (months) return months[1];
-    const years = /^(\d{1,2})\s*years?$/i.exec(text);
-    return years ? String(Number(years[1]) * 12) : null;
+/* ============================ THE ANSWER, IN THE WORDS A BANKER WRITES IT IN
+
+   THE $1 COMMITMENT (founder drive, 2026-09-02). The room asked for the first
+   payment date. The banker typed "actually change it to Oct 1, 2026". Only
+   YYYY-MM-DD was read as a date, so the line fell through to the general
+   parser, "1" was read as a COMMITMENT and the room staged
+   "Commitment amount $15M -> $1" with a magnitude warning beside it.
+
+   TWO READINGS, AND BOTH OF THEM BELONG TO THE OPEN QUESTION. A correction
+   opener ("actually", "change it to", "make it") in front of an answer is the
+   same answer, corrected: rule 5 of the create grammar, applied to the room's
+   own gate. And a date is a date in the four forms a banker actually writes.
+
+   THE STRIP IS DELIBERATELY NARROW. What is left after the opener must be the
+   WHOLE answer and nothing else, so "extend the maturity to 2027-06-30" is
+   still an instruction: it carries a verb and a field the strip does not take
+   off, and what remains is not a bare date.                                  */
+
+/** The correction a banker opens an amendment on, and nothing more of the
+ *  sentence than that. Mirrors `elicit.ts`'s own CORRECTION, which is what
+ *  amends an open create card. */
+const CORRECTION =
+  /^\s*(?:(?:no|actually|instead|rather|sorry)[,\s]+)*(?:(?:let'?s\s+)?(?:change|make|set|put|move|use)\s+(?:it|that|the\s+date|the\s+term)?\s*)?(?:to\s+|at\s+|it\s+)?/i;
+
+const MONTHS = [
+  "january", "february", "march", "april", "may", "june",
+  "july", "august", "september", "october", "november", "december",
+];
+
+/** The month a word names, 1 to 12, or null. Three letters is enough, and the
+ *  full name is what a banker usually types. */
+function monthNumber(word: string): number | null {
+  const said = word.toLowerCase().replace(/\.$/, "");
+  const at = MONTHS.findIndex((m) => m === said || (said.length >= 3 && m.startsWith(said)));
+  return at < 0 ? null : at + 1;
+}
+
+const iso = (y: number, m: number, d: number): string | null =>
+  m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2999
+    ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    : null;
+
+/**
+ * A DATE, IN THE FORMS A BANKER WRITES ONE: 2026-10-01, Oct 1, 2026,
+ * October 1st 2026, 1 October 2026. Null where the text is not a whole date and
+ * nothing else, which is what keeps an instruction out of this lane.
+ */
+export function readDate(text: string): string | null {
+  const said = text.trim().replace(/[.,;]+$/, "");
+  const plain = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(said);
+  if (plain) return iso(Number(plain[1]), Number(plain[2]), Number(plain[3]));
+
+  // Oct 1, 2026 / October 1st 2026
+  const monthFirst = /^([A-Za-z]{3,9}\.?)\s+(\d{1,2})(?:st|nd|rd|th)?\s*,?\s*(\d{4})$/.exec(said);
+  if (monthFirst) {
+    const month = monthNumber(monthFirst[1]);
+    if (month) return iso(Number(monthFirst[3]), month, Number(monthFirst[2]));
   }
-  const iso = /^(\d{4}-\d{2}-\d{2})$/.exec(text);
-  return iso ? iso[1] : null;
+
+  // 1 October 2026 / 1st Oct 2026
+  const dayFirst = /^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9}\.?)\s*,?\s*(\d{4})$/.exec(said);
+  if (dayFirst) {
+    const month = monthNumber(dayFirst[2]);
+    if (month) return iso(Number(dayFirst[3]), month, Number(dayFirst[1]));
+  }
+  return null;
+}
+
+/** The line with its correction opener taken off, where it carries one. */
+const corrected = (text: string): string => text.replace(CORRECTION, "").replace(/[?\s]+$/, "").trim();
+
+/** The banker's own free-text answer to a held question. A bare number is a
+ *  count of months; a bare date is a date, in any of the forms one is written
+ *  in. A correction opener in front of either is the SAME answer, corrected.
+ *  Anything else is not an answer, and the room lets its ordinary lanes take
+ *  the line. */
+export function readPricingFreeText(line: string, slot: PricingSlot): string | null {
+  const raw = (line ?? "").trim();
+  for (const text of raw === corrected(raw) ? [raw] : [raw, corrected(raw)]) {
+    if (slot === "amortisedTerm") {
+      const months = /^(\d{1,3})(?:\s*months?)?$/i.exec(text);
+      if (months) return months[1];
+      const years = /^(\d{1,2})\s*years?$/i.exec(text);
+      if (years) return String(Number(years[1]) * 12);
+      continue;
+    }
+    const date = readDate(text);
+    if (date) return date;
+  }
+  return null;
+}
+
+/** "Another date", "a different figure": the banker wants to type it. Read as
+ *  an answer to the OPEN gate, so the room holds the slot and asks rather than
+ *  handing the words to the general parser. */
+export function readPricingAnother(line: string, slot: PricingSlot): boolean {
+  const text = (line ?? "").trim();
+  const noun = slot === "amortisedTerm" ? /(figure|term|number|amount)/i : /(date|day|month)/i;
+  return /^\s*(?:an?\s+)?(?:other|another|different)\s+/i.test(text) && noun.test(text);
 }
 
 /** The sentence the room says when a pricing field lands on the plan. */

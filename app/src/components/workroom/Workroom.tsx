@@ -38,12 +38,13 @@ import {
   type SmartOpening,
 } from "./route";
 import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICanDo, type ReadTopic } from "./ask";
-import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
+import { buildEnvelope, clarifyOffWire, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
-import { Narration, useNarration } from "../../channel/Narration";
+import { Narration, useNarration, type NarrationView } from "../../channel/Narration";
 import type { Facility } from "../../data/contract";
 import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
+import { feeAsk, feePercentageNote, feeSay, readFeeOpen } from "./fee";
 import {
   PRICING_FIELD,
   PRICING_WHY,
@@ -52,6 +53,7 @@ import {
   pricingLanded,
   pricingNeed,
   pricingSay,
+  readPricingAnother,
   readPricingDecline,
   readPricingFreeText,
   readPricingLine,
@@ -64,8 +66,10 @@ import {
   fenceRefusal,
   focusQualifier,
   magnitudeAdvisories,
+  misreadCommitments,
   provablyClean,
   qualifierFilter,
+  stagedAddress,
   readRemove,
   readPartyRemoval,
   readsThePlan,
@@ -75,7 +79,7 @@ import {
   retypeEntry,
   stampRemovalRoles,
   typeChoiceSay,
-  type QualifierMember,
+  type MisreadMember,
 } from "./dispatch";
 import {
   advance,
@@ -240,6 +244,11 @@ type ThreadItem = { id: string; step: number } & (
   | {
       kind: "agent";
       text: string;
+      /** ONE SENTENCE THE SHELL OWNS about this parse, kept apart from the
+       *  engine's own account so it SURVIVES the paragraph stepping back to the
+       *  address where a remark lands. The percentage fee's "the org works the
+       *  money out itself" is the only one today. */
+      note?: string;
       options?: Array<{ label: string; say: string }>;
       /** The explicit restart offered when a cross-route line lands on a staged
        *  manifest. Never a silent engine swap. */
@@ -308,6 +317,29 @@ function tierOf(item: ThreadItem): EntryTier | null {
   if (item.kind === "packages") return "identity";
   if (item.kind === "brief") return "detail";
   return null;
+}
+
+/* ================================================ ONE VOICE PER MOMENT (A)
+
+   FOUNDER, DRIVING THE THIRD PUBLISH: "a lot of chat coming through, like two
+   chats simultaneously". Under a staged card he read the room's own paragraph
+   AND the model's remark, saying the same thing twice.
+
+   THE CARD IS THE FACT AND THE SENTENCE IS THE JUDGEMENT. Where the model
+   speaks under the chips this agent line announced, the agent line steps back
+   to the address: what is staged, on which facility, before and after. The
+   Before-you-confirm advisory is not part of it and never was - it renders on
+   the chip block, it is a CHECK rather than a comment, and it stays.
+
+   AND WHERE THE MODEL DOES NOT SPEAK, NOTHING MOVES. No remark, a decline, a
+   rate limit or a timeout leaves the room's own paragraph exactly as it reads
+   today. That is why this is keyed on the REMARK and not on the feature. */
+function speaksFor(item: ThreadItem, next: ThreadItem | undefined, view: NarrationView | undefined): ThreadItem {
+  if (item.kind !== "agent" || next?.kind !== "chips") return item;
+  if (!view || (!view.pending && !view.spoke)) return item;
+  const address = stagedAddress(next.chips.map((c) => c.delta).filter((d): d is WorkroomDelta => Boolean(d)));
+  if (!address) return item;
+  return { ...item, text: [address, item.note].filter(Boolean).join(" ") };
 }
 
 /** Omit that DISTRIBUTES over the union. A plain `Omit<ThreadItem, "step">`
@@ -1075,12 +1107,24 @@ export function Workroom({
           the same read the strip prints and is never re-derived: the bundle's
           own figure where the room stands on one, and the member chip's own
           printed figure read back where it does not. */
-  const qualifierMembers = useMemo<QualifierMember[]>(() => {
+  /* THE DRAWN BALANCE RIDES ALONG (founder drive, 2026-09-02). A commitment
+     under what is already outstanding is not a decision the bank could take, so
+     the misread rule needs the same read the coverage advisory stands on. Null
+     where no read carries it, and the rule then says nothing. */
+  const qualifierMembers = useMemo<MisreadMember[]>(() => {
     const committed = new Map<string, number>();
+    const drawn = new Map<string, number>();
     for (const f of reads?.bundle?.exposure?.facilities ?? []) {
-      if (f.loanId && typeof f.committed === "number") committed.set(f.loanId, f.committed);
+      if (!f.loanId) continue;
+      if (typeof f.committed === "number") committed.set(f.loanId, f.committed);
+      if (typeof f.outstanding === "number") drawn.set(f.loanId, f.outstanding);
     }
-    return brief.members.map((m) => ({ id: m.id, label: m.key, committed: committed.get(m.id) ?? printedAmount(m.amount) }));
+    return brief.members.map((m) => ({
+      id: m.id,
+      label: m.key,
+      committed: committed.get(m.id) ?? printedAmount(m.amount),
+      drawn: drawn.get(m.id) ?? null,
+    }));
   }, [brief.members, reads?.bundle]);
 
   /** The relationship's committed total, in dollars, for the magnitude bound. */
@@ -1280,7 +1324,10 @@ export function Workroom({
    * lane alone would have been.
    */
   const renderParse = useCallback(
-    (instruction: string, result: IntentResult, mine: number) => {
+    /** `note` is one sentence the SHELL owns about this parse, said in the same
+     *  bubble as the engine's own account. The percentage fee's "the org works
+     *  the money out itself" is the only one today. */
+    (instruction: string, result: IntentResult, mine: number, note = "") => {
       /* ------------------------------------------------ THE VALUE BOUNDS
 
          A STAGED VALUE HAS TO LOOK LIKE A VALUE (founder repro 11b). The
@@ -1320,7 +1367,23 @@ export function Workroom({
          found no such row and refused the whole plan. The book has the answer
          and the room is already holding it. */
       const roleRead = stampRemovalRoles({ deltas: shown, book, label: memberLabel });
-      const staged = roleRead.deltas;
+
+      /* --------------------------- THE FIGURE THAT CAME OUT WRONG (B)
+
+         A commitment under what is already drawn on the facility, or under a
+         hundredth of what it carries today, is not a decision: it is a
+         mistyped figure, and the drive proved what staging one costs. The
+         magnitude rule stages and warns because too big can still be meant;
+         this one refuses, by name, and says how to put it right. */
+      const misread = misreadCommitments({ deltas: roleRead.deltas, members: qualifierMembers });
+      /* AND THE SHELL'S OWN NOTE RIDES THE ENTRY, not only the sentence. The
+         percentage fee's "the org works the money out itself" is the reason the
+         room asks for no amount, and where the model is speaking the sentence
+         steps back to the address: a note that lived only there would be lost
+         exactly when it is being explained. Same idiom as the pricing gate's. */
+      const staged = note
+        ? misread.keep.map((d) => ({ ...d, caveat: [d.caveat, note].filter(Boolean).join(" ") }))
+        : misread.keep;
 
       /* ------------------------------------------ THE MAGNITUDE BOUND (F5)
 
@@ -1338,8 +1401,12 @@ export function Workroom({
         : result.kind === "deltas"
           ? (result.advisories ?? [])
           : [];
+      /* AND ITS ADVISORY COMES OFF WITH IT. An advisory under a card the room
+         refused to stage is the drive's own defect from the other side: the
+         warning stayed on screen beside a chip that no longer existed. */
+      const refused = new Set(misread.refusals.map((r) => r.id.slice("misread:".length)));
       const advisories = [
-        ...engineAdvice,
+        ...engineAdvice.filter((a) => ![...refused].some((id) => a.id.includes(id))),
         ...magnitudeAdvisories({ deltas: staged, members: qualifierMembers, committed: committedTotal }),
       ];
 
@@ -1362,6 +1429,7 @@ export function Workroom({
           kind: "agent",
           id: nextId("agent"),
           step: mine,
+          note,
           // THE SENTENCE AND THE CHIPS AGREE (D3). Where the qualifier narrowed,
           // the room says what it read FIRST and the engine's own account
           // follows it with the members it no longer reaches taken out of it.
@@ -1374,10 +1442,18 @@ export function Workroom({
             ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
             : roleRead.ask
               ? roleRead.ask.text
-              : !staged.length && roleRead.said.length
-                ? roleRead.said.join(" ")
-                : [
+              /* A MISREAD OWNS THE SENTENCE where nothing survived it. The
+                 engine composed its account before this rule ran and cannot
+                 know it did, so "1 of these goes on the clone" must not stand
+                 over a card that is a refusal. */
+              : !staged.length && misread.refusals.length
+                ? misread.refusals.map((r) => r.why).join(" ")
+                : !staged.length && roleRead.said.length
+                  ? roleRead.said.join(" ")
+                  : [
+                    misread.refusals.map((r) => r.why).join(" "),
                     roleRead.said.join(" "),
+                    note,
                     qualifier.said
                       ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
                       : result.reply,
@@ -1394,7 +1470,10 @@ export function Workroom({
       ];
       const chips: ChipModel[] =
         result.kind === "deltas"
-          ? staged.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
+          ? [
+              ...staged.map((d) => ({ key: nextId("chip"), delta: d, state: "open" as const })),
+              ...misread.refusals.map((r) => ({ key: nextId("chip"), refusal: r, state: "open" as const })),
+            ]
           : result.kind === "refusal"
             ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
             : [];
@@ -1423,7 +1502,7 @@ export function Workroom({
    * no path to the org that does not run through this function.
    */
   const runParser = useCallback(
-    async (instruction: string, mine: number) => {
+    async (instruction: string, mine: number, note = "") => {
       // THE COMPOSED BEAT. The glyph fills while the engine reads the line — and
       // on a wired room the engine may be waiting on the gateway, so this is
       // also the only thing standing between the banker and a blank pause.
@@ -1432,7 +1511,7 @@ export function Workroom({
       try {
         const result = await engine.parseIntent(instruction, context);
         await beat(started);
-        renderParse(instruction, result, mine);
+        renderParse(instruction, result, mine, note);
       } finally {
         setThinking(false);
       }
@@ -1622,6 +1701,15 @@ export function Workroom({
         return;
       }
       if (reply.type === "clarify") {
+        /* A CLARIFY IS HELD TO THE WIRE (C, the drive). A fee create whose
+           question is about a basis, a payment method or a paid-by is asking
+           about fields `feeAddsJson` does not carry, so it can only cost the
+           banker a round trip. The room falls back to its own parse, which is
+           where the fast lane was going to answer this line anyway. */
+        if (fallback && clarifyOffWire(reply, instruction)) {
+          renderParse(instruction, fallback, mine);
+          return;
+        }
         answer({ kind: "agent", id: nextId("agent"), text: reply.text, options: reply.options });
         return;
       }
@@ -1711,9 +1799,9 @@ export function Workroom({
    * is a contract, not a fallback: no wait, no notice, no changed behaviour.
    */
   const runLine = useCallback(
-    async (instruction: string, mine: number) => {
+    async (instruction: string, mine: number, note = "") => {
       if (!brain) {
-        await runParser(instruction, mine);
+        await runParser(instruction, mine, note);
         return;
       }
       const started = Date.now();
@@ -1739,7 +1827,7 @@ export function Workroom({
         const ownAsk =
           result !== null &&
           result.kind !== "refusal" &&
-          readExceptionOpen(instruction, elicitMembers) !== null;
+          (readExceptionOpen(instruction, elicitMembers) !== null || readFeeOpen(instruction, elicitMembers) !== null);
         const clean =
           result !== null &&
           (ownAsk ||
@@ -1752,7 +1840,7 @@ export function Workroom({
         if (!clean) reply = await askTheDesk(instruction, false);
         await beat(started);
         if (clean && result) {
-          renderParse(instruction, result, mine);
+          renderParse(instruction, result, mine, note);
           return;
         }
       } finally {
@@ -2267,6 +2355,10 @@ export function Workroom({
          same decision the Acknowledge button makes, and where the only thing
          waiting is a CHECK, the word settles it exactly as the button does. */
       let instruction = trimmed;
+      /** ONE SENTENCE THE SHELL OWNS about the parse this line becomes, where a
+       *  lane composed the line itself and knows something the engine cannot.
+       *  Empty for every ordinary line. */
+      let feeNote = "";
       /** How many checks the line settled on its way in, where it was an
        *  acknowledgment. Zero for every other line. */
       let acknowledged = 0;
@@ -2278,11 +2370,19 @@ export function Workroom({
          leave the banker holding chips the room will not take. It is the same
          decision, continued: nothing new is being proposed by these lines and
          each of them is a sentence this room composed. */
+      /* THE GATE THE ROOM IS ACTUALLY STANDING ON (founder drive, 2026-09-02).
+         `pricingPending` is only set where the banker took the "Another date"
+         chip. The gate the room ASKED is derived from the plan and the read, and
+         a free-text answer belongs to it whether or not a chip was pressed:
+         that is how "actually change it to Oct 1, 2026" fell through to the
+         general parser and staged a $1 commitment. */
+      const openGate = pricingPending ?? pricingOutstanding(entries);
       const answersPricing =
         readPricingLine(trimmed, elicitMembers) !== null ||
         readPricingDecline(trimmed, elicitMembers) !== null ||
         readPricingOther(trimmed, elicitMembers) !== null ||
-        (pricingPending !== null && readPricingFreeText(trimmed, pricingPending.slot) !== null);
+        (openGate !== null &&
+          (readPricingFreeText(trimmed, openGate.slot) !== null || readPricingAnother(trimmed, openGate.slot)));
       if (openGates > 0 && !opts?.settled && !answersPricing) {
         const ack = readAcknowledgment(trimmed);
         const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
@@ -2476,6 +2576,38 @@ export function Workroom({
           if (on) line = exceptionSay(exceptionOpen, on);
         }
 
+        /* ================================ A FEE CREATE IS THE FAST LANE'S TOO
+           (C, founder drive 2026-09-02).
+
+           "add a 1% origination fee to LOC" names a product this package
+           carries two of, so the parser came back with a QUESTION, and a
+           question is not a failed parse: the desk took it and invented five
+           rounds of its own about a basis, a payment method and a paid-by, none
+           of which is a field on the wire this room files. The room asks the
+           wire's own questions instead: which facility, what kind, how much. */
+        const feeOpen = reading ? null : readFeeOpen(line, elicitMembers, turnCtx.focused);
+        if (feeOpen) {
+          const feeNeeds = feeAsk(feeOpen, elicitMembers);
+          if (feeNeeds) {
+            setSteerPending(false);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: feeNeeds.text,
+              options: feeNeeds.options.length ? feeNeeds.options : undefined,
+            });
+            return;
+          }
+          const onFee = elicitMembers.find((m) => m.id === feeOpen.memberId);
+          if (onFee) {
+            line = feeSay(feeOpen, onFee);
+            /* AND A PERCENTAGE FEE IS NEVER ASKED FOR A FIGURE. The org derives
+               the money from the moved commitment, so the room says so once
+               rather than asking a question it already knows the answer to. */
+            if (feeOpen.percentage !== undefined) feeNote = feePercentageNote(onFee);
+          }
+        }
+
         /* ================================================ NAVIGATIONAL INTENT
 
            "let's modify a new loan" and "a different facility" are the banker
@@ -2558,12 +2690,30 @@ export function Workroom({
          Four answers and they are all sentences, so nothing about this lane is
          held between turns except the slot the room asked the banker to type a
          figure for and the facilities they left for later. */
-      if (pricingPending) {
-        const said = readPricingFreeText(instruction, pricingPending.slot);
+      /* AN ANSWER TO THE OPEN GATE IS AN ANSWER, however it is written. A date
+         in any of the four forms a banker uses, with or without a correction
+         opener in front of it, lands on the entry the room asked about. It is
+         never a new instruction: that reading is what staged a $1 commitment on
+         a $15M line and then had a model claim the date had moved. */
+      const gate = pricingPending ?? pricingOutstanding(entries);
+      if (gate) {
+        const said = readPricingFreeText(instruction, gate.slot);
         if (said) {
-          const held = pricingPending;
           setPricingPending(null);
-          await landPricing(held, said, mine);
+          await landPricing(gate, said, mine);
+          return;
+        }
+        if (readPricingAnother(instruction, gate.slot)) {
+          const on = elicitMembers.find((m) => m.id === gate.memberId);
+          setPricingPending(gate);
+          answer({
+            kind: "agent",
+            id: nextId("agent"),
+            text:
+              gate.slot === "amortisedTerm"
+                ? `Say the amortisation in months and I will put it on the ${on?.label ?? "facility"}. A number on its own is enough.`
+                : `Say the first payment date and I will put it on the ${on?.label ?? "facility"}. "Oct 1, 2026" reads the same as 2026-10-01.`,
+          });
           return;
         }
       }
@@ -2814,7 +2964,7 @@ export function Workroom({
         return;
       }
 
-      await runLine(line, mine);
+      await runLine(line, mine, feeNote);
     },
     [
       amendOpenCard,
@@ -2835,6 +2985,7 @@ export function Workroom({
       landPricing,
       openGates,
       pricingDeclined,
+      pricingOutstanding,
       pricingPending,
       reads,
       router,
@@ -3562,10 +3713,17 @@ export function Workroom({
                         {summonLabel(tiersLeft.length, tiersShown)}
                       </button>
                     )}
-                    {group.items.map((item) => {
+                    {group.items.map((item, at) => {
+                      /* ONE VOICE PER MOMENT (founder drive, 2026-09-02). Where
+                         the model is speaking under the card this agent line
+                         announced, the room's own explanation steps back to the
+                         address and the remark is the prose. A remark that never
+                         arrived, declined or failed leaves the paragraph exactly
+                         where it was: degrade parity is a contract. */
+                      const spoken = speaksFor(item, group.items[at + 1], narration.viewFor(group.items[at + 1]?.id ?? ""));
                       const block = (
                         <ThreadBlock
-                          item={item}
+                          item={spoken}
                           entries={entries}
                           filedWord={vocabulary.filedWord}
                           opening={openingItem}

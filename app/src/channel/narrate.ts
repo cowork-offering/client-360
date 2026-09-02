@@ -40,6 +40,16 @@ export interface NarrateSubject {
   /** The card the room staged, refused over or answered with, digested to what
    *  a remark could be about. Absent where the act carried no card. */
   card?: { title: string; rows: Array<{ label: string; value: string; sub?: string }> };
+  /**
+   * A ROUTINE CONFIRM (founder drive, 2026-09-02: "a lot of chat coming through,
+   * like two chats simultaneously").
+   *
+   * A plain scalar term change with no advisory on it says the whole of what
+   * there is to say on the chip itself: the field, the facility, before and
+   * after. A colleague does not comment on one, so neither does the model, and
+   * the room's own sentence is then the only voice under the card.
+   */
+  routine?: boolean;
 }
 
 /* ------------------------------------------------------------- the fence
@@ -67,6 +77,10 @@ const CHROME_CHARS = 40;
 export function shouldNarrate(subject: NarrateSubject): boolean {
   const sentence = subject.sentence.trim();
   if (!sentence) return false;
+  /* ONE VOICE PER MOMENT. A routine confirm is chrome of the same kind: the
+     chip already carries the field, the facility and the two figures, and a
+     remark under it is the room saying the same thing twice. */
+  if (subject.routine) return false;
   if (CHROME.some((rx) => rx.test(sentence))) return false;
   if (!subject.card && sentence.length < CHROME_CHARS) return false;
   return true;
@@ -79,6 +93,7 @@ export function shouldNarrate(subject: NarrateSubject): boolean {
 const HOW_TO_WRITE = [
   "HOW TO WRITE IT.",
   "THREE PARTS, IN THIS ORDER. A lead line of at most eighteen words. Then nothing, or up to three line items. Then nothing, or one closing line.",
+  "TWO SENTENCES OF PROSE IN ALL, the lead line and the closing line, and nothing beyond them. The line items are not sentences and are not counted. A third sentence is cut on the glass, so write two.",
   "A LINE ITEM IS ONE HYPHEN BULLET THAT OPENS ON A NAME, like this: - **Line of Credit ($15.0MM)**: one sentence about it.",
   "COPY THE NAME EXACTLY AS CONTEXT PRINTS IT: a label from CONTEXT.facilities, a name from CONTEXT.reads.covenants, a party from CONTEXT.reads.involvements, an asset from CONTEXT.reads.collateral, or a title from CONTEXT.staged. A name you cannot copy verbatim reads as a plain bullet, so guessing costs you the row.",
   "THE ROOM PRINTS THAT ENTITY'S OWN FIGURES BESIDE YOUR LINE ITEM. Do not restate them in your words. Bold a figure only where it is one the row cannot carry, written **like this**.",
@@ -235,6 +250,24 @@ export type NarrationBlock =
  *  something a colleague says while pointing at a card. */
 export const NARRATION_MAX_BLOCKS = 4;
 export const NARRATION_MAX_BULLETS = 3;
+/**
+ * TWO SENTENCES PLUS ROWS (founder drive, 2026-09-02).
+ *
+ * The prose in a remark is capped at two sentences in all, across every plain
+ * line the remark carries. The rows are not prose and are not counted: they are
+ * the entity list the founder asked for and they carry the room's own figures.
+ * A remark that runs past this is cut at the sentence, not mid-clause.
+ */
+export const NARRATION_MAX_SENTENCES = 2;
+/**
+ * THE GREETING IS THE ONE ACT THAT EARNS A THIRD.
+ *
+ * Its shape is the greeting-v2 addendum's own: a lead line, the rows, and a
+ * close that may have to say what the client's message asks BEFORE it hands the
+ * three routes back. Variant (e) is exactly that and it is signed-off copy, so
+ * the cap that quiets a card's remark does not cut the room's opening.
+ */
+export const GREETING_MAX_SENTENCES = 3;
 
 const BULLET = /^\s*[-*•]\s+(.*)$/;
 /**
@@ -301,7 +334,7 @@ function push(out: NarrationSpan[], raw: string, bold?: true): void {
  * Streams safely: it is called on every partial text, so a half-written `**`
  * simply reads as text until its pair arrives.
  */
-export function parseNarration(raw: string): NarrationBlock[] {
+export function parseNarration(raw: string, sentences: number = NARRATION_MAX_SENTENCES): NarrationBlock[] {
   const blocks: NarrationBlock[] = [];
   let bullets: NarrationSpan[][] | null = null;
   /** The line-item run, beside the bullet run. Both close on the same events,
@@ -358,7 +391,57 @@ export function parseNarration(raw: string): NarrationBlock[] {
     if (spans.length) blocks.push({ kind: "line", spans });
   }
   closeRuns();
-  return blocks.slice(0, NARRATION_MAX_BLOCKS);
+  return capSentences(blocks.slice(0, NARRATION_MAX_BLOCKS), sentences);
+}
+
+/** One span run, split into the sentences it carries, with the bold flags kept
+ *  where they fall. A span that ends mid-sentence keeps the sentence open, so a
+ *  bolded figure inside a sentence never splits it. */
+export function sentencesOf(spans: NarrationSpan[]): NarrationSpan[][] {
+  const out: NarrationSpan[][] = [];
+  let current: NarrationSpan[] = [];
+  for (const span of spans) {
+    const parts = span.text.split(/(?<=[.!?])\s+/);
+    parts.forEach((part, i) => {
+      if (part) current.push(span.bold ? { text: part, bold: true } : { text: part });
+      if (i < parts.length - 1 && current.length) {
+        out.push(current);
+        current = [];
+      }
+    });
+  }
+  if (current.length) out.push(current);
+  return out;
+}
+
+/** THE PROSE, HELD TO {@link NARRATION_MAX_SENTENCES}. Rows and bullets are the
+ *  remark's structure rather than its prose and pass through untouched. */
+function capSentences(blocks: NarrationBlock[], max: number): NarrationBlock[] {
+  let left = max;
+  const out: NarrationBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind !== "line") {
+      out.push(block);
+      continue;
+    }
+    if (left <= 0) continue;
+    const sentences = sentencesOf(block.spans);
+    if (sentences.length <= left) {
+      left -= sentences.length;
+      out.push(block);
+      continue;
+    }
+    /* THE SEPARATOR IS PUT BACK. `sentencesOf` splits ON the whitespace, so a
+       naive flatten would run two sentences into one word. */
+    const spans: NarrationSpan[] = [];
+    sentences.slice(0, left).forEach((sentence, i) => {
+      if (i) spans.push({ text: " " });
+      spans.push(...sentence);
+    });
+    out.push({ kind: "line", spans });
+    left = 0;
+  }
+  return out;
 }
 
 /** A bullet read as a line item, or null where it is an ordinary bullet. */
@@ -665,6 +748,158 @@ export function guardFigures(
   return { blocks: next, ungrounded: loose };
 }
 
+/* ================================= THE CLAIM GUARD (founder drive 2026-09-02)
+
+   THE CARD SAID "COMMITMENT AMOUNT $15M -> $1". The remark under it said "the
+   banker moved the first payment date forward two months to Oct 1, 2026". The
+   date had not moved, nobody had asked for it to move, and no card on the glass
+   carried it. A figure guard cannot catch that: every number in the sentence
+   was in the envelope. What was invented was the SUBJECT.
+
+   SO THE ROOM HOLDS THE REMARK TO ITS SUBJECT. The narration doctrine now says
+   the remark describes the card on the glass and nothing else, and the prompt
+   is a request. This is the check.
+
+   A SMALL ALLOWLIST, DELIBERATELY. Only the fields and entity kinds this room
+   actually writes are policed, and one of them is policed only where the card,
+   the plan, the room's own sentence and the banker's line all fail to mention
+   it. Ordinary prose names none of them and passes through untouched, which is
+   what keeps this from becoming a censor of sentences it does not understand.
+
+   A NAMED FIELD NOBODY IS TALKING ABOUT IS A CLAIM, AND A CLAIM IS DROPPED.
+   Not de-emphasised, as an ungrounded figure is: a figure the reader can hold
+   against the card is checkable, and a sentence about a change that never
+   happened is not. There is nothing for the banker to check.                */
+
+/**
+ * THE FIELDS AND ENTITY KINDS THIS ROOM WRITES, each with the words a banker
+ * writes it in, and each with the source that entitles a remark to name it.
+ *
+ * A `field` is something a CARD moves. Naming one the card does not carry is
+ * the claim itself, so its only allowance is the card, the plan, the sentence
+ * the room already said and the line the banker typed.
+ *
+ * An `entity` is something the BOOK carries. A colleague legitimately mentions
+ * the covenants or the guarantors while pointing at a commitment change, so
+ * these are allowed the reads as well. The distinction is what keeps the guard
+ * from censoring the greeting, which is a remark about the whole book.
+ */
+const CLAIM_TERMS: Array<{ id: string; kind: "field" | "entity"; says: RegExp }> = [
+  { id: "first payment date", kind: "field", says: /\bfirst payment date\b/i },
+  { id: "amortisation term", kind: "field", says: /\bamorti[sz](?:ation|sed|zed)\s+term\b/i },
+  { id: "commitment", kind: "field", says: /\bcommitments?\b/i },
+  { id: "maturity", kind: "field", says: /\bmaturity\b/i },
+  { id: "interest rate", kind: "field", says: /\b(?:interest\s+rate|repric\w+)\b/i },
+  { id: "advance rate", kind: "field", says: /\badvance rate\b/i },
+  { id: "risk rating", kind: "field", says: /\brisk (?:rating|grade)\b/i },
+  { id: "covenant", kind: "entity", says: /\bcovenants?\b/i },
+  { id: "collateral", kind: "entity", says: /\b(?:collateral|pledges?|liens?)\b/i },
+  { id: "fee", kind: "entity", says: /\bfees?\b/i },
+  { id: "guarantor", kind: "entity", says: /\bguarant(?:or|ors|y|ee)\b/i },
+  { id: "borrower", kind: "entity", says: /\bborrowers?\b/i },
+  { id: "policy exception", kind: "entity", says: /\bpolicy exceptions?\b/i },
+];
+
+/** The terms this remark may name, as ids. */
+function allowedTerms(envelope: BrainEnvelope, subject: NarrateSubject): Set<string> {
+  const card = subject.card
+    ? [subject.card.title, ...subject.card.rows.map((r) => `${r.label} ${r.value} ${r.sub ?? ""}`)].join(" ")
+    : "";
+  const plan = envelope.staged.map((s) => `${s.title} ${s.target} ${s.after}`).join(" ");
+  const onTheGlass = `${card} ${plan} ${subject.sentence} ${envelope.line ?? ""}`;
+  const inTheBook = `${onTheGlass} ${JSON.stringify(envelope.reads ?? {})}`;
+  return new Set(
+    CLAIM_TERMS.filter((t) => t.says.test(t.kind === "field" ? onTheGlass : inTheBook)).map((t) => t.id),
+  );
+}
+
+/** The term a piece of text claims that it was not allowed to, or "". */
+function claimedTerm(text: string, allowed: Set<string>): string {
+  const hit = CLAIM_TERMS.find((t) => !allowed.has(t.id) && t.says.test(text));
+  return hit ? hit.id : "";
+}
+
+/** The mark, in the room's own words. */
+export const CLAIM_MARK = "not on the card";
+
+export interface GuardedClaims extends GuardedNarration {
+  /** The terms the remark named that the card and the plan do not carry. */
+  claimed: string[];
+}
+
+/**
+ * THE REMARK, HELD TO ITS SUBJECT AND TO ITS FIGURES.
+ *
+ * Runs {@link guardFigures} first, so a sentence that survives the claim guard
+ * still has its ungrounded figures stripped of emphasis and marked. Pure, and
+ * returns what it dropped so the suite can assert on it.
+ */
+export function guardClaims(
+  blocks: NarrationBlock[],
+  envelope: BrainEnvelope,
+  subject: NarrateSubject,
+): GuardedClaims {
+  /* NO CARD, NOTHING TO BE "NOT ON". The rule is that the remark describes THE
+     CARD ON THE GLASS, so a remark with no card in front of it (the greeting,
+     the late-mail note) is not held to it: the greeting is a remark about the
+     whole book by design, and policing it against a card that does not exist
+     would delete the sentences it exists to write. The figure guard still runs. */
+  if (!subject.card) return { ...guardFigures(blocks, envelope, subject), claimed: [] };
+  const allowed = allowedTerms(envelope, subject);
+  const claimed: string[] = [];
+  const note = (term: string) => {
+    if (!claimed.includes(term)) claimed.push(term);
+  };
+
+  const keptSpans = (spans: NarrationSpan[]): NarrationSpan[] => {
+    const sentences = sentencesOf(spans);
+    const kept = sentences.filter((sentence) => {
+      const term = claimedTerm(sentence.map((s) => s.text).join(""), allowed);
+      if (term) note(term);
+      return !term;
+    });
+    if (kept.length === sentences.length) return spans;
+    const out: NarrationSpan[] = [];
+    kept.forEach((sentence, i) => {
+      if (i) out.push({ text: " " });
+      out.push(...sentence);
+    });
+    return out;
+  };
+
+  const held: NarrationBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === "line") {
+      const spans = keptSpans(block.spans);
+      if (spans.length) held.push({ kind: "line", spans });
+      continue;
+    }
+    if (block.kind === "bullets") {
+      const items = block.items.filter((item) => {
+        const term = claimedTerm(item.map((s) => s.text).join(""), allowed);
+        if (term) note(term);
+        return !term;
+      });
+      if (items.length) held.push({ kind: "bullets", items });
+      continue;
+    }
+    if (block.kind === "entity") {
+      const rows = block.rows.filter((row) => {
+        const term = claimedTerm(`${spanText(row.label)} ${row.spans.map((s) => s.text).join("")}`, allowed);
+        if (term) note(term);
+        return !term;
+      });
+      if (rows.length) held.push({ kind: "entity", rows });
+      continue;
+    }
+    held.push(block);
+  }
+
+  const guarded = guardFigures(held, envelope, subject);
+  if (claimed.length) guarded.blocks.push({ kind: "mark", text: `${CLAIM_MARK}: ${claimed.join(", ")}` });
+  return { ...guarded, claimed };
+}
+
 /** The plain text of a parsed remark, with every span joined. What a reader
  *  actually sees, once the markup is gone. */
 export function narrationText(blocks: NarrationBlock[]): string {
@@ -698,9 +933,20 @@ export interface NarratableItem {
     groups: Array<{ heading: string; rows: Array<{ label: string; value: string; detail?: string }> }>;
   };
   chips?: Array<{
-    delta?: { title: string; target: string; after: string };
+    delta?: {
+      title: string;
+      target: string;
+      after: string;
+      /** The manifest heading the entry files under. "terms" is a scalar. */
+      group?: string;
+      /** Absent reads as "change", which is what a scalar move is. */
+      op?: string;
+    };
     refusal?: { title: string; target: string; reason: string };
   }>;
+  /** THE CHECK UNDER THE CARD. A card carrying one is never routine: the
+   *  advisory is the thing a colleague would talk about. */
+  advisories?: unknown[];
 }
 
 /**
@@ -733,10 +979,20 @@ export function subjectFor(item: NarratableItem, said?: string): NarrateSubject 
       ...refusals.map((r) => ({ label: r.title, value: "refused", sub: r.reason })),
     ];
     if (!rows.length) return null;
+    /* A PLAIN SCALAR CHANGE WITH NO ADVISORY IS ROUTINE. A create, a removal, a
+       covenant, a pledge, a party or a refusal is not: those are the cards a
+       colleague comments on, and they are exactly where the model earns its
+       sentence. */
+    const routine =
+      deltas.length > 0 &&
+      !refusals.length &&
+      !item.advisories?.length &&
+      deltas.every((d) => d.group === "terms" && (d.op === undefined || d.op === "change"));
     return {
       act: deltas.length ? "staged" : "refused",
       sentence: said ?? rows.map((r) => r.label).join("; "),
       card: { title: deltas.length ? "On the plan" : "Refused", rows },
+      routine,
     };
   }
 

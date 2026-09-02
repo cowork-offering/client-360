@@ -180,6 +180,78 @@ describe("a change to the amount asks for the two fields nCino prices on", () =>
   });
 });
 
+describe("the amendment that became a $1 commitment (founder drive, 2026-09-02)", () => {
+  /* THE LINE HE ACTUALLY TYPED. The room had asked for the first payment date;
+     only YYYY-MM-DD was read as a date, so the line fell through to the general
+     parser, the "1" was read as a COMMITMENT and the room staged
+     "Commitment amount $15M -> $1" with a magnitude warning beside it. */
+  const HIS_LINE = "actually change it to Oct 1, 2026";
+
+  async function upToTheDateQuestion(room: HTMLElement) {
+    await moveTheLine(room);
+    await click(byText(/^Acknowledge$/));
+    await click(byText(/^240 months$/));
+    await click(byText(/^Confirm$/));
+  }
+
+  it("lands his own line on the open gate as the DATE", async () => {
+    const room = open();
+    await settle();
+    await upToTheDateQuestion(room);
+    expect(said(room)).toContain("What is the first payment date on the");
+
+    await typeInto(room, HIS_LINE);
+
+    // The room prints the date the way it prints every date; what went in is
+    // the ISO the org coerces from, composed off his own words.
+    expect(said(room)).toContain("The first payment date on the $15.0MM Line of Credit goes onto the plan at Oct 1, 2026");
+  });
+
+  it("stages no commitment at all off it", async () => {
+    const room = open();
+    await settle();
+    await upToTheDateQuestion(room);
+    await typeInto(room, HIS_LINE);
+
+    expect(room.textContent).not.toContain("→ $1.00");
+    expect(room.textContent).not.toContain("$15M → $1");
+    expect(said(room)).not.toContain("is 20 times the");
+  });
+
+  it("carries the date onto the manifest, and nothing else", async () => {
+    const room = open();
+    await settle();
+    await upToTheDateQuestion(room);
+    await typeInto(room, HIS_LINE);
+    await click(byText(/^Confirm$/));
+
+    expect(rail(room)).toContain("First payment date");
+    expect(rail(room)).toContain("Amortisation term (months)");
+  });
+
+  it("takes the same date in the other forms a banker writes it in", async () => {
+    for (const form of ["1 October 2026", "October 1st, 2026", "2026-10-01"]) {
+      const room = open();
+      await settle();
+      await upToTheDateQuestion(room);
+      await typeInto(room, `make it ${form}`);
+      expect(said(room)).toContain("The first payment date on the $15.0MM Line of Credit goes onto the plan at Oct 1, 2026");
+      act(() => root?.unmount());
+      container?.remove();
+      clearComposed();
+    }
+  });
+
+  it("still lets a real instruction through: a maturity is not the gate's answer", async () => {
+    const room = open();
+    await settle();
+    await upToTheDateQuestion(room);
+    await typeInto(room, "extend the maturity on the 8M equipment loan to 2027-06-30");
+
+    expect(said(room)).not.toContain("The first payment date on the $8.0MM Equipment");
+  });
+});
+
 describe("the banker can leave pricing for later", () => {
   it("records it on the plan, stages nothing, and stops asking", async () => {
     const room = open();

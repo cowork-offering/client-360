@@ -155,6 +155,61 @@ export function buildEnvelope(args: {
   });
 }
 
+/* ================================= A CLARIFY IS HELD TO THE WIRE (C, the drive)
+
+   "add a 1% origination fee to LOC" reached the desk, which asked which line
+   (fair), and then asked four more questions of its own: the fee basis on the
+   increase against the full commitment, the payment method, "financed from
+   proceeds / paid outside closing / bank paid / waived", and a confirmation.
+   Seven exchanges for a fee the parser reads in one.
+
+   NONE OF THOSE IS A FIELD ON THE WIRE THIS ROOM FILES. `feeAddsJson` carries
+   the fee type, the human label, and either a percentage or a flat amount,
+   against ONE facility. A question about a field the tool does not take cannot
+   change what gets staged; it can only cost the banker a round trip and end in
+   a restated line that carried a commitment figure into the fee reader.
+
+   THE DOCTRINE SAYS SO NOW, AND THE DOCTRINE IS A REQUEST. This is the check:
+   a fee clarify whose options name NOTHING the wire carries is treated as a
+   degrade, so the room falls back to its own parse, which is where the fast
+   lane was going to answer this line anyway.
+
+   AGGREGATE, NOT PER-OPTION. A single unrecognised option does not condemn a
+   question; a question with nothing recognisable in it is not about the wire at
+   all. Getting this wrong in the strict direction would silence a legitimate
+   clarify, and a clarify the room drops is a question the banker never sees. */
+
+/** A line that opens a fee create. The only wire this rule is written for. */
+const FEE_CREATE = /\bfees?\b/i;
+const FEE_CREATE_VERB = /\b(add|adds|charge|charged|apply|applies|put|include|attach|bill)\b/i;
+
+/** The fee wire's own fields, as the words a clarify would use for them: the
+ *  fee type, the figure, and the facility it is authored on. */
+const FEE_WIRE_WORDS = [
+  /\b(origination|arrangement|upfront|up[- ]front|front[- ]end|structuring|commitment fee|facility fee|amendment|attorney|legal|appraisal|agency|agent|waiver|survey|title|credit report|unused|other)\b/i,
+  /\d+(?:\.\d+)?\s*(?:%|per\s?cent|percent|bps|basis points?)|\$\s*\d/i,
+  /\b(facilit(?:y|ies)|loans?|lines?|revolvers?|equipment|construction|purchase)\b/i,
+];
+
+const onWire = (text: string): boolean => FEE_WIRE_WORDS.some((rx) => rx.test(text));
+
+/**
+ * TRUE where this clarify asks about nothing the target wire carries.
+ *
+ * Judged only for a fee create today, because that is the wire the drive proved
+ * it on. A caller that gets `true` should fall back to its own parse rather
+ * than render the question.
+ */
+export function clarifyOffWire(
+  clarify: { text: string; options?: Array<{ label: string; say: string }> },
+  line: string,
+): boolean {
+  if (!FEE_CREATE.test(line) || !FEE_CREATE_VERB.test(line)) return false;
+  const options = clarify.options ?? [];
+  if (options.length) return !options.some((o) => onWire(`${o.label} ${o.say}`));
+  return !onWire(clarify.text);
+}
+
 /* ------------------------------------------------------- the answer, drawn
 
    READ-CARDS RENDER THROUGH THE ROOM'S OWN CARD, never through a second one.

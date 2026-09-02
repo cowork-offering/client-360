@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLAIM_MARK,
   FIGURE_MARK,
+  GREETING_MAX_SENTENCES,
   NARRATION_MAX_BULLETS,
+  NARRATION_MAX_SENTENCES,
   composeNarratePrompt,
+  guardClaims,
   guardFigures,
   narrationText,
   parseNarration,
@@ -340,6 +344,68 @@ const rowsOf = (raw: string, envelope: BrainEnvelope = book) => {
   return entity && entity.kind === "entity" ? entity.rows : [];
 };
 
+describe("one voice per moment (founder drive, 2026-09-02)", () => {
+  /** A routine confirm, as the chips block carries it: one scalar term change,
+   *  no advisory, no refusal. */
+  const routineChips = {
+    kind: "chips",
+    chips: [{ delta: { title: "Commitment", target: "Line of Credit", after: "$20.0MM", group: "terms" } }],
+  };
+
+  it("reads a plain scalar change with no advisory as ROUTINE", () => {
+    expect(subjectFor(routineChips)?.routine).toBe(true);
+  });
+
+  it("does not consult the model on one: the chip already says the whole of it", () => {
+    expect(shouldNarrate(subjectFor(routineChips)!)).toBe(false);
+  });
+
+  it("still speaks where the card carries an advisory", () => {
+    const subject = subjectFor({ ...routineChips, advisories: [{ id: "advice:magnitude:1" }] })!;
+    expect(subject.routine).toBe(false);
+    expect(shouldNarrate(subject)).toBe(true);
+  });
+
+  it("still speaks on a create, which is not a scalar term change", () => {
+    const subject = subjectFor({
+      kind: "chips",
+      chips: [{ delta: { title: "New covenant", target: "Line of Credit", after: ">= 1.25x", group: "covenants", op: "add" } }],
+    })!;
+    expect(subject.routine).toBe(false);
+    expect(shouldNarrate(subject)).toBe(true);
+  });
+
+  it("still speaks on a refusal", () => {
+    const subject = subjectFor({
+      kind: "chips",
+      chips: [{ refusal: { title: "Detach covenant", target: "Line of Credit", reason: "not updateable" } }],
+    })!;
+    expect(subject.routine).toBe(false);
+    expect(shouldNarrate(subject)).toBe(true);
+  });
+
+  it("caps a remark at two sentences of prose, and the rows are not prose", () => {
+    const blocks = parseNarration(
+      "One. Two. Three.\n- **DSC**: the widest cushion.\n- **AR**: on its ceiling.\nAnd a close.",
+    );
+    const lines = blocks.filter((b) => b.kind === "line");
+    expect(narrationText(lines)).toBe("One. Two.");
+    expect(blocks.some((b) => b.kind === "entity" && b.rows.length === 2)).toBe(true);
+  });
+
+  it("counts sentences ACROSS the lines, so a lead and a close is the whole budget", () => {
+    const blocks = parseNarration("A lead line.\n\nA closing line.\n\nA third the glass does not carry.");
+    expect(narrationText(blocks)).toBe("A lead line. A closing line.");
+  });
+
+  it("lets the greeting keep its third: the addendum's lead, rows and close", () => {
+    expect(GREETING_MAX_SENTENCES).toBeGreaterThan(NARRATION_MAX_SENTENCES);
+    const said = "The package is clean.\n\nJames asked for a certificate. Modify, renew, or structure something new?";
+    expect(narrationText(parseNarration(said, GREETING_MAX_SENTENCES))).toContain("Modify, renew, or structure something new?");
+    expect(narrationText(parseNarration(said))).not.toContain("Modify, renew, or structure something new?");
+  });
+});
+
 describe("a covenant as a line item, with the book's own figure beside it", () => {
   it("resolves a covenant to measured against threshold, with no colour when it is clean", () => {
     const [row] = rowsOf("- **Debt Service Coverage of Borrower**: the widest cushion on the deal.");
@@ -452,6 +518,66 @@ const exceptionCard: NarrateSubject = {
 
 const guarded = (text: string, subject: NarrateSubject = exceptionCard, env: BrainEnvelope = envelope) =>
   guardFigures(parseNarration(text), env, subject);
+
+describe("the remark describes the card on the glass and nothing else", () => {
+  /* THE DRIVE'S OWN FAILURE. The card said "Commitment amount $15M -> $1". The
+     remark said the banker had moved the first payment date forward two months
+     to Oct 1, 2026. Nothing of the kind had happened, and every figure in the
+     sentence was in the envelope, so a figure guard could never catch it. */
+  const HIS_CLAIM = "The banker moved the first payment date forward two months to Oct 1, 2026.";
+
+  it("drops the sentence that claims an action nobody took", () => {
+    const guarded = guardClaims(parseNarration(`The line moves to $20.0MM. ${HIS_CLAIM}`), envelope, staged);
+    expect(narrationText(guarded.blocks)).not.toContain("moved the first payment date");
+    expect(guarded.claimed).toContain("first payment date");
+    expect(narrationText(guarded.blocks)).toContain("The line moves to $20.0MM.");
+  });
+
+  it("marks what it dropped rather than editing the remark in silence", () => {
+    const guarded = guardClaims(parseNarration(HIS_CLAIM), envelope, staged);
+    expect(narrationText(guarded.blocks)).toContain(CLAIM_MARK);
+  });
+
+  it("keeps a field the card DOES carry", () => {
+    const onTheCard: NarrateSubject = {
+      act: "staged",
+      sentence: "The first payment date goes on the plan.",
+      card: { title: "On the plan", rows: [{ label: "First payment date", value: "Oct 1, 2026", sub: "Line of Credit" }] },
+    };
+    const guarded = guardClaims(parseNarration("That settles the first payment date on this facility."), envelope, onTheCard);
+    expect(narrationText(guarded.blocks)).toContain("first payment date");
+    expect(guarded.claimed).toHaveLength(0);
+  });
+
+  it("lets a remark name what the BOOK carries: a colleague mentions the covenants", () => {
+    const guarded = guardClaims(parseNarration("The covenants on this package stay where they are."), envelope, staged);
+    expect(narrationText(guarded.blocks)).toContain("covenants");
+    expect(guarded.claimed).toHaveLength(0);
+  });
+
+  it("drops a claimed field out of a line item too, and keeps the rest", () => {
+    const said = "Two things.\n- **Line of Credit**: the commitment on it moves.\n- **Equipment**: its advance rate moves too.";
+    const guarded = guardClaims(parseNarration(said), envelope, staged);
+    const text = narrationText(guarded.blocks);
+    expect(text).toContain("Line of Credit");
+    expect(text).not.toContain("its advance rate moves too");
+    expect(guarded.claimed).toEqual(["advance rate"]);
+  });
+
+  it("holds NOTHING where there is no card: the greeting is about the whole book", () => {
+    const greeting: NarrateSubject = { act: "greeting", sentence: "Hey Fabian. What are we doing with this relationship?" };
+    const said = "The commitments sit clean across six facilities. Modify, renew, or structure something new?";
+    const guarded = guardClaims(parseNarration(said, 3), envelope, greeting);
+    expect(narrationText(guarded.blocks)).toContain("The commitments sit clean across six facilities.");
+    expect(guarded.claimed).toHaveLength(0);
+  });
+
+  it("still strips the emphasis off an ungrounded figure, exactly as before", () => {
+    const guarded = guardClaims(parseNarration("The cover is **$5.2MM** lendable."), envelope, staged);
+    expect(narrationText(guarded.blocks)).toContain(FIGURE_MARK);
+    expect(guarded.ungrounded).toContain("$5.2MM");
+  });
+});
 
 describe("a figure the room cannot point at is not endorsed", () => {
   it("marks the founder's own drifted sentence, figure by figure", () => {
