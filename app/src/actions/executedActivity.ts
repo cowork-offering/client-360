@@ -187,6 +187,15 @@ export interface WorkroomFiledInput {
   packageHref?: string | null;
   /** The package record id, for the reference chip's selectable fallback. */
   productPackageId?: string | null;
+  /**
+   * WHAT THE ORG ARMS DID, in banker language, composed by the room.
+   *
+   * A carry exclusion writes NO record, so it leaves no id and no created-record
+   * line: `filed` can say the clone was made and never say that a covenant was
+   * left off it. The room holds the manifest, so the room composes the sentence
+   * and the trail carries it verbatim. Absent on every plan that carries none.
+   */
+  arms?: string | null;
   /** Session clock: the banker just did this, on this clock (A10 carve-out). */
   now?: () => Date;
 }
@@ -201,7 +210,7 @@ export interface WorkroomFiledInput {
  * modification against a package nothing was written to is a trail that lies.
  */
 export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry | null {
-  const { execution, changeCount, packageName, approver, packageHref, productPackageId } = input;
+  const { execution, changeCount, packageName, approver, packageHref, productPackageId, arms } = input;
   const filed = execution.filed ?? [];
   if (!filed.length || changeCount < 1) return null;
   const now = (input.now ?? (() => new Date()))();
@@ -233,6 +242,7 @@ export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry 
       body: [
         `${changeCount} ${changeCount === 1 ? "change" : "changes"} filed against ${packageName}.`,
         approver ? `Confirmed by ${approver}.` : null,
+        arms ?? null,
         execution.tokenNote,
         ...filed.map((f) => `${f.recordId}: ${f.verification}`),
         execution.handoff ?? null,

@@ -9,6 +9,7 @@ import { workroomContextFor } from "./workroom/openWorkroom";
 import { NEUTRAL_QUESTION, ROUTE_CHIPS } from "./components/workroom/route";
 import type { BrainEnvelope, BrainReply } from "./channel/brainLane";
 import { READ_DOORS } from "./channel/brainTools";
+import { resetCatalog } from "./channel/catalog";
 import { acquireSample, resetSessionDoor } from "./channel/sampleDoor";
 import type { C360Data } from "./data/contract";
 import live from "../../artifact/live-data.json";
@@ -45,6 +46,7 @@ afterEach(() => {
   document.body.className = "";
   delete (window as unknown as { claude?: unknown }).claude;
   clearComposed();
+  resetCatalog();
 });
 
 const data = live as unknown as C360Data;
@@ -443,7 +445,7 @@ describe("the write fence, from the room's side", () => {
   });
 
   it("makes no connector call at all to narrate", async () => {
-    const callTool = vi.fn(async (_server: string, _tool: string) => ({ payload: {} }));
+    const callTool = vi.fn(async (..._args: unknown[]) => ({ payload: {} }));
     installSession(async () => "Coverage thins on the pledged pool.");
     (window as unknown as { claude?: { use: unknown; mcp?: unknown } }).claude!.mcp = { callTool };
     const room = await openRoom(reply(CLARIFY));
@@ -451,13 +453,14 @@ describe("the write fence, from the room's side", () => {
     await typeInto(room, "take the line of credit to 20000000");
 
     expect(room.querySelector(".wk-narr")).not.toBeNull();
-    /* THE ROOM READS THE MAILBOX ONCE, ON MOUNT, for the greeting's mail block
-       and the quiet tier together. That is the only connector call a room open
-       is allowed to make, and it is not the NARRATION making it: the narration
-       door is rung 2 and carries no tools at all, which the assertion below
-       and the READ_DOORS check above hold together. */
-    const tools = callTool.mock.calls.map((call) => call[1]);
-    expect(tools.every((tool) => tool === "outlook_email_search")).toBe(true);
+    /* THE ROOM'S ONLY CONNECTOR CALLS AT MOUNT ARE ITS OWN READS: the mailbox
+       once, for the greeting's mail block and the quiet tier together, and the
+       chip catalog once (Customer360Catalog, no longer masked by a cached null
+       since 2026-09-02). Narration itself opens no door at all: the narration
+       door is rung 2 and carries no tools, which the READ_DOORS check above holds. */
+    const doors = callTool.mock.calls.map((call) => call[1]);
+    expect(doors.every((d) => d === "outlook_email_search" || d === "Customer360Catalog")).toBe(true);
+    expect(doors.some((d) => /^(stage|execute)_/.test(String(d)))).toBe(false);
   });
 });
 

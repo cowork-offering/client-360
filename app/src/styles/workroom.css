@@ -1568,6 +1568,43 @@ body.wk-open #root {
   color: var(--ink-muted);
   margin-bottom: 7px;
 }
+/* WHAT THE PLAN WILL DO ABOUT EACH ARM. A carry exclusion writes no record, so
+   its plan step is the only proof there is; it reads in front of the approval,
+   at the summary's own weight. */
+.wk-armsteps {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.wk-armsteps li {
+  position: relative;
+  padding-left: 11px;
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.wk-armsteps li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+/* AN ARM THE PLAN DOES NOT CARRY CLOSES THE APPROVAL, and it says so on the
+   card the approval would have been taken on. The warning hairline, never a
+   wash: it is the same key the honest refusal wears. */
+.wk-armheld {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wash-2);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+}
 .wk-tokrow {
   display: flex;
   align-items: center;

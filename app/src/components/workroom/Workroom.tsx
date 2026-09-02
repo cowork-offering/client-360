@@ -81,6 +81,18 @@ import {
   type PlanEntry,
   type Slots,
 } from "./elicit";
+import {
+  armConfirmSentence,
+  armOf,
+  armPlanLines,
+  armStageRefusal,
+  armStepPairs,
+  armSummary,
+  armTrailSummary,
+  readArmRemoval,
+  readCovenantAttach,
+} from "./orgArms";
+import { readCatalog, reconcileChips, type OrgCatalog } from "../../channel/catalog";
 import { bareMemberPick, readSteer } from "./steer";
 import {
   TIER_STAGGER_MS,
@@ -661,7 +673,13 @@ export function Workroom({
    * is read back from the org for this — and the caller writes the Activity
    * trail entry, exactly as the Action Panel does for a panel action (A30).
    */
-  onFiled?: (filed: { execution: WorkroomExecution; changeCount: number; packageHref: string | null }) => void;
+  onFiled?: (filed: {
+    execution: WorkroomExecution;
+    changeCount: number;
+    packageHref: string | null;
+    /** What the org arms did, in banker language, or null where none rode. */
+    arms: string | null;
+  }) => void;
   /** Present only for the UNIFIED entry, where the room was opened on a
    *  relationship rather than on a route. Absent for every caller that already
    *  named a mode — the command palette, a deep link, a render test — and the
@@ -778,7 +796,16 @@ export function Workroom({
    *  landing and the check it trips is an approval offered too early. */
   const [thinking, setThinking] = useState(false);
   /** The review card is open, and what it is holding. */
-  const [flow, setFlow] = useState<null | { staging: StagedWorkroomPlan | null; running: boolean; status: number }>(null);
+  /* `held` NAMES THE STAGED ARMS THE ORG'S PLAN DOES NOT CARRY A STEP FOR, and
+     it is a GATE rather than a sentence: while it is non-empty the approval is
+     closed and `execute` refuses, because a plan that does not contain the
+     banker's exclusion must never be executable from the card that claims it. */
+  const [flow, setFlow] = useState<null | {
+    staging: StagedWorkroomPlan | null;
+    running: boolean;
+    status: number;
+    held: string[];
+  }>(null);
   /** The approval is in flight; a second click would stage behind the first. */
   const [filing, setFiling] = useState(false);
   /** THE APPROVAL IS CLOSED FOR THIS PLAN. The call reached the org and the
@@ -1076,6 +1103,25 @@ export function Workroom({
     [elicitMembers],
   );
 
+  /* THE ORG'S OWN CHIP SETS, READ ONCE PER VIEW (`Customer360Catalog`).
+
+     The one read this room issues that is not the bundle, and it is issued for
+     the chips rather than for the facts: the create grammar drew its picklists
+     from a shell MIRROR, and a mirror drifts silently until a refusal at the
+     confirm gate says so. Null is a state, not an error - no connector, or a
+     connector whose tool-schema cache has not seen the 25th tool yet - and every
+     chip set then falls back to the mirror it has always had. */
+  const [catalog, setCatalog] = useState<OrgCatalog | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readCatalog().then((c) => {
+      if (live && c) setCatalog(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   /** THE BOOK: what the relationship already carries, read off the bundle the
    *  room is already holding. No read is issued for it. */
   const book = useMemo(
@@ -1116,6 +1162,24 @@ export function Workroom({
     return out;
   }, [entries, items]);
 
+  /** THE ASSOCIATE, RESOLVED AGAINST THE BOOK AND THE ROUTE (P1). Null is every
+   *  create that is not an associate, and every route whose tool does not carry
+   *  the junction arm; there the handoff still says which route does. */
+  const attachFor = useCallback(
+    (draft: Draft, memberId: string) =>
+      draft.surface === "covenant" && draft.slots.associate
+        ? readCovenantAttach({
+            covenantId: draft.slots.existingCovenantId,
+            test: draft.slots.test,
+            book,
+            facilityId: memberId,
+            facilityLabel: memberLabel(memberId),
+            mode: context.mode,
+          })
+        : null,
+    [book, context.mode, memberLabel],
+  );
+
   const elicitCtx = useMemo<ElicitContext>(
     () => ({
       members: elicitMembers,
@@ -1123,8 +1187,9 @@ export function Workroom({
       book,
       plan,
       relationship: context.accountName,
+      catalog,
     }),
-    [book, context.accountName, elicitMembers, focused, plan],
+    [book, catalog, context.accountName, elicitMembers, focused, plan],
   );
 
   /** THE CONVERSATION SO FAR, for the envelope. The banker's words verbatim,
@@ -1216,6 +1281,17 @@ export function Workroom({
         ...magnitudeAdvisories({ deltas: staged, members: qualifierMembers, committed: committedTotal }),
       ];
 
+      /* ------------------------------- THE FENCED CHIP SET, HELD TO THE ORG'S
+
+         The policy-exception statuses are composed behind the engine fence, so
+         the room cannot build them from the catalog. It can CHECK them: where
+         every label the engine offered is a value the org's own picklist holds,
+         the live set wins. A value the org gained is added; a value the write
+         path refuses comes off AND IS SAID, because that is the only difference
+         a banker can act on. With no catalog nothing moves. */
+      const engineOptions = result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined;
+      const statusChips = reconcileChips(engineOptions, catalog, "exceptionStatus", (label) => label);
+
       // The reply and the chips it puts on the table land TOGETHER, in one
       // commit, so there is no frame in between where the room looks finished
       // and the chips have not arrived.
@@ -1243,6 +1319,7 @@ export function Workroom({
                     qualifier.said
                       ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
                       : result.reply,
+                    statusChips.said ?? "",
                   ]
                     .filter(Boolean)
                     .join(" "),
@@ -1250,8 +1327,7 @@ export function Workroom({
           // a "deltas" reply that still ends on a closed-set question.
           options: allDropped
             ? undefined
-            : (roleRead.ask?.options ??
-              (result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined)),
+            : (roleRead.ask?.options ?? statusChips.options),
         },
       ];
       const chips: ChipModel[] =
@@ -1272,7 +1348,7 @@ export function Workroom({
       setItems((prev) => [...prev, ...landed]);
       setSuggestion(engine.suggest());
     },
-    [book, committedTotal, context.accountName, engine, memberLabel, qualifierMembers],
+    [book, catalog, committedTotal, context.accountName, engine, memberLabel, qualifierMembers],
   );
 
   /**
@@ -1756,7 +1832,7 @@ export function Workroom({
          none is: the create goes on the plan as a HANDOFF, which is the honest
          record and writes nothing anywhere. A room that gathered all of it and
          then went quiet would be dropping the whole thing silently (rule 8). */
-      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped, context.mode) ?? routeGap(scoped.surface, context.mode);
 
       const started = Date.now();
       setThinking(true);
@@ -1764,6 +1840,23 @@ export function Workroom({
       const refused: string[] = [];
       try {
         for (const [seq, line] of composition.lines.entries()) {
+          /* ============ THE THIRD INSTRUMENT IS A REAL CARD NOW (P1, 2026-09-02)
+
+             `covenantAttachesJson` files a junction for the covenant the book
+             already carries, so the associate chip stages instead of handing off.
+             It never goes through the parser: there is no sentence to compose,
+             because the covenant already exists and what this authors is the
+             junction alone. The two refusals the org would give are given HERE,
+             by name, rather than at the confirm gate after the banker signed. */
+          const attach = attachFor(scoped, line.memberId);
+          if (attach?.kind === "refusal") {
+            refused.push(`on the ${memberLabel(line.memberId)}, ${attach.why}`);
+            continue;
+          }
+          if (attach?.kind === "attach") {
+            got.push(attach.delta);
+            continue;
+          }
           if (routeSaid) {
             got.push(handoffEntry(scoped, elicitCtx, line.memberId, routeSaid, seq));
             continue;
@@ -1888,12 +1981,18 @@ export function Workroom({
 
       // A ROUTE THAT COULD NOT FILE IT CANNOT FILE THE CORRECTION EITHER. The
       // card is still amendable; what it corrects is the handoff on the plan.
-      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped, context.mode) ?? routeGap(scoped.surface, context.mode);
       const started = Date.now();
       setThinking(true);
       const got: WorkroomDelta[] = [];
       try {
         for (const [seq, composed] of composition.lines.entries()) {
+          const attach = attachFor(scoped, composed.memberId);
+          if (attach?.kind === "attach") {
+            got.push(attach.delta);
+            continue;
+          }
+          if (attach?.kind === "refusal") continue;
           if (routeSaid) {
             got.push(handoffEntry(scoped, elicitCtx, composed.memberId, routeSaid, seq));
             continue;
@@ -2298,14 +2397,20 @@ export function Workroom({
          target, it goes to the fence where the line names something the BOOK
          carries, and it goes to the parser otherwise, where an involvement
          removal files as the carry exclusion it is. */
-      const removal = readRemove(instruction, entries, book);
+      const removal = readRemove(instruction, entries, book, elicitMembers);
       if (removal?.kind === "manifest") {
         setEntries((prev) => removeEntry(prev, removal.entry.id));
         setToast("Removed from the manifest");
+        /* AND THE WAY BACK IS THE ENTRY'S OWN. "Say it again with the figure
+           you want" is a TERM CHANGE's sentence, and a carry exclusion has no
+           figure: what putting it back means is that the new version carries
+           the junction again, exactly as the booked facility holds it. */
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `${removal.entry.title} on ${removal.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
+          text: armOf(removal.entry)
+            ? `${removal.entry.title} on ${removal.entry.target} is out of the manifest. The new version carries it again, exactly as the booked facility holds it today. Say it again to leave it off.`
+            : `${removal.entry.title} on ${removal.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
         });
         return;
       }
@@ -2313,7 +2418,58 @@ export function Workroom({
         answer({ kind: "agent", id: nextId("agent"), text: removal.reason });
         return;
       }
+      if (removal?.kind === "ask") {
+        answer({ kind: "agent", id: nextId("agent"), text: removal.text, options: removal.options });
+        return;
+      }
+      if (removal?.kind === "gap") {
+        answer({ kind: "agent", id: nextId("agent"), text: removal.text });
+        return;
+      }
       if (removal?.kind === "fence") {
+        /* ================================== THE ARM THAT FILES IT (P2, 2026-09-02)
+
+           The org arms deployed, so "remove the Minimum Liquidity covenant from
+           the 15M line of credit" is no longer a refusal on a MODIFICATION: it
+           is a CARRY EXCLUSION, and the room stages one. The booked loan keeps
+           the junction and the new version starts without it, which is the same
+           mechanism the borrowing structure has used since August.
+
+           THE BOOK IS CHECKED FIRST. Where the facility does not carry that
+           covenant or that pledge there is nothing for the new version to leave
+           behind, and the room says where it actually is rather than sending a
+           plan up to be refused by name. On renew and new-facility the arm does
+           not exist on those tools, so the honest fence refusal stands. */
+        const armed = readArmRemoval({
+          line: instruction,
+          scope: removal.scope,
+          name: removal.name,
+          book,
+          members: elicitMembers,
+          focused: focused ? (elicitMembers.find((m) => m.id === focused.id) ?? null) : null,
+          mode: context.mode,
+        });
+        if (armed?.kind === "ask") {
+          answer({ kind: "agent", id: nextId("agent"), text: armed.text, options: armed.options });
+          return;
+        }
+        if (armed?.kind === "refusal") {
+          answer({ kind: "agent", id: nextId("agent"), text: armed.text });
+          return;
+        }
+        if (armed?.kind === "exclusion") {
+          setItems((prev) => [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: armed.said },
+            {
+              kind: "chips",
+              id: nextId("chips"),
+              step: mine,
+              chips: [{ key: nextId("chip"), delta: armed.delta, state: "open" }],
+            },
+          ]);
+          return;
+        }
         const fence = fenceRefusal(removal.scope, removal.name);
         setItems((prev) => [
           ...prev,
@@ -2518,7 +2674,17 @@ export function Workroom({
          is about the entry the banker just confirmed, so it is composed here
          from the room's own figures: what the package read at before this entry
          landed, and what it reads at now. */
-      const said = committedSentence({ reply, delta, before: figures.committedMM * 1e6 });
+      /* ------------------------------- AND AN ARM SAYS WHAT AN ARM DOES (P2)
+
+         The engine closes every confirm on "staged on the clone", which is true
+         of an add and says nothing at all about a removal. A banker signing a
+         carry exclusion is entitled to read on the confirm itself that the
+         booked loan is untouched and that the clone is what starts without it. */
+      const said = committedSentence({
+        reply: armConfirmSentence(delta, reply),
+        delta,
+        before: figures.committedMM * 1e6,
+      });
       setEntries(staged);
       settleChip(blockId, chipKey, "confirmed");
       setToast(delta.badge);
@@ -2605,10 +2771,34 @@ export function Workroom({
      redeems that token; Cancel drops the card and the review chip comes back. */
 
   const openFlow = useCallback(async () => {
-    setFlow({ staging: null, running: false, status: 0 });
+    setFlow({ staging: null, running: false, status: 0, held: [] });
     try {
       const staged = await engine.stagePlan(entries, context);
-      setFlow((f) => (f ? { ...f, staging: staged } : f));
+      /* ================== THE PLAN HAS TO NAME EVERY ARM IT WAS SENT (2026-09-02)
+
+         An exclusion writes no record, so there is no id to check afterwards and
+         the PLAN STEP is the only thing that says the org took it. A manifest
+         entry that reached the tool and produced no step is an entry the banker
+         would sign for and never get.
+
+         SO IT IS A GATE, NOT A SENTENCE (2026-09-02, second pass). Saying it
+         while the staging sat on the card with its decision token left approve
+         live, and a banker who read the line and pressed the ink button anyway
+         executed a plan that does not contain their exclusion. The staging is
+         stored with the arms it is missing NAMED, and while that list is not
+         empty the approval is closed and `execute` refuses: the only ways on are
+         to take the entry off the manifest, or to discard the plan and stage
+         again. Nothing has been written either way. */
+      const planned = new Set((staged.plan.steps ?? []).map((s) => s.id));
+      const missing = armStepPairs(entries).filter((a) => !planned.has(a.writeStepId));
+      setFlow((f) => (f ? { ...f, staging: staged, held: missing.map((m) => `${m.title} on ${m.target}`) } : f));
+      if (missing.length) {
+        agent(
+          `The plan came back without a step for ${missing.map((m) => `${m.title} on ${m.target}`).join(", ")}. ` +
+            "That is the org saying it did not plan it, so I will not tell you it is going to happen, and the approval stays closed. " +
+            "Nothing has been written; take it off the manifest and say it again, or discard the plan and stage once the connector is on the deployed tool list.",
+        );
+      }
     } catch (e) {
       setFlow(null);
       // NO CONNECTOR IS NOT A SENTENCE IN THE FLOW, it is the reason nothing can
@@ -2623,13 +2813,25 @@ export function Workroom({
         });
         return;
       }
-      agent(readableError(e));
+      /* AND A REFUSAL IS THE ORG'S OWN SENTENCE, ATTACHED TO THE ENTRY IT IS
+         ABOUT. The org names a covenant or an asset; only the room knows which
+         manifest entry that is and that the rest of the plan is untouched. */
+      agent(armStageRefusal(readableError(e), entries));
     }
   }, [agent, context, engine, entries, push]);
 
   const execute = useCallback(async () => {
     const staging = flow?.staging;
     if (!staging?.decisionToken || filing || sealed) return;
+    // THE GATE, CHECKED WHERE THE TOKEN WOULD BE SPENT. The button is already
+    // closed; this is the half that does not depend on a rendered control.
+    if (flow?.held.length) {
+      agent(
+        `The plan carries no step for ${flow.held.join(", ")}, so there is nothing to approve here. ` +
+          "Take it off the manifest and say it again, or discard the plan and stage again. Nothing has been written.",
+      );
+      return;
+    }
     setFiling(true);
     setFlow((f) => (f ? { ...f, running: true } : f));
     try {
@@ -2682,7 +2884,17 @@ export function Workroom({
       // entry it was promising. Built from what the room ALREADY HOLDS — the
       // execution result and its own manifest — so nothing is read back from
       // the org to write it.
-      onFiled?.({ execution: result, changeCount: dossier.rows.length, packageHref: dossier.packageHref });
+      onFiled?.({
+        execution: result,
+        changeCount: dossier.rows.length,
+        packageHref: dossier.packageHref,
+        // THE ARMS' OWN ACCOUNT, READ OFF THE ORG'S PLAN STEPS. `filed` is built
+        // inside the engine from the deltas that carry a wire, so an arm is on
+        // it whether or not the org ever planned the arm: counting the manifest
+        // here made the trail assert a covenant was left off a version the org
+        // never planned to leave it off. The steps are the only witness there is.
+        arms: armTrailSummary(entries, staging.plan.steps ?? []),
+      });
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
       if (committedDeltaMM) onExecuted?.(committedDeltaMM);
@@ -3082,6 +3294,19 @@ export function Workroom({
                         packageName={brief.packageName}
                         planTitle={vocabulary.planTitle}
                         planSummary={figures.planSummary}
+                        /* WHAT THE ARMS DO, ON THE CARD THE BANKER SIGNS. A
+                           plan carrying none reads exactly as it always has. */
+                        armSaid={armSummary(entries)}
+                        /* AND WHAT THE PLAN SAYS IT WILL DO ABOUT EACH ONE.
+                           An exclusion writes no record, so its step is the
+                           only proof there is, and it belongs in front of the
+                           approval rather than behind it. */
+                        armSteps={flow.staging ? armPlanLines(entries, flow.staging.plan.steps ?? []) : []}
+                        /* AND THE ARMS THE PLAN DOES NOT CARRY A STEP FOR
+                           CLOSE THE APPROVAL. A banker cannot be offered an
+                           ink button for a plan that does not contain their
+                           exclusion. */
+                        held={flow.held}
                         approveLabel={vocabulary.approveLabel(fileable)}
                         fileable={fileable}
                         handedOff={handedOff}
@@ -3350,6 +3575,9 @@ function FlowCard({
   packageName,
   planTitle,
   planSummary,
+  armSaid,
+  armSteps,
+  held,
   approveLabel,
   fileable,
   handedOff,
@@ -3360,12 +3588,17 @@ function FlowCard({
   onExecute,
   onOpenPeek,
 }: {
-  flow: { staging: StagedWorkroomPlan | null; running: boolean; status: number };
+  flow: { staging: StagedWorkroomPlan | null; running: boolean; status: number; held: string[] };
   approver: string;
   loadSteps: string[];
   packageName: string;
   planTitle: string;
   planSummary: string;
+  armSaid: string | null;
+  armSteps: string[];
+  /** Staged arms the org's plan carries no write step for. Non-empty closes the
+   *  approval: the plan on this card does not contain them. */
+  held: string[];
   approveLabel: string;
   fileable: number;
   handedOff: number;
@@ -3406,6 +3639,14 @@ function FlowCard({
       </div>
       <div className="wk-s">
         {planSummary} on {packageName}
+        {armSaid && <> {armSaid}</>}
+        {armSteps.length > 0 && (
+          <ul className="wk-armsteps">
+            {armSteps.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
         {handedOff > 0 && (
           <>
             {" "}
@@ -3441,17 +3682,23 @@ function FlowCard({
           Governance
         </button>
       </div>
+      {held.length > 0 && (
+        <div className="wk-armheld" role="status">
+          This plan carries no step for {held.join(", ")}. The approval is closed: the org did not plan it, so approving
+          here would file a version that still carries it. Take it off the manifest and say it again, or discard the plan.
+        </div>
+      )}
       <div className="wk-acts">
         <button type="button" className="eg-btn-quiet" onClick={onCancel}>
-          Cancel
+          {held.length > 0 ? "Discard the plan" : "Cancel"}
         </button>
         <button
           type="button"
           className="wk-approve eg-btn-ink"
-          disabled={!flow.staging?.decisionToken || filing || sealed}
+          disabled={!flow.staging?.decisionToken || filing || sealed || held.length > 0}
           onClick={onExecute}
         >
-          {filing ? "Working…" : sealed ? "Approval closed" : approveLabel}
+          {filing ? "Working…" : sealed || held.length > 0 ? "Approval closed" : approveLabel}
         </button>
       </div>
     </div>

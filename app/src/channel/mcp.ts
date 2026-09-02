@@ -108,6 +108,16 @@ export const TOOLS = {
   searchAccounts: "Customer360SearchAccounts",
   // The durable action trail. Read-only; deploying in parallel with this UI.
   actionHistory: "Customer360ActionHistory",
+  /* THE ORG'S OWN CHIP SETS, deployed 2026-09-02 as the 25th tool on the
+     Customer 360 definition. One read, no input, every picklist and both lookup
+     catalogs the create grammar draws chips from. Read-only: one
+     @InvocableMethod, WITH USER_MODE on both queries, no DML anywhere.
+
+     THE CONNECTOR'S TOOL LIST CHANGED WHEN THE DEFINITION DEPLOYED, so the
+     client's tool-schema cache needs a fresh session before this name resolves.
+     Until it does, `readCatalog` returns null and every chip set falls back to
+     the shell's mirror, which is where they have been since the room shipped. */
+  catalog: "Customer360Catalog",
   boomRatios: "boom-mcp-js___boom_get_ratios",
   boomSpread: "boom-mcp-js___boom_get_spread",
   llm: "idb-bg-api-target-get-llm-response-staging___get_llm_response",

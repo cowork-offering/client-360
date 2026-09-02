@@ -732,12 +732,29 @@ const REMOVAL_VERB = /\b(remove|removing|drop|dropping|delete|detach|unpledge|st
  *  happens to read like an asset ("Accounts Receivable") does not. */
 const COVENANT_NOUN = /\b(covenants?|tests?|ratios?|thresholds?)\b/i;
 
+/* THE WORDS NOBODY NAMED AN ENTRY WITH (E1, the third time, 2026-09-02).
+
+   `entryWords` kept every token over two characters, so "the" counted. A
+   truncated asset title carries "the" inside it and every line anyone types
+   carries "the" too, which is how "remove the equipment pledge from the 8M
+   equipment loan" un-staged a pledge on the $15M line: both sides of the
+   address matched on that one word.
+
+   The list is closed and generic on purpose. A product word, a covenant type
+   and an asset word are never on it, so nothing a banker actually names an
+   entry with is lost. */
+const STOPWORD = new Set([
+  "the", "and", "not", "for", "from", "with", "that", "this", "its", "was", "are",
+  "off", "out", "onto", "into", "over", "under", "than", "then", "them", "they",
+  "all", "any", "has", "have", "had", "been", "but", "per", "via", "upon",
+]);
+
 /** The words of a staged entry a banker can actually see on it. */
 const entryWords = (text: string): string[] =>
   text
     .toLowerCase()
     .split(/[^a-z0-9$.]+/)
-    .filter((w) => w.length > 2 && !REMOVAL_VERB.test(w));
+    .filter((w) => w.length > 2 && !STOPWORD.has(w) && !REMOVAL_VERB.test(w));
 
 /** Does the line name this side of the entry at all? One distinctive word is
  *  enough on its own; what makes the rule safe is that BOTH sides are required. */
@@ -746,15 +763,74 @@ const names = (line: string, words: string[]): boolean => {
   return words.some((w) => lower.includes(w));
 };
 
+/** The covenant name a line puts in front of the category word, title-cased the
+ *  way the catalog holds one. Null where the line names no covenant at all. */
+const COVENANT_NAMED = /\b(?:the|a|an)\s+([a-z0-9][a-z0-9 '\u2019./-]*?)\s+(?:covenants?|tests?|ratios?|thresholds?)\b/i;
+
+export function covenantNamed(line: string): string | null {
+  const hit = COVENANT_NAMED.exec(line);
+  if (!hit) return null;
+  const said = hit[1].trim();
+  return said ? said.replace(/\b[a-z]/g, (c) => c.toUpperCase()) : null;
+}
+
+/**
+ * A COVENANT THE BOOK DOES NOT CARRY, ANSWERED FROM THE BOOK.
+ *
+ * "remove the leverage covenant from the 15M line of credit" named a test this
+ * relationship does not hold at all, so nothing resolved and the line fell
+ * through to the desk. The room is holding the covenants read: it can say the
+ * relationship carries no such test and name what the facility does carry,
+ * which is the answer the banker asked for.
+ */
+export function covenantGap(
+  said: string | null,
+  facility: { id: string; label: string } | null,
+  book: Book,
+): string {
+  const held = facility ? book.covenants.filter((c) => c.loanIds.includes(facility.id)) : [];
+  const level = book.covenants.filter((c) => !c.loanIds.length);
+  const list = (types: string[]) =>
+    types.length > 1 ? `${types.slice(0, -1).join(", ")} and ${types[types.length - 1]}` : types[0];
+  return (
+    `This relationship carries no ${said ? `${said} covenant` : "covenant by that name"}. ` +
+    (facility
+      ? held.length
+        ? `The ${facility.label} carries ${list([...new Set(held.map((c) => c.type))])}. `
+        : `The ${facility.label} carries no covenant on its own loan junction. `
+      : "") +
+    (level.length
+      ? `The book holds ${list([...new Set(level.map((c) => c.type))])} at the relationship level, with no loan junction. `
+      : "") +
+    "Nothing has been staged and nothing has come off the manifest."
+  );
+}
+
 export type RemoveRead =
   | { kind: "manifest"; entry: WorkroomDelta }
   | { kind: "ambiguous"; reason: string }
   | { kind: "fence"; scope: "covenant" | "pledge"; name: string }
+  /** The facility carries pledges and the line settles none of them. */
+  | { kind: "ask"; text: string; options: Array<{ label: string; say: string }> }
+  /** A covenant line naming a test the book does not carry anywhere. */
+  | { kind: "gap"; text: string }
   | null;
 
-export function readRemove(line: string, entries: WorkroomDelta[], book: Book): RemoveRead {
+export function readRemove(
+  line: string,
+  entries: WorkroomDelta[],
+  book: Book,
+  members: ElicitMember[] = [],
+): RemoveRead {
   if (!REMOVAL_VERB.test(line)) return null;
   const lower = line.toLowerCase();
+
+  /* WHICH FACILITY THE LINE NAMES, read once by the room's own scope reader.
+     It is the identity every side of this rule turns on: which staged entry the
+     line can be addressing, which pledges are in the pool, and where the book
+     is asked whether the junction is even there. */
+  const scope = readScope(line, members);
+  const facility = scope.ids.length === 1 ? (members.find((m) => m.id === scope.ids[0]) ?? null) : null;
 
   /* A BOOK COVENANT, NAMED BY THE CATALOG'S OWN NAME. Nothing looser: "covenant"
      on its own names no covenant, and a line that carries only the category word
@@ -765,20 +841,38 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
       .find((c) => lower.includes(c.type.toLowerCase())) ?? null;
 
   /* A BOOK ASSET. Its own COL autonumber names one row outright. Otherwise the
-     line has to carry a COLLATERAL NOUN and at least two distinctive words of
-     the asset's label: "equipment" on its own sits inside half the package's
-     vocabulary, and fencing a covenant line on it would be the mirror of E1. */
+     line has to carry a COLLATERAL NOUN and enough of the asset's own label to
+     settle it.
+
+     HOW MUCH IS ENOUGH DEPENDS ON THE POOL. Across the whole book "equipment"
+     sits inside half the package's vocabulary, so two distinctive words is the
+     bar. Among the pledges of ONE NAMED FACILITY a single word settles it
+     wherever it is unique there, which is what "remove the inventory pledge
+     from the 15M line of credit" always meant: that line resolved nothing and
+     fell through to the pre-arm handoff, while the same line with two words in
+     front of it staged a real exclusion. */
   const collateralNoun = /\b(pledge|pledges|pledged|collateral|security|lien|liens)\b/i.test(line);
-  const scored = book.assets
-    .map((a) => {
-      const tokens = [...new Set(`${a.label} ${a.kind ?? ""}`.toLowerCase().split(/[^a-z0-9]+/))].filter((t) => t.length > 3);
-      return { asset: a, score: tokens.filter((t) => lower.includes(t)).length };
-    })
-    .filter((s) => s.score >= 2)
-    .sort((a, b) => b.score - a.score);
-  const asset =
-    book.assets.find((a) => (a.name ? lower.includes(a.name.toLowerCase()) : false)) ??
-    (collateralNoun && scored.length ? scored[0].asset : null);
+  const rank = (assets: BookAsset[], floor: number) =>
+    assets
+      .map((a) => {
+        const tokens = [...new Set(`${a.label} ${a.kind ?? ""}`.toLowerCase().split(/[^a-z0-9]+/))].filter((t) => t.length > 3);
+        return { asset: a, score: tokens.filter((t) => lower.includes(t)).length };
+      })
+      .filter((s) => s.score >= floor)
+      .sort((a, b) => b.score - a.score);
+  const pool = facility ? book.assets.filter((a) => a.loanIds.includes(facility.id)) : [];
+  const here = facility ? rank(pool, 1) : [];
+  const anywhere = rank(book.assets, 2);
+  const byAutonumber = book.assets.find((a) => (a.name ? lower.includes(a.name.toLowerCase()) : false)) ?? null;
+  /* A TIE ON THE FACILITY SETTLES NOTHING. Two of its pledges answering the same
+     one word is a question, not a resolution, and the room asks it with that
+     facility's own pledges as the answers rather than picking on sort order. */
+  const tied = here.length > 1 && here[0].score === here[1].score;
+  /* AND WHERE THE NAMED FACILITY CARRIES NOTHING LIKE IT, the whole book is
+     read at the wider bar: the asset resolves, and the arm layer answers with
+     the facilities it IS pledged to rather than with covenant words. */
+  const settled = here.length && !tied ? here[0].asset : here.length ? null : (anywhere[0]?.asset ?? null);
+  const asset = byAutonumber ?? (collateralNoun ? settled : null);
 
   /* THE NOUN THE LINE USES DECIDES BETWEEN THEM (N1/P4, founder 2026-09-02).
      This book carries a covenant TYPE called "Accounts Receivable" and an asset
@@ -790,13 +884,52 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
   const covenantNoun = COVENANT_NOUN.test(line);
   const speaksCollateral = collateralNoun && !covenantNoun;
 
-  const named = entries.filter(
-    (e) => names(line, entryWords(`${e.title} ${e.kind}`)) && names(line, entryWords(`${e.target} ${e.after}`)),
-  );
+  /* THE TITLE, NEVER THE CATEGORY WORD (E1, found again by the wire-arms drive
+     2026-09-02). `remove the leverage covenant from the 2.5M line of credit`
+     named a covenant this book does not carry, so nothing resolved on the book
+     side - and the bare word "covenant" matched the KIND of a staged covenant
+     exclusion while "line of credit" matched its target, and the banker's own
+     entry came off the manifest in silence. That is E1 exactly, reached through
+     the category word rather than through the title.
+
+     The category word is what E1 already said must not be enough. So the title
+     side is matched on the TITLE alone.
+
+     AND THE TARGET SIDE IS THE FACILITY'S IDENTITY, NOT ITS PROSE (E1 again,
+     third time, 2026-09-02). The target side used to match the words of
+     `${e.target} ${e.after}`, and every carry exclusion's `after` is the
+     sentence "not carried onto the new version", so "the" alone satisfied it
+     and any removal line reached any staged entry. `after` is off the address
+     entirely now, and where the LINE NAMES A FACILITY the entry has to be ON
+     that facility: the same id the delta was staged against, not a word that
+     happens to appear in a label. A line naming a covenant the book carries
+     against a facility that does not carry it therefore reaches no manifest
+     entry at all, and goes on to the book, which says where it actually is. */
+  const onFacility = (e: WorkroomDelta): boolean =>
+    facility && e.member ? e.member === facility.id : names(line, entryWords(e.target));
+  const named = entries
+    .filter((e) => names(line, entryWords(e.title)) && onFacility(e))
+    /* AND THE NOUN NARROWS THE MANIFEST TOO (N1, one layer deeper). Once a
+       carry exclusion can be STAGED, one facility can hold an exclusion of the
+       covenant called Accounts Receivable beside an exclusion of the asset
+       described as accounts receivable, and the line's own noun is what tells
+       them apart on the manifest exactly as it does on the book. */
+    .filter((e) => (collateralNoun && !COVENANT_NOUN.test(line) ? e.group === "security" : true))
+    .filter((e) => (COVENANT_NOUN.test(line) && !collateralNoun ? e.group === "covenants" : true));
   /* THE STAGED ENTRY MUST BE THE THING NAMED. Where the line names a book item,
      only a staged entry carrying that same item can be the one the banker means;
-     everything else is the book's line and the fence answers it. */
-  const subject = covenant?.type ?? asset?.name ?? asset?.label ?? null;
+     everything else is the book's line and the fence answers it.
+
+     THE SUBJECT IS THE NOUN'S, not the ordering's. A collateral line's subject is
+     the ASSET even where a covenant type of the same name also resolved, which is
+     the same rule `speaksCollateral` makes about the book. The asset is named by
+     its first sentence, because that is what a staged entry is titled with. */
+  const assetSubject = asset
+    ? asset.name && lower.includes(asset.name.toLowerCase())
+      ? asset.name
+      : assetPhrase(asset.label)
+    : null;
+  const subject = speaksCollateral ? assetSubject : (covenant?.type ?? assetSubject);
   const claimed = subject
     ? named.filter((e) => `${e.title} ${e.after} ${e.before}`.toLowerCase().includes(subject.toLowerCase()))
     : named;
@@ -811,6 +944,26 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
   if (asset && speaksCollateral) return { kind: "fence", scope: "pledge", name: asset.label };
   if (covenant) return { kind: "fence", scope: "covenant", name: covenant.type };
   if (asset) return { kind: "fence", scope: "pledge", name: asset.label };
+
+  /* A FACILITY THAT CARRIES PLEDGES NEVER FALLS THROUGH TO THE HANDOFF. The
+     pre-arm card said "no deployed write reaches it yet", which was true in
+     August and is not true now, so a collateral line the room could not settle
+     asks which pledge rather than answering with copy the arm has retired. */
+  if (collateralNoun && facility && pool.length) {
+    return {
+      kind: "ask",
+      text: `Which pledge should the new version leave off the ${facility.label}? It carries ${pool.length === 1 ? "one" : pool.length}.`,
+      options: pool.map((a) => ({
+        label: assetPhrase(a.label),
+        say: `remove the ${a.name ?? assetPhrase(a.label)} pledge from the ${facility.shortName ?? facility.label}`,
+      })),
+    };
+  }
+
+  /* A COVENANT THE BOOK DOES NOT CARRY IS ANSWERED FROM THE BOOK, not sent to
+     the desk. The room holds the covenants read; the desk holds nothing this
+     question needs. */
+  if (covenantNoun) return { kind: "gap", text: covenantGap(covenantNamed(line), facility, book) };
   return null;
 }
 
@@ -826,10 +979,15 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
  *  to a paragraph in this org ("All present and future accounts receivable.
  *  Excludes invoices over 90 days past due, ..."), and a refusal titled with the
  *  paragraph is unreadable. The first sentence names the asset; the exclusions
- *  behind it are the credit agreement's business, not the refusal's. */
+ *  behind it are the credit agreement's business, not the refusal's.
+ *
+ *  THE TRUNCATION MARK IS ONE CHARACTER AND IT IS NOT A FULL STOP. Three dots
+ *  end a sentence to every reader that splits on one, and an asset title long
+ *  enough to be cut then carried a false sentence boundary into the confirm.
+ *  Kept identical to `orgArms.ts`: the same title has to come back out of both. */
 function assetPhrase(label: string): string {
   const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
-  return first.length > 64 ? `${first.slice(0, 61).trim()}...` : first;
+  return first.length > 64 ? `${first.slice(0, 63).trim()}\u2026` : first;
 }
 
 export function fenceRefusal(scope: "covenant" | "pledge", name: string): WorkroomRefusal & { why: string } {
@@ -841,8 +999,8 @@ export function fenceRefusal(scope: "covenant" | "pledge", name: string): Workro
     title: scope === "covenant" ? `Detach ${name}` : `Release ${said}`,
     why:
       scope === "covenant"
-        ? `Taking ${name} off a facility is a covenant DETACH, and this room does not file one: every field on the loan-covenant junction is non-updateable, so detaching means deleting the row and no delete is filed on any object here. ${name} stays on the facility and carries onto the clone with everything else. What the bank does have is a covenant compliance update, to Compliant, Waived or Exception, and it runs as its own credit action rather than on this modification. Nothing has been staged and nothing has come off the manifest.`
-        : `Taking ${said} off a facility is a COLLATERAL release, and this room files none. A pledge is never deleted on the booked loan: the security the facility carries today stays exactly where it is, and on a modification the clone carries the same pledges onto the new version. What this needs is a pledge CARRY EXCLUSION, the same mechanism the borrowing structure already uses, where the parent keeps its pledge and the new version simply starts without it. That arm is being built on the org side and is not deployed, so I will not pretend to file it. What I can file here is a pledge ONTO a facility. Nothing has been staged and nothing has come off the manifest.`,
+        ? `Taking ${name} off a facility is a covenant DETACH, and this room does not file one: every field on the loan-covenant junction is non-updateable, so detaching means deleting the row and no delete is filed on any object here. What takes it off the NEW version is a covenant CARRY EXCLUSION, and that arm rides the modification alone: a renewal files a new maturity and a repricing, and a new facility files the product, the amount, the term and the purpose, so neither of them can leave a junction behind. Run it as a modification and I will stage the exclusion. Here, ${name} stays on the facility and carries onto the clone with everything else. What the bank does have is a covenant compliance update, to Compliant, Waived or Exception, and it runs as its own credit action. Nothing has been staged and nothing has come off the manifest.`
+        : `Taking ${said} off a facility is a COLLATERAL release, and this room files none. A pledge is never deleted on the booked loan: the security the facility carries today stays exactly where it is. What takes it off the NEW version is a pledge CARRY EXCLUSION, the same mechanism the borrowing structure already uses, where the parent keeps its pledge and the clone simply starts without it. That arm rides the modification and nothing else: a renewal files a new maturity and a repricing, and a new facility files the product, the amount, the term and the purpose, so neither of them can leave a pledge behind. Run it as a modification and I will stage the exclusion. What I can file here is a pledge ONTO a facility. Nothing has been staged and nothing has come off the manifest.`,
     reason: field?.gap ?? "No tool files this today.",
     detail: field?.closes ?? "",
   };

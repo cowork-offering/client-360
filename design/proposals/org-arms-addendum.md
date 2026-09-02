@@ -2,8 +2,15 @@
 
 Written by the org-arms agent, 2026-09-02, against the founder directives in
 `knowledge/EVERYTHING-PLAN-FINDINGS-20260901.md` (the P-table, plus N4). Everything here is
-implemented on branch `org-arms` and validated against `bankinggpt-at` by a CHECK-ONLY deploy.
-Nothing has been deployed for real: the real deploy is the founder's go, given to the integrator.
+implemented on branch `org-arms` and was validated against `bankinggpt-at` by a CHECK-ONLY deploy
+before the founder's go.
+
+**DEPLOYED, 2026-09-02.** The founder's go was given and the integrator ran it: Apex job
+`0Afbb00000Dm769CAB`, 12 of 12 components with 119 of 119 tests passing, and the
+`McpServerDefinition` job `0Afbb00000Dm7MHCAZ`, which took Customer 360 to **25 org-side tools**.
+The three arms below are live on `stage_loan_modification` on that org. The line this paragraph
+replaced said nothing had been deployed for real, which was true for a few hours on the morning it
+was written and has been stale since.
 
 Three things landed on the org side: the relationship-graph read fix (N4), the covenant and pledge
 CARRY EXCLUSIONS (P2), and the associate-existing-covenant arm (P1). The shell needs the two JSON

@@ -107,3 +107,28 @@ describe("it dedupes against itself the way every other executed entry does", ()
     expect(a.id).toBe("exec-a4Zbb0000027NpMEAU");
   });
 });
+
+/* =============================================== the arms leave no record id
+
+   A CARRY EXCLUSION WRITES NOTHING, so `filed` can say the clone was made and
+   never say that a covenant was left off it. The room composes the sentence
+   from its own manifest and the trail carries it verbatim; a plan carrying no
+   arm reads exactly as it read before the arms existed. */
+
+describe("what the org arms did reaches the trail", () => {
+  it("carries the room's own arm sentence into the detail", () => {
+    const e = workroomActivityEntry({
+      execution: execution(),
+      ...base,
+      arms: "1 covenant left off the new version. Nothing is deleted: the booked facilities keep everything they hold today.",
+    })!;
+    expect(e.detail?.body).toContain("1 covenant left off the new version");
+    expect(e.detail?.body).toContain("Nothing is deleted");
+  });
+
+  it("adds nothing where the plan carried no arm", () => {
+    const withArm = workroomActivityEntry({ execution: execution(), ...base, arms: null })!;
+    const without = workroomActivityEntry({ execution: execution(), ...base })!;
+    expect(withArm.detail?.body).toBe(without.detail?.body);
+  });
+});

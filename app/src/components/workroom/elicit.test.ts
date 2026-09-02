@@ -356,13 +356,22 @@ describe("the room reads the book and the plan before it proposes anything", () 
     const aware = awarenessFor(took, ctx);
     expect(aware.fresh).toEqual([EQ8]);
 
-    // And it does not pretend to file. The deployed covenant wire carries a
-    // TYPE and no covenant record id, so this rides the plan.
-    const gap = associateGap(took)!;
+    // ON A MODIFICATION IT FILES. `covenantAttachesJson` deployed on 2026-09-02,
+    // so there is no gap left to state and the room stages a real card instead
+    // (see orgArms.test.ts). On the other two routes the handoff stands, and it
+    // names the route that does carry the arm rather than an arm being built.
+    expect(associateGap(took, "modify")).toBeNull();
+    const gap = associateGap(took, "renew")!;
     expect(gap).toContain("junction create for an existing record");
-    expect(gap).toContain("covenant TYPE and no field on it names an existing covenant record");
-    expect(gap).toContain("being built on the org side");
-    expect(associateGap(draft)).toBeNull();
+    expect(gap).toContain("rides the modification alone");
+    expect(gap).toContain("Run it as a modification");
+    expect(gap).not.toContain("being built");
+    // AND THE JOIN IS A SENTENCE END, not a colon with a capital after it. The
+    // route's own line opens a sentence wherever it is used, so a colon in
+    // front of it read as "rides the modification alone: The renewal files".
+    expect(gap).toContain("rides the modification alone. The renewal files");
+    expect(gap).not.toContain("alone: The");
+    expect(associateGap(draft, "renew")).toBeNull();
 
     const entry = handoffEntry(took, ctx, EQ8, gap, 0);
     expect(entry.fileable).toBe(false);

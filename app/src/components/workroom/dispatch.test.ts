@@ -16,7 +16,7 @@ import {
   stampRemovalRoles,
   type QualifierMember,
 } from "./dispatch";
-import { buildBook, type Book } from "./elicit";
+import { buildBook, type Book, type ElicitMember } from "./elicit";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import live from "../../../../artifact/live-data.json";
 import type { IntentResult, WorkroomDelta } from "../../workroom/types";
@@ -285,8 +285,29 @@ const BOOK: Book = {
     { id: "a3Bbb00000000L2", type: "Leverage", threshold: 3, frequency: "Quarterly", loanIds: [EQUIPMENT], accountLevel: false },
   ],
   assets: [
-    { id: "a3Ubb00000001AR", label: "Accounts receivable, present and future", name: "COL-000761", kind: "Accounts Receivable", value: 9_000_000, lien: "1st", loanIds: [LOC] },
-    { id: "a3Ubb00000001AS", label: "Blanket equipment lien, Fort Wayne and Kokomo", name: "COL-000762", kind: "Equipment", value: 6_000_000, lien: "1st", loanIds: [EQUIPMENT] },
+    /* THE ORG'S OWN DESCRIPTIONS, verbatim off `artifact/live-data.json`. The
+       shipped delta is titled with the FIRST SENTENCE of one of these, so a
+       fixture with a tidier label tests a title the room never composes. */
+    {
+      id: "a3Ubb00000001AR",
+      label:
+        "All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20% concentration cap per account debtor.",
+      name: "COL-000762",
+      kind: "Accounts Receivable",
+      value: 9_000_000,
+      lien: "1st",
+      loanIds: [LOC],
+    },
+    {
+      id: "a3Ubb00000001AS",
+      label:
+        "Blanket lien on all production machinery and equipment at the Fort Wayne and Kokomo plants, including CNC machining centres, robotic welding cells, heat-treat furnaces and CMM inspection equipment.",
+      name: "COL-000764",
+      kind: "Equipment",
+      value: 6_000_000,
+      lien: "1st",
+      loanIds: [EQUIPMENT],
+    },
   ],
   liens: ["1st"],
   parties: [
@@ -300,6 +321,14 @@ const BOOK: Book = {
     { name: ELENA, role: "Limited Guarantor", loanId: CONSTRUCTION },
   ],
 };
+
+/** THE MEMBERS AS THE ROOM HOLDS THEM, for the scope reader. A removal address
+ *  turns on WHICH FACILITY the line names, and that is the reader that says so. */
+const SCOPE: ElicitMember[] = [
+  { id: LOC, key: "line of credit", label: "$15.0MM Line of Credit", orgName: null, shortName: "Line of Credit - $15,000,000.00", committed: 15_000_000 },
+  { id: SEASONAL, key: "line of credit", label: "$2.50MM Line of Credit", orgName: null, shortName: "Line of Credit - $2,500,000.00", committed: 2_500_000 },
+  { id: EQUIPMENT, key: "equipment loan", label: "$8.0MM Equipment Loan", orgName: null, shortName: "Equipment - $8,000,000.00", committed: 8_000_000 },
+];
 
 const label = (id: string) => MEMBERS.find((m) => m.id === id)?.label ?? id;
 
@@ -585,7 +614,7 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
   it("does NOT un-stage the banker's own covenant on another facility", () => {
     // The destructive case, verbatim from the drive: this line matched the bare
     // word "covenant" and took a DIFFERENT covenant off a DIFFERENT facility.
-    const read = readRemove("remove the Minimum Liquidity covenant from the 15M line of credit", [stagedCovenant], BOOK);
+    const read = readRemove("remove the Minimum Liquidity covenant from the 15M line of credit", [stagedCovenant], BOOK, SCOPE);
     expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Minimum Liquidity" });
   });
 
@@ -599,12 +628,12 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
   });
 
   it("still un-stages a manifest entry the line names by title AND target", () => {
-    const read = readRemove("drop the new covenant on the Equipment Loan", [stagedCovenant], BOOK);
+    const read = readRemove("drop the new covenant on the Equipment Loan", [stagedCovenant], BOOK, SCOPE);
     expect(read).toEqual({ kind: "manifest", entry: stagedCovenant });
   });
 
   it("refuses a book pledge as a delete rather than un-staging anything", () => {
-    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], BOOK);
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], BOOK, SCOPE);
     expect(read?.kind).toBe("fence");
     expect(read?.kind === "fence" && read.scope).toBe("pledge");
     const fence = fenceRefusal("pledge", "Accounts receivable, present and future");
@@ -613,7 +642,7 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
   });
 
   it("leaves a party removal to the parser, where it files as a carry exclusion", () => {
-    expect(readRemove("remove Elena Hartwell from the 15M line of credit", [stagedCovenant], BOOK)).toBeNull();
+    expect(readRemove("remove Elena Hartwell from the 15M line of credit", [stagedCovenant], BOOK, SCOPE)).toBeNull();
   });
 
   /* ------------------------------------------- N1 and P4, the pledge fence
@@ -632,14 +661,186 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
   };
 
   it("reads a pledge line as COLLATERAL even where a covenant type carries the same words (N1)", () => {
-    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], AR_BOOK);
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenant], AR_BOOK, SCOPE);
     expect(read?.kind).toBe("fence");
     expect(read?.kind === "fence" && read.scope).toBe("pledge");
   });
 
   it("still reads the covenant line as a covenant, on the same book", () => {
-    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", [stagedCovenant], AR_BOOK);
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", [stagedCovenant], AR_BOOK, SCOPE);
     expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Accounts Receivable" });
+  });
+
+  /* ONE FACILITY, TWO EXCLUSIONS, ONE NAME. Once the arms let a removal be
+     STAGED, the same collision lands on the manifest: a covenant carry exclusion
+     titled "Accounts Receivable" beside a pledge carry exclusion of the asset
+     described as accounts receivable. The line's noun tells them apart there too. */
+  const stagedCovenantExclusion = delta({
+    id: "covenant.exclude:loc:a3Bbb000000S0bN",
+    member: LOC,
+    group: "covenants",
+    kind: "Covenant carry exclusion",
+    title: "Accounts Receivable",
+    target: "$15.0MM Line of Credit",
+    before: "on the booked facility, and carried onto the clone today",
+    after: "not carried onto the new version",
+  });
+  /* THE TITLE THE ROOM ACTUALLY STAGES: `pledgeExclusionDelta` titles the entry
+     with the FIRST SENTENCE of the org's own description, so the fixture is that
+     sentence and not a tidier paraphrase of it. */
+  const stagedPledgeExclusion = delta({
+    id: "collateral.exclude:loc:a35bb0000013xz3AAA",
+    member: LOC,
+    group: "security",
+    kind: "Pledge carry exclusion",
+    title: "All present and future accounts receivable",
+    target: "$15.0MM Line of Credit",
+    before: "pledged to the booked facility, and carried onto the clone today",
+    after: "not carried onto the new version",
+  });
+  const bothStaged = [stagedCovenantExclusion, stagedPledgeExclusion];
+
+  /** Hartwell's real book carries no Leverage covenant anywhere. */
+  const BOOK_WITHOUT_LEVERAGE: Book = { ...BOOK, covenants: BOOK.covenants.filter((c) => c.type !== "Leverage") };
+
+  it("un-stages the COVENANT exclusion on a covenant line, with both on the manifest", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", bothStaged, AR_BOOK, SCOPE);
+    expect(read).toEqual({ kind: "manifest", entry: stagedCovenantExclusion });
+  });
+
+  it("un-stages the PLEDGE exclusion on a pledge line, with both on the manifest", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", bothStaged, AR_BOOK, SCOPE);
+    expect(read).toEqual({ kind: "manifest", entry: stagedPledgeExclusion });
+  });
+
+  it("never un-stages a covenant entry over a collateral line, whatever it is titled", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenantExclusion], AR_BOOK, SCOPE);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" && read.scope).toBe("pledge");
+  });
+
+  /* THE DRIVE FOUND E1 AGAIN, through the category word (2026-09-02). A line
+     naming a covenant the book does NOT carry resolved nothing on the book side,
+     and then the bare word "covenant" matched the KIND of a staged covenant
+     exclusion while "line of credit" matched its target. The banker's own entry
+     came off the manifest in silence, which is E1 exactly. */
+  it("never un-stages an entry over the CATEGORY word alone", () => {
+    // Leverage IS on this book, on the EQUIPMENT loan. The line names the $2.5M
+    // line, which does not carry it, so nothing on the manifest is addressed and
+    // the book answers instead.
+    const read = readRemove("remove the leverage covenant from the 2.5M line of credit", bothStaged, AR_BOOK, SCOPE);
+    expect(read).not.toMatchObject({ kind: "manifest" });
+    expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Leverage" });
+  });
+
+  /* ============ E1, THIRD TIME: THE TARGET SIDE WAS PROSE (2026-09-02)
+
+     `names(line, entryWords(`${e.target} ${e.after}`))` matched the target side
+     on the words of the entry's `after`, and every carry exclusion's `after` is
+     "not carried onto the new version". So "the" satisfied the target side of
+     the address and, once the title side had a truncated title with "the"
+     inside it, both sides. Three lines from the drive, each of which un-staged
+     an entry on a DIFFERENT facility from the one it named. The address is the
+     facility identity now, so all three reach the book, which says where the
+     thing they name actually lives.                                          */
+
+  it("refuses a book-carried COVENANT named against a facility that does not carry it", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 2.5M line of credit", bothStaged, AR_BOOK, SCOPE);
+    // NOT the $15M entry, which is what came off the manifest in the drive.
+    expect(read).not.toMatchObject({ kind: "manifest" });
+    expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Accounts Receivable" });
+  });
+
+  it("refuses a book-carried PLEDGE named against a facility that does not carry it", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 2.5M line of credit", bothStaged, AR_BOOK, SCOPE);
+    expect(read).not.toMatchObject({ kind: "manifest" });
+    // Collateral words, never the covenant's: the asset still resolves, so the
+    // arm layer can answer with the facility it IS pledged to.
+    expect(read).toEqual({ kind: "fence", scope: "pledge", name: AR_BOOK.assets[0].label });
+  });
+
+  it("leaves a STAGED COMMITMENT CHANGE alone when the line names another facility", () => {
+    const staged = commitment("amount:loc", LOC, 20_000_000);
+    expect(readRemove("drop the commitment on the 2.5M line of credit", [staged], AR_BOOK, SCOPE)).not.toMatchObject({
+      kind: "manifest",
+    });
+    // And the same line, naming the facility it IS on, still un-stages it.
+    expect(readRemove("drop the commitment on the 15M line of credit", [staged], AR_BOOK, SCOPE)).toEqual({
+      kind: "manifest",
+      entry: staged,
+    });
+  });
+
+  it("never un-stages a pledge exclusion over the word THE, whatever else the line says", () => {
+    // The third drive line: an equipment removal on the equipment loan took a
+    // pledge off the $15M line, because "the" was in both.
+    const read = readRemove("remove the equipment pledge from the 8M equipment loan", bothStaged, AR_BOOK, SCOPE);
+    expect(read).not.toMatchObject({ kind: "manifest" });
+  });
+
+  /* ================= ONE DISTINCTIVE WORD, AMONG ONE FACILITY'S PLEDGES
+
+     "remove the inventory pledge from the 15M line of credit" resolved nothing
+     and fell through to the pre-arm handoff card, while the same line with
+     "fort wayne" in front of it staged a real exclusion. Both name the same
+     row: on a named facility, a word that is unique among ITS pledges settles
+     it.                                                                       */
+
+  const INVENTORY_BOOK: Book = {
+    ...AR_BOOK,
+    assets: [
+      ...AR_BOOK.assets,
+      {
+        id: "a35bb0000013y0fAAA",
+        label:
+          "All present and future inventory at the Fort Wayne and Kokomo plants: raw bar and plate stock, work in process and finished goods. Excludes consigned material and stock over 12 months old.",
+        name: "COL-000763",
+        kind: "Inventory",
+        value: 8_000_000,
+        lien: "1st",
+        loanIds: [LOC],
+      },
+    ],
+  };
+
+  it("settles a single distinctive word against the pledges of the facility named", () => {
+    const read = readRemove("remove the inventory pledge from the 15M line of credit", [], INVENTORY_BOOK, SCOPE);
+    expect(read).toEqual({ kind: "fence", scope: "pledge", name: INVENTORY_BOOK.assets[2].label });
+  });
+
+  it("reads the longer phrasing of the same line as the same pledge", () => {
+    const read = readRemove("remove the fort wayne inventory pledge from the 15M line of credit", [], INVENTORY_BOOK, SCOPE);
+    expect(read).toEqual({ kind: "fence", scope: "pledge", name: INVENTORY_BOOK.assets[2].label });
+  });
+
+  it("asks with that facility's own pledges rather than falling through to the handoff", () => {
+    const read = readRemove("remove the pledge from the 15M line of credit", [], INVENTORY_BOOK, SCOPE);
+    expect(read?.kind).toBe("ask");
+    if (read?.kind !== "ask") throw new Error("expected an ask");
+    expect(read.options.map((o) => o.label)).toEqual([
+      "All present and future accounts receivable",
+      "All present and future inventory at the Fort Wayne and Kokomo p…",
+    ]);
+    expect(read.options[1].say).toContain("COL-000763");
+  });
+
+  /* ============ A COVENANT THE BOOK DOES NOT CARRY IS ANSWERED FROM THE BOOK
+
+     It used to fall through to the desk, which holds nothing this question
+     needs. The room is holding the covenants read.                           */
+
+  it("answers a covenant the relationship does not hold at all, from the book", () => {
+    const read = readRemove("remove the leverage covenant from the 15M line of credit", [], BOOK_WITHOUT_LEVERAGE, SCOPE);
+    expect(read?.kind).toBe("gap");
+    if (read?.kind !== "gap") throw new Error("expected a gap");
+    expect(read.text).toContain("This relationship carries no Leverage covenant");
+    expect(read.text).toContain("The $15.0MM Line of Credit carries Minimum Liquidity");
+    expect(read.text).toContain("Nothing has been staged");
+  });
+
+  it("still un-stages on the entry's own TITLE, said again", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", bothStaged, AR_BOOK, SCOPE);
+    expect(read).toEqual({ kind: "manifest", entry: stagedCovenantExclusion });
   });
 
   it("speaks collateral on a pledge and covenant on a covenant, and the two are not the same refusal (P4)", () => {
@@ -650,15 +851,24 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     expect(pledge.why).toContain("COLLATERAL release");
     expect(pledge.why).toContain("never deleted on the booked loan");
     expect(pledge.why).toContain("CARRY EXCLUSION");
+    // AND THE ARM IS DEPLOYED. The copy said it was "being built on the org
+    // side" until 2026-09-02; saying that now would be the room understating
+    // what it can do rather than overstating it, which is the same defect.
+    expect(pledge.why).not.toMatch(/being built|not deployed/i);
+    expect(pledge.why).toContain("Run it as a modification");
     // And NEVER the covenant's.
     expect(pledge.why).not.toMatch(/loan-covenant junction/i);
     expect(pledge.why).not.toMatch(/covenant DETACH/i);
     expect(pledge.title).not.toMatch(/detach/i);
 
     // The covenant fence keeps its own constraint and does not borrow the
-    // collateral one.
+    // collateral one. It names the covenant CARRY EXCLUSION since the arm
+    // deployed (2026-09-02) and, with it, the route that carries it: this
+    // refusal is only ever reached on a renewal or a new facility now.
     expect(covenant.why).toContain("loan-covenant junction");
-    expect(covenant.why).not.toMatch(/CARRY EXCLUSION/);
+    expect(covenant.why).toContain("covenant CARRY EXCLUSION");
+    expect(covenant.why).toContain("Run it as a modification");
+    expect(covenant.why).not.toMatch(/pledge/i);
     expect(covenant.title).toBe("Detach Minimum Liquidity");
   });
 
@@ -673,7 +883,7 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
 
   it("names both rather than choosing where two staged entries fit", () => {
     const second = { ...stagedCovenant, id: "covenant.add:eq:1", after: "Leverage <= 3.00" };
-    const read = readRemove("drop the new covenant on the Equipment Loan", [stagedCovenant, second], BOOK);
+    const read = readRemove("drop the new covenant on the Equipment Loan", [stagedCovenant, second], BOOK, SCOPE);
     expect(read?.kind).toBe("ambiguous");
   });
 });
