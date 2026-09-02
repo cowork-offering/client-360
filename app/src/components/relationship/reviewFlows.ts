@@ -117,6 +117,11 @@ export interface RelStep {
   placeholder?: string;
   /** The org field this answer is aimed at, for the "what this writes" peek. */
   target?: { object: string; field: string };
+  /** A NUMBER STEP WHOSE SCALE IS REAL. The room refuses a figure outside it
+   *  with `refusal`, by name, before it becomes an answer. Only set where a
+   *  scale exists in the org and a number off it would be a governance record
+   *  nobody could read. */
+  bounds?: { min: number; max: number; whole: boolean; refusal: string };
 }
 
 /** Everything the banker has answered, keyed by step. Multi-answers are arrays;
@@ -753,7 +758,8 @@ function ratingStep(ctx: RelContext, a: Answers): RelStep | null {
       kind: "number",
       optional: true,
       options: proposed ? [{ label: proposed, value: proposed, detail: "the grade the read computes" }] : undefined,
-      placeholder: "The grade, or skip it.",
+      placeholder: `A grade from ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}, or skip it.`,
+      bounds: GRADE_BOUNDS,
       target: { object: RATING_OBJECT, field: "LLC_BI__Computed_Risk_Grade_Value__c" },
     };
   }
@@ -768,7 +774,8 @@ function ratingStep(ctx: RelContext, a: Answers): RelStep | null {
       ask: "Are you overriding the computed grade? Give me the grade you are filing instead, or skip it.",
       kind: "number",
       optional: true,
-      placeholder: "The overriding grade, or skip it.",
+      placeholder: `The overriding grade, ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}, or skip it.`,
+      bounds: GRADE_BOUNDS,
       target: { object: RATING_OBJECT, field: "LLC_BI__Overridden_Risk_Grade_Value__c" },
     };
   }
@@ -816,6 +823,52 @@ export const OVERRIDE_NEEDS_A_REASON =
   "An override above zero needs a written reason. That is the org's own rule and it has no bypass. Give me the reason and I will file both.";
 
 /**
+ * THE RATING REVIEW'S OWN SCALE, and the ONLY place the room holds it.
+ *
+ * `StageRiskRatingReview.cls` states it in its header ("the review scale here is
+ * 1 to 12") and on `computedRiskGradeValue`'s own describe ("The model output,
+ * on the 1 to 12 review scale"). It does NOT enforce it: the class validates
+ * `accountId`, `rationale` and the Mandatory_comment rule, and nothing else, so
+ * a 47, a 99 or a 0 travelled the wire and filed. The doctrine block calls this
+ * surface "unbounded" and that stays true of the ORG. It is not true of the
+ * room.
+ *
+ * The bound is written here and not read from doctrine deliberately: the
+ * doctrine block is prose the model reasons over, not a validator, and a
+ * refusal that depends on a sentence being selected is not a refusal.
+ */
+export const RISK_GRADE_SCALE = { min: 1, max: 12 } as const;
+
+/**
+ * THE GRADE IS OFF THE SCALE, refused by name with the scale stated.
+ *
+ * Zero is refused with the rest and for its own reason: on the override wire it
+ * is the org's own "no override" sentinel (`Mandatory_comment` fires above
+ * zero), so filing a zero would look like an override that needed no comment
+ * and read like a grade at the same time. The question is optional; skipping it
+ * is how a banker says nothing.
+ */
+export const GRADE_OFF_THE_SCALE =
+  `The rating review's own scale is ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}, in whole numbers, and I will not file a grade off it. Zero is not a grade on this scale either: skip the question instead. Give me a number from ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}.`;
+
+const GRADE_BOUNDS = {
+  min: RISK_GRADE_SCALE.min,
+  max: RISK_GRADE_SCALE.max,
+  whole: true,
+  refusal: GRADE_OFF_THE_SCALE,
+} as const;
+
+/** TRUE where a figure sits inside a step's declared scale. */
+export function onScale(n: number, b: NonNullable<RelStep["bounds"]>): boolean {
+  return Number.isFinite(n) && (!b.whole || Number.isInteger(n)) && n >= b.min && n <= b.max;
+}
+
+/** TRUE where a figure is a grade this org's review scale can hold. */
+export function onRiskGradeScale(n: number | null): boolean {
+  return n !== null && onScale(n, GRADE_BOUNDS);
+}
+
+/**
  * SPECIAL MENTION IS NOT A GRADE IN THIS ORG.
  *
  * The interagency categories are the regulatory classification and this org's
@@ -829,10 +882,12 @@ export const NOT_A_CLASSIFICATION =
 /**
  * FOUR GRADE SURFACES ARE LIVE HERE AND THEY DO NOT AGREE.
  *
- * THE RANGES ARE NOT INLINED HERE. They live in the `risk-rating` doctrine
- * block, which is where every other bank figure the model reasons over lives;
- * a component that restates a scale is a second place for it to drift, and the
- * A26.2 literal ban catches exactly that.
+ * THE RANGES OF THE OTHER THREE ARE NOT INLINED HERE. They live in the
+ * `risk-rating` doctrine block, which is where every other bank figure the
+ * model reasons over lives; a component that restates a scale is a second place
+ * for it to drift. This room's own surface IS inlined, in
+ * `RISK_GRADE_SCALE` above, because the room ENFORCES that one and a bound
+ * cannot be enforced from prose.
  */
 export const NAME_THE_SURFACE =
   "Four grade surfaces are live here and they do not agree: the facility's, the package's, the review's and this rating review's own. The number I am filing is on the rating review's own scale.";
@@ -1083,13 +1138,22 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
     if (overridden !== null && overridden > 0 && !comments) {
       return { ok: false, blocked: OVERRIDE_NEEDS_A_REASON };
     }
+    /* AND NEITHER GRADE MAY LEAVE THE SCALE. The step refuses it first, so this
+       is the second gate rather than the only one: an answer can also arrive
+       from a chip, from the read's own computed figure, or from a restored
+       session, and none of those goes through the composer. The org enforces
+       nothing here, so if this passes a 47 the org files a 47. */
+    for (const grade of [answeredGrade, overridden]) {
+      if (grade !== null && !onRiskGradeScale(grade)) return { ok: false, blocked: GRADE_OFF_THE_SCALE };
+    }
+    const fallback = Number.isFinite(fromRead) && onRiskGradeScale(fromRead) ? fromRead : null;
     return {
       ok: true,
       payload: {
         idempotencyKey,
         accountId: ctx.accountId,
         rationale,
-        computedRiskGradeValue: answeredGrade ?? (Number.isFinite(fromRead) ? fromRead : null),
+        computedRiskGradeValue: answeredGrade ?? fallback,
         overriddenRiskGradeValue: overridden,
         cashFlowCoverageActual: num(a.cashFlowCoverage),
         revenueGrowthActual: num(a.revenueGrowth),

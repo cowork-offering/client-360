@@ -14,6 +14,9 @@ import {
   asksForClassification,
   asksForOverride,
   buildStagePayload,
+  GRADE_OFF_THE_SCALE,
+  onScale,
+  RISK_GRADE_SCALE,
   dossierRowsFor,
   executeRelPlan,
   nextStep,
@@ -388,6 +391,58 @@ describe("the risk-rating review is account-level and carries no facility scope"
     // its wire name had never been observed. It is deployed and tested.
     expect(OVERRIDE_NEEDS_A_REASON).toContain("needs a written reason");
     expect(OVERRIDE_NEEDS_A_REASON).not.toContain("never been observed");
+  });
+
+  /* =========================================================== THE SCALE
+
+     `StageRiskRatingReview.cls` states the review scale twice, in its header
+     and on `computedRiskGradeValue`'s describe, and enforces it NOWHERE: the
+     class validates `accountId`, `rationale` and Mandatory_comment and stops.
+     So before this, 47, 99 and 0 were all accepted by the room and all filed.
+     A grade is the whole point of the route, and one off the scale is a
+     governance record nobody can read.                                       */
+
+  it("declares the scale on both grade steps, and only on those", () => {
+    const bounded: string[] = [];
+    const a: Answers = {};
+    for (let guard = 0; guard < 32; guard++) {
+      const step = nextStep("rating", ctx, a);
+      if (!step) break;
+      if (step.bounds) bounded.push(step.key);
+      a[step.key] = step.key === "overrideComment" ? "Held." : 1;
+    }
+    expect(bounded).toEqual(["computedRiskGradeValue", "overriddenRiskGradeValue"]);
+  });
+
+  it("refuses a grade off the scale by name, with the scale stated", () => {
+    expect(GRADE_OFF_THE_SCALE).toContain(`${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}`);
+    const bounds = { min: RISK_GRADE_SCALE.min, max: RISK_GRADE_SCALE.max, whole: true, refusal: GRADE_OFF_THE_SCALE };
+    for (const off of [47, 99, 0, -3, 13, 6.5]) expect(onScale(off, bounds)).toBe(false);
+    for (const on of [1, 5, 12]) expect(onScale(on, bounds)).toBe(true);
+  });
+
+  it("refuses to compose a payload carrying a grade off the scale", () => {
+    for (const bad of [47, 99, 0]) {
+      const proposed = driveTo("rating", ctx, { computedRiskGradeValue: bad });
+      expect(buildStagePayload("rating", ctx, proposed, "key-1")).toEqual({ ok: false, blocked: GRADE_OFF_THE_SCALE });
+      const override = driveTo("rating", ctx, { overriddenRiskGradeValue: bad, overrideComment: "Downgraded on coverage." });
+      const built = buildStagePayload("rating", ctx, override, "key-1");
+      // Zero is not an override at all by the org's rule, so it must be refused
+      // as a GRADE, never accepted as a silent "no override".
+      expect(built).toEqual({ ok: false, blocked: GRADE_OFF_THE_SCALE });
+    }
+  });
+
+  it("files both grades where both are on the scale", () => {
+    const answers = driveTo("rating", ctx, {
+      computedRiskGradeValue: 4,
+      overriddenRiskGradeValue: 6,
+      overrideComment: "Downgraded on coverage.",
+    });
+    const p = (buildStagePayload("rating", ctx, answers, "key-1") as { payload: StagePayloads["risk-rating-review"] }).payload;
+    expect(p.computedRiskGradeValue).toBe(4);
+    expect(p.overriddenRiskGradeValue).toBe(6);
+    expect(p.comments).toBe("Downgraded on coverage.");
   });
 });
 

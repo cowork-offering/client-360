@@ -52,6 +52,7 @@ import {
   CREATE_GAPS,
   NAME_THE_SURFACE,
   NOT_A_CLASSIFICATION,
+  onScale,
   NO_CONNECTOR,
   REL_FLOWS,
   RelFlowError,
@@ -875,6 +876,15 @@ export function RelationshipRoom({
             unreadable(live);
             return;
           }
+          /* A FIGURE OFF A REAL SCALE IS REFUSED BY NAME, not re-asked as
+             unreadable. The room read it perfectly well; the org cannot hold
+             it. The refusal states the scale, so the banker knows what to say
+             next, and the question stays live. */
+          if (live.bounds && !onScale(n, live.bounds)) {
+            setThinking(false);
+            offScale(live);
+            return;
+          }
           record(live.key, n, shown);
           return;
         }
@@ -895,6 +905,22 @@ export function RelationshipRoom({
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [beat, live, record],
+  );
+
+
+  /** THE FIGURE IS OFF THE STEP'S SCALE. Refused with the scale in words, and
+   *  the question left standing. */
+  const offScale = useCallback(
+    (target: RelStep) => {
+      setItems((prev) => {
+        const mine = prev.length ? prev[prev.length - 1].step : 0;
+        return [
+          ...prev,
+          { kind: "agent", id: nextId("scale"), step: mine, text: target.bounds!.refusal, options: optionsFor(target) },
+        ];
+      });
+    },
+    [],
   );
 
   /** THE ROOM COULD NOT READ THAT. It re-asks with the legal answers rather

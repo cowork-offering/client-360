@@ -576,6 +576,32 @@ describe("what this room does not do", () => {
     expect(document.body.textContent).not.toContain("has never been observed");
   });
 
+  /* THE SCALE IS ENFORCED IN THE ROOM, because it is enforced nowhere else.
+     `StageRiskRatingReview.cls` states 1 to 12 twice and validates neither
+     grade, so before this a 47 was read, recorded, staged and filed. */
+  it("refuses a grade off the scale by name, and keeps the question standing", async () => {
+    const { room } = open({ route: "rating" });
+    await settle();
+    for (let i = 0; i < 4; i++) await type(room, "skip"); // the four factors
+    expect(liveAsk()).toContain("What grade does this analysis support");
+
+    await type(room, "47");
+    // The refusal is the room's own sentence, not the "I could not read that"
+    // re-ask: the room read 47 perfectly well and the org cannot hold it.
+    expect(liveAsk()).toContain("scale is 1 to 12");
+    expect(document.body.textContent).not.toContain("I need a figure for that one");
+
+    await type(room, "0");
+    expect(liveAsk()).toContain("scale is 1 to 12");
+
+    /* AND NEITHER FIGURE WAS RECORDED. If 47 or 0 had been taken as the grade,
+       this 4 would land on the OVERRIDE step and the room would be asking for
+       the comment by now. It is asking for the override, so the grade step ate
+       the 4 and the two refusals cost the banker nothing but the question. */
+    await type(room, "4");
+    expect(liveAsk()).toContain("Are you overriding the computed grade?");
+  });
+
   it("refuses a REGULATORY CLASSIFICATION and then names the scale it is filing on", async () => {
     const { room } = open({ route: "rating" });
     await settle();
