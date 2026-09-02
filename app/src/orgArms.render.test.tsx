@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom } from "./components/workroom/Workroom";
@@ -7,6 +7,7 @@ import { clearComposed } from "./workroom/engine";
 import { createModifyEngine } from "./workroom/modifyEngine";
 import { createRenewEngine } from "./workroom/renewEngine";
 import { armStage } from "./components/workroom/orgArms";
+import { resetCatalog } from "./channel/catalog";
 import { workroomContextFor } from "./workroom/openWorkroom";
 import type { BrainEnvelope, BrainReply } from "./channel/brainLane";
 import type { C360Data } from "./data/contract";
@@ -46,6 +47,9 @@ afterEach(() => {
   container = null;
   document.body.className = "";
   clearComposed();
+  resetCatalog();
+  delete (window as unknown as { claude?: unknown }).claude;
+  vi.restoreAllMocks();
 });
 
 const data = live as unknown as C360Data;
@@ -351,5 +355,120 @@ describe("what the plan says back about an arm", () => {
     expect(said(room)).toContain("is not attached to Line of Credit");
     expect(said(room)).toContain("That is Accounts Receivable on");
     expect(said(room)).toContain("Staging writes nothing");
+  });
+});
+
+/* ======================================== the chips come from the org (item 5) */
+
+const CATALOG_FIELDS = [
+  {
+    objectName: "LLC_BI__Legal_Entities__c",
+    fieldName: "LLC_BI__Borrower_Type__c",
+    source: "picklist",
+    values: ["Borrower", "Guarantor", "Limited Guarantor", "Co-Borrower", "Related Entity", "Grantor", "Contractor"].map(
+      (v) => ({ label: v, value: v }),
+    ),
+    acceptedValues: ["Borrower", "Co-Borrower", "Guarantor", "Limited Guarantor", "Related Entity"],
+  },
+  {
+    objectName: "LLC_BI__Collateral__c",
+    fieldName: "LLC_BI__Collateral_Type__c",
+    source: "catalog",
+    values: [
+      "Equipment",
+      "Real Estate",
+      "Inventory",
+      "Accounts Receivable",
+      "Vehicle",
+      "Cash",
+      "Securities",
+      "Aircraft",
+      "Marine Vessel",
+      "Livestock",
+    ].map((label, i) => ({ label, value: `a3Kbb000000${i}AAA` })),
+    acceptedValues: ["Equipment", "Real Estate", "Inventory", "Accounts Receivable", "Vehicle", "Cash", "Securities", "Aircraft", "Marine Vessel"],
+  },
+  {
+    objectName: "LLC_BI__Covenant2__c",
+    fieldName: "LLC_BI__Covenant_Type__c",
+    source: "catalog",
+    values: ["Leverage", "Minimum Liquidity", "Net Worth", "Fixed Charge Coverage", "Collateral Insurance"].map(
+      (label, i) => ({ label, value: `a3Bbb000000${i}AAA` }),
+    ),
+    acceptedValues: [],
+  },
+];
+
+function stubCatalog(fields: unknown = CATALOG_FIELDS) {
+  (window as unknown as { claude?: unknown }).claude = {
+    mcp: {
+      // `callTool` in mcp.ts reads `result.payload`, so the stub returns the
+      // platform envelope rather than the invocable one directly.
+      callTool: vi.fn(async () => ({ payload: { content: [{ isSuccess: true, outputValues: { fields, note: "read live" } }] } })),
+    },
+  };
+}
+
+describe("the create chips come from the org, not from a mirror", () => {
+  it("names Grantor and Contractor as refused rather than hiding them", async () => {
+    stubCatalog();
+    const room = open();
+    await settle();
+    await typeInto(room, "add Elena Hartwell to the 8M equipment loan");
+
+    expect(said(room)).toContain("Grantor and Contractor are on the object too");
+    expect(said(room)).toContain("not borrowing structure");
+    expect(byText(/^Grantor$/)).toBeUndefined();
+    expect(byText(/^Limited Guarantor$/)).toBeTruthy();
+  });
+
+  it("draws collateral kinds from the org's catalog and names the count it did not show", async () => {
+    stubCatalog();
+    const room = open();
+    await settle();
+    await typeInto(room, "pledge some collateral to the construction loan");
+    await click(byText(/^A new asset$/));
+
+    expect(said(room)).toContain("The catalog carries 9 types the bank will lend against");
+    expect(byText(/^Aircraft$/)).toBeTruthy();
+    // The tenth carries no advance rate of its own and the write path refuses
+    // it, so it is never a chip.
+    expect(byText(/^Livestock$/)).toBeUndefined();
+  });
+
+  it("keeps covenant chips to the nine, and names the rest as present and not fileable", async () => {
+    stubCatalog();
+    const room = open();
+    await settle();
+    await typeInto(room, "add a covenant to the 8M equipment loan");
+
+    expect(said(room)).toContain("more types beyond these");
+    expect(said(room)).toContain("this room cannot settle one from a name");
+    expect(byText(/^Collateral Insurance$/)).toBeUndefined();
+  });
+});
+
+describe("channel-none: the mirror stands", () => {
+  it("offers the shell's own five roles, and names the same two as refused", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "add Elena Hartwell to the 8M equipment loan");
+
+    expect(said(room)).toContain("What role does Elena Hartwell take?");
+    // PARITY, not a degraded mode: the mirror carries the same five and the
+    // same two refusals, so the sentence a banker reads does not move.
+    expect(said(room)).toContain("Grantor and Contractor are on the object too");
+    expect(byText(/^Limited Guarantor$/)).toBeTruthy();
+    expect(byText(/^Grantor$/)).toBeUndefined();
+  });
+
+  it("offers the shell's own collateral kinds, and claims no org count", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "pledge some collateral to the construction loan");
+    await click(byText(/^A new asset$/));
+
+    expect(said(room)).toContain("The kinds I can resolve a word against are");
+    expect(said(room)).not.toContain("types the bank will lend against");
   });
 });

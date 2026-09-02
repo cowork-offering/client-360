@@ -81,6 +81,7 @@ import {
   type Slots,
 } from "./elicit";
 import { armConfirmSentence, armStageRefusal, armStepPairs, armSummary, readArmRemoval, readCovenantAttach } from "./orgArms";
+import { readCatalog, reconcileChips, type OrgCatalog } from "../../channel/catalog";
 import { bareMemberPick, readSteer } from "./steer";
 import {
   TIER_STAGGER_MS,
@@ -1045,6 +1046,25 @@ export function Workroom({
     [elicitMembers],
   );
 
+  /* THE ORG'S OWN CHIP SETS, READ ONCE PER VIEW (`Customer360Catalog`).
+
+     The one read this room issues that is not the bundle, and it is issued for
+     the chips rather than for the facts: the create grammar drew its picklists
+     from a shell MIRROR, and a mirror drifts silently until a refusal at the
+     confirm gate says so. Null is a state, not an error - no connector, or a
+     connector whose tool-schema cache has not seen the 25th tool yet - and every
+     chip set then falls back to the mirror it has always had. */
+  const [catalog, setCatalog] = useState<OrgCatalog | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readCatalog().then((c) => {
+      if (live && c) setCatalog(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   /** THE BOOK: what the relationship already carries, read off the bundle the
    *  room is already holding. No read is issued for it. */
   const book = useMemo(
@@ -1110,8 +1130,9 @@ export function Workroom({
       book,
       plan,
       relationship: context.accountName,
+      catalog,
     }),
-    [book, context.accountName, elicitMembers, focused, plan],
+    [book, catalog, context.accountName, elicitMembers, focused, plan],
   );
 
   /** THE CONVERSATION SO FAR, for the envelope. The banker's words verbatim,
@@ -1203,6 +1224,17 @@ export function Workroom({
         ...magnitudeAdvisories({ deltas: staged, members: qualifierMembers, committed: committedTotal }),
       ];
 
+      /* ------------------------------- THE FENCED CHIP SET, HELD TO THE ORG'S
+
+         The policy-exception statuses are composed behind the engine fence, so
+         the room cannot build them from the catalog. It can CHECK them: where
+         every label the engine offered is a value the org's own picklist holds,
+         the live set wins. A value the org gained is added; a value the write
+         path refuses comes off AND IS SAID, because that is the only difference
+         a banker can act on. With no catalog nothing moves. */
+      const engineOptions = result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined;
+      const statusChips = reconcileChips(engineOptions, catalog, "exceptionStatus", (label) => label);
+
       // The reply and the chips it puts on the table land TOGETHER, in one
       // commit, so there is no frame in between where the room looks finished
       // and the chips have not arrived.
@@ -1230,6 +1262,7 @@ export function Workroom({
                     qualifier.said
                       ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
                       : result.reply,
+                    statusChips.said ?? "",
                   ]
                     .filter(Boolean)
                     .join(" "),
@@ -1237,8 +1270,7 @@ export function Workroom({
           // a "deltas" reply that still ends on a closed-set question.
           options: allDropped
             ? undefined
-            : (roleRead.ask?.options ??
-              (result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined)),
+            : (roleRead.ask?.options ?? statusChips.options),
         },
       ];
       const chips: ChipModel[] =
@@ -1259,7 +1291,7 @@ export function Workroom({
       setItems((prev) => [...prev, ...landed]);
       setSuggestion(engine.suggest());
     },
-    [book, committedTotal, context.accountName, engine, memberLabel, qualifierMembers],
+    [book, catalog, committedTotal, context.accountName, engine, memberLabel, qualifierMembers],
   );
 
   /**

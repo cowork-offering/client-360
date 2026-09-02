@@ -1,5 +1,6 @@
 import type { BorrowerBundle, Covenant, Facility, LegalEntity } from "../../data/contract";
 import { isActiveFacility } from "../../data/worklist";
+import { chipSet, orgAccepted, orgRefused, orgValues, type OrgCatalog } from "../../channel/catalog";
 import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
 
 /* =============================================================================
@@ -395,6 +396,15 @@ export interface ElicitContext {
   book: Book;
   plan: PlanEntry[];
   relationship: string;
+  /**
+   * THE ORG'S OWN CHIP SETS (`Customer360Catalog`, 2026-09-02).
+   *
+   * Absent is the channel-none case and every chip set below falls back to the
+   * shell's mirror, which is where they have been since the room shipped. A
+   * mirror drifts silently; a live read does not, and the first anyone hears of
+   * a drift should not be a refusal at the confirm gate.
+   */
+  catalog?: OrgCatalog | null;
 }
 
 /* --------------------------------------------------------------- the draft */
@@ -1047,7 +1057,9 @@ const ADVANCE_BANDS: Record<string, { rates: number[]; basis: string }> = {
    this surface, and it is why the role is compared per FACILITY.             */
 
 /** The five roles a borrowing-structure change may carry, in the org's own
- *  words. Offered in the order a banker reads them. */
+ *  words. THE MIRROR: the live set is `Customer360Catalog`'s `acceptedValues` on
+ *  `LLC_BI__Legal_Entities__c.LLC_BI__Borrower_Type__c`, and this is what stands
+ *  where the room has no bridge. Offered in the order a banker reads them. */
 export const INVOLVEMENT_ROLES = ["Borrower", "Co-Borrower", "Guarantor", "Limited Guarantor", "Related Entity"];
 
 /** On the object, refused here. Named rather than silently dropped. */
@@ -1055,6 +1067,78 @@ const REFUSED_ROLES: Array<{ match: RegExp; word: string; why: string }> = [
   { match: /\bgrantor\b/i, word: "Grantor", why: "collateral semantics" },
   { match: /\bcontractor\b/i, word: "Contractor", why: "construction semantics" },
 ];
+
+/* ============================================ the chips, from the org (2026-09-02)
+
+   Founder: "picklist values, fee types, it shows them up." Each reader below
+   takes the ORG's live set where the read carries one and the shell's mirror
+   where it does not, so a room with no bridge behaves exactly as it always has.
+   Nothing extra is said about where a set came from unless the DIFFERENCE
+   matters to the banker: a value the org offers that the write path refuses. */
+
+/** The five legal roles, live. */
+export const involvementRoles = (ctx: ElicitContext): string[] =>
+  chipSet(ctx.catalog, "borrowerType", INVOLVEMENT_ROLES).values;
+
+/** The roles the object holds and this room refuses, live. Named, never hidden. */
+export const refusedRoleWords = (ctx: ElicitContext): string[] => {
+  const live = orgRefused(ctx.catalog, "borrowerType");
+  return live.length ? live : REFUSED_ROLES.map((r) => r.word);
+};
+
+/** How many collateral types to put on the glass at once. The org holds 43 and
+ *  a banker reading forty chips is reading none of them; the sentence carries
+ *  the count and free text still reaches every one. */
+const KIND_CHIP_CAP = 8;
+
+/** THE COLLATERAL TYPES THE WRITE PATH ACCEPTS, live, most useful first: the
+ *  kinds this deal already pledges, then the rest of the org's own list. A type
+ *  whose advance rate is null is refused before the org's own validation rule
+ *  can fire on the insert, which is why `acceptedValues` and not `values`. */
+export function assetKinds(ctx: ElicitContext): { chips: string[]; total: number; fromOrg: boolean } {
+  const live = orgAccepted(ctx.catalog, "collateralType");
+  if (!live.length) return { chips: ASSET_KIND_OPTIONS, total: ASSET_KIND_OPTIONS.length, fromOrg: false };
+  const held = new Set(ctx.book.assets.map((a) => (a.kind ?? "").toLowerCase()).filter(Boolean));
+  const ordered = [...live].sort((a, b) => Number(held.has(b.toLowerCase())) - Number(held.has(a.toLowerCase())));
+  return { chips: ordered.slice(0, KIND_CHIP_CAP), total: live.length, fromOrg: true };
+}
+
+/** The lien positions, live. */
+export const lienPositions = (ctx: ElicitContext): string[] => chipSet(ctx.catalog, "lienPosition", LIEN_OPTIONS).values;
+
+/**
+ * THE NINE THE ROOM'S OWN PARSER CAN SETTLE, and the rest named honestly.
+ *
+ * The org accepts all 71 of its covenant types by `typeId`; the NINE are the
+ * names `parseModify.ts`'s `COVENANT_TYPE_MAP` resolves uniquely from a typed
+ * line, and that filter is the SHELL's rather than the bank's. So the chips are
+ * the nine, and what the catalog carries beyond them is stated as present in
+ * the org and not fileable from a name here — never offered as a chip that ends
+ * in a refusal.
+ *
+ * The list is a mirror of the fenced map, which does not export it. It is the
+ * one mirror on this surface that is honest, because what it mirrors is this
+ * client's own vocabulary and not the org's data.
+ */
+export const FILEABLE_COVENANT_TYPES = [
+  "Leverage",
+  "Minimum Liquidity",
+  "Debt Service Coverage of Borrower",
+  "Maximum Debt to Worth",
+  "Minimum Current Ratio",
+  "Net Worth",
+  "EBITDA",
+  "Debt to Equity",
+  "Net Profit",
+];
+
+export function covenantTypeChips(ctx: ElicitContext): { fileable: string[]; presentNotFileable: number } {
+  const live = orgValues(ctx.catalog, "covenantType");
+  if (!live.length) return { fileable: FILEABLE_COVENANT_TYPES, presentNotFileable: 0 };
+  const nine = new Set(FILEABLE_COVENANT_TYPES.map((t) => t.toLowerCase()));
+  const fileable = [...new Set(live.filter((t) => nine.has(t.toLowerCase())))];
+  return { fileable, presentNotFileable: new Set(live.map((t) => t.toLowerCase())).size - fileable.length };
+}
 
 /** Longest first, so "limited guarantor" is never read as "guarantor" with a
  *  stray word in front. The same order the parser under this room uses. */
@@ -1329,7 +1413,7 @@ export function nextAsk(draft: Draft, ctx: ElicitContext): Ask | null {
      asking which facility it lands on before telling him the room will not
      write that role at all would spend his gesture on a decision that turns out
      not to exist. */
-  if (draft.surface === "involvement" && !draft.slots.role && draft.refusedRole) return refusedRoleAsk(draft);
+  if (draft.surface === "involvement" && !draft.slots.role && draft.refusedRole) return refusedRoleAsk(draft, ctx);
 
   if (draft.scopeWord && !draft.scope.length) return scopeAskFor(draft, ctx);
   if (draft.surface === "covenant") return covenantAsk(draft, ctx);
@@ -1420,14 +1504,28 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
        grounded proposal, it carries its own threshold and its own schedule, and
        taking one is a single gesture that settles three slots. */
     const mirrors = mirrorChips(ctx.book);
+    /* AND WHAT THE BANK'S CATALOG CARRIES BEYOND THE BOOK. The nine are the
+       names this room's own parser settles uniquely; the rest of the org's
+       catalog is named as present and not fileable from a name here, rather
+       than offered as a chip that ends in a refusal. */
+    const catalog = covenantTypeChips(ctx);
+    const mirrored = new Set(mirrors.map((m) => m.what.toLowerCase()));
+    const more = catalog.fileable.filter((t) => ![...mirrored].some((w) => w.startsWith(t.toLowerCase())));
     return {
       slot: "test",
       text:
         "To file one I need the test, the threshold and how often it is tested. " +
         (mirrors.length
           ? `This relationship already runs ${sentenceList(mirrors.map((m) => m.what))}. I can mirror one of those, or take new terms from the approved credit agreement. I will not set a threshold myself.`
-          : "The approved credit agreement is the authority on all three, and I will not set a threshold myself. Name the test and I will take it from there."),
-      options: [...mirrors.map((m) => ({ label: m.label, say: m.say })), { label: "A different test", say: "a different test" }],
+          : "The approved credit agreement is the authority on all three, and I will not set a threshold myself. Name the test and I will take it from there.") +
+        (catalog.presentNotFileable
+          ? ` The bank's catalog carries ${catalog.presentNotFileable} more types beyond these; they are in the org, and this room cannot settle one from a name, so it does not offer them.`
+          : ""),
+      options: [
+        ...mirrors.map((m) => ({ label: m.label, say: m.say })),
+        ...more.map((t) => ({ label: t, say: `a ${t.toLowerCase()} covenant` })),
+        { label: "A different test", say: "a different test" },
+      ],
     };
   }
 
@@ -1481,15 +1579,16 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
  * The refusal names the word, names why it is not a borrowing-structure role,
  * and offers the five that are. Nothing the banker already gave is thrown away.
  */
-function refusedRoleAsk(draft: Draft): Ask {
+function refusedRoleAsk(draft: Draft, ctx: ElicitContext): Ask {
   const refused = REFUSED_ROLES.find((r) => r.word === draft.refusedRole)!;
   const held = draft.slots.party ? ` I am holding ${draft.slots.party} and will carry the name onto whichever of those you name.` : "";
+  const roles = involvementRoles(ctx);
   return {
     slot: "role",
     text:
       `${refused.word} is on the object, and it is ${refused.why} rather than borrowing structure, so I will not file it as an involvement here. ` +
-      `The five roles a borrowing-structure change carries are ${sentenceList(INVOLVEMENT_ROLES)}.${held}`,
-    options: INVOLVEMENT_ROLES.map((role) => ({ label: role, say: `as a ${role.toLowerCase()}` })),
+      `The ${count(roles.length).toLowerCase()} roles a borrowing-structure change carries are ${sentenceList(roles)}.${held}`,
+    options: roles.map((role) => ({ label: role, say: `as a ${role.toLowerCase()}` })),
   };
 }
 
@@ -1522,14 +1621,23 @@ function involvementAsk(draft: Draft, ctx: ElicitContext): Ask | null {
        the deal in one role is almost always going onto another facility in the
        same one, and the book is the grounded answer rather than a guess. */
     const held = [...new Set(facilitiesFor(ctx.book, s.party).map((f) => f.role))];
-    const ordered = [...INVOLVEMENT_ROLES].sort((a, b) => Number(held.includes(b)) - Number(held.includes(a)));
+    const roles = involvementRoles(ctx);
+    const ordered = [...roles].sort((a, b) => Number(held.includes(b)) - Number(held.includes(a)));
+    /* THE TWO THE OBJECT HOLDS AND THIS ROOM REFUSES ARE NAMED, not hidden. The
+       catalog returns all seven for exactly that reason: a banker who says
+       "grantor" should be answered by name rather than by a list that quietly
+       does not contain it. */
+    const refused = refusedRoleWords(ctx);
     return {
       slot: "role",
       text:
         `What role does ${s.party} take? The org holds involvement as rows and the role is the row, so I will not pick one. ` +
         (held.length
           ? `This book already carries ${s.party} as ${sentenceList(held)} elsewhere on the package.`
-          : `The five a borrowing-structure change carries are ${sentenceList(INVOLVEMENT_ROLES)}.`),
+          : `The ${count(roles.length).toLowerCase()} a borrowing-structure change carries are ${sentenceList(roles)}.`) +
+        (refused.length
+          ? ` ${sentenceList(refused)} ${refused.length === 1 ? "is" : "are"} on the object too and ${refused.length === 1 ? "is" : "are"} not borrowing structure, so I do not file ${refused.length === 1 ? "it" : "them"} here.`
+          : ""),
       options: ordered.map((role) => ({ label: role, say: `as a ${role.toLowerCase()}` })),
     };
   }
@@ -1557,12 +1665,15 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
       /* THE CATALOG IS NAMED IN THE QUESTION. A banker whose word the catalog
          does not carry needs to see what it does carry, not be asked the same
          question again. */
+      const kinds = assetKinds(ctx);
       return {
         slot: "assetKind",
         text:
           "What kind of asset is it? The bank keeps its own collateral-type catalog and resolves the word against it, so I will not invent a type. " +
-          `The kinds I can resolve a word against are ${sentenceList(ASSET_KIND_OPTIONS.map((k) => k.toLowerCase()))}.`,
-        options: ASSET_KIND_OPTIONS.map((k) => ({ label: k, say: `a new ${k.toLowerCase()} asset` })),
+          (kinds.fromOrg && kinds.total > kinds.chips.length
+            ? `The catalog carries ${kinds.total} types the bank will lend against; these are the ones this deal is closest to, and typing any other name reaches the rest.`
+            : `The kinds I can resolve a word against are ${sentenceList(kinds.chips.map((k) => k.toLowerCase()))}.`),
+        options: kinds.chips.map((k) => ({ label: k, say: `a new ${k.toLowerCase()} asset` })),
       };
     }
     if (!s.assetDescription) {
@@ -1603,7 +1714,8 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
 
   if (!s.lien) {
     const held = ctx.book.liens;
-    const offered = held.length ? [...new Set([...held, ...LIEN_OPTIONS])] : LIEN_OPTIONS;
+    const positions = lienPositions(ctx);
+    const offered = held.length ? [...new Set([...held, ...positions])] : positions;
     return {
       slot: "lien",
       text:
