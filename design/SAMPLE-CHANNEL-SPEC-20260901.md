@@ -171,3 +171,19 @@ not connected, so I will answer from what is here and stage what the engines can
 today's behavior exactly. Not an error state.
 
 Booth: open the room before the audience gathers; a reload is a new view and a new consent.
+
+## THE MODEL RENDERS INTO THE ROOM'S OWN COMPONENTS (founder, 2026-09-02: "not only hard text")
+
+Four channels, all drawn by the room, never by the model:
+1. A read -> the room's READ CARD (groups, rows: icon, label, value, sub). The model composes
+   the content; ReadCardView draws it. A list IS a read card.
+2. A proposal -> real staged CARDS and CHIPS through restate + parser. The model never draws a
+   card; it proposes, the engine stages, the room draws.
+3. A question back -> the agent bubble WITH clickable OPTION CHIPS the model composed.
+4. Narration -> the sentence under a card, prose by design so it can never stage, with LIGHT
+   STRUCTURE allowed: a short bullet list or a bold figure, rendered in the room's typography
+   (the existing agent-sentence styles, a list style if one is missing), never raw markdown
+   characters on the glass. Cap narration at a few lines; it is a colleague's remark, not a memo.
+The model cannot invent a component. Its vocabulary is the room's: cards, chips, lists,
+advisories. A new shape is a design-round addition, never model-authored HTML. This is the census
+and brand discipline holding while the model gets to be smart.
