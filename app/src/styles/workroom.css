@@ -1497,19 +1497,6 @@ body.wk-open #root {
   font-size: 9.5px;
   color: var(--ink-faint);
 }
-.wk-railfold {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-muted);
-  background: none;
-  border: 0;
-  padding: 2px 0;
-  text-align: left;
-}
-.wk-railfold:hover {
-  color: var(--ink);
-}
-
 /* ============================================================ THE COMMIT PATH
    REVIEW & EXECUTE LIVES IN THE CHAT (rule 38). An appearing glass icon-chip
    pops into the thread; clicking it pops the flow card open IN the thread;
