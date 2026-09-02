@@ -160,14 +160,17 @@ type RelItem = { id: string; step: number } & (
        *  session that has already collected answers. Never a silent swap. */
       restart?: { route: RelRoute; label: string; say: string };
     }
-  /** THE ROOM REACHED NO ORG. Loud, in glass, with the way out of it. */
-  | { kind: "notice"; title: string; body: string }
+  /** THE ROOM REACHED NO ORG. Loud, in glass, with the way out of it.
+   *  `room` is the narration discriminator: this kind and `dossier` are shared
+   *  by NAME AND SHAPE with the facility room, whose own notice and dossier are
+   *  chrome that `subjectFor` must keep returning null for. */
+  | { kind: "notice"; room: "relationship"; title: string; body: string }
   /** A create this room can compose and cannot file, with the gap named. */
   | { kind: "gap"; gap: CreateGap }
   /** A READ QUESTION, ANSWERED. Not a step and not a gate: nothing on it is
    *  waiting for a decision, and it does not advance the review. */
   | { kind: "read"; card: ReadCardModel }
-  | { kind: "dossier"; dossier: DossierModel }
+  | { kind: "dossier"; room: "relationship"; dossier: DossierModel }
 );
 
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -1416,6 +1419,7 @@ export function RelationshipRoom({
       if (neverReachedTheOrg(e)) {
         push({
           kind: "notice",
+          room: "relationship",
           id: nextId("notice"),
           title: "This view is not connected to the bank's systems.",
           body: NO_CONNECTOR,
@@ -1475,7 +1479,7 @@ export function RelationshipRoom({
       setLit(true);
       setItems((prev) => {
         const mine = prev.length ? prev[prev.length - 1].step : 0;
-        return [...prev, { kind: "dossier", id: nextId("dossier"), step: mine, dossier }];
+        return [...prev, { kind: "dossier", room: "relationship", id: nextId("dossier"), step: mine, dossier }];
       });
       setToast(`${REL_FLOWS[route].filedWord} · logged to the activity trail`);
     } catch (e) {

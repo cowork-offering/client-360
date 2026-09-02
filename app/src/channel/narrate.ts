@@ -966,6 +966,20 @@ export interface NarratableItem {
   advisories?: unknown[];
   /* ---- the relationship room's own shapes. Structural, like everything above:
          neither room's item union is imported here. */
+  /**
+   * WHICH ROOM APPENDED THIS ITEM, and the ONLY thing that may open a
+   * relationship arm below.
+   *
+   * The two rooms share `notice` and `dossier` by name AND by shape: the
+   * facility room's notice is `{kind:"notice", title, body}` and its dossier is
+   * `{kind:"dossier", dossier}`, exactly what the relationship room appends. A
+   * structural read ("has a title and a body") therefore cannot tell them
+   * apart, and reading them the same way would narrate the facility room's
+   * chrome and, worse, its filed dossier, where the room has always said
+   * nothing. Only the relationship room sets this field; the facility room
+   * never has and must never start.
+   */
+  room?: string;
   /** A create the room composed and cannot file. */
   gap?: { what: string; line: string; orgGap: string };
   /** The no-connector notice. */
@@ -1058,14 +1072,18 @@ export function subjectFor(item: NarratableItem, said?: string): NarrateSubject 
   }
 
   /* THE ROOM REACHED NO ORG. Loud on the glass, and worth one sentence about
-     what the banker can still do from here. */
-  if (item.kind === "notice" && item.title && item.body) {
+     what the banker can still do from here. GATED ON THE ROOM, not on the
+     shape: the facility room's own no-connector notice is the same three
+     fields, and it has never been narrated. */
+  if (item.kind === "notice" && item.room === "relationship" && item.title && item.body) {
     return { act: "refused", sentence: `${item.title} ${item.body}`.trim() };
   }
 
   /* THE FILING LANDED. The dossier is the ORG'S account of it, so the rows are
-     the card and the model writes only what follows from them. */
-  if (item.kind === "dossier" && item.dossier) {
+     the card and the model writes only what follows from them. GATED ON THE
+     ROOM: the facility room's filing dossier is the same shape and is the last
+     item of its own demo, where the room says nothing. */
+  if (item.kind === "dossier" && item.room === "relationship" && item.dossier) {
     return {
       act: "filed",
       sentence: item.dossier.footer,
