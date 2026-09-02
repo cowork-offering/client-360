@@ -525,3 +525,151 @@ export function readCovenantAttach(args: {
     delta: covenantAttachDelta(covenant, { facilityId: args.facilityId, facilityLabel: args.facilityLabel }),
   };
 }
+
+/* ============================================================== the write-back
+
+   THE PLAN NAMES EACH ARM AS ITS OWN STEP PAIR, and the org's numbering is the
+   order the arms travelled in:
+
+     covenant_exclusion_{i}   / covenant_exclusion_verify_{i}
+     pledge_exclusion_{i}     / pledge_exclusion_verify_{i}
+     covenant_associate_{i}   / covenant_associate_verify_{i}
+
+   THE VERIFY STEP IS THE WHOLE POINT ON AN EXCLUSION. An exclusion writes no
+   record, so there is no record id to report: what proves it is a re-query on
+   BOTH sides, the clone reading zero and the parent still reading one. A removal
+   nobody can see is indistinguishable from a removal that did not happen.     */
+
+/** The org's step prefix for each arm. */
+const ARM_STEP: Record<ArmKind, string> = {
+  covenantExclusion: "covenant_exclusion",
+  pledgeExclusion: "pledge_exclusion",
+  covenantAttach: "covenant_associate",
+};
+
+/** The banker's word for what an arm does, for a sentence about a set of them. */
+const ARM_DID: Record<ArmKind, [string, string]> = {
+  covenantExclusion: ["covenant left off the new version", "covenants left off the new version"],
+  pledgeExclusion: ["pledge left off the new version", "pledges left off the new version"],
+  covenantAttach: ["existing covenant associated by junction", "existing covenants associated by junction"],
+};
+
+/** One staged arm and the two plan steps that report on it. */
+export interface ArmStepPair {
+  deltaId: string;
+  kind: ArmKind;
+  title: string;
+  target: string;
+  writeStepId: string;
+  verifyStepId: string;
+}
+
+/**
+ * WHICH PLAN STEPS BELONG TO WHICH STAGED ARM.
+ *
+ * The index is the arm's position among its OWN kind, in the order the payload
+ * sent them, which is the order the manifest holds them. That is the same
+ * ordering the org numbers by, and it is the only correspondence there is: an
+ * exclusion writes no record, so there is no id to match on afterwards.
+ */
+export function armStepPairs(deltas: WorkroomDelta[]): ArmStepPair[] {
+  const seen: Record<ArmKind, number> = { covenantExclusion: 0, pledgeExclusion: 0, covenantAttach: 0 };
+  const out: ArmStepPair[] = [];
+  for (const delta of deltas) {
+    const arm = armOf(delta);
+    if (!arm) continue;
+    const i = seen[arm.kind];
+    seen[arm.kind] += 1;
+    out.push({
+      deltaId: delta.id,
+      kind: arm.kind,
+      title: delta.title,
+      target: delta.target,
+      writeStepId: `${ARM_STEP[arm.kind]}_${i}`,
+      verifyStepId: `${ARM_STEP[arm.kind]}_verify_${i}`,
+    });
+  }
+  return out;
+}
+
+/** Is this plan step one of the arms', whatever the org labelled it? */
+export function isArmStep(stepId: string): boolean {
+  return /^(covenant_exclusion|pledge_exclusion|covenant_associate)(_verify)?_\d+$/.test(stepId);
+}
+
+/**
+ * ONE ARM STEP, IN BANKER LANGUAGE.
+ *
+ * The ORG's own label wins wherever it sent one: the exclusion step labels carry
+ * the banker sentence already ("Carry the covenants of <facility> WITHOUT
+ * COV-000662 ...") and paraphrasing the bank's own account of its own write is
+ * how a room starts drifting from what actually ran. This composes a sentence
+ * only where the label is missing, so a step never reads as a raw id.
+ */
+export function armStepSentence(step: { id: string; label?: string; state?: string }): string | null {
+  if (!isArmStep(step.id)) return null;
+  if (step.label?.trim()) return step.label.trim();
+  const verify = step.id.includes("_verify_");
+  if (step.id.startsWith("covenant_exclusion")) {
+    return verify
+      ? "Prove the covenant came off: the clone reads no junction for it and the booked facility still reads its own."
+      : "Carry the facility's covenants without the named one. Nothing is deleted; the clone starts without that junction.";
+  }
+  if (step.id.startsWith("pledge_exclusion")) {
+    return verify
+      ? "Prove the pledge came off: the clone reads no pledge for it and the booked facility still reads its own."
+      : "Carry the facility's collateral without the named pledge. The asset and the borrower's ownership of it are not touched.";
+  }
+  return verify
+    ? "Prove the association: the junction reads on the clone and the covenant record reads back unchanged."
+    : "Author the loan-covenant junction for the covenant the borrower already holds. No covenant is inserted.";
+}
+
+/** `n thing` / `n things`, in banker language. */
+const counted = (n: number, [one, many]: [string, string]) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * WHAT THE ARMS DID, FOR THE TRAIL AND FOR THE PLAN SUMMARY.
+ *
+ * Null where the manifest carries none, so every plan that files nothing new
+ * reads exactly as it read before the arms existed. Where it carries some, the
+ * sentence counts them apart — a banker reads one set of covenants on the new
+ * version whoever authored each record, and the association and the net-new are
+ * not the same act.
+ */
+export function armSummary(deltas: WorkroomDelta[]): string | null {
+  const arms = deltas.map(armOf).filter((a): a is ArmEntry => a !== null);
+  if (!arms.length) return null;
+  const parts: string[] = [];
+  for (const kind of ["covenantExclusion", "pledgeExclusion", "covenantAttach"] as ArmKind[]) {
+    const n = arms.filter((a) => a.kind === kind).length;
+    if (n) parts.push(counted(n, ARM_DID[kind]));
+  }
+  const excluded = arms.some((a) => a.kind !== "covenantAttach");
+  return `${parts.join(", ")}.${excluded ? " Nothing is deleted: the booked facilities keep everything they hold today." : ""}`;
+}
+
+/**
+ * THE ORG REFUSED, AND THE ROOM SAYS SO IN THE ORG'S OWN WORDS.
+ *
+ * A stage refusal is the ORG's sentence about a precondition, and paraphrasing
+ * one has already cost a live session. What the room adds is the part the org
+ * cannot know: WHICH entry on this manifest it is about, and that the rest of
+ * the plan is exactly where the banker left it. Staging writes nothing, so a
+ * refusal here has cost nothing but the round trip.
+ *
+ * Where nothing on the manifest matches, the org's sentence is returned alone
+ * rather than attached to a guess.
+ */
+export function armStageRefusal(message: string, deltas: WorkroomDelta[]): string {
+  const lower = message.toLowerCase();
+  const named = deltas.filter((d) => armOf(d) && lower.includes(d.title.toLowerCase()));
+  const rest = deltas.length - named.length;
+  if (!named.length) return message;
+  const one = named[0];
+  return (
+    `${message} That is ${one.title} on ${one.target}. Take it off the manifest and the plan goes up without it` +
+    `${rest > 0 ? `; the other ${rest === 1 ? "entry is" : `${rest} entries are`} exactly where you left ${rest === 1 ? "it" : "them"}` : ""}. ` +
+    "Staging writes nothing, so nothing has been filed and nothing has come off the manifest."
+  );
+}

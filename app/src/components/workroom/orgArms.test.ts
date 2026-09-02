@@ -8,6 +8,11 @@ import {
   armOf,
   covenantExclusionDelta,
   pledgeExclusionDelta,
+  armStageRefusal,
+  armStepPairs,
+  armStepSentence,
+  armSummary,
+  isArmStep,
   readArmRemoval,
   readCovenantAttach,
 } from "./orgArms";
@@ -402,5 +407,104 @@ describe("the confirm sentence", () => {
   it("leaves a delta carrying no arm exactly as the engine composed it", () => {
     const plain = { id: "x", fieldWire: { field: "LLC_BI__Payment_Schedule__c", label: "", value: "Monthly", display: "", facilityId: LOC } } as never;
     expect(armConfirmSentence(plain, "unchanged.")).toBe("unchanged.");
+  });
+});
+
+describe("the write-back", () => {
+  const covenant = covenantExclusionDelta(BOOK.covenants[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+  const pledge = pledgeExclusionDelta(BOOK.assets[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+  const attach = (() => {
+    const read = readCovenantAttach({
+      covenantId: DSC,
+      test: "Debt Service Coverage of Borrower",
+      book: BOOK,
+      facilityId: EQUIPMENT,
+      facilityLabel: "Equipment ($8M)",
+      mode: "modify",
+    });
+    if (read?.kind !== "attach") throw new Error("expected an attach");
+    return read.delta;
+  })();
+
+  const scalar = { id: "scalar", title: "Commitment", target: "Line of Credit ($15M)" } as never;
+
+  it("numbers each arm's plan steps by its position among its own kind", () => {
+    const pairs = armStepPairs([scalar, covenant, pledge, attach]);
+    expect(pairs.map((p) => [p.writeStepId, p.verifyStepId])).toEqual([
+      ["covenant_exclusion_0", "covenant_exclusion_verify_0"],
+      ["pledge_exclusion_0", "pledge_exclusion_verify_0"],
+      ["covenant_associate_0", "covenant_associate_verify_0"],
+    ]);
+  });
+
+  it("counts a second exclusion of the same kind as the next index", () => {
+    const second = covenantExclusionDelta(
+      { ...BOOK.covenants[0], id: "a3Xbb00000012ZZZAY" },
+      { facilityId: EQUIPMENT, facilityLabel: "Equipment ($8M)" },
+    );
+    expect(armStepPairs([covenant, second]).map((p) => p.writeStepId)).toEqual([
+      "covenant_exclusion_0",
+      "covenant_exclusion_1",
+    ]);
+  });
+
+  it("recognises every arm step name the org sends, and nothing else", () => {
+    for (const id of [
+      "covenant_exclusion_0",
+      "covenant_exclusion_verify_9",
+      "pledge_exclusion_3",
+      "pledge_exclusion_verify_0",
+      "covenant_associate_0",
+      "covenant_associate_verify_2",
+    ]) {
+      expect(isArmStep(id)).toBe(true);
+    }
+    for (const id of ["apply_changes_0", "carry_junctions", "covenant_exclusion", "held_execution"]) {
+      expect(isArmStep(id)).toBe(false);
+    }
+  });
+
+  it("keeps the ORG's own step label where it sent one", () => {
+    const label =
+      "Carry the covenants of Line of Credit WITHOUT COV-000662 (Minimum Liquidity): the booked facility keeps its junction.";
+    expect(armStepSentence({ id: "covenant_exclusion_0", label })).toBe(label);
+  });
+
+  it("composes banker language only where the label is missing, never a raw id", () => {
+    expect(armStepSentence({ id: "covenant_exclusion_0" })).toContain("Nothing is deleted");
+    expect(armStepSentence({ id: "covenant_exclusion_verify_0" })).toContain("the booked facility still reads its own");
+    expect(armStepSentence({ id: "pledge_exclusion_0" })).toContain("The asset and the borrower's ownership of it are not touched");
+    expect(armStepSentence({ id: "covenant_associate_0" })).toContain("No covenant is inserted");
+    expect(armStepSentence({ id: "apply_changes_0" })).toBeNull();
+  });
+
+  it("counts the arms apart in one sentence, and says nothing is deleted", () => {
+    expect(armSummary([scalar, covenant, pledge, attach])).toBe(
+      "1 covenant left off the new version, 1 pledge left off the new version, 1 existing covenant associated by junction." +
+        " Nothing is deleted: the booked facilities keep everything they hold today.",
+    );
+  });
+
+  it("leaves a plan carrying no arm with nothing extra to say", () => {
+    expect(armSummary([scalar])).toBeNull();
+  });
+
+  it("does not claim a deletion disclaimer on an association-only plan", () => {
+    expect(armSummary([attach])).toBe("1 existing covenant associated by junction.");
+  });
+
+  it("attributes the org's own refusal to the entry it is about, and reports the rest honestly", () => {
+    const org =
+      "Covenant a3Xbb00000012ABCAY is not attached to Line of Credit, so there is nothing for the new version to leave behind.";
+    const said = armStageRefusal(`${org} Minimum Liquidity`, [covenant, pledge, attach]);
+    expect(said).toContain(org);
+    expect(said).toContain("That is Minimum Liquidity on Line of Credit ($15M)");
+    expect(said).toContain("the other 2 entries are exactly where you left them");
+    expect(said).toContain("Staging writes nothing");
+  });
+
+  it("returns the org's sentence alone where nothing on the manifest matches it", () => {
+    const org = "A covenant exclusion targets facility a4Zbb0000027MpXEAU, which is not one of the selected facilities.";
+    expect(armStageRefusal(org, [covenant])).toBe(org);
   });
 });

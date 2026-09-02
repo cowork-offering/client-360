@@ -6,9 +6,12 @@ import { Workroom } from "./components/workroom/Workroom";
 import { clearComposed } from "./workroom/engine";
 import { createModifyEngine } from "./workroom/modifyEngine";
 import { createRenewEngine } from "./workroom/renewEngine";
+import { armStage } from "./components/workroom/orgArms";
 import { workroomContextFor } from "./workroom/openWorkroom";
 import type { BrainEnvelope, BrainReply } from "./channel/brainLane";
 import type { C360Data } from "./data/contract";
+import type { StagedOutput } from "./actions/stagedPlan";
+import type { StagePayloads, ToolOutcome } from "./channel/writeTools";
 import type { WorkroomMode } from "./workroom/types";
 import live from "../../artifact/live-data.json";
 
@@ -48,7 +51,26 @@ afterEach(() => {
 const data = live as unknown as C360Data;
 const accountId = "001bb00001I7FPNAA3";
 
-function open(args: { brain?: (e: BrainEnvelope) => Promise<BrainReply>; mode?: WorkroomMode } = {}) {
+type Payload = StagePayloads["loan-modification"];
+
+/** A plan the org would have returned, with whatever steps the test needs. */
+const plan = (steps: string[]): StagedOutput => ({
+  stagingId: "a3Sbb0000001STGAA2",
+  decisionToken: "tok-0001",
+  planHash: "hash-9999",
+  summary: "Roll the package to a new version",
+  steps: steps.map((id) => ({ id, type: "write" as const, label: "" })),
+  warnings: [],
+  suggestions: [],
+});
+
+function open(
+  args: {
+    brain?: (e: BrainEnvelope) => Promise<BrainReply>;
+    mode?: WorkroomMode;
+    stage?: (payload: Payload) => Promise<ToolOutcome<StagedOutput>>;
+  } = {},
+) {
   const bundle = data.borrowers![accountId];
   const mode = args.mode ?? "modify";
   const context = workroomContextFor({ mode, data, bundle, accountId, accountName: bundle.snapshot!.name! });
@@ -60,7 +82,14 @@ function open(args: { brain?: (e: BrainEnvelope) => Promise<BrainReply>; mode?: 
       <Workroom
         context={context}
         engine={
-          mode === "renew" ? createRenewEngine({ context, data, bundle }) : createModifyEngine({ context, data, bundle })
+          mode === "renew"
+            ? createRenewEngine({ context, data, bundle })
+            : createModifyEngine({
+                context,
+                data,
+                bundle,
+                deps: args.stage ? { stage: armStage(args.stage), available: () => true } : undefined,
+              })
         }
         reads={{ bundle, accountName: bundle.snapshot!.name!, productPackageId: context.productPackageId }}
         brain={args.brain}
@@ -271,5 +300,56 @@ describe("channel-none parity", () => {
     expect(chips(room)).toHaveLength(1);
     expect(said(room)).toContain("will not carry onto the new version");
     expect(asked.filter((e) => e.line.startsWith("remove the accounts receivable"))).toHaveLength(0);
+  });
+});
+
+/* ======================================================= the write-back (item 4) */
+
+describe("what the plan says back about an arm", () => {
+  it("names the arms on the card the banker signs, and says nothing is deleted", async () => {
+    const sent: Payload[] = [];
+    const room = open({
+      stage: async (payload) => {
+        sent.push(payload);
+        return { ok: true as const, result: plan(["covenant_exclusion_0", "covenant_exclusion_verify_0"]) };
+      },
+    });
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await click(room.querySelector(".wk-propose")!);
+
+    // The arm reached the wire as the org's own key, and the sentinel did not.
+    expect(JSON.parse(sent[0].covenantExclusionsJson!)).toHaveLength(1);
+    expect(sent[0].fieldChangesJson).toBeUndefined();
+    expect(room.textContent).toContain("1 covenant left off the new version");
+    expect(room.textContent).toContain("Nothing is deleted");
+  });
+
+  it("says so where the plan came back WITHOUT a step for a staged arm", async () => {
+    const room = open({ stage: async () => ({ ok: true as const, result: plan(["apply_changes_0"]) }) });
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await click(room.querySelector(".wk-propose")!);
+
+    expect(said(room)).toContain("The plan came back without a step for Accounts Receivable on");
+    expect(said(room)).toContain("I will not tell you it is going to happen");
+  });
+
+  it("shows the ORG's own refusal, attached to the entry, with the rest reported honestly", async () => {
+    const org =
+      "Covenant a3Bbb000000S0bNEAS is not attached to Line of Credit, so there is nothing for the new version to leave behind. Accounts Receivable";
+    const room = open({
+      stage: async () => ({ ok: false as const, error: { code: "tool_error", message: org, retryable: false } as never }),
+    });
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await click(room.querySelector(".wk-propose")!);
+
+    expect(said(room)).toContain("is not attached to Line of Credit");
+    expect(said(room)).toContain("That is Accounts Receivable on");
+    expect(said(room)).toContain("Staging writes nothing");
   });
 });

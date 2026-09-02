@@ -80,7 +80,7 @@ import {
   type PlanEntry,
   type Slots,
 } from "./elicit";
-import { armConfirmSentence, readArmRemoval, readCovenantAttach } from "./orgArms";
+import { armConfirmSentence, armStageRefusal, armStepPairs, armSummary, readArmRemoval, readCovenantAttach } from "./orgArms";
 import { bareMemberPick, readSteer } from "./steer";
 import {
   TIER_STAGGER_MS,
@@ -660,7 +660,13 @@ export function Workroom({
    * is read back from the org for this — and the caller writes the Activity
    * trail entry, exactly as the Action Panel does for a panel action (A30).
    */
-  onFiled?: (filed: { execution: WorkroomExecution; changeCount: number; packageHref: string | null }) => void;
+  onFiled?: (filed: {
+    execution: WorkroomExecution;
+    changeCount: number;
+    packageHref: string | null;
+    /** What the org arms did, in banker language, or null where none rode. */
+    arms: string | null;
+  }) => void;
   /** Present only for the UNIFIED entry, where the room was opened on a
    *  relationship rather than on a route. Absent for every caller that already
    *  named a mode — the command palette, a deep link, a render test — and the
@@ -2614,6 +2620,22 @@ export function Workroom({
     try {
       const staged = await engine.stagePlan(entries, context);
       setFlow((f) => (f ? { ...f, staging: staged } : f));
+      /* ================== THE PLAN HAS TO NAME EVERY ARM IT WAS SENT (2026-09-02)
+
+         An exclusion writes no record, so there is no id to check afterwards and
+         the PLAN STEP is the only thing that says the org took it. A manifest
+         entry that reached the tool and produced no step is an entry the banker
+         would sign for and never get, so the room says so BEFORE the token is
+         spent rather than reporting it as filed afterwards. */
+      const planned = new Set((staged.plan.steps ?? []).map((s) => s.id));
+      const missing = armStepPairs(entries).filter((a) => !planned.has(a.writeStepId));
+      if (missing.length) {
+        agent(
+          `The plan came back without a step for ${missing.map((m) => `${m.title} on ${m.target}`).join(', ')}. ` +
+            "That is the org saying it did not plan it, so I will not tell you it is going to happen. " +
+            "Nothing has been written; take it off the manifest, or stage again once the connector is on the deployed tool list.",
+        );
+      }
     } catch (e) {
       setFlow(null);
       // NO CONNECTOR IS NOT A SENTENCE IN THE FLOW, it is the reason nothing can
@@ -2628,7 +2650,10 @@ export function Workroom({
         });
         return;
       }
-      agent(readableError(e));
+      /* AND A REFUSAL IS THE ORG'S OWN SENTENCE, ATTACHED TO THE ENTRY IT IS
+         ABOUT. The org names a covenant or an asset; only the room knows which
+         manifest entry that is and that the rest of the plan is untouched. */
+      agent(armStageRefusal(readableError(e), entries));
     }
   }, [agent, context, engine, entries, push]);
 
@@ -2687,7 +2712,14 @@ export function Workroom({
       // entry it was promising. Built from what the room ALREADY HOLDS — the
       // execution result and its own manifest — so nothing is read back from
       // the org to write it.
-      onFiled?.({ execution: result, changeCount: dossier.rows.length, packageHref: dossier.packageHref });
+      onFiled?.({
+        execution: result,
+        changeCount: dossier.rows.length,
+        packageHref: dossier.packageHref,
+        // The arms leave no record id, so the trail would otherwise carry no
+        // account of them at all. The manifest is here; the sentence is made here.
+        arms: armSummary(entries.filter((e) => filed.has(e.id))),
+      });
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
       if (committedDeltaMM) onExecuted?.(committedDeltaMM);
@@ -3082,6 +3114,9 @@ export function Workroom({
                         packageName={brief.packageName}
                         planTitle={vocabulary.planTitle}
                         planSummary={figures.planSummary}
+                        /* WHAT THE ARMS DO, ON THE CARD THE BANKER SIGNS. A
+                           plan carrying none reads exactly as it always has. */
+                        armSaid={armSummary(entries)}
                         approveLabel={vocabulary.approveLabel(fileable)}
                         fileable={fileable}
                         handedOff={handedOff}
@@ -3350,6 +3385,7 @@ function FlowCard({
   packageName,
   planTitle,
   planSummary,
+  armSaid,
   approveLabel,
   fileable,
   handedOff,
@@ -3366,6 +3402,7 @@ function FlowCard({
   packageName: string;
   planTitle: string;
   planSummary: string;
+  armSaid: string | null;
   approveLabel: string;
   fileable: number;
   handedOff: number;
@@ -3406,6 +3443,7 @@ function FlowCard({
       </div>
       <div className="wk-s">
         {planSummary} on {packageName}
+        {armSaid && <> {armSaid}</>}
         {handedOff > 0 && (
           <>
             {" "}
