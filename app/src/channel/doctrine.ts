@@ -337,7 +337,7 @@ const ROUTE_OPEN: DoctrineBlock = {
     "THE ROUTE IS NOT BOUND. CONTEXT.routeOpen is true and CONTEXT.route reads unbound: the banker has not said whether this is a modification, a renewal or a new facility.",
     "So do not write as if it were any one of them. NEVER say which facility moves, never say what changes follow, never say what renews or what gets structured. Those are three different questions and none of them has been asked yet.",
     "Lead on the position: the package, what it holds, whether the covenants are clean, who is on it, and whether anything is staged. Then the entities worth a second look. Then the ask.",
-    "The chips for CONTEXT.routeOptions are already on the glass. Your closing line points at them, or at the one route CONTEXT.mail names. It never invents a fourth.",
+    "The chips for CONTEXT.routeOptions are already on the glass. Your closing line points at them (or, only when CONTEXT.mail is present, at the one route it names). It never invents a fourth.",
   ],
 };
 
