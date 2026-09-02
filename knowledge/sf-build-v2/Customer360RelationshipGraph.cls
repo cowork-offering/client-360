@@ -11,7 +11,10 @@
  * 8 edges, and is NOT queried here — it is FSC enrichment, out of scope for
  * this tool per the verified data model).
  * Secondary source: LLC_BI__Legal_Entities__c (per-facility involvement:
- * borrower vs guarantor vs co-borrower, with guaranty amounts).
+ * borrower vs guarantor vs co-borrower, with guaranty amounts). Read as the
+ * UNION of the rows where the anchor IS the party and the rows on the anchor's
+ * own loans and packages, because a guarantor row carries the GUARANTOR's
+ * account, never the anchor's (finding N4, 2026-09-02).
  *
  * KYC__c and Compliance_Check__c are NOT queried — confirmed near-empty
  * org-wide (0-1 rows). The real, populated beneficial-ownership signal for
@@ -117,7 +120,29 @@ global with sharing class Customer360RelationshipGraph {
                 res.connections.add(edge);
             }
 
-            List<LLC_BI__Legal_Entities__c> entities = [
+            // THE INVOLVEMENT UNION (2026-09-02, finding N4).
+            //
+            // A single `LLC_BI__Account__c = :accountId` filter answers "where is this account
+            // itself a party", which on Hartwell is the seven Borrower rows and nothing else. The
+            // question the borrowing-structure card actually asks is "who is on this account's
+            // DEALS", and the guarantors, limited guarantors and related entities carry the
+            // GUARANTOR's account on the row, never the anchor's. Fifteen of the twenty-two rows
+            // were invisible, which is what made "any guarantors?" render an empty card and what
+            // let a duplicate-guarantor add stage a second row.
+            //
+            // So the read is a UNION of two legs, deduped by row id:
+            //   leg 1  the anchor IS the party (kept first, in its existing order, because the
+            //          borrower rows are what a structure card leads with)
+            //   leg 2  the row hangs off a LOAN or a PACKAGE of the anchor account, whoever the
+            //          party is
+            // Leg 2 is expressed as relationship-path filters rather than semi-joins on purpose:
+            // SOQL refuses a nested semi-join outright, and the path form costs one query instead
+            // of three. Leg 1 is not redundant: an involvement naming the anchor on some other
+            // relationship's facility belongs in this answer and leg 2 would never see it.
+            Map<Id, LLC_BI__Legal_Entities__c> byRowId = new Map<Id, LLC_BI__Legal_Entities__c>();
+            List<LLC_BI__Legal_Entities__c> entities = new List<LLC_BI__Legal_Entities__c>();
+
+            for (LLC_BI__Legal_Entities__c e : [
                 SELECT Id, LLC_BI__Account__r.Name, LLC_BI__Borrower_Type__c,
                        LLC_BI__Relationship_Type__c, LLC_BI__Ownership__c,
                        LLC_BI__Guaranty_Amount__c, LLC_BI__Contingent_Amount__c,
@@ -126,7 +151,32 @@ global with sharing class Customer360RelationshipGraph {
                 WHERE LLC_BI__Account__c = :req.accountId
                 WITH USER_MODE
                 ORDER BY LLC_BI__Order__c ASC NULLS LAST
-            ];
+            ]) {
+                if (byRowId.containsKey(e.Id)) {
+                    continue;
+                }
+                byRowId.put(e.Id, e);
+                entities.add(e);
+            }
+
+            for (LLC_BI__Legal_Entities__c e : [
+                SELECT Id, LLC_BI__Account__r.Name, LLC_BI__Borrower_Type__c,
+                       LLC_BI__Relationship_Type__c, LLC_BI__Ownership__c,
+                       LLC_BI__Guaranty_Amount__c, LLC_BI__Contingent_Amount__c,
+                       LLC_BI__Loan__c, LLC_BI__Product_Package__c
+                FROM LLC_BI__Legal_Entities__c
+                WHERE LLC_BI__Loan__r.LLC_BI__Product_Package__r.LLC_BI__Account__c = :req.accountId
+                   OR LLC_BI__Product_Package__r.LLC_BI__Account__c = :req.accountId
+                   OR LLC_BI__Loan__r.LLC_BI__Account__c = :req.accountId
+                WITH USER_MODE
+                ORDER BY LLC_BI__Order__c ASC NULLS LAST
+            ]) {
+                if (byRowId.containsKey(e.Id)) {
+                    continue;
+                }
+                byRowId.put(e.Id, e);
+                entities.add(e);
+            }
 
             for (LLC_BI__Legal_Entities__c e : entities) {
                 LegalEntityInvolvement li = new LegalEntityInvolvement();
