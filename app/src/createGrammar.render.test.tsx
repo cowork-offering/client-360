@@ -447,26 +447,47 @@ describe("a pledge is gathered without ever asking what the org works out", () =
     expect(words).not.toMatch(/lendable/i);
   });
 
-  it("asks the lien position when the deal does not answer it, and never the advance rate", async () => {
-    const { room } = open();
-    await settle();
-    await typeInto(room, "pledge a new forklift fleet worth $2,000,000 to the purchase facility");
-    // A NET-NEW ASSET is the one shape this room cannot compose, and it says so
-    // rather than asking for a rate it will not set.
-    expect(said(room)).toContain("credit decision");
-    await click(byText(/Pledge something the deal already carries/));
-    expect(said(room)).toContain("Which asset?");
-    expect(said(room)).not.toMatch(/advance rate for you to set|lendable/i);
-  });
+  /* -------------------------------------------- P3, create then pledge
 
-  it("names the net-new asset gap instead of asking for a rate it will not set", async () => {
+     "Pledge something the deal already carries" as the fallback to creating an
+     asset makes no sense: the deal's collateral carries onto the clone by
+     itself. Creating one must be possible, so the room asks for the rate the
+     wire needs, with the bank's own guideline as the proposal, and never
+     refuses. */
+
+  it("P3: asks a net-new asset for the rate rather than refusing it", async () => {
     const { room } = open();
     await settle();
     await typeInto(room, "pledge a new forklift fleet worth $2,000,000 to the purchase facility");
 
     expect(chips(room)).toHaveLength(0);
-    expect(said(room)).toContain("credit decision");
-    expect(said(room)).toContain("advance rate");
+    const words = said(room);
+    expect(words).toContain("The credit terms carry an advance rate for this asset: which?");
+    expect(words).toContain("approved credit terms are the authority");
+    // The refusal is gone, and so is the pointless fallback.
+    expect(words).not.toContain("credit decision out of the approved credit terms");
+    expect(byText(/Pledge something the deal already carries/)).toBeFalsy();
+    // The bank's guideline for equipment, as a chip.
+    expect(byText(/^80 percent$/)).toBeTruthy();
+  });
+
+  it("P3: drives the founder's own create-then-pledge line to a staged card", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000");
+
+    // E3 holds: the typed type is honoured and the kind is never asked.
+    expect(said(room)).not.toContain("What kind of asset is it?");
+    await click(byText(/^75 percent$/));
+    await click(byText(/^1st position$/));
+
+    expect(chips(room)).toHaveLength(1);
+    // The banker's own words, on the card and on the wire.
+    expect(room.textContent).toContain("Kokomo plant expansion");
+    expect(room.textContent).toContain("created and pledged, $6,500,000.00 at 75% advance");
+    const words = said(room);
+    expect(words).toContain("The asset is created, the borrower's ownership is recorded and only then is it pledged");
+    expect(words).not.toContain("I will not set");
   });
 });
 

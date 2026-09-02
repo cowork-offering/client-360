@@ -5,7 +5,6 @@ import {
   amendmentOf,
   associateGap,
   awarenessFor,
-  blockedReason,
   buildBook,
   CATALOG_TESTS,
   changedLine,
@@ -33,6 +32,7 @@ import {
 import { createModifyEngine } from "../../workroom/modifyEngine";
 import { workroomContextFor } from "../../workroom/openWorkroom";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
+import type { WorkroomDelta } from "../../workroom/types";
 import live from "../../../../artifact/live-data.json";
 
 /* =============================================================================
@@ -257,13 +257,23 @@ describe("the room asks for what the human owns, and never for what the org comp
     expect(compose(draft, ctx).lede).toContain("no advance rate for you to set here");
   });
 
-  it("names the net-new asset gap rather than asking for a rate it will not set", () => {
+  it("P3: asks a net-new asset for the rate the credit terms carry, and never refuses it", () => {
     const ctx = ctxWith();
     const draft = openCreate("pledge a new forklift fleet worth $2,000,000 to the Purchase", ctx)!;
     expect(draft.slots.isNew).toBe(true);
-    const why = blockedReason(draft)!;
-    expect(why).toContain("advance rate");
-    expect(why).toContain("credit decision");
+    expect(draft.slots.assetValue).toBe(2_000_000);
+    expect(draft.slots.assetDescription).toBe("Forklift fleet");
+
+    const ask = advance(draft, ctx).ask!;
+    expect(ask.slot).toBe("advanceRate");
+    expect(ask.text).toContain("The credit terms carry an advance rate for this asset: which?");
+    expect(ask.text).toContain("approved credit terms are the authority");
+    // The bank's own guideline, as a band, offered as chips.
+    expect(ask.options.map((o) => o.label)).toEqual(["80 percent"]);
+    expect(ask.options[0].say).toBe("at a 80% advance rate");
+    // And never the pointless fallback.
+    expect(ask.text).not.toContain("already carries");
+    expect(ask.text).not.toMatch(/will not set/i);
   });
 });
 
@@ -955,6 +965,113 @@ describe("a party already on the facility is named, never staged twice (E4a)", (
     const aware = awarenessFor(draft, structuredCtx({ plan }));
     expect(aware.fresh).toEqual([]);
     expect(aware.onThePlan).toContain("already on this plan");
+  });
+});
+
+describe("create then pledge, end to end (P3)", () => {
+  const FOUNDER = "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000";
+
+  it("reads the asset, the kind, the figure and the facility off the founder's own line", () => {
+    const draft = openCreate(FOUNDER, ctxWith())!;
+    expect(draft.slots.isNew).toBe(true);
+    expect(draft.slots.assetKind).toBe("Real Estate");
+    expect(draft.slots.assetValue).toBe(6_500_000);
+    // HIS WORDS. What the org files as the collateral description.
+    expect(draft.slots.assetDescription).toBe("Kokomo plant expansion");
+    expect(draft.scope).toEqual([CONSTRUCTION]);
+  });
+
+  it("asks only for the rate and the lien, and never refuses the create", () => {
+    const ctx = ctxWith();
+    let draft = openCreate(FOUNDER, ctx)!;
+    const asks: string[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const step = advance(draft, ctx);
+      if (!step.ask) break;
+      asks.push(step.ask.slot);
+      draft = readInto(step.draft, step.ask.slot === "advanceRate" ? "at a 75% advance rate" : "1st lien position", ctx);
+    }
+    expect(asks).toEqual(["advanceRate", "lien"]);
+    expect(draft.slots.advanceRate).toBe(75);
+    // And the description survived the answers that came after it.
+    expect(draft.slots.assetDescription).toBe("Kokomo plant expansion");
+  });
+
+  it("the rate ask offers the bank's own guideline band for the kind", () => {
+    const ctx = ctxWith();
+    const draft = readInto(openCreate(FOUNDER, ctx)!, "", ctx);
+    const ask = advance(draft, ctx).ask!;
+    expect(ask.slot).toBe("advanceRate");
+    expect(ask.options.map((o) => o.label)).toEqual(["75 percent", "80 percent"]);
+    expect(ask.text).toContain("75 to 80 percent of appraised value");
+    expect(ask.text).toContain("70 percent of cost on construction");
+  });
+
+  it("composes a sentence the real engine stages, and files the banker's own description", async () => {
+    const ctx = ctxWith();
+    const settled: Draft = {
+      ...openCreate(FOUNDER, ctx)!,
+      slots: {
+        ...openCreate(FOUNDER, ctx)!.slots,
+        advanceRate: 75,
+        lien: "1st",
+      },
+    };
+    const composition = compose(settled, ctx);
+    expect(composition.lines).toHaveLength(1);
+    expect(composition.lede).toContain("Kokomo plant expansion, real estate at $6,500,000");
+    expect(composition.lede).toContain("75 percent advance rate");
+    // The lien still rides the plan: no deployed write carries one.
+    expect(composition.gaps.join(" ")).toContain("lien position");
+
+    const { engine, context } = realEngine();
+    const result = await engine.parseIntent(composition.lines[0].say, context);
+    expect(result.kind).toBe("deltas");
+    const verdict = verify(settled, CONSTRUCTION, result.kind === "deltas" ? result.deltas : []);
+    expect(verdict.ok).toBe(true);
+
+    const entry = restateEntry(settled, ctx, (verdict as { ok: true; delta: WorkroomDelta }).delta);
+    expect(entry.fileable).toBe(true);
+    expect(entry.title).toBe("Kokomo plant expansion");
+    expect(entry.pledgeWire!.newCollateral).toEqual({
+      description: "Kokomo plant expansion",
+      collateralType: "Real Estate",
+      value: 6_500_000,
+    });
+    expect(entry.pledgeWire!.advanceRate).toBe(75);
+    expect(entry.after).toContain("created and pledged");
+  });
+
+  it("asks for the description where the line carried none, rather than composing one", () => {
+    const ctx = ctxWith();
+    const draft = readInto(
+      { surface: "collateral", slots: { isNew: true, assetKind: "Equipment" }, scope: [PURCHASE], scopeWord: true, unused: null },
+      "a new asset",
+      ctx,
+    );
+    const ask = advance(draft, ctx).ask!;
+    expect(ask.slot).toBe("assetDescription");
+    expect(ask.text).toContain("only readable identity");
+  });
+
+  it("keeps pledge-existing as its own action and never as the fallback to a create", () => {
+    const ctx = ctxWith();
+    // The asset question, on a line that named no asset at all. The deal's own
+    // assets are offered here, which is where that choice belongs.
+    const ask = advance(openCreate("pledge something to the Purchase", ctx)!, ctx).ask!;
+    expect(ask.slot).toBe("asset");
+    expect(ask.options.map((o) => o.label)).toContain("A new asset");
+    // And a create is never answered with "pledge something the deal already
+    // carries", which was the pointless fallback (P3).
+    let draft = openCreate("pledge a new forklift fleet worth $2,000,000 to the Purchase", ctx)!;
+    for (let i = 0; i < 6; i += 1) {
+      const step = advance(draft, ctx);
+      if (!step.ask) break;
+      expect(step.ask.text).not.toContain("already carries");
+      expect(step.ask.options.map((o) => o.label)).not.toContain("Pledge something the deal already carries");
+      draft = readInto(step.draft, step.ask.slot === "advanceRate" ? "at an 80% advance rate" : "1st lien position", ctx);
+    }
+    expect(compose(draft, ctx).lines).toHaveLength(1);
   });
 });
 

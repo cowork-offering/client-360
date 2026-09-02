@@ -58,6 +58,8 @@ export type SlotId =
   | "asset"
   | "assetKind"
   | "assetValue"
+  | "assetDescription"
+  | "advanceRate"
   | "lien"
   | "party"
   | "role";
@@ -104,7 +106,18 @@ export interface Slots {
   isNew?: boolean;
   assetKind?: string;
   assetValue?: number;
+  /** The banker's own words for a net-new asset. What the org files as the
+   *  collateral description, so it is his and never composed. */
   assetDescription?: string;
+  /**
+   * THE ADVANCE RATE ON A NET-NEW PLEDGE, as a percentage.
+   *
+   * Asked for only where the asset is being CREATED, because there the wire
+   * requires it: it rides `LLC_BI__Advance_Rate_Override__c`, the plain rate
+   * being a formula. On an existing asset the org resolves it and this room
+   * never asks.
+   */
+  advanceRate?: number;
   /** First, second, third. The bank's decision, and no wire carries it. */
   lien?: string;
   /** The party, spelled the way the ORG spells it wherever the book carries the
@@ -852,11 +865,24 @@ function readTest(
 /* ===================================================== the collateral surface
 
    THE HUMAN SUPPLIES which asset - or, for a net-new one, its description, kind
-   and value - and the lien position. THE ORG RESOLVES THE ADVANCE RATE AND THE
-   LENDABLE VALUE IN-TRANSACTION and this room does not ask for either: the
-   advance rate on the pledge is a formula with an override, the lendable value
-   is derived from it, and asking a banker to type a number the org computes is
-   noise dressed as diligence.                                                */
+   and value - and the lien position.
+
+   ON AN ASSET THE DEAL ALREADY CARRIES the org resolves the advance rate and the
+   lendable value in-transaction and this room asks for neither: the advance rate
+   on the pledge is a formula with an override, the lendable value is derived
+   from it, and asking a banker to type a figure the org computes is noise
+   dressed as diligence.
+
+   ON A NET-NEW ASSET IT IS ASKED FOR, AND NEVER REFUSED (P3, founder
+   2026-09-02). "Pledge something the deal already carries" was offered as the
+   fallback to creating one, which is pointless: the deal's collateral carries
+   onto the clone by itself. Creating an asset and pledging it must be possible.
+   The wire genuinely requires the rate on a create - `advanceRate` rides
+   `LLC_BI__Advance_Rate_Override__c` because the plain rate is a formula, and
+   the org's own Advance_Rate_Override rule demands a written reason beside it -
+   so the room ASKS for it, with the bank's own guideline bands as labelled
+   proposals and the approved credit terms named as the authority. It proposes;
+   it does not set.                                                           */
 
 const COLLATERAL_OPENS =
   /\b(pledge|add|attach|take\s+security|secure)\b[^.]{0,40}\b(collateral|security|asset|lien|receivables?|inventory|equipment|machinery|real\s*estate|warehouse|property|vehicles?|deposits?)\b|\bpledge\b/i;
@@ -897,6 +923,78 @@ function matchAsset(line: string, assets: BookAsset[]): BookAsset[] {
 
 const NEW_ASSET = /\b(new|newly|another|additional|just\s+(?:bought|financed)|not\s+on\s+the\s+deal)\b/i;
 
+/** Fragments that name the KIND and nothing else. A line saying "real estate"
+ *  has answered "what kind", not "what is it". */
+const KIND_ALONE = new Set([
+  "equipment", "machinery", "real estate", "realestate", "property", "land", "inventory",
+  "accounts receivable", "receivables", "a/r", "vehicles", "vehicle", "fleet", "securities",
+  "deposits", "cash", "cash and securities",
+]);
+
+const escapeRe = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * THE BANKER'S OWN WORDS FOR A NET-NEW ASSET (P3).
+ *
+ * "pledge new collateral on the construction loan: Kokomo plant expansion, real
+ * estate, valued at 6,500,000" names the asset "Kokomo plant expansion", and
+ * that phrase is what the org files as the collateral description. It is HIS
+ * and it is never composed, so it is read here rather than derived from the
+ * sentence the room composes back.
+ *
+ * WHAT IS STRIPPED is everything that is not the asset: the facility it lands
+ * on, read off the package's own names; the pledge verb; the words "new
+ * collateral"; the figure; the rate; the lien. What is left is split on the
+ * banker's own punctuation and the first substantive fragment wins, because a
+ * fragment that is only a collateral TYPE is the answer to a different question.
+ */
+export function readAssetDescription(text: string, ctx: ElicitContext): string | undefined {
+  let rest = ` ${text} `;
+
+  // The facility is not the asset. Named off the package, longest name first.
+  const names = ctx.members
+    .flatMap((m) => [m.orgName, m.shortName, m.label, m.key])
+    .filter((n): n is string => Boolean(n))
+    .sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    rest = rest.replace(
+      new RegExp(`\\b(?:on|onto|to|against|for|under)\\s+(?:the\\s+|this\\s+|our\\s+)?(?:[$\\d][\\w.,$]*\\s+)?${escapeRe(name)}(?:\\s+(?:loan|line|facility|note|revolver))?\\b`, "gi"),
+      " ",
+    );
+  }
+  rest = rest
+    .replace(/\b(?:on|onto|to|against|for|under)\s+(?:the|this|our)\s+[^,:;]*?\b(?:loans?|lines?|facilit(?:y|ies)|revolvers?|notes?)\b/gi, " ")
+    .replace(/^\s*(?:please\s+)?(?:add|pledge|attach|include|take\s+security\s+over|secure(?:\s+it)?(?:\s+with)?)\b/i, " ")
+    .replace(/\b(?:a|an|the)?\s*(?:new|net-new|additional|another)\s+(?:piece\s+of\s+)?(?:collateral|asset|security)\b/gi, " ")
+    .replace(/\bas\s+(?:new\s+|additional\s+)*collateral\b/gi, " ")
+    .replace(/\b(?:at|of)\s+an?\s+[\d.]+\s*(?:%|per\s?cent|percent)\s*(?:advance(?:\s+rate)?)?/gi, " ")
+    .replace(/\b(?:advance\s+rate|advance)\s*(?:of|at)?\s*[\d.]+\s*(?:%|per\s?cent|percent)?/gi, " ")
+    .replace(/[\d.]+\s*(?:%|per\s?cent|percent|bps|basis\s+points?)/gi, " ")
+    .replace(/\b(?:worth|valued\s+at|value\s+of|value)\s*(?:\$\s*)?[\d,]+(?:\.\d+)?\s*(?:mm|million|k|thousand|bn|billion)?/gi, " ")
+    .replace(/(?:\$\s*)?\b\d[\d,]*(?:\.\d+)?\s*(?:mm|million|k|thousand|bn|billion)?\b/gi, " ")
+    .replace(/\blien\s+position\b/gi, " ")
+    .replace(/\b(?:first|1st|second|2nd|third|3rd)\s+(?:lien|position|mortgage)(?:\s+position)?\b/gi, " ");
+
+  for (const part of rest.split(/[,:;]/)) {
+    const said = part
+      .replace(/\s{2,}/g, " ")
+      .trim()
+      .replace(/^(?:and|of|as|it|is)\s+/i, "")
+      .replace(/^(?:an?|the)\s+/i, "")
+      .replace(/^(?:new|net-new|additional|another)\s+/i, "")
+      .replace(/[.,;:]+$/, "")
+      .trim();
+    if (said.length < 3) continue;
+    // A fragment that is ONLY the collateral kind answers "what kind", not
+    // "what is it". It is not a description. Matched as the WHOLE fragment: a
+    // forklift fleet carries the word "forklift" and is still an asset.
+    if (KIND_ALONE.has(said.toLowerCase().replace(/\s+/g, " "))) continue;
+    if (/^(?:collateral|assets?|security|pledges?|positions?|liens?|it|this|that)$/i.test(said)) continue;
+    return said.length > 200 ? `${said.slice(0, 197).trim()}...` : said[0].toUpperCase() + said.slice(1);
+  }
+  return undefined;
+}
+
 /** THE BANKER TOOK THE ASSOCIATE (P1). "the existing one" on its own is enough:
  *  the chip says it and it is the only thing in the room that word can mean. */
 const ASSOCIATE_EXISTING = /\b(?:associate|attach|link)\b[^.]*\bexisting\b|\bthe\s+existing\s+one\b|\buse\s+the\s+existing\b/i;
@@ -911,6 +1009,24 @@ const ASSET_KINDS: Array<{ match: RegExp; word: string }> = [
 ];
 
 const ASSET_KIND_OPTIONS = ["Equipment", "Real estate", "Inventory", "Accounts receivable", "Vehicles", "Securities"];
+
+/**
+ * THE BANK'S OWN ADVANCE-RATE GUIDELINES, per collateral kind.
+ *
+ * A BAND, NOT A FIGURE. The approved credit terms are the authority on the rate
+ * and the room says so; what it offers is what the bank's guideline carries for
+ * that kind of asset, so the banker is choosing rather than typing blind. A kind
+ * with no guideline offers nothing and the question stands on its own.
+ *
+ * Source: WORKROOM-BRAIN 5.1.
+ */
+const ADVANCE_BANDS: Record<string, { rates: number[]; basis: string }> = {
+  Equipment: { rates: [80], basis: "up to 80 percent of orderly liquidation value, on an approved appraisal" },
+  "Real Estate": { rates: [75, 80], basis: "75 to 80 percent of appraised value on owner-occupied commercial real estate, and 70 percent of cost on construction, which is the tightest line the bank carries" },
+  Inventory: { rates: [50], basis: "up to 50 percent on eligible raw material and finished goods, work in process excluded" },
+  "Accounts Receivable": { rates: [80], basis: "up to 80 percent on eligible receivables aged 90 days or less" },
+  Cash: { rates: [50, 70], basis: "50 to 70 percent by asset class" },
+};
 
 /* ==================================================== the involvement surface
 
@@ -1145,10 +1261,26 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     const kind = ASSET_KINDS.find((k) => k.match.test(text));
     if (kind) next.slots.assetKind = kind.word;
     if (next.slots.isNew) {
-      const money = moneyIn(text);
+      /* THE RATE IS READ BEFORE THE VALUE, and the order is load-bearing: a
+         percentage carries its own mark, so taking it out of the line first
+         stops "75" being read as $75 and filed as what the asset is worth. */
+      const pct = /(\d+(?:\.\d+)?)\s*(?:%|per\s?cent|percent)/i.exec(text);
+      if (pct) next.slots.advanceRate = Number(pct[1]);
+      const money = moneyIn(pct ? text.replace(pct[0], " ") : text);
       if (money.length) {
         next.slots.assetValue = money[money.length - 1];
         claimed.push(money[money.length - 1]);
+      }
+      /* HIS OWN WORDS FOR THE ASSET. Only where the line carries some, and
+         never overwritten by a later line that carries none: the description
+         settles once, the way the lien and the kind do. */
+      /* IT SETTLES ONCE. Every later line still reads for every slot (free text
+         always wins), and "1st lien position" answered into an open create would
+         otherwise overwrite the banker's own words for the asset with the answer
+         to a different question. */
+      if (next.slots.assetDescription === undefined) {
+        const said = readAssetDescription(text, ctx);
+        if (said) next.slots.assetDescription = said;
       }
     }
     const lien = LIEN_WORDS.find((l) => l.match.test(text));
@@ -1431,11 +1563,38 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
         options: ASSET_KIND_OPTIONS.map((k) => ({ label: k, say: `a new ${k.toLowerCase()} asset` })),
       };
     }
+    if (!s.assetDescription) {
+      return {
+        slot: "assetDescription",
+        text:
+          "What is the asset, in your own words? The description is the only readable identity the collateral record carries, " +
+          "so it is yours to write and I will not compose one for you.",
+        options: [],
+      };
+    }
     if (s.assetValue === undefined) {
       return {
         slot: "assetValue",
-        text: "What is it worth? Say it in full, $2,000,000 or 2 million; I will not read a bare number as money. What the bank will lend against it is the org's to work out, not yours to type.",
+        text: "What is it worth? Say it in full, $2,000,000 or 2 million; I will not read a bare number as money.",
         options: [],
+      };
+    }
+    /* THE RATE, ASKED FOR RATHER THAN REFUSED (P3). On an asset the bank has
+       never lent against there is no rate for the org to fall back on: the
+       pledge carries it as an override and the org's own validation rule wants
+       a written reason beside it. The approved credit terms are the authority
+       and the bank's guideline is the proposal. */
+    if (s.advanceRate === undefined) {
+      const band = s.assetKind ? ADVANCE_BANDS[s.assetKind] : undefined;
+      return {
+        slot: "advanceRate",
+        text:
+          `The credit terms carry an advance rate for this asset: which? On an asset the bank has never lent against there is nothing for the org to fall back on, ` +
+          `so the rate rides the pledge as an override and travels with its own written reason. ` +
+          (band
+            ? `The bank's guideline for ${(s.assetKind ?? "").toLowerCase()} is ${band.basis}. The approved credit terms are the authority, not the guideline.`
+            : "The approved credit terms are the authority on it, and I will not set one myself."),
+        options: (band?.rates ?? []).map((rate) => ({ label: `${rate} percent`, say: `at a ${rate}% advance rate` })),
       };
     }
   }
@@ -1517,6 +1676,11 @@ export function thresholdText(value: number, unit?: "ratio" | "money"): string {
 }
 
 const shortLabel = (a: BookAsset) => (a.label.length > 44 ? `${a.label.slice(0, 42).trim()}...` : a.label);
+
+/** A figure written the way a credit agreement writes it. Never abbreviated:
+ *  "$6.5M" and "$6,500,000" are the same money and only one of them is what the
+ *  org files. */
+const exactMoney = (value: number) => `$${value.toLocaleString("en-US")}`;
 
 function sentenceList(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
@@ -1858,6 +2022,44 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
     };
   }
 
+  /* ============================================ CREATE THEN PLEDGE (P3)
+
+     THE BANKER'S OWN WORDS ARE NOT IN THE COMPOSED SENTENCE, and that is
+     deliberate. The engine reads a description out of the line it is given by
+     stripping the figure, the rate and the pledge clause out of it, which
+     mangles any noun sitting between them - and the words a collateral record
+     is filed under are the one thing here that must not be mangled. So the
+     sentence carries the KIND, the VALUE, the RATE and the TARGET, which are
+     exactly what the wire needs, and {@link restateEntry} puts the banker's own
+     description back onto the entry afterwards.
+
+     "ADDITIONAL" IS IN THE SENTENCE ON PURPOSE. The engine asks its own
+     amend-or-add question when a create's words brush against something already
+     on the facility, and a net-new asset named after a plant the deal already
+     mortgages would trip it. The word says what this is: a new record beside
+     what is there, which is what the banker asked for. */
+  if (s.isNew) {
+    const kind = (s.assetKind ?? "").toLowerCase();
+    for (const id of draft.scope) {
+      lines.push({
+        memberId: id,
+        say: `pledge an additional new ${kind} asset worth ${exactMoney(s.assetValue!)} at a ${s.advanceRate}% advance rate to the ${target(id)}`,
+      });
+    }
+    if (s.lien) {
+      gaps.push(
+        `The ${s.lien} lien position. No deployed write carries a lien position onto a pledge, so it is recorded on the plan for the credit file rather than written to the bank's systems.`,
+      );
+    }
+    return {
+      lines,
+      gaps,
+      lede:
+        `${s.assetDescription}, ${kind} at ${exactMoney(s.assetValue!)}, pledged to ${sentenceList(draft.scope.map((id) => member(id).label))} at a ${s.advanceRate} percent advance rate. ` +
+        "The asset is created, the borrower's ownership is recorded and only then is it pledged: three connected writes, in that order, and the lendable value is the org's to derive from the rate.",
+    };
+  }
+
   for (const id of draft.scope) {
     const lead = s.second ? "add a second pledge of" : "pledge";
     lines.push({ memberId: id, say: `${lead} ${s.assetName ?? s.assetId} to the ${target(id)}` });
@@ -1879,24 +2081,6 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
       `${lien} to ${sentenceList(draft.scope.map((id) => member(id).label))}. ` +
       "What the bank will lend against it is worked out when the change is filed, so there is no advance rate for you to set here.",
   };
-}
-
-/**
- * THE CREATE THAT CANNOT BE COMPOSED AT ALL, named.
- *
- * A net-new asset needs an advance rate on the pledge, which is a credit
- * decision on something the bank has never lent against. The room will not set
- * one and the doctrine forbids asking for it as if it were routine, so this is
- * said BY NAME after everything else is gathered rather than guessed at.
- */
-export function blockedReason(draft: Draft): string | null {
-  if (draft.surface === "collateral" && draft.slots.isNew) {
-    return (
-      "Creating an asset the bank has never lent against and pledging it needs an advance rate recorded on the pledge, and that is a credit decision out of the approved credit terms rather than something I will set. " +
-      "I can pledge an existing asset the deal already carries, or you can give me the rate the credit terms carry and I will compose the whole chain."
-    );
-  }
-  return null;
 }
 
 /* ============================================== what THIS ROUTE can file
@@ -2103,6 +2287,22 @@ export function verify(draft: Draft, memberId: string, deltas: WorkroomDelta[]):
  * slots that were elicited and nothing else.
  */
 export function restateEntry(draft: Draft, ctx: ElicitContext, delta: WorkroomDelta): WorkroomDelta {
+  /* A NET-NEW ASSET IS FILED UNDER THE BANKER'S OWN WORDS (P3). The composed
+     sentence deliberately carries no description - see {@link compose} - so the
+     one he wrote goes onto the entry and onto the wire here, which is the only
+     place that holds both. Nothing else about the wire is touched. */
+  if (draft.surface === "collateral" && draft.slots.isNew && draft.slots.assetDescription && delta.pledgeWire?.newCollateral) {
+    const said = draft.slots.assetDescription;
+    return {
+      ...delta,
+      title: said,
+      badge: `${said} → ${delta.after}`,
+      pledgeWire: {
+        ...delta.pledgeWire,
+        newCollateral: { ...delta.pledgeWire.newCollateral, description: said },
+      },
+    };
+  }
   if (draft.surface !== "involvement") return delta;
   const { party, role } = draft.slots;
   if (!party || !role) return delta;

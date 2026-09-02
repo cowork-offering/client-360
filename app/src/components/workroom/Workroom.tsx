@@ -60,7 +60,6 @@ import {
   associateGap,
   awarenessFor,
   amendmentOf,
-  blockedReason,
   buildBook,
   changedLine,
   compose,
@@ -1706,18 +1705,6 @@ export function Workroom({
     async (d: Draft, mine: number) => {
       const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
 
-      const blocked = blockedReason(d);
-      if (blocked) {
-        setCreating(d);
-        answer({
-          kind: "agent",
-          id: nextId("agent"),
-          text: blocked,
-          options: [{ label: "Pledge something the deal already carries", say: "pledge an asset the deal already carries" }],
-        });
-        return;
-      }
-
       const step = advance(d, elicitCtx);
       if (step.ask) {
         setCreating(step.draft);
@@ -1996,24 +1983,6 @@ export function Workroom({
            it, because a room that swallowed every following sentence would be a
            form wearing a conversation's clothes. */
         if (creating && !reading) {
-          /* A CREATE THE ROOM CANNOT COMPOSE AT ALL MUST NOT TRAP THE NEXT LINE.
-             `blockedReason` is not a question the room is waiting on an answer
-             to: it is the room saying it will not author this thing without a
-             figure the credit terms carry. Every line after it still READS into
-             the draft, though, so a blocked create swallowed the whole rest of
-             the drive - the fence probes, the borrowing structure, all of it -
-             and answered each of them with the same block. So a blocked create
-             holds the room for exactly one shape of line, the one that answers
-             it, and lets everything else past. (Found driving the founder's own
-             Part 1, 2026-09-01.) */
-          if (blockedReason(creating) && !/\d+(?:\.\d+)?\s*%/.test(line)) {
-            setCreating(null);
-            answer({
-              kind: "agent",
-              id: nextId("agent"),
-              text: "That one is still waiting on the rate the credit terms carry, so I am leaving it where it stands and taking this line as it reads.",
-            });
-          } else {
           const next = readInto(creating, line, elicitCtx);
           const moved =
             JSON.stringify(next.slots) !== JSON.stringify(creating.slots) ||
@@ -2032,7 +2001,6 @@ export function Workroom({
             id: nextId("agent"),
             text: "Nothing in that answered what the new one still needs, so I am leaving it where it stands and taking the line as it reads.",
           });
-          }
         }
 
         /* ==================================================== A CREATE OPENS
