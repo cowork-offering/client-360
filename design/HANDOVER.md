@@ -135,7 +135,7 @@ transforms changing over time, worklist rows clickable through it. Rule 66 in DI
 
 ---
 ## Addendum 2 (2026-08-31): the auto-demo + richer Hartwell data
-The dummy now demos itself: 3s after load (skipped if a human already interacted), an incoming CFO
+The dummy now demos itself: started and stopped with Cmd/Ctrl+S (no autostart, no on-screen chip), an incoming CFO
 email card opens Hartwell and the director walks tabs → chat conversation → full workroom ritual →
 write-back → hand-back toast (~70s). Every beat is element-readiness-driven (duntil polling); any
 trusted click/keydown stops it. Beat trail on `window.__demoBeat`. Chat gained a conversational

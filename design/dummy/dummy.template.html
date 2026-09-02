@@ -189,6 +189,48 @@
   .fab:active{transform:scale(.94)}
   .fabwrap.open .arcbtn:active{transform:translate(var(--tx),var(--ty)) scale(.9)}
 
+  /* ---------- chat log scrolls; conversations grow ---------- */
+  .chatlog{max-height:340px;overflow-y:auto;scrollbar-width:none}
+  .chatlog::-webkit-scrollbar{display:none}
+
+  /* ---------- incoming mail: a glass envelope sliding in from the right ---------- */
+  .mailcard{position:fixed;top:72px;right:26px;z-index:85;width:340px;border-radius:16px;padding:14px 16px;
+    background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.06);
+    -webkit-backdrop-filter:blur(38px) saturate(1.9);backdrop-filter:blur(38px) saturate(1.9);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 1px rgba(255,255,255,.35),inset 0 0 0 1px rgba(255,255,255,.28),0 18px 50px -18px rgba(0,0,0,.35);
+    opacity:0;transform:translateX(28px);pointer-events:none;
+    transition:opacity .45s var(--ease),transform .55s cubic-bezier(.22,1,.36,1)}
+  .mailcard.show{opacity:1;transform:none;pointer-events:auto}
+  .mc-h{display:flex;align-items:flex-start;gap:9px}
+  .mc-ico{width:26px;height:26px;flex:none;border-radius:8px;background:var(--purple-050);color:var(--purple-deep);
+    display:grid;place-items:center;font-size:12px}
+  .mc-who{flex:1;min-width:0}
+  .mc-who b{display:block;font-size:12.5px;font-weight:600;color:var(--ink)}
+  .mc-who span{font-size:10.5px;color:var(--ink-4)}
+  .mc-when{font-size:10px;color:var(--ink-4)}
+  .mc-s{margin-top:9px;font-size:12.5px;font-weight:600;color:var(--ink)}
+  .mailcard p{margin:5px 0 10px;font-size:11.5px;line-height:1.5;color:var(--ink-3)}
+  .mc-open{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;padding:7px 15px;
+    background:var(--ink);color:#fff;font-size:11.5px;font-weight:600;transition:background var(--dur) var(--ease)}
+  .mc-open:hover{background:var(--purple)}
+  .mc-open .go{transition:transform var(--dur) var(--ease)}
+  .mc-open:hover .go{transform:translateX(2px)}
+
+  /* ---------- maturity profile: dense ink bars, near maturity carries the flag ---------- */
+  .matbars{display:flex;align-items:flex-end;gap:18px;height:120px;padding:0 4px}
+  .mb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:5px}
+  .mb i{display:block;width:100%;max-width:52px;border-radius:6px 6px 2px 2px;background:#e3e3e8;min-height:6px}
+  .mb.hot i{background:linear-gradient(180deg,var(--purple) 0%,#7b3fb0 100%)}
+  .mb b{font-size:11.5px;font-weight:600;color:var(--ink)}
+  .mb span{font-size:10px;color:var(--ink-4)}
+  .pane.show .mb i{animation:mbgrow .7s var(--settle) both}
+  .pane.show .mb:nth-child(2) i{animation-delay:.06s}
+  .pane.show .mb:nth-child(3) i{animation-delay:.12s}
+  .pane.show .mb:nth-child(4) i{animation-delay:.18s}
+  @keyframes mbgrow{from{height:0}}
+
+  @media (prefers-reduced-motion: reduce){.pane.show .mb i{animation:none}}
+
   /* ---------- the weave: slim filament threads breathing behind the briefing ---------- */
   #view-home{position:relative}
   .weave{position:absolute;top:-10px;left:0;right:0;height:380px;z-index:0;pointer-events:none;overflow:hidden;
@@ -1095,6 +1137,7 @@
       <div class="feeditem"><div class="ic w">!</div><div class="tx"><b>Utilization crossed 90%</b><span>Revolver HIG-2041 · sustained 3 weeks · AFS</span></div><span class="when">2d</span></div>
       <div class="feeditem"><div class="ic a"><svg viewBox="0 0 16 16" width="13" height="13" style="stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4"/></svg></div><div class="tx"><b>Renewal window opened</b><span>Term loan HIG-2044 · 45 days to maturity action</span></div><span class="when">6d</span></div>
       <div class="feeditem"><div class="ic w">!</div><div class="tx"><b>DSC headroom narrowing</b><span>1.38× against a 1.30× floor · trending flat</span></div><span class="when">12d</span></div>
+      <div class="feeditem"><div class="ic a">✓</div><div class="tx"><b>Deposit balances up 14%</b><span>Operating account · steady inflows since June · AFS</span></div><span class="when">21d</span></div>
     </section>
 
     <!-- ACTIVITY -->
@@ -1137,6 +1180,7 @@
       <div class="pane-grid">
         <div class="opp num"><b>Treasury management</b><div class="v">$120<span class="u">K</span></div><span class="st acc">Warm · CFO intro</span></div>
         <div class="opp num"><b>Equipment line expansion</b><div class="v">$4.5<span class="u">M</span></div><span class="st mut">Exploring</span></div>
+        <div class="opp num"><b>Rate hedge on the term loan</b><div class="v">$22<span class="u">M</span><span style="font-size:11px;color:var(--ink-4)">&nbsp;notional</span></div><span class="st acc">Priced · awaiting CFO</span></div>
       </div>
     </section>
   </div>
@@ -1207,12 +1251,14 @@
 </div>
 <div class="chatpanel" id="chatpanel">
   <div class="chatctl"><button class="chatx" id="chatMin" aria-label="Minimize chat"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 5h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button><button class="chatx" id="chatX" aria-label="Close chat"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button></div>
-  <div class="umsg"><b>You</b> · Should we support the revolver increase?</div>
-  <div class="think" id="chatThink"><svg class="gtb gt" width="12" height="13"><use href="#acn-gt"/></svg><span id="chatThinkLine">Reading AFS utilization history…</span></div>
-  <div class="amsg" id="chatMsg"></div>
+  <div class="chatlog" id="chatLog">
+    <div class="umsg"><b>You</b> · Should we support the revolver increase?</div>
+    <div class="think" id="chatThink"><svg class="gtb gt" width="12" height="13"><use href="#acn-gt"/></svg><span id="chatThinkLine">Reading AFS utilization history…</span></div>
+    <div class="amsg" id="chatMsg"></div>
+  </div>
   <div class="chatin">
-    <input placeholder="Ask about this relationship…" aria-label="Ask">
-    <button class="send" aria-label="Send"><svg class="gt" width="10" height="11"><use href="#acn-gt"/></svg></button>
+    <input id="chatInput" placeholder="Ask about this relationship…" aria-label="Ask">
+    <button class="send" id="chatSend" aria-label="Send"><svg class="gt" width="10" height="11"><use href="#acn-gt"/></svg></button>
   </div>
 </div>
 <button class="chatmini" id="chatMini"><svg class="gt" width="11" height="12"><use href="#acn-gt"/></svg>Assist</button>
@@ -1231,6 +1277,12 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="mailcard" id="mailCard" role="status">
+  <div class="mc-h"><span class="mc-ico">✉</span><span class="mc-who"><b>Katherine Whitmore</b><span>CFO · Hartwell Industrial Group</span></span><span class="mc-when">now</span></div>
+  <div class="mc-s">Revolver headroom ahead of the Q4 steel purchase</div>
+  <p>"We would like to take the revolver to $19–20M before the October buy. Coil pricing is favorable and we want to move while it holds. Can we talk this week?"</p>
+  <button class="mc-open" id="mailOpen">Open Hartwell <span class="go">→</span></button>
+</div>
 
 <script>
 (function(){
@@ -1572,6 +1624,10 @@
     document.querySelector('button[data-open="hartwell"]').click(); /* rides the name flight */
   });
   $("#whisperX").addEventListener("click", function(e){ e.stopPropagation(); hideWhisper(); });
+  $("#mailOpen").addEventListener("click", function(){
+    $("#mailCard").classList.remove("show");
+    document.querySelector('button[data-open="hartwell"]').click();
+  });
 
   /* ---------- expanding icon tabs ---------- */
   $("#tabs").addEventListener("click", function(e){
@@ -1876,11 +1932,12 @@
     var bps = t.match(/(?:sofr|spread|pricing|margin)[^\d]{0,8}(\d{2,3})\b/i);
     var dat = t.match(/(20\d{2})\s*[-\/]\s*(\d{1,2})/);
     if(/covenant|leverage/i.test(t)) return { kind:"covenant", thr: thr ? thr[1] : "4.25" };
-    if(/pricing|sofr|spread|margin|bps/i.test(t)) return bps ? { kind:"pricing", bps: bps[1] } : { kind:"clarify" };
-    if(/matur|extend/i.test(t)) return dat ? { kind:"maturity", to: dat[1] + "-" + ("0"+dat[2]).slice(-2) } : { kind:"clarify" };
+    /* a commitment amount OUTRANKS a passing mention of pricing ("...keep pricing") */
     if(/increase|decrease|reduce|raise|commit|revolver|upsize/i.test(t) && amt){
       return { kind:"commit", to: "$" + parseFloat(amt[1].replace(",", ".")).toFixed(1) + "M" };
     }
+    if(/pricing|sofr|spread|margin|bps/i.test(t)) return bps ? { kind:"pricing", bps: bps[1] } : { kind:"clarify" };
+    if(/matur|extend/i.test(t)) return dat ? { kind:"maturity", to: dat[1] + "-" + ("0"+dat[2]).slice(-2) } : { kind:"clarify" };
     return { kind:"clarify" };
   }
   function deltaCard(intent){
@@ -2152,6 +2209,64 @@
     setTimeout(function(){ el.replaceChild(document.createTextNode(newText), wrap); }, 1100);
   }
 
+  /* ---------- chat: follow-up exchanges + a small canned brain ---------- */
+  function chatExchange(q, answer, source, done){
+    var log = $("#chatLog");
+    var u = document.createElement("div");
+    u.className = "umsg"; u.innerHTML = "<b>You</b> · ";
+    u.appendChild(document.createTextNode(q));
+    log.appendChild(u);
+    var th = document.createElement("div");
+    th.className = "think";
+    th.innerHTML = '<svg class="gtb gt" width="12" height="13"><use href="#acn-gt"/></svg><span>Working it out…</span>';
+    log.appendChild(th); log.scrollTop = log.scrollHeight;
+    setTimeout(function(){
+      th.remove();
+      var m = document.createElement("div");
+      m.className = "amsg"; log.appendChild(m);
+      var words = answer.trim().split(" "), i = 0;
+      if(reduce){ m.textContent = answer; if(done) done(); return; }
+      var t = setInterval(function(){
+        if(i >= words.length){
+          clearInterval(t);
+          var src = document.createElement("span");
+          src.className = "src"; src.textContent = source || "Boom · IRIS pro-forma";
+          m.appendChild(src); log.scrollTop = log.scrollHeight;
+          if(done) done();
+          return;
+        }
+        var w = document.createElement("span");
+        w.className = "w"; w.textContent = words[i] + " ";
+        m.appendChild(w); i++; log.scrollTop = log.scrollHeight;
+      }, 42);
+    }, reduce ? 0 : 1500);
+  }
+  function chatAnswerFor(q){
+    if(/19|20\s*m|increase|upsize|revolver/i.test(q)) return ["At a $19.0M commitment, pro-forma leverage lands at 4.02× against the 4.50× covenant. Coverage holds at 2.6× and all four tests still pass; DSC stays the one to watch at 1.38×.", "Boom · IRIS pro-forma"];
+    if(/covenant|dsc|headroom|breach|test/i.test(q)) return ["Four covenants on the package, all passing: leverage 3.85× against ≤4.50×, coverage 2.64× against ≥2.00×, liquidity $3.4M against ≥$2.0M. DSC is the thin one at 1.38× against a 1.30× floor, 0.08× of headroom and trending flat.", "nCino · covenant tests"];
+    if(/risk|grade|rating|watch/i.test(q)) return ["Grade 5, Pass/Watch, affirmed at the June annual review with the watch note on utilization. Nothing on file moves the grade unless DSC breaks 1.30× or a covenant breaches.", "IRIS · 2026-07-14"];
+    if(/renewal|matur|2044/i.test(q)) return ["HIG-2044 matures 2029-06, but the renewal action window on the package opens in 45 days. Filing two weeks ahead keeps it off the committee crunch.", "nCino · package calendar"];
+    if(/deposit|treasury|cash/i.test(q)) return ["Operating deposits are up 14% since June with steady inflows. That supports the treasury management conversation already sitting on the opportunity list.", "AFS · deposit trends"];
+    if(/meridian|past due/i.test(q)) return ["Meridian is 12 days past due on the revolver at 91% drawn, grade 7 with three covenant breaches. The payment conversation is this week's move; a downgrade memo follows if it does not land.", "AFS + IRIS"];
+    if(/piedmont/i.test(q)) return ["Piedmont is the quiet one: grade 3, 54% utilization, every covenant passing with room, annual review closed in June without conditions. Nothing needs you there this quarter.", "IRIS · 2026-06-11"];
+    if(/email|cfo|whitmore/i.test(q)) return ["Katherine Whitmore is asking for $19–20M on the revolver ahead of the October steel buy. The utilization history supports it and the covenants hold pro-forma; staging the modification now keeps it inside the renewal window.", "RM inbox + Boom"];
+    /* no route hit: stay in character and answer from where the banker is standing */
+    if(curClient === "meridian") return ["The thing that matters on Meridian right now is the past-due revolver, 12 days and counting at 91% drawn. Ask me about the breaches or the downgrade path.", "AFS · servicing"];
+    if(curClient === "piedmont") return ["Piedmont is clean end to end: grade 3, comfortable headroom everywhere, review closed. If you are looking for something to do here, the capex term line conversation is the warm one.", "IRIS + nCino"];
+    return ["The book stands at $127M committed across five relationships, 72.9% drawn. Hartwell carries today's attention: the revolver has held above 90% for three weeks and the CFO is asking for headroom. Ask me about leverage, covenants, or the renewal window.", "Boom + AFS · book view"];
+  }
+  function chatAsk(q){
+    var pair = chatAnswerFor(q);
+    chatExchange(q, pair[0], pair[1]);
+  }
+  $("#chatSend").addEventListener("click", function(){
+    var v = $("#chatInput").value.trim();
+    if(!v) return; $("#chatInput").value = ""; chatAsk(v);
+  });
+  $("#chatInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); var v = e.target.value.trim(); if(!v) return; e.target.value = ""; chatAsk(v); }
+  });
+
   /* ---------- command palette ---------- */
   var cmdk = $("#cmdkWrap");
   function toggleCmdk(on){
@@ -2201,6 +2316,150 @@
       if(cmd === "drawer"){ applyClient("hartwell"); show("account"); setTimeout(openRoom, 250); }
     });
   });
+
+  /* ============ THE DEMO DIRECTOR: the cockpit presents itself ============
+     Starts 3s after load unless a human has already touched anything.
+     Every beat WAITS for its element (no blind timers). Any trusted click
+     or keypress hands the wheel back instantly. */
+  var demoOn = false, humanTouched = false;
+  function demoStop(){
+    if(!demoOn) return;
+    demoOn = false;
+    document.body.classList.remove("demoing");
+    $("#mailCard").classList.remove("show");
+  }
+  addEventListener("pointerdown", function(e){ humanTouched = true; if(e.isTrusted) demoStop(); }, true);
+  addEventListener("keydown", function(e){
+    humanTouched = true;
+    if(!e.isTrusted || !demoOn) return;
+    if(e.key === "Control" || e.key === "Meta" || e.key === "Shift" || e.key === "Alt") return; /* a bare modifier is not a take-over */
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") return; /* the toggle owns its own combo */
+    demoStop();
+  }, true);
+  /* Cmd/Ctrl+S toggles the demo */
+  addEventListener("keydown", function(e){
+    if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s"){
+      e.preventDefault();
+      if(demoOn){ demoStop(); }
+      else { runDemo().catch(function(err){ window.__demoBeat = "ERROR:" + err.message; }); }
+    }
+  });
+  function dwait(ms){ return new Promise(function(r){ setTimeout(function(){ r(demoOn); }, ms); }); }
+  function duntil(cond, timeout){
+    return new Promise(function(r){
+      var t0 = Date.now();
+      (function poll(){
+        if(!demoOn) return r(false);
+        var v = null; try{ v = cond(); }catch(e){}
+        if(v) return r(v);
+        if(Date.now() - t0 > (timeout || 9000)) return r(false);
+        setTimeout(poll, 110);
+      })();
+    });
+  }
+  function dtype(inputSel, text){
+    return new Promise(function(r){
+      var inp = document.querySelector(inputSel), i = 0;
+      (function tick(){
+        if(!demoOn) return r(false);
+        if(i >= text.length) return setTimeout(function(){ r(true); }, 320);
+        inp.value = text.slice(0, ++i);
+        setTimeout(tick, 30 + Math.random() * 34);
+      })();
+    });
+  }
+  function dbeat(n){ window.__demoBeat = n; }
+  async function runDemo(){
+    if(demoOn) return;
+    demoOn = true;
+    document.body.classList.add("demoing");
+    whisperDone = true; /* the director owns the stage */
+    show("home");
+    /* 1 — the inbox leans in */
+    if(!await dwait(1400)) return;
+    dbeat("mail");
+    $("#mailCard").classList.add("show");
+    if(!await dwait(4600)) return;
+    $("#mailCard").classList.remove("show");
+    /* 2 — into Hartwell on the name flight */
+    dbeat("flight");
+    document.querySelector('button[data-open="hartwell"]').click();
+    if(!await dwait(1900)) return;
+    /* 3 — walk the workspace */
+    var tabs = ["financials","covenants","signals","activity","graph","opportunities","exposure"];
+    for(var i = 0; i < tabs.length; i++){
+      var tb = document.querySelector('.itab[data-pane="' + tabs[i] + '"]');
+      if(tb) tb.click();
+      if(!await dwait(tabs[i] === "financials" || tabs[i] === "graph" ? 2600 : 1900)) return;
+    }
+    /* 4 — a conversation with the agent */
+    dbeat("chat");
+    if(!chatOpen) toggleChat();
+    if(!await duntil(function(){ return document.querySelector("#chatMsg .src"); }, 14000)) return;
+    if(!await dwait(900)) return;
+    if(!await dtype("#chatInput", "If we take the revolver to $19M, where does leverage land?")) return;
+    var q1 = $("#chatInput").value; $("#chatInput").value = "";
+    chatAsk(q1);
+    if(!await duntil(function(){ var m = document.querySelectorAll("#chatLog .amsg"); return m.length >= 2 && m[m.length-1].querySelector(".src"); }, 14000)) return;
+    if(!await dwait(1400)) return;
+    if(chatOpen) toggleChat(); /* close; FAB returns */
+    if(!await dwait(700)) return;
+    /* 5 — the workroom ritual, both changes */
+    dbeat("arc");
+    $("#fab").click();
+    if(!await dwait(900)) return;
+    document.querySelector('.arcbtn[data-act="modify"]').click();
+    dbeat("waitPkg");
+    var pkg = await duntil(function(){ return document.getElementById("pkgBooked"); }, 12000); if(!pkg){ dbeat("FAIL:pkg"); return; }
+    await dwait(1200); if(!demoOn) return;
+    pkg.click();
+    dbeat("waitFac");
+    var fac = await duntil(function(){ return document.querySelector(".wk-fac"); }, 12000); if(!fac){ dbeat("FAIL:fac"); return; }
+    await dwait(1300); if(!demoOn) return;
+    fac.click();
+    dbeat("waitInput");
+    if(!await duntil(function(){ var i2 = $("#wkInput"); return i2 && !i2.disabled; }, 12000)){ dbeat("FAIL:input"); return; }
+    await dwait(900); if(!demoOn) return;
+    dbeat("type1");
+    if(!await dtype("#wkInput", "Increase the revolver to $19.0M, keep pricing")){ dbeat("FAIL:type1"); return; }
+    $("#wkSend").click();
+    var c1 = await duntil(function(){
+      return Array.prototype.slice.call(document.querySelectorAll(".wk-step:not(.gone) button"))
+        .filter(function(b){ return b.textContent.trim() === "Confirm"; })[0];
+    }, 12000); dbeat("gotC1:" + !!c1); if(!c1){ dbeat("FAIL:c1"); return; }
+    await dwait(1500); if(!demoOn) return;
+    c1.click();
+    if(!await dwait(2000)) return;
+    dbeat("type2");
+    if(!await dtype("#wkInput", "Add a leverage covenant max 4.25x")){ dbeat("FAIL:type2"); return; }
+    $("#wkSend").click();
+    var c2 = await duntil(function(){
+      return Array.prototype.slice.call(document.querySelectorAll(".wk-step:not(.gone) button"))
+        .filter(function(b){ return b.textContent.trim() === "Confirm"; })[0];
+    }, 12000); if(!c2){ dbeat("FAIL:c2"); return; }
+    await dwait(1500); if(!demoOn) return;
+    c2.click();
+    dbeat("waitPropose");
+    var pb = await duntil(function(){ return document.querySelector(".wk-propose"); }, 12000); if(!pb){ dbeat("FAIL:propose"); return; }
+    await dwait(1200); if(!demoOn) return;
+    pb.click();
+    var ex = await duntil(function(){
+      return Array.prototype.slice.call(document.querySelectorAll("button"))
+        .filter(function(b){ return /execute write/i.test(b.textContent) && b.offsetParent; })[0];
+    }, 12000); if(!ex){ dbeat("FAIL:exec"); return; }
+    await dwait(1400); if(!demoOn) return;
+    ex.click();
+    /* 6 — the write-back rolls through the glass; then the wash */
+    dbeat("waitDossier");
+    if(!await duntil(function(){ return document.querySelector(".wk-rescard .ok"); }, 16000)){ dbeat("FAIL:dossier"); return; }
+    if(!await dwait(4200)) return;
+    $("#wkClose").click();
+    if(!await dwait(2200)) return;
+    dbeat("done");
+    toast("End of demo. Everything you saw is live UI. Take the wheel.");
+    demoStop();
+  }
+  /* the demo starts ONLY on Cmd/Ctrl+S; it never hijacks a session by itself */
 
   /* ---------- ownership flow: curves float INTO the relationship ----------
      Measured from the real node positions, so any number of related entities
