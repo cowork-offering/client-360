@@ -176,6 +176,42 @@ describe("the remark lands under the card, in the room's own bubble", () => {
   });
 });
 
+describe("the consent moment rides the greeting", () => {
+  it("makes its FIRST session call at room open, before any line is typed", async () => {
+    const session = installSession(async () => "One covenant tests inside 90 days.");
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+
+    // The dialog the platform raises on this call is framed by the greeting the
+    // banker just asked for by opening the room. Never mid-plan.
+    expect(session.calls).toHaveLength(1);
+    expect(session.calls[0]).toMatch(/The room has just OPENED on this relationship/);
+    expect(room.querySelector(".wk-narr")?.textContent).toContain("One covenant tests inside 90 days.");
+  });
+
+  it("asks once: a typed line afterwards makes a SECOND call, never a second consent", async () => {
+    const session = installSession(async () => "Coverage thins on the pledged pool.");
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+    const atOpen = session.calls.length;
+    await typeInto(room, "take the line of credit to 20000000");
+
+    expect(atOpen).toBe(1);
+    expect(session.calls.length).toBeGreaterThan(atOpen);
+    // Every later call is an ordinary narration, never another opening.
+    expect(session.calls.slice(1).every((c) => !/The room has just OPENED/.test(c))).toBe(true);
+  });
+
+  it("makes no call at all at open where there is no session door", async () => {
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+    expect(room.querySelector(".wk-narr")).toBeNull();
+  });
+});
+
 describe("a remark that fails leaves the room exactly as it was", () => {
   it("keeps the deterministic sentence when the door rejects", async () => {
     installSession(() => Promise.reject({ code: "upstream_error", message: "down" }));
