@@ -38,12 +38,13 @@ import {
   type SmartOpening,
 } from "./route";
 import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICanDo, type ReadTopic } from "./ask";
-import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
+import { buildEnvelope, clarifyOffWire, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { Narration, useNarration, type NarrationView } from "../../channel/Narration";
 import type { Facility } from "../../data/contract";
 import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
+import { feeAsk, feePercentageNote, feeSay, readFeeOpen } from "./fee";
 import {
   PRICING_FIELD,
   PRICING_WHY,
@@ -1317,7 +1318,10 @@ export function Workroom({
    * lane alone would have been.
    */
   const renderParse = useCallback(
-    (instruction: string, result: IntentResult, mine: number) => {
+    /** `note` is one sentence the SHELL owns about this parse, said in the same
+     *  bubble as the engine's own account. The percentage fee's "the org works
+     *  the money out itself" is the only one today. */
+    (instruction: string, result: IntentResult, mine: number, note = "") => {
       /* ------------------------------------------------ THE VALUE BOUNDS
 
          A STAGED VALUE HAS TO LOOK LIKE A VALUE (founder repro 11b). The
@@ -1435,6 +1439,7 @@ export function Workroom({
                   : [
                     misread.refusals.map((r) => r.why).join(" "),
                     roleRead.said.join(" "),
+                    note,
                     qualifier.said
                       ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
                       : result.reply,
@@ -1483,7 +1488,7 @@ export function Workroom({
    * no path to the org that does not run through this function.
    */
   const runParser = useCallback(
-    async (instruction: string, mine: number) => {
+    async (instruction: string, mine: number, note = "") => {
       // THE COMPOSED BEAT. The glyph fills while the engine reads the line — and
       // on a wired room the engine may be waiting on the gateway, so this is
       // also the only thing standing between the banker and a blank pause.
@@ -1492,7 +1497,7 @@ export function Workroom({
       try {
         const result = await engine.parseIntent(instruction, context);
         await beat(started);
-        renderParse(instruction, result, mine);
+        renderParse(instruction, result, mine, note);
       } finally {
         setThinking(false);
       }
@@ -1682,6 +1687,15 @@ export function Workroom({
         return;
       }
       if (reply.type === "clarify") {
+        /* A CLARIFY IS HELD TO THE WIRE (C, the drive). A fee create whose
+           question is about a basis, a payment method or a paid-by is asking
+           about fields `feeAddsJson` does not carry, so it can only cost the
+           banker a round trip. The room falls back to its own parse, which is
+           where the fast lane was going to answer this line anyway. */
+        if (fallback && clarifyOffWire(reply, instruction)) {
+          renderParse(instruction, fallback, mine);
+          return;
+        }
         answer({ kind: "agent", id: nextId("agent"), text: reply.text, options: reply.options });
         return;
       }
@@ -1771,9 +1785,9 @@ export function Workroom({
    * is a contract, not a fallback: no wait, no notice, no changed behaviour.
    */
   const runLine = useCallback(
-    async (instruction: string, mine: number) => {
+    async (instruction: string, mine: number, note = "") => {
       if (!brain) {
-        await runParser(instruction, mine);
+        await runParser(instruction, mine, note);
         return;
       }
       const started = Date.now();
@@ -1799,7 +1813,7 @@ export function Workroom({
         const ownAsk =
           result !== null &&
           result.kind !== "refusal" &&
-          readExceptionOpen(instruction, elicitMembers) !== null;
+          (readExceptionOpen(instruction, elicitMembers) !== null || readFeeOpen(instruction, elicitMembers) !== null);
         const clean =
           result !== null &&
           (ownAsk ||
@@ -1812,7 +1826,7 @@ export function Workroom({
         if (!clean) reply = await askTheDesk(instruction, false);
         await beat(started);
         if (clean && result) {
-          renderParse(instruction, result, mine);
+          renderParse(instruction, result, mine, note);
           return;
         }
       } finally {
@@ -2327,6 +2341,10 @@ export function Workroom({
          same decision the Acknowledge button makes, and where the only thing
          waiting is a CHECK, the word settles it exactly as the button does. */
       let instruction = trimmed;
+      /** ONE SENTENCE THE SHELL OWNS about the parse this line becomes, where a
+       *  lane composed the line itself and knows something the engine cannot.
+       *  Empty for every ordinary line. */
+      let feeNote = "";
       /** How many checks the line settled on its way in, where it was an
        *  acknowledgment. Zero for every other line. */
       let acknowledged = 0;
@@ -2542,6 +2560,38 @@ export function Workroom({
           }
           const on = elicitMembers.find((m) => m.id === exceptionOpen.memberId);
           if (on) line = exceptionSay(exceptionOpen, on);
+        }
+
+        /* ================================ A FEE CREATE IS THE FAST LANE'S TOO
+           (C, founder drive 2026-09-02).
+
+           "add a 1% origination fee to LOC" names a product this package
+           carries two of, so the parser came back with a QUESTION, and a
+           question is not a failed parse: the desk took it and invented five
+           rounds of its own about a basis, a payment method and a paid-by, none
+           of which is a field on the wire this room files. The room asks the
+           wire's own questions instead: which facility, what kind, how much. */
+        const feeOpen = reading ? null : readFeeOpen(line, elicitMembers, turnCtx.focused);
+        if (feeOpen) {
+          const feeNeeds = feeAsk(feeOpen, elicitMembers);
+          if (feeNeeds) {
+            setSteerPending(false);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: feeNeeds.text,
+              options: feeNeeds.options.length ? feeNeeds.options : undefined,
+            });
+            return;
+          }
+          const onFee = elicitMembers.find((m) => m.id === feeOpen.memberId);
+          if (onFee) {
+            line = feeSay(feeOpen, onFee);
+            /* AND A PERCENTAGE FEE IS NEVER ASKED FOR A FIGURE. The org derives
+               the money from the moved commitment, so the room says so once
+               rather than asking a question it already knows the answer to. */
+            if (feeOpen.percentage !== undefined) feeNote = feePercentageNote(onFee);
+          }
         }
 
         /* ================================================ NAVIGATIONAL INTENT
@@ -2900,7 +2950,7 @@ export function Workroom({
         return;
       }
 
-      await runLine(line, mine);
+      await runLine(line, mine, feeNote);
     },
     [
       amendOpenCard,

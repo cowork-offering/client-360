@@ -518,6 +518,20 @@ function statedCount(line: string): number | null {
   return digits ? Number(digits[1]) : null;
 }
 
+/**
+ * THE DESK'S OWN SHORTHAND FOR A PRODUCT.
+ *
+ * A banker writes LOC, not "line of credit" (founder drive, 2026-09-02: "add a
+ * 1% origination fee to LOC"). The alias is not a product word the package
+ * carries, so it can never be derived from the members: it is the banker's
+ * abbreviation FOR one, and it resolves to the same family the full words do.
+ * Nothing here is a list of products; it is a list of ways to say one.
+ */
+const PRODUCT_ALIAS: Array<{ said: RegExp; key: RegExp }> = [
+  { said: /\blocs?\b/i, key: /\bline of credit\b/i },
+  { said: /\brevolvers?\b/i, key: /\bline of credit\b/i },
+];
+
 /** The product words this package actually uses, longest first so "line of
  *  credit" wins over "line". Derived from the members, never from a list. */
 function productWords(members: ElicitMember[]): Array<{ word: string; ids: string[] }> {
@@ -535,6 +549,16 @@ function productWords(members: ElicitMember[]): Array<{ word: string; ids: strin
   return [...groups.entries()]
     .map(([word, ids]) => ({ word, ids }))
     .sort((a, b) => b.word.length - a.word.length);
+}
+
+/** The members an abbreviation names, by the product word it stands for. */
+function aliasedMembers(line: string, members: ElicitMember[]): string[] {
+  const out: string[] = [];
+  for (const alias of PRODUCT_ALIAS) {
+    if (!alias.said.test(line)) continue;
+    for (const m of members) if (alias.key.test(m.key) && !out.includes(m.id)) out.push(m.id);
+  }
+  return out;
 }
 
 /** Two figures are the same figure. The room prints commitments to one decimal
@@ -620,6 +644,16 @@ export function readScope(line: string, members: ElicitMember[], claimed: number
     namedGroup = namedGroup ?? p;
     for (const id of p.ids) named.add(id);
   }
+  /* AND THE DESK'S OWN SHORTHAND FOR THE SAME FAMILY. "LOC" names the lines of
+     credit exactly as "line" does, and lands on the same ambiguity question
+     where the package carries two of them. */
+  if (!namedGroup) {
+    const aliased = aliasedMembers(lower, members);
+    if (aliased.length) {
+      namedGroup = { word: "line of credit", ids: aliased };
+      for (const id of aliased) named.add(id);
+    }
+  }
 
   // The qualifier wins over the group it sits inside: "the 2.5M line of credit"
   // names one line, not both.
@@ -671,6 +705,23 @@ export function readScope(line: string, members: ElicitMember[], claimed: number
   }
 
   return none;
+}
+
+/**
+ * THE PRODUCT FAMILY THIS LINE NAMES, by id, or an empty list.
+ *
+ * `readScope` deliberately answers a product word that matches several members
+ * with AMBIGUOUS and no ids: naming a product is not naming a facility, and the
+ * silent fan-out is the defect it exists to stop. A caller that is about to ASK
+ * which one still needs the candidates, and they are exactly this. The room's
+ * own abbreviations resolve here too, so "LOC" offers the lines of credit.
+ */
+export function namedFamily(line: string, members: ElicitMember[]): string[] {
+  const lower = (line ?? "").toLowerCase();
+  for (const p of productWords(members)) {
+    if (new RegExp(`\\b${p.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}s?\\b`, "i").test(lower)) return p.ids;
+  }
+  return aliasedMembers(lower, members);
 }
 
 /** The package carries a revolving line beside something that is not one. */

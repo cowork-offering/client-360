@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEnvelope, politeCommand, toReadCardModel } from "./brainRoute";
+import { buildEnvelope, clarifyOffWire, politeCommand, toReadCardModel } from "./brainRoute";
 import { isQuestion } from "./ask";
 import type { BrainReadCard } from "../../channel/brainLane";
 import type { PackageMember, WorkroomDelta } from "../../workroom/types";
@@ -169,5 +169,63 @@ describe("a brain read-card renders through the room's own card", () => {
     const model = toReadCardModel({ ...card, topic: "risk_rating" });
     expect(model.topic).toBe("risk_rating");
     expect(model.groups[0].heading).toBe("Risk rating");
+  });
+});
+
+/* ================================= a clarify is held to the wire (C, the drive)
+
+   The desk asked the fee basis, the payment method and a paid-by, none of which
+   is a field on `feeAddsJson`. A question about a field the tool does not take
+   cannot change what gets staged.                                            */
+
+describe("a fee clarify that asks about nothing the wire carries is a degrade", () => {
+  const LINE = "add a 1% origination fee to LOC";
+
+  it("catches the drive's own payment-method question", () => {
+    expect(
+      clarifyOffWire(
+        {
+          text: "How is the fee paid?",
+          options: [
+            { label: "Financed from proceeds", say: "financed from proceeds" },
+            { label: "Paid outside closing", say: "paid outside closing" },
+            { label: "Bank paid", say: "bank paid" },
+            { label: "Waived", say: "waived" },
+          ],
+        },
+        LINE,
+      ),
+    ).toBe(true);
+  });
+
+  it("catches the confirmation the banker makes on the card", () => {
+    expect(clarifyOffWire({ text: "Shall I go ahead and stage that?" }, LINE)).toBe(true);
+  });
+
+  it("keeps the one question that IS the wire's: which facility", () => {
+    expect(
+      clarifyOffWire(
+        {
+          text: "Which line do you mean? The relationship carries two.",
+          options: [
+            { label: "Line of Credit, $15.0MM", say: "the $15M line of credit" },
+            { label: "Line of Credit, $2.5MM", say: "the $2.5M line of credit" },
+          ],
+        },
+        LINE,
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps a question about the kind, and one about the figure", () => {
+    expect(
+      clarifyOffWire({ text: "What kind of fee?", options: [{ label: "Origination", say: "origination fee" }] }, LINE),
+    ).toBe(false);
+    expect(clarifyOffWire({ text: "Is it 1% or a flat $5,000?" }, LINE), ).toBe(false);
+  });
+
+  it("judges nothing at all on a line that is not a fee create", () => {
+    expect(clarifyOffWire({ text: "Shall I go ahead?" }, "take the line of credit to $20M")).toBe(false);
+    expect(clarifyOffWire({ text: "Shall I go ahead?" }, "what fees are on this package")).toBe(false);
   });
 });

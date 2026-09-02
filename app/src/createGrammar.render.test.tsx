@@ -120,6 +120,11 @@ const click = async (el: Element | undefined) => {
   for (let i = 0; i < 6; i += 1) await settle();
 };
 const chips = (room: HTMLElement) => [...room.querySelectorAll(".wk-chip")];
+/** The OPTION chips the agent offered, in order. Scoped to `.wk-opt` so the
+ *  package member strip's own buttons are never mistaken for an answer. */
+const opts = (room: HTMLElement) => [...room.querySelectorAll(".wk-opt")].map((b) => b.textContent ?? "");
+const option = (room: HTMLElement, label: string) =>
+  [...room.querySelectorAll(".wk-opt")].find((b) => (b.textContent ?? "") === label);
 /** Everything the agent has said, in one string. */
 const said = (room: HTMLElement) => [...room.querySelectorAll(".wk-msg")].map((m) => m.textContent ?? "").join(" ");
 /** Every org constraint riding an entry, in one string. */
@@ -500,6 +505,73 @@ describe("a pledge is gathered without ever asking what the org works out", () =
     const words = said(room);
     expect(words).toContain("The asset is created, the borrower's ownership is recorded and only then is it pledged");
     expect(words).not.toContain("I will not set");
+  });
+});
+
+/* ============================== C, the fee cascade (founder drive 2026-09-02) */
+
+describe("a fee create stays in the fast lane", () => {
+  /* HIS OWN LINE. It went to the brain, which asked which line (fair) and then
+     invented five more rounds: the fee basis on the increase against the full
+     commitment, the payment method, "financed from proceeds / paid outside
+     closing / bank paid / waived", and a confirmation. Then the deterministic
+     layer asked "Is the origination fee 1% or $20,000,000.00?" because the
+     restated line had carried the commitment figure into it. Seven exchanges. */
+  const HIS_LINE = "add a 1% origination fee to LOC";
+
+  it("asks which line, in chips, and never reaches the desk", async () => {
+    const brain = vi.fn(async (_e: BrainEnvelope) => NEVER);
+    const { room } = open({ brain });
+    await settle();
+    await typeInto(room, HIS_LINE);
+
+    expect(brain).not.toHaveBeenCalled();
+    expect(said(room)).toContain("Which facility does the origination fee go on?");
+    // AND ONLY THE LINES OF CREDIT. "LOC" names that family and no other.
+    expect(opts(room)).toEqual(["$15.0MM Line of Credit", "$2.5MM Line of Credit"]);
+  });
+
+  it("stages the card on the NEXT gesture, and asks nothing more", async () => {
+    const { room } = open({ brain: vi.fn(async (_e: BrainEnvelope) => NEVER) });
+    await settle();
+    await typeInto(room, HIS_LINE);
+    await click(option(room, "$15.0MM Line of Credit"));
+
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("1.00% of the committed amount");
+  });
+
+  it("never asks for a dollar amount beside the percentage, or for a basis", async () => {
+    const { room } = open({ brain: vi.fn(async (_e: BrainEnvelope) => NEVER) });
+    await settle();
+    await typeInto(room, HIS_LINE);
+    await click(option(room, "$15.0MM Line of Credit"));
+
+    const words = said(room);
+    expect(words).not.toMatch(/1% or \$/);
+    expect(words).not.toMatch(/paid outside closing|financed from proceeds|bank paid/i);
+    expect(words).not.toMatch(/\bbasis\b/i);
+    // It says WHY it is not asking, once.
+    expect(words).toContain("The org works the money out itself");
+  });
+
+  it("asks the kind where the line named none, and nothing else", async () => {
+    const { room } = open({ brain: vi.fn(async (_e: BrainEnvelope) => NEVER) });
+    await settle();
+    await typeInto(room, "add a 1% fee to the 8M equipment loan");
+
+    expect(said(room)).toContain("What kind of fee is that on the");
+    expect(opts(room)).toContain("Origination fee");
+    expect(opts(room)).toContain("Commitment fee");
+  });
+
+  it("leaves a question about the fees on file alone", async () => {
+    const brain = vi.fn(async (_e: BrainEnvelope) => NEVER);
+    const { room } = open({ brain });
+    await settle();
+    await typeInto(room, "what fees are on this package?");
+
+    expect(said(room)).not.toContain("Which facility does the");
   });
 });
 
