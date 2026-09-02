@@ -155,3 +155,19 @@ model adds the one line of judgment the bundle cannot.
 Where the deterministic sentence is already exact and short (a confirm, a "one decision at a
 time"), the model is NOT consulted: narration is for anything a banker would expect a colleague to
 comment on, not for chrome. The over-call rate on narration is measured with the rest.
+
+## CONSENT RIDES THE GREETING (founder question 2026-09-02: "can we bake that into the chat?")
+
+The platform shows a one-time per-view consent dialog on the first `sample` call, because the
+viewer's own Claude usage is being spent. It cannot be suppressed or pre-approved by the page. It
+CAN be placed. The room places it at the one natural moment: the workroom's opening line is the
+first session call, made once at room open (an explicit banker action), with a prompt that is
+stable across loads, so the dialog appears framed by the greeting and never mid-plan, never
+between a card and its sentence. One call at open, memoized per view; every later call silent;
+never from a timer or a loop.
+
+Decline: one sentence, banker language, once per view: "Working from the file only. The desk is
+not connected, so I will answer from what is here and stage what the engines can read." Then
+today's behavior exactly. Not an error state.
+
+Booth: open the room before the audience gathers; a reload is a new view and a new consent.
