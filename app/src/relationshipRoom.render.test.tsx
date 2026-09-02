@@ -440,6 +440,11 @@ describe("the plan, the token and the dossier", () => {
     await settle();
     click(byText(/Not assessed/));
     await settle();
+    // AND THE SECTIONS CHIP SET, taken as none. Six further narratives reach
+    // the banker through one optional question rather than six sequential
+    // ones, so the shortest annual review is still three answers and a skip.
+    click(byText(/Not assessed/));
+    await settle();
     return opened;
   }
 
@@ -447,7 +452,7 @@ describe("the plan, the token and the dossier", () => {
     const { room } = await driveAnnual();
     const chip = room.querySelector(".wk-propose")!;
     expect(chip.textContent).toContain("Review & file");
-    expect(chip.textContent).toContain("3 answers collected");
+    expect(chip.textContent).toContain("4 answers collected");
   });
 
   it("stages on the chip and shows the ORG's real token, never a decoration", async () => {
@@ -682,5 +687,43 @@ describe("a route that can only refuse says so before it asks", () => {
     await settle();
     expect(room.textContent).toContain("Which covenants are we assessing?");
     expect(room.textContent).not.toContain("no open test period");
+  });
+});
+
+describe("an optional multi step can actually be skipped", () => {
+  it("takes the skip chip on the annual review's section set, and records none", async () => {
+    /* The skip used to be unreachable on a MULTI step: `answerLive` matched
+       the line against the options before it read the skip, so "Not assessed"
+       named no section and the room re-asked a question the banker had just
+       answered. The annual review's section chip set is the first optional
+       multi step in this room, which is where it surfaced. */
+    const { room } = open({ route: "annual" });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    expect(room.textContent).toContain("Anything else for the file?");
+    click(byText(/Not assessed/));
+    await settle();
+    // Answered, not re-asked: the room moved on to the plan.
+    expect(room.textContent).not.toContain("I could not read that");
+    expect(room.querySelector(".wk-propose")).not.toBeNull();
+  });
+
+  it("opens one text step for each section picked", async () => {
+    const { room } = open({ route: "annual" });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/^Collateral analysis/));
+    await settle();
+    expect(room.textContent).toContain("The collateral position, with the dates behind the values.");
   });
 });

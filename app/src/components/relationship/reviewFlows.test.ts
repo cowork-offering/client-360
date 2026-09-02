@@ -186,9 +186,11 @@ describe("the annual review collects what stage_annual_review takes", () => {
     expect(step.optional).toBeFalsy();
   });
 
-  it("settles after the type and two optional narratives", () => {
+  it("settles after the type, two optional narratives and the sections chip", () => {
+    // THREE QUESTIONS PLUS ONE CHIP SET, never eight sequential narratives.
+    // Skipping the sections leaves the route exactly as long as it always was.
     const answers = driveTo("annual", ctxFor(), { reviewType: "Annual" });
-    expect(Object.keys(answers)).toEqual(["reviewType", "relationshipSummary", "recommendation"]);
+    expect(Object.keys(answers)).toEqual(["reviewType", "relationshipSummary", "recommendation", "sections"]);
   });
 
   it("composes the account-anchored payload the tool accepts", () => {
@@ -871,5 +873,96 @@ describe("the valuation collects its primary flag and its note", () => {
     })!;
     expect(step.key).toBe("source");
     expect(step.placeholder).toContain("No BOV and no Field Exam");
+  });
+});
+
+/* =============================================================================
+   THE ANNUAL REVIEW CARRIES THE SECTIONS A REAL ONE CARRIES.
+
+   Six narrative wires were declared on StageAnnualReview.Request and HARD
+   NULLED in buildStagePayload, so a review this room filed carried a position
+   and a recommendation and nothing else. What this holds is that all six now
+   reach the wire, that they reach it through ONE chip set rather than six
+   sequential questions, and that a section nobody picked stays null.
+   ============================================================================= */
+
+describe("the annual review's further sections", () => {
+  const ctx = ctxFor();
+  const base = { reviewType: "Annual", relationshipSummary: "The position.", recommendation: "Affirm at 4." };
+
+  it("offers the six sections as one chip set, defaulting to none", () => {
+    const step = nextStep("annual", ctx, base)!;
+    expect(step.key).toBe("sections");
+    expect(step.kind).toBe("multi");
+    expect(step.optional).toBe(true);
+    expect(step.options?.map((o) => o.value)).toEqual([
+      "strengths",
+      "weaknesses",
+      "collateral",
+      "guarantors",
+      "rating",
+      "financial",
+    ]);
+    // Each chip names the field it writes, so the peek is the truth.
+    expect(step.options?.[2].detail).toBe("Writes cm_Collateral_Analysis_Narrative__c.");
+  });
+
+  it("opens ONE text step per section picked, and no more", () => {
+    const one = nextStep("annual", ctx, { ...base, sections: ["collateral"] })!;
+    expect(one.key).toBe("sectionNarratives.collateral");
+    expect(one.target?.field).toBe("cm_Collateral_Analysis_Narrative__c");
+    const answers = driveTo("annual", ctx, { ...base, sections: ["collateral", "rating"] });
+    expect(Object.keys(answers)).toEqual([
+      "reviewType",
+      "relationshipSummary",
+      "recommendation",
+      "sections",
+      "sectionNarratives",
+    ]);
+  });
+
+  it("travels each picked section on its own wire, and nulls the rest", () => {
+    const built = buildStagePayload(
+      "annual",
+      ctx,
+      {
+        ...base,
+        sections: ["collateral", "rating"],
+        sectionNarratives: {
+          collateral: "A/R and inventory carry the base; the equipment number is an OLV reading.",
+          rating: "Affirm at 4 with the construction facility flagged.",
+        },
+      },
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["annual-review"] }).payload;
+    expect(p.collateralAnalysisNarrative).toContain("OLV reading");
+    expect(p.riskRatingComments).toContain("Affirm at 4");
+    expect(p.strengthsNarrative).toBeNull();
+    expect(p.weaknessNarrative).toBeNull();
+    expect(p.guarantorNarrative).toBeNull();
+    expect(p.financialAnalystNarrative).toBeNull();
+  });
+
+  it("nulls a section that was picked and then skipped, and never sends the sentinel", () => {
+    const built = buildStagePayload(
+      "annual",
+      ctx,
+      { ...base, sections: ["guarantors"], sectionNarratives: { guarantors: SKIPPED } },
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["annual-review"] }).payload;
+    expect(p.guarantorNarrative).toBeNull();
+    expect(JSON.stringify(p)).not.toContain(SKIPPED);
+  });
+
+  it("names the cm_ fields this org actually has on both narrative peeks", () => {
+    // LLC_BI__Relationship_Summary__c and LLC_BI__Recommendation__c do not
+    // exist in this org. The payload always sent the right names; the peek on
+    // the founder's screen did not.
+    const summary = nextStep("annual", ctx, { reviewType: "Annual" })!;
+    expect(summary.target?.field).toBe("cm_Relationship_Summary__c");
+    const recommendation = nextStep("annual", ctx, { reviewType: "Annual", relationshipSummary: "x" })!;
+    expect(recommendation.target?.field).toBe("cm_Recommendation_Narrative__c");
   });
 });

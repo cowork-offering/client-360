@@ -819,6 +819,21 @@ export function RelationshipRoom({
       setThinking(true);
       try {
         await beat(started);
+        /* THE SKIP IS READ BEFORE THE KIND, and it has to be. An OPTIONAL MULTI
+           step offers the skip chip like every other optional step, and the
+           multi branch below matched it against the options first: "Not
+           assessed" named no option, so the room re-asked a question the banker
+           had just answered. The first optional multi step in this room is the
+           annual review's section chip set, which is where it surfaced. */
+        if (text === SKIP_LABEL || text.toLowerCase() === "skip") {
+          if (!live.optional) {
+            setThinking(false);
+            unreadable(live);
+            return;
+          }
+          record(live.key, live.kind === "multi" ? [] : SKIPPED, SKIP_LABEL);
+          return;
+        }
         if (live.kind === "multi") {
           // A MULTI STEP TAKES A SET. A chip contributes one id; a typed line
           // is matched against the options by name, and a line that matches
@@ -831,15 +846,6 @@ export function RelationshipRoom({
             return;
           }
           record(live.key, matched, shown);
-          return;
-        }
-        if (text === SKIP_LABEL || text.toLowerCase() === "skip") {
-          if (!live.optional) {
-            setThinking(false);
-            unreadable(live);
-            return;
-          }
-          record(live.key, SKIPPED, SKIP_LABEL);
           return;
         }
         if (live.kind === "number") {
@@ -1822,8 +1828,9 @@ function optionsFor(step: RelStep): Opt[] | undefined {
 function stepAccepts(step: RelStep, text: string): boolean {
   const line = text.trim();
   if (!line) return false;
-  if (step.kind === "multi") return matchOptions(step, line).length > 0;
+  // The skip is read before the kind, exactly as `answerLive` reads it.
   if (line === SKIP_LABEL || line.toLowerCase() === "skip") return step.optional === true;
+  if (step.kind === "multi") return matchOptions(step, line).length > 0;
   if (step.kind === "number") return Number.isFinite(Number(line.replace(/[$,\s]/g, "")));
   if (step.options?.length && step.kind === "chips") {
     return step.options.some((o) => o.value.toLowerCase() === line.toLowerCase());

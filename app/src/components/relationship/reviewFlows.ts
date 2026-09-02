@@ -162,7 +162,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The annual review covers the whole relationship: exposure, performance against the package, covenant compliance and the standing risk grade.",
     produces:
-      "It files a credit review record at In Progress carrying the narratives, then hands control to the bank's own Submit for Approval process.",
+      "It files a credit review record at In Progress carrying the narratives, then hands control to the bank's own Submit for Approval process. The review's own decision picklists are on no tool wire and stay for nCino, and the rating on file is untouched by this: changing it is the risk-rating review.",
     writeObjectLabel: "credit review",
     approveLabel: "File the review",
     filedWord: "Filed",
@@ -301,7 +301,66 @@ export function nextStep(route: RelRoute, ctx: RelContext, a: Answers): RelStep 
   }
 }
 
-function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
+/**
+ * THE FURTHER SECTIONS OF A REAL ANNUAL REVIEW.
+ *
+ * Six narrative wires were declared on `StageAnnualReview.Request` and HARD
+ * NULLED in `buildStagePayload`, so a review this room filed carried a position
+ * and a recommendation and nothing else. A real annual review carries the
+ * collateral position, the guarantors, the rating affirmation and the financial
+ * read.
+ *
+ * OFFERED AS A CHIP SET, NOT AS SIX SEQUENTIAL QUESTIONS. The addendum's target
+ * is two or three questions, never eight: the banker picks the sections that
+ * matter on this relationship, and each pick opens ONE text step. Default is
+ * none, so a review that only needs a position and a recommendation still takes
+ * exactly the three questions it takes today.
+ */
+const ANNUAL_SECTIONS: Array<{ value: string; label: string; ask: string; field: string }> = [
+  {
+    value: "strengths",
+    label: "Strengths",
+    ask: "The strengths this review rests on.",
+    field: "cm_Strengths_Narrative__c",
+  },
+  {
+    value: "weaknesses",
+    label: "Weaknesses",
+    ask: "And the weaknesses it has to name.",
+    field: "cm_Weakness_Narrative__c",
+  },
+  {
+    value: "collateral",
+    label: "Collateral analysis",
+    ask: "The collateral position, with the dates behind the values.",
+    field: "cm_Collateral_Analysis_Narrative__c",
+  },
+  {
+    value: "guarantors",
+    label: "Guarantors",
+    ask: "The guarantors and what their support is worth.",
+    field: "cm_Guarantor_Narrative__c",
+  },
+  {
+    value: "rating",
+    label: "Rating comments",
+    ask: "The rating affirmation, in prose.",
+    field: "cm_Risk_Rating_Comments__c",
+  },
+  {
+    value: "financial",
+    label: "Financial analysis",
+    ask: "The financial read: the direction, not the level.",
+    field: "cm_Financial_Analyst_Narrative__c",
+  },
+];
+
+/** The section answer keys, so the payload reads them without a second table. */
+export const ANNUAL_SECTION_FIELDS: Record<string, string> = Object.fromEntries(
+  ANNUAL_SECTIONS.map((s) => [s.value, s.field]),
+);
+
+function annualStep(ctx: RelContext, a: Answers): RelStep | null {
   if (!answered(a, "reviewType")) {
     return {
       key: "reviewType",
@@ -319,7 +378,10 @@ function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "The position, in your own words.",
-      target: { object: "LLC_BI__Review__c", field: "LLC_BI__Relationship_Summary__c" },
+      /* THE FIELD NAMED HERE USED TO BE `LLC_BI__Relationship_Summary__c`,
+         WHICH DOES NOT EXIST IN THIS ORG. The payload has always sent the
+         correct `cm_` name; the peek on the founder's screen was wrong. */
+      target: { object: "LLC_BI__Review__c", field: "cm_Relationship_Summary__c" },
     };
   }
   if (!answered(a, "recommendation")) {
@@ -329,9 +391,40 @@ function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "The recommendation.",
-      target: { object: "LLC_BI__Review__c", field: "LLC_BI__Recommendation__c" },
+      /* Was `LLC_BI__Recommendation__c`, which does not exist here either. */
+      target: { object: "LLC_BI__Review__c", field: "cm_Recommendation_Narrative__c" },
     };
   }
+  if (!answered(a, "sections")) {
+    return {
+      key: "sections",
+      ask: "Anything else for the file?",
+      kind: "multi",
+      optional: true,
+      options: ANNUAL_SECTIONS.map((sec) => ({
+        label: sec.label,
+        value: sec.value,
+        detail: `Writes ${sec.field}.`,
+      })),
+      placeholder: "Pick the sections this review needs, or none.",
+    };
+  }
+  const picked = pickedList(a, "sections");
+  const written = perRecord(a, "sectionNarratives");
+  for (const value of picked) {
+    if (answered(written, value)) continue;
+    const sec = ANNUAL_SECTIONS.find((x) => x.value === value);
+    if (!sec) continue;
+    return {
+      key: `sectionNarratives.${value}`,
+      ask: sec.ask,
+      kind: "text",
+      optional: true,
+      placeholder: `${sec.label}, in your own words.`,
+      target: { object: "LLC_BI__Review__c", field: sec.field },
+    };
+  }
+  void ctx;
   return null;
 }
 
@@ -464,6 +557,27 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
  * IT IS NOT THE SAME TEST AS `buildStagePayload`. That one guards the WIRE and
  * still runs; this one guards the CONVERSATION.
  */
+/**
+ * WHAT THE ROOM CANNOT SEE, SAID OUT LOUD BEFORE THE ROUTE RUNS.
+ *
+ * `stage_annual_review` CREATES. There is no deployed path that edits a review
+ * already on file, so filing from here files a SECOND record, not an edit. The
+ * addendum wants the room to name the review already open before it asks
+ * anything; no read on this cockpit carries `LLC_BI__Review__c`, so what the
+ * room can honestly say is that it cannot see one. Those are different facts
+ * and a banker acts differently on each.
+ */
+export const ANNUAL_CREATES_A_SECOND =
+  "This tool creates a review; there is no deployed path that edits one already on file, and no read here carries the reviews this relationship already holds. So if a review is already open, filing from here files a second one. Say so and I will hold.";
+
+/** The review's own decision picklists, on no tool wire. Stated, never guessed. */
+export const DECISIONS_NOT_ON_THE_WIRE =
+  "The review's own decision fields are not on this tool: the current and recommended relationship ratings, whether a grade change is requested, whether the covenants were tested and passed, a new policy exception, sending it to credit committee, and the next review type and date. I write the affirmation in the rating comments in prose, and those picklists stay for nCino.";
+
+/** Filed is not approved, and the two fields that would say so are fenced. */
+export const COMPLETE_IS_NOT_OURS =
+  "The review is filed at In Progress, not approved. cm_Review_Stage__c and cm_Approved_Date__c are fenced from this cockpit, and submitting it for approval runs through the bank's own process.";
+
 export function relRouteBlock(route: RelRoute, ctx: RelContext): string | null {
   if (route === "covenant") {
     if (!ctx.productPackageId) return NO_PACKAGE_ANCHOR;
@@ -732,12 +846,24 @@ const text = (v: unknown): string | null => {
  */
 export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, idempotencyKey: string): PayloadResult {
   const spec = REL_FLOWS[route];
-  const typed = [text(a.relationshipSummary), text(a.recommendation), text(a.assessmentNarrative), text(a.overrideComment), text(a.detail)]
+  const typed = [
+    text(a.relationshipSummary),
+    text(a.recommendation),
+    text(a.assessmentNarrative),
+    text(a.overrideComment),
+    text(a.detail),
+  ]
     .filter((x): x is string => !!x)
     .join(" ");
   const rationale = stageRationale({ actionId: spec.actionId, accountName: ctx.accountName, typed });
 
   if (route === "annual") {
+    const written = perRecord(a, "sectionNarratives");
+    /* A SECTION TRAVELS ONLY WHERE IT WAS PICKED AND ANSWERED. A section the
+       banker never chose is null, and one they chose and skipped is null too:
+       the wire carries what was written and nothing about the choosing. */
+    const section = (value: string): string | null =>
+      pickedList(a, "sections").includes(value) ? text(written[value]) : null;
     return {
       ok: true,
       payload: {
@@ -748,13 +874,13 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
         productPackageId: ctx.productPackageId,
         narrative: null,
         relationshipSummary: text(a.relationshipSummary),
-        strengthsNarrative: null,
-        weaknessNarrative: null,
+        strengthsNarrative: section("strengths"),
+        weaknessNarrative: section("weaknesses"),
         recommendationNarrative: text(a.recommendation),
-        collateralAnalysisNarrative: null,
-        financialAnalystNarrative: null,
-        guarantorNarrative: null,
-        riskRatingComments: null,
+        collateralAnalysisNarrative: section("collateral"),
+        financialAnalystNarrative: section("financial"),
+        guarantorNarrative: section("guarantors"),
+        riskRatingComments: section("rating"),
       },
     };
   }
