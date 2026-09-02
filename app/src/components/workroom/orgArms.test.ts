@@ -8,6 +8,7 @@ import {
   armOf,
   covenantExclusionDelta,
   pledgeExclusionDelta,
+  armPlanLines,
   armStageRefusal,
   armStepPairs,
   armStepSentence,
@@ -491,6 +492,24 @@ describe("the write-back", () => {
 
   it("does not claim a deletion disclaimer on an association-only plan", () => {
     expect(armSummary([attach])).toBe("1 existing covenant associated by junction.");
+  });
+
+  it("renders the ORG's label for each arm step, in the order the plan carries them", () => {
+    const label = "Carry the covenants of Line of Credit WITHOUT COV-000662 (Minimum Liquidity).";
+    const lines = armPlanLines(
+      [covenant, pledge],
+      [
+        { id: "apply_changes_0", label: "Apply the requested changes" },
+        { id: "covenant_exclusion_0", label },
+        { id: "pledge_exclusion_0", label: "" },
+      ],
+    );
+    expect(lines).toEqual([label, "Carry the facility's collateral without the named pledge. The asset and the borrower's ownership of it are not touched."]);
+  });
+
+  it("names nothing for an arm the plan carries no step for", () => {
+    expect(armPlanLines([covenant], [{ id: "apply_changes_0", label: "x" }])).toEqual([]);
+    expect(armPlanLines([scalar], [{ id: "covenant_exclusion_0", label: "x" }])).toEqual([]);
   });
 
   it("attributes the org's own refusal to the entry it is about, and reports the rest honestly", () => {

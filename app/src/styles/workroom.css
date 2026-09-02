@@ -1568,6 +1568,30 @@ body.wk-open #root {
   color: var(--ink-muted);
   margin-bottom: 7px;
 }
+/* WHAT THE PLAN WILL DO ABOUT EACH ARM. A carry exclusion writes no record, so
+   its plan step is the only proof there is; it reads in front of the approval,
+   at the summary's own weight. */
+.wk-armsteps {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.wk-armsteps li {
+  position: relative;
+  padding-left: 11px;
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.wk-armsteps li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
 .wk-tokrow {
   display: flex;
   align-items: center;

@@ -80,7 +80,15 @@ import {
   type PlanEntry,
   type Slots,
 } from "./elicit";
-import { armConfirmSentence, armStageRefusal, armStepPairs, armSummary, readArmRemoval, readCovenantAttach } from "./orgArms";
+import {
+  armConfirmSentence,
+  armPlanLines,
+  armStageRefusal,
+  armStepPairs,
+  armSummary,
+  readArmRemoval,
+  readCovenantAttach,
+} from "./orgArms";
 import { readCatalog, reconcileChips, type OrgCatalog } from "../../channel/catalog";
 import { bareMemberPick, readSteer } from "./steer";
 import {
@@ -3149,6 +3157,11 @@ export function Workroom({
                         /* WHAT THE ARMS DO, ON THE CARD THE BANKER SIGNS. A
                            plan carrying none reads exactly as it always has. */
                         armSaid={armSummary(entries)}
+                        /* AND WHAT THE PLAN SAYS IT WILL DO ABOUT EACH ONE.
+                           An exclusion writes no record, so its step is the
+                           only proof there is, and it belongs in front of the
+                           approval rather than behind it. */
+                        armSteps={flow.staging ? armPlanLines(entries, flow.staging.plan.steps ?? []) : []}
                         approveLabel={vocabulary.approveLabel(fileable)}
                         fileable={fileable}
                         handedOff={handedOff}
@@ -3418,6 +3431,7 @@ function FlowCard({
   planTitle,
   planSummary,
   armSaid,
+  armSteps,
   approveLabel,
   fileable,
   handedOff,
@@ -3435,6 +3449,7 @@ function FlowCard({
   planTitle: string;
   planSummary: string;
   armSaid: string | null;
+  armSteps: string[];
   approveLabel: string;
   fileable: number;
   handedOff: number;
@@ -3476,6 +3491,13 @@ function FlowCard({
       <div className="wk-s">
         {planSummary} on {packageName}
         {armSaid && <> {armSaid}</>}
+        {armSteps.length > 0 && (
+          <ul className="wk-armsteps">
+            {armSteps.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
         {handedOff > 0 && (
           <>
             {" "}

@@ -328,6 +328,9 @@ describe("what the plan says back about an arm", () => {
     expect(sent[0].fieldChangesJson).toBeUndefined();
     expect(room.textContent).toContain("1 covenant left off the new version");
     expect(room.textContent).toContain("Nothing is deleted");
+    // AND WHAT THE PLAN SAYS IT WILL DO ABOUT IT, in the org's own words where
+    // it sent them and in banker language where it did not.
+    expect(room.querySelector(".wk-armsteps")?.textContent).toContain("Carry the facility's covenants without the named one");
   });
 
   it("says so where the plan came back WITHOUT a step for a staged arm", async () => {

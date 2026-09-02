@@ -673,3 +673,28 @@ export function armStageRefusal(message: string, deltas: WorkroomDelta[]): strin
     "Staging writes nothing, so nothing has been filed and nothing has come off the manifest."
   );
 }
+
+/**
+ * WHAT THE PLAN SAYS IT WILL DO ABOUT EACH ARM, on the card the approval is
+ * taken on.
+ *
+ * An exclusion writes no record, so its plan STEP is the only thing that says
+ * the org took it, and a banker signing a removal should be able to read that
+ * before signing rather than after. The ORG's own label wins wherever it sent
+ * one; the composed sentence is the fallback for a label that did not arrive,
+ * so a step never reads to a banker as a raw id.
+ *
+ * Empty where the plan carries no arm, which is every plan that filed before
+ * the arms existed.
+ */
+export function armPlanLines(deltas: WorkroomDelta[], steps: Array<{ id: string; label?: string }>): string[] {
+  const byId = new Map(steps.map((s) => [s.id, s]));
+  const out: string[] = [];
+  for (const pair of armStepPairs(deltas)) {
+    const step = byId.get(pair.writeStepId);
+    if (!step) continue;
+    const said = armStepSentence(step);
+    if (said) out.push(said);
+  }
+  return out;
+}
