@@ -84,6 +84,9 @@ const HOW_TO_WRITE = [
   "THE ROOM PRINTS THAT ENTITY'S OWN FIGURES BESIDE YOUR LINE ITEM. Do not restate them in your words. Bold a figure only where it is one the row cannot carry, written **like this**.",
   "Nothing else is bold. No headings, no tables, no links, no code.",
   "Do not mix line items and plain bullets in one run. Write all of one, then all of the other.",
+  "EVERY FIGURE YOU WRITE MUST ALREADY BE ON THE CARD OR IN CONTEXT.reads. Copy it, digit for digit, with its own unit.",
+  "NEVER DERIVE A FIGURE. No lendable value from an advance rate, no headroom from a threshold, no percentage the card does not carry, no total you added up yourself. The arithmetic is the bank's.",
+  "If you are unsure of a number, name the CARD's figure instead of writing one of your own. A remark with the card's figure in it is always right; a remark with a figure nobody read is wrong even when it happens to be close.",
   "No em dashes. Never repeat the sentence the room already said; add what it could not.",
   "Name what your remark is based on. If there is nothing worth saying, write the lead line and stop.",
   "IF IT RUNS LONG, CUT IN THIS ORDER. The third line item first. Then the closing line, whenever the chips on the glass or the card's own follow-up already carry the ask. Then a line item's trailing clause. Never the lead line, and never a figure.",
@@ -222,7 +225,11 @@ export interface NarrationRow {
 export type NarrationBlock =
   | { kind: "line"; spans: NarrationSpan[] }
   | { kind: "bullets"; items: NarrationSpan[][] }
-  | { kind: "entity"; rows: NarrationRow[] };
+  | { kind: "entity"; rows: NarrationRow[] }
+  /** THE QUIET MARK. Not the model's, and never parsed out of its text: the
+   *  room's own note that a figure in the remark above is on no read it holds.
+   *  See {@link guardFigures}. */
+  | { kind: "mark"; text: string };
 
 /** A remark is a remark. Four blocks and three bullets is already generous for
  *  something a colleague says while pointing at a card. */
@@ -514,6 +521,150 @@ export function resolveEntities(blocks: NarrationBlock[], envelope: BrainEnvelop
   });
 }
 
+/* ================================= THE FIGURE GUARD (founder drive 2026-09-02)
+
+   THE CARD SAID CRE-AR-01 IS 75 PERCENT APPROVED AGAINST A 65 PERCENT
+   GUIDELINE. The remark under it said "80 percent advance, above the bank's 70
+   percent construction guideline" and then computed "$5.2MM lendable value".
+   Four figures, none of them on the card, one of them arithmetic the model did
+   itself. A banker reading that reads the bank's own record.
+
+   THE PROMPT SAYS SO NOW, and the prompt is a request. This is the check.
+
+   WHAT IS GROUNDED. A figure that appears in the CARD's own rows, or anywhere
+   in the envelope the model was handed: the reads, the facilities, the staged
+   plan, the banker's own line, the sentence the room already said. That is the
+   whole of what the model was given, so a figure outside it came from nowhere a
+   reader could follow.
+
+   WHAT HAPPENS TO AN UNGROUNDED ONE. It is rendered WITHOUT EMPHASIS and the
+   remark carries a quiet mark naming it. It is NOT dropped, and that is a
+   deliberate call: cutting a clause out of a sentence the model wrote leaves
+   prose that reads as though the room agreed with the rest of it, and a banker
+   who can see the figure and the mark beside it can check the card. Silence
+   would be the room editing the model's account of itself.
+
+   COMPARISON IS BY VALUE AND UNIT, not by string. "80 percent" and "80%" are
+   the same figure; "$5.2MM" and "$5,200,000" are the same figure. Getting that
+   wrong in the strict direction would mark the card's own numbers.           */
+
+/** What a figure IS, for this purpose. Three kinds, because they are the three
+ *  a credit remark carries and they do not compare across kinds: a 1.25x and a
+ *  125% are not the same thing said twice. */
+type FigureKind = "pct" | "money" | "multiple";
+
+const MAGNITUDE_WORDS: Record<string, number> = {
+  k: 1e3,
+  thousand: 1e3,
+  m: 1e6,
+  mm: 1e6,
+  million: 1e6,
+  b: 1e9,
+  bn: 1e9,
+  billion: 1e9,
+};
+
+/** A percentage, a multiple, then money. Ordered so "1.25x" is never read as a
+ *  bare 1.25 and "$5.2MM" is never read as 5.2. */
+const FIGURE_PATTERNS: Array<{ kind: FigureKind; re: RegExp }> = [
+  { kind: "pct", re: /(\d+(?:\.\d+)?)\s*(?:%|per\s?cent\b|percent\b)/gi },
+  { kind: "multiple", re: /(\d+(?:\.\d+)?)\s*x\b/gi },
+  {
+    kind: "money",
+    re: /\$\s*(\d[\d,]*(?:\.\d+)?)\s*(mm|m|k|bn|b|million|thousand|billion)?\b|(\d[\d,]*(?:\.\d+)?)\s*(mm|million|bn|billion|thousand)\b/gi,
+  },
+];
+
+/** One figure, as it is compared. `text` is what the reader saw. */
+interface Figure {
+  key: string;
+  text: string;
+}
+
+/** Every figure in a piece of text, keyed by kind and VALUE so two spellings of
+ *  one number are one key. */
+function figuresIn(text: string): Figure[] {
+  const out: Figure[] = [];
+  const seen = new Set<string>();
+  for (const { kind, re } of FIGURE_PATTERNS) {
+    re.lastIndex = 0;
+    for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+      const digits = m[1] ?? m[3];
+      if (digits === undefined) continue;
+      const suffix = (m[2] ?? m[4] ?? "").toLowerCase();
+      const base = Number(digits.replace(/,/g, ""));
+      if (!Number.isFinite(base)) continue;
+      const value = kind === "money" ? base * (MAGNITUDE_WORDS[suffix] ?? 1) : base;
+      const key = `${kind}:${value}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ key, text: m[0].trim() });
+    }
+  }
+  return out;
+}
+
+/** Everything the model was actually given, as one string. The envelope is
+ *  serialised whole: the reads, the facilities, the staged plan and the line
+ *  are all in it, and a figure outside all of that is a figure from nowhere. */
+function groundedText(envelope: BrainEnvelope, subject: NarrateSubject): string {
+  const card = subject.card
+    ? [subject.card.title, ...subject.card.rows.map((r) => `${r.label} ${r.value} ${r.sub ?? ""}`)].join(" ")
+    : "";
+  return `${card} ${subject.sentence} ${JSON.stringify(envelope)}`;
+}
+
+/** The mark, in the room's own words. */
+export const FIGURE_MARK = "figure not on the card";
+
+export interface GuardedNarration {
+  blocks: NarrationBlock[];
+  /** The figures the remark carried that no read holds, as the reader saw them. */
+  ungrounded: string[];
+}
+
+/**
+ * THE REMARK, WITH EVERY FIGURE HELD AGAINST WHAT THE MODEL WAS GIVEN.
+ *
+ * Pure, and returns the ungrounded figures beside the blocks so a caller (and
+ * the suite) can assert on them rather than reading them back out of the mark.
+ */
+export function guardFigures(
+  blocks: NarrationBlock[],
+  envelope: BrainEnvelope,
+  subject: NarrateSubject,
+): GuardedNarration {
+  const grounded = new Set(figuresIn(groundedText(envelope, subject)).map((f) => f.key));
+  const loose: string[] = [];
+
+  /* A ROW'S `value` IS THE ROOM'S OWN and is never checked: it was resolved out
+     of the envelope by `resolveEntities`, so checking it would be the room
+     marking its own figure. Only what the MODEL wrote is held to this. */
+  const check = (spans: NarrationSpan[]): NarrationSpan[] =>
+    spans.map((span) => {
+      const bad = figuresIn(span.text).filter((f) => !grounded.has(f.key));
+      if (!bad.length) return span;
+      for (const f of bad) if (!loose.includes(f.text)) loose.push(f.text);
+      // WITHOUT EMPHASIS. The words stay; the room's endorsement of them does not.
+      return { text: span.text };
+    });
+
+  const next: NarrationBlock[] = blocks.map((block) => {
+    if (block.kind === "line") return { kind: "line", spans: check(block.spans) };
+    if (block.kind === "bullets") return { kind: "bullets", items: block.items.map(check) };
+    if (block.kind === "entity") {
+      return {
+        kind: "entity",
+        rows: block.rows.map((row) => ({ ...row, label: check(row.label), spans: check(row.spans) })),
+      };
+    }
+    return block;
+  });
+
+  if (loose.length) next.push({ kind: "mark", text: `${FIGURE_MARK}: ${loose.join(", ")}` });
+  return { blocks: next, ungrounded: loose };
+}
+
 /** The plain text of a parsed remark, with every span joined. What a reader
  *  actually sees, once the markup is gone. */
 export function narrationText(blocks: NarrationBlock[]): string {
@@ -521,6 +672,7 @@ export function narrationText(blocks: NarrationBlock[]): string {
     .map((b) => {
       if (b.kind === "line") return b.spans.map((s) => s.text).join("");
       if (b.kind === "bullets") return b.items.map((i) => i.map((s) => s.text).join("")).join(" ");
+      if (b.kind === "mark") return b.text;
       return b.rows
         .map((r) => `${spanText(r.label)}: ${r.spans.map((s) => s.text).join("")}${r.value ? ` ${r.value}` : ""}`)
         .join(" ");

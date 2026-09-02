@@ -150,7 +150,13 @@ export function WorkroomHost() {
      already holds; the entry is minted in actions/ where every other executed
      action's entry is minted, and dispatched here where the provider is. */
   const onFiled = useCallback(
-    (filed: { execution: WorkroomExecution; changeCount: number; packageHref: string | null; arms: string | null }) => {
+    (filed: {
+      execution: WorkroomExecution;
+      changeCount: number;
+      packageHref: string | null;
+      arms: string | null;
+      pricing: string | null;
+    }) => {
       if (!context) return;
       const entry = workroomActivityEntry({
         execution: filed.execution,
@@ -160,6 +166,7 @@ export function WorkroomHost() {
         packageHref: filed.packageHref,
         productPackageId: context.productPackageId,
         arms: filed.arms,
+        pricing: filed.pricing,
       });
       if (entry) dispatch({ type: "LOG_ACTIVITY", accountId: context.accountId, entry });
     },

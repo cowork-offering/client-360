@@ -439,6 +439,24 @@ export interface Facility {
    * coverage state with a reason a credit officer can act on.
    */
   coverageNote?: string | null;
+  /**
+   * THE TERM, THE AMORTISED TERM AND THE FIRST PAYMENT DATE.
+   *
+   * nCino hides the rate and the payment stream on a loan until FOUR fields are
+   * set: the amount, the term (`LLC_BI__Term_Months__c`), the amortised term
+   * (`LLC_BI__Amortized_Term_Months__c`) and the first payment date
+   * (`LLC_BI__First_Payment_Date__c`). A modification that moves the amount and
+   * leaves the last two blank produces a version nobody can price in the UI.
+   *
+   * NO READ ON THIS COCKPIT CARRIES ANY OF THEM TODAY. `Customer360Exposure`
+   * returns the amount, the maturity and the rate and nothing else about the
+   * schedule, so these are declared, ABSENT, and absent means UNKNOWN. The room
+   * asks rather than assuming either way, which is the same fail-closed reading
+   * `stage` takes.
+   */
+  termMonths?: number | null;
+  amortizedTermMonths?: number | null;
+  firstPaymentDate?: string | null;
   collateral?: Collateral[];
   /** Loan-level covenant junctions. An EMPTY array is a legitimate fact (all of
    *  Piedmont's covenants are Account-level), not missing data. */

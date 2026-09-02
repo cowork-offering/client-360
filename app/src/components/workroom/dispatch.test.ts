@@ -12,11 +12,15 @@ import {
   readRemove,
   readPartyRemoval,
   readsThePlan,
+  readTypeChoice,
+  readTypeRefusal,
+  retypeEntry,
   singleClause,
+  typeChoiceSay,
   stampRemovalRoles,
   type QualifierMember,
 } from "./dispatch";
-import { buildBook, type Book, type ElicitMember } from "./elicit";
+import { buildBook, clipTitle, type Book, type ElicitMember } from "./elicit";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import live from "../../../../artifact/live-data.json";
 import type { IntentResult, WorkroomDelta } from "../../workroom/types";
@@ -819,7 +823,7 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     if (read?.kind !== "ask") throw new Error("expected an ask");
     expect(read.options.map((o) => o.label)).toEqual([
       "All present and future accounts receivable",
-      "All present and future inventory at the Fort Wayne and Kokomo p…",
+      "All present and future inventory at the Fort Wayne and Kokomo…",
     ]);
     expect(read.options[1].say).toContain("COL-000763");
   });
@@ -946,5 +950,195 @@ describe("the plan is read back locally", () => {
   it("is not a line that CHANGES the plan", () => {
     expect(readsThePlan("add a covenant to the plan")).toBe(false);
     expect(readsThePlan("increase the 15M line of credit to 20M")).toBe(false);
+  });
+});
+
+/* ================== THE ORG REFUSED A COLLATERAL TYPE AND SENT ITS OWN LIST
+   (E6, founder drive 2026-09-02.) The room staged "Real Estate", which is a
+   WORD; the org holds eleven names under it and refused with all of them. The
+   room relayed the sentence and offered nothing to press.                     */
+
+const ORG_TYPE_REFUSAL =
+  '"Real Estate" matches 12 collateral types on this org: Real Estate-1-4 Family, Real Estate-Construction, ' +
+  "Real Estate-Construction, Real Estate-Farm Land, Real Estate-Land, Real Estate-Lot, Real Estate-Mobile Home, " +
+  "Real Estate-Multi-Family, Real Estate-Office, Real Estate-Other RE, Real Estate-Retail, Real Estate-Warehouse. " +
+  "Name one of them exactly.";
+
+const kokomo = (): WorkroomDelta =>
+  delta({
+    id: "collateral.pledge:construction:0",
+    group: "security",
+    kind: "New pledge",
+    title: "Kokomo plant expansion",
+    target: "Construction",
+    member: CONSTRUCTION,
+    before: "not on the facility today",
+    after: "created and pledged, $6,500,000.00 at 75% advance",
+    pledgeWire: {
+      facilityId: CONSTRUCTION,
+      advanceRate: 75,
+      newCollateral: { description: "Kokomo plant expansion", collateralType: "Real Estate", value: 6_500_000 },
+    },
+  });
+
+describe("an org refusal that lists its own values becomes chips (E6)", () => {
+  it("reads the org's names out of the sentence and names the entry it is about", () => {
+    const entry = kokomo();
+    const read = readTypeRefusal(ORG_TYPE_REFUSAL, [entry]);
+    expect(read).not.toBeNull();
+    expect(read!.entry.id).toBe(entry.id);
+    // TWELVE RECORDS, ELEVEN NAMES. This org holds Real Estate-Construction
+    // twice and two identical chips are not a choice.
+    expect(read!.values).toHaveLength(11);
+    expect(read!.values).toContain("Real Estate-Construction");
+    expect(read!.values).toContain("Real Estate-Warehouse");
+  });
+
+  it("returns null where the manifest does not carry exactly one entry of that type", () => {
+    expect(readTypeRefusal(ORG_TYPE_REFUSAL, [])).toBeNull();
+    expect(readTypeRefusal(ORG_TYPE_REFUSAL, [kokomo(), kokomo()])).toBeNull();
+    // And a refusal about something else is the org's sentence, untouched.
+    expect(readTypeRefusal("Covenant a3Bbb000000S0bNEAS is not attached to Line of Credit.", [kokomo()])).toBeNull();
+  });
+
+  it("takes the chip back and re-types that entry and nothing else", () => {
+    const entry = kokomo();
+    const say = typeChoiceSay(entry, "Real Estate-Construction");
+    const chosen = readTypeChoice(say, [entry]);
+    expect(chosen).not.toBeNull();
+    expect(chosen!.type).toBe("Real Estate-Construction");
+
+    const next = retypeEntry(chosen!.entry, chosen!.type);
+    expect(next.pledgeWire!.newCollateral!.collateralType).toBe("Real Estate-Construction");
+    // Everything else on the entry is the entry's.
+    expect(next.pledgeWire!.newCollateral!.description).toBe("Kokomo plant expansion");
+    expect(next.pledgeWire!.newCollateral!.value).toBe(6_500_000);
+    expect(next.pledgeWire!.advanceRate).toBe(75);
+    expect(next.id).toBe(entry.id);
+    expect(next.title).toBe(entry.title);
+  });
+
+  it("claims nothing where the line is not a type choice", () => {
+    expect(readTypeChoice("remove the Kokomo plant expansion pledge", [kokomo()])).toBeNull();
+    expect(readTypeChoice("set the collateral type on Something Else to Real Estate-Lot", [kokomo()])).toBeNull();
+  });
+});
+
+/* ============ THE MANIFEST IS ADDRESSED BEFORE THE BOOK (E1, a fourth time)
+
+   Founder drive 2026-09-02. "remove the Kokomo plant expansion pledge from the
+   construction loan" named a STAGED create-then-pledge titled exactly that, and
+   un-staged nothing: the same three words also sit inside the description of a
+   BOOK pledge on that facility, so the room staged a carry exclusion of a
+   booked first mortgage nobody had mentioned.                                 */
+
+const KOKOMO_BOOK: Book = {
+  ...BOOK,
+  assets: [
+    ...BOOK.assets,
+    {
+      id: "a3Ubb00000001AT",
+      label:
+        "First mortgage on the owner-occupied Fort Wayne manufacturing campus at 4820 Industrial Parkway, Fort Wayne, Indiana, and the Kokomo plant (140,000 sq ft, under expansion).",
+      name: "COL-000761",
+      kind: "Real Estate-Warehouse",
+      value: 18_000_000,
+      lien: "1st",
+      loanIds: [CONSTRUCTION],
+    },
+  ],
+};
+
+const KOKOMO_SCOPE: ElicitMember[] = [
+  ...SCOPE,
+  { id: CONSTRUCTION, key: "construction", label: "Construction", orgName: null, shortName: "Construction - $12,000,000.00", committed: 12_000_000 },
+];
+
+const stagedKokomo = (): WorkroomDelta =>
+  delta({
+    id: "collateral.pledge:construction:0",
+    group: "security",
+    kind: "New pledge",
+    title: "Kokomo plant expansion",
+    target: "Construction",
+    member: CONSTRUCTION,
+    before: "not on the facility today",
+    after: "created and pledged, $6,500,000.00 at 75% advance",
+    pledgeWire: {
+      facilityId: CONSTRUCTION,
+      advanceRate: 75,
+      newCollateral: {
+        description: "Kokomo plant expansion",
+        collateralType: "Real Estate-Construction",
+        value: 6_500_000,
+      },
+    },
+  });
+
+describe("a remove addresses the manifest before it excludes a book pledge", () => {
+  const line = "remove the Kokomo plant expansion pledge from the construction loan";
+
+  it("un-stages the banker's own entry rather than excluding the first mortgage", () => {
+    const read = readRemove(line, [stagedKokomo()], KOKOMO_BOOK, KOKOMO_SCOPE);
+    expect(read?.kind).toBe("manifest");
+    expect(read?.kind === "manifest" ? read.entry.title : "").toBe("Kokomo plant expansion");
+  });
+
+  it("excludes the book pledge only where no staged entry is named better", () => {
+    const read = readRemove(line, [], KOKOMO_BOOK, KOKOMO_SCOPE);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" ? read.name : "").toContain("First mortgage on the owner-occupied");
+  });
+
+  it("still reaches the book where the line names the book pledge's own words", () => {
+    const read = readRemove(
+      "remove the first mortgage pledge from the construction loan",
+      [stagedKokomo()],
+      KOKOMO_BOOK,
+      KOKOMO_SCOPE,
+    );
+    expect(read?.kind).toBe("fence");
+  });
+
+  it("leaves a staged entry on ANOTHER facility exactly where it is", () => {
+    const elsewhere = { ...stagedKokomo(), member: LOC, target: "$15.0MM Line of Credit" };
+    const read = readRemove(line, [elsewhere], KOKOMO_BOOK, KOKOMO_SCOPE);
+    expect(read?.kind).not.toBe("manifest");
+  });
+});
+
+/* ================ A SHORTENED TITLE ENDS ON A WORD (founder, 2026-09-02)
+
+   The confirm sentence read "First mortgage on the owner-occupied Fort Wayne
+   manufacturing c… on Construction". The mark was already one character; the
+   cut was still a bare character slice.                                       */
+
+describe("clipTitle", () => {
+  const LONG =
+    "First mortgage on the owner-occupied Fort Wayne manufacturing campus at 4820 Industrial Parkway";
+
+  it("cuts on a word and marks it with the single ellipsis character", () => {
+    const said = clipTitle(LONG, 64);
+    expect(said).toBe("First mortgage on the owner-occupied Fort Wayne manufacturing…");
+    expect(said).not.toContain("...");
+    expect(said.replace("…", "")).not.toMatch(/\s$/);
+    // The word it stopped on is a whole word.
+    expect(LONG.startsWith(said.replace("…", ""))).toBe(true);
+  });
+
+  it("leaves a title that fits exactly as it is", () => {
+    expect(clipTitle("Kokomo plant expansion", 64)).toBe("Kokomo plant expansion");
+  });
+
+  it("falls back to the hard cut where there is no boundary worth taking", () => {
+    // A first word longer than the cap has no boundary inside it, and a
+    // two-character stub would be worse than a cut word.
+    expect(clipTitle("Supercalifragilisticexpialidocious", 10)).toBe("Supercalif…");
+  });
+
+  it("never leaves punctuation hanging in front of the mark", () => {
+    expect(clipTitle("All present and future accounts receivable, excluding invoices", 44)).toBe(
+      "All present and future accounts receivable…",
+    );
   });
 });

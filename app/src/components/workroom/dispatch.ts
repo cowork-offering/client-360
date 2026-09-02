@@ -1,7 +1,7 @@
 import { fmtMoney } from "../../data/format";
 import { catalogField } from "../../workroom/fieldCatalog";
 import type { IntentResult, WorkroomAdvisory, WorkroomDelta, WorkroomRefusal } from "../../workroom/types";
-import { facilitiesFor, readScope, rolesOnFacility, samePartyName, type Book, type BookAsset, type ElicitMember } from "./elicit";
+import { clipTitle, facilitiesFor, readScope, rolesOnFacility, samePartyName, type Book, type BookAsset, type ElicitMember } from "./elicit";
 
 /* =============================================================================
    THE DISPATCH RULE, AND THE TWO SAFETY LAYERS BESIDE IT.
@@ -756,6 +756,22 @@ const entryWords = (text: string): string[] =>
     .split(/[^a-z0-9$.]+/)
     .filter((w) => w.length > 2 && !STOPWORD.has(w) && !REMOVAL_VERB.test(w));
 
+/** The words a BOOK asset is known by, on the same bar `rank` uses. */
+const assetTokens = (a: BookAsset): string[] =>
+  [...new Set(`${a.label} ${a.kind ?? ""}`.toLowerCase().split(/[^a-z0-9]+/))].filter((t) => t.length > 3);
+
+/** HOW MUCH OF A NAME THE LINE ACTUALLY ACCOUNTS FOR, between 0 and 1.
+ *
+ *  A staged entry titled "Kokomo plant expansion" is entirely named by a line
+ *  carrying those three words. A book pledge whose paragraph merely CONTAINS
+ *  them is not, and the raw count cannot tell the two apart because it is the
+ *  same three words on both sides. */
+const coverage = (tokens: string[], lower: string): number => {
+  const uniq = [...new Set(tokens)];
+  if (!uniq.length) return 0;
+  return uniq.filter((t) => lower.includes(t)).length / uniq.length;
+};
+
 /** Does the line name this side of the entry at all? One distinctive word is
  *  enough on its own; what makes the rule safe is that BOTH sides are required. */
 const names = (line: string, words: string[]): boolean => {
@@ -934,6 +950,41 @@ export function readRemove(
     ? named.filter((e) => `${e.title} ${e.after} ${e.before}`.toLowerCase().includes(subject.toLowerCase()))
     : named;
 
+  /* ============ THE MANIFEST IS ADDRESSED BEFORE THE BOOK WHERE THE LINE
+     ADDRESSES IT BETTER (E1, a fourth time, founder drive 2026-09-02).
+
+     "remove the Kokomo plant expansion pledge from the construction loan" named
+     a STAGED create-then-pledge titled exactly that. It did not un-stage it: the
+     line's own words also sit inside the description of the BOOK pledge on the
+     same facility ("First mortgage on the owner-occupied Fort Wayne
+     manufacturing campus ... and the Kokomo plant (140,000 sq ft, under
+     expansion)"), the asset resolved on those three words, and `subject` then
+     narrowed the manifest to entries carrying the FIRST MORTGAGE's title. None
+     did. So the room staged a carry exclusion of a booked first mortgage the
+     banker never mentioned.
+
+     WHAT SETTLES IT IS COVERAGE, not the raw count. Both sides matched the same
+     three words, so counting them is a tie; the staged entry's title is
+     ACCOUNTED FOR by the line and the book pledge's paragraph is not, and that
+     is the difference a banker sees. A book pledge is excluded only where no
+     staged entry is named better than it is. */
+  if (!claimed.length && named.length) {
+    const bookCover = asset ? coverage(assetTokens(asset), lower) : 0;
+    const ranked = named
+      .map((entry) => ({ entry, cover: coverage(entryWords(entry.title), lower) }))
+      .sort((a, b) => b.cover - a.cover);
+    if (ranked[0].cover > bookCover) {
+      const tied = ranked.filter((r) => r.cover === ranked[0].cover);
+      if (tied.length > 1) {
+        return {
+          kind: "ambiguous",
+          reason: `That could be ${tied.map((t) => `${t.entry.title} on ${t.entry.target}`).join(" or ")}. Name one.`,
+        };
+      }
+      return { kind: "manifest", entry: ranked[0].entry };
+    }
+  }
+
   if (claimed.length === 1) return { kind: "manifest", entry: claimed[0] };
   if (claimed.length > 1) {
     return {
@@ -967,6 +1018,88 @@ export function readRemove(
   return null;
 }
 
+/* ================== THE ORG REFUSED A COLLATERAL TYPE, AND IT SENT ITS OWN LIST
+   (E6, founder drive 2026-09-02.)
+
+   The room staged a net-new pledge typed "Real Estate", and the org answered:
+
+     "Real Estate" matches 12 collateral types on this org: Real Estate-1-4
+     Family, ... Real Estate-Warehouse. Name one of them exactly.
+
+   The room relayed that sentence and offered nothing, so the banker's only way
+   on was to type a name into a room that then mapped it straight back onto the
+   word. The refusal CARRIES the answer set: it is parsed into chips, each of
+   which re-types the entry the refusal is about. Nothing is re-staged and
+   nothing is written; staging wrote nothing in the first place.               */
+
+/** The org's sentence, and the list inside it. Keyed on the org's own wording so
+ *  a refusal about anything else is left exactly as the org wrote it. */
+const TYPE_REFUSAL =
+  /"([^"]+)"\s+matches\s+\d+\s+collateral\s+types?\s+on\s+this\s+org:\s*([\s\S]+?)\.\s*Name\s+one\s+of\s+them\s+exactly/i;
+
+export interface TypeRefusalRead {
+  /** The manifest entry the org refused. */
+  entry: WorkroomDelta;
+  /** The org's own names, in the org's own order, de-duplicated: this org holds
+   *  `Real Estate-Construction` on two records and a banker choosing between
+   *  two identical chips is choosing nothing. */
+  values: string[];
+}
+
+/**
+ * THE ORG'S REFUSAL, READ AS AN ANSWER SET, or null.
+ *
+ * Null wherever the sentence is not that refusal, or wherever the manifest does
+ * not carry exactly one entry typed with the word the org refused: a chip that
+ * re-typed the wrong entry would be the E1 defect wearing the org's clothes.
+ */
+export function readTypeRefusal(message: string, entries: WorkroomDelta[]): TypeRefusalRead | null {
+  const hit = TYPE_REFUSAL.exec(message ?? "");
+  if (!hit) return null;
+  const said = hit[1].trim().toLowerCase();
+  const values = [...new Set(hit[2].split(",").map((v) => v.trim()).filter((v) => v.length > 2))];
+  if (!values.length) return null;
+  const named = entries.filter(
+    (e) => (e.pledgeWire?.newCollateral?.collateralType ?? "").trim().toLowerCase() === said,
+  );
+  if (named.length !== 1) return null;
+  return { entry: named[0], values };
+}
+
+/** The sentence the chip types back. Deterministic on both sides, and it names
+ *  the entry so a manifest holding two net-new pledges stays unambiguous. */
+export const typeChoiceSay = (entry: WorkroomDelta, value: string): string =>
+  `set the collateral type on ${entry.title} to ${value}`;
+
+const TYPE_CHOICE = /^\s*set\s+the\s+collateral\s+type\s+on\s+(.+?)\s+to\s+(.+?)\s*$/i;
+
+/** The banker took one of those chips, or typed the sentence. Null otherwise. */
+export function readTypeChoice(
+  line: string,
+  entries: WorkroomDelta[],
+): { entry: WorkroomDelta; type: string } | null {
+  const hit = TYPE_CHOICE.exec(line ?? "");
+  if (!hit) return null;
+  const title = hit[1].trim().toLowerCase();
+  const type = hit[2].trim().replace(/[.]+$/, "");
+  const entry = entries.find(
+    (e) => e.title.trim().toLowerCase() === title && Boolean(e.pledgeWire?.newCollateral),
+  );
+  return entry && type ? { entry, type } : null;
+}
+
+/** The same entry, under the org's own type name. The only field that moves. */
+export function retypeEntry(delta: WorkroomDelta, type: string): WorkroomDelta {
+  if (!delta.pledgeWire?.newCollateral) return delta;
+  return {
+    ...delta,
+    pledgeWire: {
+      ...delta.pledgeWire,
+      newCollateral: { ...delta.pledgeWire.newCollateral, collateralType: type },
+    },
+  };
+}
+
 /**
  * THE FENCE, REFUSED BY NAME, WITH THE ROUTE THAT EXISTS.
  *
@@ -981,13 +1114,14 @@ export function readRemove(
  *  paragraph is unreadable. The first sentence names the asset; the exclusions
  *  behind it are the credit agreement's business, not the refusal's.
  *
- *  THE TRUNCATION MARK IS ONE CHARACTER AND IT IS NOT A FULL STOP. Three dots
- *  end a sentence to every reader that splits on one, and an asset title long
- *  enough to be cut then carried a false sentence boundary into the confirm.
- *  Kept identical to `orgArms.ts`: the same title has to come back out of both. */
+ *  THE TRUNCATION MARK IS ONE CHARACTER AND IT IS NOT A FULL STOP, AND THE CUT
+ *  IS ON A WORD (2026-09-02). Three dots end a sentence to every reader that
+ *  splits on one, and a title cut mid-word read "... Fort Wayne manufacturing
+ *  c… on Construction" on the manifest, the read-back and the confirm.
+ *  `clipTitle` is the one rule and every shortener in the room uses it. */
 function assetPhrase(label: string): string {
   const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
-  return first.length > 64 ? `${first.slice(0, 63).trim()}\u2026` : first;
+  return clipTitle(first, 64);
 }
 
 export function fenceRefusal(scope: "covenant" | "pledge", name: string): WorkroomRefusal & { why: string } {

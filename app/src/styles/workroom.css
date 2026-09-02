@@ -2424,6 +2424,16 @@ body.wk-open #root {
 .wk-narr-rows + .wk-narr-rows {
   margin-top: 7px;
 }
+/* THE FIGURE MARK (2026-09-02). Quiet by construction: the room is not
+   shouting at the model, it is telling a banker that one number in the remark
+   above is on no read this room holds. Smaller, muted, and under the bubble it
+   is about. */
+.wk-narr-mark {
+  margin: 7px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--ink-muted);
+}
 .wk-narr-list {
   margin: 0;
   padding: 0;

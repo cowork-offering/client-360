@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ALWAYS_BLOCK_IDS,
+  alwaysBlockIds,
   DOCTRINE_BLOCKS,
   DOCTRINE_BUDGET_BYTES,
   DOCTRINE_DROP_ORDER,
@@ -272,5 +273,26 @@ describe("the caller can force a slice the line would never match", () => {
   it("is a no-op for an id nobody declared", () => {
     const plain = composeDoctrine("", { mode: "narrate" });
     expect(composeDoctrine("", { mode: "narrate", include: ["not-a-block"] }).lines).toEqual(plain.lines);
+  });
+});
+
+describe("the figure rules travel on every remark (2026-09-02)", () => {
+  it("is always-on in narrate mode and never dropped by the budget", () => {
+    const { included, dropped } = composeDoctrine("anything at all", { mode: "narrate", budget: 0 });
+    expect(included).toContain("figures");
+    expect(dropped).not.toContain("figures");
+    expect(alwaysBlockIds("narrate")).toContain("figures");
+  });
+
+  it("stays off the reply mode, which carries the same rule in hard-rules", () => {
+    expect(composeDoctrine("anything at all", { mode: "reply" }).included).not.toContain("figures");
+    expect(alwaysBlockIds("reply")).not.toContain("figures");
+  });
+
+  it("says the two things the drive proved a remark will otherwise do", () => {
+    const text = composeDoctrine("", { mode: "narrate" }).lines.join("\n");
+    expect(text).toContain("Every figure you write must already appear in THE CARD ON THE GLASS or in CONTEXT.reads");
+    expect(text).toContain("NEVER DERIVE ONE");
+    expect(text).toContain("An advance rate is not a lendable value");
   });
 });

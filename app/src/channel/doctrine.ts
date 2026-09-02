@@ -269,6 +269,8 @@ const POLICY_EXCEPTIONS: DoctrineBlock = {
     "Four anchors exist: the loan, the relationship account, a covenant and a collateral asset. An exception may hold more than one.",
     "Every committed exception POSTs the whole serialised record to an external endpoint, so the borrower's data leaves the org. Surface that egress in the proposal: it is the one write the bank's own audit trail cannot follow.",
     "The Hartwell precedent is the shape to imitate: a code, a title, a severity, a status and three written mitigants, each a fact somebody could verify rather than a sentiment.",
+    "A line that says LOG or RECORD an exception is a CREATE, not a question about the exceptions on file. Where it names a different exception than one already on file, the new one is what is being asked for: mention the one on file, never answer with it.",
+    "The exception's NAME is what is out of policy, in the vocabulary of the thing that is out of policy. A banker's verb phrase is not a name, and who approved it is a mitigant.",
   ],
 };
 
@@ -329,6 +331,31 @@ const MAIL: DoctrineBlock = {
   ],
 };
 
+/* ================================ THE FIGURES (founder drive 2026-09-02)
+
+   The card said CRE-AR-01 is 75 percent approved against a 65 percent
+   guideline. The remark said "80 percent advance, above the bank's 70 percent
+   construction guideline" and then computed "$5.2MM lendable value". Four
+   figures, none of them on the card, one of them arithmetic the model did
+   itself, printed in the bank's own voice under the bank's own record.
+
+   ALWAYS ON THE NARRATE MODE, and it is not in the drop order: this is the one
+   rule whose absence is a wrong number rather than a thin answer. The reply
+   mode carries the same rule already, inside HARD_RULES.                     */
+const FIGURES: DoctrineBlock = {
+  id: "figures",
+  source: "1.5 / 4.2, and the 2026-09-02 drive",
+  always: true,
+  modes: ["narrate"],
+  lines: [
+    "FIGURES. Every figure you write must already appear in THE CARD ON THE GLASS or in CONTEXT.reads. Copy it digit for digit, with its own unit.",
+    "NEVER DERIVE ONE. No lendable value from an advance rate, no headroom from a threshold, no percentage the card does not carry, no total you added up yourself. The arithmetic belongs to the bank's systems, and a figure you computed is a figure nobody can check.",
+    "An advance rate is not a lendable value. A guideline is not a rate. A threshold is not a measured value. Where the card carries one of a pair, say that one and stop.",
+    "IF YOU ARE UNSURE, NAME THE CARD'S FIGURE. A remark carrying the card's own number is always right; a remark carrying a number nobody read is wrong even when it happens to be close.",
+    "A figure the room cannot find in what it gave you is rendered plainly and marked as not on the card, so write none you cannot point at.",
+  ],
+};
+
 const ROUTE_OPEN: DoctrineBlock = {
   id: "route-open",
   source: "the room's own router",
@@ -364,15 +391,23 @@ export const DOCTRINE_BLOCKS: DoctrineBlock[] = [
   COLLATERAL_CHAIN,
   FEES,
   POLICY_EXCEPTIONS,
+  FIGURES,
   PRICING_CONVENTIONS,
   CREDIT_POLICY,
   MAIL,
   ROUTE_OPEN,
 ];
 
-/** The blocks no line ever travels without. Their absence makes ANY answer
- *  wrong, so the budget may never reach them. */
-export const ALWAYS_BLOCK_IDS = DOCTRINE_BLOCKS.filter((b) => b.always).map((b) => b.id);
+/** The blocks no line ever travels without, IN A GIVEN MODE. Their absence
+ *  makes ANY answer wrong, so the budget may never reach them.
+ *
+ *  MODE-AWARE SINCE 2026-09-02. `figures` is always-on and NARRATE-ONLY (the
+ *  reply mode carries the same rule inside `hard-rules`), so a flat list of
+ *  every always block would claim a reply prompt carries one it never does. */
+export const alwaysBlockIds = (mode: DoctrineMode = "reply"): string[] =>
+  DOCTRINE_BLOCKS.filter((b) => b.always && (b.modes === undefined || b.modes.includes(mode))).map((b) => b.id);
+
+export const ALWAYS_BLOCK_IDS = alwaysBlockIds("reply");
 
 /**
  * THE ORDER SURFACE BLOCKS ARE GIVEN UP IN, least load-bearing first.
@@ -408,10 +443,15 @@ export interface DoctrineSelection {
 const sizeOfLines = (lines: string[]): number => lines.join("\n").length;
 
 /** The default doctrine budget. Every block firing at once measures a little
- *  over 15 KB, so a line that touches every surface still carries the whole
+ *  over 16 KB, so a line that touches every surface still carries the whole
  *  slice set; beside the envelope's own 10 KB cap that leaves the prompt well
- *  inside {@link PROMPT_CAP_BYTES}. The budget is a ceiling, not a target. */
-export const DOCTRINE_BUDGET_BYTES = 16_000;
+ *  inside {@link PROMPT_CAP_BYTES}. The budget is a ceiling, not a target.
+ *
+ *  RAISED FROM 16,000 on 2026-09-02, for the drive-fix slices ({@link POLICY_EXCEPTIONS} and {@link FIGURES}). A budget that
+ *  silently dropped `credit-policy` to make room for a new line would trade one
+ *  slice for another with nobody saying so, which is the one thing the drop
+ *  order exists to make visible. */
+export const DOCTRINE_BUDGET_BYTES = 18_000;
 
 /**
  * THE DOCTRINE THIS LINE NEEDS, inside its budget.

@@ -169,6 +169,37 @@ export interface ElicitMember {
   committed: number | null;
 }
 
+/* ================================ SHORTENING A TITLE (2026-09-02)
+
+   "First mortgage on the owner-occupied Fort Wayne manufacturing c… on
+   Construction" is what the confirm sentence and the manifest read. The cut
+   landed mid-word, because every shortener in this room sliced at a character
+   count and stopped.
+
+   ONE RULE, AND IT IS USED EVERYWHERE A TITLE IS SHORTENED. Cut at the last
+   word boundary inside the cap, and mark it with the SINGLE ELLIPSIS CHARACTER.
+   Three dots end a sentence to every reader that splits on one, and an asset
+   title long enough to be cut then carried a false sentence boundary into
+   `armConfirmSentence`, which is how half the engine's opening clause leaked
+   onto the glass in the first place.
+
+   A cut that would leave less than half the cap falls back to the hard slice:
+   a title whose first word is longer than the cap has no boundary to find, and
+   a two-character stub is worse than a cut word.                             */
+
+/** The mark. One character, never three dots. */
+export const ELLIPSIS = "\u2026";
+
+/** A title, shortened to `cap` characters on a word boundary. */
+export function clipTitle(text: string, cap: number): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= cap) return line;
+  const cut = line.slice(0, cap);
+  const lastSpace = cut.lastIndexOf(" ");
+  const kept = (lastSpace > cap / 2 ? cut.slice(0, lastSpace) : cut).trim().replace(/[\s,;:.-]+$/, "");
+  return `${kept}${ELLIPSIS}`;
+}
+
 /* ---------------------------------------------------------------- the book */
 
 export interface BookCovenant {
@@ -438,6 +469,15 @@ export interface Draft {
    * and the banker's own word is held so the refusal can name it.
    */
   refusedRole?: string;
+  /**
+   * THE COLLATERAL FAMILY THE BANKER'S WORD LANDED ON (E6, 2026-09-02).
+   *
+   * "real estate" is one word and eleven names in this org, and the org refuses
+   * the word by name at staging. The family is held so the room can ask WHICH,
+   * with the org's own names as the answers, rather than staging a type the
+   * catalog cannot resolve.
+   */
+  typeFamily?: { word: string; values: string[] };
 }
 
 export interface Ask {
@@ -1002,7 +1042,7 @@ export function readAssetDescription(text: string, ctx: ElicitContext): string |
     // forklift fleet carries the word "forklift" and is still an asset.
     if (KIND_ALONE.has(said.toLowerCase().replace(/\s+/g, " "))) continue;
     if (/^(?:collateral|assets?|security|pledges?|positions?|liens?|it|this|that)$/i.test(said)) continue;
-    return said.length > 200 ? `${said.slice(0, 197).trim()}...` : said[0].toUpperCase() + said.slice(1);
+    return said.length > 200 ? clipTitle(said, 199) : said[0].toUpperCase() + said.slice(1);
   }
   return undefined;
 }
@@ -1020,7 +1060,52 @@ const ASSET_KINDS: Array<{ match: RegExp; word: string }> = [
   { match: /\b(securities|deposits?|certificate\s+of\s+deposit)\b/i, word: "Cash" },
 ];
 
-const ASSET_KIND_OPTIONS = ["Equipment", "Real estate", "Inventory", "Accounts receivable", "Vehicles", "Securities"];
+/* ================================ THE ORG'S OWN COLLATERAL TYPES (E6, 2026-09-02)
+
+   FOUNDER DRIVE: "pledge new collateral on the construction loan: Kokomo plant
+   expansion, real estate, valued at 6,500,000" staged the asset with the type
+   "Real Estate", which is a WORD and not one of this org's types. The org
+   refused it at staging, in its own sentence:
+
+     "Real Estate" matches 12 collateral types on this org: Real Estate-1-4
+     Family, Real Estate-Construction, Real Estate-Construction, Real Estate-Farm
+     Land, Real Estate-Land, Real Estate-Lot, Real Estate-Mobile Home, Real
+     Estate-Multi-Family, Real Estate-Office, Real Estate-Other RE, Real
+     Estate-Retail, Real Estate-Warehouse. Name one of them exactly.
+
+   Twelve records, eleven distinct names: this org holds `Real Estate-Construction`
+   TWICE, which is exactly why the type is a LOOKUP and why the catalog reader
+   keeps a record id beside every name.
+
+   SO THE MIRROR CARRIES THE ORG'S OWN FAMILY NAMES. Only the Real Estate family
+   is attested here, by the org's own refusal, and it is the family the generic
+   word actually collides on. The other five stay the shell's word because no
+   read on this cockpit has ever named them and inventing a hyphenated form for
+   them would be the same defect from the other side. */
+const ORG_REAL_ESTATE_TYPES = [
+  "Real Estate-1-4 Family",
+  "Real Estate-Construction",
+  "Real Estate-Farm Land",
+  "Real Estate-Land",
+  "Real Estate-Lot",
+  "Real Estate-Mobile Home",
+  "Real Estate-Multi-Family",
+  "Real Estate-Office",
+  "Real Estate-Other RE",
+  "Real Estate-Retail",
+  "Real Estate-Warehouse",
+];
+
+/** The shell's own collateral-type list. THE MIRROR, and it stands only where
+ *  `Customer360Catalog` carries nothing. */
+const ASSET_KIND_OPTIONS = [
+  ...ORG_REAL_ESTATE_TYPES,
+  "Equipment",
+  "Inventory",
+  "Accounts Receivable",
+  "Vehicle",
+  "Cash",
+];
 
 /**
  * THE BANK'S OWN ADVANCE-RATE GUIDELINES, per collateral kind.
@@ -1039,6 +1124,17 @@ const ADVANCE_BANDS: Record<string, { rates: number[]; basis: string }> = {
   "Accounts Receivable": { rates: [80], basis: "up to 80 percent on eligible receivables aged 90 days or less" },
   Cash: { rates: [50, 70], basis: "50 to 70 percent by asset class" },
 };
+
+/** The bank's guideline for a type, found by its FAMILY where the org's own
+ *  name carries a qualifier after it: the guideline is written for real estate,
+ *  and `Real Estate-Construction` is real estate. */
+function bandFor(kind: string | undefined): { rates: number[]; basis: string } | undefined {
+  if (!kind) return undefined;
+  const exact = ADVANCE_BANDS[kind];
+  if (exact) return exact;
+  const root = Object.keys(ADVANCE_BANDS).find((k) => inFamily(kind, k));
+  return root ? ADVANCE_BANDS[root] : undefined;
+}
 
 /* ==================================================== the involvement surface
 
@@ -1095,12 +1191,100 @@ const KIND_CHIP_CAP = 8;
  *  kinds this deal already pledges, then the rest of the org's own list. A type
  *  whose advance rate is null is refused before the org's own validation rule
  *  can fire on the insert, which is why `acceptedValues` and not `values`. */
-function assetKinds(ctx: ElicitContext): { chips: string[]; total: number; fromOrg: boolean } {
+function assetKinds(ctx: ElicitContext): { chips: string[]; total: number; families: number; fromOrg: boolean } {
+  const { values, fromOrg } = assetTypeUniverse(ctx);
+  /* ONE CHIP PER FAMILY (E6). This org holds eleven Real Estate types and six
+     families; offering eleven of the one and none of the others is a chip set
+     that answers a different question. The FAMILY is the first question and the
+     name is the second, which is the same two beats the org's own refusal
+     walks a banker through. */
+  const roots: string[] = [];
+  for (const value of values) {
+    const root = familyRoot(value);
+    if (!roots.some((r) => r.toLowerCase() === root.toLowerCase())) roots.push(root);
+  }
+  const held = new Set(ctx.book.assets.map((a) => familyRoot(a.kind ?? "").toLowerCase()).filter(Boolean));
+  const ordered = roots.sort((a, b) => Number(held.has(b.toLowerCase())) - Number(held.has(a.toLowerCase())));
+  return { chips: ordered.slice(0, KIND_CHIP_CAP), total: values.length, families: roots.length, fromOrg };
+}
+
+/** The family a type name belongs to: everything in front of the qualifier the
+ *  org hangs off it. "Real Estate-Warehouse" is Real Estate's; "Equipment" is
+ *  its own. */
+function familyRoot(value: string): string {
+  const cut = value.search(/[-/]/);
+  const root = cut > 0 ? value.slice(0, cut) : value;
+  return root.trim() || value;
+}
+
+/* ------------------------------------------- the type, resolved to the org's
+
+   ONE RULE, IN ONE PLACE. The room never sends a WORD where the org holds a
+   NAME. The universe is the org's own accepted set wherever the catalog is in
+   hand and the mirror where it is not, and the same three readings run over
+   either: a name the banker typed wins outright, a generic word that lands on
+   one name settles to it, and a generic word that lands on several is a
+   QUESTION with those names as the answers. */
+
+/** How many family names go on the glass at once. A family is bounded by
+ *  construction and the Real Estate one is eleven, so it is shown whole. */
+const FAMILY_CHIP_CAP = 12;
+
+/** Every collateral type this room may settle on, and where it came from. */
+function assetTypeUniverse(ctx: ElicitContext): { values: string[]; fromOrg: boolean } {
   const live = orgAccepted(ctx.catalog, "collateralType");
-  if (!live.length) return { chips: ASSET_KIND_OPTIONS, total: ASSET_KIND_OPTIONS.length, fromOrg: false };
-  const held = new Set(ctx.book.assets.map((a) => (a.kind ?? "").toLowerCase()).filter(Boolean));
-  const ordered = [...live].sort((a, b) => Number(held.has(b.toLowerCase())) - Number(held.has(a.toLowerCase())));
-  return { chips: ordered.slice(0, KIND_CHIP_CAP), total: live.length, fromOrg: true };
+  return live.length
+    ? { values: [...new Set(live)], fromOrg: true }
+    : { values: ASSET_KIND_OPTIONS, fromOrg: false };
+}
+
+/** Is `value` a member of `root`'s family? The org names a family member by
+ *  putting a separator and a qualifier after the family's own words, so
+ *  "Real Estate-Construction" is Real Estate's and "Real Estate Investment
+ *  Trust" would be too. A bare prefix is not enough: "Cashflow" is not "Cash". */
+function inFamily(value: string, root: string): boolean {
+  const v = value.toLowerCase();
+  const r = root.toLowerCase();
+  if (v === r) return true;
+  return v.startsWith(r) && /[^a-z0-9]/.test(v.charAt(r.length));
+}
+
+export type AssetTypeRead =
+  /** One org name, settled. */
+  | { kind: "exact"; value: string }
+  /** A word the org holds several names under. The room asks which. */
+  | { kind: "family"; word: string; values: string[] };
+
+/**
+ * THE COLLATERAL TYPE THIS LINE NAMES, against the org's own catalog.
+ *
+ * Null is not a failure: the line said nothing about the kind of asset, and the
+ * slot stays where it was.
+ */
+export function readAssetType(text: string, ctx: ElicitContext): AssetTypeRead | null {
+  const { values } = assetTypeUniverse(ctx);
+  const lower = text.toLowerCase();
+
+  /* AN ORG NAME THE BANKER TYPED WINS OUTRIGHT, longest first, so
+     "Real Estate-Construction" is never read as the word in front of it. Where
+     the longest name the line carries has kin, the banker typed the FAMILY's
+     own words and the question still stands. */
+  const contained = values.filter((v) => lower.includes(v.toLowerCase())).sort((a, b) => b.length - a.length);
+  if (contained.length) {
+    const best = contained[0];
+    const kin = values.filter((v) => v !== best && inFamily(v, best));
+    if (!kin.length) return { kind: "exact", value: best };
+    return { kind: "family", word: best, values: [best, ...kin].slice(0, FAMILY_CHIP_CAP) };
+  }
+
+  const generic = ASSET_KINDS.find((k) => k.match.test(text));
+  if (!generic) return null;
+  const family = values.filter((v) => inFamily(v, generic.word));
+  if (family.length === 1) return { kind: "exact", value: family[0] };
+  if (family.length > 1) return { kind: "family", word: generic.word, values: family.slice(0, FAMILY_CHIP_CAP) };
+  /* THE WORD, WHERE THE CATALOG HOLDS NOTHING UNDER IT. The org resolves it and
+     refuses it with its own list, which is the state this room was always in. */
+  return { kind: "exact", value: generic.word };
 }
 
 /** The lien positions, live. */
@@ -1344,8 +1528,17 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
        line and before the net-new flag is known, because a banker who wrote the
        type has answered the question whether or not the room had got round to
        deciding the asset was new. */
-    const kind = ASSET_KINDS.find((k) => k.match.test(text));
-    if (kind) next.slots.assetKind = kind.word;
+    /* AND THE TYPE IS THE ORG'S NAME, NEVER THE WORD (E6). A word this org
+       holds several names under is a question with those names as the answers;
+       a name the banker typed settles the slot outright. */
+    const typed = readAssetType(text, ctx);
+    if (typed?.kind === "exact") {
+      next.slots.assetKind = typed.value;
+      delete next.typeFamily;
+    } else if (typed?.kind === "family") {
+      delete next.slots.assetKind;
+      next.typeFamily = typed;
+    }
     if (next.slots.isNew) {
       /* THE RATE IS READ BEFORE THE VALUE, and the order is load-bearing: a
          percentage carries its own mark, so taking it out of the line first
@@ -1662,6 +1855,20 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
 
   if (s.isNew) {
     if (!s.assetKind) {
+      /* THE WORD LANDED ON A FAMILY (E6). The org holds eleven Real Estate
+         types and refuses the bare words at staging with all of them listed, so
+         the room asks HERE, with the org's own names as the answers, instead of
+         staging a type the catalog cannot resolve and relaying a refusal. */
+      const family = draft.typeFamily;
+      if (family) {
+        return {
+          slot: "assetKind",
+          text:
+            `"${family.word}" is ${family.values.length} collateral types on this org, not one, and the catalog resolves a type by its exact name. ` +
+            "Which of them is it? Typing the name works as well as the chip.",
+          options: family.values.map((v) => ({ label: v, say: v })),
+        };
+      }
       /* THE CATALOG IS NAMED IN THE QUESTION. A banker whose word the catalog
          does not carry needs to see what it does carry, not be asked the same
          question again. */
@@ -1670,8 +1877,16 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
         slot: "assetKind",
         text:
           "What kind of asset is it? The bank keeps its own collateral-type catalog and resolves the word against it, so I will not invent a type. " +
-          (kinds.fromOrg && kinds.total > kinds.chips.length
-            ? `The catalog carries ${kinds.total} types the bank will lend against; these are the ones this deal is closest to, and typing any other name reaches the rest.`
+          (kinds.total > kinds.chips.length
+            ? `${
+                kinds.fromOrg
+                  ? `The catalog carries ${kinds.total} types the bank will lend against`
+                  : `I resolve a name against ${kinds.total} types`
+              }, in ${kinds.families} famil${kinds.families === 1 ? "y" : "ies"}${
+                kinds.families > kinds.chips.length
+                  ? `; these are the ${kinds.chips.length} this deal is closest to`
+                  : "; say the family and I will name the types inside it"
+              }. Typing an exact name reaches any of them.`
             : `The kinds I can resolve a word against are ${sentenceList(kinds.chips.map((k) => k.toLowerCase()))}.`),
         options: kinds.chips.map((k) => ({ label: k, say: `a new ${k.toLowerCase()} asset` })),
       };
@@ -1698,7 +1913,7 @@ function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
        a written reason beside it. The approved credit terms are the authority
        and the bank's guideline is the proposal. */
     if (s.advanceRate === undefined) {
-      const band = s.assetKind ? ADVANCE_BANDS[s.assetKind] : undefined;
+      const band = bandFor(s.assetKind);
       return {
         slot: "advanceRate",
         text:
@@ -1789,7 +2004,7 @@ export function thresholdText(value: number, unit?: "ratio" | "money"): string {
   return value.toLocaleString("en-US");
 }
 
-const shortLabel = (a: BookAsset) => (a.label.length > 44 ? `${a.label.slice(0, 42).trim()}...` : a.label);
+const shortLabel = (a: BookAsset) => clipTitle(a.label, 44);
 
 /** A figure written the way a credit agreement writes it. Never abbreviated:
  *  "$6.5M" and "$6,500,000" are the same money and only one of them is what the
@@ -1844,6 +2059,13 @@ export interface PlanAmendment {
   changed: string[];
 }
 
+/** Two net-new pledges are the same pledge where the banker's own words for the
+ *  asset are the same words. Case and inner spacing are not a difference. */
+const sameAssetWords = (a: string | undefined, b: string | undefined): boolean => {
+  const norm = (t: string | undefined) => (t ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  return Boolean(norm(a)) && norm(a) === norm(b);
+};
+
 export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendment | null {
   if (draft.slots.second || draft.scope.length !== 1) return null;
   const memberId = draft.scope[0];
@@ -1853,6 +2075,12 @@ export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendmen
     if (draft.surface === "involvement") {
       return Boolean(s.party) && Boolean(p.slots.party) && samePartyName(p.slots.party!, s.party!);
     }
+    /* A NET-NEW ASSET HAS NO RECORD ID YET, so `assetId` names nothing and the
+       plan-awareness rule fell straight through it: the founder staged the
+       Kokomo create twice and the manifest ended with it twice. What identifies
+       a net-new pledge is the DESCRIPTION, which is the banker's own words and
+       the only readable identity the collateral record carries. */
+    if (s.isNew || p.slots.isNew) return sameAssetWords(s.assetDescription, p.slots.assetDescription);
     return Boolean(s.assetId) && p.slots.assetId === s.assetId;
   };
   const entry = ctx.plan.find((p) => !p.open && p.surface === draft.surface && p.memberId === memberId && sameSubject(p));
@@ -1866,8 +2094,15 @@ export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendmen
     if (s.frequency && s.frequency !== entry.slots.frequency) changed.push(`it is tested ${s.frequency.toLowerCase()}`);
   } else if (draft.surface === "involvement") {
     if (s.role && s.role !== entry.slots.role) changed.push(`the role is now ${s.role}`);
-  } else if (s.lien && s.lien !== entry.slots.lien) {
-    changed.push(`the lien position is now ${s.lien}`);
+  } else {
+    if (s.lien && s.lien !== entry.slots.lien) changed.push(`the lien position is now ${s.lien}`);
+    if (s.assetKind && s.assetKind !== entry.slots.assetKind) changed.push(`the collateral type is now ${s.assetKind}`);
+    if (s.assetValue !== undefined && s.assetValue !== entry.slots.assetValue) {
+      changed.push(`it is worth ${exactMoney(s.assetValue)}`);
+    }
+    if (s.advanceRate !== undefined && s.advanceRate !== entry.slots.advanceRate) {
+      changed.push(`the advance rate is now ${s.advanceRate} percent`);
+    }
   }
   return changed.length ? { entry, changed } : null;
 }
@@ -2033,6 +2268,34 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
           ]
         : [],
       close: null,
+    };
+  }
+
+  /* ================= THE NET-NEW PLEDGE ALREADY ON THIS PLAN (2026-09-02)
+
+     The awareness below keys on `assetId`, which a net-new asset does not have
+     yet, so staging the same create twice put a second, identical entry beside
+     the first. The banker's own description is what identifies it, exactly as
+     it does for {@link planAmendmentFor}. */
+  if (draft.surface === "collateral" && draft.slots.isNew && draft.slots.assetDescription) {
+    const staged = ctx.plan.filter(
+      (p) =>
+        p.surface === "collateral" &&
+        sameAssetWords(p.slots.assetDescription, draft.slots.assetDescription) &&
+        p.memberId &&
+        draft.scope.includes(p.memberId),
+    );
+    const onPlan = staged.map((p) => p.memberId!).filter((id, i, all) => all.indexOf(id) === i);
+    if (!onPlan.length) return none;
+    return {
+      onTheBook: null,
+      onThePlan: `${draft.slots.assetDescription} is already on this plan for ${sentenceList(onPlan.map(label))}, created and pledged there.`,
+      fresh: draft.scope.filter((id) => !onPlan.includes(id)),
+      options: [
+        { label: "A different facility", say: "a different facility" },
+        { label: "Take it off the plan", say: `remove the ${draft.slots.assetDescription} pledge from the ${label(onPlan[0])}` },
+      ],
+      close: "Say it again with a different figure and I will move that entry rather than putting a second one beside it.",
     };
   }
 
@@ -2419,15 +2682,28 @@ export function restateEntry(draft: Draft, ctx: ElicitContext, delta: WorkroomDe
      sentence deliberately carries no description - see {@link compose} - so the
      one he wrote goes onto the entry and onto the wire here, which is the only
      place that holds both. Nothing else about the wire is touched. */
-  if (draft.surface === "collateral" && draft.slots.isNew && draft.slots.assetDescription && delta.pledgeWire?.newCollateral) {
+  /* AND UNDER THE ORG'S OWN TYPE NAME (E6, 2026-09-02). The fenced parser maps
+     every real-estate word onto the single word "Real Estate", which is not one
+     of this org's 43 collateral types: the org refuses it at staging and lists
+     the eleven it holds. The room settled an exact name with the banker before
+     composing, so the name goes onto the wire here, in the one place that holds
+     both the elicited slots and the delta. */
+  if (draft.surface === "collateral" && draft.slots.isNew && delta.pledgeWire?.newCollateral) {
     const said = draft.slots.assetDescription;
+    const type = draft.slots.assetKind;
+    if (!said && !type) return delta;
+    const title = said ?? delta.title;
     return {
       ...delta,
-      title: said,
-      badge: `${said} → ${delta.after}`,
+      title,
+      badge: `${title} → ${delta.after}`,
       pledgeWire: {
         ...delta.pledgeWire,
-        newCollateral: { ...delta.pledgeWire.newCollateral, description: said },
+        newCollateral: {
+          ...delta.pledgeWire.newCollateral,
+          ...(said ? { description: said } : {}),
+          ...(type ? { collateralType: type } : {}),
+        },
       },
     };
   }

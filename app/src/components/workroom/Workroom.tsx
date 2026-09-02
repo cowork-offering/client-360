@@ -42,6 +42,22 @@ import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { Narration, useNarration } from "../../channel/Narration";
+import type { Facility } from "../../data/contract";
+import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
+import {
+  PRICING_FIELD,
+  PRICING_WHY,
+  pricingAsk,
+  pricingDeclinedLine,
+  pricingLanded,
+  pricingNeed,
+  pricingSay,
+  readPricingDecline,
+  readPricingFreeText,
+  readPricingLine,
+  readPricingOther,
+  type PricingNeed,
+} from "./pricingGate";
 import { subjectFor } from "../../channel/narrate";
 import {
   committedSentence,
@@ -53,8 +69,12 @@ import {
   readRemove,
   readPartyRemoval,
   readsThePlan,
+  readTypeChoice,
+  readTypeRefusal,
   reconcileNarrative,
+  retypeEntry,
   stampRemovalRoles,
+  typeChoiceSay,
   type QualifierMember,
 } from "./dispatch";
 import {
@@ -101,7 +121,7 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "./entryChoreography";
-import { buildReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
+import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
 import { mailTipFrom, overdueCovenantTip } from "./tips";
@@ -679,6 +699,11 @@ export function Workroom({
     packageHref: string | null;
     /** What the org arms did, in banker language, or null where none rode. */
     arms: string | null;
+    /** What the plan says about the four fields nCino prices on, or null where
+     *  every facility that moved carries the amortised term and the first
+     *  payment date. A facility left for later writes no record, so this is the
+     *  only place the trail can carry that decision. */
+    pricing: string | null;
   }) => void;
   /** Present only for the UNIFIED entry, where the room was opened on a
    *  relationship rather than on a route. Absent for every caller that already
@@ -791,6 +816,15 @@ export function Workroom({
   /** The room just offered the facilities as chips, so a bare facility name is
    *  the answer to that question rather than an instruction with nothing on it. */
   const [steerPending, setSteerPending] = useState(false);
+  /* ================== THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02)
+
+     A modification that moves the amount or the term leaves a version nobody
+     can price unless the amortised term and the first payment date are set too.
+     `pricingPending` is the slot the room asked the banker to type a figure
+     for; `pricingDeclined` is the facilities they chose to leave for later, and
+     that choice is recorded on the plan rather than asked again every turn. */
+  const [pricingPending, setPricingPending] = useState<PricingNeed | null>(null);
+  const [pricingDeclined, setPricingDeclined] = useState<ReadonlySet<string>>(() => new Set<string>());
   /** The room is composing an answer. It drives the beat, and it holds the
    *  review chip closed: a chip that appeared for one frame between a confirm
    *  landing and the check it trips is an approval offered too early. */
@@ -1129,6 +1163,23 @@ export function Workroom({
     [elicitMembers, reads?.bundle],
   );
 
+  /** THE FACILITIES AS THE READ CARRIES THEM, by loan id. The pricing gate asks
+   *  this read what it holds for the amortised term and the first payment date,
+   *  and absent is UNKNOWN rather than fine. */
+  const facilityRead = useMemo(() => {
+    const out = new Map<string, Facility>();
+    for (const f of reads?.bundle?.exposure?.facilities ?? []) if (f.loanId) out.set(f.loanId, f);
+    return out;
+  }, [reads?.bundle]);
+
+  /** THE ONE PRICING FIELD THE PLAN STILL NEEDS, or null. Derived from the
+   *  manifest and the read, exactly like every other figure in this room. */
+  const pricingOutstanding = useCallback(
+    (staged: WorkroomDelta[]) =>
+      pricingNeed({ entries: staged, facilities: facilityRead, declined: pricingDeclined }),
+    [facilityRead, pricingDeclined],
+  );
+
   /** THE PLAN: what this session already put up, open on a chip or staged on
    *  the manifest, read back as context rather than only written. */
   const plan = useMemo<PlanEntry[]>(() => {
@@ -1143,7 +1194,18 @@ export function Workroom({
         ? { test: d.covenantWire.typeName, threshold: d.covenantWire.threshold, frequency: d.covenantWire.frequency }
         : d.involvementWire
           ? { party: d.involvementWire.accountName, role: d.involvementWire.role }
-          : { assetId: d.pledgeWire?.collateralId };
+          : /* A NET-NEW PLEDGE IS IDENTIFIED BY ITS DESCRIPTION, not by a record
+               id it does not have yet, so the plan-awareness rule can still see
+               it where no elicited draft is held beside the delta. */
+            d.pledgeWire?.newCollateral
+            ? {
+                isNew: true,
+                assetDescription: d.pledgeWire.newCollateral.description,
+                assetKind: d.pledgeWire.newCollateral.collateralType,
+                assetValue: d.pledgeWire.newCollateral.value,
+                advanceRate: d.pledgeWire.advanceRate,
+              }
+            : { assetId: d.pledgeWire?.collateralId };
       out.push({
         deltaId: d.id,
         surface,
@@ -1666,14 +1728,27 @@ export function Workroom({
         }
         const sound =
           result?.kind === "deltas" ? result.deltas.filter((d) => !unsoundFieldChange(instruction, d)) : [];
+        /* AN EXCEPTION CREATE'S QUESTION IS THIS ROOM'S OWN (E7, 2026-09-02).
+           `provablyClean` reads anything that is not deltas as a failed parse,
+           and an exception create legitimately comes back asking what mitigates
+           it: the fenced reader will not default a credit judgement. Sending
+           that to the desk is how "log a policy exception for leverage above
+           policy" was answered as a question about the exception already on
+           file, with nothing staged. A REFUSAL still goes to the desk, because
+           a refusal is not a question. */
+        const ownAsk =
+          result !== null &&
+          result.kind !== "refusal" &&
+          readExceptionOpen(instruction, elicitMembers) !== null;
         const clean =
           result !== null &&
-          provablyClean({
-            line: instruction,
-            result,
-            sound,
-            qualifier: qualifierFilter(instruction, sound, qualifierMembers),
-          });
+          (ownAsk ||
+            provablyClean({
+              line: instruction,
+              result,
+              sound,
+              qualifier: qualifierFilter(instruction, sound, qualifierMembers),
+            }));
         if (!clean) reply = await askTheDesk(instruction, false);
         await beat(started);
         if (clean && result) {
@@ -1685,7 +1760,7 @@ export function Workroom({
       }
       await landBrainReply(reply, instruction, mine, { fallback: result });
     },
-    [askTheDesk, beat, brain, context, engine, landBrainReply, qualifierMembers, renderParse, runParser],
+    [askTheDesk, beat, brain, context, elicitMembers, engine, landBrainReply, qualifierMembers, renderParse, runParser],
   );
 
   /* ========================================================= THE CREATE GRAMMAR
@@ -1932,6 +2007,74 @@ export function Workroom({
   );
 
   /**
+   * A PRICING FIELD, PUT UP AS ITS OWN CHIP ON THE FACILITY THAT MOVED.
+   *
+   * The sentence goes through the SAME parser every typed line goes through, and
+   * what comes back is filtered to the ONE delta carrying the API name the room
+   * asked for. That filter is load-bearing: "set the amortisation term to 240
+   * months" also matches the TERM scalar inside the fenced parser, so the reply
+   * carries a `requestedTermMonths` delta beside the field change, and staging
+   * it would move a term nobody asked to move.
+   */
+  const landPricing = useCallback(
+    async (need: PricingNeed, value: string, mine: number) => {
+      const member = elicitMembers.find((m) => m.id === need.memberId);
+      if (!member) return;
+      const composed = pricingSay(member, need.slot, value);
+      const started = Date.now();
+      setThinking(true);
+      let taken: WorkroomDelta | null = null;
+      try {
+        let result: IntentResult | null = null;
+        try {
+          result = await engine.parseIntent(composed, context);
+        } catch {
+          result = null;
+        }
+        if (result?.kind === "deltas") {
+          taken =
+            result.deltas.find(
+              (d) => d.member === need.memberId && d.fieldWire?.field === PRICING_FIELD[need.slot],
+            ) ?? null;
+        }
+        await beat(started);
+      } finally {
+        setThinking(false);
+      }
+      if (!taken) {
+        // THE ENGINE'S OWN QUESTION STATE IS LEFT CLEAN, exactly as a composed
+        // create does when its sentence does not come back as a change.
+        engine.pick(need.memberId);
+        setItems((prev) => [
+          ...prev,
+          {
+            kind: "agent",
+            id: nextId("agent"),
+            step: mine,
+            text: `That did not come back as a change to the ${member.label}, so nothing is on the plan for it. Say the figure again and I will put it up.`,
+          },
+        ]);
+        return;
+      }
+      /* THE REASON RIDES THE ENTRY. A field change on a plan with no sentence
+         beside it reads as a field somebody touched; this one is the reason the
+         version can be priced at all, and that travels onto the plan with it. */
+      const carded: WorkroomDelta = { ...taken, caveat: [taken.caveat, PRICING_WHY].filter(Boolean).join(" ") };
+      setItems((prev) => [
+        ...prev,
+        { kind: "agent", id: nextId("agent"), step: mine, text: pricingLanded(need.slot, member, carded.after) },
+        {
+          kind: "chips",
+          id: nextId("chips"),
+          step: mine,
+          chips: [{ key: nextId("chip"), delta: carded, state: "open" as ChipState }],
+        },
+      ]);
+    },
+    [beat, context, elicitMembers, engine],
+  );
+
+  /**
    * THE ONE QUESTION THIS CREATE STILL NEEDS, or the create itself.
    *
    * One question at a time, in chips, in the room's own vocabulary. Free text
@@ -2127,7 +2270,20 @@ export function Workroom({
       /** How many checks the line settled on its way in, where it was an
        *  acknowledgment. Zero for every other line. */
       let acknowledged = 0;
-      if (openGates > 0 && !opts?.settled) {
+      /* AND THE THIRD EXCEPTION IS THE ROOM'S OWN FOLLOW-UP QUESTION (founder,
+         2026-09-02). The pricing gate asks for the amortised term in the SAME
+         commit as the confirm that made it matter, and a commitment change
+         routinely trips a coverage check in that same commit. Refusing the
+         answer to the room's own question with "one decision at a time" would
+         leave the banker holding chips the room will not take. It is the same
+         decision, continued: nothing new is being proposed by these lines and
+         each of them is a sentence this room composed. */
+      const answersPricing =
+        readPricingLine(trimmed, elicitMembers) !== null ||
+        readPricingDecline(trimmed, elicitMembers) !== null ||
+        readPricingOther(trimmed, elicitMembers) !== null ||
+        (pricingPending !== null && readPricingFreeText(trimmed, pricingPending.slot) !== null);
+      if (openGates > 0 && !opts?.settled && !answersPricing) {
         const ack = readAcknowledgment(trimmed);
         const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
         if (!ack || !checks.length || checks.length !== openGates) {
@@ -2291,6 +2447,35 @@ export function Workroom({
           return;
         }
 
+        /* ============================ A POLICY EXCEPTION CREATE IS THE FAST
+           LANE'S (E7, founder drive 2026-09-02).
+
+           The status is a credit judgement the fenced reader refuses to default,
+           so an exception create legitimately comes back from the parser as a
+           QUESTION - and `provablyClean` reads a question as a failed parse and
+           sends it to the desk, which answered it as a question about the
+           exception already on file and staged nothing. The room elicits it
+           here instead: the NAME is what is out of policy, the aside about who
+           approved it is a NOTE, the status is asked with the org's own three,
+           and the facility is named by the org's own loan name so the parser
+           resolves one member rather than the focused one. */
+        const exceptionOpen = reading ? null : readExceptionOpen(line, elicitMembers, turnCtx.focused);
+        if (exceptionOpen) {
+          const exceptionNeeds = exceptionAsk(exceptionOpen, elicitMembers);
+          if (exceptionNeeds) {
+            setSteerPending(false);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: exceptionNeeds.text,
+              options: exceptionNeeds.options,
+            });
+            return;
+          }
+          const on = elicitMembers.find((m) => m.id === exceptionOpen.memberId);
+          if (on) line = exceptionSay(exceptionOpen, on);
+        }
+
         /* ================================================ NAVIGATIONAL INTENT
 
            "let's modify a new loan" and "a different facility" are the banker
@@ -2368,20 +2553,122 @@ export function Workroom({
         return;
       }
 
+      /* ================ THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02)
+
+         Four answers and they are all sentences, so nothing about this lane is
+         held between turns except the slot the room asked the banker to type a
+         figure for and the facilities they left for later. */
+      if (pricingPending) {
+        const said = readPricingFreeText(instruction, pricingPending.slot);
+        if (said) {
+          const held = pricingPending;
+          setPricingPending(null);
+          await landPricing(held, said, mine);
+          return;
+        }
+      }
+      const pricingLater = readPricingDecline(instruction, elicitMembers);
+      if (pricingLater) {
+        const on = elicitMembers.find((m) => m.id === pricingLater);
+        setPricingDeclined((prev) => new Set([...prev, pricingLater]));
+        setPricingPending(null);
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: on ? pricingDeclinedLine(on) : PRICING_WHY,
+        });
+        return;
+      }
+      const pricingOther = readPricingOther(instruction, elicitMembers);
+      if (pricingOther) {
+        const on = elicitMembers.find((m) => m.id === pricingOther.memberId);
+        setPricingPending(pricingOther);
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text:
+            pricingOther.slot === "amortisedTerm"
+              ? `Say the amortisation in months and I will put it on the ${on?.label ?? "facility"}. A number on its own is enough.`
+              : `Say the first payment date as YYYY-MM-DD and I will put it on the ${on?.label ?? "facility"}.`,
+        });
+        return;
+      }
+      const pricingAnswer = readPricingLine(instruction, elicitMembers);
+      if (pricingAnswer) {
+        setPricingPending(null);
+        await landPricing({ memberId: pricingAnswer.memberId, slot: pricingAnswer.slot }, pricingAnswer.value, mine);
+        return;
+      }
+
+      /* THE ORG'S OWN TYPE NAME, TAKEN OFF ITS REFUSAL (E6). The chip re-types
+         the entry that was refused and nothing else: the plan is untouched, the
+         figures do not move, and the next staging carries the name the org
+         asked for. */
+      const retyped = readTypeChoice(instruction, entries);
+      if (retyped) {
+        const next = retypeEntry(retyped.entry, retyped.type);
+        setEntries((prev) => prev.map((e) => (e.id === next.id ? next : e)));
+        setItems((prev) =>
+          prev.map((item) =>
+            item.kind === "chips"
+              ? { ...item, chips: item.chips.map((c) => (c.delta?.id === next.id ? { ...c, delta: next } : c)) }
+              : item,
+          ),
+        );
+        setToast("Collateral type set");
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${next.title} on ${next.target} carries the collateral type ${retyped.type}, which is the org's own name for it. Nothing else on the manifest moved. Stage it again when you are ready.`,
+        });
+        return;
+      }
+
       // THE LANE IS ADDRESSABLE IN THE CONVERSATION. "what is staged" is
       // answered here, before the parser sees it: it is a move on the manifest,
       // not a new amendment.
       const address = addressManifest(instruction, entries);
       if (address?.kind === "list" || readsThePlan(instruction)) {
         const staged = address?.kind === "list" ? address.entries : entries;
+        /* ONE ROW PER ENTRY, GROUPED BY FACILITY (founder drive 2026-09-02).
+           Fifteen entries as one semicolon-separated paragraph is not a
+           read-back, and the model's remark underneath was left doing the
+           structuring the deterministic layer should have done. The count line
+           is the card's lede, so the card and the rail state the same figure. */
+        if (staged.length) {
+          const card = planReadCard(
+            staged,
+            `The manifest holds ${staged.length} ${staged.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1]}.`,
+            vocabulary.nextMove,
+          );
+          /* AND A FACILITY WHOSE PRICING WAS LEFT FOR LATER SAYS SO ON THE PLAN
+             (founder, 2026-09-02). Nothing is staged for it, so it is not an
+             entry; it IS a decision the banker made about that facility, and a
+             plan read-back that did not carry it would let a version go up that
+             nobody can price with nobody having been told twice. */
+          /* THE HEADING IS THE ENTRY'S OWN TARGET, which is the engine's label
+             for the facility and not the room's, so the group is matched back
+             through the entries rather than by comparing two labels that were
+             never the same string. */
+          const memberOfHeading = new Map<string, string>();
+          for (const e of staged) if (e.member && e.target) memberOfHeading.set(e.target, e.member);
+          for (const group of card.groups) {
+            const memberId = memberOfHeading.get(group.heading);
+            if (!memberId || !pricingDeclined.has(memberId)) continue;
+            group.rows.push({
+              icon: "pricing",
+              label: "Pricing fields",
+              value: "",
+              detail: "left for later, so no rate or payment stream on the new version",
+            });
+          }
+          answer({ kind: "read", id: nextId("read"), card });
+          return;
+        }
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: staged.length
-            ? `The manifest holds ${staged.length}: ${staged
-                .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
-                .join("; ")}.`
-            : "Nothing is staged yet. Confirmed changes land here, grouped.",
+          text: "Nothing is staged yet. Confirmed changes land here, grouped.",
         });
         return;
       }
@@ -2545,7 +2832,10 @@ export function Workroom({
       engine,
       entries,
       items,
+      landPricing,
       openGates,
+      pricingDeclined,
+      pricingPending,
       reads,
       router,
       runBrain,
@@ -2685,6 +2975,20 @@ export function Workroom({
         delta,
         before: figures.committedMM * 1e6,
       });
+      /* ============ THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02)
+
+         A confirmed amount or term change leaves a version nobody can price
+         unless the amortised term and the first payment date are set on the same
+         facility. The read carries neither, and the org holds both blank on this
+         relationship, so the room ASKS - one question, in the same commit as the
+         confirm, so the banker reads the consequence of what they just did
+         beside it rather than a turn later. */
+      const gateNeed = pricingOutstanding(staged);
+      const gateOn = gateNeed ? elicitMembers.find((m) => m.id === gateNeed.memberId) : null;
+      const gate =
+        gateNeed && gateOn
+          ? pricingAsk(gateNeed, gateOn, { entries: staged, generatedAt: reads?.generatedAt })
+          : null;
       setEntries(staged);
       settleChip(blockId, chipKey, "confirmed");
       setToast(delta.badge);
@@ -2696,11 +3000,14 @@ export function Workroom({
           // CHECKS COME TO YOU. The check a confirm trips arrives back in the
           // conversation the moment it becomes true, never in a separate tab.
           ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), step: mine, challenge, acked: false }] : []),
+          ...(gate
+            ? [{ kind: "agent" as const, id: nextId("agent"), step: mine, text: gate.text, options: gate.options }]
+            : []),
         ];
       });
       setSuggestion(engine.suggest());
     },
-    [engine, entries, figures.committedMM, settleChip],
+    [elicitMembers, engine, entries, figures.committedMM, pricingOutstanding, reads?.generatedAt, settleChip],
   );
 
   /**
@@ -2816,7 +3123,22 @@ export function Workroom({
       /* AND A REFUSAL IS THE ORG'S OWN SENTENCE, ATTACHED TO THE ENTRY IT IS
          ABOUT. The org names a covenant or an asset; only the room knows which
          manifest entry that is and that the rest of the plan is untouched. */
-      agent(armStageRefusal(readableError(e), entries));
+      /* AND WHERE THE REFUSAL CARRIES ITS OWN ANSWER SET, THE ANSWERS ARE CHIPS
+         (E6). The org lists the collateral types it holds and ends "Name one of
+         them exactly"; relaying that with nothing to press leaves the banker
+         typing a word the room maps straight back onto the one the org just
+         refused. */
+      const said = readableError(e);
+      const retype = readTypeRefusal(said, entries);
+      if (retype) {
+        agent(
+          `${said} That is ${retype.entry.title} on ${retype.entry.target}. Pick the one it is and I will put the org's own name on that entry. ` +
+            "Staging writes nothing, so nothing has been filed and nothing has come off the manifest.",
+          retype.values.map((v) => ({ label: v, say: typeChoiceSay(retype.entry, v) })),
+        );
+        return;
+      }
+      agent(armStageRefusal(said, entries));
     }
   }, [agent, context, engine, entries, push]);
 
@@ -2894,6 +3216,16 @@ export function Workroom({
         // here made the trail assert a covenant was left off a version the org
         // never planned to leave it off. The steps are the only witness there is.
         arms: armTrailSummary(entries, staging.plan.steps ?? []),
+        /* AND THE PRICING DECISION. A facility whose amortised term and first
+           payment date were SET rides the filed list like any other field
+           change; one the banker left for later writes nothing, so the trail
+           would otherwise carry no sign that a version went up unpriceable. */
+        pricing:
+          [...pricingDeclined]
+            .map((id) => elicitMembers.find((m) => m.id === id))
+            .filter((m): m is ElicitMember => Boolean(m))
+            .map((m) => pricingDeclinedLine(m))
+            .join(" ") || null,
       });
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
@@ -2916,7 +3248,7 @@ export function Workroom({
     } finally {
       setFiling(false);
     }
-  }, [agent, brief.baselineCommittedMM, brief.packageName, context.approver, context.productPackageId, engine, entries, figures.committedMM, filing, flow, instanceUrl, onExecuted, onFiled, sealed, vocabulary.filedWord]);
+  }, [agent, brief.baselineCommittedMM, brief.packageName, context.approver, context.productPackageId, elicitMembers, engine, entries, figures.committedMM, filing, flow, instanceUrl, onExecuted, onFiled, pricingDeclined, sealed, vocabulary.filedWord]);
 
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
   useEffect(() => {

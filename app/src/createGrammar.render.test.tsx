@@ -483,8 +483,13 @@ describe("a pledge is gathered without ever asking what the org works out", () =
     await settle();
     await typeInto(room, "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000");
 
-    // E3 holds: the typed type is honoured and the kind is never asked.
+    /* E6 SUPERSEDES E3's "never asks the kind". The typed word is honoured and
+       it is what picks the FAMILY; this org holds eleven names under it and
+       refuses the bare words at staging, so the room asks WHICH with the org's
+       own names as the chips. */
     expect(said(room)).not.toContain("What kind of asset is it?");
+    expect(said(room)).toContain("11 collateral types on this org");
+    await click(byText(/^Real Estate-Construction$/));
     await click(byText(/^75 percent$/));
     await click(byText(/^1st position$/));
 
@@ -529,12 +534,17 @@ describe("a dollar qualifier names the facility on every line, not just a commit
     // The narrative survived the strip: the exception is about leverage.
     expect(said(room).toLowerCase()).toContain("leverage");
     expect(said(room)).not.toMatch(/1% or|\$15,000,000/);
-    expect(said(room)).toContain("Leverage above policy approved by credit committee");
+    /* E7: the NAME is what is out of policy. "approved by credit committee"
+       says who decided, which is a mitigant and never the record's name. */
+    expect(said(room)).toContain('Is "Leverage above policy" waived, mitigated, or standing unmitigated');
+    expect(said(room)).toContain('"approved by credit committee"');
+    expect(said(room)).not.toContain("Leverage above policy approved by credit committee");
 
     await click(byText(/^Waived$/));
     expect(chips(room)).toHaveLength(1);
     expect(room.textContent).toContain("Line of Credit ($15M)");
-    expect(room.textContent).toContain("Leverage above policy approved by credit committee");
+    expect(room.textContent).toContain("Leverage above policy");
+    expect(room.textContent).not.toContain("Leverage above policy approved by credit committee");
   });
 });
 

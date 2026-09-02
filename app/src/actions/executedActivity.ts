@@ -196,6 +196,17 @@ export interface WorkroomFiledInput {
    * and the trail carries it verbatim. Absent on every plan that carries none.
    */
   arms?: string | null;
+  /**
+   * WHAT THE PLAN SAYS ABOUT THE FOUR FIELDS nCINO PRICES ON, composed by the
+   * room (founder, 2026-09-02).
+   *
+   * An amortised term and a first payment date that were SET ride the filed list
+   * like any other field change and need nothing here. A facility whose pricing
+   * the banker chose to LEAVE FOR LATER writes no record at all, so this is the
+   * only place the trail can carry that decision. Absent where every facility
+   * that moved carries both fields.
+   */
+  pricing?: string | null;
   /** Session clock: the banker just did this, on this clock (A10 carve-out). */
   now?: () => Date;
 }
@@ -210,7 +221,7 @@ export interface WorkroomFiledInput {
  * modification against a package nothing was written to is a trail that lies.
  */
 export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry | null {
-  const { execution, changeCount, packageName, approver, packageHref, productPackageId, arms } = input;
+  const { execution, changeCount, packageName, approver, packageHref, productPackageId, arms, pricing } = input;
   const filed = execution.filed ?? [];
   if (!filed.length || changeCount < 1) return null;
   const now = (input.now ?? (() => new Date()))();
@@ -243,6 +254,7 @@ export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry 
         `${changeCount} ${changeCount === 1 ? "change" : "changes"} filed against ${packageName}.`,
         approver ? `Confirmed by ${approver}.` : null,
         arms ?? null,
+        pricing ?? null,
         execution.tokenNote,
         ...filed.map((f) => `${f.recordId}: ${f.verification}`),
         execution.handoff ?? null,

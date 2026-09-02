@@ -14,6 +14,7 @@ import {
   namedTest,
   openCreate,
   planAmendmentFor,
+  readAssetType,
   readInto,
   readScope,
   restateEntry,
@@ -33,6 +34,7 @@ import { createModifyEngine } from "../../workroom/modifyEngine";
 import { workroomContextFor } from "../../workroom/openWorkroom";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import type { WorkroomDelta } from "../../workroom/types";
+import type { OrgCatalog } from "../../channel/catalog";
 import live from "../../../../artifact/live-data.json";
 
 /* =============================================================================
@@ -990,10 +992,15 @@ describe("a party already on the facility is named, never staged twice (E4a)", (
 describe("create then pledge, end to end (P3)", () => {
   const FOUNDER = "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000";
 
-  it("reads the asset, the kind, the figure and the facility off the founder's own line", () => {
+  it("reads the asset, the family, the figure and the facility off the founder's own line", () => {
     const draft = openCreate(FOUNDER, ctxWith())!;
     expect(draft.slots.isNew).toBe(true);
-    expect(draft.slots.assetKind).toBe("Real Estate");
+    /* E6: "real estate" is a WORD and this org holds eleven NAMES under it, so
+       the kind is a question rather than a settled slot. The org's own refusal
+       is what says so: `"Real Estate" matches 12 collateral types on this org`. */
+    expect(draft.slots.assetKind).toBeUndefined();
+    expect(draft.typeFamily?.word).toBe("Real Estate");
+    expect(draft.typeFamily?.values).toContain("Real Estate-Construction");
     expect(draft.slots.assetValue).toBe(6_500_000);
     // HIS WORDS. What the org files as the collateral description.
     expect(draft.slots.assetDescription).toBe("Kokomo plant expansion");
@@ -1004,13 +1011,19 @@ describe("create then pledge, end to end (P3)", () => {
     const ctx = ctxWith();
     let draft = openCreate(FOUNDER, ctx)!;
     const asks: string[] = [];
+    const answers: Record<string, string> = {
+      assetKind: "Real Estate-Construction",
+      advanceRate: "at a 75% advance rate",
+      lien: "1st lien position",
+    };
     for (let i = 0; i < 6; i += 1) {
       const step = advance(draft, ctx);
       if (!step.ask) break;
       asks.push(step.ask.slot);
-      draft = readInto(step.draft, step.ask.slot === "advanceRate" ? "at a 75% advance rate" : "1st lien position", ctx);
+      draft = readInto(step.draft, answers[step.ask.slot] ?? "1st lien position", ctx);
     }
-    expect(asks).toEqual(["advanceRate", "lien"]);
+    expect(asks).toEqual(["assetKind", "advanceRate", "lien"]);
+    expect(draft.slots.assetKind).toBe("Real Estate-Construction");
     expect(draft.slots.advanceRate).toBe(75);
     // And the description survived the answers that came after it.
     expect(draft.slots.assetDescription).toBe("Kokomo plant expansion");
@@ -1018,7 +1031,7 @@ describe("create then pledge, end to end (P3)", () => {
 
   it("the rate ask offers the bank's own guideline band for the kind", () => {
     const ctx = ctxWith();
-    const draft = readInto(openCreate(FOUNDER, ctx)!, "", ctx);
+    const draft = readInto(openCreate(FOUNDER, ctx)!, "Real Estate-Construction", ctx);
     const ask = advance(draft, ctx).ask!;
     expect(ask.slot).toBe("advanceRate");
     expect(ask.options.map((o) => o.label)).toEqual(["75 percent", "80 percent"]);
@@ -1032,13 +1045,14 @@ describe("create then pledge, end to end (P3)", () => {
       ...openCreate(FOUNDER, ctx)!,
       slots: {
         ...openCreate(FOUNDER, ctx)!.slots,
+        assetKind: "Real Estate-Construction",
         advanceRate: 75,
         lien: "1st",
       },
     };
     const composition = compose(settled, ctx);
     expect(composition.lines).toHaveLength(1);
-    expect(composition.lede).toContain("Kokomo plant expansion, real estate at $6,500,000");
+    expect(composition.lede).toContain("Kokomo plant expansion, real estate-construction at $6,500,000");
     expect(composition.lede).toContain("75 percent advance rate");
     // The lien still rides the plan: no deployed write carries one.
     expect(composition.gaps.join(" ")).toContain("lien position");
@@ -1052,9 +1066,13 @@ describe("create then pledge, end to end (P3)", () => {
     const entry = restateEntry(settled, ctx, (verdict as { ok: true; delta: WorkroomDelta }).delta);
     expect(entry.fileable).toBe(true);
     expect(entry.title).toBe("Kokomo plant expansion");
+    /* E6: the fenced parser maps every real-estate word onto the single word
+       "Real Estate", which is not one of this org's types and which the org
+       refuses at staging with its own list. `restateEntry` puts the name the
+       banker settled on onto the wire. */
     expect(entry.pledgeWire!.newCollateral).toEqual({
       description: "Kokomo plant expansion",
-      collateralType: "Real Estate",
+      collateralType: "Real Estate-Construction",
       value: 6_500_000,
     });
     expect(entry.pledgeWire!.advanceRate).toBe(75);
@@ -1095,15 +1113,24 @@ describe("create then pledge, end to end (P3)", () => {
 });
 
 describe("a typed collateral type wins over the question (E3)", () => {
-  it("takes \"real estate\" off the founder's own line and never asks the kind", () => {
+  it("takes \"real estate\" off the founder's own line and asks WHICH of the org's own names", () => {
     const line = "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000";
     const draft = openCreate(line, ctxWith())!;
     expect(draft.surface).toBe("collateral");
     expect(draft.slots.isNew).toBe(true);
-    expect(draft.slots.assetKind).toBe("Real Estate");
     expect(draft.slots.assetValue).toBe(6_500_000);
+    /* E6, and it SUPERSEDES the E3 reading below it. The typed word is still
+       honoured: it is what picks the family. What it is not is a collateral
+       TYPE, because this org holds eleven of them under those two words. */
     const step = advance(draft, ctxWith());
-    expect(step.ask?.slot).not.toBe("assetKind");
+    expect(step.ask?.slot).toBe("assetKind");
+    expect(step.ask!.text).toContain("11 collateral types on this org");
+    expect(step.ask!.options.map((o) => o.label)).toContain("Real Estate-Construction");
+    // And the chip is the org's own name, typed straight back.
+    const answered = readInto(step.draft, "Real Estate-Construction", ctxWith());
+    expect(answered.slots.assetKind).toBe("Real Estate-Construction");
+    expect(answered.typeFamily).toBeUndefined();
+    expect(advance(answered, ctxWith()).ask?.slot).not.toBe("assetKind");
   });
 
   it("names the catalog it resolves a word against when it does have to ask", () => {
@@ -1111,8 +1138,10 @@ describe("a typed collateral type wins over the question (E3)", () => {
     const ask = advance(draft, ctxWith()).ask!;
     expect(ask.slot).toBe("assetKind");
     expect(ask.text).toContain("collateral-type catalog");
-    expect(ask.text).toContain("real estate");
-    expect(ask.text).toContain("accounts receivable");
+    // ONE CHIP PER FAMILY. The name is the family's own second question.
+    expect(ask.options.map((o) => o.label)).toContain("Equipment");
+    expect(ask.options.map((o) => o.label)).toContain("Real Estate");
+    expect(ask.options.map((o) => o.label)).not.toContain("Real Estate-Warehouse");
   });
 });
 
@@ -1141,5 +1170,167 @@ describe("an operator in front of a figure is the threshold", () => {
     const draft = openCreate("add a Maximum Debt to Worth covenant of 3.5x on the construction loan", ctxWith())!;
     expect(draft.slots.threshold).toBe(3.5);
     expect(draft.slots.unit).toBe("ratio");
+  });
+});
+
+/* ============================ THE COLLATERAL TYPE IS THE ORG'S NAME (E6)
+
+   Founder drive, 2026-09-02: "pledge new collateral on the construction loan:
+   Kokomo plant expansion, real estate, valued at 6,500,000" staged the type
+   "Real Estate" and the org refused it at staging with the eleven names it
+   actually holds. The word is a FAMILY here, and a family is a question.      */
+
+const ORG_COLLATERAL_CATALOG: OrgCatalog = {
+  fields: [
+    {
+      objectName: "LLC_BI__Collateral__c",
+      fieldName: "LLC_BI__Collateral_Type__c",
+      source: "catalog",
+      values: [
+        "Equipment",
+        "Real Estate-Construction",
+        "Real Estate-Office",
+        "Real Estate-Warehouse",
+        "Inventory",
+      ].map((label, i) => ({ label, value: `a3Kbb000000${i}AAA` })),
+      acceptedValues: [],
+    },
+  ],
+};
+
+describe("the collateral type resolves to the org's own name (E6)", () => {
+  const catalogCtx = () => ctxWith({ catalog: ORG_COLLATERAL_CATALOG });
+
+  it("asks WHICH name where the banker's word is a family the org holds several of", () => {
+    const read = readAssetType("Kokomo plant expansion, real estate, valued at 6,500,000", catalogCtx());
+    expect(read).toEqual({
+      kind: "family",
+      word: "Real Estate",
+      values: ["Real Estate-Construction", "Real Estate-Office", "Real Estate-Warehouse"],
+    });
+  });
+
+  it("takes an exact org name the banker typed over the word in front of it", () => {
+    expect(readAssetType("Real Estate-Construction", catalogCtx())).toEqual({
+      kind: "exact",
+      value: "Real Estate-Construction",
+    });
+  });
+
+  it("settles a word the org holds exactly one name under, and asks nothing", () => {
+    expect(readAssetType("a new equipment asset", catalogCtx())).toEqual({ kind: "exact", value: "Equipment" });
+  });
+
+  it("says nothing about a line that named no kind at all", () => {
+    expect(readAssetType("at a 75% advance rate", catalogCtx())).toBeNull();
+  });
+
+  it("carries the choice into the composed sentence and onto the wire", () => {
+    const ctx = catalogCtx();
+    let draft = openCreate(
+      "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000",
+      ctx,
+    )!;
+    expect(draft.slots.assetKind).toBeUndefined();
+    const ask = advance(draft, ctx).ask!;
+    expect(ask.slot).toBe("assetKind");
+    expect(ask.text).toContain("3 collateral types on this org");
+    // The chip types the org's own name straight back.
+    draft = readInto(draft, ask.options[0].say, ctx);
+    expect(draft.slots.assetKind).toBe("Real Estate-Construction");
+    expect(draft.typeFamily).toBeUndefined();
+  });
+
+  it("stands on the mirror with the org's own family names where there is no catalog", () => {
+    const read = readAssetType("a new real estate asset", ctxWith());
+    expect(read?.kind).toBe("family");
+    expect(read && read.kind === "family" ? read.values : []).toContain("Real Estate-Construction");
+    expect(read && read.kind === "family" ? read.values : []).toHaveLength(11);
+  });
+});
+
+/* ========= THE SAME CREATE TWICE AMENDS THE ENTRY, IT DOES NOT DOUBLE IT
+
+   Founder drive 2026-09-02: the Kokomo create was staged twice and the manifest
+   ended with it twice. The plan-awareness rule keys on `assetId`, which a
+   net-new asset does not have yet, so it fell straight through.               */
+
+describe("a net-new pledge already on the plan (2026-09-02)", () => {
+  const KOKOMO: Draft = {
+    surface: "collateral",
+    slots: {
+      isNew: true,
+      assetKind: "Real Estate-Construction",
+      assetDescription: "Kokomo plant expansion",
+      assetValue: 6_500_000,
+      advanceRate: 75,
+    },
+    scope: [CONSTRUCTION],
+    scopeWord: true,
+    unused: null,
+  };
+
+  const staged = (over: Partial<Draft["slots"]> = {}) =>
+    ctxWith({
+      plan: [
+        {
+          deltaId: "collateral.pledge:construction:0",
+          surface: "collateral",
+          memberId: CONSTRUCTION,
+          title: "Kokomo plant expansion",
+          target: "Construction",
+          slots: { ...KOKOMO.slots, ...over },
+          open: false,
+        },
+      ],
+    });
+
+  it("names it as already on the plan rather than staging a second one", () => {
+    const aware = awarenessFor(KOKOMO, staged());
+    expect(aware.onThePlan).toContain("Kokomo plant expansion is already on this plan for Construction");
+    expect(aware.fresh).toEqual([]);
+  });
+
+  it("amends the entry where the banker said it again with a different figure", () => {
+    const amendment = planAmendmentFor({ ...KOKOMO, slots: { ...KOKOMO.slots, assetValue: 7_000_000 } }, staged())!;
+    expect(amendment).not.toBeNull();
+    expect(amendment.entry.deltaId).toBe("collateral.pledge:construction:0");
+    expect(amendment.changed).toEqual(["it is worth $7,000,000"]);
+  });
+
+  it("amends the entry where the collateral type moved", () => {
+    const amendment = planAmendmentFor(
+      { ...KOKOMO, slots: { ...KOKOMO.slots, assetKind: "Real Estate-Office" } },
+      staged(),
+    )!;
+    expect(amendment.changed).toEqual(["the collateral type is now Real Estate-Office"]);
+  });
+
+  it("is not an amendment where nothing the banker owns has moved", () => {
+    expect(planAmendmentFor(KOKOMO, staged())).toBeNull();
+  });
+
+  it("takes a DIFFERENT asset on the same facility as a create of its own", () => {
+    const other: Draft = { ...KOKOMO, slots: { ...KOKOMO.slots, assetDescription: "Muncie tooling line" } };
+    expect(planAmendmentFor(other, staged())).toBeNull();
+    expect(awarenessFor(other, staged()).fresh).toEqual([CONSTRUCTION]);
+  });
+
+  it("leaves an entry staged on another facility alone", () => {
+    const elsewhere = ctxWith({
+      plan: [
+        {
+          deltaId: "collateral.pledge:loc:0",
+          surface: "collateral",
+          memberId: LOC15,
+          title: "Kokomo plant expansion",
+          target: "$15.0MM Line of Credit",
+          slots: KOKOMO.slots,
+          open: false,
+        },
+      ],
+    });
+    expect(planAmendmentFor(KOKOMO, elsewhere)).toBeNull();
+    expect(awarenessFor(KOKOMO, elsewhere).fresh).toEqual([CONSTRUCTION]);
   });
 });
