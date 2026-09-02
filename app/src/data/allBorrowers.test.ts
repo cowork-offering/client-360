@@ -277,10 +277,13 @@ describe("the refreshed reads, per relationship", () => {
     }
   });
 
-  it("Hartwell's covenants carry no compliance anchor, which is correct here", () => {
-    // No compliance rows by design on this account; Piedmont is where that
-    // anchor populates. An absent anchor is not a defect to chase.
+  it("Hartwell's covenants each carry an open Pending test period (seeded 2026-09-02)", () => {
+    // The org holds a closed prior quarter and one open Pending row per covenant
+    // since the founder asked for the covenant review to be testable; the read
+    // carries the open row's id and status.
     const rows = bundleOf("001bb00001I7FPNAA3").covenants?.covenants ?? [];
-    expect(rows.every((c) => !c.latestComplianceId)).toBe(true);
+    expect(rows).toHaveLength(6);
+    expect(rows.every((c) => typeof c.latestComplianceId === "string" && c.latestComplianceId.startsWith("a3C"))).toBe(true);
+    expect(rows.every((c) => c.latestComplianceStatus === "Pending")).toBe(true);
   });
 });

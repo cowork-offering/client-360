@@ -2248,7 +2248,7 @@
           {
             "thresholdValue": 80,
             "nextEvaluationDate": "2026-07-31",
-            "latestComplianceId": null,
+            "latestComplianceId": "a3Cbb00000EQmIjEAL",
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Monthly",
@@ -2263,12 +2263,14 @@
                 "loanId": "a4Zbb0000027MaYEAU"
               }
             ],
-            "actualValue": 80
+            "actualValue": 80,
+            "latestComplianceStatus": "Pending",
+            "reasonForException": null
           },
           {
             "thresholdValue": 1.25,
             "nextEvaluationDate": "2026-09-30",
-            "latestComplianceId": null,
+            "latestComplianceId": "a3Cbb00000EQmIfEAL",
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2278,12 +2280,14 @@
             "covenantId": "a3Bbb000000S0UvEAK",
             "breached": false,
             "attachedLoans": [],
-            "actualValue": 1.38
+            "actualValue": 1.38,
+            "latestComplianceStatus": "Pending",
+            "reasonForException": null
           },
           {
             "thresholdValue": 3,
             "nextEvaluationDate": "2026-09-30",
-            "latestComplianceId": null,
+            "latestComplianceId": "a3Cbb00000EQmIgEAL",
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2293,12 +2297,14 @@
             "covenantId": "a3Bbb000000S0WXEA0",
             "breached": false,
             "attachedLoans": [],
-            "actualValue": 2.42
+            "actualValue": 2.42,
+            "latestComplianceStatus": "Pending",
+            "reasonForException": null
           },
           {
             "thresholdValue": 5000000,
             "nextEvaluationDate": "2026-09-30",
-            "latestComplianceId": null,
+            "latestComplianceId": "a3Cbb00000EQmIhEAL",
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2308,12 +2314,14 @@
             "covenantId": "a3Bbb000000S0Y9EAK",
             "breached": false,
             "attachedLoans": [],
-            "actualValue": 6800000
+            "actualValue": 6800000,
+            "latestComplianceStatus": "Pending",
+            "reasonForException": null
           },
           {
             "thresholdValue": 1.15,
             "nextEvaluationDate": "2026-09-30",
-            "latestComplianceId": null,
+            "latestComplianceId": "a3Cbb00000EQmIiEAL",
             "lastEvaluationStatus": "Compliant",
             "lastEvaluationDate": "2026-06-30",
             "frequency": "Quarterly",
@@ -2323,12 +2331,14 @@
             "covenantId": "a3Bbb000000S0ZlEAK",
             "breached": false,
             "attachedLoans": [],
-            "actualValue": 1.22
+            "actualValue": 1.22,
+            "latestComplianceStatus": "Pending",
+            "reasonForException": null
           },
           {
             "thresholdValue": null,
             "nextEvaluationDate": "2026-11-01",
-            "latestComplianceId": null,
+            "latestComplianceId": "a3Cbb00000EQmIkEAL",
             "lastEvaluationStatus": null,
             "lastEvaluationDate": null,
             "frequency": "One-Off",
@@ -2343,7 +2353,9 @@
                 "loanId": "a4Zbb0000027Mp3EAE"
               }
             ],
-            "actualValue": null
+            "actualValue": null,
+            "latestComplianceStatus": "Pending",
+            "reasonForException": null
           }
         ],
         "note": "Threshold x actual already evaluated by nCino as of Last Evaluation Date. For a live ratio ahead of the next scheduled test, compose with the Boom MCP ratio tools at the agent layer."
