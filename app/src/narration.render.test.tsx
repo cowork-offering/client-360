@@ -6,6 +6,7 @@ import { Workroom } from "./components/workroom/Workroom";
 import { clearComposed } from "./workroom/engine";
 import { createModifyEngine } from "./workroom/modifyEngine";
 import { workroomContextFor } from "./workroom/openWorkroom";
+import { NEUTRAL_QUESTION, ROUTE_CHIPS } from "./components/workroom/route";
 import type { BrainEnvelope, BrainReply } from "./channel/brainLane";
 import { READ_DOORS } from "./channel/brainTools";
 import { acquireSample, resetSessionDoor } from "./channel/sampleDoor";
@@ -70,7 +71,7 @@ function installSession(answer: () => Promise<string>): { calls: string[] } {
 /** main.tsx acquires the door before first render; the suite does the same. */
 async function openRoom(
   brain?: (e: BrainEnvelope) => Promise<BrainReply>,
-  opts: { generatedAt?: string } = {},
+  opts: { generatedAt?: string; unbound?: true } = {},
 ) {
   await acquireSample(50);
   const bundle = data.borrowers![accountId];
@@ -90,12 +91,23 @@ async function openRoom(
           generatedAt: opts.generatedAt,
         }}
         brain={brain}
+        router={opts.unbound ? ROUTER : undefined}
         onClose={() => {}}
       />,
     );
   });
   return document.querySelector<HTMLElement>(".wk-room")!;
 }
+
+/** THE ROUTE QUESTION, as the unified entry hands it to the room. With it the
+ *  room is UNBOUND and standing on a provisional engine; without it the caller
+ *  already named a mode and the room is bound, which is every other test here. */
+const ROUTER = {
+  question: { line: NEUTRAL_QUESTION, chips: [...ROUTE_CHIPS] },
+  say: null,
+  onBind: () => {},
+  onRestart: () => {},
+};
 
 /**
  * THE MAILBOX, AT THE SHAPE THE LIVE TOOL ACTUALLY ANSWERS IN: a BARE SINGLE
@@ -558,5 +570,148 @@ describe("the greeting carries the client's mail, or says nothing about a mailbo
     await settle();
 
     expect(calls.filter((t) => t === "outlook_email_search")).toHaveLength(1);
+  });
+});
+
+
+/* =============================================================================
+   THE GREETING'S SHAPE: A LEAD, THE ITEMS, A CLOSE.
+
+   The founder pasted his own greeting and called it good but long: eighty-eight
+   prose words carrying two figures, ending on "which facility or facilities
+   move and what changes follow" over a room that had not yet been told whether
+   this was a modification at all.
+
+   THE FIXTURES BELOW ARE THE ANSWER TO BOTH HALVES, and they are the copy
+   variants the addendum publishes. The model is not guaranteed to write them:
+   what is guaranteed is that when it does, the room renders them as a lead, up
+   to three line items carrying THE BOOK'S figures, and one closing line, and
+   that the words the route has not earned are absent.
+   ============================================================================= */
+
+/** (a) NO MAIL, ROUTE UNBOUND. Forty-eight prose words carrying six figures. */
+const GREETING_UNBOUND = [
+  "Hartwell's $46M package sits clean across six facilities, nothing staged yet.",
+  "- **Debt Service Coverage of Borrower**: the widest ratio cushion on the deal.",
+  "- **Maximum Debt to Worth**: room before the covenant binds, either way.",
+  "- **Accounts Receivable**: exactly on its ceiling, and tested monthly.",
+  "Modify, renew, or structure something new?",
+].join("\n");
+
+/** (d) THE MAIL ASKS A RENEWAL. The close names THAT route, and only it. */
+const GREETING_RENEWAL_MAIL = [
+  "Hartwell's $46M package is clean across six facilities, nothing staged yet.",
+  "- **Equipment ($8.0MM)**: the facility the note names, and the one a renewal re-cuts.",
+  "- **Debt Service Coverage of Borrower**: the test a renewal is priced against.",
+  "James asked to renew the $8.0MM equipment loan; open the renewal?",
+].join("\n");
+
+/** (e) A PLAIN QUESTION. Nothing to offer beyond the three routes. */
+const GREETING_PLAIN_QUESTION = [
+  "Hartwell's $46M package is clean; the message on it asks nothing of the credit.",
+  "- **Accounts Receivable**: tested monthly, and the one test with no room left.",
+  "James asked on Aug 28 for a copy of the June covenant certificate. Modify, renew, or structure something new?",
+].join("\n");
+
+describe("the greeting reads as a lead, the items and a close", () => {
+  const opening = (room: HTMLElement) => room.querySelector<HTMLElement>(".wk-narr")!;
+
+  it("renders three parts: one lead line, the rows, and one closing line", async () => {
+    installSession(async () => GREETING_UNBOUND);
+    const room = await openRoom(reply(CLARIFY), { unbound: true });
+    await settle();
+    await settle();
+
+    const bubble = opening(room).querySelector(".wk-bub")!;
+    const parts = [...bubble.children].map((el) => el.className);
+    expect(parts).toEqual(["wk-narr-line", "wk-narr-rows", "wk-narr-line"]);
+
+    const lead = bubble.querySelector(".wk-narr-line")!.textContent!;
+    expect(lead.trim().split(/\s+/).length).toBeLessThanOrEqual(18);
+    expect([...bubble.querySelectorAll(".wk-narr-row")]).toHaveLength(3);
+  });
+
+  it("puts the BOOK'S figures in the rail, on every row, unasked", async () => {
+    installSession(async () => GREETING_UNBOUND);
+    const room = await openRoom(reply(CLARIFY), { unbound: true });
+    await settle();
+    await settle();
+
+    const rails = [...opening(room).querySelectorAll(".wk-narr-row-v")].map((v) => v.textContent);
+    expect(rails).toEqual(["1.38× vs ≥ 1.25×", "2.42× vs ≤ 3.00×", "80% vs ≥ 80%"]);
+    // Six figures, and the model wrote none of them.
+    expect(GREETING_UNBOUND).not.toMatch(/1\.38|2\.42|80%/);
+  });
+
+  it("never says which facility moves while the route is still open", async () => {
+    const session = installSession(async () => GREETING_UNBOUND);
+    const room = await openRoom(reply(CLARIFY), { unbound: true });
+    await settle();
+    await settle();
+
+    const said = opening(room).textContent ?? "";
+    expect(said).not.toMatch(/which facility|facilities move|changes follow/i);
+    // The room ASKED the neutral question, and the remark closes on the same
+    // three routes rather than on a fourth of its own.
+    expect(said).toMatch(/Modify, renew, or structure something new\?/);
+    expect(session.calls[0]).toMatch(/THE ROUTE IS NOT BOUND YET/);
+    expect(session.calls[0]).toContain('"route":"unbound"');
+    expect(session.calls[0]).toContain('"routeOptions":["modify","renew","create"]');
+    // The three chips are already on the glass; the remark adds no fourth.
+    expect(opening(room).querySelector("button")).toBeNull();
+  });
+
+  it("tells a BOUND room it is bound, and drops the route-open prohibition", async () => {
+    const session = installSession(async () => "The package is clean and nothing is staged.");
+    await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+
+    expect(session.calls[0]).toMatch(/THE ROUTE IS BOUND: this is a modify/);
+    expect(session.calls[0]).not.toMatch(/THE ROUTE IS NOT BOUND/);
+    expect(session.calls[0]).not.toMatch(/never say what changes follow/);
+    expect(session.calls[0]).toContain('"route":"modify"');
+  });
+
+  it("closes on the route the mail names, and names no other", async () => {
+    installSession(async () => GREETING_RENEWAL_MAIL);
+    installMailbox({
+      ...HARTWELL_MAIL,
+      subject: "Hartwell equipment loan renewal",
+      summary: "Can we renew the $8M equipment loan when it matures?",
+    });
+    const room = await openRoom(reply(CLARIFY), { unbound: true, generatedAt: "2026-07-25T21:04:49Z" });
+    await settle();
+    await settle();
+    await settle();
+
+    const said = opening(room).textContent ?? "";
+    expect(said).toMatch(/open the renewal\?/i);
+    expect(said).not.toMatch(/which facility|facilities move|changes follow/i);
+    // The facility the note names carries its own commitment, from the book.
+    const rails = [...opening(room).querySelectorAll(".wk-narr-row-v")].map((v) => v.textContent);
+    expect(rails).toEqual(["$8.0MM", "1.38× vs ≥ 1.25×"]);
+  });
+
+  it("mentions a message that asks nothing of the credit, and offers the three", async () => {
+    const session = installSession(async () => GREETING_PLAIN_QUESTION);
+    installMailbox({
+      ...HARTWELL_MAIL,
+      subject: "Hartwell covenant certificate",
+      summary: "Could you send a copy of the June covenant certificate?",
+    });
+    const room = await openRoom(reply(CLARIFY), { unbound: true, generatedAt: "2026-07-25T21:04:49Z" });
+    await settle();
+    await settle();
+    await settle();
+
+    const said = opening(room).textContent ?? "";
+    expect(said).toMatch(/Modify, renew, or structure something new\?/);
+    expect(said).not.toMatch(/open the renewal|open the modification/i);
+    expect([...opening(room).querySelectorAll(".wk-narr-row")]).toHaveLength(1);
+    // A question is not a credit action, so the room read no route out of it.
+    const prompt = session.calls.find((c) => /The room has just OPENED/.test(c))!;
+    expect(prompt).not.toContain('"route":"renew"');
+    expect(prompt).toMatch(/MENTION IT AND STOP/);
   });
 });
