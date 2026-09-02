@@ -239,9 +239,32 @@ export function readRelRouteIntent(text: string): RelRoute | null {
  * that mentions "the collateral behind it" does not move the room unless the
  * banker says "valuation".
  */
-export function readRelRouteSwitch(text: string, current: RelRoute): RelRoute | null {
+export function readRelRouteSwitch(
+  text: string,
+  current: RelRoute,
+  opts: { openTextStep?: boolean } = {},
+): RelRoute | null {
   const route = readRelRouteIntent(text);
-  return route && route !== current ? route : null;
+  if (!route || route === current) return null;
+  /* A ROUTE WORD INSIDE AN ANSWER IS NOT A REQUEST TO CHANGE REVIEW.
+     "Copy of the June covenant compliance certificate" is the SUBJECT of a
+     service request and it re-routed the room to the covenant review, because
+     the switch read ran ahead of the open text step that had just asked for it.
+     Caught by the headless drive on 2026-09-02, line 13.
+
+     A banker switching review says so in a few words: "covenant review", "run
+     the covenant review instead". A banker answering an open question writes a
+     sentence. Over an OPEN TEXT STEP the short form still switches and the
+     sentence is the answer; everywhere else the read is unchanged. */
+  if (opts.openTextStep && !isRouteNaming(text)) return null;
+  return route;
+}
+
+/** Past this it is an ANSWER that mentions a review, not a request for one. */
+const ROUTE_NAMING_WORD_CAP = 5;
+
+function isRouteNaming(text: string): boolean {
+  return text.trim().replace(/[?.!,]+$/, "").split(/\s+/).filter(Boolean).length <= ROUTE_NAMING_WORD_CAP;
 }
 
 /** TRUE where the line asks for FACILITY work this room does not do. The room

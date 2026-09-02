@@ -1263,7 +1263,9 @@ export function RelationshipRoom({
          collected against this review, so the room is simply rebuilt on the
          other one. Once anything is collected the room refuses out loud and
          offers the discard as the explicit gesture it is. */
-      const switchTo = router ? readRelRouteSwitch(text, route) : null;
+      /* THE OPEN TEXT STEP GETS ITS ANSWER. A route word inside a subject or a
+         narrative is not a request to change review; see readRelRouteSwitch. */
+      const switchTo = router ? readRelRouteSwitch(text, route, { openTextStep: live?.kind === "text" }) : null;
       if (switchTo && router) {
         if (!order.length) {
           router.onRestart(switchTo, text);

@@ -875,3 +875,23 @@ describe("a blocked route does not claim everything is collected", () => {
     expect(room.querySelector(".wk-propose")).toBeNull();
   });
 });
+
+describe("a service request subject carrying a route word stays on the service request", () => {
+  it("records the subject rather than re-routing to the covenant review", async () => {
+    const { room, restarted } = open({ route: "service" });
+    await settle();
+    await type(room, "Copy of the June covenant compliance certificate");
+    await settle();
+    expect(restarted).toEqual([]);
+    expect(room.textContent).toContain("And the request in full");
+    expect(room.textContent).toContain("Copy of the June covenant compliance certificate");
+  });
+
+  it("still switches on the short form a banker actually uses", async () => {
+    const { room, restarted } = open({ route: "service" });
+    await settle();
+    await type(room, "covenant review");
+    await settle();
+    expect(restarted.map((r) => r.route)).toEqual(["covenant"]);
+  });
+});

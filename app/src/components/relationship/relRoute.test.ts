@@ -216,3 +216,29 @@ describe("facility work", () => {
     expect(FACILITY_HANDOFF).not.toMatch(/[—!]/);
   });
 });
+
+describe("a route word inside an ANSWER is not a request to change review", () => {
+  /* THE HEADLESS DRIVE CAUGHT THIS on 2026-09-02, line 13. "Copy of the June
+     covenant compliance certificate" is the SUBJECT of a service request, and
+     it re-routed the room to the covenant review: the switch read ran ahead of
+     the open text step that had just asked for it. */
+  it("keeps the room on the service request while a text step is open", () => {
+    expect(
+      readRelRouteSwitch("Copy of the June covenant compliance certificate", "service", { openTextStep: true }),
+    ).toBeNull();
+    expect(
+      readRelRouteSwitch("The covenants are clean and the collateral is current.", "annual", { openTextStep: true }),
+    ).toBeNull();
+  });
+
+  it("still switches on the short form a banker actually uses", () => {
+    expect(readRelRouteSwitch("covenant review", "service", { openTextStep: true })).toBe("covenant");
+    expect(readRelRouteSwitch("run the covenant review", "service", { openTextStep: true })).toBe("covenant");
+  });
+
+  it("is unchanged everywhere else: a chips or number step switches on any form", () => {
+    expect(readRelRouteSwitch("Copy of the June covenant compliance certificate", "service")).toBe("covenant");
+    expect(readRelRouteSwitch("covenant review", "annual")).toBe("covenant");
+    expect(readRelRouteSwitch("covenant review", "covenant")).toBeNull();
+  });
+});
