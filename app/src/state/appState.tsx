@@ -6,6 +6,7 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
+import { mergeDynamicBook, useDynamicBook } from "../book/dynamicBook";
 import type { AgentChannel } from "../channel/adapter";
 import { createChannel, formatProbe, probeChannels } from "../channel/adapter";
 import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, C360Data, Worklist } from "../data/contract";
@@ -324,7 +325,16 @@ export function accountKey(stateAccountId: string | null | undefined, snapshotAc
   return stateAccountId || snapshotAccountId || "";
 }
 
-export function AppProvider({ data, children }: { data: C360Data; children: ReactNode }) {
+export function AppProvider({ data: injected, children }: { data: C360Data; children: ReactNode }) {
+  /* THE BOOK, PLUS WHATEVER THIS SESSION READ LIVE.
+     ONE MERGE POINT, HERE, so `resolveBundle`, the worklist, the palette, the
+     workspace and both rooms pick a live relationship up without any of them
+     learning a second way to find a bundle. `mergeDynamicBook` returns the
+     SAME OBJECT when nothing has been read live, so a cockpit standing on the
+     baked five is not merely equivalent to the one before this feature: every
+     memo below sees the reference it always did. */
+  const live = useDynamicBook();
+  const data = useMemo(() => mergeDynamicBook(injected, live), [injected, live]);
   const anchor = data.meta.anchorAccountId;
   const worklist = useMemo(() => deriveWorklist(data), [data]);
   const channel = useMemo(() => createChannel(), []);

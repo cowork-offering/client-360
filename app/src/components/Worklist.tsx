@@ -8,6 +8,8 @@ import { REASON_META } from "./reasons";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 import { flyName } from "./nameFlight";
 import { Odo } from "./Odometer";
+import { mcpAvailable } from "../channel/mcp";
+import { CMDK_OPEN_EVENT } from "./CommandPalette";
 
 /* =============================================================================
    THE WORKLIST — the landing's third beat.
@@ -72,7 +74,19 @@ function statusesFor(r: WorklistRow): Status[] {
   }
   if (!r.staged) out.push({ tone: "mut", text: "not staged" });
   if (r.sample) out.push({ tone: "mut", text: "sample" });
+  /* A RELATIONSHIP READ LIVE SAYS WHEN. It is not in the baked snapshot, so the
+     row must not pass itself off as one: "live read, 14:32" is the honest
+     provenance chip for a bundle that came off the connector this session. */
+  if (r.liveReadAt != null) out.push({ tone: "acc", text: `live read, ${clockOf(r.liveReadAt)}` });
   return out;
+}
+
+/** The wall clock of a LIVE read. Epoch ms is a page-session fact about a
+ *  gesture, not a figure derived from the book, so reading it as local time is
+ *  correct here and nowhere near A10. */
+function clockOf(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function initialsOf(name: string): string {
@@ -105,7 +119,24 @@ export function Worklist() {
       <div className="eyebrow">
         <span className="kicker">Worklist</span>
       </div>
-      <div className="wl-head">Needs action</div>
+      <div className="wl-head">
+        Needs action
+        {/* THE QUEUE IS NOT THE BOOK. Five relationships need something today;
+            the org holds the rest, and a banker who came in to open one of them
+            should not have to learn that the search chip in the header is where
+            that lives. One line, and only where there is a connector to search
+            with: with no channel this renders nothing, exactly as before. */}
+        {mcpAvailable() && (
+          <button
+            type="button"
+            className="wl-open-any"
+            id="wlOpenAny"
+            onClick={() => window.dispatchEvent(new Event(CMDK_OPEN_EVENT))}
+          >
+            Open any relationship by name
+          </button>
+        )}
+      </div>
 
       {rows.length === 0 ? (
         <div className="card wl-empty">

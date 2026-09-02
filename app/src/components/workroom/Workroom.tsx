@@ -130,6 +130,8 @@ import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
 import { mailTipFrom, overdueCovenantTip } from "./tips";
 import { useClientMail } from "./clientMail";
+import { useRoomFeed } from "../../intent/feed";
+import { intentFor, intentMailNote } from "../../intent/open";
 import "../../styles/workroom.css";
 import { ManifestRail } from "../rail/ManifestRail";
 
@@ -772,6 +774,10 @@ export function Workroom({
     accountName: context.accountName,
     bundle: reads?.bundle ?? null,
     generatedAt: reads?.generatedAt ?? "",
+    /* THE ROOM SAYS WHERE THE WORK CAME FROM. Null for every room the banker
+       opened themselves, and the greeting is then byte-identical to the one it
+       has always composed. */
+    intentNote: intentMailNote(intentFor(context.accountId)),
   });
   const mail = useMemo(
     () => mailTipFrom({ hits: mailHits, accountName: context.accountName, today: reads?.generatedAt ?? "" }),
@@ -3019,6 +3025,39 @@ export function Workroom({
     saidRef.current = line;
     void say(line);
   }, [ask, awake, router?.say, say]);
+
+  /* ================================================= AN INTENT'S OWN LINES
+
+     THE SAME DOOR, AND THE SAME QUEUE DISCIPLINE THE BANKER GETS. An intent
+     carried in from a conversation elsewhere is a list of instructions, and each
+     of them goes through `say` exactly as if it had been typed here — same
+     parser, same brain lane, same refusals.
+
+     THE FEED ONLY MOVES WHEN THE ROOM IS HOLDING NOTHING. A staged card, an
+     open check, a set of chips, a pricing question, a create being gathered, a
+     flow in flight: any of them stops the queue where it stands and the banker
+     answers. That is not politeness, it is the same rule the composer enforces
+     on a typed line — one decision per view — applied to a line the room did
+     not have to wait for someone to type.
+
+     WITH NO FEED STAGED (every room the banker opened themselves) `useRoomFeed`
+     subscribes, finds nothing for this relationship, and does nothing at all. */
+  const lastItem = items[items.length - 1];
+  const awaitingChoice =
+    !!lastItem && lastItem.kind === "agent" && (!!lastItem.options?.length || !!lastItem.restart);
+  const feedReady =
+    awake &&
+    !ask &&
+    phase === "work" &&
+    !thinking &&
+    !filing &&
+    openGates === 0 &&
+    flow === null &&
+    creating === null &&
+    pricingPending === null &&
+    !steerPending &&
+    !awaitingChoice;
+  useRoomFeed({ room: "facility", accountId: context.accountId, ready: feedReady, say });
 
   /* ---- and the member the signal named is the one the lane opens on. */
   useEffect(() => {

@@ -5,7 +5,9 @@ import "./styles/tailwind.css";
 import { App } from "./App";
 import { acquireMcp } from "./channel/mcp";
 import { acquireSample } from "./channel/sampleDoor";
+import { acquireDb } from "./channel/dbDoor";
 import { installSampleGateReadout } from "./channel/sampleMetrics";
+import { installIntentReadout, startIntentWatch } from "./intent/store";
 
 const root = document.getElementById("root");
 if (root) {
@@ -19,7 +21,15 @@ if (root) {
   // synchronous availability gate downstream keeps its meaning. Neither can
   // fail: absence is a state, and the room renders for it.
   installSampleGateReadout();
-  void Promise.all([acquireMcp(), acquireSample()]).finally(() => {
+  installIntentReadout();
+  // THE THIRD DOOR, ACQUIRED THE SAME WAY AND FOR THE SAME REASON. The intent
+  // store is `claude.use("db")`, which resolves asynchronously and resolves
+  // NULL on most views; settling it before first render keeps `dbAvailable()`
+  // meaningful everywhere downstream. The watch is opened once acquisition has
+  // settled, so a page with no store never subscribes to anything and every
+  // surface renders exactly as it did before the lane existed.
+  void Promise.all([acquireMcp(), acquireSample(), acquireDb()]).finally(() => {
+    startIntentWatch();
     createRoot(root).render(
       <StrictMode>
         <App />

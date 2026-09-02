@@ -35,6 +35,8 @@ import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
 import { NO_COMPLIANCE_ROW_CHIP, relBookFor, type RelBook } from "./relBook";
 import { buildRelReadCard, readRelTopic, relReadGap } from "./relReads";
 import { useClientMail } from "../workroom/clientMail";
+import { useRoomFeed } from "../../intent/feed";
+import { intentFor, intentMailNote, noteFiled } from "../../intent/open";
 import { stepperState } from "../../workroom/stepper";
 import {
   FACILITY_HANDOFF,
@@ -1442,6 +1444,16 @@ export function RelationshipRoom({
     void say(line);
   }, [ask, awake, route, router?.say, say]);
 
+  /* ================================================= AN INTENT'S OWN LINES
+
+     The mirror of the facility room's feed. This room is a step machine, so a
+     fed line answers whatever step is live exactly as a typed one does, and the
+     queue holds while the room is composing, while a flow card is open and once
+     the review is filed. Nothing is staged on the banker's behalf: the review
+     card and its token are where they have always been. */
+  const feedReady = awake && !ask && phase === "work" && !thinking && !filing && flow === null;
+  useRoomFeed({ room: "relationship", accountId: ctx.accountId, ready: feedReady, say });
+
   /* ---- THE SIGNAL'S COVENANT IS PRESELECTED. Where the opening named one, the
           covenant review opens with it already on the list rather than making
           the banker find it again. */
@@ -2373,6 +2385,7 @@ export function RelationshipRoomHost() {
     accountName: accountName ?? "",
     bundle,
     generatedAt,
+    intentNote: intentMailNote(intentFor(accountId)),
   });
 
   /* AN EXECUTED REVIEW LANDS IN THE TRAIL (A30), the way WorkroomHost lands a
@@ -2391,6 +2404,9 @@ export function RelationshipRoomHost() {
         instanceUrl: data.meta?.instanceUrl,
       });
       if (entry) dispatch({ type: "LOG_ACTIVITY", accountId, entry });
+      /* A REVIEW THAT CAME FROM AN INTENT SPENDS IT. Fire-and-forget; a store
+         write that fails never touches what the banker just filed. */
+      noteFiled(accountId);
     },
     [accountId, accountName, data.meta?.instanceUrl, data.meta?.user, dispatch],
   );

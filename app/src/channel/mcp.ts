@@ -105,6 +105,17 @@ export const TOOLS = {
   covenants: "Customer360Covenants",
   opportunities: "Customer360Opportunities",
   structuralSignals: "Customer360StructuralSignals",
+  /* THE BOOK IS THE ORG'S BOOK (2026-09-03). Partial-name account search, and
+     the door to every relationship this snapshot did not bake. IN THE MANIFEST
+     as of this wave: the Customer 360 grant is 25 tools with this one in it
+     (design/proposals/intent-handoff-addendum.md carries the exact declaration
+     for the integrator). OBSERVED SHAPE:
+       input  { name, industry?, maxResults? }   maxResults defaults to 25
+       output { count, results: [{ accountId, name, industry, naicsCode,
+                annualRevenue }] }
+     A READ, and the only figures it carries are labels: everything the cockpit
+     renders about a relationship comes off the eight reads that follow, never
+     off the search hit. */
   searchAccounts: "Customer360SearchAccounts",
   // The durable action trail. Read-only; deploying in parallel with this UI.
   actionHistory: "Customer360ActionHistory",
