@@ -189,16 +189,18 @@ const DELTA: BrainReply = {
 
 describe("the remark lands under the card, in the room's own bubble", () => {
   it("streams a sentence under the block the room just staged", async () => {
-    installSession(async () => "Coverage thins to **0.62x**: the pledged pool does not grow with the line.");
+    /* THE BOLD FIGURE IS ONE THE ENVELOPE CARRIES. A figure the room cannot
+       point at is rendered plainly and marked, which is the guard below. */
+    installSession(async () => "Coverage thins on the **$15.0M** line: the pledged pool does not grow with it.");
     const room = await openRoom(reply(CLARIFY));
     await settle();
     await typeInto(room, "take the line of credit to 20000000");
 
     const remark = room.querySelector(".wk-narr");
     expect(remark).not.toBeNull();
-    expect(remark!.textContent).toContain("Coverage thins to");
+    expect(remark!.textContent).toContain("Coverage thins on the");
     // Light structure, parsed into the room's OWN elements. Never a marker.
-    expect(remark!.querySelector("b")?.textContent).toBe("0.62x");
+    expect(remark!.querySelector("b")?.textContent).toBe("$15.0M");
     expect(remark!.textContent).not.toMatch(/\*/);
     // It is an agent bubble, not a second panel: one voice, one typography.
     expect(remark!.classList.contains("wk-agent")).toBe(true);

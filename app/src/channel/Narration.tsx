@@ -3,6 +3,7 @@ import type { BrainEnvelope } from "./brainLane";
 import { LiquidMark } from "../components/workroom/Liquid";
 import {
   composeNarratePrompt,
+  guardFigures,
   parseNarration,
   resolveEntities,
   shouldNarrate,
@@ -113,7 +114,14 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
          same instance, or a row could print a figure from a book the model
          never saw. */
       const envelope = envelopeFor(line);
-      const read = (text: string) => resolveEntities(parseNarration(text), envelope);
+      /* THE FIGURE GUARD RUNS ON THE FINISHED REMARK, NOT ON EVERY PARTIAL. A
+         half-streamed "$5.2M" is a different figure from the "$5.2MM" it is
+         about to become, so marking mid-stream would flicker a warning on and
+         off under a sentence the model has not finished writing. */
+      const read = (text: string, settled = false) => {
+        const blocks = resolveEntities(parseNarration(text), envelope);
+        return settled ? guardFigures(blocks, envelope, subject).blocks : blocks;
+      };
       const prompt = composeNarratePrompt(envelope, subject);
       const options: AskSessionOptions = {
         kind: greeting ? "greeting" : "narrate",
@@ -126,7 +134,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
       const call = greeting ? prime(prompt, options) : ask(prompt, options);
       void Promise.resolve(call)
         .then((text) => {
-          const blocks = read(typeof text === "string" ? text : "");
+          const blocks = read(typeof text === "string" ? text : "", true);
           if (blocks.length) setViews((prev) => ({ ...prev, [id]: { blocks, pending: false } }));
           else settle(id);
         })
@@ -187,6 +195,16 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
                   </li>
                 ))}
               </ul>
+            );
+          /* THE QUIET MARK (2026-09-02). The room's own note that a figure in
+             the remark above is on no read it holds. It is not the model's
+             text, so it is not parsed out of it and it never carries a span:
+             it is one muted line under the bubble it is about. */
+          if (block.kind === "mark")
+            return (
+              <p className="wk-narr-mark" key={i}>
+                {block.text}
+              </p>
             );
           /* THE LINE ITEM. The read card's own row vocabulary, minus its icon:
              three 20px glyphs inside an agent bubble read as a second card,

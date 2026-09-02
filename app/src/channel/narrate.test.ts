@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  FIGURE_MARK,
   NARRATION_MAX_BULLETS,
   composeNarratePrompt,
+  guardFigures,
   narrationText,
   parseNarration,
   resolveEntities,
@@ -426,5 +428,94 @@ describe("a covenant as a line item, with the book's own figure beside it", () =
     const text = narrationText(resolveEntities(parseNarration("- **James Hartwell**: unlimited."), book));
     expect(text).toBe("James Hartwell: unlimited. Guarantor");
     expect(text).not.toMatch(/[*_#]/);
+  });
+});
+
+/* ================= THE FIGURE GUARD (founder drive 2026-09-02)
+
+   The card said CRE-AR-01 is 75 percent approved against a 65 percent
+   guideline. The remark said "80 percent advance, above the bank's 70 percent
+   construction guideline" and then computed "$5.2MM lendable value". These are
+   the founder's own sentences.                                                */
+
+const exceptionCard: NarrateSubject = {
+  act: "answered",
+  sentence: "CRE-AR-01 is on this relationship, Major and Mitigated.",
+  card: {
+    title: "CRE-AR-01",
+    rows: [
+      { label: "Approved advance rate", value: "75%", sub: "Construction" },
+      { label: "Policy guideline", value: "65%", sub: "Construction" },
+    ],
+  },
+};
+
+const guarded = (text: string, subject: NarrateSubject = exceptionCard, env: BrainEnvelope = envelope) =>
+  guardFigures(parseNarration(text), env, subject);
+
+describe("a figure the room cannot point at is not endorsed", () => {
+  it("marks the founder's own drifted sentence, figure by figure", () => {
+    const out = guarded(
+      "The exception records an **80 percent** advance, above the bank's **70 percent** construction guideline.",
+    );
+    expect(out.ungrounded).toContain("80 percent");
+    expect(out.ungrounded).toContain("70 percent");
+    expect(narrationText(out.blocks)).toContain(FIGURE_MARK);
+  });
+
+  it("renders a drifted figure WITHOUT emphasis, and keeps the words", () => {
+    const out = guarded("The exception records an **80 percent** advance.");
+    const line = out.blocks.find((b) => b.kind === "line");
+    expect(line?.kind === "line" ? line.spans.some((s) => s.bold) : true).toBe(false);
+    expect(narrationText(out.blocks)).toContain("80 percent");
+  });
+
+  it("marks a figure the model DERIVED, which is on no read at all", () => {
+    const out = guarded("That is **$5.2MM** of lendable value against the construction line.");
+    expect(out.ungrounded).toEqual(["$5.2MM"]);
+  });
+
+  it("leaves the CARD's own figures exactly as the model wrote them", () => {
+    const out = guarded("The approved rate is **75%** against a **65%** guideline.");
+    expect(out.ungrounded).toEqual([]);
+    expect(narrationText(out.blocks)).not.toContain(FIGURE_MARK);
+    const line = out.blocks.find((b) => b.kind === "line");
+    expect(line?.kind === "line" ? line.spans.filter((s) => s.bold).map((s) => s.text) : []).toEqual(["75%", "65%"]);
+  });
+
+  it("reads two spellings of one figure as one figure", () => {
+    // "75 percent" on the card and "75%" in the remark are the same number.
+    expect(guarded("The rate is **75 percent**.").ungrounded).toEqual([]);
+    // And money magnitudes compare by value, not by spelling.
+    const env: BrainEnvelope = { ...envelope, facilities: [{ loanId: "a1", label: "Line of Credit", commitment: "$15.0M" }] };
+    expect(guarded("The line stands at **$15,000,000**.", exceptionCard, env).ungrounded).toEqual([]);
+  });
+
+  it("does not compare across kinds: a 1.25x is not a 125 percent", () => {
+    const out = guarded("Coverage runs at **1.25x**.");
+    expect(out.ungrounded).toEqual([]);
+  });
+
+  it("holds a line item's clause to the same rule and leaves the room's own value alone", () => {
+    const env: BrainEnvelope = {
+      ...envelope,
+      facilities: [{ loanId: "a1", label: "Line of Credit", commitment: "$15.0M" }],
+    };
+    const blocks = resolveEntities(
+      parseNarration("- **Line of Credit**: it lends **$5.2MM** against the pool."),
+      env,
+    );
+    const out = guardFigures(blocks, env, exceptionCard);
+    expect(out.ungrounded).toEqual(["$5.2MM"]);
+    const entity = out.blocks.find((b) => b.kind === "entity");
+    // The RAIL is the room's own figure, resolved out of the envelope. It is
+    // never marked: marking it would be the room marking itself.
+    expect(entity?.kind === "entity" ? entity.rows[0].value : "").toBe("$15.0M");
+  });
+
+  it("says nothing at all about a remark carrying no figures", () => {
+    const out = guarded("The exception stands where the credit committee left it.");
+    expect(out.ungrounded).toEqual([]);
+    expect(out.blocks.some((b) => b.kind === "mark")).toBe(false);
   });
 });
