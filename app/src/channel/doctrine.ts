@@ -269,6 +269,8 @@ const POLICY_EXCEPTIONS: DoctrineBlock = {
     "Four anchors exist: the loan, the relationship account, a covenant and a collateral asset. An exception may hold more than one.",
     "Every committed exception POSTs the whole serialised record to an external endpoint, so the borrower's data leaves the org. Surface that egress in the proposal: it is the one write the bank's own audit trail cannot follow.",
     "The Hartwell precedent is the shape to imitate: a code, a title, a severity, a status and three written mitigants, each a fact somebody could verify rather than a sentiment.",
+    "A line that says LOG or RECORD an exception is a CREATE, not a question about the exceptions on file. Where it names a different exception than one already on file, the new one is what is being asked for: mention the one on file, never answer with it.",
+    "The exception's NAME is what is out of policy, in the vocabulary of the thing that is out of policy. A banker's verb phrase is not a name, and who approved it is a mitigant.",
   ],
 };
 
@@ -408,10 +410,15 @@ export interface DoctrineSelection {
 const sizeOfLines = (lines: string[]): number => lines.join("\n").length;
 
 /** The default doctrine budget. Every block firing at once measures a little
- *  over 15 KB, so a line that touches every surface still carries the whole
+ *  over 16 KB, so a line that touches every surface still carries the whole
  *  slice set; beside the envelope's own 10 KB cap that leaves the prompt well
- *  inside {@link PROMPT_CAP_BYTES}. The budget is a ceiling, not a target. */
-export const DOCTRINE_BUDGET_BYTES = 16_000;
+ *  inside {@link PROMPT_CAP_BYTES}. The budget is a ceiling, not a target.
+ *
+ *  RAISED FROM 16,000 on 2026-09-02, for the drive-fix slices. A budget that
+ *  silently dropped `credit-policy` to make room for a new line would trade one
+ *  slice for another with nobody saying so, which is the one thing the drop
+ *  order exists to make visible. */
+export const DOCTRINE_BUDGET_BYTES = 18_000;
 
 /**
  * THE DOCTRINE THIS LINE NEEDS, inside its budget.

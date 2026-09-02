@@ -42,6 +42,7 @@ import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { Narration, useNarration } from "../../channel/Narration";
+import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
 import { subjectFor } from "../../channel/narrate";
 import {
   committedSentence,
@@ -1670,14 +1671,27 @@ export function Workroom({
         }
         const sound =
           result?.kind === "deltas" ? result.deltas.filter((d) => !unsoundFieldChange(instruction, d)) : [];
+        /* AN EXCEPTION CREATE'S QUESTION IS THIS ROOM'S OWN (E7, 2026-09-02).
+           `provablyClean` reads anything that is not deltas as a failed parse,
+           and an exception create legitimately comes back asking what mitigates
+           it: the fenced reader will not default a credit judgement. Sending
+           that to the desk is how "log a policy exception for leverage above
+           policy" was answered as a question about the exception already on
+           file, with nothing staged. A REFUSAL still goes to the desk, because
+           a refusal is not a question. */
+        const ownAsk =
+          result !== null &&
+          result.kind !== "refusal" &&
+          readExceptionOpen(instruction, elicitMembers) !== null;
         const clean =
           result !== null &&
-          provablyClean({
-            line: instruction,
-            result,
-            sound,
-            qualifier: qualifierFilter(instruction, sound, qualifierMembers),
-          });
+          (ownAsk ||
+            provablyClean({
+              line: instruction,
+              result,
+              sound,
+              qualifier: qualifierFilter(instruction, sound, qualifierMembers),
+            }));
         if (!clean) reply = await askTheDesk(instruction, false);
         await beat(started);
         if (clean && result) {
@@ -1689,7 +1703,7 @@ export function Workroom({
       }
       await landBrainReply(reply, instruction, mine, { fallback: result });
     },
-    [askTheDesk, beat, brain, context, engine, landBrainReply, qualifierMembers, renderParse, runParser],
+    [askTheDesk, beat, brain, context, elicitMembers, engine, landBrainReply, qualifierMembers, renderParse, runParser],
   );
 
   /* ========================================================= THE CREATE GRAMMAR
@@ -2293,6 +2307,35 @@ export function Workroom({
           setSteerPending(false);
           await askCreate(opened, mine);
           return;
+        }
+
+        /* ============================ A POLICY EXCEPTION CREATE IS THE FAST
+           LANE'S (E7, founder drive 2026-09-02).
+
+           The status is a credit judgement the fenced reader refuses to default,
+           so an exception create legitimately comes back from the parser as a
+           QUESTION - and `provablyClean` reads a question as a failed parse and
+           sends it to the desk, which answered it as a question about the
+           exception already on file and staged nothing. The room elicits it
+           here instead: the NAME is what is out of policy, the aside about who
+           approved it is a NOTE, the status is asked with the org's own three,
+           and the facility is named by the org's own loan name so the parser
+           resolves one member rather than the focused one. */
+        const exceptionOpen = reading ? null : readExceptionOpen(line, elicitMembers, turnCtx.focused);
+        if (exceptionOpen) {
+          const exceptionNeeds = exceptionAsk(exceptionOpen, elicitMembers);
+          if (exceptionNeeds) {
+            setSteerPending(false);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: exceptionNeeds.text,
+              options: exceptionNeeds.options,
+            });
+            return;
+          }
+          const on = elicitMembers.find((m) => m.id === exceptionOpen.memberId);
+          if (on) line = exceptionSay(exceptionOpen, on);
         }
 
         /* ================================================ NAVIGATIONAL INTENT

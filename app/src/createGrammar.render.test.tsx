@@ -534,12 +534,17 @@ describe("a dollar qualifier names the facility on every line, not just a commit
     // The narrative survived the strip: the exception is about leverage.
     expect(said(room).toLowerCase()).toContain("leverage");
     expect(said(room)).not.toMatch(/1% or|\$15,000,000/);
-    expect(said(room)).toContain("Leverage above policy approved by credit committee");
+    /* E7: the NAME is what is out of policy. "approved by credit committee"
+       says who decided, which is a mitigant and never the record's name. */
+    expect(said(room)).toContain('Is "Leverage above policy" waived, mitigated, or standing unmitigated');
+    expect(said(room)).toContain('"approved by credit committee"');
+    expect(said(room)).not.toContain("Leverage above policy approved by credit committee");
 
     await click(byText(/^Waived$/));
     expect(chips(room)).toHaveLength(1);
     expect(room.textContent).toContain("Line of Credit ($15M)");
-    expect(room.textContent).toContain("Leverage above policy approved by credit committee");
+    expect(room.textContent).toContain("Leverage above policy");
+    expect(room.textContent).not.toContain("Leverage above policy approved by credit committee");
   });
 });
 
