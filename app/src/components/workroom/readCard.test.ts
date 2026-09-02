@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReadCard, readGap, type ReadSource } from "./readCard";
+import { buildReadCard, planReadCard, readGap, type ReadSource } from "./readCard";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import live from "../../../../artifact/live-data.json";
 import sample from "../../../../artifact/sample-data.json";
@@ -250,5 +250,51 @@ describe("a question about guarantors is answered with the guarantors", () => {
     // carries six facilities. The card stands on the package it is scoped to.
     expect(new Set((HARTWELL.graph?.legalEntities ?? []).filter((e) => e.borrowerType === "Borrower").map((e) => e.loanId)).size).toBe(7);
     expect(borrower.detail).toContain("on 6 facilities");
+  });
+});
+
+/* ================== "WHAT IS ON THE PLAN" IS ROWS, NOT A PARAGRAPH
+
+   Founder drive 2026-09-02: the deterministic read-back printed fifteen entries
+   as one semicolon-separated blob, and the model's remark under it then did the
+   structuring the deterministic layer should have done.                       */
+
+describe("the plan reads back as rows, grouped by facility", () => {
+  const PLAN = [
+    { title: "Commitment", target: "$15.0MM Line of Credit", before: "$15.0M", after: "$20.0M", group: "terms", member: "a1" },
+    { title: "Leverage above policy", target: "$15.0MM Line of Credit", before: "not on the facility today", after: "logged as mitigated", group: "structure", member: "a1" },
+    { title: "Kokomo plant expansion", target: "Construction", before: "not on the facility today", after: "created and pledged, $6,500,000.00 at 75% advance", group: "security", member: "a2" },
+  ];
+
+  it("puts one row under each facility, in landing order, and keeps the count line", () => {
+    const card = planReadCard(PLAN, "The manifest holds 3 changes.", "What next?");
+    expect(card.lede).toBe("The manifest holds 3 changes.");
+    expect(card.groups.map((g) => g.heading)).toEqual(["$15.0MM Line of Credit", "Construction"]);
+    expect(card.groups[0].rows.map((r) => r.label)).toEqual(["Commitment", "Leverage above policy"]);
+    expect(card.groups[1].rows.map((r) => r.label)).toEqual(["Kokomo plant expansion"]);
+  });
+
+  it("carries the move in the entry's own words, before to after", () => {
+    const card = planReadCard(PLAN, "The manifest holds 3 changes.", "What next?");
+    expect(card.groups[0].rows[0].detail).toBe("$15.0M → $20.0M");
+    expect(card.groups[1].rows[0].detail).toBe(
+      "not on the facility today → created and pledged, $6,500,000.00 at 75% advance",
+    );
+  });
+
+  it("never runs the entries together into one line", () => {
+    const card = planReadCard(PLAN, "The manifest holds 3 changes.", "What next?");
+    const rows = card.groups.flatMap((g) => g.rows);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) expect(row.label).not.toContain(";");
+  });
+
+  it("groups an entry that hangs off no facility under the relationship", () => {
+    const card = planReadCard(
+      [{ title: "A thing", target: "", before: "a", after: "b", group: "covenants" }],
+      "The manifest holds 1 change.",
+      "What next?",
+    );
+    expect(card.groups[0].heading).toBe("Across the relationship");
   });
 });

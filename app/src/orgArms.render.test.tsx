@@ -189,7 +189,11 @@ describe("a covenant carry exclusion on a modification (P2)", () => {
     await click(byText(/^Confirm$/));
     await typeInto(room, "what is on the plan");
 
-    expect(said(room)).toMatch(/The manifest holds 1: Accounts Receivable on [^,]+, on the booked facility[^,]*, and carried onto the clone today to not carried onto the new version/);
+    /* ONE ROW PER ENTRY, on the room's own card, grouped by facility. The blob
+       is gone; the count line and the words are the entry's own. */
+    expect(room.textContent).toMatch(/The manifest holds 1 \w+\./);
+    expect(room.textContent).toContain("Accounts Receivable");
+    expect(room.textContent).toMatch(/on the booked facility[^\u2192]*\u2192 not carried onto the new version/);
   });
 
   it("REFUSES a covenant the facility does not carry, and says where it is (drive line 6)", async () => {

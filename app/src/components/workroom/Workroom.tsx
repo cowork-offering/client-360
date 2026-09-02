@@ -106,7 +106,7 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "./entryChoreography";
-import { buildReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
+import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
 import { mailTipFrom, overdueCovenantTip } from "./tips";
@@ -2456,14 +2456,27 @@ export function Workroom({
       const address = addressManifest(instruction, entries);
       if (address?.kind === "list" || readsThePlan(instruction)) {
         const staged = address?.kind === "list" ? address.entries : entries;
+        /* ONE ROW PER ENTRY, GROUPED BY FACILITY (founder drive 2026-09-02).
+           Fifteen entries as one semicolon-separated paragraph is not a
+           read-back, and the model's remark underneath was left doing the
+           structuring the deterministic layer should have done. The count line
+           is the card's lede, so the card and the rail state the same figure. */
+        if (staged.length) {
+          answer({
+            kind: "read",
+            id: nextId("read"),
+            card: planReadCard(
+              staged,
+              `The manifest holds ${staged.length} ${staged.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1]}.`,
+              vocabulary.nextMove,
+            ),
+          });
+          return;
+        }
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: staged.length
-            ? `The manifest holds ${staged.length}: ${staged
-                .map((e) => `${e.title} on ${e.target}, ${e.before} to ${e.after}`)
-                .join("; ")}.`
-            : "Nothing is staged yet. Confirmed changes land here, grouped.",
+          text: "Nothing is staged yet. Confirmed changes land here, grouped.",
         });
         return;
       }

@@ -374,3 +374,59 @@ export function buildReadCard(topic: ReadTopic, src: ReadSource, opts: ReadOptio
       return null;
   }
 }
+
+/* ============================== THE PLAN, READ BACK AS ROWS (2026-09-02)
+
+   FOUNDER DRIVE: "what is on the plan" printed fifteen entries as one
+   semicolon-separated paragraph. The model's remark under it then re-structured
+   the same fifteen BY FACILITY, which is the shape the answer wanted and is not
+   a shape a deterministic read-back should be leaving to a model.
+
+   SO THE DETERMINISTIC READ-BACK USES THE ROOM'S OWN CARD. One row per entry,
+   grouped by the facility the entry sits on, in the order the entries landed.
+   The COUNT LINE stays exactly where it was, as the card's lede: it is the
+   figure the rail itself shows and the two must agree.
+
+   IT RENDERS; IT DERIVES NOTHING. Every string on the card is already on the
+   entry, so a row and the manifest rail beside it cannot disagree.           */
+
+/** The glyph for a manifest group. The rail's own vocabulary, not a new one. */
+const PLAN_ICON: Record<string, IconKind> = {
+  structure: "package",
+  terms: "commit",
+  covenants: "covenant",
+  security: "collateral",
+};
+
+/** The facility an entry sits on, as the banker reads it on the rail. An entry
+ *  that hangs off no member is grouped under the relationship. */
+const PLAN_SCOPE = "Across the relationship";
+
+export function planReadCard(
+  entries: Array<{ title: string; target: string; before: string; after: string; group: string; member?: string }>,
+  countLine: string,
+  followUp: string,
+): ReadCardModel {
+  const order: string[] = [];
+  const byFacility = new Map<string, ReadRow[]>();
+  for (const e of entries) {
+    const heading = e.target?.trim() || PLAN_SCOPE;
+    if (!byFacility.has(heading)) {
+      byFacility.set(heading, []);
+      order.push(heading);
+    }
+    byFacility.get(heading)!.push({
+      icon: PLAN_ICON[e.group] ?? "package",
+      label: e.title,
+      // THE MOVE, IN THE ENTRY'S OWN WORDS. Never recomposed and never derived.
+      value: "",
+      detail: `${e.before} \u2192 ${e.after}`,
+    });
+  }
+  return {
+    topic: "plan",
+    lede: countLine,
+    groups: order.map((heading) => ({ heading, rows: byFacility.get(heading)! })),
+    followUp,
+  };
+}
