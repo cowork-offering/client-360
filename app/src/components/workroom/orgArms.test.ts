@@ -7,6 +7,7 @@ import {
   armStage,
   armOf,
   covenantExclusionDelta,
+  pledgeExclusionDelta,
   readArmRemoval,
 } from "./orgArms";
 import type { Book, ElicitMember } from "./elicit";
@@ -228,6 +229,75 @@ describe("the arm payload, at the wire", () => {
   });
 });
 
+describe("the pledge carry exclusion (drive line 9)", () => {
+  const pledgeCtx = (over: Partial<Parameters<typeof readArmRemoval>[0]> = {}) =>
+    ctx({
+      line: "remove the accounts receivable pledge from the 15M line of credit",
+      scope: "pledge",
+      name: BOOK.assets[0].label,
+      ...over,
+    });
+
+  it("stages the exclusion in COLLATERAL words, never in covenant words (P4)", () => {
+    const read = readArmRemoval(pledgeCtx());
+    expect(read?.kind).toBe("exclusion");
+    if (read?.kind !== "exclusion") return;
+    expect(read.said).toContain("the booked loan keeps the pledge");
+    expect(read.said).toContain("The asset and the borrower's ownership of it are relationship records");
+    expect(`${read.said} ${read.delta.kind} ${read.delta.map.map((m) => m[1]).join(" ")}`).not.toMatch(/covenant/i);
+    expect(read.delta.group).toBe("security");
+    expect(read.delta.fields).toEqual(["LLC_BI__Loan_Collateral2__c"]);
+  });
+
+  it("titles it with the asset rather than with the credit-agreement paragraph", () => {
+    const read = readArmRemoval(pledgeCtx());
+    if (read?.kind !== "exclusion") throw new Error("expected an exclusion");
+    expect(read.delta.title).toBe("All present and future accounts receivable");
+  });
+
+  it("resolves the collateral id the read carries onto the wire", () => {
+    const read = readArmRemoval(pledgeCtx());
+    if (read?.kind !== "exclusion") throw new Error("expected an exclusion");
+    expect(armOf(read.delta)).toEqual({ kind: "pledgeExclusion", recordId: RECEIVABLES, targetLoanId: LOC });
+  });
+
+  it("sends it as pledgeExclusionsJson with the collateral id", () => {
+    const delta = pledgeExclusionDelta(BOOK.assets[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+    const out = armPayload(
+      basePayload({
+        fieldChangesJson: JSON.stringify([
+          { field: delta.fieldWire!.field, value: delta.fieldWire!.value, targetLoanId: LOC },
+        ]),
+      }),
+    );
+    expect(JSON.parse(out.pledgeExclusionsJson!)).toEqual([{ collateralId: RECEIVABLES }]);
+    expect(out.covenantExclusionsJson).toBeUndefined();
+  });
+
+  it("REFUSES where the asset is not pledged to that facility, in collateral words", () => {
+    const read = readArmRemoval(pledgeCtx({ line: "remove the accounts receivable pledge from the 8M equipment loan" }));
+    expect(read?.kind).toBe("refusal");
+    if (read?.kind !== "refusal") return;
+    expect(read.text).toContain("is not pledged to the Equipment ($8M)");
+    expect(read.text).toContain("Line of Credit ($15M)");
+    expect(read.text).not.toMatch(/covenant/i);
+  });
+
+  it("counts the two arms apart on one plan", () => {
+    const covenant = covenantExclusionDelta(BOOK.covenants[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+    const pledge = pledgeExclusionDelta(BOOK.assets[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+    const out = armPayload(
+      basePayload({
+        fieldChangesJson: JSON.stringify(
+          [covenant, pledge].map((d) => ({ field: d.fieldWire!.field, value: d.fieldWire!.value, targetLoanId: LOC })),
+        ),
+      }),
+    );
+    expect(JSON.parse(out.covenantExclusionsJson!)).toEqual([{ covenantId: LIQUIDITY }]);
+    expect(JSON.parse(out.pledgeExclusionsJson!)).toEqual([{ collateralId: RECEIVABLES }]);
+  });
+});
+
 describe("the confirm sentence", () => {
   it("says the booked loan is untouched and the clone will not carry it", () => {
     const delta = covenantExclusionDelta(BOOK.covenants[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
@@ -241,6 +311,14 @@ describe("the confirm sentence", () => {
     // The engine still owns the package figure and the next move.
     expect(said).toContain("The package total holds at $49.0M.");
     expect(said).toContain("What else?");
+  });
+
+  it("says the pledge stays on the booked facility and the asset is not touched", () => {
+    const delta = pledgeExclusionDelta(BOOK.assets[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+    const said = armConfirmSentence(delta, "Pledge staged on the clone. The package total holds at $49.0M.");
+    expect(said).toContain("The booked facility keeps the pledge exactly as it holds it today");
+    expect(said).toContain("nothing is deleted anywhere");
+    expect(said).toContain("The package total holds at $49.0M.");
   });
 
   it("leaves a delta carrying no arm exactly as the engine composed it", () => {

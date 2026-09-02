@@ -576,6 +576,46 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     expect(read).toEqual({ kind: "fence", scope: "covenant", name: "Accounts Receivable" });
   });
 
+  /* ONE FACILITY, TWO EXCLUSIONS, ONE NAME. Once the arms let a removal be
+     STAGED, the same collision lands on the manifest: a covenant carry exclusion
+     titled "Accounts Receivable" beside a pledge carry exclusion of the asset
+     described as accounts receivable. The line's noun tells them apart there too. */
+  const stagedCovenantExclusion = delta({
+    id: "covenant.exclude:loc:a3Bbb000000S0bN",
+    group: "covenants",
+    kind: "Covenant carry exclusion",
+    title: "Accounts Receivable",
+    target: "Line of Credit ($15M)",
+    before: "on the booked facility, and carried onto the clone today",
+    after: "not carried onto the new version",
+  });
+  const stagedPledgeExclusion = delta({
+    id: "collateral.exclude:loc:a35bb0000013xz3AAA",
+    group: "security",
+    kind: "Pledge carry exclusion",
+    title: "Accounts receivable, present and future",
+    target: "Line of Credit ($15M)",
+    before: "pledged to the booked facility, and carried onto the clone today",
+    after: "not carried onto the new version",
+  });
+  const bothStaged = [stagedCovenantExclusion, stagedPledgeExclusion];
+
+  it("un-stages the COVENANT exclusion on a covenant line, with both on the manifest", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", bothStaged, AR_BOOK);
+    expect(read).toEqual({ kind: "manifest", entry: stagedCovenantExclusion });
+  });
+
+  it("un-stages the PLEDGE exclusion on a pledge line, with both on the manifest", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", bothStaged, AR_BOOK);
+    expect(read).toEqual({ kind: "manifest", entry: stagedPledgeExclusion });
+  });
+
+  it("never un-stages a covenant entry over a collateral line, whatever it is titled", () => {
+    const read = readRemove("remove the accounts receivable pledge from the 15M line of credit", [stagedCovenantExclusion], AR_BOOK);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" && read.scope).toBe("pledge");
+  });
+
   it("speaks collateral on a pledge and covenant on a covenant, and the two are not the same refusal (P4)", () => {
     const pledge = fenceRefusal("pledge", "Accounts receivable, present and future");
     const covenant = fenceRefusal("covenant", "Minimum Liquidity");
@@ -584,15 +624,24 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     expect(pledge.why).toContain("COLLATERAL release");
     expect(pledge.why).toContain("never deleted on the booked loan");
     expect(pledge.why).toContain("CARRY EXCLUSION");
+    // AND THE ARM IS DEPLOYED. The copy said it was "being built on the org
+    // side" until 2026-09-02; saying that now would be the room understating
+    // what it can do rather than overstating it, which is the same defect.
+    expect(pledge.why).not.toMatch(/being built|not deployed/i);
+    expect(pledge.why).toContain("Run it as a modification");
     // And NEVER the covenant's.
     expect(pledge.why).not.toMatch(/loan-covenant junction/i);
     expect(pledge.why).not.toMatch(/covenant DETACH/i);
     expect(pledge.title).not.toMatch(/detach/i);
 
     // The covenant fence keeps its own constraint and does not borrow the
-    // collateral one.
+    // collateral one. It names the covenant CARRY EXCLUSION since the arm
+    // deployed (2026-09-02) and, with it, the route that carries it: this
+    // refusal is only ever reached on a renewal or a new facility now.
     expect(covenant.why).toContain("loan-covenant junction");
-    expect(covenant.why).not.toMatch(/CARRY EXCLUSION/);
+    expect(covenant.why).toContain("covenant CARRY EXCLUSION");
+    expect(covenant.why).toContain("Run it as a modification");
+    expect(covenant.why).not.toMatch(/pledge/i);
     expect(covenant.title).toBe("Detach Minimum Liquidity");
   });
 

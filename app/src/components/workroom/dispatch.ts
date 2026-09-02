@@ -790,13 +790,29 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
   const covenantNoun = COVENANT_NOUN.test(line);
   const speaksCollateral = collateralNoun && !covenantNoun;
 
-  const named = entries.filter(
-    (e) => names(line, entryWords(`${e.title} ${e.kind}`)) && names(line, entryWords(`${e.target} ${e.after}`)),
-  );
+  const named = entries
+    .filter((e) => names(line, entryWords(`${e.title} ${e.kind}`)) && names(line, entryWords(`${e.target} ${e.after}`)))
+    /* AND THE NOUN NARROWS THE MANIFEST TOO (N1, one layer deeper). Once a
+       carry exclusion can be STAGED, one facility can hold an exclusion of the
+       covenant called Accounts Receivable beside an exclusion of the asset
+       described as accounts receivable, and the line's own noun is what tells
+       them apart on the manifest exactly as it does on the book. */
+    .filter((e) => (collateralNoun && !COVENANT_NOUN.test(line) ? e.group === "security" : true))
+    .filter((e) => (COVENANT_NOUN.test(line) && !collateralNoun ? e.group === "covenants" : true));
   /* THE STAGED ENTRY MUST BE THE THING NAMED. Where the line names a book item,
      only a staged entry carrying that same item can be the one the banker means;
-     everything else is the book's line and the fence answers it. */
-  const subject = covenant?.type ?? asset?.name ?? asset?.label ?? null;
+     everything else is the book's line and the fence answers it.
+
+     THE SUBJECT IS THE NOUN'S, not the ordering's. A collateral line's subject is
+     the ASSET even where a covenant type of the same name also resolved, which is
+     the same rule `speaksCollateral` makes about the book. The asset is named by
+     its first sentence, because that is what a staged entry is titled with. */
+  const assetSubject = asset
+    ? asset.name && lower.includes(asset.name.toLowerCase())
+      ? asset.name
+      : assetPhrase(asset.label)
+    : null;
+  const subject = speaksCollateral ? assetSubject : (covenant?.type ?? assetSubject);
   const claimed = subject
     ? named.filter((e) => `${e.title} ${e.after} ${e.before}`.toLowerCase().includes(subject.toLowerCase()))
     : named;
@@ -841,8 +857,8 @@ export function fenceRefusal(scope: "covenant" | "pledge", name: string): Workro
     title: scope === "covenant" ? `Detach ${name}` : `Release ${said}`,
     why:
       scope === "covenant"
-        ? `Taking ${name} off a facility is a covenant DETACH, and this room does not file one: every field on the loan-covenant junction is non-updateable, so detaching means deleting the row and no delete is filed on any object here. ${name} stays on the facility and carries onto the clone with everything else. What the bank does have is a covenant compliance update, to Compliant, Waived or Exception, and it runs as its own credit action rather than on this modification. Nothing has been staged and nothing has come off the manifest.`
-        : `Taking ${said} off a facility is a COLLATERAL release, and this room files none. A pledge is never deleted on the booked loan: the security the facility carries today stays exactly where it is, and on a modification the clone carries the same pledges onto the new version. What this needs is a pledge CARRY EXCLUSION, the same mechanism the borrowing structure already uses, where the parent keeps its pledge and the new version simply starts without it. That arm is being built on the org side and is not deployed, so I will not pretend to file it. What I can file here is a pledge ONTO a facility. Nothing has been staged and nothing has come off the manifest.`,
+        ? `Taking ${name} off a facility is a covenant DETACH, and this room does not file one: every field on the loan-covenant junction is non-updateable, so detaching means deleting the row and no delete is filed on any object here. What takes it off the NEW version is a covenant CARRY EXCLUSION, and that arm rides the modification alone: a renewal files a new maturity and a repricing, and a new facility files the product, the amount, the term and the purpose, so neither of them can leave a junction behind. Run it as a modification and I will stage the exclusion. Here, ${name} stays on the facility and carries onto the clone with everything else. What the bank does have is a covenant compliance update, to Compliant, Waived or Exception, and it runs as its own credit action. Nothing has been staged and nothing has come off the manifest.`
+        : `Taking ${said} off a facility is a COLLATERAL release, and this room files none. A pledge is never deleted on the booked loan: the security the facility carries today stays exactly where it is. What takes it off the NEW version is a pledge CARRY EXCLUSION, the same mechanism the borrowing structure already uses, where the parent keeps its pledge and the clone simply starts without it. That arm rides the modification and nothing else: a renewal files a new maturity and a repricing, and a new facility files the product, the amount, the term and the purpose, so neither of them can leave a pledge behind. Run it as a modification and I will stage the exclusion. What I can file here is a pledge ONTO a facility. Nothing has been staged and nothing has come off the manifest.`,
     reason: field?.gap ?? "No tool files this today.",
     detail: field?.closes ?? "",
   };

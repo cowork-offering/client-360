@@ -96,6 +96,11 @@ const click = async (el: Element | undefined) => {
 };
 const chips = (room: HTMLElement) => [...room.querySelectorAll(".wk-chip")];
 const said = (room: HTMLElement) => [...room.querySelectorAll(".wk-msg")].map((m) => m.textContent ?? "").join(" ");
+/** The last thing the room said, for an assertion about a WORD it must not use. */
+const lastSaid = (room: HTMLElement) => {
+  const all = [...room.querySelectorAll(".wk-msg")];
+  return all[all.length - 1]?.textContent ?? "";
+};
 const rail = (room: HTMLElement) => [...room.querySelectorAll(".wk-ent")].map((e) => e.textContent ?? "").join(" ");
 
 const NEVER: BrainReply = { type: "clarify", text: "the desk should never have been asked this" };
@@ -174,6 +179,53 @@ describe("a covenant carry exclusion on a modification (P2)", () => {
 
     expect(chips(room)).toHaveLength(1);
     expect(chips(room)[0].textContent).toContain("Detach Accounts Receivable");
+  });
+});
+
+describe("a pledge carry exclusion on a modification (P2 + P4)", () => {
+  it("stages the exclusion for an asset the facility actually carries (drive line 9)", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "remove the accounts receivable pledge from the 15M line of credit");
+
+    expect(chips(room)).toHaveLength(1);
+    const chip = chips(room)[0].textContent ?? "";
+    expect(chip).toContain("All present and future accounts receivable");
+    expect(chip).toContain("not carried onto the new version");
+    expect(said(room)).toContain("the booked loan keeps the pledge");
+  });
+
+  it("speaks collateral, not covenants, though the catalog carries a test of the same name (N1)", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "remove the accounts receivable pledge from the 15M line of credit");
+
+    expect(lastSaid(room)).not.toMatch(/covenant/i);
+    expect(lastSaid(room)).toContain("relationship records");
+  });
+
+  it("is the same words with one noun changed, and reaches the other arm", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await typeInto(room, "remove the accounts receivable pledge from the 15M line of credit");
+
+    const staged = chips(room).map((c) => c.textContent ?? "");
+    expect(staged).toHaveLength(2);
+    expect(staged[0]).toContain("Covenant carry exclusion");
+    expect(staged[1]).toContain("Pledge carry exclusion");
+  });
+
+  it("the confirm says the asset and the ownership junction are not touched", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "remove the accounts receivable pledge from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+
+    expect(said(room)).toContain("The booked facility keeps the pledge exactly as it holds it today");
+    expect(said(room)).toContain("nothing is deleted anywhere");
+    expect(rail(room)).toContain("not carried onto the new version");
   });
 });
 
