@@ -427,6 +427,33 @@ before the connector registered its tools stayed on the mirror with no retry. Th
 the cache while it is in flight, so two callers on one frame share the round trip; it is dropped the
 moment it resolves to null, and the next read asks again.
 
+### The targeted drive of the fixes
+
+Headless, against the assembled build on port 8913, one page load per line, with `window.claude.mcp`
+stubbed before the page's own scripts. `Customer360Catalog` answers the org shape, `outlook_email_search`
+answers `[]`, and `stage_loan_modification` records the payload and then either throws the org's own
+refusal or returns a plan, depending on what the line is proving.
+
+**The room makes TWO gateway calls on a fuzzy line and they are different questions**, so the stub
+answers them apart: a prompt opening `Rewrite this banker instruction ...` is the ENGINE's restate
+pre-pass and takes a sentence back (`NONE`, so the stub never authors a delta), and anything else is
+the brain ENVELOPE and takes contract-valid JSON. On this build the envelope answers a fuzzy line
+before the parser is reached, so the restate door was never opened in the run: the last line below
+records that rather than claiming a pass for it.
+
+| # | the line | what the room did |
+|---|---|---|
+| 1 | `remove the accounts receivable covenant from the 2.5M line of credit` | REFUSED and named where it lives ("This book carries it on $15.0MM Line of Credit"). Manifest unchanged. |
+| 2 | `remove the accounts receivable pledge from the 2.5M line of credit` | Manifest unchanged. That line DOES carry COL-000762, so it staged an exclusion there rather than touching the $15M entry. |
+| 3 | `remove the equipment pledge from the 8M equipment loan` | Manifest unchanged. Staged the exclusion on the $8.0MM Equipment, which carries COL-000764. |
+| 4 | `remove the real estate pledge from the 5M purchase loan`, confirmed | One clean sentence: "... nothing is deleted anywhere. The package total holds at $46M." No fragment of the engine's opening clause. |
+| 5 | `remove the inventory pledge from the 15M line of credit` | Staged the COL-000763 exclusion. No handoff card. |
+| 6 | `remove the leverage covenant from the 15M line of credit` | Answered from the book, naming what the facility carries and what sits at relationship level. Two tools called in the whole run, neither of them the gateway. |
+| 7 | the same removal twice | "... is out of the manifest. The new version carries it again, exactly as the booked facility holds it today. Say it again to leave it off." No figure copy. |
+| 8 | the org's refusal, by record id | The org's sentence verbatim, then "That is Accounts Receivable on $15.0MM Line of Credit." The payload carried `covenantExclusionsJson` and no sentinel. |
+| 9 | a plan with no `covenant_exclusion_0` | Approve DISABLED and labelled "Approval closed", the card said why, the quiet button read "Discard the plan", and pressing the ink button filed nothing. |
+| 10 | a fuzzy line, for the stub itself | One gateway door opened, the envelope. The restate pre-pass is not reached on this route. |
+
 ### Notes
 
 **`modifyEngine.ts` contains one NUL byte, near line 1693.** It is inside the fence and pre-existing,
