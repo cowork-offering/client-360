@@ -655,6 +655,282 @@ private class StageExecuteLoanModificationTest {
         }
     }
 
+    /**
+     * P2, the founder's requirement of 2026-09-02: "we should have the ability to remove covenants
+     * from the open loan when the modification happens", and the same for a pledge.
+     *
+     * The correct nCino model is a CARRY EXCLUSION, not a delete and not a detach. This fixture
+     * gives the parent TWO covenants and TWO pledges, names one of each as excluded, and proves
+     * four things at once: the named ones do not reach the clone, the unnamed ones do, the parent's
+     * own junctions and pledges are all still there, and neither the covenant records nor the
+     * collateral assets were touched.
+     */
+    @IsTest
+    static void aCovenantAndAPledgeAreRemovedFromTheCloneAsCarryExclusions() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('carryexcl');
+
+        LLC_BI__Covenant2__c dropped = new LLC_BI__Covenant2__c(LLC_BI__Account__c = borrower().Id);
+        LLC_BI__Covenant2__c kept = new LLC_BI__Covenant2__c(LLC_BI__Account__c = borrower().Id);
+        insert new List<LLC_BI__Covenant2__c>{ dropped, kept };
+        LLC_BI__Loan_Covenant__c droppedJunction = new LLC_BI__Loan_Covenant__c(
+            LLC_BI__Loan__c = before.Id, LLC_BI__Covenant2__c = dropped.Id
+        );
+        LLC_BI__Loan_Covenant__c keptJunction = new LLC_BI__Loan_Covenant__c(
+            LLC_BI__Loan__c = before.Id, LLC_BI__Covenant2__c = kept.Id
+        );
+        insert new List<LLC_BI__Loan_Covenant__c>{ droppedJunction, keptJunction };
+
+        LLC_BI__Collateral_Type__c colType = new LLC_BI__Collateral_Type__c(
+            Name = 'ZZ-MOD-TEST Excl Type', LLC_BI__Advance_Rate__c = 70
+        );
+        insert colType;
+        LLC_BI__Collateral__c releasedAsset = new LLC_BI__Collateral__c(
+            LLC_BI__Collateral_Type__c = colType.Id, LLC_BI__Description__c = 'ZZ-MOD-TEST released receivables'
+        );
+        LLC_BI__Collateral__c heldAsset = new LLC_BI__Collateral__c(
+            LLC_BI__Collateral_Type__c = colType.Id, LLC_BI__Description__c = 'ZZ-MOD-TEST held equipment'
+        );
+        insert new List<LLC_BI__Collateral__c>{ releasedAsset, heldAsset };
+        LLC_BI__Loan_Collateral_Aggregate__c parentAgg = new LLC_BI__Loan_Collateral_Aggregate__c(Name = 'ZZ-MOD-TEST Excl Aggregate');
+        insert parentAgg;
+        LLC_BI__Loan_Collateral2__c releasedPledge = new LLC_BI__Loan_Collateral2__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Collateral__c = releasedAsset.Id,
+            LLC_BI__Loan_Collateral_Aggregate__c = parentAgg.Id,
+            LLC_BI__Lien_Position__c = '1st',
+            LLC_BI__Amount_Pledged__c = 400000
+        );
+        LLC_BI__Loan_Collateral2__c heldPledge = new LLC_BI__Loan_Collateral2__c(
+            LLC_BI__Loan__c = before.Id,
+            LLC_BI__Collateral__c = heldAsset.Id,
+            LLC_BI__Loan_Collateral_Aggregate__c = parentAgg.Id,
+            LLC_BI__Lien_Position__c = '1st',
+            LLC_BI__Amount_Pledged__c = 600000
+        );
+        insert new List<LLC_BI__Loan_Collateral2__c>{ releasedPledge, heldPledge };
+
+        StageLoanModification.Request r = stageReq(k);
+        r.covenantExclusionsJson = '[{"covenantId":"' + dropped.Id + '"}]';
+        r.pledgeExclusionsJson = '[{"pledgeId":"' + releasedPledge.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('carry exclusion'),
+            'The banker confirms a plan that says the removal is a carry exclusion: ' + staged.result.summary);
+        Boolean saidNotDeleted = false;
+        for (String w : staged.result.warnings) {
+            if (w.contains('REMOVED MEANS NOT CARRIED')) {
+                saidNotDeleted = true;
+            }
+        }
+        System.assertEquals(true, saidNotDeleted,
+            'And a warning that says plainly nothing is deleted: ' + String.join(staged.result.warnings, ' | '));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        System.assertEquals(0, [
+            SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :dropped.Id
+        ], 'The excluded covenant junction never travels to the clone');
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :kept.Id
+        ], 'And the covenant nobody named carries exactly as it always did');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE Id = :droppedJunction.Id],
+            'The PARENT keeps its own junction: this is an exclusion, never a detach');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Covenant2__c WHERE Id = :dropped.Id],
+            'And the covenant record itself is untouched');
+
+        System.assertEquals(0, [
+            SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Collateral__c = :releasedAsset.Id
+        ], 'The excluded pledge never travels to the clone');
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Collateral__c = :heldAsset.Id
+        ], 'And the pledge nobody named carries');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c WHERE Id = :releasedPledge.Id],
+            'The PARENT keeps its own pledge');
+        System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Collateral__c WHERE Id = :releasedAsset.Id],
+            'And the asset is a relationship record: nothing deleted it');
+
+        Boolean covExclProven = false;
+        Boolean pledgeExclProven = false;
+        for (ExecuteLoanModification.StepResult s : done.result.steps) {
+            if (s.id == 'covenant_exclusion_verify_0') { covExclProven = s.state == C360Plan.STATE_VERIFIED; }
+            if (s.id == 'pledge_exclusion_verify_0') { pledgeExclProven = s.state == C360Plan.STATE_VERIFIED; }
+        }
+        System.assertEquals(true, covExclProven && pledgeExclProven,
+            'Each exclusion is proven by re-query, absent on the clone and present on the parent: ' + JSON.serialize(done.result.steps));
+    }
+
+    /** An id the facility does not carry is refused BY NAME, never staged as a silent no-op. */
+    @IsTest
+    static void excludingACovenantTheFacilityDoesNotCarryIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Covenant2__c elsewhere = new LLC_BI__Covenant2__c(LLC_BI__Account__c = borrower().Id);
+        insert elsewhere;
+
+        StageLoanModification.Request r = stageReq(key('badcovexcl'));
+        r.covenantExclusionsJson = '[{"covenantId":"' + elsewhere.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'Removing what the facility does not carry cannot be staged');
+        System.assert(res.error.message.contains('is not attached to'),
+            'And the refusal names the covenant and the facility: ' + res.error.message);
+    }
+
+    /** Same for a pledge, and the refusal speaks COLLATERAL rather than covenant language. */
+    @IsTest
+    static void excludingAPledgeTheFacilityDoesNotCarryIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral_Type__c colType = new LLC_BI__Collateral_Type__c(
+            Name = 'ZZ-MOD-TEST Unpledged Type', LLC_BI__Advance_Rate__c = 60
+        );
+        insert colType;
+        LLC_BI__Collateral__c unpledged = new LLC_BI__Collateral__c(
+            LLC_BI__Collateral_Type__c = colType.Id, LLC_BI__Description__c = 'ZZ-MOD-TEST unpledged asset'
+        );
+        insert unpledged;
+
+        StageLoanModification.Request r = stageReq(key('badplexcl'));
+        r.pledgeExclusionsJson = '[{"collateralId":"' + unpledged.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'Releasing what is not pledged cannot be staged');
+        System.assert(res.error.message.contains('is not pledged to'),
+            'And the refusal is collateral language, not covenant language: ' + res.error.message);
+    }
+
+    /** A string that is not a Salesforce id at all is refused by name, not by a platform stack. */
+    @IsTest
+    static void anUnreadableExclusionIdIsRefusedByName() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('junkid'));
+        r.covenantExclusionsJson = '[{"covenantId":"the minimum liquidity covenant"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A description is not an id');
+        System.assert(res.error.message.contains('is not a Salesforce id'),
+            'And the banker reads why: ' + res.error.message);
+    }
+
+    /**
+     * P1: associating an EXISTING covenant to a facility is a junction-only create.
+     *
+     * The founder's correction: a relationship-level covenant carries no loan junction, so it is
+     * NOT associated to the loan however it reads at relationship level. This proves the junction
+     * lands on the clone, the covenant record is not re-created and not amended, and the account
+     * association is not duplicated when the covenant already carries one.
+     */
+    @IsTest
+    static void anExistingCovenantIsAssociatedToTheCloneByJunctionOnly() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('covassoc');
+
+        LLC_BI__Covenant2__c relationshipLevel = new LLC_BI__Covenant2__c(
+            LLC_BI__Account__c = borrower().Id,
+            LLC_BI__Financial_Indicator_Value__c = 1.25,
+            LLC_BI__Covenant_Status__c = 'Pending',
+            LLC_BI__Active__c = true
+        );
+        insert relationshipLevel;
+        insert new LLC_BI__Account_Covenant__c(
+            LLC_BI__Account__c = borrower().Id, LLC_BI__Covenant2__c = relationshipLevel.Id
+        );
+        Integer covenantsBefore = [SELECT COUNT() FROM LLC_BI__Covenant2__c];
+
+        StageLoanModification.Request r = stageReq(k);
+        r.covenantAttachesJson = '[{"covenantId":"' + relationshipLevel.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assert(staged.result.summary.contains('junction only'),
+            'The plan says plainly that no covenant is created: ' + staged.result.summary);
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+
+        Id cloneId = (Id) done.result.cloneLoanId;
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+            WHERE LLC_BI__Loan__c = :cloneId AND LLC_BI__Covenant2__c = :relationshipLevel.Id
+        ], 'The junction ties the EXISTING covenant to the clone');
+        System.assertEquals(covenantsBefore, [SELECT COUNT() FROM LLC_BI__Covenant2__c],
+            'And no covenant was created: this arm is a junction and nothing else');
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Account_Covenant__c
+            WHERE LLC_BI__Covenant2__c = :relationshipLevel.Id AND LLC_BI__Account__c = :borrower().Id
+        ], 'The account association it already carried was not duplicated');
+        System.assertEquals(1.25, [
+            SELECT LLC_BI__Financial_Indicator_Value__c FROM LLC_BI__Covenant2__c WHERE Id = :relationshipLevel.Id
+        ].LLC_BI__Financial_Indicator_Value__c, 'The covenant itself is untouched: an association is not an amend');
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :parent().Id],
+            'And the booked parent gains nothing');
+    }
+
+    /** A covenant already on the facility is refused by name: the carry brings it by itself. */
+    @IsTest
+    static void associatingACovenantAlreadyOnTheFacilityIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Covenant2__c already = new LLC_BI__Covenant2__c(LLC_BI__Account__c = borrower().Id);
+        insert already;
+        insert new LLC_BI__Loan_Covenant__c(LLC_BI__Loan__c = parent().Id, LLC_BI__Covenant2__c = already.Id);
+
+        StageLoanModification.Request r = stageReq(key('dupassoc'));
+        r.covenantAttachesJson = '[{"covenantId":"' + already.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A second junction for the same covenant on the same loan is a duplicate');
+        System.assert(res.error.message.contains('ALREADY associated'),
+            'And the refusal says the carry already brings it: ' + res.error.message);
+    }
+
+    /** A covenant on another relationship is never cross-linked by a junction. */
+    @IsTest
+    static void associatingACovenantFromAnotherRelationshipIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        Account other = new Account(Name = 'ZZ-MOD-TEST Other Relationship');
+        insert other;
+        LLC_BI__Covenant2__c foreign = new LLC_BI__Covenant2__c(LLC_BI__Account__c = other.Id);
+        insert foreign;
+
+        StageLoanModification.Request r = stageReq(key('foreignassoc'));
+        r.covenantAttachesJson = '[{"covenantId":"' + foreign.Id + '"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A covenant is not moved between relationships by a junction');
+        System.assert(res.error.message.contains('not to the borrower on this package'),
+            'And the refusal names whose covenant it is: ' + res.error.message);
+    }
+
     @IsTest
     static void removingAnEntityThatIsNotInvolvedIsRefusedAtStageTime() {
         C360TestFixture.armCalloutMock();

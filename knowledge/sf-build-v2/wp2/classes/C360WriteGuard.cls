@@ -44,6 +44,20 @@ public with sharing class C360WriteGuard {
      */
     public static final String OP_CARRY = 'carry';
 
+    // CARRY EXCLUSIONS NEED NO OPERATION OF THEIR OWN, and that is the whole point of them.
+    //
+    // A banker who says "remove this covenant from the loan" on a modification is not asking for a
+    // delete and not asking for a detach: the booked facility keeps everything it has, and the new
+    // VERSION simply starts without the named row. Involvements have worked this way since
+    // 2026-08-30; covenants and pledges joined them on 2026-09-02 (founder P2). The carry writes
+    // FEWER rows than it otherwise would, and writing fewer rows needs no permission: every row it
+    // does write still passes OP_CARRY with the same fields it always did.
+    //
+    // So there is deliberately nothing here for an exclusion, and there must never be. A guard
+    // entry for "remove" would be a doorway to a delete, which is fenced on every object in this
+    // package. If a future arm ever needs to un-write something on a BOOKED record, that is a
+    // founder decision and a new fence, not an extension of this one.
+
     public static final String OBJ_LOAN_COVENANT = 'LLC_BI__Loan_Covenant__c';
     public static final String OBJ_PLEDGE = 'LLC_BI__Loan_Collateral2__c';
     public static final String OBJ_PLEDGE_AGGREGATE = 'LLC_BI__Loan_Collateral_Aggregate__c';
@@ -133,10 +147,14 @@ public with sharing class C360WriteGuard {
             'LLC_BI__Covenant_Status__c' => new Set<String>{ 'Pending' },
             'LLC_BI__Active__c' => new Set<String>{ 'true' }
         },
-        // The attach of a NET-NEW covenant to a facility. Doctrine: the caller may attach only a
-        // covenant this same transaction created, and only to a modification clone this same
-        // transaction created — never to a booked facility. The gate fences the object; the
-        // caller owns that scoping, exactly as with OP_CARRY.
+        // The attach of a covenant to a facility. Doctrine, widened 2026-09-02 (founder P1): the
+        // caller may attach a covenant this same transaction created, OR one the BORROWER on this
+        // package already holds, and only ever to a modification clone this same transaction
+        // created, never to a booked facility. Associating an existing covenant is the instrument
+        // for a relationship-level covenant, which carries no loan junction and is therefore not on
+        // the loan however it reads at relationship level; it is a junction create and nothing
+        // else, so the covenant AMEND and DETACH fences are untouched. The gate fences the object;
+        // the caller owns that scoping, exactly as with OP_CARRY.
         OBJ_LOAN_COVENANT => new Map<String, Set<String>>(),
         // The account association nCino's own UI mints beside every covenant (founder correction,
         // 2026-08-31): a covenant belongs to the borrower as well as to the facility, and 140 such
