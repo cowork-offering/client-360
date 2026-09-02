@@ -1997,7 +1997,9 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
     return {
       lines,
       gaps,
-      lede: `${s.test} of ${threshold}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}${s.frequencyFrom === "book" ? " as this relationship already tests it" : ""}, on ${sentenceList(draft.scope.map((id) => member(id).label))}. The effective date is set once when it is created and never updated afterwards.`,
+      lede: s.associate
+        ? `The ${s.test} the book already carries, at ${threshold} tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}, put onto ${sentenceList(draft.scope.map((id) => member(id).label))}. The covenant record is not touched: what this authors is the junction to the facility, so its threshold, its schedule and its effective date stay exactly as they are.`
+        : `${s.test} of ${threshold}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}${s.frequencyFrom === "book" ? " as this relationship already tests it" : ""}, on ${sentenceList(draft.scope.map((id) => member(id).label))}. The effective date is set once when it is created and never updated afterwards.`,
     };
   }
 
@@ -2173,12 +2175,17 @@ export function handoffEntry(
     : involvement
       ? `${s.party} as ${s.role}`
       : `${shortLabel(asset ?? ({ label: s.assetLabel ?? "the asset" } as BookAsset))}${s.lien ? ` at ${s.lien} position` : ""}`;
-  const noun = covenant ? "New covenant" : involvement ? "New involvement" : "New pledge";
-  const object = covenant
-    ? "LLC_BI__Covenant2__c"
-    : involvement
-      ? "LLC_BI__Legal_Entities__c"
-      : "LLC_BI__Loan_Collateral2__c";
+  /* AN ASSOCIATE IS NOT A NEW COVENANT, and the card must not call it one: the
+     record exists, and what this would author is the junction to it. */
+  const associate = covenant && Boolean(s.associate);
+  const noun = associate ? "Associate a covenant" : covenant ? "New covenant" : involvement ? "New involvement" : "New pledge";
+  const object = associate
+    ? "LLC_BI__Loan_Covenant__c"
+    : covenant
+      ? "LLC_BI__Covenant2__c"
+      : involvement
+        ? "LLC_BI__Legal_Entities__c"
+        : "LLC_BI__Loan_Collateral2__c";
   const fieldId = covenant ? "covenant.add" : involvement ? "party.add" : "collateral.pledge";
   return {
     id: `${fieldId}:${memberId}:handoff:${seq}`,
@@ -2189,7 +2196,7 @@ export function handoffEntry(
     badge: `${noun} handed off`,
     title: involvement ? (s.party ?? noun) : noun,
     target: member.label,
-    before: "not on the facility today",
+    before: associate ? "on the book, with no junction to this facility" : "not on the facility today",
     after,
     member: memberId,
     map: [

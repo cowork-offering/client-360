@@ -367,6 +367,16 @@ describe("the room reads the book and the plan before it proposes anything", () 
     const entry = handoffEntry(took, ctx, EQ8, gap, 0);
     expect(entry.fileable).toBe(false);
     expect(entry.after).toContain("Debt Service Coverage of Borrower");
+    // The card does not call an association a new covenant, and the object it
+    // names is the junction rather than the covenant.
+    expect(entry.kind).toBe("Associate a covenant");
+    expect(entry.title).toBe("Associate a covenant");
+    expect(entry.before).toBe("on the book, with no junction to this facility");
+    expect(entry.fields).toEqual(["LLC_BI__Loan_Covenant__c"]);
+
+    // And the sentence over it says the record is not touched.
+    expect(compose(took, ctx).lede).toContain("The covenant record is not touched");
+    expect(compose(took, ctx).lede).not.toContain("set once when it is created");
   });
 
   it("never asks an associate for a threshold it is not setting", () => {
