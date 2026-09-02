@@ -12,6 +12,8 @@ import { resetModalStack } from "./components/modalStack";
 import { readAnchors } from "./data/contract";
 import { collapseConnections } from "./data/graphAggregate";
 import { collateralRecords } from "./data/collateralRecords";
+import { packageRecords } from "./actions/schemas";
+import { resolveBundle } from "./actions/registry";
 import live from "../../artifact/live-data.json";
 import sample from "../../artifact/sample-data.json";
 
@@ -488,5 +490,45 @@ describe("a client email proposes its action (founder: when is the action coming
     const text = container!.textContent ?? "";
     expect(text).toContain("Hartwell");
     expect(text).not.toContain("suggested next step");
+  });
+});
+
+/* =============================================================================
+   THE PACKAGE ANCHOR, ON THE SHIPPED FIXTURE.
+
+   `relContextFor` reads the relationship's product package off the SNAPSHOT,
+   and no snapshot in this file carried one, although every borrower has exactly
+   one package and every one of its facilities names it. So the covenant review
+   and the collateral valuation both refused with NO_PACKAGE_ANCHOR before their
+   first question, on the fixture the demo runs against.
+
+   `scripts/anchor-snapshot-packages.mjs` derives the anchor from the facilities
+   and refuses where it cannot. This pins the result, so a regenerated bundle
+   that drops the key fails here rather than in the room.
+   ============================================================================= */
+
+describe("every relationship in the shipped fixture is anchored on its own package", () => {
+  const borrowers = Object.entries((live as unknown as C360Data).borrowers ?? {});
+
+  it("carries a snapshot productPackageId on all of them", () => {
+    expect(borrowers.length).toBeGreaterThan(0);
+    for (const [id, b] of borrowers) {
+      expect(b.snapshot?.productPackageId, `${id} has no package anchor`).toBeTruthy();
+    }
+  });
+
+  it("takes it from the facilities, and stages exactly ONE package for each", () => {
+    for (const [id, b] of borrowers) {
+      const onFacilities = [...new Set((b.exposure?.facilities ?? []).map((f) => f.productPackageId).filter(Boolean))];
+      expect(onFacilities, `${id}`).toEqual([b.snapshot!.productPackageId]);
+      // And so `packageRecords` cannot produce a duplicate: it seeds with the
+      // snapshot's id and skips any facility already naming it.
+      expect(packageRecords(resolveBundle(live as unknown as C360Data, id)), `${id}`).toHaveLength(1);
+    }
+  });
+
+  it("anchors Hartwell on the id the addendum names", () => {
+    const hartwell = borrowers.find(([, b]) => (b.snapshot?.name ?? "").startsWith("Hartwell"))!;
+    expect(hartwell[1].snapshot!.productPackageId).toBe("a5Fbb000000IHFJEA4");
   });
 });
