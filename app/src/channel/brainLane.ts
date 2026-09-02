@@ -1,5 +1,8 @@
+import { buildBrainTools } from "./brainTools";
 import { budgetPrompt } from "./doctrine";
+import { rungFor, type RungChoice } from "./ladder";
 import { callTool, mcpAvailable, SERVERS, TOOLS, unwrapLlm } from "./mcp";
+import { askSessionJson, sampleAvailable } from "./sampleDoor";
 
 /* =============================================================================
    THE BRAIN LANE — the room's second lane, over the artifact<->session bridge.
@@ -668,18 +671,38 @@ export function restateProposal(
 
 /* --------------------------------------------------------------- the wire */
 
-/** How long the room waits on the desk before it stops waiting out loud. */
+/** How long the room waits on a rung-2 quick call. A restatement that takes
+ *  longer than this has stopped being a restatement. */
 export const BRAIN_TIMEOUT_MS = 25_000;
+
+/** Rung 2 on the default tier: the contract says 5 to 60 seconds to first text,
+ *  up to two minutes on a long structured prompt. */
+export const BRAIN_TIMEOUT_DEFAULT_MS = 90_000;
+
+/** Rung 3: several rounds back to back, commonly 30 to 90 seconds and legally
+ *  longer. A timeout tighter than the platform's own would cut off an answer
+ *  the banker was told to expect. */
+export const BRAIN_TIMEOUT_TOOLS_MS = 150_000;
+
+/** The wait this rung is allowed. One place, so no caller has to remember it. */
+export function timeoutFor(choice: RungChoice): number {
+  if (choice.rung === 3) return BRAIN_TIMEOUT_TOOLS_MS;
+  return choice.tier === "quick" ? BRAIN_TIMEOUT_MS : BRAIN_TIMEOUT_DEFAULT_MS;
+}
 
 /**
  * IS THERE A BRAIN LANE AT ALL.
  *
- * The mcp capability is the only arm of the bridge that returns a reply. With
- * no capability the room keeps the fast lane and the existing loud notice, and
- * a routed line gets {@link NOT_CONNECTED_CLARIFY} rather than a hang.
+ * TWO DOORS NOW. The SESSION door (`window.claude.use("sample")`) is the one
+ * the recorded decision names: the viewer's own Claude, their identity, their
+ * connectors, zero infrastructure. The gateway completion door is the rung
+ * below it, kept only as the fallback while the latency gate is unproven.
+ *
+ * With NEITHER the room keeps the fast lane and the existing loud notice, and a
+ * routed line gets {@link NOT_CONNECTED_CLARIFY} rather than a hang.
  */
 export function brainReachable(): boolean {
-  return mcpAvailable();
+  return sampleAvailable() || mcpAvailable();
 }
 
 /* ------------------------------------------------------- the doctrine, inline
@@ -743,29 +766,72 @@ export function composeBrainPrompt(envelope: BrainEnvelope): string {
 }
 
 export interface BrainAskDeps {
-  /** The completion door. Injected so the suite never touches a global. */
+  /** The door, overridden. Injected so the suite never touches a global. */
   send?: (prompt: string, signal?: AbortSignal) => Promise<string>;
   /** The clock the timeout runs on. Injected for the same reason. */
   timeoutMs?: number;
+  /**
+   * WHAT THE RUNG-3 TOOLS BIND TO. Absent means no tools are offered at all, so
+   * a room that does not know which relationship it is standing in can never
+   * hand the model a door to somebody else's book.
+   */
+  anchor?: { accountId: string | null; company: string | null };
+  /** The rung, overridden. The router decides it from the envelope otherwise. */
+  rung?: RungChoice;
 }
 
-/** The assist's own transport, verbatim: the gateway completion door through
- *  `window.claude.mcp`, unwrapped exactly as `askCopilot` unwraps it. */
+/** The gateway completion door, verbatim as `askCopilot` unwraps it. It is the
+ *  rung BELOW the session door now: kept while the latency gate is unproven,
+ *  carrying the same inlined doctrine, and invested in no further. */
 async function sendThroughBridge(prompt: string, signal?: AbortSignal): Promise<string> {
   const res = await callTool(SERVERS.gateway, TOOLS.llm, { prompt }, { read: true, signal });
   return unwrapLlm(res.payload).text;
 }
 
 /**
+ * THE SESSION DOOR FIRST, THE GATEWAY BENEATH IT.
+ *
+ * `sample` is the recorded decision and the correct door. Every way it can fail
+ * — null capability, a declined consent, a rate limit, a refusal, a transport
+ * fault — means one thing here: take the next rung down. The banker is never
+ * shown which door answered, and never shown that one did not.
+ *
+ * TOOLS RIDE ONLY AT RUNG 3, and only where the room named an anchor. That is
+ * the whole of what keeps a 30 to 90 second round trip rare.
+ */
+function doorFor(envelope: BrainEnvelope, deps: BrainAskDeps, choice: RungChoice) {
+  return async (prompt: string, signal?: AbortSignal): Promise<string> => {
+    if (sampleAvailable()) {
+      try {
+        return await askSessionJson(prompt, {
+          kind: "reply",
+          tier: choice.tier,
+          rung: choice.rung,
+          signal,
+          tools:
+            choice.rung === 3 && deps.anchor
+              ? buildBrainTools({ anchor: deps.anchor, reads: envelope.reads })
+              : undefined,
+        });
+      } catch {
+        // Absence, never an error on the glass. The gateway is the next rung.
+      }
+    }
+    return sendThroughBridge(prompt, signal);
+  };
+}
+
+/**
  * ASK THE BRAIN, AND COME BACK WITH SOMETHING RENDERABLE.
  *
  * This never rejects and never resolves to a shape the room cannot draw. Every
- * failure — no bridge, a timeout, a transport error, a malformed reply — comes
+ * failure — no door, a timeout, a transport error, a malformed reply — comes
  * back as a clarify the room renders as an agent bubble.
  */
 export async function askBrain(envelope: BrainEnvelope, deps: BrainAskDeps = {}): Promise<BrainReply> {
-  const send = deps.send ?? sendThroughBridge;
-  const timeoutMs = deps.timeoutMs ?? BRAIN_TIMEOUT_MS;
+  const choice = deps.rung ?? rungFor(envelope);
+  const send = deps.send ?? doorFor(envelope, deps, choice);
+  const timeoutMs = deps.timeoutMs ?? timeoutFor(choice);
   if (!deps.send && !brainReachable()) return NOT_CONNECTED_CLARIFY;
 
   const controller = new AbortController();
