@@ -4,6 +4,7 @@ import { BrandGlyph } from "./brand";
 import { whisperLine } from "../intent/contract";
 import { deferIntent, offerFor, useIntents } from "../intent/store";
 import { openIntent } from "../intent/open";
+import { announce, bookHas, openProgress, useBookProgress } from "../book/dynamicBook";
 
 /* =============================================================================
    THE INTENT WHISPER.
@@ -26,6 +27,7 @@ import { openIntent } from "../intent/open";
 export function IntentWhisper() {
   const { data, state, dispatch } = useApp();
   const intents = useIntents();
+  const progress = useBookProgress();
   const [shown, setShown] = useState(false);
 
   const offer = useMemo(
@@ -49,7 +51,13 @@ export function IntentWhisper() {
     return () => window.clearTimeout(t);
   }, [offer, panelOpen]);
 
-  if (!offer) return null;
+  /* THE READS TAKE THE CORNER while they run. An intent naming a relationship
+     this snapshot never baked is READ before its room opens, and the banker
+     watches that happen on the same chip the offer stood on. */
+  if (!offer) return progress ? <ProgressChip line={progress} /> : null;
+  if (progress) return <ProgressChip line={progress} />;
+
+  const staged = bookHas(data, offer.accountId);
 
   return (
     <div className={`whisper intent-whisper${shown ? " show" : ""}`} id="intentWhisper" role="status">
@@ -68,6 +76,16 @@ export function IntentWhisper() {
               intent: offer,
               navigate: (accountId) => dispatch({ type: "OPEN_ACCOUNT", accountId }),
               openedBy: data.meta?.user,
+              /* A RELATIONSHIP THE SNAPSHOT NEVER BAKED IS READ FIRST, with the
+                 progress line up. Already in the book and this is absent, so the
+                 room opens on the same frame it always has. */
+              ensureBook: staged
+                ? undefined
+                : async (accountId, accountName) => {
+                    const ok = await openProgress(accountId, accountName);
+                    if (!ok) announce(`the org had nothing to read for ${accountName}. Nothing was opened.`);
+                    return ok;
+                  },
             });
           }}
         >
@@ -84,6 +102,20 @@ export function IntentWhisper() {
         >
           Later
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** What the eight reads are doing, while they do it. One line, no spinner: this
+ *  cockpit's shape for a set of reads is a console of lines, and one line is
+ *  what fits in the corner. */
+function ProgressChip({ line }: { line: string }) {
+  return (
+    <div className="whisper intent-whisper show" id="intentProgress" role="status">
+      <div className="wbody">
+        <BrandGlyph />
+        <span data-intent-progress>{line}</span>
       </div>
     </div>
   );

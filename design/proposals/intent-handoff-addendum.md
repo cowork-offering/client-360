@@ -132,6 +132,55 @@ one. It prints; it opens nothing and writes nothing.
 
 ---
 
+## Part B2. The dynamic book
+
+The cockpit no longer holds only the relationships the snapshot baked.
+
+**The search.** The command palette calls `Customer360SearchAccounts` as the
+banker types, debounced at 280ms, past three characters, and only where there is
+a connector. Matches render as `Open <name>` rows, kind **Org**, under the staged
+clients; a relationship already in the book keeps its one row. The landing
+carries one line on the worklist head, `Open any relationship by name`, which
+opens the same palette.
+
+**The reads.** Picking a match runs the eight reads the sync sweep runs, at the
+sweep's own pacing (`createPacer`: two in flight, spaced) — `Customer360Snapshot`,
+`Exposure`, `Covenants`, `Opportunities`, `StructuralSignals`, `Portfolio`,
+`ActionHistory`, then `RelationshipGraph`. The graph is the slow one and it goes
+LAST on purpose: the room opens on the seven that landed and the graph fills in
+behind it. A read that does not come back leaves its slice ABSENT — never
+guessed — and the relationship is named in `missing`.
+
+**The bundle.** Exactly the shape `artifact/live-data.json` stores under
+`borrowers.<accountId>`. `snapshot.productPackageId` is derived the way
+`scripts/anchor-snapshot-packages.mjs` derives it: the distinct
+`productPackageId` over the facilities, and only where there is precisely one.
+Zero or several leaves the anchor absent and the rooms ask.
+
+**The registration.** One merge point, in `AppProvider`: `mergeDynamicBook`
+folds the live relationships into `borrowers`, `portfolio.accounts` and, where
+the org staged its own worklist, the candidate list. It returns the SAME data
+object when nothing has been read live, so `resolveBundle`, the worklist, the
+palette, the workspace and both rooms pick a live relationship up without any of
+them learning a second way to find a bundle, and a cockpit standing on the baked
+five is byte-identical to the one before this feature.
+
+The row is marked **`live read, HH:MM`** in the queue. It is not in the baked
+snapshot and it does not pass itself off as one.
+
+**The cache.** `books/<accountId>` in the artifact's own store, with `storedAt`.
+A re-open is instant off the cache and refreshes behind itself; a document that
+serialises over 200 KB is not cached (the store's own cap is 256 KiB) and is
+simply re-read. Cached content is UNTRUSTED like everything else the store
+returns: a document that is not a bundle is a cache miss, never a half-read one.
+
+**Intents reach outside the book too.** An intent naming a relationship the
+snapshot never baked reads it FIRST, with the progress line in the whisper's
+corner: `reading Bright Horizon Health: 8 reads, 3 done`. The room opens on the
+result. Where the org has nothing readable, nothing opens and the chip says so.
+
+---
+
 ## Part C. Publishing the artifact
 
 The capabilities declaration for the published cockpit. Pass it verbatim on the

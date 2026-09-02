@@ -17,6 +17,9 @@ export interface WorklistRow {
   maturityDate: string | null;
   staged: boolean;
   sample: boolean;
+  /** Epoch ms of a LIVE read, for a relationship this session opened by name.
+   *  Null for every baked row. */
+  liveReadAt: number | null;
 }
 
 function earliest(
@@ -89,6 +92,7 @@ export function buildWorklistRows(data: C360Data, worklist: Worklist): WorklistR
       maturityDate: maturity.date,
       staged: !!bundle,
       sample: a?._sample_only === true,
+      liveReadAt: a?.liveReadAt ?? null,
     };
   });
 }

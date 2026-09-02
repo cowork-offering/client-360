@@ -678,3 +678,27 @@ body.on-client .topnav {
 .iw-chip.iw-open:hover {
   filter: brightness(1.08);
 }
+
+/* The queue is not the book: one quiet way into the rest of it, sitting on the
+   worklist head's own baseline rather than as a control of its own. */
+.wl-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.wl-open-any {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: color 0.16s var(--ease-out);
+}
+.wl-open-any:hover {
+  color: var(--brand);
+}

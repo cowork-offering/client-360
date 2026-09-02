@@ -5,6 +5,9 @@ import { ACTIONS, resolveBundle } from "../actions/registry";
 import { openWorkroom, workroomContextFor, workroomModeFor } from "../workroom/openWorkroom";
 import { openRelationshipRoom } from "./relationship/relSession";
 import { relOpeningForAccount } from "./relationship/RelationshipRoom";
+import { mcpAvailable } from "../channel/mcp";
+import { MIN_QUERY, searchAccounts, type AccountMatch } from "../book/search";
+import { announce, bookHas, openAccountLive } from "../book/dynamicBook";
 import "../styles/cmdk.css";
 
 /* =============================================================================
@@ -27,7 +30,7 @@ import "../styles/cmdk.css";
  *  own open/close and the header should not have to hold it. */
 export const CMDK_OPEN_EVENT = "c360:cmdk-open";
 
-type CommandKind = "Action" | "Client" | "View";
+type CommandKind = "Action" | "Client" | "View" | "Org";
 
 interface Command {
   id: string;
@@ -62,6 +65,59 @@ export function CommandPalette() {
   }, [data]);
 
   const openAccountId = state.view === "account" ? state.accountId : null;
+
+  /* ============================================ THE BOOK IS THE ORG'S BOOK
+
+     The rows above are what this snapshot baked. `Customer360SearchAccounts` is
+     the rest of it: a partial-name read the palette runs as the banker types,
+     debounced, and only past three characters — two would match the book.
+
+     A MATCH IS A CHIP, NOT A NAVIGATION. Picking one reads the relationship out
+     of the org (the same eight reads the sync sweep runs, at the same pacing)
+     and only then opens it. Nothing is rendered from a search hit: the hit is a
+     name and an id, and every figure the cockpit shows comes off those reads.
+
+     WITH NO CONNECTOR THIS DOES NOT RUN AT ALL and the palette is exactly the
+     palette it has always been. */
+  const [matches, setMatches] = useState<AccountMatch[]>([]);
+  const [searchState, setSearchState] = useState<"idle" | "running" | "failed">("idle");
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!open || !mcpAvailable() || q.length < MIN_QUERY) {
+      setMatches([]);
+      setSearchState("idle");
+      return;
+    }
+    let alive = true;
+    setSearchState("running");
+    const timer = window.setTimeout(() => {
+      void searchAccounts(q)
+        .then((res) => {
+          if (!alive) return;
+          setMatches(res.results);
+          setSearchState("idle");
+        })
+        .catch(() => {
+          if (!alive) return;
+          setMatches([]);
+          // A refused search is not an empty org. The row says which.
+          setSearchState("failed");
+        });
+    }, 280);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [open, query]);
+
+  /** Open a relationship the snapshot never baked: read it, then go. */
+  const openFromOrg = (match: AccountMatch) => {
+    void openAccountLive({ accountId: match.accountId, name: match.name, match }).then((ok) => {
+      if (ok) dispatch({ type: "OPEN_ACCOUNT", accountId: match.accountId });
+      else announce(`the org had nothing to read for ${match.name}. Nothing was opened.`);
+    });
+  };
 
   const commands = useMemo<Command[]>(() => {
     const out: Command[] = [];
@@ -127,6 +183,21 @@ export function CommandPalette() {
       });
     }
 
+    /* THE ORG'S OWN MATCHES, under the book's. A relationship already staged
+       (or already read live this session) keeps its one row: two rows for one
+       borrower would be the palette disagreeing with itself about what is
+       open. */
+    for (const m of matches) {
+      if (bookHas(data, m.accountId)) continue;
+      out.push({
+        id: `org:${m.accountId}`,
+        label: `Open ${m.name}`,
+        kind: "Org",
+        aka: `${m.industry ?? ""} ${m.naicsCode ?? ""}`.trim(),
+        run: () => openFromOrg(m),
+      });
+    }
+
     out.push({
       id: "view:home",
       label: "Back to worklist",
@@ -135,7 +206,9 @@ export function CommandPalette() {
     });
 
     return out;
-  }, [data, dispatch, openAccountId, staged]);
+    // `openFromOrg` closes over nothing but `dispatch`, which is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, dispatch, matches, openAccountId, staged]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -277,7 +350,16 @@ export function CommandPalette() {
               );
             })}
             <div className={`nores${visible.length ? "" : " on"}`} id="cmdkNores">
-              Nothing matches. Try a client or an action.
+              {/* THREE DIFFERENT FACTS, AND THEY ARE NOT THE SAME SENTENCE: the
+                  org is still being asked, the org was asked and said nothing,
+                  or the org could not be asked at all. */}
+              {searchState === "running"
+                ? "Searching the book\u2026"
+                : searchState === "failed"
+                  ? "The book could not be searched just now. The staged clients are still here."
+                  : mcpAvailable() && query.trim().length >= MIN_QUERY
+                    ? "No client of that name, here or in the book."
+                    : "Nothing matches. Try a client or an action."}
             </div>
           </div>
         </div>

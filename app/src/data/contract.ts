@@ -229,6 +229,12 @@ export interface AccountRow {
   riskRating?: string;
   stage?: string;
   packageCount?: number;
+  /** WHEN THIS ROW WAS READ LIVE OUT OF THE ORG, as an epoch millisecond.
+   *  Present only on a relationship the snapshot never baked and this session
+   *  opened by name; absent on every baked row, which is why nothing about the
+   *  baked book changes when it exists. The page's own clock, on a live gesture
+   *  — never a figure derived from the data (A10 governs the latter). */
+  liveReadAt?: number;
   _sample_only?: boolean;
 }
 

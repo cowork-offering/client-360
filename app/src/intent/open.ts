@@ -60,11 +60,30 @@ export function openIntent(args: {
   navigate: (accountId: string) => void;
   /** The viewer, for the store's `openedBy`. Display name only. */
   openedBy?: string;
+  /**
+   * READ THE RELATIONSHIP FIRST, where this snapshot never baked it.
+   *
+   * Absent for every intent naming a relationship already in the book, and the
+   * room then opens on the same frame it always has. Resolving FALSE is the
+   * org having nothing readable: nothing opens and the caller has already said
+   * so on the glass.
+   */
+  ensureBook?: (accountId: string, accountName: string) => Promise<boolean>;
 }): void {
   const { intent, navigate } = args;
   consumeIntent(intent);
   void markOpened(intent, args.openedBy);
 
+  if (args.ensureBook) {
+    void args.ensureBook(intent.accountId, intent.accountName).then((ok) => {
+      if (ok) enter(intent, navigate);
+    });
+    return;
+  }
+  enter(intent, navigate);
+}
+
+function enter(intent: IntentDoc, navigate: (accountId: string) => void): void {
   const src = flightSourceFor(intent.accountId);
   const open = () => navigate(intent.accountId);
   if (src) flyName(src, open);
