@@ -1,5 +1,5 @@
 /* =============================================================================
-   THE MANIFEST RAIL — the room's ledger, bounded and scrollable.
+   THE MANIFEST RAIL: the room's ledger, bounded and scrollable.
 
    FOUNDER CALL, 2026-09-02: past a dozen committed cards the lane ran off the
    bottom of the room and the newest change was simply gone. The rail now holds

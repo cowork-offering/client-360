@@ -1,5 +1,5 @@
 /* =============================================================================
-   THE MANIFEST RAIL — the shared bounded ledger (founder, 2026-09-02).
+   THE MANIFEST RAIL: the shared bounded ledger (founder, 2026-09-02).
 
    The lane used to be a column that simply grew: at a dozen committed cards it
    ran past the bottom of the room and the room, which clips, ate the newest
@@ -53,7 +53,10 @@
   overscroll-behavior: contain;
   /* autoprefixer: ignore next */
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  /* NO `scroll-behavior: smooth` here, deliberately. It makes every scrollTop
+     read return the position mid-animation, so two arrow presses in a row both
+     computed their step from ~0 and the second undid the first. The one moment
+     that should glide says so itself, with scrollTo({ behavior }). */
   scrollbar-gutter: stable;
   border-radius: 14px;
   margin: 0 -10px;
@@ -129,10 +132,4 @@
 }
 .wk-col-r > .wk-detail {
   flex: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rail-vp {
-    scroll-behavior: auto;
-  }
 }
