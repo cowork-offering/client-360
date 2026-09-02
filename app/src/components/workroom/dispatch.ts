@@ -967,6 +967,88 @@ export function readRemove(
   return null;
 }
 
+/* ================== THE ORG REFUSED A COLLATERAL TYPE, AND IT SENT ITS OWN LIST
+   (E6, founder drive 2026-09-02.)
+
+   The room staged a net-new pledge typed "Real Estate", and the org answered:
+
+     "Real Estate" matches 12 collateral types on this org: Real Estate-1-4
+     Family, ... Real Estate-Warehouse. Name one of them exactly.
+
+   The room relayed that sentence and offered nothing, so the banker's only way
+   on was to type a name into a room that then mapped it straight back onto the
+   word. The refusal CARRIES the answer set: it is parsed into chips, each of
+   which re-types the entry the refusal is about. Nothing is re-staged and
+   nothing is written; staging wrote nothing in the first place.               */
+
+/** The org's sentence, and the list inside it. Keyed on the org's own wording so
+ *  a refusal about anything else is left exactly as the org wrote it. */
+const TYPE_REFUSAL =
+  /"([^"]+)"\s+matches\s+\d+\s+collateral\s+types?\s+on\s+this\s+org:\s*([\s\S]+?)\.\s*Name\s+one\s+of\s+them\s+exactly/i;
+
+export interface TypeRefusalRead {
+  /** The manifest entry the org refused. */
+  entry: WorkroomDelta;
+  /** The org's own names, in the org's own order, de-duplicated: this org holds
+   *  `Real Estate-Construction` on two records and a banker choosing between
+   *  two identical chips is choosing nothing. */
+  values: string[];
+}
+
+/**
+ * THE ORG'S REFUSAL, READ AS AN ANSWER SET, or null.
+ *
+ * Null wherever the sentence is not that refusal, or wherever the manifest does
+ * not carry exactly one entry typed with the word the org refused: a chip that
+ * re-typed the wrong entry would be the E1 defect wearing the org's clothes.
+ */
+export function readTypeRefusal(message: string, entries: WorkroomDelta[]): TypeRefusalRead | null {
+  const hit = TYPE_REFUSAL.exec(message ?? "");
+  if (!hit) return null;
+  const said = hit[1].trim().toLowerCase();
+  const values = [...new Set(hit[2].split(",").map((v) => v.trim()).filter((v) => v.length > 2))];
+  if (!values.length) return null;
+  const named = entries.filter(
+    (e) => (e.pledgeWire?.newCollateral?.collateralType ?? "").trim().toLowerCase() === said,
+  );
+  if (named.length !== 1) return null;
+  return { entry: named[0], values };
+}
+
+/** The sentence the chip types back. Deterministic on both sides, and it names
+ *  the entry so a manifest holding two net-new pledges stays unambiguous. */
+export const typeChoiceSay = (entry: WorkroomDelta, value: string): string =>
+  `set the collateral type on ${entry.title} to ${value}`;
+
+const TYPE_CHOICE = /^\s*set\s+the\s+collateral\s+type\s+on\s+(.+?)\s+to\s+(.+?)\s*$/i;
+
+/** The banker took one of those chips, or typed the sentence. Null otherwise. */
+export function readTypeChoice(
+  line: string,
+  entries: WorkroomDelta[],
+): { entry: WorkroomDelta; type: string } | null {
+  const hit = TYPE_CHOICE.exec(line ?? "");
+  if (!hit) return null;
+  const title = hit[1].trim().toLowerCase();
+  const type = hit[2].trim().replace(/[.]+$/, "");
+  const entry = entries.find(
+    (e) => e.title.trim().toLowerCase() === title && Boolean(e.pledgeWire?.newCollateral),
+  );
+  return entry && type ? { entry, type } : null;
+}
+
+/** The same entry, under the org's own type name. The only field that moves. */
+export function retypeEntry(delta: WorkroomDelta, type: string): WorkroomDelta {
+  if (!delta.pledgeWire?.newCollateral) return delta;
+  return {
+    ...delta,
+    pledgeWire: {
+      ...delta.pledgeWire,
+      newCollateral: { ...delta.pledgeWire.newCollateral, collateralType: type },
+    },
+  };
+}
+
 /**
  * THE FENCE, REFUSED BY NAME, WITH THE ROUTE THAT EXISTS.
  *

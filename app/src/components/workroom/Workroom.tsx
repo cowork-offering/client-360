@@ -53,8 +53,12 @@ import {
   readRemove,
   readPartyRemoval,
   readsThePlan,
+  readTypeChoice,
+  readTypeRefusal,
   reconcileNarrative,
+  retypeEntry,
   stampRemovalRoles,
+  typeChoiceSay,
   type QualifierMember,
 } from "./dispatch";
 import {
@@ -2368,6 +2372,30 @@ export function Workroom({
         return;
       }
 
+      /* THE ORG'S OWN TYPE NAME, TAKEN OFF ITS REFUSAL (E6). The chip re-types
+         the entry that was refused and nothing else: the plan is untouched, the
+         figures do not move, and the next staging carries the name the org
+         asked for. */
+      const retyped = readTypeChoice(instruction, entries);
+      if (retyped) {
+        const next = retypeEntry(retyped.entry, retyped.type);
+        setEntries((prev) => prev.map((e) => (e.id === next.id ? next : e)));
+        setItems((prev) =>
+          prev.map((item) =>
+            item.kind === "chips"
+              ? { ...item, chips: item.chips.map((c) => (c.delta?.id === next.id ? { ...c, delta: next } : c)) }
+              : item,
+          ),
+        );
+        setToast("Collateral type set");
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: `${next.title} on ${next.target} carries the collateral type ${retyped.type}, which is the org's own name for it. Nothing else on the manifest moved. Stage it again when you are ready.`,
+        });
+        return;
+      }
+
       // THE LANE IS ADDRESSABLE IN THE CONVERSATION. "what is staged" is
       // answered here, before the parser sees it: it is a move on the manifest,
       // not a new amendment.
@@ -2816,7 +2844,22 @@ export function Workroom({
       /* AND A REFUSAL IS THE ORG'S OWN SENTENCE, ATTACHED TO THE ENTRY IT IS
          ABOUT. The org names a covenant or an asset; only the room knows which
          manifest entry that is and that the rest of the plan is untouched. */
-      agent(armStageRefusal(readableError(e), entries));
+      /* AND WHERE THE REFUSAL CARRIES ITS OWN ANSWER SET, THE ANSWERS ARE CHIPS
+         (E6). The org lists the collateral types it holds and ends "Name one of
+         them exactly"; relaying that with nothing to press leaves the banker
+         typing a word the room maps straight back onto the one the org just
+         refused. */
+      const said = readableError(e);
+      const retype = readTypeRefusal(said, entries);
+      if (retype) {
+        agent(
+          `${said} That is ${retype.entry.title} on ${retype.entry.target}. Pick the one it is and I will put the org's own name on that entry. ` +
+            "Staging writes nothing, so nothing has been filed and nothing has come off the manifest.",
+          retype.values.map((v) => ({ label: v, say: typeChoiceSay(retype.entry, v) })),
+        );
+        return;
+      }
+      agent(armStageRefusal(said, entries));
     }
   }, [agent, context, engine, entries, push]);
 

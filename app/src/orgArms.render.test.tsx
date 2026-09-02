@@ -446,9 +446,22 @@ const CATALOG_FIELDS = [
     objectName: "LLC_BI__Collateral__c",
     fieldName: "LLC_BI__Collateral_Type__c",
     source: "catalog",
+    /* THE ORG'S OWN SHAPE (2026-09-02). The Real Estate family is eleven names
+       on twelve records, which is what the org's staging refusal listed back at
+       the founder when the room sent it the WORD. */
     values: [
       "Equipment",
-      "Real Estate",
+      "Real Estate-1-4 Family",
+      "Real Estate-Construction",
+      "Real Estate-Farm Land",
+      "Real Estate-Land",
+      "Real Estate-Lot",
+      "Real Estate-Mobile Home",
+      "Real Estate-Multi-Family",
+      "Real Estate-Office",
+      "Real Estate-Other RE",
+      "Real Estate-Retail",
+      "Real Estate-Warehouse",
       "Inventory",
       "Accounts Receivable",
       "Vehicle",
@@ -457,8 +470,28 @@ const CATALOG_FIELDS = [
       "Aircraft",
       "Marine Vessel",
       "Livestock",
-    ].map((label, i) => ({ label, value: `a3Kbb000000${i}AAA` })),
-    acceptedValues: ["Equipment", "Real Estate", "Inventory", "Accounts Receivable", "Vehicle", "Cash", "Securities", "Aircraft", "Marine Vessel"],
+    ].map((label, i) => ({ label, value: `a3Kbb00000${String(i).padStart(2, "0")}AAA` })),
+    acceptedValues: [
+      "Equipment",
+      "Real Estate-1-4 Family",
+      "Real Estate-Construction",
+      "Real Estate-Farm Land",
+      "Real Estate-Land",
+      "Real Estate-Lot",
+      "Real Estate-Mobile Home",
+      "Real Estate-Multi-Family",
+      "Real Estate-Office",
+      "Real Estate-Other RE",
+      "Real Estate-Retail",
+      "Real Estate-Warehouse",
+      "Inventory",
+      "Accounts Receivable",
+      "Vehicle",
+      "Cash",
+      "Securities",
+      "Aircraft",
+      "Marine Vessel",
+    ],
   },
   {
     objectName: "LLC_BI__Covenant2__c",
@@ -501,8 +534,13 @@ describe("the create chips come from the org, not from a mirror", () => {
     await typeInto(room, "pledge some collateral to the construction loan");
     await click(byText(/^A new asset$/));
 
-    expect(said(room)).toContain("The catalog carries 9 types the bank will lend against");
+    expect(said(room)).toContain("The catalog carries 19 types the bank will lend against");
+    expect(said(room)).toContain("in 9 families");
     expect(byText(/^Aircraft$/)).toBeTruthy();
+    // ONE CHIP PER FAMILY. The eleven Real Estate names are the family's own
+    // second question, not eleven chips in front of the other eight families.
+    expect(byText(/^Real Estate$/)).toBeTruthy();
+    expect(byText(/^Real Estate-Warehouse$/)).toBeUndefined();
     // The tenth carries no advance rate of its own and the write path refuses
     // it, so it is never a chip.
     expect(byText(/^Livestock$/)).toBeUndefined();
@@ -540,7 +578,13 @@ describe("channel-none: the mirror stands", () => {
     await typeInto(room, "pledge some collateral to the construction loan");
     await click(byText(/^A new asset$/));
 
-    expect(said(room)).toContain("The kinds I can resolve a word against are");
+    /* E6: the mirror carries the ORG's own family names now, so it has a count
+       of its own to state. What it must never do is claim the count is the
+       CATALOG's, which is the only thing a room with no bridge cannot know. */
+    expect(said(room)).toContain("I resolve a name against");
+    expect(said(room)).toContain("families");
     expect(said(room)).not.toContain("types the bank will lend against");
+    expect(byText(/^Real Estate$/)).toBeTruthy();
+    expect(byText(/^Real Estate-Warehouse$/)).toBeUndefined();
   });
 });

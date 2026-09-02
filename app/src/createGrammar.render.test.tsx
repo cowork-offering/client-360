@@ -483,8 +483,13 @@ describe("a pledge is gathered without ever asking what the org works out", () =
     await settle();
     await typeInto(room, "pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000");
 
-    // E3 holds: the typed type is honoured and the kind is never asked.
+    /* E6 SUPERSEDES E3's "never asks the kind". The typed word is honoured and
+       it is what picks the FAMILY; this org holds eleven names under it and
+       refuses the bare words at staging, so the room asks WHICH with the org's
+       own names as the chips. */
     expect(said(room)).not.toContain("What kind of asset is it?");
+    expect(said(room)).toContain("11 collateral types on this org");
+    await click(byText(/^Real Estate-Construction$/));
     await click(byText(/^75 percent$/));
     await click(byText(/^1st position$/));
 

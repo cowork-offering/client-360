@@ -12,7 +12,11 @@ import {
   readRemove,
   readPartyRemoval,
   readsThePlan,
+  readTypeChoice,
+  readTypeRefusal,
+  retypeEntry,
   singleClause,
+  typeChoiceSay,
   stampRemovalRoles,
   type QualifierMember,
 } from "./dispatch";
@@ -946,5 +950,76 @@ describe("the plan is read back locally", () => {
   it("is not a line that CHANGES the plan", () => {
     expect(readsThePlan("add a covenant to the plan")).toBe(false);
     expect(readsThePlan("increase the 15M line of credit to 20M")).toBe(false);
+  });
+});
+
+/* ================== THE ORG REFUSED A COLLATERAL TYPE AND SENT ITS OWN LIST
+   (E6, founder drive 2026-09-02.) The room staged "Real Estate", which is a
+   WORD; the org holds eleven names under it and refused with all of them. The
+   room relayed the sentence and offered nothing to press.                     */
+
+const ORG_TYPE_REFUSAL =
+  '"Real Estate" matches 12 collateral types on this org: Real Estate-1-4 Family, Real Estate-Construction, ' +
+  "Real Estate-Construction, Real Estate-Farm Land, Real Estate-Land, Real Estate-Lot, Real Estate-Mobile Home, " +
+  "Real Estate-Multi-Family, Real Estate-Office, Real Estate-Other RE, Real Estate-Retail, Real Estate-Warehouse. " +
+  "Name one of them exactly.";
+
+const kokomo = (): WorkroomDelta =>
+  delta({
+    id: "collateral.pledge:construction:0",
+    group: "security",
+    kind: "New pledge",
+    title: "Kokomo plant expansion",
+    target: "Construction",
+    member: CONSTRUCTION,
+    before: "not on the facility today",
+    after: "created and pledged, $6,500,000.00 at 75% advance",
+    pledgeWire: {
+      facilityId: CONSTRUCTION,
+      advanceRate: 75,
+      newCollateral: { description: "Kokomo plant expansion", collateralType: "Real Estate", value: 6_500_000 },
+    },
+  });
+
+describe("an org refusal that lists its own values becomes chips (E6)", () => {
+  it("reads the org's names out of the sentence and names the entry it is about", () => {
+    const entry = kokomo();
+    const read = readTypeRefusal(ORG_TYPE_REFUSAL, [entry]);
+    expect(read).not.toBeNull();
+    expect(read!.entry.id).toBe(entry.id);
+    // TWELVE RECORDS, ELEVEN NAMES. This org holds Real Estate-Construction
+    // twice and two identical chips are not a choice.
+    expect(read!.values).toHaveLength(11);
+    expect(read!.values).toContain("Real Estate-Construction");
+    expect(read!.values).toContain("Real Estate-Warehouse");
+  });
+
+  it("returns null where the manifest does not carry exactly one entry of that type", () => {
+    expect(readTypeRefusal(ORG_TYPE_REFUSAL, [])).toBeNull();
+    expect(readTypeRefusal(ORG_TYPE_REFUSAL, [kokomo(), kokomo()])).toBeNull();
+    // And a refusal about something else is the org's sentence, untouched.
+    expect(readTypeRefusal("Covenant a3Bbb000000S0bNEAS is not attached to Line of Credit.", [kokomo()])).toBeNull();
+  });
+
+  it("takes the chip back and re-types that entry and nothing else", () => {
+    const entry = kokomo();
+    const say = typeChoiceSay(entry, "Real Estate-Construction");
+    const chosen = readTypeChoice(say, [entry]);
+    expect(chosen).not.toBeNull();
+    expect(chosen!.type).toBe("Real Estate-Construction");
+
+    const next = retypeEntry(chosen!.entry, chosen!.type);
+    expect(next.pledgeWire!.newCollateral!.collateralType).toBe("Real Estate-Construction");
+    // Everything else on the entry is the entry's.
+    expect(next.pledgeWire!.newCollateral!.description).toBe("Kokomo plant expansion");
+    expect(next.pledgeWire!.newCollateral!.value).toBe(6_500_000);
+    expect(next.pledgeWire!.advanceRate).toBe(75);
+    expect(next.id).toBe(entry.id);
+    expect(next.title).toBe(entry.title);
+  });
+
+  it("claims nothing where the line is not a type choice", () => {
+    expect(readTypeChoice("remove the Kokomo plant expansion pledge", [kokomo()])).toBeNull();
+    expect(readTypeChoice("set the collateral type on Something Else to Real Estate-Lot", [kokomo()])).toBeNull();
   });
 });
