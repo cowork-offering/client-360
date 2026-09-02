@@ -9,6 +9,8 @@ import { type WorkroomEngine } from "../../workroom/engine";
 import { createModifyEngine } from "../../workroom/modifyEngine";
 import { createRenewEngine } from "../../workroom/renewEngine";
 import { closeWorkroom, openWorkroom, useWorkroom, workroomContextFor } from "../../workroom/openWorkroom";
+import { stageAction } from "../../channel/writeTools";
+import { armStage } from "./orgArms";
 import type { WorkroomContext, WorkroomExecution, WorkroomMode } from "../../workroom/types";
 import { anchorFacilityRoom, bindFacilityRoute, closeFacilityRoom, useFacilityRoom } from "./roomSession";
 import { Workroom, neutralAsk, smartAsk, type WorkroomRouter } from "./Workroom";
@@ -87,7 +89,16 @@ export function WorkroomHost() {
       case "create":
         return createCreateEngine(args);
       default:
-        return createModifyEngine(args);
+        /* THE ORG ARMS RIDE THE ENGINE'S OWN STAGE DEPENDENCY (2026-09-02).
+           The three arms deployed after the engine was fenced, so an arm delta
+           travels through it as a sentinel field change and `armStage` lifts
+           those back out into `covenantExclusionsJson`, `pledgeExclusionsJson`
+           and `covenantAttachesJson` on the way to the org. A plan carrying no
+           arm reaches the tool on exactly the payload it always has. */
+        return createModifyEngine({
+          ...args,
+          deps: { stage: armStage((payload) => stageAction("loan-modification", payload)) },
+        });
     }
   }, [context, data, bundle]);
 

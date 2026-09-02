@@ -80,6 +80,7 @@ import {
   type PlanEntry,
   type Slots,
 } from "./elicit";
+import { armConfirmSentence, readArmRemoval } from "./orgArms";
 import { bareMemberPick, readSteer } from "./steer";
 import {
   TIER_STAGGER_MS,
@@ -2224,6 +2225,49 @@ export function Workroom({
         return;
       }
       if (removal?.kind === "fence") {
+        /* ================================== THE ARM THAT FILES IT (P2, 2026-09-02)
+
+           The org arms deployed, so "remove the Minimum Liquidity covenant from
+           the 15M line of credit" is no longer a refusal on a MODIFICATION: it
+           is a CARRY EXCLUSION, and the room stages one. The booked loan keeps
+           the junction and the new version starts without it, which is the same
+           mechanism the borrowing structure has used since August.
+
+           THE BOOK IS CHECKED FIRST. Where the facility does not carry that
+           covenant or that pledge there is nothing for the new version to leave
+           behind, and the room says where it actually is rather than sending a
+           plan up to be refused by name. On renew and new-facility the arm does
+           not exist on those tools, so the honest fence refusal stands. */
+        const armed = readArmRemoval({
+          line: instruction,
+          scope: removal.scope,
+          name: removal.name,
+          book,
+          members: elicitMembers,
+          focused: focused ? (elicitMembers.find((m) => m.id === focused.id) ?? null) : null,
+          mode: context.mode,
+        });
+        if (armed?.kind === "ask") {
+          answer({ kind: "agent", id: nextId("agent"), text: armed.text, options: armed.options });
+          return;
+        }
+        if (armed?.kind === "refusal") {
+          answer({ kind: "agent", id: nextId("agent"), text: armed.text });
+          return;
+        }
+        if (armed?.kind === "exclusion") {
+          setItems((prev) => [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: armed.said },
+            {
+              kind: "chips",
+              id: nextId("chips"),
+              step: mine,
+              chips: [{ key: nextId("chip"), delta: armed.delta, state: "open" }],
+            },
+          ]);
+          return;
+        }
         const fence = fenceRefusal(removal.scope, removal.name);
         setItems((prev) => [
           ...prev,
@@ -2428,7 +2472,17 @@ export function Workroom({
          is about the entry the banker just confirmed, so it is composed here
          from the room's own figures: what the package read at before this entry
          landed, and what it reads at now. */
-      const said = committedSentence({ reply, delta, before: figures.committedMM * 1e6 });
+      /* ------------------------------- AND AN ARM SAYS WHAT AN ARM DOES (P2)
+
+         The engine closes every confirm on "staged on the clone", which is true
+         of an add and says nothing at all about a removal. A banker signing a
+         carry exclusion is entitled to read on the confirm itself that the
+         booked loan is untouched and that the clone is what starts without it. */
+      const said = committedSentence({
+        reply: armConfirmSentence(delta, reply),
+        delta,
+        before: figures.committedMM * 1e6,
+      });
       setEntries(staged);
       settleChip(blockId, chipKey, "confirmed");
       setToast(delta.badge);

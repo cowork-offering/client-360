@@ -711,6 +711,40 @@ export interface StagePayloads {
      *  the org. The whole plan's exceptions are inserted in ONE DML for exactly
      *  that reason. Counts toward the tool's at-least-one-change rule. */
     policyExceptionAddsJson?: string | null;
+    /** COVENANT CARRY EXCLUSIONS (2026-09-02), JSON-encoded:
+     *  [{covenantId? or junctionId?, targetLoanId?}]. EXACTLY ONE identifier per
+     *  entry; `targetLoanId` may be omitted when the plan selects exactly one
+     *  facility. At most ten.
+     *
+     *  NOTHING IS DELETED. A modification clones the parent and the carry
+     *  replicates its junctions; an exclusion makes that carry write FEWER rows,
+     *  so the booked facility keeps its own `LLC_BI__Loan_Covenant__c` and the
+     *  clone simply starts without one. The org resolves the exact junction at
+     *  STAGE time against the target parent, so the banker confirms a named
+     *  covenant rather than a description, and refuses by name where the
+     *  facility does not carry that covenant at all. */
+    covenantExclusionsJson?: string | null;
+    /** PLEDGE CARRY EXCLUSIONS (2026-09-02), JSON-encoded:
+     *  [{pledgeId? or collateralId?, targetLoanId?}]. Same one-identifier rule,
+     *  same optional target, same cap of ten.
+     *
+     *  The pledge object is `LLC_BI__Loan_Collateral2__c`. The ASSET and its
+     *  `LLC_BI__Account_Collateral__c` ownership junction are RELATIONSHIP
+     *  records and are never touched: what fails to travel onto the new version
+     *  is the per-facility pledge alone. */
+    pledgeExclusionsJson?: string | null;
+    /** ASSOCIATING AN EXISTING COVENANT (2026-09-02), JSON-encoded:
+     *  [{covenantId, targetLoanId?}]. `covenantId` is REQUIRED and is an
+     *  `LLC_BI__Covenant2__c` id exactly as the covenants read returns it.
+     *
+     *  A JUNCTION-ONLY CREATE. `covenantAddsJson` resolves a covenant TYPE and
+     *  always inserts a fresh covenant, which is why this is its own arm: the
+     *  junction lands on the CLONE for the covenant the borrower already holds,
+     *  no covenant is inserted and no covenant field is written, so the
+     *  threshold, the frequency and the schedule stay exactly as the borrower
+     *  holds them. The org refuses a duplicate junction and a covenant
+     *  belonging to another relationship, each by name. */
+    covenantAttachesJson?: string | null;
   };
   renewal: FacilityAnchor & {
     idempotencyKey: string;
