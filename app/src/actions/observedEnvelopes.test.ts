@@ -292,15 +292,30 @@ describe("Codex review fixes, pinned against the envelopes", () => {
     return (callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> }).inputs[0];
   };
 
-  it("#1 never sends an override field whose wire name has not been observed", async () => {
-    const body = await sent("risk-rating-review", {
+  it("#1 sends no override where none was given, and the deployed one where it was", async () => {
+    /* THE OVERRIDE IS ON THE WIRE (2026-09-02). This case used to assert the
+       opposite, on the reasoning that the input's name had never been observed.
+       `StageRiskRatingReview.Request.overriddenRiskGradeValue` is deployed and
+       `StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted` covers
+       it, so what the suite pins now is the honest pair: absent when nobody
+       asked for one, and present with its mandatory comment when they did. */
+    const bare = await sent("risk-rating-review", {
       idempotencyKey: "k",
       accountId: "001X",
       rationale: "r",
       comments: "why",
     });
-    expect(body.overriddenRiskGradeValue).toBeUndefined();
-    expect(Object.keys(body).some((k) => /override/i.test(k))).toBe(false);
+    expect(bare.overriddenRiskGradeValue).toBeUndefined();
+
+    const overridden = await sent("risk-rating-review", {
+      idempotencyKey: "k",
+      accountId: "001X",
+      rationale: "r",
+      overriddenRiskGradeValue: 5,
+      comments: "Construction facility above the 70 pct policy line.",
+    });
+    expect(overridden.overriddenRiskGradeValue).toBe(5);
+    expect(overridden.comments).toBe("Construction facility above the 70 pct policy line.");
   });
 
   it("#8 sends the service request origin the schema advertises", async () => {

@@ -484,12 +484,34 @@ export interface StagePayloads {
       primary?: boolean;
     }>;
   };
+  /**
+   * THE DEPLOYED SHAPE, RE-READ AGAINST THE APEX (2026-09-02).
+   *
+   * `requestType` becomes `Subject` and `summary` becomes `Description`. The
+   * class says so in its own field descriptions ("Banker-language description
+   * of what the client asked for. Becomes the case subject" and "The request in
+   * full, as the servicing team needs to read it"), and BOTH are required=true.
+   * The relationship room used to ask for them the other way round, so a
+   * CATEGORY landed on the subject line and the subject landed in the body.
+   *
+   * `origin` IS NOT AN INVOCABLE VARIABLE. `StageServiceRequest.cls` declares
+   * none: it resolves `Case.Type` and `Case.Origin` itself through
+   * `C360Picklist.preferredOrFallback` and reports `degradedTypeMode` where the
+   * org offered neither preferred value. The key is KEPT on this type because
+   * the Client Actions panel still sends it from its own schema control, and
+   * removing it would change that panel's request body on the eve of a demo.
+   * The relationship room does not send it and does not ask for it: a question
+   * whose answer is dropped on the floor is worse than no question.
+   */
   "create-service-request": {
     idempotencyKey: string;
     accountId: string;
     rationale?: string;
+    /** Banker-language description of what the client asked for. -> `Subject`. */
     requestType?: string | null;
+    /** NOT A WIRE ON THE APEX. See the note above. The room sends none. */
     origin?: string | null;
+    /** The request in full, as the servicing team reads it. -> `Description`. */
     summary?: string | null;
     referenceKind?: string | null;
     referenceId?: string | null;
@@ -549,12 +571,21 @@ export interface StagePayloads {
     managementExperienceActual?: number | null;
     creditScoreActual?: number | null;
     comments?: string | null;
-    /* NO OVERRIDE FIELD. The staged plan writes
-       `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool almost certainly
-       accepts an override input, but no observed request has ever carried one
-       and its wire name would be a guess. Guessing a field name is exactly the
-       failure this campaign has already paid for twice, so the ticket blocks
-       staging with a named gap instead of sending an invented key. */
+    /**
+     * THE OVERRIDE IS ON THE WIRE, and this comment used to say it was not.
+     *
+     * `StageRiskRatingReview.Request.overriddenRiskGradeValue` is DEPLOYED, it
+     * carries its own description ("Any value above zero triggers the
+     * Mandatory_comment rule") and `StageExecuteRiskRatingReviewTest`
+     * .overrideWithACommentIsAccepted covers it. It maps to
+     * `LLC_BI__Overridden_Risk_Grade_Value__c`.
+     *
+     * ANY VALUE ABOVE ZERO MAKES `comments` MANDATORY. That is the org's own
+     * rule and it has no bypass, so the room validates it before the org has
+     * to. `comments` is the field the rule tests, NOT
+     * `LLC_BI__Override_Comment__c`.
+     */
+    overriddenRiskGradeValue?: number | null;
   };
   /**
    * PACKAGE-SCOPED BULK, rebuilt 2026-08-22 (WS0.5 item 2). Observed on the wire

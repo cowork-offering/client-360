@@ -30,7 +30,7 @@ import { composeDoctrine } from "./doctrine";
 /* ------------------------------------------------------------ the subject */
 
 /** What the room just did, as the model is told about it. */
-export type NarrateAct = "staged" | "refused" | "answered" | "greeting" | "mail";
+export type NarrateAct = "staged" | "refused" | "answered" | "greeting" | "mail" | "filed";
 
 export interface NarrateSubject {
   act: NarrateAct;
@@ -123,6 +123,7 @@ const ACT_BUDGET: Record<NarrateAct, string> = {
     "ABOUT FIFTY-FIVE WORDS in all. The card already carries the delta; your job is the consequence. One or two line items.",
   refused: "ABOUT FORTY-FIVE WORDS in all. The card already carries the reason by name. One line item, then stop.",
   mail: "ABOUT FIFTY-FIVE WORDS in all. One line item at most. Say what the message asks and offer the move.",
+  filed: "ABOUT FORTY-FIVE WORDS in all. The dossier already lists what landed. One line item at most, then stop.",
 };
 
 /**
@@ -154,6 +155,12 @@ const ACT_LINE: Record<NarrateAct, string> = {
   answered: "The room ANSWERED a read from the book it is already holding.",
   greeting: "The room has just OPENED on this relationship and greeted the banker.",
   mail: "The client's message arrived AFTER the room greeted the banker. Say what it asks and offer the move, in one short remark.",
+  /* THE SECOND ROOM'S OWN ACT. A relationship review is FILED, not staged: the
+     token is spent, the org has written, and the dossier is the org's own
+     account of it. Calling that "staged and waiting for the confirm" would tell
+     a banker the write had not happened. The facility room emits no `filed`
+     item, so its remarks are unchanged by construction. */
+  filed: "The room FILED a governance record and the org accepted it. The dossier beside you is the org's own account of what landed. Say what follows, never what was written.",
 };
 
 /**
@@ -168,9 +175,14 @@ export function composeNarratePrompt(envelope: BrainEnvelope, subject: NarrateSu
   /* THE TWO SLICES THE LINE CANNOT ASK FOR. A greeting's line is EMPTY, so a
      mail block or a route-open block gated on a word would never travel on the
      one call that carries consent. The envelope knows; the line does not. */
-  const include = [envelope.mail ? "mail" : null, envelope.routeOpen ? "route-open" : null].filter(
-    (id): id is string => id !== null,
-  );
+  /* AND THE ROUTE-OPEN ARM IS PER ROOM. `route-open` names the facility room's
+     three routes by name; the relationship room has five and none of them is a
+     modification. Selecting the wrong arm would tell the model to choose
+     between routes this room does not offer. */
+  const include = [
+    envelope.mail ? "mail" : null,
+    envelope.routeOpen ? (envelope.room === "relationship" ? "route-open-relationship" : "route-open") : null,
+  ].filter((id): id is string => id !== null);
   const doctrine = composeDoctrine(envelope.line || subject.sentence, { mode: "narrate", include });
   return [
     "You are the credit brain of a relationship workroom, writing ONE short remark under a card.",
@@ -588,6 +600,11 @@ export function resolveEntities(blocks: NarrationBlock[], envelope: BrainEnvelop
   );
   book.add((envelope.reads?.involvements ?? []).map((i) => ({ name: i.name, value: i.role })));
   book.add((envelope.reads?.collateral ?? []).map((c) => ({ name: c.asset, value: c.lendable ?? c.pledged })));
+  /* THE LAST RANK, and the only one a room fills by hand. The relationship
+     room's greeting names the grade on file and the reviews already filed, and
+     no read block carries either. Every rank above already had first refusal on
+     the name, so this can only fill what nothing else claimed. */
+  book.add(envelope.entities ?? []);
 
   return blocks.map((block) => {
     if (block.kind !== "entity") return block;
@@ -947,6 +964,15 @@ export interface NarratableItem {
   /** THE CHECK UNDER THE CARD. A card carrying one is never routine: the
    *  advisory is the thing a colleague would talk about. */
   advisories?: unknown[];
+  /* ---- the relationship room's own shapes. Structural, like everything above:
+         neither room's item union is imported here. */
+  /** A create the room composed and cannot file. */
+  gap?: { what: string; line: string; orgGap: string };
+  /** The no-connector notice. */
+  title?: string;
+  body?: string;
+  /** The result dossier, built from the org's own execute result. */
+  dossier?: { title: string; footer: string; rows: Array<{ label: string; value: string }> };
 }
 
 /**
@@ -1000,6 +1026,54 @@ export function subjectFor(item: NarratableItem, said?: string): NarrateSubject 
   // already asked well. Everything else is a sentence a colleague might add to.
   if (item.kind === "agent" && item.text && !item.options?.length) {
     return { act: "answered", sentence: item.text };
+  }
+
+  /* ------------------------------------------- THE RELATIONSHIP ROOM'S KINDS
+
+     Five item kinds this mapping used to answer `null` for, so the second
+     room's most interesting moments were never narrated at all. Three of them
+     speak; two deliberately do not, and the reason is written down rather than
+     left as an omission a later reader would "fix".                          */
+
+  /* THE OPENING IS NOT NARRATED FROM HERE, EVER. The greeting is the ONE call
+     that carries the platform's consent dialog and it is claimed by
+     `narration.open` on the room's own greeting effect. A subject returned here
+     would let the generic item effect reach the same id first, through `ask`
+     rather than `prime`, and the consent moment would land on whatever the room
+     said next instead of on the greeting the banker opened it for. */
+  if (item.kind === "opening") return null;
+
+  /* THE BRIEF IS THE ROOM'S OWN SCOPE STATEMENT, read once, immediately above
+     the first question. A remark under it talks over the question. */
+  if (item.kind === "brief") return null;
+
+  /* A CREATE THE ROOM CANNOT FILE. The refusal is already on the card by name;
+     the remark says what the banker can do instead. */
+  if (item.kind === "gap" && item.gap) {
+    return {
+      act: "refused",
+      sentence: item.gap.line,
+      card: { title: item.gap.what, rows: [{ label: "not filed", value: "no deployed tool", sub: item.gap.orgGap }] },
+    };
+  }
+
+  /* THE ROOM REACHED NO ORG. Loud on the glass, and worth one sentence about
+     what the banker can still do from here. */
+  if (item.kind === "notice" && item.title && item.body) {
+    return { act: "refused", sentence: `${item.title} ${item.body}`.trim() };
+  }
+
+  /* THE FILING LANDED. The dossier is the ORG'S account of it, so the rows are
+     the card and the model writes only what follows from them. */
+  if (item.kind === "dossier" && item.dossier) {
+    return {
+      act: "filed",
+      sentence: item.dossier.footer,
+      card: {
+        title: item.dossier.title,
+        rows: item.dossier.rows.map((r) => ({ label: r.label, value: r.value })),
+      },
+    };
   }
   return null;
 }

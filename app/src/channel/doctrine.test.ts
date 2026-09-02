@@ -296,3 +296,138 @@ describe("the figure rules travel on every remark (2026-09-02)", () => {
     expect(text).toContain("An advance rate is not a lendable value");
   });
 });
+
+/* =============================================================================
+   THE RELATIONSHIP ROOM'S FIVE SLICES (relationship-room-v2, section 3).
+
+   The room's whole subject matter arrived in one wave, so the two things that
+   would break are asserted together: each block must be reachable on its own
+   words and droppable on its own, and the FACILITY room's selections must not
+   move by one block. The facility guard below is the real gate on this section:
+   the match words overlap the facility room's lines, and a block that started
+   firing on a facility line would push a facility block out of the budget
+   without anyone saying so.
+   ============================================================================= */
+
+const REL_BLOCKS = ["covenant-testing", "valuation-basis", "annual-review", "risk-rating", "coverage-math"] as const;
+
+describe("the relationship room's doctrine slices", () => {
+  const ON_ITS_OWN_WORDS: Record<(typeof REL_BLOCKS)[number], string> = {
+    "covenant-testing": "the compliance certificate was never delivered and the test date passed",
+    "valuation-basis": "the appraisal came back on an orderly liquidation basis",
+    "annual-review": "run the annual review on this relationship",
+    "risk-rating": "downgrade them a notch to special mention",
+    "coverage-math": "what is the availability on the borrowing base",
+  };
+
+  for (const id of REL_BLOCKS) {
+    it(`selects ${id} on its own words`, () => {
+      expect(composeDoctrine(ON_ITS_OWN_WORDS[id], { mode: "narrate" }).included).toContain(id);
+    });
+
+    it(`gives ${id} up under budget rather than dropping an always block`, () => {
+      const { included, dropped } = composeDoctrine(ON_ITS_OWN_WORDS[id], { mode: "narrate", budget: 0 });
+      expect(dropped).toContain(id);
+      expect(included).toEqual(alwaysBlockIds("narrate"));
+    });
+
+    it(`names ${id} in the drop order, ahead of credit-policy`, () => {
+      const order = [...DOCTRINE_DROP_ORDER] as string[];
+      expect(order).toContain(id);
+      expect(order.indexOf(id)).toBeLessThan(order.indexOf("credit-policy"));
+    });
+  }
+
+  it("carries every relationship line the room's own drive script types, with nothing dropped", () => {
+    /* THE BUDGET IS MEASURED, NOT RAISED PRE-EMPTIVELY (section 3.5). Every
+       line the drive types fits inside the standing 18,000, so the raise from
+       16,000 is the last one this file records. */
+    const DRIVE = [
+      "",
+      "what is the risk rating",
+      "covenant review",
+      "revalue the a/r and the inventory",
+      "net orderly liquidation value, then field exam",
+      "annual review",
+      "downgrade them to a 5",
+      "they are special mention",
+      "james wants the june certificate",
+    ];
+    for (const line of DRIVE) {
+      const out = composeDoctrine(line, { mode: "narrate", include: ["route-open-relationship"] });
+      expect(out.dropped, `dropped a block on "${line}"`).toEqual([]);
+      expect(out.bytes).toBeLessThanOrEqual(DOCTRINE_BUDGET_BYTES);
+    }
+  });
+
+  it("offers the second room its own five-way arm, and never the facility room's three", () => {
+    const rel = composeDoctrine("", { mode: "narrate", include: ["route-open-relationship"] });
+    const text = rel.lines.join("\n");
+    expect(rel.included).toContain("route-open-relationship");
+    expect(rel.included).not.toContain("route-open");
+    expect(text).toContain("THE ROUTE IS NOT BOUND, AND THIS IS THE RELATIONSHIP ROOM");
+    expect(text).toContain("never propose a grade");
+    expect(text).not.toContain("a modification, a renewal or a new facility");
+  });
+
+  it("keeps the relationship arm out of the drop order, as the consent call's own block", () => {
+    expect([...DOCTRINE_DROP_ORDER]).not.toContain("route-open-relationship");
+    const tiny = composeDoctrine("", { mode: "narrate", budget: 0, include: ["route-open-relationship"] });
+    expect(tiny.included).toContain("route-open-relationship");
+    expect(tiny.dropped).not.toContain("route-open-relationship");
+  });
+});
+
+describe("THE FACILITY GUARD: the pinned facility lines select exactly what they selected before", () => {
+  /* Block for block, before and after the relationship wave. This is the one
+     assertion that stands between a new match word and a facility remark that
+     silently lost a slice it has always carried. */
+  const PINNED: Array<{ line: string; mode?: "reply" | "narrate"; blocks: string[] }> = [
+    {
+      line: "add a DSCR covenant of 1.25x on the equipment loan",
+      blocks: [...ALWAYS_BLOCK_IDS, "covenant-levels", "covenant-families", "collateral-chain"],
+    },
+    {
+      line: "pledge the warehouse to the equipment loan",
+      blocks: [...ALWAYS_BLOCK_IDS, "collateral-chain"],
+    },
+    {
+      line: "who guarantees the construction loan",
+      blocks: [...ALWAYS_BLOCK_IDS, "involvement-roles"],
+    },
+    {
+      line: "add a 0.5% origination fee",
+      blocks: [...ALWAYS_BLOCK_IDS, "fees"],
+    },
+    {
+      line: "what is the spread on the revolver",
+      blocks: [...ALWAYS_BLOCK_IDS, "pricing"],
+    },
+    {
+      line: "take the line to $20M on this modification",
+      blocks: [...ALWAYS_BLOCK_IDS, "version-carry"],
+    },
+    {
+      line: "log a policy exception for the advance rate",
+      blocks: [...ALWAYS_BLOCK_IDS, "policy-exceptions", "credit-policy", "pricing", "collateral-chain"],
+    },
+    {
+      line: "increase the line and add a DSCR covenant",
+      blocks: [...ALWAYS_BLOCK_IDS, "covenant-levels", "covenant-families", "credit-policy"],
+    },
+  ];
+
+  for (const pin of PINNED) {
+    it(`"${pin.line}" is unchanged`, () => {
+      const { included, dropped } = composeDoctrine(pin.line, { mode: pin.mode });
+      expect([...included].sort()).toEqual([...new Set(pin.blocks)].sort());
+      expect(dropped).toEqual([]);
+    });
+  }
+
+  it("keeps the facility room's own route-open arm on a facility greeting", () => {
+    const { included } = composeDoctrine("", { mode: "narrate", include: ["route-open"] });
+    expect(included).toContain("route-open");
+    expect(included).not.toContain("route-open-relationship");
+  });
+});

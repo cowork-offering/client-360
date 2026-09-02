@@ -381,6 +381,121 @@ const ROUTE_OPEN: DoctrineBlock = {
   ],
 };
 
+/* ================================================ THE RELATIONSHIP ROOM'S FOUR
+
+   THE SECOND ROOM'S SUBJECT MATTER, sliced the same way the facility room's
+   was. `brain/WORKROOM-BRAIN.md` 4.3.1, 4.4.1, 4.9 and 4.8 carry how a covenant
+   is actually tested, how a valuation is actually struck, what an annual review
+   actually is and how this org actually rates. Without them the rating and the
+   valuation routes reach the desk with no methodology at all, which is exactly
+   what the founder named on 2026-09-02.
+
+   EVERY ONE IS MATCH-GATED AND EVERY ONE IS DROPPABLE. They go into
+   DOCTRINE_DROP_ORDER ahead of `credit-policy`, so the budget gives them up
+   FIRST and visibly rather than silently trading one slice for another. The
+   match words deliberately avoid the facility room's own vocabulary: the
+   facility guard in doctrine.test.ts is the gate on that, block for block. */
+
+const COVENANT_TESTING: DoctrineBlock = {
+  id: "covenant-testing",
+  source: "4.3.1",
+  match:
+    /\b(tested|testing|test\s+date|certificate|compliance\s+(row|period|certificate)|measurement\s+period|ltm|trailing\s+twelve|equity\s+cure|cure\b|waiver|delinquent|undelivered)\b/i,
+  lines: [
+    "COVENANT TESTING. The test date, the frequency and the measurement period come from the credit agreement, never from the day the file was opened. Coverage and leverage are measured on the trailing twelve months; balance-sheet tests are point in time on the test date.",
+    "The compliance certificate is the DELIVERY obligation and the ratio is the FINANCIAL obligation. They fail separately and this bank tracks them separately.",
+    "Breach is a test that ran and failed. Overdue is a date that passed with nothing delivered. Waived is relief for a period, and the covenant still exists. Amended means the terms changed, so apply the framework to the modified terms.",
+    "A financial breach is not cured by performance. It is fixed by a waiver, an amendment resetting the covenant, a paydown, or an equity cure treated as an EBITDA add-back for the period.",
+    "A covenant review closes an open test period. It records the verdict and the figure; it approves nothing, and where a test fails it raises the separate action rather than resolving it.",
+    "In THIS org nCino computes no covenant test: the rule object holds three rows and the spread statement period object holds none. The test is ours, deterministically, from the org's threshold and operator against a Boom actual. Say which number came from where.",
+  ],
+};
+
+const VALUATION_BASIS: DoctrineBlock = {
+  id: "valuation-basis",
+  source: "4.4.1 and 2.6",
+  match:
+    /* NOT "advance rate". It is a POLICY-EXCEPTION word in the facility room
+       ("log a policy exception for the advance rate") and matching it here
+       pushed a slice onto a facility line that had never carried one. The
+       facility guard in doctrine.test.ts caught it; the two-lendable-values
+       rule still reaches every line that says "lendable". */
+    /\b(valuation|revalu\w+|appraisal|appraise\w*|olv|nolv|fmv|liquidation|field\s+exam|receivables?\s+aging|lendable|stale|expiry|valuation\s+basis|orderly\s+liquidation|fair\s+market\s+value)\b/i,
+  lines: [
+    "VALUATION. A valuation is a dated statement of what an asset is worth, struck on a named basis, from a named source. Basis matters more than the number: fair market value, orderly liquidation value and forced liquidation value are three different numbers for one asset, in descending order, and machinery and equipment advance rates are quoted against OLV.",
+    "A figure without its basis is not a valuation. If you do not know the basis, say so.",
+    "A number that fell because the basis changed is not an impairment. Name the basis on both readings before you call anything a decline.",
+    "Every valuation carries an as-of date. Policy states how long it stays good: monthly for A/R and inventory on a borrowing base, 12 to 24 months for machinery and equipment, 12 to 36 for CRE.",
+    "LENDABLE VALUE IS TWO NUMBERS IN THIS ORG. The collateral record's lendable value is a formula over the collateral TYPE rate and ignores any pledge override; the pledge's own lendable value honours it. The credit figure is the PLEDGE figure. Never present the asset figure as the bank's.",
+    "Filing a valuation does not move the collateral value. That roll-up is bound to nCino's own Add Valuation button and does not fire headlessly. Claim no coverage improvement from a filing.",
+  ],
+};
+
+const ANNUAL_REVIEW: DoctrineBlock = {
+  id: "annual-review",
+  source: "4.9",
+  match:
+    /\b(annual\s+review|yearly\s+review|periodic\s+review|re-?underwrit\w+|renewal\s+decision|action\s+items|affirm\w*|credit\s+committee|credit\s+officer|problem\s+loan\s+review)\b/i,
+  lines: [
+    "THE ANNUAL REVIEW. The bank's periodic re-underwriting of a relationship it already holds. The question is narrow: on today's facts, would we still do this deal, at this size, price, structure and grade.",
+    "Eight sections: exposure position, financial update (the direction, not the level), covenant compliance test by test, collateral position with the dates behind the values, relationship profitability, the rating affirmation, the renewal decision, and the action items with an owner and a date.",
+    "RM drafts. Credit analysis supports. A credit officer with the lending authority approves, and committee above that limit or on anything moving to criticised. You draft. You never approve.",
+    "A finding is cited from the read or the read is said to be silent. Never carry a covenant verdict, a collateral value or a profitability figure you cannot point at.",
+    "In THIS org the review's own decision picklists are on no tool wire: the current and recommended relationship ratings, whether a grade change is requested, whether the covenants were tested and passed, a new policy exception, credit committee, and the next review type and date. State the affirmation in prose in the rating comments and hand the picklists to nCino.",
+  ],
+};
+
+const RISK_RATING: DoctrineBlock = {
+  id: "risk-rating",
+  source: "4.8",
+  match:
+    /\b(risk[-\s]?rating|re-?rate|re-?rating|regrade|downgrade|upgrade|notch|probability\s+of\s+default|loss\s+given\s+default|\bpd\b|\blgd\b|special\s+mention|substandard|doubtful|classification|overrid\w+|pass\/?watch|criticised|criticized|grade\s+(on\s+file|change))\b/i,
+  lines: [
+    "RISK RATING. A pass band, then the interagency categories: Special Mention, Substandard, Doubtful, Loss. The line between Pass/Watch and Special Mention is the one that costs money: it changes reserve, reporting and examiner attention.",
+    "Dual rating. The borrower rating is probability of default; the facility rating is loss given default, driven by collateral, lien position, guaranty and structure. One borrower, one PD; six facilities, six LGDs.",
+    "A rating narrative carries the comparison to the grade on file, four to six supporting points across leverage, coverage, liquidity, business profile, sector and ownership, an explicit why not one notch better and why not one notch worse, and the conditions that would trigger a downgrade.",
+    "A rating change is never silent. If a proposed rating differs from the rating on file, surface it.",
+    "An override is a governed event: written reason, reason code, approval above the proposer. A rating system that accepts an override with no comment is a rating system nobody examines.",
+    "Downgrade triggers: a breach not cured or waived, two consecutive quarters of coverage below the covenant, an unplanned revolver draw that does not clean up, a going-concern or qualified opinion, loss of a top customer, payment past due beyond 30 days, a borrowing base that stops supporting the commitment, bankruptcy or judgment against a guarantor.",
+    "FOUR GRADE SURFACES ARE LIVE IN THIS ORG AND THEY DO NOT AGREE: the facility 0 to 15, the package 1 to 10, the review 1 to 12, and the rating review unbounded. Name the surface every time.",
+    "This org's rating object does not score. The final grade is a formula that picks the overridden grade if there is one and the computed grade if there is not. The probability of default, loss given default, quantitative, qualitative and total score fields exist and are empty on every record. Read them; never claim them.",
+    "Special Mention, Substandard, Doubtful and Loss are not values on any picklist here. Never write a regulatory classification into a numeric grade.",
+  ],
+};
+
+const COVERAGE_MATH: DoctrineBlock = {
+  id: "coverage-math",
+  source: "4.4",
+  match:
+    /\b(coverage|borrowing\s+base|availability|eligible|ineligible|reserves?|\bltv\b|loan\s+to\s+value|shortfall|concentration|cross-?aged)\b/i,
+  lines: [
+    "COVERAGE AND THE BORROWING BASE. Availability on a base-governed revolver is min(commitment, base) less outstandings. Treating the full undrawn commitment as available where a base exists is a standard error.",
+    "Borrowing base is (eligible A/R x its rate) plus (eligible inventory x its rate) less reserves. Eligible A/R excludes aged, cross-aged, over-concentration, contra, affiliate, unsupported foreign, government without assignment, bill-and-hold, consignment and disputed items. Eligible inventory excludes work in process at most banks, slow-moving and obsolete stock, consigned goods, in-transit without documents, and stock at locations with no landlord waiver or bailee letter.",
+    "Collateral coverage is total lendable value over outstandings. Lendable value is collateral value times the advance rate. LTV is loan amount over collateral value.",
+    "In THIS org Customer360Exposure returns lendable value and a computed coverage ratio per facility plus a shortfall flag. USE THE ORG'S FIGURE. Do not re-derive one and present it as the bank's.",
+    "A lien marked excluded sits outside availability math. Say so rather than quietly counting it.",
+  ],
+};
+
+/* THE ROUTE-OPEN ARM FOR THE SECOND ROOM. `route-open` names the facility
+   room's three routes by name, so a relationship greeting carrying it would be
+   told to choose between a modification, a renewal and a new facility. This is
+   the same rule in the second room's own five-way vocabulary, force-selected by
+   `composeNarratePrompt` on `room === "relationship"`, and out of the drop order
+   for the same reason its twin is: the block governing the one call that carries
+   consent must be undroppable. */
+const ROUTE_OPEN_RELATIONSHIP: DoctrineBlock = {
+  id: "route-open-relationship",
+  source: "the relationship room's own router",
+  modes: ["reply", "narrate"],
+  lines: [
+    "THE ROUTE IS NOT BOUND, AND THIS IS THE RELATIONSHIP ROOM. Five questions are open: the annual review, the covenant review, the collateral valuation, the risk-rating review and the service request. None of them has been asked yet.",
+    "Do not write as if any one of them were running. Never say which covenants are being assessed, never say what is being valued, never propose a grade, never draft a review section, and never compose a case.",
+    "Lead on the POSITION of the relationship: what it holds, whether the tests are clean and when they are next due, whether the collateral numbers are current, the grade on file and when it was last looked at, and whether anything is staged.",
+    "The chips for CONTEXT.routeOptions are on the glass. Your closing line points at them, or at the one route CONTEXT.mail names. It never invents a sixth.",
+  ],
+};
+
 /**
  * EVERY BLOCK, in prompt order.
  *
@@ -407,8 +522,14 @@ export const DOCTRINE_BLOCKS: DoctrineBlock[] = [
   FIGURES,
   PRICING_CONVENTIONS,
   CREDIT_POLICY,
+  COVENANT_TESTING,
+  VALUATION_BASIS,
+  ANNUAL_REVIEW,
+  RISK_RATING,
+  COVERAGE_MATH,
   MAIL,
   ROUTE_OPEN,
+  ROUTE_OPEN_RELATIONSHIP,
 ];
 
 /** The blocks no line ever travels without, IN A GIVEN MODE. Their absence
@@ -430,6 +551,15 @@ export const ALWAYS_BLOCK_IDS = alwaysBlockIds("reply");
  * WRONG answer, so they are given up last.
  */
 export const DOCTRINE_DROP_ORDER = [
+  /* THE RELATIONSHIP ROOM'S FIVE GO FIRST (2026-09-02). They are the newest
+     and the widest, and a budget that shed `credit-policy` to make room for one
+     of them would trade a slice the facility room depends on for a slice the
+     relationship room only sometimes needs, with nobody saying so. */
+  "covenant-testing",
+  "valuation-basis",
+  "annual-review",
+  "risk-rating",
+  "coverage-math",
   "credit-policy",
   "pricing",
   "covenant-families",
