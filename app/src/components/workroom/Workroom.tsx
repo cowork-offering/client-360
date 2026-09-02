@@ -1148,7 +1148,18 @@ export function Workroom({
         ? { test: d.covenantWire.typeName, threshold: d.covenantWire.threshold, frequency: d.covenantWire.frequency }
         : d.involvementWire
           ? { party: d.involvementWire.accountName, role: d.involvementWire.role }
-          : { assetId: d.pledgeWire?.collateralId };
+          : /* A NET-NEW PLEDGE IS IDENTIFIED BY ITS DESCRIPTION, not by a record
+               id it does not have yet, so the plan-awareness rule can still see
+               it where no elicited draft is held beside the delta. */
+            d.pledgeWire?.newCollateral
+            ? {
+                isNew: true,
+                assetDescription: d.pledgeWire.newCollateral.description,
+                assetKind: d.pledgeWire.newCollateral.collateralType,
+                assetValue: d.pledgeWire.newCollateral.value,
+                advanceRate: d.pledgeWire.advanceRate,
+              }
+            : { assetId: d.pledgeWire?.collateralId };
       out.push({
         deltaId: d.id,
         surface,

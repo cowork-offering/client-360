@@ -1248,3 +1248,89 @@ describe("the collateral type resolves to the org's own name (E6)", () => {
     expect(read && read.kind === "family" ? read.values : []).toHaveLength(11);
   });
 });
+
+/* ========= THE SAME CREATE TWICE AMENDS THE ENTRY, IT DOES NOT DOUBLE IT
+
+   Founder drive 2026-09-02: the Kokomo create was staged twice and the manifest
+   ended with it twice. The plan-awareness rule keys on `assetId`, which a
+   net-new asset does not have yet, so it fell straight through.               */
+
+describe("a net-new pledge already on the plan (2026-09-02)", () => {
+  const KOKOMO: Draft = {
+    surface: "collateral",
+    slots: {
+      isNew: true,
+      assetKind: "Real Estate-Construction",
+      assetDescription: "Kokomo plant expansion",
+      assetValue: 6_500_000,
+      advanceRate: 75,
+    },
+    scope: [CONSTRUCTION],
+    scopeWord: true,
+    unused: null,
+  };
+
+  const staged = (over: Partial<Draft["slots"]> = {}) =>
+    ctxWith({
+      plan: [
+        {
+          deltaId: "collateral.pledge:construction:0",
+          surface: "collateral",
+          memberId: CONSTRUCTION,
+          title: "Kokomo plant expansion",
+          target: "Construction",
+          slots: { ...KOKOMO.slots, ...over },
+          open: false,
+        },
+      ],
+    });
+
+  it("names it as already on the plan rather than staging a second one", () => {
+    const aware = awarenessFor(KOKOMO, staged());
+    expect(aware.onThePlan).toContain("Kokomo plant expansion is already on this plan for Construction");
+    expect(aware.fresh).toEqual([]);
+  });
+
+  it("amends the entry where the banker said it again with a different figure", () => {
+    const amendment = planAmendmentFor({ ...KOKOMO, slots: { ...KOKOMO.slots, assetValue: 7_000_000 } }, staged())!;
+    expect(amendment).not.toBeNull();
+    expect(amendment.entry.deltaId).toBe("collateral.pledge:construction:0");
+    expect(amendment.changed).toEqual(["it is worth $7,000,000"]);
+  });
+
+  it("amends the entry where the collateral type moved", () => {
+    const amendment = planAmendmentFor(
+      { ...KOKOMO, slots: { ...KOKOMO.slots, assetKind: "Real Estate-Office" } },
+      staged(),
+    )!;
+    expect(amendment.changed).toEqual(["the collateral type is now Real Estate-Office"]);
+  });
+
+  it("is not an amendment where nothing the banker owns has moved", () => {
+    expect(planAmendmentFor(KOKOMO, staged())).toBeNull();
+  });
+
+  it("takes a DIFFERENT asset on the same facility as a create of its own", () => {
+    const other: Draft = { ...KOKOMO, slots: { ...KOKOMO.slots, assetDescription: "Muncie tooling line" } };
+    expect(planAmendmentFor(other, staged())).toBeNull();
+    expect(awarenessFor(other, staged()).fresh).toEqual([CONSTRUCTION]);
+  });
+
+  it("leaves an entry staged on another facility alone", () => {
+    const elsewhere = ctxWith({
+      plan: [
+        {
+          deltaId: "collateral.pledge:loc:0",
+          surface: "collateral",
+          memberId: LOC15,
+          title: "Kokomo plant expansion",
+          target: "$15.0MM Line of Credit",
+          slots: KOKOMO.slots,
+          open: false,
+        },
+      ],
+    });
+    expect(planAmendmentFor(KOKOMO, elsewhere)).toBeNull();
+    expect(awarenessFor(KOKOMO, elsewhere).fresh).toEqual([CONSTRUCTION]);
+  });
+});

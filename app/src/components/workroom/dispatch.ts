@@ -756,6 +756,22 @@ const entryWords = (text: string): string[] =>
     .split(/[^a-z0-9$.]+/)
     .filter((w) => w.length > 2 && !STOPWORD.has(w) && !REMOVAL_VERB.test(w));
 
+/** The words a BOOK asset is known by, on the same bar `rank` uses. */
+const assetTokens = (a: BookAsset): string[] =>
+  [...new Set(`${a.label} ${a.kind ?? ""}`.toLowerCase().split(/[^a-z0-9]+/))].filter((t) => t.length > 3);
+
+/** HOW MUCH OF A NAME THE LINE ACTUALLY ACCOUNTS FOR, between 0 and 1.
+ *
+ *  A staged entry titled "Kokomo plant expansion" is entirely named by a line
+ *  carrying those three words. A book pledge whose paragraph merely CONTAINS
+ *  them is not, and the raw count cannot tell the two apart because it is the
+ *  same three words on both sides. */
+const coverage = (tokens: string[], lower: string): number => {
+  const uniq = [...new Set(tokens)];
+  if (!uniq.length) return 0;
+  return uniq.filter((t) => lower.includes(t)).length / uniq.length;
+};
+
 /** Does the line name this side of the entry at all? One distinctive word is
  *  enough on its own; what makes the rule safe is that BOTH sides are required. */
 const names = (line: string, words: string[]): boolean => {
@@ -933,6 +949,41 @@ export function readRemove(
   const claimed = subject
     ? named.filter((e) => `${e.title} ${e.after} ${e.before}`.toLowerCase().includes(subject.toLowerCase()))
     : named;
+
+  /* ============ THE MANIFEST IS ADDRESSED BEFORE THE BOOK WHERE THE LINE
+     ADDRESSES IT BETTER (E1, a fourth time, founder drive 2026-09-02).
+
+     "remove the Kokomo plant expansion pledge from the construction loan" named
+     a STAGED create-then-pledge titled exactly that. It did not un-stage it: the
+     line's own words also sit inside the description of the BOOK pledge on the
+     same facility ("First mortgage on the owner-occupied Fort Wayne
+     manufacturing campus ... and the Kokomo plant (140,000 sq ft, under
+     expansion)"), the asset resolved on those three words, and `subject` then
+     narrowed the manifest to entries carrying the FIRST MORTGAGE's title. None
+     did. So the room staged a carry exclusion of a booked first mortgage the
+     banker never mentioned.
+
+     WHAT SETTLES IT IS COVERAGE, not the raw count. Both sides matched the same
+     three words, so counting them is a tie; the staged entry's title is
+     ACCOUNTED FOR by the line and the book pledge's paragraph is not, and that
+     is the difference a banker sees. A book pledge is excluded only where no
+     staged entry is named better than it is. */
+  if (!claimed.length && named.length) {
+    const bookCover = asset ? coverage(assetTokens(asset), lower) : 0;
+    const ranked = named
+      .map((entry) => ({ entry, cover: coverage(entryWords(entry.title), lower) }))
+      .sort((a, b) => b.cover - a.cover);
+    if (ranked[0].cover > bookCover) {
+      const tied = ranked.filter((r) => r.cover === ranked[0].cover);
+      if (tied.length > 1) {
+        return {
+          kind: "ambiguous",
+          reason: `That could be ${tied.map((t) => `${t.entry.title} on ${t.entry.target}`).join(" or ")}. Name one.`,
+        };
+      }
+      return { kind: "manifest", entry: ranked[0].entry };
+    }
+  }
 
   if (claimed.length === 1) return { kind: "manifest", entry: claimed[0] };
   if (claimed.length > 1) {

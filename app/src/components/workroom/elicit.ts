@@ -2028,6 +2028,13 @@ export interface PlanAmendment {
   changed: string[];
 }
 
+/** Two net-new pledges are the same pledge where the banker's own words for the
+ *  asset are the same words. Case and inner spacing are not a difference. */
+const sameAssetWords = (a: string | undefined, b: string | undefined): boolean => {
+  const norm = (t: string | undefined) => (t ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  return Boolean(norm(a)) && norm(a) === norm(b);
+};
+
 export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendment | null {
   if (draft.slots.second || draft.scope.length !== 1) return null;
   const memberId = draft.scope[0];
@@ -2037,6 +2044,12 @@ export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendmen
     if (draft.surface === "involvement") {
       return Boolean(s.party) && Boolean(p.slots.party) && samePartyName(p.slots.party!, s.party!);
     }
+    /* A NET-NEW ASSET HAS NO RECORD ID YET, so `assetId` names nothing and the
+       plan-awareness rule fell straight through it: the founder staged the
+       Kokomo create twice and the manifest ended with it twice. What identifies
+       a net-new pledge is the DESCRIPTION, which is the banker's own words and
+       the only readable identity the collateral record carries. */
+    if (s.isNew || p.slots.isNew) return sameAssetWords(s.assetDescription, p.slots.assetDescription);
     return Boolean(s.assetId) && p.slots.assetId === s.assetId;
   };
   const entry = ctx.plan.find((p) => !p.open && p.surface === draft.surface && p.memberId === memberId && sameSubject(p));
@@ -2050,8 +2063,15 @@ export function planAmendmentFor(draft: Draft, ctx: ElicitContext): PlanAmendmen
     if (s.frequency && s.frequency !== entry.slots.frequency) changed.push(`it is tested ${s.frequency.toLowerCase()}`);
   } else if (draft.surface === "involvement") {
     if (s.role && s.role !== entry.slots.role) changed.push(`the role is now ${s.role}`);
-  } else if (s.lien && s.lien !== entry.slots.lien) {
-    changed.push(`the lien position is now ${s.lien}`);
+  } else {
+    if (s.lien && s.lien !== entry.slots.lien) changed.push(`the lien position is now ${s.lien}`);
+    if (s.assetKind && s.assetKind !== entry.slots.assetKind) changed.push(`the collateral type is now ${s.assetKind}`);
+    if (s.assetValue !== undefined && s.assetValue !== entry.slots.assetValue) {
+      changed.push(`it is worth ${exactMoney(s.assetValue)}`);
+    }
+    if (s.advanceRate !== undefined && s.advanceRate !== entry.slots.advanceRate) {
+      changed.push(`the advance rate is now ${s.advanceRate} percent`);
+    }
   }
   return changed.length ? { entry, changed } : null;
 }
@@ -2217,6 +2237,34 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
           ]
         : [],
       close: null,
+    };
+  }
+
+  /* ================= THE NET-NEW PLEDGE ALREADY ON THIS PLAN (2026-09-02)
+
+     The awareness below keys on `assetId`, which a net-new asset does not have
+     yet, so staging the same create twice put a second, identical entry beside
+     the first. The banker's own description is what identifies it, exactly as
+     it does for {@link planAmendmentFor}. */
+  if (draft.surface === "collateral" && draft.slots.isNew && draft.slots.assetDescription) {
+    const staged = ctx.plan.filter(
+      (p) =>
+        p.surface === "collateral" &&
+        sameAssetWords(p.slots.assetDescription, draft.slots.assetDescription) &&
+        p.memberId &&
+        draft.scope.includes(p.memberId),
+    );
+    const onPlan = staged.map((p) => p.memberId!).filter((id, i, all) => all.indexOf(id) === i);
+    if (!onPlan.length) return none;
+    return {
+      onTheBook: null,
+      onThePlan: `${draft.slots.assetDescription} is already on this plan for ${sentenceList(onPlan.map(label))}, created and pledged there.`,
+      fresh: draft.scope.filter((id) => !onPlan.includes(id)),
+      options: [
+        { label: "A different facility", say: "a different facility" },
+        { label: "Take it off the plan", say: `remove the ${draft.slots.assetDescription} pledge from the ${label(onPlan[0])}` },
+      ],
+      close: "Say it again with a different figure and I will move that entry rather than putting a second one beside it.",
     };
   }
 

@@ -1023,3 +1023,86 @@ describe("an org refusal that lists its own values becomes chips (E6)", () => {
     expect(readTypeChoice("set the collateral type on Something Else to Real Estate-Lot", [kokomo()])).toBeNull();
   });
 });
+
+/* ============ THE MANIFEST IS ADDRESSED BEFORE THE BOOK (E1, a fourth time)
+
+   Founder drive 2026-09-02. "remove the Kokomo plant expansion pledge from the
+   construction loan" named a STAGED create-then-pledge titled exactly that, and
+   un-staged nothing: the same three words also sit inside the description of a
+   BOOK pledge on that facility, so the room staged a carry exclusion of a
+   booked first mortgage nobody had mentioned.                                 */
+
+const KOKOMO_BOOK: Book = {
+  ...BOOK,
+  assets: [
+    ...BOOK.assets,
+    {
+      id: "a3Ubb00000001AT",
+      label:
+        "First mortgage on the owner-occupied Fort Wayne manufacturing campus at 4820 Industrial Parkway, Fort Wayne, Indiana, and the Kokomo plant (140,000 sq ft, under expansion).",
+      name: "COL-000761",
+      kind: "Real Estate-Warehouse",
+      value: 18_000_000,
+      lien: "1st",
+      loanIds: [CONSTRUCTION],
+    },
+  ],
+};
+
+const KOKOMO_SCOPE: ElicitMember[] = [
+  ...SCOPE,
+  { id: CONSTRUCTION, key: "construction", label: "Construction", orgName: null, shortName: "Construction - $12,000,000.00", committed: 12_000_000 },
+];
+
+const stagedKokomo = (): WorkroomDelta =>
+  delta({
+    id: "collateral.pledge:construction:0",
+    group: "security",
+    kind: "New pledge",
+    title: "Kokomo plant expansion",
+    target: "Construction",
+    member: CONSTRUCTION,
+    before: "not on the facility today",
+    after: "created and pledged, $6,500,000.00 at 75% advance",
+    pledgeWire: {
+      facilityId: CONSTRUCTION,
+      advanceRate: 75,
+      newCollateral: {
+        description: "Kokomo plant expansion",
+        collateralType: "Real Estate-Construction",
+        value: 6_500_000,
+      },
+    },
+  });
+
+describe("a remove addresses the manifest before it excludes a book pledge", () => {
+  const line = "remove the Kokomo plant expansion pledge from the construction loan";
+
+  it("un-stages the banker's own entry rather than excluding the first mortgage", () => {
+    const read = readRemove(line, [stagedKokomo()], KOKOMO_BOOK, KOKOMO_SCOPE);
+    expect(read?.kind).toBe("manifest");
+    expect(read?.kind === "manifest" ? read.entry.title : "").toBe("Kokomo plant expansion");
+  });
+
+  it("excludes the book pledge only where no staged entry is named better", () => {
+    const read = readRemove(line, [], KOKOMO_BOOK, KOKOMO_SCOPE);
+    expect(read?.kind).toBe("fence");
+    expect(read?.kind === "fence" ? read.name : "").toContain("First mortgage on the owner-occupied");
+  });
+
+  it("still reaches the book where the line names the book pledge's own words", () => {
+    const read = readRemove(
+      "remove the first mortgage pledge from the construction loan",
+      [stagedKokomo()],
+      KOKOMO_BOOK,
+      KOKOMO_SCOPE,
+    );
+    expect(read?.kind).toBe("fence");
+  });
+
+  it("leaves a staged entry on ANOTHER facility exactly where it is", () => {
+    const elsewhere = { ...stagedKokomo(), member: LOC, target: "$15.0MM Line of Credit" };
+    const read = readRemove(line, [elsewhere], KOKOMO_BOOK, KOKOMO_SCOPE);
+    expect(read?.kind).not.toBe("manifest");
+  });
+});
