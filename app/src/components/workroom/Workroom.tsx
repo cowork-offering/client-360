@@ -131,6 +131,7 @@ import { packageDeepLink } from "../DeepLink";
 import { mailTipFrom, overdueCovenantTip } from "./tips";
 import { useClientMail } from "./clientMail";
 import "../../styles/workroom.css";
+import { ManifestRail } from "../rail/ManifestRail";
 
 /* =============================================================================
    THE WORKROOM — A GUIDED RITUAL.
@@ -300,8 +301,6 @@ const DOSSIER_FOOT_MS = 200;
 const DOSSIER_CHECK_MS = 180;
 /** ~5s after the card lands, the light breathes out over 1.4s. */
 const HALO_LIFE_MS = 5600;
-/** How many manifest chips the lane shows before the rest fold into a peek. */
-const RAIL_VISIBLE = 6;
 /** The word stagger of the agent's speech (rule 65). */
 const WORD_STAGGER_MS = 26;
 
@@ -591,22 +590,6 @@ function ChallengeMath({ challenge }: { challenge: WorkroomChallenge }) {
     </>
   );
 }
-function ManifestList({ entries }: { entries: WorkroomDelta[] }) {
-  return (
-    <>
-      {entries.map((d) => (
-        <div className="wk-have-row" key={d.id}>
-          <div className="wk-l">{d.kind}</div>
-          <div className="wk-v">{d.title}</div>
-          <div className="wk-d">
-            {d.target} · {d.before} → {d.after}
-          </div>
-        </div>
-      ))}
-    </>
-  );
-}
-
 function MemberCards({ members }: { members: PackageMember[] }) {
   return (
     <div className="wk-mgrid">
@@ -880,7 +863,6 @@ export function Workroom({
   const [sealed, setSealed] = useState(false);
   const [draft, setDraft] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const [railFolded, setRailFolded] = useState(0);
   /** The halo is execute's ONLY light, and it breathes out ~5s after landing. */
   const [lit, setLit] = useState(false);
   /** THE LOOKUP CAME BACK. The tiers below it are earned one at a time from
@@ -3483,14 +3465,6 @@ export function Workroom({
    *  already read", never two competing ones. */
   const tiersLeft = choreo.left;
   const tiersShown = choreo.summoned || histOpen;
-  const railEntries = entries.slice(railFolded);
-
-  /* The lane never grows past the room: past the visible cap the OLDEST fold
-     into a peek and the count above always states the whole manifest. */
-  useEffect(() => {
-    setRailFolded(Math.max(0, entries.length - RAIL_VISIBLE));
-  }, [entries.length]);
-
   /** The card a single-package book shows: the room's own anchor, stated. */
   const anchoredPackage = {
     id: context.productPackageId ?? "anchored",
@@ -3958,85 +3932,72 @@ export function Workroom({
             )}
 
             {entries.length > 0 && (
-            <div className="wk-man-h">
-              <span className="wk-kicker">{manifestHeading}</span>
-              <span className="wk-c">{figures.countLine}</span>
-              <button
-                type="button"
-                className="wk-dt"
-                onClick={(e) =>
-                  openPeek(e.currentTarget, {
-                    kicker: "What the package holds today",
-                    width: 460,
-                    content: <HaveRows rows={brief.have} />,
-                  })
+              <ManifestRail
+                heading={manifestHeading}
+                count={figures.countLine}
+                label={`${manifestHeading} · ${figures.countLine}`}
+                newest={entries[entries.length - 1]?.id ?? null}
+                action={
+                  <button
+                    type="button"
+                    className="wk-dt"
+                    onClick={(e) =>
+                      openPeek(e.currentTarget, {
+                        kicker: "What the package holds today",
+                        width: 460,
+                        content: <HaveRows rows={brief.have} />,
+                      })
+                    }
+                  >
+                    Package today
+                  </button>
                 }
               >
-                Package today
-              </button>
-            </div>
-            )}
-
-                        {railFolded > 0 && (
-              <button
-                type="button"
-                className="wk-railfold"
-                onClick={(e) =>
-                  openPeek(e.currentTarget, {
-                    kicker: `Everything in ${vocabulary.manifestHeading.toLowerCase()}`,
-                    width: 460,
-                    content: <ManifestList entries={entries} />,
-                  })
-                }
-              >
-                ↑ {railFolded} earlier in the manifest
-              </button>
-            )}
-            <div className="wk-ents">
-              {railEntries.map((delta) => {
-                const filed = filedById.get(delta.id);
-                return (
-                  <div className={`wk-ent ${filed ? "wk-filed" : ""}`} key={delta.id}>
-                    <TypeIcon kind={iconForDelta(delta)} />
-                    <button
-                      type="button"
-                      className="wk-ent-t"
-                      onClick={(e) =>
-                        openPeek(e.currentTarget, {
-                          kicker: `${delta.title} · what this writes`,
-                          width: 460,
-                          content: <OrgMap delta={delta} filedNote={filed?.verification} />,
-                        })
-                      }
-                    >
-                      <b>{delta.title}</b>
-                      <span>
-                        {delta.target} · {delta.before} → {delta.after}
-                      </span>
-                      {filed && (
-                        <span className="wk-filedbar">
-                          <span className="wk-st">{vocabulary.filedWord}</span>
-                          <span className="wk-id">{filed.recordId}</span>
-                        </span>
-                      )}
-                    </button>
-                    {!filed && (
+                {entries.map((delta) => {
+                  const filed = filedById.get(delta.id);
+                  return (
+                    <div className={`wk-ent ${filed ? "wk-filed" : ""}`} key={delta.id}>
+                      <TypeIcon kind={iconForDelta(delta)} />
                       <button
                         type="button"
-                        className="wk-ent-x"
-                        aria-label={`Remove ${delta.title} from the manifest`}
-                        title="Remove. To change it, say it again in the chat."
-                        onClick={() => drop(delta)}
+                        className="wk-ent-t"
+                        onClick={(e) =>
+                          openPeek(e.currentTarget, {
+                            kicker: `${delta.title} · what this writes`,
+                            width: 460,
+                            content: <OrgMap delta={delta} filedNote={filed?.verification} />,
+                          })
+                        }
                       >
-                        <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
-                          <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                        </svg>
+                        <b>{delta.title}</b>
+                        <span>
+                          {delta.target} · {delta.before} → {delta.after}
+                        </span>
+                        {filed && (
+                          <span className="wk-filedbar">
+                            <span className="wk-st">{vocabulary.filedWord}</span>
+                            <span className="wk-id">{filed.recordId}</span>
+                          </span>
+                        )}
                       </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {!filed && (
+                        <button
+                          type="button"
+                          className="wk-ent-x"
+                          aria-label={`Remove ${delta.title} from the manifest`}
+                          title="Remove. To change it, say it again in the chat."
+                          onClick={() => drop(delta)}
+                        >
+                          <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
+                            <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </ManifestRail>
+            )}
           </aside>
         </div>
 

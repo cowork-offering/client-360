@@ -1,0 +1,138 @@
+/* =============================================================================
+   THE MANIFEST RAIL — the shared bounded ledger (founder, 2026-09-02).
+
+   The lane used to be a column that simply grew: at a dozen committed cards it
+   ran past the bottom of the room and the room, which clips, ate the newest
+   change. The frame is now the room's, not the content's. The head is pinned
+   and states the whole total; the chips scroll under it inside a fixed cap;
+   the edge that is holding content back carries a soft fade so the cut is
+   never hard (DIRECTION-LOCKED: no hard cuts).
+
+   The sheet lives with the primitive rather than in workroom.css because the
+   primitive is shared: the workroom's manifest and the relationship room's
+   review ledger are the same frame with different nouns.
+   ============================================================================= */
+
+/* The fades are animated LENGTHS, so a mask can ease in and out instead of
+   snapping. Custom properties only transition once they are registered. */
+@property --rail-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --rail-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* THE HEAD IS PINNED. It sits outside the scroller, so the total the banker
+   reads is the whole manifest however far down the chips have travelled. The
+   head itself is `.wk-man-h`, the lane head both rooms already render and both
+   already dress: the rail owns the frame, not the typography. */
+.rail > .wk-man-h {
+  flex: none;
+}
+
+/* THE VIEWPORT. Negative margins buy the glass chips room to cast their own
+   shadow inside a clipping box; the gutter is reserved at every length so the
+   stack never shifts sideways the moment it grows past the cap. */
+.rail-vp {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* autoprefixer: ignore next */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  border-radius: 14px;
+  margin: 0 -10px;
+  padding: 4px 10px;
+  --rail-top: 0px;
+  --rail-bottom: 0px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--rail-top),
+    #000 calc(100% - var(--rail-bottom)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--rail-top),
+    #000 calc(100% - var(--rail-bottom)),
+    transparent 100%
+  );
+  transition: --rail-top 260ms var(--ease-out), --rail-bottom 260ms var(--ease-out);
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+/* The fade appears ONLY on the side that is holding something back. */
+.rail-vp.rail-up {
+  --rail-top: 26px;
+}
+.rail-vp.rail-down {
+  --rail-bottom: 30px;
+}
+.rail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* THE BAR IS GLASS, NOT A GUTTER. It is absent until a hand or a keyboard is
+   on the rail, and then it is a thin ink thread on nothing. */
+.rail-vp:hover,
+.rail-vp:focus-visible,
+.rail-vp:focus-within {
+  scrollbar-color: rgba(20, 19, 24, 0.16) transparent;
+}
+.rail-vp::-webkit-scrollbar {
+  width: 6px;
+}
+.rail-vp::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rail-vp::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 999px;
+  transition: background-color 220ms var(--ease-out);
+}
+.rail-vp:hover::-webkit-scrollbar-thumb,
+.rail-vp:focus-visible::-webkit-scrollbar-thumb,
+.rail-vp:focus-within::-webkit-scrollbar-thumb {
+  background-color: rgba(20, 19, 24, 0.16);
+}
+
+/* THE LANE THAT HOLDS A RAIL IS BOUNDED BY THE ROOM. The lane is absolute at
+   74px from the room's top, so the cap leaves 22px of air at the bottom: the
+   ledger can never reach the room's edge, and the thread, the composer and the
+   Review & execute chip never move to make room for it. A lane WITHOUT a rail
+   (the relationship room until it adopts the primitive) is untouched. */
+.wk-col-r:has(> .rail) {
+  max-height: calc(100% - 96px);
+}
+.wk-col-r > .rail {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.wk-col-r > .wk-detail {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-vp {
+    scroll-behavior: auto;
+  }
+}
