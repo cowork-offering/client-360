@@ -4,7 +4,6 @@ import {
   chipSet,
   catalogField,
   orgAccepted,
-  orgPairs,
   orgRefused,
   orgValues,
   readCatalog,
@@ -115,7 +114,7 @@ describe("reading it", () => {
   it("keeps a catalog entry's record ids, because the names are not unique", async () => {
     stubMcp(envelope(FIELDS));
     const catalog = await readCatalog();
-    expect(orgPairs(catalog, "collateralType")[0]).toEqual({ label: "Equipment", value: "a3Kbb0000001AAA" });
+    expect(catalogField(catalog, "collateralType")?.values[0]).toEqual({ label: "Equipment", value: "a3Kbb0000001AAA" });
     expect(catalogField(catalog, "collateralType")?.source).toBe("catalog");
   });
 });

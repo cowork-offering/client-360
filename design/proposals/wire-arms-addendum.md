@@ -210,9 +210,13 @@ carries one and the shell's own where it does not.
 entries carry an empty one, and reading it as an empty allowlist would silently offer no chips at
 all on those four.
 
-**The two catalog entries carry record ids, not names.** Collateral type and covenant type are
-LOOKUPS whose names are not unique in this org, so both are held as label plus id and a chip built
-on a name alone is never sent as one.
+**The two catalog entries carry record ids beside their names.** Collateral type and covenant type
+are LOOKUPS whose names are not unique in this org, so the reader keeps both. The room's chips still
+carry the NAME, because both wires take one: `covenantAddsJson` takes a `typeName` and
+`pledgeAddsJson.newCollateral` takes a `collateralType`, and the ORG resolves each against its own
+live catalog and refuses an ambiguous one with the candidate ids. Sending an id would need a wire
+that accepts one, and only `covenantAttachesJson` does. The id is held so that the day a wire takes
+one, the room already has it.
 
 **A fenced chip set is checked, not built.** The exception statuses come out of `parseModify.ts`,
 which cannot be edited, so the room holds them against the org's own: a value the org gained is

@@ -164,13 +164,6 @@ export function orgRefused(catalog: OrgCatalog | null | undefined, key: CatalogK
   return entry.values.map((v) => v.label).filter((label) => !ok.has(label));
 }
 
-/** The label/id pairs, for the two entries whose `value` is a RECORD ID. A chip
- *  built on the name alone is eventually refused as ambiguous, because names
- *  are not unique in either catalog. */
-export function orgPairs(catalog: OrgCatalog | null | undefined, key: CatalogKey): CatalogValue[] {
-  return catalogField(catalog, key)?.values ?? [];
-}
-
 /**
  * THE ORG'S SET, OR THE MIRROR.
  *

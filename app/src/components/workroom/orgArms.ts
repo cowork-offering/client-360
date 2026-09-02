@@ -64,17 +64,12 @@ export const ARM_FIELD = "__c360OrgArm";
 
 /** At most ten of each, per plan. The org's cap, enforced here so the banker
  *  reads the eleventh as a sentence rather than as a refused plan. */
-export const ARM_CAP = 10;
-
-/** Does this delta carry an arm? */
-export function isArmDelta(delta: WorkroomDelta): boolean {
-  return delta.fieldWire?.field === ARM_FIELD;
-}
+const ARM_CAP = 10;
 
 /** The arm this delta carries, or null. */
 export function armOf(delta: WorkroomDelta): ArmEntry | null {
-  if (!isArmDelta(delta)) return null;
-  return decodeArm(String(delta.fieldWire!.value));
+  if (delta.fieldWire?.field !== ARM_FIELD) return null;
+  return decodeArm(String(delta.fieldWire.value));
 }
 
 const encodeArm = (arm: ArmEntry): string => JSON.stringify(arm);
@@ -170,7 +165,7 @@ export function armStage(
 
 /** An asset description runs to a paragraph in this org. The first sentence
  *  names it; the exclusions inside it are the credit agreement's business. */
-export function assetPhrase(label: string): string {
+function assetPhrase(label: string): string {
   const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
   return first.length > 64 ? `${first.slice(0, 61).trim()}...` : first;
 }

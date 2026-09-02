@@ -1077,11 +1077,11 @@ const REFUSED_ROLES: Array<{ match: RegExp; word: string; why: string }> = [
    matters to the banker: a value the org offers that the write path refuses. */
 
 /** The five legal roles, live. */
-export const involvementRoles = (ctx: ElicitContext): string[] =>
+const involvementRoles = (ctx: ElicitContext): string[] =>
   chipSet(ctx.catalog, "borrowerType", INVOLVEMENT_ROLES).values;
 
 /** The roles the object holds and this room refuses, live. Named, never hidden. */
-export const refusedRoleWords = (ctx: ElicitContext): string[] => {
+const refusedRoleWords = (ctx: ElicitContext): string[] => {
   const live = orgRefused(ctx.catalog, "borrowerType");
   return live.length ? live : REFUSED_ROLES.map((r) => r.word);
 };
@@ -1095,7 +1095,7 @@ const KIND_CHIP_CAP = 8;
  *  kinds this deal already pledges, then the rest of the org's own list. A type
  *  whose advance rate is null is refused before the org's own validation rule
  *  can fire on the insert, which is why `acceptedValues` and not `values`. */
-export function assetKinds(ctx: ElicitContext): { chips: string[]; total: number; fromOrg: boolean } {
+function assetKinds(ctx: ElicitContext): { chips: string[]; total: number; fromOrg: boolean } {
   const live = orgAccepted(ctx.catalog, "collateralType");
   if (!live.length) return { chips: ASSET_KIND_OPTIONS, total: ASSET_KIND_OPTIONS.length, fromOrg: false };
   const held = new Set(ctx.book.assets.map((a) => (a.kind ?? "").toLowerCase()).filter(Boolean));
@@ -1104,7 +1104,7 @@ export function assetKinds(ctx: ElicitContext): { chips: string[]; total: number
 }
 
 /** The lien positions, live. */
-export const lienPositions = (ctx: ElicitContext): string[] => chipSet(ctx.catalog, "lienPosition", LIEN_OPTIONS).values;
+const lienPositions = (ctx: ElicitContext): string[] => chipSet(ctx.catalog, "lienPosition", LIEN_OPTIONS).values;
 
 /**
  * THE NINE THE ROOM'S OWN PARSER CAN SETTLE, and the rest named honestly.
@@ -1120,7 +1120,7 @@ export const lienPositions = (ctx: ElicitContext): string[] => chipSet(ctx.catal
  * one mirror on this surface that is honest, because what it mirrors is this
  * client's own vocabulary and not the org's data.
  */
-export const FILEABLE_COVENANT_TYPES = [
+const FILEABLE_COVENANT_TYPES = [
   "Leverage",
   "Minimum Liquidity",
   "Debt Service Coverage of Borrower",
@@ -1132,7 +1132,7 @@ export const FILEABLE_COVENANT_TYPES = [
   "Net Profit",
 ];
 
-export function covenantTypeChips(ctx: ElicitContext): { fileable: string[]; presentNotFileable: number } {
+function covenantTypeChips(ctx: ElicitContext): { fileable: string[]; presentNotFileable: number } {
   const live = orgValues(ctx.catalog, "covenantType");
   if (!live.length) return { fileable: FILEABLE_COVENANT_TYPES, presentNotFileable: 0 };
   const nine = new Set(FILEABLE_COVENANT_TYPES.map((t) => t.toLowerCase()));
