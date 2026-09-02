@@ -451,6 +451,8 @@ const LANE_LABELS: Record<string, string> = {
   valuationDate: "Valuation date",
   type: "Basis",
   source: "Source",
+  primary: "Primary valuation",
+  description: "Note",
   cashFlowCoverage: "Cash-flow coverage",
   revenueGrowth: "Revenue growth",
   managementExperience: "Management experience",
@@ -465,7 +467,7 @@ function iconForAnswer(route: RelRoute, group: string): IconKind {
   if (group.startsWith("covenant")) return "covenant";
   if (group === "records" || group === "recordValues") return "collateral";
   if (group === "valuationDate" || group === "detail") return "maturity";
-  if (group === "type" || group === "source") return "pricing";
+  if (group === "type" || group === "source" || group === "primary" || group === "description") return "pricing";
   if (route === "rating") return "pricing";
   return REL_FLOWS[route].icon;
 }

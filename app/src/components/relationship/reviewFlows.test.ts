@@ -314,6 +314,7 @@ describe("the collateral valuation is package-anchored bulk too", () => {
       valuationDate: "2026-08-31",
       type: "Net Orderly Liquidation Value",
       source: "Appraisal",
+      primary: "no",
     });
     const built = buildStagePayload("valuation", ctx, answers, "key-1");
     const p = (built as { payload: StagePayloads["collateral-valuation"] }).payload;
@@ -771,5 +772,104 @@ describe("the covenant review proposes the figure and offers the opt-in", () => 
     expect((no as { payload: StagePayloads["covenant-review"] }).payload).not.toHaveProperty("allowNonPending");
     const never = buildStagePayload("covenant", ctx, base, "key-1");
     expect((never as { payload: StagePayloads["covenant-review"] }).payload).not.toHaveProperty("allowNonPending");
+  });
+});
+
+/* =============================================================================
+   THE VALUATION STOPS HARDCODING TWO INPUTS THE TOOL ALWAYS TOOK.
+
+   `primary: false` and `description: null` were written into every payload the
+   room composed. So a banker filing the valuation that supersedes the one on
+   file could not say so, and the appraiser who struck the figure went
+   unrecorded on a record whose whole purpose is provenance.
+   ============================================================================= */
+
+describe("the valuation collects its primary flag and its note", () => {
+  const ctx = ctxFor();
+  const upTo = (extra: Record<string, unknown>): Answers => ({
+    records: ["a35A"],
+    recordValues: { a35A: 11_400_000 },
+    valuationDate: "2026-08-31",
+    type: "Net Orderly Liquidation Value",
+    source: "Receivables Aging",
+    ...extra,
+  });
+
+  it("asks whether it becomes the primary, and says what each answer means", () => {
+    const step = nextStep("valuation", ctx, upTo({}))!;
+    expect(step.key).toBe("primary");
+    expect(step.kind).toBe("chips");
+    expect(step.optional).toBeFalsy();
+    expect(step.options?.[0].detail).toContain("supersedes");
+    expect(step.options?.[1].detail).toContain("joins the ladder");
+    expect(step.target?.field).toBe("LLC_BI__Primary__c");
+  });
+
+  it("then asks who struck the figure, and lets it be skipped", () => {
+    const step = nextStep("valuation", ctx, upTo({ primary: "yes" }))!;
+    expect(step.key).toBe("description");
+    expect(step.optional).toBe(true);
+    expect(step.target?.field).toBe("LLC_BI__Valuation_Description__c");
+  });
+
+  it("travels both when answered", () => {
+    const built = buildStagePayload(
+      "valuation",
+      ctx,
+      upTo({ primary: "yes", description: "Q3 field exam, Hilco" }),
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["collateral-valuation"] }).payload;
+    expect(p.items[0].primary).toBe(true);
+    expect(p.items[0].description).toBe("Q3 field exam, Hilco");
+  });
+
+  it("travels false and null when skipped, and never the skip sentinel", () => {
+    const built = buildStagePayload("valuation", ctx, upTo({ primary: "no", description: SKIPPED }), "key-1");
+    const p = (built as { payload: StagePayloads["collateral-valuation"] }).payload;
+    expect(p.items[0].primary).toBe(false);
+    expect(p.items[0].description).toBeNull();
+    expect(JSON.stringify(p)).not.toContain(SKIPPED);
+  });
+
+  it("names the PLEDGE lendable value on every asset option, never the asset formula", () => {
+    const withOverride = ctxFor({
+      exposure: {
+        facilities: [
+          {
+            loanId: "0Cb1",
+            status: "Active",
+            productPackageId: PACKAGE,
+            collateral: [
+              {
+                collateralId: "a35A",
+                collateralDescription: "Inventory, Fort Wayne",
+                collateralType: "UCC-Inventory",
+                collateralValue: 8_000_000,
+                currentLendableValue: 4_000_000,
+                advanceRateSource: "Pledge override",
+              },
+            ],
+          },
+        ],
+      },
+    } as never);
+    const step = nextStep("valuation", withOverride, {})!;
+    // $6.4MM would be the asset formula at the 80 percent type rate. The bank
+    // lends against the pledge, and the pledge carries a 50 percent override.
+    expect(step.options?.[0].detail).toContain("$4M lendable");
+    expect(step.options?.[0].detail).toContain("Pledge override");
+    expect(step.options?.[0].detail).not.toContain("$6.4");
+  });
+
+  it("says the org offers no BOV and no Field Exam, rather than picking one", () => {
+    const step = nextStep("valuation", ctx, {
+      records: ["a35A"],
+      recordValues: { a35A: 1 },
+      valuationDate: "2026-08-31",
+      type: "Net Orderly Liquidation Value",
+    })!;
+    expect(step.key).toBe("source");
+    expect(step.placeholder).toContain("No BOV and no Field Exam");
   });
 });

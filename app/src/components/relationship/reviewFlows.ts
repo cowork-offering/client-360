@@ -478,17 +478,32 @@ export function relRouteBlock(route: RelRoute, ctx: RelContext): string | null {
 function valuationStep(ctx: RelContext, a: Answers): RelStep | null {
   const assets = valuableCollateral(ctx);
   if (!answered(a, "records")) {
+    const held = new Map(relBookFor(ctx).assets.map((x) => [x.collateralId, x]));
     return {
       key: "records",
       ask: "Which collateral are we valuing?",
       kind: "multi",
-      options: assets.map((c) => ({
-        label: collateralLabel(c),
-        value: c.collateralId!,
-        detail: [c.collateralType, typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null]
-          .filter(Boolean)
-          .join(" · "),
-      })),
+      options: assets.map((c) => {
+        const book = held.get(c.collateralId!);
+        /* THE LENDABLE VALUE ON THE OPTION IS THE PLEDGE FIGURE, which is the
+           credit figure. The asset's own formula ignores the pledge override:
+           on Hartwell inventory the asset reads $6.4MM at the 80 percent type
+           rate and the pledge reads $4.0MM at the 50 percent policy rate.
+           Printing the asset figure would print a number the bank does not
+           lend against. NO VALUATION DATE: the read carries none. */
+        return {
+          label: collateralLabel(c),
+          value: c.collateralId!,
+          detail: [
+            c.collateralType,
+            typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null,
+            book?.lendable ? `${book.lendable} lendable` : null,
+            book?.advanceRateSource,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        };
+      }),
       placeholder: "Name the assets, or pick them above.",
     };
   }
@@ -530,8 +545,38 @@ function valuationStep(ctx: RelContext, a: Answers): RelStep | null {
       ask: "And where did the figure come from?",
       kind: "chips",
       options: asOptions(VALUATION_SOURCE?.values),
-      placeholder: "The source of the number.",
+      /* THE ORG'S LIST CARRIES NEITHER A BROKER OPINION OF VALUE NOR A FIELD
+         EXAM, and a banker who says either should be told which of the org's
+         own values covers it rather than watching the room pick one silently. */
+      placeholder: "The source of the number. No BOV and no Field Exam on this org's list.",
       target: { object: "LLC_BI__Collateral_Valuation__c", field: "LLC_BI__Source__c" },
+    };
+  }
+  /* TWO INPUTS THE TOOL HAS ALWAYS TAKEN AND THE ROOM HARDCODED.
+     `primary: false` and `description: null` were written into every payload,
+     so a banker filing the valuation that supersedes the one on file could not
+     say so, and the appraiser who struck the figure went unrecorded. */
+  if (!answered(a, "primary")) {
+    return {
+      key: "primary",
+      ask: "Does this become the primary valuation on the asset?",
+      kind: "chips",
+      options: [
+        { label: "Yes", value: "yes", detail: "It supersedes the valuation on file as the primary." },
+        { label: "No", value: "no", detail: "It joins the ladder and the primary does not move." },
+      ],
+      placeholder: "Yes or no.",
+      target: { object: "LLC_BI__Collateral_Valuation__c", field: "LLC_BI__Primary__c" },
+    };
+  }
+  if (!answered(a, "description")) {
+    return {
+      key: "description",
+      ask: "Name the appraiser or the exam, for the record.",
+      kind: "text",
+      optional: true,
+      placeholder: "Who struck the figure, or skip it.",
+      target: { object: "LLC_BI__Collateral_Valuation__c", field: "LLC_BI__Valuation_Description__c" },
     };
   }
   return null;
@@ -768,8 +813,8 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
       valuationDate,
       type: text(a.type),
       source: text(a.source),
-      description: null,
-      primary: false,
+      description: text(a.description),
+      primary: a.primary === "yes",
     };
     return {
       ok: true,
