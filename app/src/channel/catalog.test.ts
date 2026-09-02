@@ -13,7 +13,7 @@ import {
 } from "./catalog";
 
 /* =============================================================================
-   Customer360Catalog — THE CHIPS COME FROM THE ORG.
+   Customer360Catalog: THE CHIPS COME FROM THE ORG.
 
    The shapes below are `design/proposals/org-arms-addendum.md` verbatim, with
    the values the tool actually returned off bankinggpt-at on 2026-09-02.
@@ -109,6 +109,34 @@ describe("reading it", () => {
   it("is null on an empty envelope, never a catalog of nothing", async () => {
     stubMcp(envelope([]));
     expect(await readCatalog()).toBeNull();
+  });
+
+  /* A FAILED READ IS NOT AN ANSWER TO CACHE (2026-09-02). The promise was the
+     cache whatever it resolved to, and `resetCatalog` is never called by the
+     room, so a view mounted before the connector registered its tools stayed on
+     the mirror for its whole life with no retry. */
+  it("retries on the next read where the first one came back with nothing", async () => {
+    expect(await readCatalog()).toBeNull();
+    const callTool = stubMcp(envelope(FIELDS));
+    expect((await readCatalog())?.fields).toHaveLength(4);
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries after a REFUSAL too, and caches the catalog once it arrives", async () => {
+    stubMcp({ content: [{ isSuccess: false, errors: "INSUFFICIENT_ACCESS" }] });
+    expect(await readCatalog()).toBeNull();
+    const callTool = stubMcp(envelope(FIELDS));
+    await Promise.all([readCatalog(), readCatalog()]);
+    await readCatalog();
+    // ONE round trip once it succeeds: the cache is unchanged for the state it
+    // was built for.
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shares ONE round trip between callers on the frame that fails", async () => {
+    const callTool = stubMcp(envelope([]));
+    expect(await Promise.all([readCatalog(), readCatalog()])).toEqual([null, null]);
+    expect(callTool).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a catalog entry's record ids, because the names are not unique", async () => {

@@ -33,10 +33,17 @@ three new arms are not among them. The engine cannot be edited. So:
 - a payload carrying no arm comes back **byte-identical**, so every plan that has been filing since
   August files on exactly the wire it always did.
 
-**It is fail-closed by construction.** The sentinel is not a legal API name, and stripping it is
-the only way it can travel. Bypass `armStage` and the org resolves field names against its own live
-describe and refuses an unknown one with the legal list, rather than writing anything. A wiring
-mistake is a refusal, never a wrong write on a borrower's clone.
+**It is fail-closed by construction, and it is worth naming what closes it.** The sentinel is not a
+legal API name, and stripping it is the only way it can travel. Bypass `armStage` and
+`StageLoanModification.cls` resolves the field against the live describe of `LLC_BI__Loan__c`, by
+API name and by label, and throws before any write:
+
+> No field named `"__c360OrgArm"` exists on the facility in this org, by API name or by label.
+
+It is **not** `C360WriteGuard` that refuses it. The guard's field check is a NEGATIVE list, the
+fields it refuses to write, so a name no object holds is not on it and the guard has nothing to say
+about the sentinel at all. A wiring mistake is a refusal at stage time, never a wrong write on a
+borrower's clone.
 
 Because the delta carries a wire the engine recognises, everything downstream of `carriesWire`
 keeps working without knowing what an arm is: the entry counts as fileable rather than as a
@@ -339,3 +346,91 @@ the 2.5M line of credit` un-staged the banker's own entry: the book resolved not
 bare word "covenant" matched the KIND of a staged covenant exclusion while "line of credit" matched
 its target. That is E1, reached through the category word instead of the title, and the new exclusion
 kinds made it easy to hit. The manifest address now matches on the entry's TITLE alone.
+
+---
+
+## The review pass, 2026-09-02
+
+Two independent reviewers drove the branch after the drive above. Everything below is fixed on it.
+
+**E1, a third time: the target side of the manifest address was PROSE.** The title side was fixed to
+match on the title alone, and the TARGET side was left matching the words of `${e.target} ${e.after}`.
+Every carry exclusion's `after` is the sentence "not carried onto the new version", so the word "the"
+satisfied the target side of the address on its own; a truncated asset title carries "the" inside it,
+so it satisfied the title side too. Three lines reproduced it, each un-staging an entry on a facility
+it did not name:
+
+| the line | what it did | what it does |
+|---|---|---|
+| `remove the accounts receivable covenant from the 2.5M line of credit` | un-staged the $15M exclusion | refuses, and says the covenant is on the $15.0MM Line of Credit |
+| `remove the accounts receivable pledge from the 2.5M line of credit` | un-staged the $15M exclusion | refuses in collateral words, naming where it IS pledged |
+| `remove the equipment pledge from the 8M equipment loan` | un-staged a pledge on the $15M line, on "the" | reaches the book |
+
+`after` is off the address entirely, the tokeniser drops a closed list of stopwords, and where the
+line NAMES a facility the entry has to be on it, by the member id the delta was staged against.
+`readRemove` therefore takes the members now: which facility a line names is the room's own scope
+reader's answer, not a word match on a label.
+
+**The missing-arm-step sentence became a GATE.** R38 checked the plan for a step per arm and said so,
+while `setFlow` had already stored the staging with its decision token, so approve stayed live and a
+banker who read the line and pressed the ink button anyway would execute a plan not containing their
+exclusion. The staging is stored with the arms it is missing NAMED; while that list is not empty the
+approval is closed, `execute` refuses on the same list, and the card says why and offers Discard.
+
+**The trail counts the org's STEPS, not the manifest.** `result.filed` is built inside the fenced
+engine from the deltas that carry a wire, so an arm was reported as filed whether or not the org ever
+planned it, and the trail asserted "1 covenant left off the new version" about a plan with no such
+step. `armTrailSummary` composes the trail sentence from the returned plan's own steps: a step that
+is present is counted, one that is absent is named as unplanned, one the org marked failed is named
+as unproved. `armSummary` still composes the sentence IN FRONT of the approval, where the manifest is
+the right thing to count: there it says what the plan is being sent to do.
+
+**The confirm leaked half the engine's opening clause on a long pledge.** `armConfirmSentence` drops
+the engine's opening clause by splitting the reply on its sentence boundaries, and `assetPhrase`
+truncated a long asset title with `"..."`, which IS a sentence boundary. Three of Hartwell's four
+collateral descriptions truncate (COL-000763 at 129 characters, COL-000765 at 152, COL-000764 at
+196), so a banker read "... and nothing is deleted anywhere. on Purchase: pledged to the booked
+facility, and carried onto the clone today ... staged on the clone." The mark is one ellipsis
+character now, in both copies of `assetPhrase`, and the boundary itself refuses a doubled full stop.
+
+**R39 keys on the RECORD ID.** The org's refusals name the record ("Covenant a3Bbb000000S0bNEAS is
+not attached to Line of Credit, ..."), never the covenant type, so matching the manifest on `d.title`
+found the entry only where the type happened to appear in the sentence too, and never on a pledge.
+The match is the arm's own `recordId`, on its first fifteen characters so a 15-character read and an
+18-character refusal are the same record.
+
+**A pledge is settled by one distinctive word among the pledges of the facility named.** `remove the
+inventory pledge from the 15M line of credit` resolved nothing and fell through to the pre-arm
+handoff card, whose copy ("no deployed write reaches it yet") lives behind the fence and is no longer
+true, while `remove the fort wayne inventory pledge from the 15M line of credit` staged a real
+exclusion. Both name the same row. One word settles it wherever it is unique among that facility's
+own pledges; a tie asks, with that facility's pledges as the chips; a facility that carries pledges
+never falls through to the handoff. Across the whole book, where no facility is named, the two-word
+bar stands.
+
+**Un-staging a carry exclusion no longer closes in term-change copy.** "Say it again to put it back,
+with the figure you want" is a commitment change's sentence and an exclusion has no figure. It says
+the new version carries it again, exactly as the booked facility holds it.
+
+**A covenant the relationship does not carry is answered from the book.** `remove the leverage
+covenant from the 15M line of credit` fell through to the brain lane. Hartwell holds no Leverage
+covenant at all, and the room is holding the covenants read, so it says so and names what the
+facility does carry.
+
+**The associate handoff's join.** "...rides the modification alone: The renewal files..." spliced a
+capitalised sentence after a colon, because `ROUTE_FILES` opens a sentence wherever it is used. It is
+a full stop.
+
+**`Customer360Catalog` no longer caches a failure for the life of the view.** The promise was the
+cache whatever it resolved to, and `resetCatalog` is never called by the room, so a room mounted
+before the connector registered its tools stayed on the mirror with no retry. The promise is still
+the cache while it is in flight, so two callers on one frame share the round trip; it is dropped the
+moment it resolves to null, and the next read asks again.
+
+### Notes
+
+**`modifyEngine.ts` contains one NUL byte, near line 1693.** It is inside the fence and pre-existing,
+so it is not touched here, and it is recorded because it changes how the file must be searched:
+`grep` treats the file as binary and prints "Binary file ... matches" instead of the matching lines
+unless it is given `-a`. Anyone grepping the engine and getting nothing back should reach for `grep
+-a` before concluding the string is not there.

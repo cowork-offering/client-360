@@ -366,6 +366,11 @@ describe("the room reads the book and the plan before it proposes anything", () 
     expect(gap).toContain("rides the modification alone");
     expect(gap).toContain("Run it as a modification");
     expect(gap).not.toContain("being built");
+    // AND THE JOIN IS A SENTENCE END, not a colon with a capital after it. The
+    // route's own line opens a sentence wherever it is used, so a colon in
+    // front of it read as "rides the modification alone: The renewal files".
+    expect(gap).toContain("rides the modification alone. The renewal files");
+    expect(gap).not.toContain("alone: The");
     expect(associateGap(draft, "renew")).toBeNull();
 
     const entry = handoffEntry(took, ctx, EQ8, gap, 0);

@@ -8,6 +8,7 @@ import { createModifyEngine } from "./workroom/modifyEngine";
 import { workroomContextFor } from "./workroom/openWorkroom";
 import type { BrainEnvelope, BrainReply } from "./channel/brainLane";
 import { READ_DOORS } from "./channel/brainTools";
+import { resetCatalog } from "./channel/catalog";
 import { acquireSample, resetSessionDoor } from "./channel/sampleDoor";
 import type { C360Data } from "./data/contract";
 import live from "../../artifact/live-data.json";
@@ -44,6 +45,7 @@ afterEach(() => {
   document.body.className = "";
   delete (window as unknown as { claude?: unknown }).claude;
   clearComposed();
+  resetCatalog();
 });
 
 const data = live as unknown as C360Data;
@@ -324,7 +326,7 @@ describe("the write fence, from the room's side", () => {
   });
 
   it("makes no connector call at all to narrate", async () => {
-    const callTool = vi.fn(async () => ({ payload: {} }));
+    const callTool = vi.fn(async (..._args: unknown[]) => ({ payload: {} }));
     installSession(async () => "Coverage thins on the pledged pool.");
     (window as unknown as { claude?: { use: unknown; mcp?: unknown } }).claude!.mcp = { callTool };
     const room = await openRoom(reply(CLARIFY));
@@ -332,6 +334,13 @@ describe("the write fence, from the room's side", () => {
     await typeInto(room, "take the line of credit to 20000000");
 
     expect(room.querySelector(".wk-narr")).not.toBeNull();
-    expect(callTool).not.toHaveBeenCalled();
+    /* NOTHING THE MODEL SAID REACHED A TOOL. The room's ONE call is its own
+       chip catalog, a read it makes at mount whether or not there is a desk;
+       narration itself opens no door at all. It shows up here now because a
+       failed catalog read is no longer cached for the life of the view
+       (2026-09-02), so it is no longer masked by a leaked null. */
+    const doors = callTool.mock.calls.map((c) => c[1]);
+    expect(doors).toEqual(["Customer360Catalog"]);
+    expect(doors.some((d) => /^(stage|execute)_/.test(String(d)))).toBe(false);
   });
 });

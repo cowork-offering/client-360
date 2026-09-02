@@ -20,15 +20,26 @@
 
    `app/src/workroom/` is the fenced engine and `wirePayload` inside it maps the
    seven wire lists it shipped with. An arm delta therefore travels as a
-   `fieldWire` carrying {@link ARM_FIELD} — a field name no org describe holds —
+   `fieldWire` carrying {@link ARM_FIELD}, a field name no org describe holds,
    and {@link armStage} lifts those entries back out of `fieldChangesJson`
    before the payload leaves the client, replacing them with the three arm keys.
 
-   The sentinel is FAIL-CLOSED by construction. Stripping it is the only way it
-   can travel: if this wrapper is ever bypassed, the org resolves field names
-   against its own live describe and refuses an unknown one with the legal list
-   rather than writing anything. A wiring mistake is a refusal, never a wrong
-   write on a borrower's clone.
+   The sentinel is FAIL-CLOSED by construction, and it is worth being exact
+   about WHICH thing on the org closes it. `StageLoanModification.cls` resolves
+   every field change against the live describe of `LLC_BI__Loan__c`, by API
+   name and by label, and throws on one it cannot resolve:
+
+     No field named "__c360OrgArm" exists on the facility in this org, by API
+     name or by label.
+
+   That is the refusal, and it fires at stage time, before any write. It is NOT
+   `C360WriteGuard`: the guard's field check is a NEGATIVE list, the fields it
+   refuses to write, so a name no object holds is not on it and the guard would
+   have nothing to say about the sentinel at all.
+
+   Stripping the sentinel is therefore the only way an arm can travel. Bypass
+   this wrapper and the plan is refused rather than written: a wiring mistake is
+   a refusal, never a wrong write on a borrower's clone.
    ============================================================================= */
 
 import type { StagePayloads } from "../../channel/writeTools";
@@ -58,7 +69,8 @@ export interface ArmEntry {
  *
  * It is deliberately not a legal API name and deliberately not a label: the org
  * would have to invent this field for the sentinel to reach it, so a bypass of
- * {@link armStage} refuses instead of writing.
+ * {@link armStage} is refused by `StageLoanModification.cls`'s own describe
+ * lookup instead of being written.
  */
 export const ARM_FIELD = "__c360OrgArm";
 
@@ -327,7 +339,7 @@ export function covenantAttachDelta(covenant: BookCovenant, args: DeltaArgs): Wo
  * an add and says nothing about an exclusion. A banker signing a removal is
  * entitled to read, on the confirm itself, that the booked loan is untouched.
  * So the arm's own sentence replaces the engine's opening clause and the rest of
- * the engine's reply — the package figure, the next move — is kept verbatim.
+ * the engine's reply, the package figure and the next move, is kept verbatim.
  */
 export function armConfirmSentence(delta: WorkroomDelta, reply: string): string {
   const arm = armOf(delta);
@@ -408,7 +420,7 @@ export interface ArmContext {
  * a covenant the read carries no id for cannot be named on the wire.
  *
  * THE BOOK IS CHECKED FIRST. An exclusion is meaningless where the facility does
- * not carry the junction, and the org says so by name — so the room says it
+ * not carry the junction, and the org says so by name, so the room says it
  * first, with where the covenant actually is, rather than sending a plan up to
  * be refused.
  */
@@ -645,7 +657,7 @@ const counted = (n: number, [one, many]: [string, string]) => `${n} ${n === 1 ? 
  *
  * Null where the manifest carries none, so every plan that files nothing new
  * reads exactly as it read before the arms existed. Where it carries some, the
- * sentence counts them apart — a banker reads one set of covenants on the new
+ * sentence counts them apart. A banker reads one set of covenants on the new
  * version whoever authored each record, and the association and the net-new are
  * not the same act.
  */

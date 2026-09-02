@@ -1113,7 +1113,7 @@ const lienPositions = (ctx: ElicitContext): string[] => chipSet(ctx.catalog, "li
  * names `parseModify.ts`'s `COVENANT_TYPE_MAP` resolves uniquely from a typed
  * line, and that filter is the SHELL's rather than the bank's. So the chips are
  * the nine, and what the catalog carries beyond them is stated as present in
- * the org and not fileable from a name here — never offered as a chip that ends
+ * the org and not fileable from a name here, never offered as a chip that ends
  * in a refusal.
  *
  * The list is a mirror of the fenced map, which does not export it. It is the
@@ -2257,7 +2257,7 @@ export function associateGap(draft: Draft, mode: WorkroomMode): string | null {
   if (mode === "modify") return null;
   return (
     "Associating the covenant the book already carries is a loan-covenant junction create for an existing record, which is a create rather than a delete and is inside the fence. " +
-    `The arm that files one rides the modification alone: ${ROUTE_FILES[mode] ?? ""} A junction is not one of them. ` +
+    `The arm that files one rides the modification alone. ${ROUTE_FILES[mode] ?? ""} A junction is not one of them. ` +
     "Run it as a modification and I will stage it. Here it rides the plan for the credit file, with the record it would attach named on it, and nothing about it is written to the bank's systems."
   );
 }

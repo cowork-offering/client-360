@@ -1,5 +1,5 @@
 /* =============================================================================
-   Customer360Catalog — THE CHIPS COME FROM THE ORG, NOT FROM A MIRROR.
+   Customer360Catalog: THE CHIPS COME FROM THE ORG, NOT FROM A MIRROR.
 
    Founder, 2026-09-02: "picklist values, fee types, it shows them up." Every
    create chip in this room came from a SHELL MIRROR of the org's deployed maps.
@@ -16,8 +16,8 @@
    THE MIRROR IS THE FALLBACK, NOT THE SOURCE. With no connector there is no
    catalog and every chip set falls back to what the shell holds, which is the
    channel-none doctrine applied to picklists: a room with no bridge behaves as
-   it always did. Where the difference MATTERS to the banker — a value the org
-   offers that the write path will refuse — the sentence says so; where it does
+   it always did. Where the difference MATTERS to the banker (a value the org
+   offers that the write path will refuse) the sentence says so; where it does
    not, nothing extra is said.
    ============================================================================= */
 
@@ -107,7 +107,7 @@ const asValues = (raw: unknown): CatalogValue[] =>
  */
 export async function readCatalog(): Promise<OrgCatalog | null> {
   if (pending) return pending;
-  pending = (async () => {
+  const run = (async () => {
     if (!mcpAvailable()) return null;
     try {
       // THE NORMAL CALL CARRIES NO INPUT. Omitting `objectNames` returns
@@ -130,7 +130,16 @@ export async function readCatalog(): Promise<OrgCatalog | null> {
       return null;
     }
   })();
-  return pending;
+  pending = run;
+  /* NULL IS NOT AN ANSWER TO CACHE (2026-09-02). A room that mounts before the
+     connector registers its tools read null once and stayed on the mirror for
+     the life of the view, with no retry and `resetCatalog` never called outside
+     a test. The promise is still the cache while it is in flight, so two
+     callers on one frame share the round trip; it is dropped the moment it
+     resolves to nothing, and the next read asks again. */
+  const out = await run;
+  if (out === null && pending === run) pending = null;
+  return out;
 }
 
 /* ------------------------------------------------------------- reading it */
@@ -191,9 +200,9 @@ export interface Chip {
  * A CHIP SET THE ENGINE COMPOSED, HELD AGAINST THE ORG'S OWN.
  *
  * Some chip sets are composed behind the engine fence, so the room cannot build
- * them from the catalog: it can only CHECK them. The check is narrow on purpose
- * — it runs only where every label the engine offered is a value this field
- * actually holds, which is what identifies the set as that field's at all.
+ * them from the catalog: it can only CHECK them. The check is narrow on
+ * purpose. It runs only where every label the engine offered is a value this
+ * field actually holds, which is what identifies the set as that field's at all.
  *
  * Then two corrections, and they are not symmetrical. A value the org offers and
  * the engine did not is ADDED silently: an org that gained a value is an org the
