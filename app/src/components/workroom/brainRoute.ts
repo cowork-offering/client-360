@@ -1,4 +1,4 @@
-import type { BrainEnvelope, BrainFacility, BrainFileable, BrainReadCard, BrainTurn } from "../../channel/brainLane";
+import type { BrainEnvelope, BrainFacility, BrainFileable, BrainMail, BrainReadCard, BrainTurn } from "../../channel/brainLane";
 import { capEnvelope } from "../../channel/brainLane";
 import type { PackageMember, WorkroomDelta, WorkroomMode } from "../../workroom/types";
 import { buildReadBlocks, threadDigest } from "./readBlocks";
@@ -117,6 +117,12 @@ export function buildEnvelope(args: {
   thread?: BrainTurn[];
   /** TRUE while the room is still asking which of the three routes this is. */
   routeOpen?: boolean;
+  /**
+   * THE CLIENT'S OWN MESSAGE, where this room found one (founder, 2026-09-02:
+   * "when there is an email attached, it should be in that first response baked
+   * in"). Absent is silent: no key, no apology, no "not connected" string.
+   */
+  mail?: BrainMail;
 }): BrainEnvelope {
   const entries = args.entries;
   const fileable: BrainFileable = {
@@ -141,7 +147,8 @@ export function buildEnvelope(args: {
     selectedFacility: args.focused ? facilityOf(args.focused, args.members) : null,
     facilities: args.members.filter(args.eligible).map((m) => facilityOf(m, args.members)),
     staged: entries.map((e) => ({ title: e.title, target: e.target, after: e.after })),
-    reads: buildReadBlocks(args.reads),
+    reads: buildReadBlocks(args.reads, Boolean(args.mail)),
+    mail: args.mail,
     thread: args.thread ? threadDigest(args.thread) : undefined,
     fileable,
     grounding: "plugin-skill:workroom-brain",

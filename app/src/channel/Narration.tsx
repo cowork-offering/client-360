@@ -4,6 +4,7 @@ import { LiquidMark } from "../components/workroom/Liquid";
 import {
   composeNarratePrompt,
   parseNarration,
+  resolveEntities,
   shouldNarrate,
   type NarrateSubject,
   type NarrationBlock,
@@ -107,19 +108,25 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
       running.current.set(id, controller);
       setViews((prev) => ({ ...prev, [id]: { blocks: [], pending: true } }));
 
-      const prompt = composeNarratePrompt(envelopeFor(line), subject);
+      /* ONE ENVELOPE, FOR THE LIFE OF THE REMARK. The prompt the model is
+         given and the book the row's figures are resolved out of must be the
+         same instance, or a row could print a figure from a book the model
+         never saw. */
+      const envelope = envelopeFor(line);
+      const read = (text: string) => resolveEntities(parseNarration(text), envelope);
+      const prompt = composeNarratePrompt(envelope, subject);
       const options: AskSessionOptions = {
         kind: greeting ? "greeting" : "narrate",
         tier: "quick",
         rung: 2,
         signal: controller.signal,
-        onText: ({ text }) => setViews((prev) => ({ ...prev, [id]: { blocks: parseNarration(text), pending: false } })),
+        onText: ({ text }) => setViews((prev) => ({ ...prev, [id]: { blocks: read(text), pending: false } })),
       };
 
       const call = greeting ? prime(prompt, options) : ask(prompt, options);
       void Promise.resolve(call)
         .then((text) => {
-          const blocks = parseNarration(typeof text === "string" ? text : "");
+          const blocks = read(typeof text === "string" ? text : "");
           if (blocks.length) setViews((prev) => ({ ...prev, [id]: { blocks, pending: false } }));
           else settle(id);
         })
@@ -162,21 +169,45 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
   return (
     <div className="wk-msg wk-agent wk-narr" data-who="Agent">
       <div className="wk-bub">
-        {view.blocks.map((block, i) =>
-          block.kind === "line" ? (
-            <p className="wk-narr-line" key={i}>
-              {block.spans.map((span, j) => (span.bold ? <b key={j}>{span.text}</b> : <span key={j}>{span.text}</span>))}
-            </p>
-          ) : (
-            <ul className="wk-narr-list" key={i}>
-              {block.items.map((item, j) => (
-                <li key={j}>
-                  {item.map((span, k) => (span.bold ? <b key={k}>{span.text}</b> : <span key={k}>{span.text}</span>))}
+        {view.blocks.map((block, i) => {
+          if (block.kind === "line")
+            return (
+              <p className="wk-narr-line" key={i}>
+                {block.spans.map((span, j) =>
+                  span.bold ? <b key={j}>{span.text}</b> : <span key={j}>{span.text}</span>,
+                )}
+              </p>
+            );
+          if (block.kind === "bullets")
+            return (
+              <ul className="wk-narr-list" key={i}>
+                {block.items.map((item, j) => (
+                  <li key={j}>
+                    {item.map((span, k) => (span.bold ? <b key={k}>{span.text}</b> : <span key={k}>{span.text}</span>))}
+                  </li>
+                ))}
+              </ul>
+            );
+          /* THE LINE ITEM. The read card's own row vocabulary, minus its icon:
+             three 20px glyphs inside an agent bubble read as a second card,
+             which is the boundary the four-channel rule draws. The bold name is
+             the mark. A SEPARATE list, so a resolved run never lands in
+             `.wk-narr-list` and the bullet contract stays exactly as it was. */
+          return (
+            <ul className="wk-narr-rows" key={i}>
+              {block.rows.map((row, j) => (
+                <li className={`wk-narr-row${row.tone ? ` wk-${row.tone}` : ""}`} key={j}>
+                  <span className="wk-narr-row-l">
+                    <b>{row.label.map((span) => span.text).join("")}</b>
+                    {": "}
+                    {row.spans.map((span, k) => (span.bold ? <b key={k}>{span.text}</b> : <span key={k}>{span.text}</span>))}
+                  </span>
+                  {row.value && <span className="wk-narr-row-v tnum">{row.value}</span>}
                 </li>
               ))}
             </ul>
-          ),
-        )}
+          );
+        })}
       </div>
     </div>
   );

@@ -2379,7 +2379,12 @@ body.wk-open #root {
 }
 .wk-narr-line + .wk-narr-line,
 .wk-narr-line + .wk-narr-list,
-.wk-narr-list + .wk-narr-line {
+.wk-narr-list + .wk-narr-line,
+.wk-narr-line + .wk-narr-rows,
+.wk-narr-rows + .wk-narr-line,
+.wk-narr-list + .wk-narr-rows,
+.wk-narr-rows + .wk-narr-list,
+.wk-narr-rows + .wk-narr-rows {
   margin-top: 7px;
 }
 .wk-narr-list {
@@ -2402,6 +2407,57 @@ body.wk-open #root {
   width: 5px;
   height: 1px;
   background: var(--ink-muted);
+}
+/* THE LINE ITEM (founder, 2026-09-02: "showing XYZ covenant as a line item
+   with text around it"). Every value below is COPIED from the read card's own
+   row rules above (.wk-read-r / .wk-read-l / .wk-read-v and the two tones); none
+   of it is re-picked, so a row in a remark and a row in a card are the same
+   object drawn twice. The hyphen is byte-identical to `.wk-narr-list li::before`,
+   which is what makes an UNRESOLVED row indistinguishable from a bullet. */
+.wk-narr-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wk-narr-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-left: 13px;
+}
+.wk-narr-row::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 1px;
+  background: var(--ink-muted);
+}
+.wk-narr-row + .wk-narr-row {
+  margin-top: 3px;
+}
+.wk-narr-row-l {
+  min-width: 0;
+}
+.wk-narr-row-l b {
+  font-weight: 600;
+  color: var(--ink-body-strong);
+}
+.wk-narr-row-v {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.wk-narr-row.wk-warn .wk-narr-row-v {
+  color: var(--warning);
+}
+.wk-narr-row.wk-bad .wk-narr-row-v {
+  color: var(--critical);
 }
 /* The room's own pulse, held until the first token arrives. */
 .wk-narr-wait {

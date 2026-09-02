@@ -120,6 +120,11 @@ Never mid-plan. Never between a card and its sentence.
 - Its reply is a NARRATE call, so the model may add one line of what it noticed on the book (an
   overdue covenant, a maturity inside 90 days) under the greeting the room composed
   deterministically. If it adds nothing, the greeting stands alone.
+- **What it notices now includes the CLIENT'S MAIL (2026-09-02).** The room reads the mailbox once
+  on open and the greeting waits at most `MAIL_GATE_MS` (1200ms) for it, which is zero added
+  latency on the animated path and at most one beat under reduced motion. Mail that misses the gate
+  arrives as a SECOND remark under the greeting, through `askSession` and not `primeConsent`: the
+  greeting is never recomposed and there is never a second consent dialog.
 
 ### The decline path
 

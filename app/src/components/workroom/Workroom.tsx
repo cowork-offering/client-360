@@ -91,7 +91,8 @@ import {
 import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
-import { overdueCovenantTip, useMailTip } from "./tips";
+import { mailTipFrom, overdueCovenantTip } from "./tips";
+import { useClientMail } from "./clientMail";
 import "../../styles/workroom.css";
 
 /* =============================================================================
@@ -699,7 +700,24 @@ export function Workroom({
     () => overdueCovenantTip({ bundle: reads?.bundle ?? null, today: reads?.generatedAt ?? "" }),
     [reads?.bundle, reads?.generatedAt],
   );
-  const mail = useMailTip({ accountName: context.accountName, today: reads?.generatedAt ?? "" });
+  /* ONE MAIL READ, TWO CONSUMERS (founder, 2026-09-02: the client's mail is
+     baked into the greeting). `useClientMail` makes the SAME single
+     `outlook_email_search` the tier used to make on its own, and hands back
+     both the note the envelope carries and the hits this tier is shaped from.
+     Net connector traffic for a room open is unchanged. */
+  const {
+    note: mailNote,
+    hits: mailHits,
+    gate: mailGate,
+  } = useClientMail({
+    accountName: context.accountName,
+    bundle: reads?.bundle ?? null,
+    generatedAt: reads?.generatedAt ?? "",
+  });
+  const mail = useMemo(
+    () => mailTipFrom({ hits: mailHits, accountName: context.accountName, today: reads?.generatedAt ?? "" }),
+    [mailHits, context.accountName, reads?.generatedAt],
+  );
 
   /** THE ROUTE IS STILL OPEN. Non-null while the room is asking which of the
    *  three this is; the answer clears it and nothing puts it back. */
@@ -1289,8 +1307,9 @@ export function Workroom({
         reads,
         thread: conversation(),
         routeOpen,
+        mail: mailNote ?? undefined,
       }),
-    [brief.members, brief.packageName, context, conversation, entries, focused, isEligible, reads],
+    [brief.members, brief.packageName, context, conversation, entries, focused, isEligible, mailNote, reads],
   );
 
   const askTheDesk = useCallback(
@@ -1318,7 +1337,17 @@ export function Workroom({
      from each engine: `subjectFor` decides what is worth remarking on and
      `shouldNarrate` refuses the chrome. Where narration is off or unavailable
      this is inert and the room renders precisely what it renders today. */
-  const narration = useNarration({ enabled: Boolean(brain), envelopeFor: (line) => envelopeFor(line) });
+  /* ROUTE-NEUTRAL UNTIL THE ROUTE IS BOUND (founder, 2026-09-02). The room
+     stands on the PROVISIONAL modify engine while the route question is open,
+     so an envelope built with routeOpen defaulted to false told the model this
+     was a modification before the banker had said any such thing. That is
+     exactly what he read in the greeting: "which facility or facilities move
+     and what changes follow". The reply lane has always passed this; the
+     narration lane now passes the same thing. */
+  const narration = useNarration({
+    enabled: Boolean(brain),
+    envelopeFor: (line) => envelopeFor(line, ask !== null),
+  });
   const narrated = useRef(new Set<string>());
 
   /* THE ONE CONSENT MOMENT (founder, 2026-09-02). The platform asks the viewer
@@ -1328,11 +1357,52 @@ export function Workroom({
      by a sentence that explains itself, never mid-plan and never between a card
      and its sentence. `primeConsent` is memoised, so this can only happen once
      however many times the room re-renders or is re-opened. */
+  /** TRUE where the greeting went out WITH the client's mail on the envelope.
+   *  Captured at the instant it fires, because the note may land afterwards and
+   *  the greeting is not rewritten when it does. */
+  const greetedWithMail = useRef(false);
+  const greeted = useRef(false);
   useEffect(() => {
     if (!brain || !lookedUp || !openingIdRef.current) return;
+    /* ONCE. `narration.open` is latched per item id, so a second call was
+       already inert; what was NOT inert is the ref below, which a later pass
+       would overwrite with a mail that arrived after the greeting had gone. */
+    if (greeted.current) return;
+    /* AND THE MAILBOX HAS ANSWERED, OR RUN OUT OF TIME. At most MAIL_GATE_MS,
+       and zero added latency with no connector. The prompt is composed at this
+       instant and never again: `primeConsent` memoises the PROMISE and ignores
+       the prompt of every later caller, so a greeting that waits for the mail
+       must wait BEFORE the first call rather than recompose after it. */
+    if (!mailGate) return;
     const said = `${brief.greeting ?? ""} ${ask ? ask.line : brief.position}`.trim();
-    if (said) narration.open(openingIdRef.current, { act: "greeting", sentence: said });
-  }, [ask, brain, brief.greeting, brief.position, lookedUp, narration]);
+    if (!said) return;
+    greetedWithMail.current = Boolean(mailNote);
+    greeted.current = true;
+    narration.open(openingIdRef.current, { act: "greeting", sentence: said });
+  }, [ask, brain, brief.greeting, brief.position, lookedUp, mailGate, mailNote, narration]);
+
+  /* MAIL THAT MISSED THE GATE IS A SECOND REMARK, NEVER A REWRITTEN GREETING.
+     The greeting is already on the glass and it is the one call that carried
+     consent; taking it back would be the room changing its mind in front of the
+     banker. So the room says one more thing, under it, in its own bubble.
+
+     `narrate`, not `prime`: there is no second consent dialog, and no second
+     connector call either. A declined view deletes the greeting's own view in
+     `settle()`, which is also what silences this. */
+  const followedUp = useRef(false);
+  useEffect(() => {
+    if (!brain || !mailNote || followedUp.current) return;
+    if (!greeted.current || greetedWithMail.current) return;
+    const opening = narration.viewFor(openingIdRef.current);
+    if (!opening || opening.pending) return;
+    followedUp.current = true;
+    const who = mailNote.from ?? "the client";
+    const when = mailNote.received ? ` on ${mailNote.received}` : "";
+    narration.narrate(`${openingIdRef.current}::mail`, {
+      act: "mail",
+      sentence: `A message from ${who}${when} is open on this relationship.`,
+    });
+  }, [brain, mailNote, narration]);
 
   useEffect(() => {
     const last = items[items.length - 1];
@@ -2955,6 +3025,7 @@ export function Workroom({
                           <Fragment key={item.id}>
                             {block}
                             <Narration view={narration.viewFor(item.id)} />
+                            <Narration view={narration.viewFor(`${item.id}::mail`)} />
                           </Fragment>
                         );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED. The wrapper
@@ -2965,6 +3036,10 @@ export function Workroom({
                         <div key={item.id} {...tierAttrs(tier, choreo.stateOf(tier), tiersShown)}>
                           {block}
                           <Narration view={narration.viewFor(item.id)} />
+                          {/* THE LATE MAIL, under the greeting it missed. Every
+                              other item's ::mail view is undefined and this
+                              renders nothing at all. */}
+                          <Narration view={narration.viewFor(`${item.id}::mail`)} />
                         </div>
                       );
                     })}

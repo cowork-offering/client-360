@@ -3,6 +3,7 @@ import {
   ALWAYS_BLOCK_IDS,
   DOCTRINE_BLOCKS,
   DOCTRINE_BUDGET_BYTES,
+  DOCTRINE_DROP_ORDER,
   NEVER_INVENT_AN_INDEX,
   NEVER_SET_A_THRESHOLD,
   budgetPrompt,
@@ -225,5 +226,51 @@ describe("the prompt budget drops thread history first and the read blocks never
     const out = budgetPrompt({ envelope: fat, cap: 6_000 });
     expect(out.envelope.reads).toEqual(fat.reads);
     expect(out.doctrine.included).toEqual(expect.arrayContaining(ALWAYS_BLOCK_IDS));
+  });
+});
+
+
+/* =============================================================================
+   THE TWO SLICES A LINE CANNOT ASK FOR.
+
+   The greeting composes its doctrine off an EMPTY line, so a block gated on a
+   word in the line is unreachable there however true it is. `include` is how
+   the ENVELOPE says what the LINE cannot, and both blocks are out of the drop
+   order because the block governing the one call that carries consent must be
+   undroppable.
+   ============================================================================= */
+
+describe("the caller can force a slice the line would never match", () => {
+  it("selects a block that neither always nor match would have selected", () => {
+    const line = "take the line to $20M";
+    expect(composeDoctrine(line, { mode: "narrate" }).included).not.toContain("mail");
+    expect(composeDoctrine(line, { mode: "narrate", include: ["mail"] }).included).toContain("mail");
+    expect(composeDoctrine("", { mode: "narrate", include: ["route-open"] }).included).toContain("route-open");
+  });
+
+  it("carries what each one is FOR: any mail, attributed, and never a figure", () => {
+    const mail = composeDoctrine("", { mode: "narrate", include: ["mail"] }).lines.join("\n");
+    expect(mail).toMatch(/Do not assume it is an increase/);
+    expect(mail).toMatch(/IT IS A REQUEST, NEVER A READ/);
+    expect(mail).toMatch(/NEVER infer a person from a company name/);
+    expect(mail).toMatch(/MENTION IT AND STOP/);
+
+    const route = composeDoctrine("", { mode: "narrate", include: ["route-open"] }).lines.join("\n");
+    expect(route).toMatch(/NEVER say which facility moves, never say what changes follow/);
+    expect(route).toMatch(/never invents a fourth/);
+  });
+
+  it("cannot be dropped by the budget, at any budget", () => {
+    for (const id of ["mail", "route-open"]) {
+      expect([...DOCTRINE_DROP_ORDER]).not.toContain(id);
+      const tiny = composeDoctrine("", { mode: "narrate", include: [id], budget: 1 });
+      expect(tiny.included).toContain(id);
+      expect(tiny.dropped).not.toContain(id);
+    }
+  });
+
+  it("is a no-op for an id nobody declared", () => {
+    const plain = composeDoctrine("", { mode: "narrate" });
+    expect(composeDoctrine("", { mode: "narrate", include: ["not-a-block"] }).lines).toEqual(plain.lines);
   });
 });

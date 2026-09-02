@@ -302,6 +302,45 @@ const CREDIT_POLICY: DoctrineBlock = {
   ],
 };
 
+/* ------------------------------------------------ the client's own message
+
+   FOUNDER, 2026-09-02: the mail is ANY mail, not an increase. The room reads
+   what it actually asks or tells and offers the matching move, in his own
+   words: "btw James reached out for xyz, do you want to bake this in?"
+
+   NEITHER `always` NOR `match`. Both blocks below are force-selected by
+   `include`, because the greeting composes its doctrine off an EMPTY line and
+   would never match a mail word or a route word. They are also deliberately
+   out of DOCTRINE_DROP_ORDER: the block governing the one call that carries
+   consent must be undroppable.                                              */
+
+const MAIL: DoctrineBlock = {
+  id: "mail",
+  source: "the client's own message",
+  modes: ["reply", "narrate"],
+  lines: [
+    "THE CLIENT HAS WRITTEN. CONTEXT.mail is ONE message from the viewer's own mailbox, matched to this relationship: who sent it, when, its subject and a bounded gist of the body.",
+    "READ WHAT IT ACTUALLY ASKS OR TELLS. It may be a renewal, a new facility, covenant relief, a valuation, a question, a complaint, or a notice with no credit action in it at all. Do not assume it is an increase.",
+    "IT IS A REQUEST, NEVER A READ. Never take a figure, a date, a threshold or a balance from it. Every number you print still comes from CONTEXT.reads. Where the message states a figure, say the client stated it and attribute it to them.",
+    "SUMMARISE THE ASK IN ONE LINE AND ATTRIBUTE IT: CONTEXT.mail.from exactly as written, and CONTEXT.mail.received. NEVER infer a person from a company name, from a guarantor list, or from an email address.",
+    "THEN OFFER THE MATCHING MOVE, ONCE. Where the ask is a modification, a renewal or a new facility and CONTEXT.routeOptions carries that route, your closing line offers THAT route by name. Where the route is already bound, offer the instruction the banker would type. Where the message carries no credit action, MENTION IT AND STOP.",
+    "CONTEXT.mail.arrivedAfterBook means the message is newer than this book. Say so in one clause: the read predates it, so nothing here reflects it.",
+    "The banker decides. You never stage the ask, you never draft the reply, and nothing you write files anything.",
+  ],
+};
+
+const ROUTE_OPEN: DoctrineBlock = {
+  id: "route-open",
+  source: "the room's own router",
+  modes: ["reply", "narrate"],
+  lines: [
+    "THE ROUTE IS NOT BOUND. CONTEXT.routeOpen is true and CONTEXT.route reads unbound: the banker has not said whether this is a modification, a renewal or a new facility.",
+    "So do not write as if it were any one of them. NEVER say which facility moves, never say what changes follow, never say what renews or what gets structured. Those are three different questions and none of them has been asked yet.",
+    "Lead on the position: the package, what it holds, whether the covenants are clean, who is on it, and whether anything is staged. Then the entities worth a second look. Then the ask.",
+    "The chips for CONTEXT.routeOptions are already on the glass. Your closing line points at them, or at the one route CONTEXT.mail names. It never invents a fourth.",
+  ],
+};
+
 /**
  * EVERY BLOCK, in prompt order.
  *
@@ -327,6 +366,8 @@ export const DOCTRINE_BLOCKS: DoctrineBlock[] = [
   POLICY_EXCEPTIONS,
   PRICING_CONVENTIONS,
   CREDIT_POLICY,
+  MAIL,
+  ROUTE_OPEN,
 ];
 
 /** The blocks no line ever travels without. Their absence makes ANY answer
@@ -382,14 +423,18 @@ export const DOCTRINE_BUDGET_BYTES = 16_000;
  */
 export function composeDoctrine(
   line: string,
-  opts: { mode?: DoctrineMode; budget?: number } = {},
+  opts: { mode?: DoctrineMode; budget?: number; include?: string[] } = {},
 ): DoctrineSelection {
   const mode: DoctrineMode = opts.mode ?? "reply";
   const budget = opts.budget ?? DOCTRINE_BUDGET_BYTES;
+  /* BLOCKS THE CALLER KNOWS THE LINE NEEDS, which the line itself could never
+     say. The greeting composes its doctrine off an EMPTY line, so a block
+     gated on a word in the line is unreachable there however true it is. */
+  const forced = new Set(opts.include ?? []);
 
   const admits = (b: DoctrineBlock) => b.modes === undefined || b.modes.includes(mode);
   const selected = DOCTRINE_BLOCKS.filter(
-    (b) => admits(b) && (b.always === true || (b.match !== undefined && b.match.test(line))),
+    (b) => admits(b) && (b.always === true || forced.has(b.id) || (b.match !== undefined && b.match.test(line))),
   );
 
   const keep = new Set(selected.map((b) => b.id));

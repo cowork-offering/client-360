@@ -41,6 +41,40 @@ describe("what the room read travels with the line", () => {
     expect(row.scope.length).toBeGreaterThan(0);
   });
 
+  /* THE FIGURE IN ITS OWN UNIT (2026-09-02). The envelope carried raw numbers:
+     a threshold of "1.25" and a measured value of "5000000". A line item's rail
+     printing "5000000" is worse than no rail, so the block now formats through
+     the room's OWN covenant helpers, and the card and the remark can no longer
+     write the same test two different ways. */
+  it("prints every covenant in the unit its type carries, never a raw number", () => {
+    const by = new Map(blocks.covenants!.map((c) => [c.name, c]));
+    expect(by.get("Debt Service Coverage of Borrower")).toMatchObject({ measured: "1.38×", threshold: "≥ 1.25×" });
+    expect(by.get("Maximum Debt to Worth")).toMatchObject({ measured: "2.42×", threshold: "≤ 3.00×" });
+    // "≥", not "≤": Accounts Receivable matches neither the cap nor the floor
+    // hint list, so `covenantDirection` falls to its magnitude rule and 80
+    // against 80 reads as a floor. That is what the room's own card prints
+    // beside it, which is the only thing that matters here: one test, one unit,
+    // in both places.
+    expect(by.get("Accounts Receivable")).toMatchObject({ measured: "80%", threshold: "≥ 80%" });
+    expect(by.get("Minimum Liquidity")).toMatchObject({ measured: "$6.80M", threshold: "≥ $5M" });
+    expect(by.get("Debt Service Coverage with and without Distributions")).toMatchObject({
+      measured: "1.22×",
+      threshold: "≥ 1.15×",
+    });
+    // A test the org carries no threshold for says so, and carries no measure.
+    expect(by.get("Term Covenants")).toMatchObject({ threshold: "not carried", measured: undefined });
+    for (const row of blocks.covenants!) expect(row.threshold).not.toMatch(/^\d/);
+  });
+
+  it("carries the frequency and the verdict's own severity, for the row's colour", () => {
+    const dsc = blocks.covenants!.find((c) => c.name === "Debt Service Coverage of Borrower")!;
+    expect(dsc.frequency).toBe("Quarterly");
+    expect(dsc.severity).toBe("clear");
+    for (const row of blocks.covenants!) {
+      expect(["breach", "watch", "clear", "neutral", undefined]).toContain(row.severity);
+    }
+  });
+
   it("carries who is on the deal, with the role the org wrote", () => {
     expect(blocks.involvements?.length).toBeGreaterThan(0);
     expect(blocks.involvements!.every((r) => r.name.length > 0 && r.role.length > 0)).toBe(true);
@@ -67,6 +101,16 @@ describe("what the room read travels with the line", () => {
     // No read tool puts fee rows on the bundle. An absent block reported as an
     // empty fact is the failure the whole grounding pass exists to end.
     expect(blocks.notCarried.join(" ")).toMatch(/fees/);
+  });
+
+  it("refuses the THREAD by name only where the envelope actually carries mail", () => {
+    // A connector-less room must not talk about a mailbox it never looked at.
+    // A room WITH one must be able to refuse the rest of the exchange by name
+    // rather than passing its single search hit off as the whole thing.
+    expect(blocks.notCarried.join(" ")).not.toMatch(/correspondence/);
+    const withMail = buildReadBlocks(src, true)!;
+    expect(withMail.notCarried.join(" ")).toMatch(/correspondence beyond the one message/);
+    expect(withMail.notCarried.length).toBe(blocks.notCarried.length + 1);
   });
 
   it("is absent altogether where the room stands on no read", () => {
@@ -128,6 +172,27 @@ describe("the envelope holds to its budget, and says what it dropped", () => {
     // The covenants survived: an answer without the last exchanges is a worse
     // conversation; an answer without the thresholds is a wrong one.
     expect(capped.reads?.covenants?.length).toBe(envelope.reads?.covenants?.length);
+  });
+
+  it("gives up the client's mail LAST, and names it when it does", () => {
+    const mail = {
+      source: "mailbox" as const,
+      from: "james@hartwellprecision.com",
+      received: "Aug 28, 2026",
+      subject: "Equipment loan renewal",
+      gist: "Asking whether the equipment loan can roll when it matures.",
+    };
+    // Inside the budget the mail simply travels.
+    const fits: BrainEnvelope = { ...base(), mail };
+    expect(capEnvelope(fits).mail).toEqual(mail);
+
+    // Over it, every read block goes first and the mail goes after them.
+    const over: BrainEnvelope = { ...base(), line: "x".repeat(ENVELOPE_CAP_BYTES), mail };
+    const capped = capEnvelope(over);
+    expect(capped.mail).toBeUndefined();
+    const omitted = capped.omitted ?? [];
+    expect(omitted).toContain("mail");
+    expect(omitted[omitted.length - 1]).toBe("mail");
   });
 
   it("gives up read blocks in the declared order, naming every one", () => {

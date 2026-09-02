@@ -1,6 +1,7 @@
 import type { BrainReadBlocks, BrainTurn } from "../../channel/brainLane";
 import type { Facility, LegalEntity } from "../../data/contract";
 import { facilityProduct } from "../../data/facilityStage";
+import { fmtCovThreshold, fmtCovVal } from "../../data/finance";
 import { fmtDate, fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
@@ -76,11 +77,19 @@ function covenantBlock(src: ReadSource): BrainReadBlocks["covenants"] {
     const verdict = classifyCovenant(c);
     return {
       name: (c.covenantType ?? "").trim() || "Covenant",
-      threshold: typeof c.thresholdValue === "number" ? `${c.thresholdValue}` : "not carried",
-      measured: typeof c.actualValue === "number" ? `${c.actualValue}` : undefined,
+      // IN THE COVENANT'S OWN UNIT, through the room's own formatters. A raw
+      // 5000000 on the envelope reads as "5000000" in the line item's rail,
+      // which is worse than no rail at all.
+      threshold:
+        typeof c.thresholdValue === "number"
+          ? fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)
+          : "not carried",
+      measured: typeof c.actualValue === "number" ? fmtCovVal(c.actualValue, c.covenantType) : undefined,
       lastEvaluated: c.lastEvaluationDate ? fmtDate(c.lastEvaluationDate) : undefined,
       nextTest: c.nextEvaluationDate ? fmtDate(c.nextEvaluationDate) : undefined,
+      frequency: c.frequency,
       status: verdict.label,
+      severity: verdict.severity,
       scope: attached.length ? attached.join(", ") : RELATIONSHIP,
     };
   });
@@ -142,8 +151,16 @@ function pricingBlock(src: ReadSource): BrainReadBlocks["pricing"] {
   return rows.length ? rows : undefined;
 }
 
+/** What the cockpit holds of the CORRESPONDENCE, said only where the envelope
+ *  actually carries a message. A room with no connector must not talk about a
+ *  mailbox it never looked at; a room WITH one must be able to refuse a THREAD
+ *  by name rather than passing off its single search hit as the whole
+ *  exchange. */
+const MAIL_NOT_CARRIED =
+  "correspondence beyond the one message in CONTEXT.mail - this cockpit reads one search hit, never a thread, and no attachment";
+
 /** WHAT THE ROOM HAS ALREADY READ, packed. Absent where it stands on no read. */
-export function buildReadBlocks(src: ReadSource | undefined): BrainReadBlocks | undefined {
+export function buildReadBlocks(src: ReadSource | undefined, hasMail = false): BrainReadBlocks | undefined {
   if (!src?.bundle) return undefined;
   return {
     covenants: covenantBlock(src),
@@ -151,7 +168,7 @@ export function buildReadBlocks(src: ReadSource | undefined): BrainReadBlocks | 
     collateral: collateralBlock(src),
     exposure: exposureBlock(src),
     pricing: pricingBlock(src),
-    notCarried: NOT_CARRIED,
+    notCarried: hasMail ? [...NOT_CARRIED, MAIL_NOT_CARRIED] : NOT_CARRIED,
   };
 }
 
