@@ -30,6 +30,7 @@ import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../chan
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { Narration, useNarration } from "../../channel/Narration";
 import { subjectFor } from "../../channel/narrate";
+import { ManifestRail } from "../rail/ManifestRail";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
 import { NO_COMPLIANCE_ROW_CHIP, relBookFor, type RelBook } from "./relBook";
 import { buildRelReadCard, readRelTopic, relReadGap } from "./relReads";
@@ -207,8 +208,6 @@ const DOSSIER_FOOT_MS = 200;
 const DOSSIER_CHECK_MS = 180;
 const HALO_LIFE_MS = 5600;
 const WORD_STAGGER_MS = 26;
-/** How many collected answers the lane shows before the rest fold away. */
-const LANE_VISIBLE = 8;
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
@@ -1588,7 +1587,6 @@ export function RelationshipRoom({
   /** The tiers that left the stage, and whether they are back on it. */
   const tiersLeft = choreo.left;
   const tiersShown = choreo.summoned || histOpen;
-  const laneFolded = Math.max(0, laneRows.length - LANE_VISIBLE);
 
   /* THE GREETING'S OWN REMARK RIDES THE OPENING BUBBLE. Every other item's
      remark is rendered by the thread loop under `Narration`; the opening is a
@@ -1847,74 +1845,78 @@ export function RelationshipRoom({
           <aside className="wk-col-r" aria-label={laneHeading}>
             {/* The lane opens empty (founder call, 2026-09-01): content arrives with
               the review, never as furniture. */}
-                        {laneRows.length > 0 && (
-            <div className="wk-man-h">
-              <span className="wk-kicker">{laneHeading}</span>
-              <span className="wk-c">
-                {laneRows.length} {laneRows.length === 1 ? "answer" : "answers"}
-              </span>
-              <button
-                type="button"
-                className="wk-dt"
-                onClick={(e) =>
-                  openPeek(e.currentTarget, {
-                    kicker: "What this review writes",
-                    width: 480,
-                    content: flowSpec ? (
-                      <>
-                        <div className="wk-prose">{flowSpec.covers}</div>
-                        <div className="wk-prose" style={{ marginTop: 10 }}>
-                          {flowSpec.produces}
-                        </div>
-                        <div className="wk-cav">
-                          Staged intent only: nothing is written until the single approval, and the plan the banker
-                          reads is the plan that executes.
-                        </div>
-                      </>
-                    ) : (
-                      <div className="wk-prose">
-                        No review is bound yet. Pick one above and this states exactly what it covers and what it
-                        files.
-                      </div>
-                    ),
-                  })
-                }
-              >
-                Scope
-              </button>
-            </div>
-            )}
-
             {laneRows.length === 0 && (
               <div className="wk-empty">
                 {flowSpec ? "Nothing collected yet. Answers land here as the review takes them." : "Pick a review to begin."}
               </div>
             )}
-            {laneFolded > 0 && <div className="rl-fold">↑ {laneFolded} earlier in this review</div>}
-            <div className="wk-ents">
-              {laneRows.slice(laneFolded).map((row) => (
-                <div className="wk-ent" key={row.key}>
-                  <TypeIcon kind={row.icon} />
-                  <span className="wk-ent-t">
-                    <b>{row.label}</b>
-                    <span>{row.value}</span>
-                  </span>
-                  {phase === "work" && (
-                    <button
-                      type="button"
-                      className="wk-ent-x"
-                      aria-label={`Take ${row.label} back off the review`}
-                      title="Take it back. The room asks again."
-                      onClick={() => drop(row.key)}
-                    >
-                      <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
-                        <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            {/* THE SHARED RAIL (design/proposals/rail-scroll-addendum.md, section 4).
+                The lane's own fold is gone with it: a fold on top of a scroller is two
+                answers to one question, and the fold answered the overflow by removing
+                the content. Every answer is on the rail, the head stays outside the
+                scroller, and the frame is the ROOM's rather than the content's. */}
+            {laneRows.length > 0 && (
+              <ManifestRail
+                heading={laneHeading}
+                count={`${laneRows.length} ${laneRows.length === 1 ? "answer" : "answers"}`}
+                label={`${laneHeading} · ${laneRows.length} ${laneRows.length === 1 ? "answer" : "answers"}`}
+                newest={laneRows[laneRows.length - 1]?.key ?? null}
+                action={
+                  <button
+                    type="button"
+                    className="wk-dt"
+                    onClick={(e) =>
+                      openPeek(e.currentTarget, {
+                        kicker: "What this review writes",
+                        width: 480,
+                        content: flowSpec ? (
+                          <>
+                            <div className="wk-prose">{flowSpec.covers}</div>
+                            <div className="wk-prose" style={{ marginTop: 10 }}>
+                              {flowSpec.produces}
+                            </div>
+                            <div className="wk-cav">
+                              Staged intent only: nothing is written until the single approval, and the plan the banker
+                              reads is the plan that executes.
+                            </div>
+                          </>
+                        ) : (
+                          <div className="wk-prose">
+                            No review is bound yet. Pick one above and this states exactly what it covers and what it
+                            files.
+                          </div>
+                        ),
+                      })
+                    }
+                  >
+                    Scope
+                  </button>
+                }
+              >
+                {laneRows.map((row) => (
+                  <div className="wk-ent" key={row.key}>
+                    <TypeIcon kind={row.icon} />
+                    <span className="wk-ent-t">
+                      <b>{row.label}</b>
+                      <span>{row.value}</span>
+                    </span>
+                    {phase === "work" && (
+                      <button
+                        type="button"
+                        className="wk-ent-x"
+                        aria-label={`Take ${row.label} back off the review`}
+                        title="Take it back. The room asks again."
+                        onClick={() => drop(row.key)}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
+                          <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </ManifestRail>
+            )}
           </aside>
         </div>
 
