@@ -790,8 +790,18 @@ export function readRemove(line: string, entries: WorkroomDelta[], book: Book): 
   const covenantNoun = COVENANT_NOUN.test(line);
   const speaksCollateral = collateralNoun && !covenantNoun;
 
+  /* THE TITLE, NEVER THE CATEGORY WORD (E1, found again by the wire-arms drive
+     2026-09-02). `remove the leverage covenant from the 2.5M line of credit`
+     named a covenant this book does not carry, so nothing resolved on the book
+     side - and the bare word "covenant" matched the KIND of a staged covenant
+     exclusion while "line of credit" matched its target, and the banker's own
+     entry came off the manifest in silence. That is E1 exactly, reached through
+     the category word rather than through the title.
+
+     The category word is what E1 already said must not be enough. So the title
+     side is matched on the TITLE alone. */
   const named = entries
-    .filter((e) => names(line, entryWords(`${e.title} ${e.kind}`)) && names(line, entryWords(`${e.target} ${e.after}`)))
+    .filter((e) => names(line, entryWords(e.title)) && names(line, entryWords(`${e.target} ${e.after}`)))
     /* AND THE NOUN NARROWS THE MANIFEST TOO (N1, one layer deeper). Once a
        carry exclusion can be STAGED, one facility can hold an exclusion of the
        covenant called Accounts Receivable beside an exclusion of the asset

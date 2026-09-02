@@ -616,6 +616,21 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     expect(read?.kind === "fence" && read.scope).toBe("pledge");
   });
 
+  /* THE DRIVE FOUND E1 AGAIN, through the category word (2026-09-02). A line
+     naming a covenant the book does NOT carry resolved nothing on the book side,
+     and then the bare word "covenant" matched the KIND of a staged covenant
+     exclusion while "line of credit" matched its target. The banker's own entry
+     came off the manifest in silence, which is E1 exactly. */
+  it("never un-stages an entry over the CATEGORY word alone", () => {
+    const read = readRemove("remove the leverage covenant from the 2.5M line of credit", bothStaged, AR_BOOK);
+    expect(read).not.toMatchObject({ kind: "manifest" });
+  });
+
+  it("still un-stages on the entry's own TITLE, said again", () => {
+    const read = readRemove("remove the accounts receivable covenant from the 15M line of credit", bothStaged, AR_BOOK);
+    expect(read).toEqual({ kind: "manifest", entry: stagedCovenantExclusion });
+  });
+
   it("speaks collateral on a pledge and covenant on a covenant, and the two are not the same refusal (P4)", () => {
     const pledge = fenceRefusal("pledge", "Accounts receivable, present and future");
     const covenant = fenceRefusal("covenant", "Minimum Liquidity");
