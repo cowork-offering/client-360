@@ -1,0 +1,311 @@
+import type { Facility } from "../../data/contract";
+import type { WorkroomDelta } from "../../workroom/types";
+import type { ElicitMember } from "./elicit";
+
+/* =============================================================================
+   THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02).
+
+   nCino hides the rate and the payment stream on a loan until FOUR fields are
+   defined on it:
+
+     LLC_BI__Amount__c                  the loan amount
+     LLC_BI__Term_Months__c             the term
+     LLC_BI__Amortized_Term_Months__c   the amortised term (a double)
+     LLC_BI__First_Payment_Date__c      the first payment date
+
+   ON HARTWELL, TWO OF THE FOUR ARE BLANK. First Payment Date is blank on every
+   loan, and Amortized Term is blank on both lines of credit and on Construction,
+   booked AND on the new version. So a modification that moves the $15M line to
+   $20M produces a version nobody can price in the nCino UI: the banker signs a
+   change, the org files it, and the screen the next person opens shows no rate
+   and no payment stream.
+
+   NO READ ON THIS COCKPIT CARRIES THEM. `Customer360Exposure` returns the
+   amount, the maturity and the rate and nothing else about the schedule, so the
+   room treats both as UNKNOWN and ASKS. Absent is not zero and it is not "fine".
+
+   THE ANSWERS RIDE THE ORDINARY FIELD WAVE. Both fields are already in the
+   room's own field catalog (`loan.amortisedTerm`, `loan.firstPaymentDate`), both
+   are `live-verified`, and both travel in `fieldChangesJson` like any other loan
+   field: the org resolves each against its own describe at stage time. Neither
+   is on `C360WriteGuard`'s OBJ_LOAN deny-list (which holds only hasRenewal,
+   Number_Of_Renewals and RootLoanId) and neither is in
+   `StageLoanModification.FIELD_WAVE_DENY` (which holds the four scalars, the
+   stage and status, the anchors and the versioning flags). Verified against
+   `knowledge/sf-build-v2/wp2/classes/` on 2026-09-02.
+
+   ONE QUESTION AT A TIME, and the banker can decline. "Leave pricing for later"
+   is a real answer: it is recorded on the plan, nothing is staged for it, and
+   the room says plainly what the consequence is.
+
+   NOTHING HERE READS A CLOCK. Every date the room offers is computed from the
+   artifact's own `meta.generatedAt`, which is the only instant any derivation in
+   this room is allowed to read.
+   ============================================================================= */
+
+export type PricingSlot = "amortisedTerm" | "firstPaymentDate";
+
+/** The org's own API names, which is what the field wave travels under. */
+export const PRICING_FIELD: Record<PricingSlot, string> = {
+  amortisedTerm: "LLC_BI__Amortized_Term_Months__c",
+  firstPaymentDate: "LLC_BI__First_Payment_Date__c",
+};
+
+/** The room's own field-catalog ids for the same two fields. */
+export const PRICING_CATALOG_ID: Record<PricingSlot, string> = {
+  amortisedTerm: "loan.amortisedTerm",
+  firstPaymentDate: "loan.firstPaymentDate",
+};
+
+/** Why the room is asking, in the banker's own vocabulary. Said on the card and
+ *  on the confirm, because a question with no reason behind it reads as a form. */
+export const PRICING_WHY =
+  "nCino needs the amount, the term, the amortised term and the first payment date before it will price this loan.";
+
+/** What the banker reads when they leave it. */
+export const PRICING_LATER =
+  "Left for later. Nothing is staged for it, and until it is set the new version will not show a rate or a payment stream in nCino.";
+
+/* --------------------------------------------------- what moves the pricing */
+
+/** The two scalars whose movement makes the pricing fields matter. A rate or a
+ *  maturity does not: nCino prices on the amount and the term. */
+const PRICING_SCALARS = new Set(["requestedAmount", "requestedTermMonths"]);
+
+/** Does this entry move the facility's amount or its term? */
+export function movesPricing(delta: WorkroomDelta): boolean {
+  const key = delta.wire?.key;
+  return typeof key === "string" && PRICING_SCALARS.has(key);
+}
+
+/** The term this plan is putting on that facility, where it is putting one. The
+ *  "same as the term" chip stands on this and on nothing else: the read carries
+ *  no term, so a term nobody staged is a term this room does not know. */
+export function stagedTermMonths(entries: WorkroomDelta[], memberId: string): number | null {
+  for (const e of entries) {
+    if (e.member !== memberId) continue;
+    if (e.wire?.key === "requestedTermMonths" && typeof e.wire.value === "number") return e.wire.value;
+  }
+  return null;
+}
+
+/** Does the plan already carry this field on this facility? */
+export function carriesPricing(entries: WorkroomDelta[], memberId: string, slot: PricingSlot): boolean {
+  return entries.some((e) => e.member === memberId && e.fieldWire?.field === PRICING_FIELD[slot]);
+}
+
+/** Does the BOOK already carry it? Absent is UNKNOWN, and unknown is asked. */
+export function bookCarriesPricing(facility: Facility | null | undefined, slot: PricingSlot): boolean {
+  if (!facility) return false;
+  return slot === "amortisedTerm"
+    ? typeof facility.amortizedTermMonths === "number"
+    : typeof facility.firstPaymentDate === "string" && facility.firstPaymentDate.trim().length > 0;
+}
+
+export interface PricingNeed {
+  memberId: string;
+  slot: PricingSlot;
+}
+
+export interface PricingSource {
+  /** The manifest, in landing order. */
+  entries: WorkroomDelta[];
+  /** The facilities the room is standing on, by loan id. */
+  facilities: Map<string, Facility>;
+  /** The facilities the banker has left for later, by member id. */
+  declined: ReadonlySet<string>;
+}
+
+/**
+ * THE ONE PRICING FIELD THIS PLAN STILL NEEDS, or null.
+ *
+ * In manifest order, so the first facility the banker moved is the first one
+ * asked about, and the amortised term before the first payment date, because
+ * that is the order a banker settles them in.
+ */
+export function pricingNeed(src: PricingSource): PricingNeed | null {
+  const moved: string[] = [];
+  for (const e of src.entries) {
+    if (!movesPricing(e) || !e.member) continue;
+    if (!moved.includes(e.member)) moved.push(e.member);
+  }
+  for (const memberId of moved) {
+    if (src.declined.has(memberId)) continue;
+    const facility = src.facilities.get(memberId);
+    for (const slot of ["amortisedTerm", "firstPaymentDate"] as PricingSlot[]) {
+      if (bookCarriesPricing(facility, slot)) continue;
+      if (carriesPricing(src.entries, memberId, slot)) continue;
+      return { memberId, slot };
+    }
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------- the sentences
+
+   THE CHIP TYPES BACK A COMPLETE SENTENCE, so no state is held between turns for
+   a chip: the room reads the whole thing again and gets the same answer. The
+   facility is named by the ORG's own loan name, which resolves exactly one
+   member inside the parser rather than relying on a filter afterwards.         */
+
+const targetOf = (m: ElicitMember): string => m.orgName ?? m.label;
+
+export function pricingSay(member: ElicitMember, slot: PricingSlot, value: string): string {
+  return slot === "amortisedTerm"
+    ? `on the ${targetOf(member)} set the amortisation term to ${value} months`
+    : `on the ${targetOf(member)} set the first payment date to ${value}`;
+}
+
+/** "Leave pricing for later" is an answer, and it is one sentence. */
+export const pricingLaterSay = (member: ElicitMember): string => `leave pricing for later on the ${member.label}`;
+
+/** "Other" is an answer too: the room asks for the figure and holds the slot. */
+export const pricingOtherSay = (member: ElicitMember, slot: PricingSlot): string =>
+  slot === "amortisedTerm"
+    ? `set the amortisation term on the ${member.label} myself`
+    : `set the first payment date on the ${member.label} myself`;
+
+/* ----------------------------------------------------------------- the dates
+
+   THE FIRST OF A MONTH, COMPUTED FROM THE ARTIFACT'S OWN INSTANT. `Date.now()`
+   is never read: a cockpit rendered from a snapshot has one clock and it is the
+   snapshot's. With no instant at hand the room offers no dates and asks for one
+   in the banker's own words, which is the honest state rather than an invented
+   month.                                                                      */
+
+/** The first of the month `ahead` months after `generatedAt`, as YYYY-MM-DD,
+ *  which is the format `StageLoanModification` coerces a DATE field from. */
+export function firstOfMonth(generatedAt: string | undefined, ahead: number): string | null {
+  if (!generatedAt) return null;
+  const at = new Date(generatedAt);
+  if (Number.isNaN(at.getTime())) return null;
+  const year = at.getUTCFullYear();
+  const month = at.getUTCMonth() + ahead;
+  const shifted = new Date(Date.UTC(year, month, 1));
+  const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  return `${shifted.getUTCFullYear()}-${mm}-01`;
+}
+
+/** The month a YYYY-MM-DD reads as, for a chip label. */
+export function monthLabel(iso: string): string {
+  const at = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/* ------------------------------------------------------------------ the ask */
+
+export interface PricingAsk {
+  need: PricingNeed;
+  text: string;
+  options: Array<{ label: string; say: string }>;
+}
+
+/** The bank's own amortisation lengths, offered beside the plan's own term.
+ *  A BAND, NOT A DEFAULT: the approved credit terms are the authority. */
+const AMORTISATION_MONTHS = [240, 300];
+
+export function pricingAsk(
+  need: PricingNeed,
+  member: ElicitMember,
+  args: { entries: WorkroomDelta[]; generatedAt?: string },
+): PricingAsk {
+  if (need.slot === "amortisedTerm") {
+    const term = stagedTermMonths(args.entries, need.memberId);
+    const options = [
+      ...(term !== null ? [{ label: `Same as the term (${term} months)`, say: pricingSay(member, "amortisedTerm", String(term)) }] : []),
+      ...AMORTISATION_MONTHS.filter((m) => m !== term).map((m) => ({
+        label: `${m} months`,
+        say: pricingSay(member, "amortisedTerm", String(m)),
+      })),
+      { label: "Another figure", say: pricingOtherSay(member, "amortisedTerm") },
+      { label: "Leave pricing for later", say: pricingLaterSay(member) },
+    ];
+    return {
+      need,
+      text:
+        `What is the amortisation term on the ${member.label}? ${PRICING_WHY} ` +
+        "This read carries no amortisation for it, and the org holds it blank on the booked loan and on the new version, so nobody can price the change until it is set." +
+        (term === null ? " This plan sets no term either, so there is nothing here for me to match it to." : ""),
+      options,
+    };
+  }
+
+  const next = firstOfMonth(args.generatedAt, 1);
+  const after = firstOfMonth(args.generatedAt, 2);
+  const dates = [next, after].filter((d): d is string => d !== null);
+  return {
+    need,
+    text:
+      `What is the first payment date on the ${member.label}? ${PRICING_WHY} ` +
+      "The org holds it blank on every loan on this relationship, so this is the last of the four." +
+      (dates.length ? "" : " This view carries no snapshot instant, so I will not offer a month; say the date."),
+    options: [
+      ...dates.map((iso) => ({ label: `1 ${monthLabel(iso)}`, say: pricingSay(member, "firstPaymentDate", iso) })),
+      { label: "Another date", say: pricingOtherSay(member, "firstPaymentDate") },
+      { label: "Leave pricing for later", say: pricingLaterSay(member) },
+    ],
+  };
+}
+
+/* ------------------------------------------------------- reading the answers */
+
+/** The chip's own sentence, read back. Null where the line is not one. */
+export function readPricingLine(
+  line: string,
+  members: ElicitMember[],
+): { memberId: string; slot: PricingSlot; value: string } | null {
+  const text = (line ?? "").trim();
+  const amort = /^on the (.+?) set the amortisation term to (\d+(?:\.\d+)?) months$/i.exec(text);
+  const date = /^on the (.+?) set the first payment date to (\d{4}-\d{2}-\d{2})$/i.exec(text);
+  const hit = amort ?? date;
+  if (!hit) return null;
+  const member = members.find((m) => (m.orgName ?? m.label).toLowerCase() === hit[1].trim().toLowerCase());
+  if (!member) return null;
+  return { memberId: member.id, slot: amort ? "amortisedTerm" : "firstPaymentDate", value: hit[2] };
+}
+
+/** "Leave pricing for later on the $15.0MM Line of Credit". */
+export function readPricingDecline(line: string, members: ElicitMember[]): string | null {
+  const hit = /^leave pricing for later on the (.+?)\s*$/i.exec((line ?? "").trim());
+  if (!hit) return null;
+  const said = hit[1].trim().toLowerCase();
+  return members.find((m) => m.label.toLowerCase() === said || (m.shortName ?? "").toLowerCase() === said)?.id ?? null;
+}
+
+/** "Set the amortisation term on the $15.0MM Line of Credit myself". */
+export function readPricingOther(line: string, members: ElicitMember[]): PricingNeed | null {
+  const hit = /^set the (amortisation term|first payment date) on the (.+?) myself$/i.exec((line ?? "").trim());
+  if (!hit) return null;
+  const said = hit[2].trim().toLowerCase();
+  const member = members.find((m) => m.label.toLowerCase() === said);
+  if (!member) return null;
+  return { memberId: member.id, slot: /amortisation/i.test(hit[1]) ? "amortisedTerm" : "firstPaymentDate" };
+}
+
+/** The banker's own free-text answer to a held question. A bare number is a
+ *  count of months; a bare date is a date. Anything else is not an answer, and
+ *  the room lets its ordinary lanes take the line. */
+export function readPricingFreeText(line: string, slot: PricingSlot): string | null {
+  const text = (line ?? "").trim();
+  if (slot === "amortisedTerm") {
+    const months = /^(\d{1,3})(?:\s*months?)?$/i.exec(text);
+    if (months) return months[1];
+    const years = /^(\d{1,2})\s*years?$/i.exec(text);
+    return years ? String(Number(years[1]) * 12) : null;
+  }
+  const iso = /^(\d{4}-\d{2}-\d{2})$/.exec(text);
+  return iso ? iso[1] : null;
+}
+
+/** The sentence the room says when a pricing field lands on the plan. */
+export function pricingLanded(slot: PricingSlot, member: ElicitMember, display: string): string {
+  return slot === "amortisedTerm"
+    ? `The amortisation term on the ${member.label} goes onto the plan at ${display}. ${PRICING_WHY}`
+    : `The first payment date on the ${member.label} goes onto the plan at ${display}. ${PRICING_WHY}`;
+}
+
+/** What the plan says about a facility the banker left for later. */
+export function pricingDeclinedLine(member: ElicitMember): string {
+  return `Pricing fields on the ${member.label}: left for later. The amortisation term and the first payment date are not on this plan, so the new version will not show a rate or a payment stream in nCino until somebody sets them.`;
+}
