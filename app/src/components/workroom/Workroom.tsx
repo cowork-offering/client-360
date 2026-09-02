@@ -41,6 +41,8 @@ import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICan
 import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
+import { Narration, useNarration } from "../../channel/Narration";
+import { subjectFor } from "../../channel/narrate";
 import {
   committedSentence,
   fenceRefusal,
@@ -805,6 +807,9 @@ export function Workroom({
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
     ];
+    // The greeting's own id, so the ONE consent moment can land its remark
+    // under the greeting the banker just opened the room for.
+    openingIdRef.current = opening[0].id;
     setItems(opening);
     // THE STAGE IS CALM AGAIN. A bound route rebuilds this room on a new
     // engine and replays the ritual, so the tiers start over with it. The tier
@@ -873,6 +878,7 @@ export function Workroom({
           reading. */
   /** THE BEAT IS HELD IN A REF, NOT IN A CLEANUP. A cleanup would clear the
    *  facilities' own beat every time anything under this effect moved. */
+  const openingIdRef = useRef<string>("");
   const tierTimer = useRef(0);
   useEffect(() => () => window.clearTimeout(tierTimer.current), []);
   useEffect(() => {
@@ -1266,34 +1272,81 @@ export function Workroom({
    * what this route can and cannot file. No read is issued for it, and the
    * budget is enforced at the wire (`capEnvelope`).
    */
+  /** THE BOOK, PACKAGED, for whichever lane is asking. One builder, so a remark
+   *  under a card stands on exactly the envelope a reply would have stood on. */
+  const envelopeFor = useCallback(
+    (instruction: string, routeOpen = false): BrainEnvelope =>
+      buildEnvelope({
+        line: instruction,
+        mode: context.mode,
+        accountName: context.accountName,
+        packageName: brief.packageName,
+        productPackageId: context.productPackageId,
+        members: brief.members,
+        eligible: isEligible,
+        focused,
+        entries,
+        reads,
+        thread: conversation(),
+        routeOpen,
+      }),
+    [brief.members, brief.packageName, context, conversation, entries, focused, isEligible, reads],
+  );
+
   const askTheDesk = useCallback(
     async (instruction: string, routeOpen: boolean): Promise<BrainReply | null> => {
       if (!brain) return null;
       try {
-        return await brain(
-          buildEnvelope({
-            line: instruction,
-            mode: context.mode,
-            accountName: context.accountName,
-            packageName: brief.packageName,
-            productPackageId: context.productPackageId,
-            members: brief.members,
-            eligible: isEligible,
-            focused,
-            entries,
-            reads,
-            thread: conversation(),
-            routeOpen,
-          }),
-        );
+        return await brain(envelopeFor(instruction, routeOpen));
       } catch {
         // The lane never throws into the room. A transport that failed past
         // `askBrain`'s own guard degrades exactly as a malformed reply does.
         return null;
       }
     },
-    [brain, brief.members, brief.packageName, context, conversation, entries, focused, isEligible, reads],
+    [brain, envelopeFor],
   );
+
+  /* ============================================ THE PARSER STAGES, THE MODEL SPEAKS
+
+     The card is deterministic and instant, exactly as it is today. The SENTENCE
+     under it is the model's, streaming in a second or two later with the whole
+     book, the plan and the doctrine in view.
+
+     ONE EFFECT, NOT TWENTY CALL SITES. Every staging path in this room ends by
+     appending a thread item, so the remark is driven from the item rather than
+     from each engine: `subjectFor` decides what is worth remarking on and
+     `shouldNarrate` refuses the chrome. Where narration is off or unavailable
+     this is inert and the room renders precisely what it renders today. */
+  const narration = useNarration({ enabled: Boolean(brain), envelopeFor: (line) => envelopeFor(line) });
+  const narrated = useRef(new Set<string>());
+
+  /* THE ONE CONSENT MOMENT (founder, 2026-09-02). The platform asks the viewer
+     to allow this artifact to use their Claude on the FIRST call of a view, and
+     the call waits while they decide. So the first call is the one the banker
+     just asked for by opening the room: the greeting. The dialog arrives framed
+     by a sentence that explains itself, never mid-plan and never between a card
+     and its sentence. `primeConsent` is memoised, so this can only happen once
+     however many times the room re-renders or is re-opened. */
+  useEffect(() => {
+    if (!brain || !lookedUp || !openingIdRef.current) return;
+    const said = `${brief.greeting ?? ""} ${ask ? ask.line : brief.position}`.trim();
+    if (said) narration.open(openingIdRef.current, { act: "greeting", sentence: said });
+  }, [ask, brain, brief.greeting, brief.position, lookedUp, narration]);
+
+  useEffect(() => {
+    const last = items[items.length - 1];
+    if (!last || narrated.current.has(last.id)) return;
+    narrated.current.add(last.id);
+    // The sentence the room put up just before this item is what the model is
+    // writing beside, so a chip block inherits the line that announced it.
+    const prior = items[items.length - 2];
+    const said = prior && prior.kind === "agent" ? prior.text : undefined;
+    const subject = subjectFor(last as unknown as Parameters<typeof subjectFor>[0], said);
+    if (!subject) return;
+    const asked = [...items].reverse().find((i) => i.kind === "banker");
+    narration.narrate(last.id, subject, asked && asked.kind === "banker" ? asked.text : "");
+  }, [items, narration]);
 
   /**
    * WHAT THE DESK SAID, DRAWN.
@@ -2897,7 +2950,13 @@ export function Workroom({
                         />
                       );
                       const tier = tierOf(item);
-                      if (!tier) return <Fragment key={item.id}>{block}</Fragment>;
+                      if (!tier)
+                        return (
+                          <Fragment key={item.id}>
+                            {block}
+                            <Narration view={narration.viewFor(item.id)} />
+                          </Fragment>
+                        );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED. The wrapper
                          carries its state, so "faded out" and "gone" are two
                          different readings and an absence contract can tell
@@ -2905,6 +2964,7 @@ export function Workroom({
                       return (
                         <div key={item.id} {...tierAttrs(tier, choreo.stateOf(tier), tiersShown)}>
                           {block}
+                          <Narration view={narration.viewFor(item.id)} />
                         </div>
                       );
                     })}

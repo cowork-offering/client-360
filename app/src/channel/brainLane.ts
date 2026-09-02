@@ -1,4 +1,8 @@
+import { buildBrainTools } from "./brainTools";
+import { budgetPrompt } from "./doctrine";
+import { rungFor, type RungChoice } from "./ladder";
 import { callTool, mcpAvailable, SERVERS, TOOLS, unwrapLlm } from "./mcp";
+import { askSessionJson, sampleAvailable } from "./sampleDoor";
 
 /* =============================================================================
    THE BRAIN LANE — the room's second lane, over the artifact<->session bridge.
@@ -667,18 +671,38 @@ export function restateProposal(
 
 /* --------------------------------------------------------------- the wire */
 
-/** How long the room waits on the desk before it stops waiting out loud. */
+/** How long the room waits on a rung-2 quick call. A restatement that takes
+ *  longer than this has stopped being a restatement. */
 export const BRAIN_TIMEOUT_MS = 25_000;
+
+/** Rung 2 on the default tier: the contract says 5 to 60 seconds to first text,
+ *  up to two minutes on a long structured prompt. */
+export const BRAIN_TIMEOUT_DEFAULT_MS = 90_000;
+
+/** Rung 3: several rounds back to back, commonly 30 to 90 seconds and legally
+ *  longer. A timeout tighter than the platform's own would cut off an answer
+ *  the banker was told to expect. */
+export const BRAIN_TIMEOUT_TOOLS_MS = 150_000;
+
+/** The wait this rung is allowed. One place, so no caller has to remember it. */
+export function timeoutFor(choice: RungChoice): number {
+  if (choice.rung === 3) return BRAIN_TIMEOUT_TOOLS_MS;
+  return choice.tier === "quick" ? BRAIN_TIMEOUT_MS : BRAIN_TIMEOUT_DEFAULT_MS;
+}
 
 /**
  * IS THERE A BRAIN LANE AT ALL.
  *
- * The mcp capability is the only arm of the bridge that returns a reply. With
- * no capability the room keeps the fast lane and the existing loud notice, and
- * a routed line gets {@link NOT_CONNECTED_CLARIFY} rather than a hang.
+ * TWO DOORS NOW. The SESSION door (`window.claude.use("sample")`) is the one
+ * the recorded decision names: the viewer's own Claude, their identity, their
+ * connectors, zero infrastructure. The gateway completion door is the rung
+ * below it, kept only as the fallback while the latency gate is unproven.
+ *
+ * With NEITHER the room keeps the fast lane and the existing loud notice, and a
+ * routed line gets {@link NOT_CONNECTED_CLARIFY} rather than a hang.
  */
 export function brainReachable(): boolean {
-  return mcpAvailable();
+  return sampleAvailable() || mcpAvailable();
 }
 
 /* ------------------------------------------------------- the doctrine, inline
@@ -686,130 +710,47 @@ export function brainReachable(): boolean {
    THE PACK NEVER ARRIVES, SO THE DOCTRINE TRAVELS IN THE PROMPT.
 
    The envelope has always declared `grounding: "plugin-skill:workroom-brain"`
-   and the preamble has always said "obey it". No channel loads it. The
-   completion door is a one-shot gateway call into a model that has never seen
-   WORKROOM-BRAIN.md, so the instruction pointed at a document the responder
-   could not read, and P3 of the 2026-09-01 drive degraded for exactly that
-   reason: an unfed model handed a JSON contract with no doctrine complies
-   inconsistently.
+   and the preamble has always said "obey it". No channel loads it, and the
+   SESSION door cannot: `sample` has no page-controlled system prompt and does
+   not auto-load the plugin skill either. So the instruction pointed at a
+   document neither responder could read, and P3 of the 2026-09-01 drive
+   degraded for exactly that reason.
 
-   WHAT TRAVELS IS THE SLICE, NOT THE PACK. Twenty-seven pages in every prompt
-   would crowd out the envelope it is supposed to ground. So: the rules that
-   produce a WRONG ANSWER when absent travel always, and the fences of a
-   SURFACE travel when the line is about that surface. The marker in the
-   envelope stays, because a session that HAS loaded the pack should still be
-   told the pack is the authority; the prompt simply no longer depends on it.
+   WHAT TRAVELS IS THE SLICE, NOT THE PACK, and the slicing now lives in
+   channel/doctrine.ts: named, budgeted blocks, four of which travel on every
+   line and the rest selected by the surface the line is about. The marker in
+   the envelope stays, because a session that HAS loaded the pack should still
+   be told the pack is the authority; the prompt simply no longer depends on it.
 
-   Sources, by section of brain/WORKROOM-BRAIN.md: 1.5 hard rules, 2.4
-   covenants, 2.5 involvement roles, 2.6 collateral chain and advance rates,
-   2.7 fees, 2.8 policy exceptions, 4.2 covenant families.                    */
+   THE BUDGET IS THE WHOLE PROMPT. `budgetPrompt` gives up thread history first,
+   doctrine second, and never the read blocks.                                */
 
-/** What is wrong in EVERY answer when it is absent. Always sent. */
-const DOCTRINE_CORE = [
-  "DOCTRINE. These rules travel with this prompt and are binding on this reply.",
-  "Never fabricate a figure, a record, a covenant, a correspondence or an id. Missing data is an answer.",
-  "Figures come from the live read in CONTEXT, never from memory and never from an earlier turn.",
-  "One or two sentences, then the card. Never a capability lecture. No em dashes.",
-  "Bands are PROPOSAL guidance, offered and labelled as such. They are never stated as facts about this borrower.",
-  "COVENANT BANDS (typical C&I, tested quarterly): DSCR minimum 1.20x to 1.25x. FCCR minimum 1.15x to 1.25x.",
-  "Debt to tangible net worth maximum 3.00x. Total leverage 2.5x to 3.5x is typical middle market.",
-  "A threshold comes from the approved credit agreement. Propose a band, never a threshold.",
-];
-
-/** The fences of one surface, sent when the line is about that surface. */
-const DOCTRINE_SURFACE: Array<{ id: string; match: RegExp; lines: string[] }> = [
-  {
-    id: "covenant",
-    match: /\b(covenants?|tests?|dscr|fccr|leverage|liquidity|debt service|debt to worth|current ratio|net worth|capex)\b/i,
-    lines: [
-      "COVENANTS. A covenant ADD is safe: it mints no compliance row, starts no approval and sends no email.",
-      "Covenant AMEND and DETACH are REFUSED, because every junction field is non-updateable. Say so rather than proposing one.",
-      "The effective date is set once at creation and is never updated. Getting a covenant right at creation is the whole game.",
-      "An empty attachedLoans list means the covenant is relationship-level. That is an answer, not a gap.",
-      'Exception alone is never a breach. Check reasonForException (Breached or Overdue) before you use the word "breach".',
-    ],
-  },
-  {
-    id: "collateral",
-    match: /\b(collateral|security|pledges?|pledged|lien|advance rate|lendable|coverage|receivables?|inventory|equipment|real\s*estate|warehouse)\b/i,
-    lines: [
-      "COLLATERAL. The advance rate on a pledge is a formula and the lendable value is derived from it.",
-      "Both resolve in-transaction. Never ask a banker for either and never invent a valuation.",
-      "The chain has no shortcut: the asset, then the ownership junction that is its only link to the borrower, then the pledge.",
-      "Hartwell liens are 1st position and flagged out of availability. Do not quietly treat an excluded lien as included.",
-    ],
-  },
-  {
-    id: "fee",
-    match: /\bfees?\b|\bbasis points?\b|\bbps\b/i,
-    lines: [
-      "FEES. A fee is a percentage OR a fixed amount, never both. On a percentage fee the org computes the money from the commitment.",
-      "Never state a money figure beside a percentage: it would contradict what the org works out.",
-      "The fee-type list on this org is residential, so a commercial fee files as Other with the banker's own words as the label.",
-    ],
-  },
-  {
-    id: "involvement",
-    match: /\b(borrowers?|guarantors?|co-?borrowers?|involvements?|parties|obligors?|ownership)\b/i,
-    lines: [
-      "INVOLVEMENT ROLES. Five are legal: Borrower, Co-Borrower, Guarantor, Limited Guarantor, Related Entity.",
-      "Adding a party already on the deal stages a SECOND row rather than correcting the first. If a role is what changed, say so.",
-    ],
-  },
-  {
-    id: "exception",
-    match: /\b(policy exceptions?|exceptions?|out of policy|waiver|mitigant)\b/i,
-    lines: [
-      "POLICY EXCEPTIONS. Status is Waived, Mitigated or Unmitigated, and an omitted status silently states a position.",
-      "Every committed exception POSTs the whole record to an external endpoint. Surface that egress in the proposal.",
-    ],
-  },
-];
-
-/** The doctrine this line needs: the core, plus the fences of whatever surfaces
- *  it touches. Deterministic, so the suite can assert what a line carries. */
-export function doctrineFor(line: string): string[] {
-  const out = [...DOCTRINE_CORE];
-  for (const surface of DOCTRINE_SURFACE) {
-    if (surface.match.test(line)) out.push(...surface.lines);
-  }
-  return out;
-}
+/** The composer's own preamble, in bytes, so the budget is the whole prompt
+ *  rather than two halves that each fit and together do not. */
+const PREAMBLE_BYTES = 1_400;
 
 /**
  * THE PROMPT THE ENVELOPE TRAVELS IN.
  *
- * The completion door takes a string, so the envelope is serialised into one.
- * The preamble states the CONTRACT, carries the doctrine slices the line needs,
- * and then hands over the envelope. The plugin-skill marker stays on the
- * envelope, but nothing here depends on the skill having been loaded any more.
+ * Both doors take a string, so the envelope is serialised into one. The
+ * preamble states the GROUNDING FACTS contract (what CONTEXT carries and how to
+ * refuse what it does not), then the doctrine slices this line needs, then the
+ * envelope itself.
  */
 export function composeBrainPrompt(envelope: BrainEnvelope): string {
+  const budgeted = budgetPrompt({ envelope, mode: "reply", overhead: PREAMBLE_BYTES });
   return [
     "You are the credit brain of a relationship workroom, answering one banker line.",
     "The workroom-brain pack (WORKROOM-BRAIN.md) is the authority. The slices you need are below.",
     "",
-    "Reply with EXACTLY ONE JSON object and no prose outside it. One of three shapes:",
-    '  {"type":"read-card","topic":…,"title":…,"rows":[{"icon":…,"label":…,"value":…,"sub":…}],"followUp":…}',
-    '  {"type":"delta-proposal","action":"loan-modification","rationale":…,"facilityIds":[…],"changes":{…}}',
-    '  {"type":"clarify","text":…,"options":[{"label":…,"say":…}]}',
-    "",
-    "Never write. Never call an execute_ tool. Never fabricate a figure, a record or an id.",
-    "If the read does not carry it, say the read does not carry it, in a clarify.",
-    "",
     /* ------------------------------------------- THE GROUNDING FACTS CONTRACT
        The envelope is no longer blind, so an answer that ignores it is now a
-       worse failure than one that refuses. These four lines are the whole of
-       what changed for the model between v1 and v2. */
+       worse failure than one that refuses. */
     "GROUNDING FACTS. CONTEXT.reads carries what this room has already read:",
     "covenants, involvements, collateral, exposure and pricing, formatted as the glass prints them.",
     "Answer READS from those blocks and state the figures as they stand there.",
     "CONTEXT.reads.notCarried names what no read on this cockpit holds, and CONTEXT.omitted names",
     "what was dropped to fit. Refuse those BY NAME. An absent block is never an empty fact.",
-    "",
-    "PRICING. This org stores a rate and, on floating facilities, a spread. IT STORES NO INDEX NAME.",
-    'Never say "SOFR", "Prime", "LIBOR" or any other index, and never infer one from a rate.',
-    "State the rate or the spread as stored, or say the index is not stored.",
     "",
     "CONTEXT.thread is the conversation so far, oldest first. Read it: this is one conversation.",
     "CONTEXT.fileable names what this route can and cannot file. Refuse what it cannot, by name,",
@@ -817,37 +758,80 @@ export function composeBrainPrompt(envelope: BrainEnvelope): string {
     'If CONTEXT.routeOpen is true you may add "route" to your reply, naming ONE of CONTEXT.routeOptions,',
     "where the line makes the intent plain. Where it does not, clarify and let the banker pick.",
     "",
-    ...doctrineFor(envelope.line),
+    ...budgeted.doctrine.lines,
     "",
     "CONTEXT:",
-    JSON.stringify(envelope),
+    JSON.stringify(budgeted.envelope),
   ].join("\n");
 }
 
 export interface BrainAskDeps {
-  /** The completion door. Injected so the suite never touches a global. */
+  /** The door, overridden. Injected so the suite never touches a global. */
   send?: (prompt: string, signal?: AbortSignal) => Promise<string>;
   /** The clock the timeout runs on. Injected for the same reason. */
   timeoutMs?: number;
+  /**
+   * WHAT THE RUNG-3 TOOLS BIND TO. Absent means no tools are offered at all, so
+   * a room that does not know which relationship it is standing in can never
+   * hand the model a door to somebody else's book.
+   */
+  anchor?: { accountId: string | null; company: string | null };
+  /** The rung, overridden. The router decides it from the envelope otherwise. */
+  rung?: RungChoice;
 }
 
-/** The assist's own transport, verbatim: the gateway completion door through
- *  `window.claude.mcp`, unwrapped exactly as `askCopilot` unwraps it. */
+/** The gateway completion door, verbatim as `askCopilot` unwraps it. It is the
+ *  rung BELOW the session door now: kept while the latency gate is unproven,
+ *  carrying the same inlined doctrine, and invested in no further. */
 async function sendThroughBridge(prompt: string, signal?: AbortSignal): Promise<string> {
   const res = await callTool(SERVERS.gateway, TOOLS.llm, { prompt }, { read: true, signal });
   return unwrapLlm(res.payload).text;
 }
 
 /**
+ * THE SESSION DOOR FIRST, THE GATEWAY BENEATH IT.
+ *
+ * `sample` is the recorded decision and the correct door. Every way it can fail
+ * — null capability, a declined consent, a rate limit, a refusal, a transport
+ * fault — means one thing here: take the next rung down. The banker is never
+ * shown which door answered, and never shown that one did not.
+ *
+ * TOOLS RIDE ONLY AT RUNG 3, and only where the room named an anchor. That is
+ * the whole of what keeps a 30 to 90 second round trip rare.
+ */
+function doorFor(envelope: BrainEnvelope, deps: BrainAskDeps, choice: RungChoice) {
+  return async (prompt: string, signal?: AbortSignal): Promise<string> => {
+    if (sampleAvailable()) {
+      try {
+        return await askSessionJson(prompt, {
+          kind: "reply",
+          tier: choice.tier,
+          rung: choice.rung,
+          signal,
+          tools:
+            choice.rung === 3 && deps.anchor
+              ? buildBrainTools({ anchor: deps.anchor, reads: envelope.reads })
+              : undefined,
+        });
+      } catch {
+        // Absence, never an error on the glass. The gateway is the next rung.
+      }
+    }
+    return sendThroughBridge(prompt, signal);
+  };
+}
+
+/**
  * ASK THE BRAIN, AND COME BACK WITH SOMETHING RENDERABLE.
  *
  * This never rejects and never resolves to a shape the room cannot draw. Every
- * failure — no bridge, a timeout, a transport error, a malformed reply — comes
+ * failure — no door, a timeout, a transport error, a malformed reply — comes
  * back as a clarify the room renders as an agent bubble.
  */
 export async function askBrain(envelope: BrainEnvelope, deps: BrainAskDeps = {}): Promise<BrainReply> {
-  const send = deps.send ?? sendThroughBridge;
-  const timeoutMs = deps.timeoutMs ?? BRAIN_TIMEOUT_MS;
+  const choice = deps.rung ?? rungFor(envelope);
+  const send = deps.send ?? doorFor(envelope, deps, choice);
+  const timeoutMs = deps.timeoutMs ?? timeoutFor(choice);
   if (!deps.send && !brainReachable()) return NOT_CONNECTED_CLARIFY;
 
   const controller = new AbortController();
