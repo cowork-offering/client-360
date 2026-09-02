@@ -244,6 +244,11 @@ type ThreadItem = { id: string; step: number } & (
   | {
       kind: "agent";
       text: string;
+      /** ONE SENTENCE THE SHELL OWNS about this parse, kept apart from the
+       *  engine's own account so it SURVIVES the paragraph stepping back to the
+       *  address where a remark lands. The percentage fee's "the org works the
+       *  money out itself" is the only one today. */
+      note?: string;
       options?: Array<{ label: string; say: string }>;
       /** The explicit restart offered when a cross-route line lands on a staged
        *  manifest. Never a silent engine swap. */
@@ -333,7 +338,8 @@ function speaksFor(item: ThreadItem, next: ThreadItem | undefined, view: Narrati
   if (item.kind !== "agent" || next?.kind !== "chips") return item;
   if (!view || (!view.pending && !view.spoke)) return item;
   const address = stagedAddress(next.chips.map((c) => c.delta).filter((d): d is WorkroomDelta => Boolean(d)));
-  return address ? { ...item, text: address } : item;
+  if (!address) return item;
+  return { ...item, text: [address, item.note].filter(Boolean).join(" ") };
 }
 
 /** Omit that DISTRIBUTES over the union. A plain `Omit<ThreadItem, "step">`
@@ -1370,7 +1376,14 @@ export function Workroom({
          magnitude rule stages and warns because too big can still be meant;
          this one refuses, by name, and says how to put it right. */
       const misread = misreadCommitments({ deltas: roleRead.deltas, members: qualifierMembers });
-      const staged = misread.keep;
+      /* AND THE SHELL'S OWN NOTE RIDES THE ENTRY, not only the sentence. The
+         percentage fee's "the org works the money out itself" is the reason the
+         room asks for no amount, and where the model is speaking the sentence
+         steps back to the address: a note that lived only there would be lost
+         exactly when it is being explained. Same idiom as the pricing gate's. */
+      const staged = note
+        ? misread.keep.map((d) => ({ ...d, caveat: [d.caveat, note].filter(Boolean).join(" ") }))
+        : misread.keep;
 
       /* ------------------------------------------ THE MAGNITUDE BOUND (F5)
 
@@ -1416,6 +1429,7 @@ export function Workroom({
           kind: "agent",
           id: nextId("agent"),
           step: mine,
+          note,
           // THE SENTENCE AND THE CHIPS AGREE (D3). Where the qualifier narrowed,
           // the room says what it read FIRST and the engine's own account
           // follows it with the members it no longer reaches taken out of it.

@@ -564,6 +564,14 @@ describe("the remark describes the card on the glass and nothing else", () => {
     expect(guarded.claimed).toEqual(["advance rate"]);
   });
 
+  it("holds NOTHING where there is no card: the greeting is about the whole book", () => {
+    const greeting: NarrateSubject = { act: "greeting", sentence: "Hey Fabian. What are we doing with this relationship?" };
+    const said = "The commitments sit clean across six facilities. Modify, renew, or structure something new?";
+    const guarded = guardClaims(parseNarration(said, 3), envelope, greeting);
+    expect(narrationText(guarded.blocks)).toContain("The commitments sit clean across six facilities.");
+    expect(guarded.claimed).toHaveLength(0);
+  });
+
   it("still strips the emphasis off an ungrounded figure, exactly as before", () => {
     const guarded = guardClaims(parseNarration("The cover is **$5.2MM** lendable."), envelope, staged);
     expect(narrationText(guarded.blocks)).toContain(FIGURE_MARK);

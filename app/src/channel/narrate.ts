@@ -839,6 +839,12 @@ export function guardClaims(
   envelope: BrainEnvelope,
   subject: NarrateSubject,
 ): GuardedClaims {
+  /* NO CARD, NOTHING TO BE "NOT ON". The rule is that the remark describes THE
+     CARD ON THE GLASS, so a remark with no card in front of it (the greeting,
+     the late-mail note) is not held to it: the greeting is a remark about the
+     whole book by design, and policing it against a card that does not exist
+     would delete the sentences it exists to write. The figure guard still runs. */
+  if (!subject.card) return { ...guardFigures(blocks, envelope, subject), claimed: [] };
   const allowed = allowedTerms(envelope, subject);
   const claimed: string[] = [];
   const note = (term: string) => {

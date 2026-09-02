@@ -551,7 +551,9 @@ describe("a fee create stays in the fast lane", () => {
     expect(words).not.toMatch(/1% or \$/);
     expect(words).not.toMatch(/paid outside closing|financed from proceeds|bank paid/i);
     expect(words).not.toMatch(/\bbasis\b/i);
-    // It says WHY it is not asking, once.
+    // It says WHY it is not asking, once. The same reason rides the ENTRY as a
+    // caveat, so it survives the sentence stepping back to the address where a
+    // remark lands under the card.
     expect(words).toContain("The org works the money out itself");
   });
 
