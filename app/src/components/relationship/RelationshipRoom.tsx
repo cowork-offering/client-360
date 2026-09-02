@@ -37,12 +37,15 @@ import { useClientMail } from "../workroom/clientMail";
 import { stepperState } from "../../workroom/stepper";
 import {
   FACILITY_HANDOFF,
+  CLIENT_REQUEST_OFFER,
   NEUTRAL_QUESTION,
+  RAISE_A_SERVICE_REQUEST,
   REL_ROUTE_CHIPS,
   REL_ROUTE_WORD,
   SOMETHING_ELSE,
   asksForFacilityWork,
   readRelRouteIntent,
+  readsAsClientRequest,
   readRelRouteSwitch,
   relOpeningFor,
   type RelOpening,
@@ -217,6 +220,10 @@ export interface RelRouteChoice {
   label: string;
   route: RelRoute | null;
   covenantId?: string | null;
+  /** The line the chip binds WITH, where the chip is confirming a reading of
+   *  something the banker already typed. The bound room replays it, so the
+   *  client's own words become the case subject instead of being retyped. */
+  say?: string;
   /** The staged data cannot support this review. The chip STAYS, disabled,
    *  carrying the registry's own reason verbatim (A27.3): hiding it would take
    *  the map of what exists away from the banker. */
@@ -1188,6 +1195,21 @@ export function RelationshipRoom({
           "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
         setStep(mine);
         setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        /* THE CLIENT ASKED FOR SOMETHING, AND NAMED NO REVIEW. One line and one
+           chip, rather than the five-way read back at a banker who is plainly
+           running none of the four reviews. It does not bind: the chip does,
+           and it binds WITH the banker's own line, which the service route's
+           first step takes as the case subject. */
+        if (!preCard && !preRelTopic && readsAsClientRequest(text)) {
+          setAsk({
+            line: CLIENT_REQUEST_OFFER,
+            chips: [
+              { label: RAISE_A_SERVICE_REQUEST, route: "service", say: text },
+              { label: SOMETHING_ELSE, route: null },
+            ],
+          });
+          return;
+        }
         if (preCard) {
           setItems((prev) => [...prev, { kind: "read", id: nextId("read"), step: mine, card: preCard }]);
           return;
@@ -1379,7 +1401,7 @@ export function RelationshipRoom({
         return;
       }
       setAsk(null);
-      router.onBind(chip.route, { covenantId: chip.covenantId ?? null });
+      router.onBind(chip.route, { covenantId: chip.covenantId ?? null, say: chip.say });
     },
     [router],
   );

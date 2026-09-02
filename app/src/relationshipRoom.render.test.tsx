@@ -278,6 +278,40 @@ describe("the neutral five-way", () => {
     expect(document.body.textContent).toContain("Pick one above, or name which of the five this is.");
   });
 
+  /* THE DRIVE'S LINE 13. "james wants the june certificate" names no review at
+     all, so before this it fell to the five-way, which reads the annual review,
+     the covenant review, a valuation and the rating back at a banker plainly
+     running none of them. */
+  it("offers the service request in ONE line when the client asked for something", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "james wants the june certificate");
+    // It does NOT bind. Guessing here picks a write path.
+    expect(bound).toEqual([]);
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).toContain("which is a service request on this relationship");
+    // One offer, and the way out of it. Never the five.
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(2);
+    expect(byText(/Raise a service request/)).toBeTruthy();
+    expect(byText(/Something else/)).toBeTruthy();
+  });
+
+  it("binds the service route WITH the banker's own line, so it becomes the subject", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "james wants the june certificate");
+    click(byText(/Raise a service request/));
+    expect(bound).toEqual([
+      { route: "service", opts: { covenantId: null, say: "james wants the june certificate" } },
+    ]);
+  });
+
+  it("still offers all five on 'Something else', binding nothing", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "james wants the june certificate");
+    click(byText(/Something else/));
+    expect(bound).toEqual([]);
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(5);
+  });
+
   it("keeps an unavailable route VISIBLE and disabled, with the registry's own reason", () => {
     const empty = { borrowers: { "001X": {} }, borrower: {}, portfolio: { accounts: [] }, meta: {} } as unknown as C360Data;
     const question = neutralRelAsk({ data: empty, accountId: "001X" });

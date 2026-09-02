@@ -8,6 +8,7 @@ import {
   asksForFacilityWork,
   readRelRouteIntent,
   readRelRouteSwitch,
+  readsAsClientRequest,
   relOpeningFor,
 } from "./relRoute";
 
@@ -240,5 +241,56 @@ describe("a route word inside an ANSWER is not a request to change review", () =
     expect(readRelRouteSwitch("Copy of the June covenant compliance certificate", "service")).toBe("covenant");
     expect(readRelRouteSwitch("covenant review", "annual")).toBe("covenant");
     expect(readRelRouteSwitch("covenant review", "covenant")).toBeNull();
+  });
+});
+
+/* =============================================================================
+   THE CLIENT'S ASK, WHICH NAMES NO REVIEW.
+
+   The commonest line in this room binds nothing: "james wants the june
+   certificate" carries no route word at all, so it fell to the five-way, which
+   reads the annual review and the rating back at a banker running neither. The
+   read below offers the service request and never binds it.
+   ============================================================================= */
+
+describe("a plain client request is read as one, and still not routed", () => {
+  it("reads a request for a document or a service", () => {
+    for (const line of [
+      "james wants the june certificate",
+      "send them the payoff letter",
+      "the client asked for a copy of the statement",
+      "they are chasing the lien release",
+      "he needs wire instructions",
+      "would like a balance confirmation",
+    ]) {
+      expect(readsAsClientRequest(line), line).toBe(true);
+    }
+  });
+
+  it("needs BOTH halves: somebody asking, and a thing servicing files", () => {
+    for (const line of [
+      "james wants a downgrade", // asking, but for no document
+      "the june certificate", // a document, but nobody asking
+      "run the annual review",
+      "",
+    ]) {
+      expect(readsAsClientRequest(line), line).toBe(false);
+    }
+  });
+
+  it("never binds a route, and never shadows one that does", () => {
+    // The route read runs FIRST, so a request naming one of the five is that
+    // review, not a service request. These lines never reach the client read.
+    expect(readRelRouteIntent("the client wants a covenant waiver")).toBe("covenant");
+    // And where BOTH reads match, the route read runs first and wins: this one
+    // is a valuation, not a service request, although a client is asking for a
+    // copy of something.
+    expect(readsAsClientRequest("they want a copy of the appraisal")).toBe(true);
+    expect(readRelRouteIntent("they want a copy of the appraisal")).toBe("valuation");
+    // And the line that started this returns null: the offer is a chip, not a
+    // binding.
+    expect(readRelRouteIntent("james wants the june certificate")).toBeNull();
+    // "payoff" is already a service word, so this one binds without the offer.
+    expect(readRelRouteIntent("send them the payoff letter")).toBe("service");
   });
 });
