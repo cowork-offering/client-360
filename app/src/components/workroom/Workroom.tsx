@@ -57,6 +57,7 @@ import {
 import {
   advance,
   amendedPlanLine,
+  associateGap,
   awarenessFor,
   amendmentOf,
   blockedReason,
@@ -1597,7 +1598,7 @@ export function Workroom({
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `${notes.join(" ")} Nothing here needs putting up twice.`,
+          text: `${notes.join(" ")} ${aware.close ?? "Nothing here needs putting up twice."}`,
           options: aware.options.length ? aware.options : undefined,
         });
         return [];
@@ -1612,7 +1613,7 @@ export function Workroom({
          none is: the create goes on the plan as a HANDOFF, which is the honest
          record and writes nothing anywhere. A room that gathered all of it and
          then went quiet would be dropping the whole thing silently (rule 8). */
-      const routeSaid = routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
 
       const started = Date.now();
       setThinking(true);
@@ -1756,7 +1757,7 @@ export function Workroom({
 
       // A ROUTE THAT COULD NOT FILE IT CANNOT FILE THE CORRECTION EITHER. The
       // card is still amendable; what it corrects is the handoff on the plan.
-      const routeSaid = routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
       const started = Date.now();
       setThinking(true);
       const got: WorkroomDelta[] = [];

@@ -82,6 +82,17 @@ export interface Slots {
   frequency?: string;
   /** Where the frequency came from, so the card can say it. */
   frequencyFrom?: "said" | "book";
+  /**
+   * THE BANKER CHOSE TO ASSOCIATE THE COVENANT THE BOOK ALREADY CARRIES rather
+   * than create a second record of the same test. In nCino that is a
+   * LLC_BI__Loan_Covenant__c junction create pointing at an existing Covenant2,
+   * which is a create and not a delete - but the deployed covenant wire carries
+   * a TYPE NAME and never an existing covenant id, so the room stages it as a
+   * handoff and says so. {@link associateGap}.
+   */
+  associate?: boolean;
+  /** The covenant record an associate would attach. The org's own id. */
+  existingCovenantId?: string;
   /** An asset the deal already carries. The org's own record id travels. */
   assetId?: string;
   assetLabel?: string;
@@ -145,6 +156,10 @@ export interface ElicitMember {
 /* ---------------------------------------------------------------- the book */
 
 export interface BookCovenant {
+  /** The org's own covenant record id, where the read carries one. What an
+   *  ASSOCIATE would have to send: the junction points at THIS record, not at a
+   *  fresh one of the same type. */
+  id: string | null;
   /** The org catalog's own type name. */
   type: string;
   threshold: number | null;
@@ -214,6 +229,7 @@ export function buildBook(bundle: BorrowerBundle | null | undefined, memberIds: 
     const attached = c.attachedLoans;
     const loanIds = (attached ?? []).map((a) => a.loanId ?? "").filter((id) => id && inScope.has(id));
     covenants.push({
+      id: (c.covenantId ?? "").trim() || null,
       type,
       threshold: typeof c.thresholdValue === "number" ? c.thresholdValue : null,
       frequency: (c.frequency ?? "").trim() || null,
@@ -881,6 +897,10 @@ function matchAsset(line: string, assets: BookAsset[]): BookAsset[] {
 
 const NEW_ASSET = /\b(new|newly|another|additional|just\s+(?:bought|financed)|not\s+on\s+the\s+deal)\b/i;
 
+/** THE BANKER TOOK THE ASSOCIATE (P1). "the existing one" on its own is enough:
+ *  the chip says it and it is the only thing in the room that word can mean. */
+const ASSOCIATE_EXISTING = /\b(?:associate|attach|link)\b[^.]*\bexisting\b|\bthe\s+existing\s+one\b|\buse\s+the\s+existing\b/i;
+
 const ASSET_KINDS: Array<{ match: RegExp; word: string }> = [
   { match: /\b(equipment|machine|machines|machinery|tooling|press|lathe|cnc|forklift)\b/i, word: "Equipment" },
   { match: /\b(warehouse|building|plant|premises|real\s*estate|property|land)\b/i, word: "Real Estate" },
@@ -1017,6 +1037,11 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
   const claimed: number[] = [];
 
   if (next.surface === "covenant") {
+    /* ASSOCIATE THE ONE THE BOOK ALREADY CARRIES (P1). The chip says it in
+       these words and a banker may type them; either way it names an EXISTING
+       covenant record rather than a new one, so the record's own id, threshold
+       and schedule come off the book and nothing here is invented. */
+    if (ASSOCIATE_EXISTING.test(text)) next.slots.associate = true;
     const test = readTest(text, ctx.book);
     if (test && "type" in test) {
       next.slots.test = test.type;
@@ -1047,6 +1072,26 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     if (frequency) {
       next.slots.frequency = frequency;
       next.slots.frequencyFrom = "said";
+    }
+
+    /* THE EXISTING RECORD, RESOLVED. An associate that cannot name the record
+       it would attach is not an associate, so the flag comes off rather than
+       travelling as a claim nothing backs. */
+    if (next.slots.associate) {
+      const held = ctx.book.covenants.find((c) => c.type === next.slots.test && c.id);
+      if (held) {
+        next.slots.existingCovenantId = held.id!;
+        if (held.threshold !== null) {
+          next.slots.threshold = held.threshold;
+          delete next.slots.unit;
+        }
+        if (held.frequency) {
+          next.slots.frequency = held.frequency;
+          next.slots.frequencyFrom = "book";
+        }
+      } else {
+        delete next.slots.associate;
+      }
     }
   }
 
@@ -1252,7 +1297,11 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
     };
   }
 
-  if (s.threshold === undefined) {
+  /* AN ASSOCIATE ASKS FOR NEITHER. The threshold and the schedule are the
+     EXISTING record's, and a room that asked for them would be offering to
+     change a covenant it is only attaching - which is the amend this fence
+     refuses outright. */
+  if (s.threshold === undefined && !s.associate) {
     const band = DOCTRINE_BAND.find((b) => b.match.test(s.test!));
     const held = ctx.book.covenants.filter((c) => c.type === s.test && typeof c.threshold === "number");
     return {
@@ -1270,7 +1319,7 @@ function covenantAsk(draft: Draft, ctx: ElicitContext): Ask | null {
     };
   }
 
-  if (!s.frequency) {
+  if (!s.frequency && !s.associate) {
     /* WHERE THE BOOK ANSWERS IT, THE ROOM DOES NOT ASK. A relationship that
        tests this covenant on one schedule everywhere it carries it has already
        answered the question, and the card says where the answer came from. */
@@ -1489,6 +1538,13 @@ export interface Awareness {
   fresh: string[];
   /** The chips the room offers instead of staging a duplicate blindly. */
   options: Array<{ label: string; say: string }>;
+  /**
+   * THE ROOM'S CLOSING SENTENCE over those chips. Null takes the default, which
+   * is the DUPLICATE's sentence: nothing here needs putting up twice. A test on
+   * the book that is NOT on this loan is not a duplicate and must not be told it
+   * is one (P1), so that state carries its own close.
+   */
+  close: string | null;
 }
 
 /**
@@ -1545,34 +1601,96 @@ export function amendedPlanLine(changed: string[]): string {
 
 export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
   const label = (id: string) => ctx.members.find((m) => m.id === id)?.label ?? id;
-  const none: Awareness = { onTheBook: null, onThePlan: null, fresh: draft.scope, options: [] };
+  const none: Awareness = { onTheBook: null, onThePlan: null, fresh: draft.scope, options: [], close: null };
 
+  /* ================================= THE DEDUPE IS PER LOAN JUNCTION (P1)
+
+     "DSC of Borrower already runs at the relationship level, so it already
+     reaches every facility, nothing needs putting up twice" is WRONG, and the
+     founder said so in the words the model uses: a covenant is relationship-
+     level or loan-level depending on WHICH JUNCTION it carries, and a covenant
+     with an Account_Covenant association and no Loan_Covenant junction is NOT
+     associated to the loan (WORKROOM-BRAIN 2.4). The package VIEW is a union;
+     the association is not.
+
+     SO THERE ARE THREE STATES AND THEY ARE DIFFERENT ANSWERS:
+
+       on THIS loan          - the true duplicate. Named as one, nothing staged;
+       on the book, NOT here - not a duplicate at all. The room says exactly
+                               that and offers three ways through: a new one on
+                               this facility, ASSOCIATING the existing record to
+                               it, or a different test;
+       not on the book       - nothing to say. It stages.
+
+     An ASSOCIATE is a junction create for an existing Covenant2, never a
+     delete, so it is inside the fence. What it is not is fileable by the
+     deployed wire, which carries a type name and no covenant id: that is
+     {@link associateGap}, and the room says it rather than pretending. */
   if (draft.surface === "covenant" && draft.slots.test) {
     const already = ctx.book.covenants.filter((c) => c.type === draft.slots.test);
-    const accountLevel = already.find((c) => c.accountLevel);
-    const onBook = draft.slots.second ? [] : draft.scope.filter((id) => already.some((c) => c.loanIds.includes(id)));
     const staged = ctx.plan.filter(
       (p) => p.surface === "covenant" && p.slots.test === draft.slots.test && p.memberId && draft.scope.includes(p.memberId),
     );
     const onPlan = staged.map((p) => p.memberId!).filter((id, i, all) => all.indexOf(id) === i);
+
+    /* THE JUNCTION, AND NOTHING ELSE. `loanIds` is exactly the covenant's
+       LLC_BI__Loan_Covenant__c set, so this asks the one question that decides
+       it: is this test on THIS facility? */
+    const onBook = draft.slots.second || draft.slots.associate ? [] : draft.scope.filter((id) => already.some((c) => c.loanIds.includes(id)));
     const blocked = new Set([...onBook, ...onPlan]);
     const fresh = draft.scope.filter((id) => !blocked.has(id));
-    return {
-      onTheBook: accountLevel && !draft.slots.second
-        ? `${draft.slots.test} already runs at the relationship level on this book${accountLevel.threshold !== null ? ` at ${thresholdText(accountLevel.threshold)}` : ""}${accountLevel.frequency ? `, tested ${accountLevel.frequency.toLowerCase()}` : ""}, so it already reaches every facility on the package.`
-        : onBook.length
+
+    if (onBook.length || onPlan.length) {
+      return {
+        onTheBook: onBook.length
           ? `${draft.slots.test} is already on ${sentenceList(onBook.map(label))}, and a modification carries it onto the clone.`
           : null,
-      onThePlan: onPlan.length ? `${draft.slots.test} is already on this plan for ${sentenceList(onPlan.map(label))}.` : null,
-      fresh: accountLevel && !draft.slots.second ? [] : fresh,
-      options:
-        (accountLevel && !draft.slots.second) || onBook.length || onPlan.length
-          ? [
-              { label: "Put a second one on the facility", say: `add a second ${draft.slots.test} covenant` },
-              { label: "A different test", say: "a different test" },
-            ]
-          : [],
-    };
+        onThePlan: onPlan.length ? `${draft.slots.test} is already on this plan for ${sentenceList(onPlan.map(label))}.` : null,
+        fresh,
+        options: [
+          { label: "Put a second one on the facility", say: `add a second ${draft.slots.test} covenant` },
+          { label: "A different test", say: "a different test" },
+        ],
+        close: null,
+      };
+    }
+
+    /* ON THE BOOK, NOT ON THIS LOAN. The elsewhere covenant is worth naming
+       because it is what an ASSOCIATE would attach, and because a banker who
+       wrote this test is usually looking at the one the relationship already
+       runs. It is NOT a reason to refuse and it does not narrow the scope. */
+    const elsewhere = draft.slots.second || draft.slots.associate ? null : already[0] ?? null;
+    if (elsewhere && draft.scope.length) {
+      const one = draft.scope.length === 1;
+      const here = one ? "this facility" : "these facilities";
+      const terms = [
+        elsewhere.threshold !== null ? `at ${thresholdText(elsewhere.threshold)}` : null,
+        elsewhere.frequency ? `tested ${elsewhere.frequency.toLowerCase()}` : null,
+      ].filter((t): t is string => Boolean(t));
+      const where = elsewhere.loanIds.length
+        ? `attached to ${sentenceList(elsewhere.loanIds.map(label))}`
+        : "at the relationship level, with no loan junction on it at all";
+      return {
+        onTheBook:
+          `${draft.slots.test} is on this book${terms.length ? ` ${sentenceList(terms)}` : ""}, ${where}, ` +
+          `and it is NOT associated to ${sentenceList(draft.scope.map(label))}. A covenant reaches a facility through its loan junction, ` +
+          `so a test that carries no junction here does not run on ${one ? "this facility" : "these"}, whatever it does elsewhere. ` +
+          `Two ways to put it on ${here}, and they are different records.`,
+        onThePlan: null,
+        fresh: [],
+        options: [
+          { label: `Create a new one on ${here}`, say: `add a second ${draft.slots.test} covenant` },
+          {
+            label: `Associate the existing ${draft.slots.test} to ${here}`,
+            say: `associate the existing ${draft.slots.test} covenant to ${here}`,
+          },
+          { label: "A different test", say: "a different test" },
+        ],
+        close: "Say which and I will put it up.",
+      };
+    }
+
+    return { onTheBook: null, onThePlan: null, fresh, options: [], close: null };
   }
 
   /* ============================ THE BORROWING-STRUCTURE DUPLICATE (E4a)
@@ -1634,6 +1752,7 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
             { label: "A different facility", say: "a different facility" },
           ]
         : [],
+      close: null,
     };
   }
 
@@ -1658,6 +1777,7 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
               { label: "A different facility", say: "a different facility" },
             ]
           : [],
+      close: null,
     };
   }
 
@@ -1812,6 +1932,29 @@ const SURFACE_NOUN: Record<SurfaceId, string> = {
   involvement: "A borrowing-structure change",
 };
 
+/**
+ * ASSOCIATING AN EXISTING COVENANT, AND WHY IT RIDES THE PLAN (P1).
+ *
+ * The MODEL is right and inside the fence: a loan junction for a Covenant2 that
+ * already exists is a create, not a delete, and it is exactly what "put the test
+ * the book already runs onto this loan" means in nCino.
+ *
+ * The WIRE is the problem. `covenantAddsJson` carries `typeName` or `typeId` -
+ * a covenant TYPE - and no field on it names an existing covenant RECORD, so
+ * sending this through the deployed path would mint a second Covenant2 of the
+ * same type and call it an association. That is the one thing the room may not
+ * do: pretend. So it stages the decision, names the arm being built, and writes
+ * nothing.
+ */
+export function associateGap(draft: Draft): string | null {
+  if (draft.surface !== "covenant" || !draft.slots.associate) return null;
+  return (
+    "Associating the covenant the book already carries is a loan-covenant junction create for an existing record, which is a create rather than a delete and is inside the fence. " +
+    "What is not there yet is the wire: the deployed covenant path carries a covenant TYPE and no field on it names an existing covenant record, so sending this down it would mint a second covenant of the same type and call it an association. " +
+    "The junction-only arm is being built on the org side. Until it is deployed this rides the plan for the credit file, with the record it would attach named on it, and nothing about it is written to the bank's systems."
+  );
+}
+
 export function routeGap(surface: SurfaceId, mode: WorkroomMode): string | null {
   const files = ROUTE_FILES[mode];
   if (!files) return null;
@@ -1842,7 +1985,7 @@ export function handoffEntry(
   const involvement = draft.surface === "involvement";
   const asset = ctx.book.assets.find((a) => a.id === s.assetId);
   const after = covenant
-    ? `${s.test} at ${thresholdText(s.threshold!, s.unit)}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}`
+    ? `${s.test}${s.threshold !== undefined ? ` at ${thresholdText(s.threshold, s.unit)}` : ""}, tested ${(s.frequency ?? WIRED_FREQUENCY).toLowerCase()}`
     : involvement
       ? `${s.party} as ${s.role}`
       : `${shortLabel(asset ?? ({ label: s.assetLabel ?? "the asset" } as BookAsset))}${s.lien ? ` at ${s.lien} position` : ""}`;

@@ -3,6 +3,7 @@ import {
   advance,
   amendedPlanLine,
   amendmentOf,
+  associateGap,
   awarenessFor,
   blockedReason,
   buildBook,
@@ -277,17 +278,98 @@ describe("the room reads the book and the plan before it proposes anything", () 
     unused: null,
   });
 
-  it("names a relationship-level covenant rather than staging a duplicate", () => {
-    const aware = awarenessFor(complete(), ctxWith());
-    expect(aware.onTheBook).toContain("already runs at the relationship level");
+  /* ------------------------------------------------- P1, the three states
+
+     THE DEDUPE IS PER LOAN JUNCTION. A covenant with an Account_Covenant
+     association and no Loan_Covenant junction is NOT associated to the loan,
+     whatever the package VIEW shows, so "it already reaches every facility,
+     nothing needs putting up twice" was a false refusal. Three states, three
+     different answers. */
+
+  it("STATE 1: the same test on THIS loan is the duplicate, and is named as one", () => {
+    // Accounts Receivable carries a loan junction to the $15M line on this book.
+    const aware = awarenessFor(complete({ test: "Accounts Receivable", threshold: 80 }, [LOC15]), ctxWith());
+    expect(aware.onTheBook).toContain("is already on $15.0MM Line of Credit");
     expect(aware.fresh).toHaveLength(0);
-    expect(aware.options.map((o) => o.label)).toContain("Put a second one on the facility");
+    expect(aware.options.map((o) => o.label)).toEqual(["Put a second one on the facility", "A different test"]);
+    // The duplicate's own close. Nothing here needs putting up twice.
+    expect(aware.close).toBeNull();
+  });
+
+  it("STATE 2: on the book but not on THIS loan is not a duplicate, and offers the three", () => {
+    // The founder's own line: DSC of Borrower runs at the relationship level and
+    // carries no loan junction at all, so it is not on the equipment loan.
+    const aware = awarenessFor(complete({}, [EQ8]), ctxWith());
+    expect(aware.onTheBook).toContain("NOT associated to $8.0MM Equipment");
+    expect(aware.onTheBook).toContain("at the relationship level, with no loan junction on it at all");
+    expect(aware.onTheBook).toContain("reaches a facility through its loan junction");
+    // And never the old claim.
+    expect(aware.onTheBook).not.toContain("already reaches every facility");
+    expect(aware.options.map((o) => o.label)).toEqual([
+      "Create a new one on this facility",
+      "Associate the existing Debt Service Coverage of Borrower to this facility",
+      "A different test",
+    ]);
+    // NOT a duplicate, so it must not be told it is one.
+    expect(aware.close).toBe("Say which and I will put it up.");
+  });
+
+  it("STATE 3: a test the book does not carry stages, with nothing said", () => {
+    const aware = awarenessFor(complete({ test: "Minimum Liquidity", threshold: 5_000_000, unit: "money" }, [EQ8]), ctxWith());
+    // Minimum Liquidity carries no junction to the equipment loan either, so it
+    // is state 2 as well - the honest third state needs a book with nothing on
+    // it at all for this test.
+    const bare = awarenessFor(complete({ test: "Minimum Liquidity" }, [EQ8]), ctxWith({ book: { ...book, covenants: [] } }));
+    expect(bare.onTheBook).toBeNull();
+    expect(bare.fresh).toEqual([EQ8]);
+    expect(bare.options).toHaveLength(0);
+    expect(aware.onTheBook).toContain("NOT associated to");
   });
 
   it("stages the second when the banker asks for one anyway", () => {
-    const aware = awarenessFor(complete({ second: true }), ctxWith());
+    const aware = awarenessFor(complete({ test: "Accounts Receivable", second: true }, [LOC15]), ctxWith());
     expect(aware.onTheBook).toBeNull();
-    expect(aware.fresh).toEqual([PURCHASE]);
+    expect(aware.fresh).toEqual([LOC15]);
+  });
+
+  it("takes the associate chip, settles the record's own terms, and stages it as a handoff", () => {
+    const ctx = ctxWith();
+    const draft = complete({}, [EQ8]);
+    const took = readInto(draft, "associate the existing Debt Service Coverage of Borrower covenant to this facility", ctx);
+    expect(took.slots.associate).toBe(true);
+    // The org's own record id, off the book. Never invented.
+    expect(took.slots.existingCovenantId).toBe("a3Bbb000000S0UvEAK");
+    expect(took.slots.threshold).toBe(1.25);
+    expect(took.slots.frequency).toBe("Quarterly");
+
+    // It is no longer blocked: an associate is a create on the junction.
+    const aware = awarenessFor(took, ctx);
+    expect(aware.fresh).toEqual([EQ8]);
+
+    // And it does not pretend to file. The deployed covenant wire carries a
+    // TYPE and no covenant record id, so this rides the plan.
+    const gap = associateGap(took)!;
+    expect(gap).toContain("junction create for an existing record");
+    expect(gap).toContain("covenant TYPE and no field on it names an existing covenant record");
+    expect(gap).toContain("being built on the org side");
+    expect(associateGap(draft)).toBeNull();
+
+    const entry = handoffEntry(took, ctx, EQ8, gap, 0);
+    expect(entry.fileable).toBe(false);
+    expect(entry.after).toContain("Debt Service Coverage of Borrower");
+  });
+
+  it("never asks an associate for a threshold it is not setting", () => {
+    const ctx = ctxWith();
+    const took = readInto(
+      { surface: "covenant", slots: { test: "Term Covenants", associate: true }, scope: [EQ8], scopeWord: true, unused: null },
+      "the existing one",
+      ctx,
+    );
+    // Term Covenants carries no threshold on this book at all.
+    expect(took.slots.existingCovenantId).toBe("a3Bbb000000S0czEAC");
+    expect(took.slots.threshold).toBeUndefined();
+    expect(advance(took, ctx).ask).toBeNull();
   });
 
   it("names a pledge the deal already carries, and offers the second", () => {

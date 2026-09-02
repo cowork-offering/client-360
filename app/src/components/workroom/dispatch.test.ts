@@ -278,8 +278,8 @@ const ELENA = "Elena Hartwell";
 /** The book, carrying the org facts the drive was pre-flighted on. */
 const BOOK: Book = {
   covenants: [
-    { type: "Minimum Liquidity", threshold: 5_000_000, frequency: "Quarterly", loanIds: [LOC], accountLevel: false },
-    { type: "Leverage", threshold: 3, frequency: "Quarterly", loanIds: [EQUIPMENT], accountLevel: false },
+    { id: "a3Bbb00000000L1", type: "Minimum Liquidity", threshold: 5_000_000, frequency: "Quarterly", loanIds: [LOC], accountLevel: false },
+    { id: "a3Bbb00000000L2", type: "Leverage", threshold: 3, frequency: "Quarterly", loanIds: [EQUIPMENT], accountLevel: false },
   ],
   assets: [
     { id: "a3Ubb00000001AR", label: "Accounts receivable, present and future", name: "COL-000761", kind: "Accounts Receivable", value: 9_000_000, lien: "1st", loanIds: [LOC] },
@@ -494,7 +494,7 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     ...BOOK,
     covenants: [
       ...BOOK.covenants,
-      { type: "Accounts Receivable", threshold: 80, frequency: "Monthly", loanIds: [LOC], accountLevel: false },
+      { id: "a3Bbb000000S0bN", type: "Accounts Receivable", threshold: 80, frequency: "Monthly", loanIds: [LOC], accountLevel: false },
     ],
   };
 
