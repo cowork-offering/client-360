@@ -26,6 +26,8 @@ import {
 } from "../workroom/entryChoreography";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
+import { Narration, useNarration } from "../../channel/Narration";
+import { subjectFor } from "../../channel/narrate";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
 import { stepperState } from "../../workroom/stepper";
 import {
@@ -883,32 +885,57 @@ export function RelationshipRoom({
     [items],
   );
 
+  /** THE BOOK, PACKAGED, for whichever lane is asking. One builder, so a remark
+   *  under a card stands on exactly the envelope a reply would have stood on. */
+  const envelopeFor = useCallback(
+    (line: string): BrainEnvelope =>
+      buildRelEnvelope({
+        line,
+        route,
+        ctx,
+        reads,
+        thread: conversation(),
+        collected: laneRows.map((r) => ({
+          title: r.label,
+          target: route ? REL_ROUTE_WORD[route] : "this relationship",
+          after: r.value,
+        })),
+      }),
+    [conversation, ctx, laneRows, reads, route],
+  );
+
   const askTheDesk = useCallback(
     async (line: string): Promise<BrainReply | null> => {
       if (!brain) return null;
       try {
-        return await brain(
-          buildRelEnvelope({
-            line,
-            route,
-            ctx,
-            reads,
-            thread: conversation(),
-            collected: laneRows.map((r) => ({
-              title: r.label,
-              target: route ? REL_ROUTE_WORD[route] : "this relationship",
-              after: r.value,
-            })),
-          }),
-        );
+        return await brain(envelopeFor(line));
       } catch {
         // The lane never throws into the room: a transport that failed past
         // `askBrain`'s own guard degrades exactly as a malformed reply does.
         return null;
       }
     },
-    [brain, conversation, ctx, laneRows, reads, route],
+    [brain, envelopeFor],
   );
+
+  /* THE PARSER STAGES, THE MODEL SPEAKS. The same rule as the facility room and
+     the same single effect: every path in this room ends by appending an item,
+     so the remark rides the item rather than each engine. Inert where the
+     session door is absent, so channel-none renders exactly today's sentences. */
+  const narration = useNarration({ enabled: Boolean(brain), envelopeFor });
+  const narrated = useRef(new Set<string>());
+
+  useEffect(() => {
+    const last = items[items.length - 1];
+    if (!last || narrated.current.has(last.id)) return;
+    narrated.current.add(last.id);
+    const prior = items[items.length - 2];
+    const said = prior && prior.kind === "agent" ? prior.text : undefined;
+    const subject = subjectFor(last as unknown as Parameters<typeof subjectFor>[0], said);
+    if (!subject) return;
+    const asked = [...items].reverse().find((i) => i.kind === "banker");
+    narration.narrate(last.id, subject, asked && asked.kind === "banker" ? asked.text : "");
+  }, [items, narration]);
 
   /**
    * WHAT THE DESK SAID, DRAWN.
@@ -1467,7 +1494,13 @@ export function RelationshipRoom({
                         />
                       );
                       const tier = relTierOf(item, detailId);
-                      if (!tier) return <Fragment key={item.id}>{block}</Fragment>;
+                      if (!tier)
+                        return (
+                          <Fragment key={item.id}>
+                            {block}
+                            <Narration view={narration.viewFor(item.id)} />
+                          </Fragment>
+                        );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED, so an absence
                          contract can tell "faded out" from "gone". */
                       return (

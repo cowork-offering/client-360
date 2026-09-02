@@ -2360,3 +2360,52 @@ body.wk-open #root {
     opacity: 1;
   }
 }
+
+/* ============================================================ THE REMARK
+
+   THE PARSER STAGES, THE MODEL SPEAKS. A narration is an agent bubble and
+   nothing else: it inherits `.wk-msg.wk-agent .wk-bub` wholesale, so the room
+   has one voice and one typography rather than a second panel for the model.
+
+   Only two things are added. A tighter paragraph rhythm, because a remark of
+   three sentences reads as one thought and not as three. And the list style the
+   room has never needed until now: hyphen-marked, inside the bubble's own
+   measure, on the Electric Glass tokens the rest of the room already uses. */
+.wk-narr .wk-bub {
+  max-width: 62ch;
+}
+.wk-narr-line {
+  margin: 0;
+}
+.wk-narr-line + .wk-narr-line,
+.wk-narr-line + .wk-narr-list,
+.wk-narr-list + .wk-narr-line {
+  margin-top: 7px;
+}
+.wk-narr-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wk-narr-list li {
+  position: relative;
+  padding-left: 13px;
+}
+.wk-narr-list li + li {
+  margin-top: 3px;
+}
+.wk-narr-list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 1px;
+  background: var(--ink-muted);
+}
+/* The room's own pulse, held until the first token arrives. */
+.wk-narr-wait {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+}
