@@ -47,7 +47,7 @@ import type { StagedOutput } from "../../actions/stagedPlan";
 import type { ToolOutcome } from "../../channel/writeTools";
 import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
 import type { Book, BookAsset, BookCovenant, ElicitMember } from "./elicit";
-import { readScope } from "./elicit";
+import { clipTitle, readScope } from "./elicit";
 
 /* --------------------------------------------------------------- the wire */
 
@@ -187,10 +187,15 @@ export function armStage(
  * confirm read "... and nothing is deleted anywhere. on Purchase: pledged to
  * the booked facility ...": half the engine's own opening clause, spliced back
  * on after the arm's sentence. One ellipsis character cannot do that.
+ *
+ * AND THE CUT IS ON A WORD (2026-09-02). It was a bare character slice, so the
+ * confirm and the manifest both read "First mortgage on the owner-occupied Fort
+ * Wayne manufacturing c… on Construction". `clipTitle` is the one rule now, and
+ * every shortener in the room uses it.
  */
 function assetPhrase(label: string): string {
   const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
-  return first.length > 64 ? `${first.slice(0, 63).trim()}\u2026` : first;
+  return clipTitle(first, 64);
 }
 
 interface DeltaArgs {

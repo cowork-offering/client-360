@@ -169,6 +169,37 @@ export interface ElicitMember {
   committed: number | null;
 }
 
+/* ================================ SHORTENING A TITLE (2026-09-02)
+
+   "First mortgage on the owner-occupied Fort Wayne manufacturing c… on
+   Construction" is what the confirm sentence and the manifest read. The cut
+   landed mid-word, because every shortener in this room sliced at a character
+   count and stopped.
+
+   ONE RULE, AND IT IS USED EVERYWHERE A TITLE IS SHORTENED. Cut at the last
+   word boundary inside the cap, and mark it with the SINGLE ELLIPSIS CHARACTER.
+   Three dots end a sentence to every reader that splits on one, and an asset
+   title long enough to be cut then carried a false sentence boundary into
+   `armConfirmSentence`, which is how half the engine's opening clause leaked
+   onto the glass in the first place.
+
+   A cut that would leave less than half the cap falls back to the hard slice:
+   a title whose first word is longer than the cap has no boundary to find, and
+   a two-character stub is worse than a cut word.                             */
+
+/** The mark. One character, never three dots. */
+export const ELLIPSIS = "\u2026";
+
+/** A title, shortened to `cap` characters on a word boundary. */
+export function clipTitle(text: string, cap: number): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= cap) return line;
+  const cut = line.slice(0, cap);
+  const lastSpace = cut.lastIndexOf(" ");
+  const kept = (lastSpace > cap / 2 ? cut.slice(0, lastSpace) : cut).trim().replace(/[\s,;:.-]+$/, "");
+  return `${kept}${ELLIPSIS}`;
+}
+
 /* ---------------------------------------------------------------- the book */
 
 export interface BookCovenant {
@@ -1011,7 +1042,7 @@ export function readAssetDescription(text: string, ctx: ElicitContext): string |
     // forklift fleet carries the word "forklift" and is still an asset.
     if (KIND_ALONE.has(said.toLowerCase().replace(/\s+/g, " "))) continue;
     if (/^(?:collateral|assets?|security|pledges?|positions?|liens?|it|this|that)$/i.test(said)) continue;
-    return said.length > 200 ? `${said.slice(0, 197).trim()}...` : said[0].toUpperCase() + said.slice(1);
+    return said.length > 200 ? clipTitle(said, 199) : said[0].toUpperCase() + said.slice(1);
   }
   return undefined;
 }
@@ -1973,7 +2004,7 @@ export function thresholdText(value: number, unit?: "ratio" | "money"): string {
   return value.toLocaleString("en-US");
 }
 
-const shortLabel = (a: BookAsset) => (a.label.length > 44 ? `${a.label.slice(0, 42).trim()}...` : a.label);
+const shortLabel = (a: BookAsset) => clipTitle(a.label, 44);
 
 /** A figure written the way a credit agreement writes it. Never abbreviated:
  *  "$6.5M" and "$6,500,000" are the same money and only one of them is what the

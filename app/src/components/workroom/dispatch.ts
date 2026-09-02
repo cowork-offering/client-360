@@ -1,7 +1,7 @@
 import { fmtMoney } from "../../data/format";
 import { catalogField } from "../../workroom/fieldCatalog";
 import type { IntentResult, WorkroomAdvisory, WorkroomDelta, WorkroomRefusal } from "../../workroom/types";
-import { facilitiesFor, readScope, rolesOnFacility, samePartyName, type Book, type BookAsset, type ElicitMember } from "./elicit";
+import { clipTitle, facilitiesFor, readScope, rolesOnFacility, samePartyName, type Book, type BookAsset, type ElicitMember } from "./elicit";
 
 /* =============================================================================
    THE DISPATCH RULE, AND THE TWO SAFETY LAYERS BESIDE IT.
@@ -1114,13 +1114,14 @@ export function retypeEntry(delta: WorkroomDelta, type: string): WorkroomDelta {
  *  paragraph is unreadable. The first sentence names the asset; the exclusions
  *  behind it are the credit agreement's business, not the refusal's.
  *
- *  THE TRUNCATION MARK IS ONE CHARACTER AND IT IS NOT A FULL STOP. Three dots
- *  end a sentence to every reader that splits on one, and an asset title long
- *  enough to be cut then carried a false sentence boundary into the confirm.
- *  Kept identical to `orgArms.ts`: the same title has to come back out of both. */
+ *  THE TRUNCATION MARK IS ONE CHARACTER AND IT IS NOT A FULL STOP, AND THE CUT
+ *  IS ON A WORD (2026-09-02). Three dots end a sentence to every reader that
+ *  splits on one, and a title cut mid-word read "... Fort Wayne manufacturing
+ *  c… on Construction" on the manifest, the read-back and the confirm.
+ *  `clipTitle` is the one rule and every shortener in the room uses it. */
 function assetPhrase(label: string): string {
   const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
-  return first.length > 64 ? `${first.slice(0, 63).trim()}\u2026` : first;
+  return clipTitle(first, 64);
 }
 
 export function fenceRefusal(scope: "covenant" | "pledge", name: string): WorkroomRefusal & { why: string } {

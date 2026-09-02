@@ -20,7 +20,7 @@ import {
   stampRemovalRoles,
   type QualifierMember,
 } from "./dispatch";
-import { buildBook, type Book, type ElicitMember } from "./elicit";
+import { buildBook, clipTitle, type Book, type ElicitMember } from "./elicit";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import live from "../../../../artifact/live-data.json";
 import type { IntentResult, WorkroomDelta } from "../../workroom/types";
@@ -823,7 +823,7 @@ describe("a remove is routed, and it un-stages nothing it was not told to (E1)",
     if (read?.kind !== "ask") throw new Error("expected an ask");
     expect(read.options.map((o) => o.label)).toEqual([
       "All present and future accounts receivable",
-      "All present and future inventory at the Fort Wayne and Kokomo p…",
+      "All present and future inventory at the Fort Wayne and Kokomo…",
     ]);
     expect(read.options[1].say).toContain("COL-000763");
   });
@@ -1104,5 +1104,41 @@ describe("a remove addresses the manifest before it excludes a book pledge", () 
     const elsewhere = { ...stagedKokomo(), member: LOC, target: "$15.0MM Line of Credit" };
     const read = readRemove(line, [elsewhere], KOKOMO_BOOK, KOKOMO_SCOPE);
     expect(read?.kind).not.toBe("manifest");
+  });
+});
+
+/* ================ A SHORTENED TITLE ENDS ON A WORD (founder, 2026-09-02)
+
+   The confirm sentence read "First mortgage on the owner-occupied Fort Wayne
+   manufacturing c… on Construction". The mark was already one character; the
+   cut was still a bare character slice.                                       */
+
+describe("clipTitle", () => {
+  const LONG =
+    "First mortgage on the owner-occupied Fort Wayne manufacturing campus at 4820 Industrial Parkway";
+
+  it("cuts on a word and marks it with the single ellipsis character", () => {
+    const said = clipTitle(LONG, 64);
+    expect(said).toBe("First mortgage on the owner-occupied Fort Wayne manufacturing…");
+    expect(said).not.toContain("...");
+    expect(said.replace("…", "")).not.toMatch(/\s$/);
+    // The word it stopped on is a whole word.
+    expect(LONG.startsWith(said.replace("…", ""))).toBe(true);
+  });
+
+  it("leaves a title that fits exactly as it is", () => {
+    expect(clipTitle("Kokomo plant expansion", 64)).toBe("Kokomo plant expansion");
+  });
+
+  it("falls back to the hard cut where there is no boundary worth taking", () => {
+    // A first word longer than the cap has no boundary inside it, and a
+    // two-character stub would be worse than a cut word.
+    expect(clipTitle("Supercalifragilisticexpialidocious", 10)).toBe("Supercalif…");
+  });
+
+  it("never leaves punctuation hanging in front of the mark", () => {
+    expect(clipTitle("All present and future accounts receivable, excluding invoices", 44)).toBe(
+      "All present and future accounts receivable…",
+    );
   });
 });
