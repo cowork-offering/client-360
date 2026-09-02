@@ -129,3 +129,29 @@ numbers decide, not the aspiration.
 - Bedrock survives ONLY as the rung-2 fallback if the session door fails the latency gate. No
   further investment in it beyond carrying the same inlined doctrine.
 - No em dashes in UI copy. Commit trailers. No git add -A.
+
+## THE PARSER STAGES, THE MODEL SPEAKS (founder feedback 2026-09-02, first-class rule)
+
+Founder, after driving the plan-fixes build: "it does not read the room or the relationship, it
+does not know the relationship inside out, it feels VERY scripted, it does not think, it pops up
+with answers." He is right, and the ladder above is the reason: rungs 0 and 1 answer with NO
+model, and the deterministic layer composes the sentence as well as the card. Instant, and canned.
+
+The rule for this build: the deterministic layer keeps staging the CARD instantly (rung 0 and 1
+unchanged, nothing gets slower), but the SENTENCE around the card is written by the model, on the
+quick tier, streaming in a second or two after the card lands, with the FULL book, the plan and
+the doctrine in view. The model narrates what the room did and what it saw: "that test already runs
+at relationship level, tested quarterly, but it is not on the Equipment loan; I can associate it or
+create a new one." The card is the fact; the sentence is the judgment.
+
+Mechanics: the room stages as today, then hands the model a NARRATE envelope (the line, the card
+it staged or the refusal it made, the reads, the plan, the doctrine slices) and streams the reply
+under the card via onText, thinking pulse until first token. The reply is prose, not a shape: it
+can never stage, amend, or un-stage anything, so the validator has nothing to refuse and the write
+fence is untouched. A degrade (null, rate limit, timeout) leaves the deterministic sentence in
+place: nothing is worse than today. Reads work the same way: the card is local and instant, the
+model adds the one line of judgment the bundle cannot.
+
+Where the deterministic sentence is already exact and short (a confirm, a "one decision at a
+time"), the model is NOT consulted: narration is for anything a banker would expect a colleague to
+comment on, not for chrome. The over-call rate on narration is measured with the rest.
