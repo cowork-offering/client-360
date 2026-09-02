@@ -72,6 +72,40 @@ creation is the whole game, and that is exactly why a hollow covenant must never
    and the elicitation must not become a way around it.
 9. **Banker language throughout.** No schema words, no field names, no em dashes on the glass.
 
+## Situational awareness: the room reads the plan AND the book
+
+Founder, same conversation: "it should read the room, whats proposed etc, and know how to act on it
+in streamlined ways, and also knows what is on the relationship". This is what separates an agent
+from a form, and it governs every rule above.
+
+**Two pictures, held at once, before the room proposes or asks anything.**
+
+1. **THE PLAN - what is already staged in this session.** The manifest is not a list the room
+   writes and forgets; it is context it reads back.
+   - Never propose what is already on the plan. Say it is already there.
+   - A line that touches something already staged ACTS ON THAT ENTRY - it amends it - rather than
+     putting a second, parallel entry beside it. Two entries moving the same commitment is a
+     contradiction the banker has to reconcile by hand, which is exactly the work the room exists
+     to remove.
+   - The room can answer "what is on the plan" at any moment, and can drop or change an entry by
+     name.
+   - The next step is offered as a chip where the plan makes it obvious.
+2. **THE BOOK - what the relationship already carries.** The reads are already in the room and in
+   the envelope: covenants with their thresholds and frequencies, collateral with its pledges and
+   lien positions, borrowers and guarantors with their roles, exposure, pricing.
+   - A create that duplicates something the relationship already has is named as such, not staged
+     blindly. The collateral lane already does this well and it is the model for the rest: it says
+     the blanket lien is already on the Equipment facility and offers "add a second" rather than
+     silently pledging twice.
+   - Proposals are MIRRORED from the book first: this relationship already tests Debt Service
+     Coverage quarterly, so that is the first chip, before any doctrine band.
+   - Where the book makes an answer unnecessary, the room does not ask the question.
+
+**Streamlined means fewer gestures, not fewer facts.** Awareness is spent on removing questions
+the room can already answer, never on skipping a decision that is the banker's to make. The
+threshold is still his. The scope is still his. What awareness removes is being asked about things
+the room is already holding.
+
 ## Worked shape (the founder's own line)
 
 ```
@@ -112,3 +146,17 @@ creation is the whole game, and that is exactly why a hollow covenant must never
 - Every existing law holds: the empty lane, the entry choreography, brain-first dispatch, the
   qualifier filter, the magnitude advisory, the degrade path, channel-none parity.
 - No `git add -A`. Commit trailers. No em dashes in UI copy or commit text.
+
+## Chips come from the org's own picklists (founder, 2026-09-02: "picklist values, fee types, it shows them up")
+
+Today the chips come from a shell MIRROR of the org's deployed maps (nine fileable covenant types,
+five roles, the collateral types, the exception statuses): accurate for this org, a copy all the
+same, and Case.Type / Case.Origin were never read at all. Target: a read-only Apex tool
+`Customer360Catalog` (org-arms batch) returns the live picklist values for every field the room
+writes in ONE describe pass; the shell reads it once per view, caches it, and every create chip
+set is drawn from it: fee type, exception status, collateral type, involvement role, case type and
+origin, covenant type. Two rules on top:
+- Covenant chips are ADDITIONALLY filtered by the deployed fileable map (the nine); the rest are
+  named as present in the org but not fileable here, never offered as a chip that ends in a refusal.
+- Involvement chips show the five legal roles; Grantor and Contractor are named as refused, not hidden.
+Until the Catalog tool lands, the mirror stands and is marked as such in code.
