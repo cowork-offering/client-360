@@ -53,3 +53,18 @@ Confirmed FIXED on the published build: E1 (both removes refuse by name, nothing
 Also observed: the Customer 360 connector in the integrator's own session returns INVALID_JWT_FORMAT - re-authorise it in claude.ai connector settings before relying on live reads at the booth.
 
 Drive script that matches the screen: knowledge/MODIFICATION-DRIVE-SCRIPT-20260901.md.
+
+---
+
+## Founder product directives from the plan-fixes drive (2026-09-02, 00:xx). He holds off testing until these land.
+
+| # | His point | The correct nCino model | Where |
+|---|---|---|---|
+| P1 | "DSC of Borrower already runs at relationship level, nothing needs putting up twice" is WRONG: a relationship-level covenant has no loan junction, so it is NOT associated to the loan. The room must check the LOAN junction, and when the covenant is not on that loan offer: create a new one on the loan, ASSOCIATE the existing one to the loan, or a different one. | Dedupe is per loan-covenant junction, never "relationship-level covers the package". Associate-existing = create an LLC_BI__Loan_Covenant__c junction for an existing Covenant2 (a create, not a delete). | SHELL dedupe + chips now. ORG: verify the junction-only create for an existing covenant files through the deployed covenant path; if not, small arm. |
+| P2 | "We should have the ability to remove covenants from the open loan when the modification happens." Same for the AR pledge on line 9. | On a modification nothing is deleted on the booked loan: the new VERSION simply does not CARRY that covenant / that pledge onto the clone. That is a CARRY-EXCLUSION, exactly the mechanism involvements already use, and the delete fence stays intact. | ORG ARM: covenant carry-exclusion + pledge carry-exclusion on stage_loan_modification, C360WriteGuard AND transitionAllowlist.ts together, tests, deploy (joint). SHELL: "remove X from the loan" on a modification stages the exclusion, says the booked loan is untouched and the clone will not carry it. |
+| P3 | "Pledge something the deal already carries" as the fallback to creating a new asset makes no sense: the deal's collateral already carries onto the clone. Creating a collateral must be possible. | Wave 2 proved the org resolves advance rate and lendable in-transaction. Lift the block; the room creates the asset and pledges it. Where a rate is genuinely required by the tool, ask for it as a chip, never refuse. Pledge-existing stays only as its own action for a facility that does not hold the asset. | SHELL now. |
+| P4 | Line 9's refusal says "covenant DETACH" for a collateral pledge. "Is this a collateral or a covenant?" | A pledge is collateral. The refusal must speak the collateral fence, and once P2 lands it is not a refusal at all but a carry-exclusion. | SHELL copy now; superseded by P2. |
+
+Also standing: N3 (dollar qualifier on fee/exception/party lines) is fixed in the shell by resolving
+the qualifier to FOCUS and stripping it before the engine, so "on the 15M line of credit" works on
+every line. And N4 (graph read returns only the anchor's own rows) is Apex on the read tool.
