@@ -195,6 +195,54 @@ const RATING = /\b(risk[-\s]?rating|re-?rate|re-?rating|downgrade|upgrade|regrad
 /** "service request", "raise a ticket", "the client asked for a payoff quote". */
 const SERVICE = /\b(service\s+request|servicing\s+request|raise\s+a\s+(ticket|request)|payoff|statement\s+request|open\s+a\s+ticket)\b/i;
 
+/* ------------------------------------------- the client's ask, unrouted
+
+   THE DRIVE'S LINE 13 NAMES NO ROUTE. "james wants the june certificate" and
+   "send them the payoff letter" are the commonest thing a banker types into
+   this room, and only the second binds: `SERVICE` matches "payoff" and nothing
+   in the first is a route word at all. So the first fell to the five-way
+   sentence, which lists the annual review, the covenant review, a valuation and
+   the rating back at a banker who is plainly not running any of them.
+
+   THIS IS NOT A SIXTH ROUTE WORD, and it deliberately does not bind. Guessing
+   here picks a WRITE PATH, which is the rule this module opens with. It offers
+   the service request as ONE CHIP and keeps "Something else" beside it, so the
+   banker confirms in one click what the room can only infer.
+
+   BOTH HALVES ARE REQUIRED: somebody asking, and a thing a servicing team
+   files. "the client wants a covenant waiver" never reaches here, because the
+   route read runs first and `COVENANT` binds it. */
+
+/** Somebody outside the bank asking for something. */
+const REQUEST_VERB =
+  /\b(wants?|wanted|needs?|asked|asking|requests?|requested|requesting|chasing|would\s+like|send\s+(them|him|her|it|over|through)|get\s+(them|him|her)\b)\b/i;
+
+/** A thing a servicing team produces. Documents and account services only: no
+ *  word here names a review, so this set cannot shadow one of the five. */
+const SERVICE_NOUN =
+  /\b(certificate|statement|letter|copy|copies|document|paperwork|payoff|pay-?off|balance|invoice|receipt|confirmation|schedule|amortisation|amortization|form|wire\s+instructions?|lien\s+release|subordination|estoppel|reference)\b/i;
+
+/**
+ * TRUE where an unbound line reads as a CLIENT'S REQUEST for a document or a
+ * service, rather than as a review anybody named.
+ *
+ * Only ever consulted AFTER `readRelRouteIntent` has returned null, so a line
+ * that names one of the five is never seen here.
+ */
+export function readsAsClientRequest(text: string): boolean {
+  const line = text.trim();
+  if (!line) return false;
+  return REQUEST_VERB.test(line) && SERVICE_NOUN.test(line);
+}
+
+/** The one line the room answers such a request with. It states what it read,
+ *  and it does not claim to have routed anything. */
+export const CLIENT_REQUEST_OFFER =
+  "That reads as something the client asked us for, which is a service request on this relationship rather than one of the reviews.";
+
+/** The chip that takes the offer. */
+export const RAISE_A_SERVICE_REQUEST = "Raise a service request";
+
 /**
  * A LINE THAT NAMES FACILITY WORK. This room does not do it, and it says so
  * rather than routing a pledge into a valuation.
@@ -239,9 +287,32 @@ export function readRelRouteIntent(text: string): RelRoute | null {
  * that mentions "the collateral behind it" does not move the room unless the
  * banker says "valuation".
  */
-export function readRelRouteSwitch(text: string, current: RelRoute): RelRoute | null {
+export function readRelRouteSwitch(
+  text: string,
+  current: RelRoute,
+  opts: { openTextStep?: boolean } = {},
+): RelRoute | null {
   const route = readRelRouteIntent(text);
-  return route && route !== current ? route : null;
+  if (!route || route === current) return null;
+  /* A ROUTE WORD INSIDE AN ANSWER IS NOT A REQUEST TO CHANGE REVIEW.
+     "Copy of the June covenant compliance certificate" is the SUBJECT of a
+     service request and it re-routed the room to the covenant review, because
+     the switch read ran ahead of the open text step that had just asked for it.
+     Caught by the headless drive on 2026-09-02, line 13.
+
+     A banker switching review says so in a few words: "covenant review", "run
+     the covenant review instead". A banker answering an open question writes a
+     sentence. Over an OPEN TEXT STEP the short form still switches and the
+     sentence is the answer; everywhere else the read is unchanged. */
+  if (opts.openTextStep && !isRouteNaming(text)) return null;
+  return route;
+}
+
+/** Past this it is an ANSWER that mentions a review, not a request for one. */
+const ROUTE_NAMING_WORD_CAP = 5;
+
+function isRouteNaming(text: string): boolean {
+  return text.trim().replace(/[?.!,]+$/, "").split(/\s+/).filter(Boolean).length <= ROUTE_NAMING_WORD_CAP;
 }
 
 /** TRUE where the line asks for FACILITY work this room does not do. The room

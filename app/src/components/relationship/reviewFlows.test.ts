@@ -4,19 +4,25 @@ import type { StagedOutput } from "../../actions/stagedPlan";
 import type { ExecuteResult, StagePayloads, ToolOutcome } from "../../channel/writeTools";
 import {
   CREATE_GAPS,
+  NOT_A_CLASSIFICATION,
   NO_CONNECTOR,
-  OVERRIDE_NOT_FILEABLE,
+  OVERRIDE_NEEDS_A_REASON,
   REL_FLOWS,
   RelFlowError,
   SKIPPED,
   VALUATION_BATCH_CAP,
+  asksForClassification,
   asksForOverride,
   buildStagePayload,
+  GRADE_OFF_THE_SCALE,
+  onScale,
+  RISK_GRADE_SCALE,
   dossierRowsFor,
   executeRelPlan,
   nextStep,
   readCreateAsk,
   relContextFor,
+  relRouteBlock,
   routeAvailability,
   stageRelPlan,
   type Answers,
@@ -185,9 +191,11 @@ describe("the annual review collects what stage_annual_review takes", () => {
     expect(step.optional).toBeFalsy();
   });
 
-  it("settles after the type and two optional narratives", () => {
+  it("settles after the type, two optional narratives and the sections chip", () => {
+    // THREE QUESTIONS PLUS ONE CHIP SET, never eight sequential narratives.
+    // Skipping the sections leaves the route exactly as long as it always was.
     const answers = driveTo("annual", ctxFor(), { reviewType: "Annual" });
-    expect(Object.keys(answers)).toEqual(["reviewType", "relationshipSummary", "recommendation"]);
+    expect(Object.keys(answers)).toEqual(["reviewType", "relationshipSummary", "recommendation", "sections"]);
   });
 
   it("composes the account-anchored payload the tool accepts", () => {
@@ -313,6 +321,7 @@ describe("the collateral valuation is package-anchored bulk too", () => {
       valuationDate: "2026-08-31",
       type: "Net Orderly Liquidation Value",
       source: "Appraisal",
+      primary: "no",
     });
     const built = buildStagePayload("valuation", ctx, answers, "key-1");
     const p = (built as { payload: StagePayloads["collateral-valuation"] }).payload;
@@ -348,13 +357,15 @@ describe("the collateral valuation is package-anchored bulk too", () => {
 describe("the risk-rating review is account-level and carries no facility scope", () => {
   const ctx = ctxFor();
 
-  it("asks the four named factors, every one of them skippable", () => {
+  it("asks the four named factors, then the grade and the override, every one skippable", () => {
     const answers = driveTo("rating", ctx, {});
     expect(Object.keys(answers)).toEqual([
       "cashFlowCoverage",
       "revenueGrowth",
       "managementExperience",
       "creditScore",
+      "computedRiskGradeValue",
+      "overriddenRiskGradeValue",
       "overrideComment",
     ]);
   });
@@ -373,51 +384,145 @@ describe("the risk-rating review is account-level and carries no facility scope"
     expect(Object.keys(p).some((k) => /override/i.test(k))).toBe(false);
   });
 
-  it("refuses the grade override by name rather than guessing its wire key", () => {
+  it("reads an override ask, and refuses only the one thing the org refuses", () => {
     expect(asksForOverride("override the grade to 6", "rating")).toBe(true);
     expect(asksForOverride("override the grade to 6", "covenant")).toBe(false);
-    expect(OVERRIDE_NOT_FILEABLE).toContain("has never been observed");
+    // The old sentence told the banker the override could not be filed because
+    // its wire name had never been observed. It is deployed and tested.
+    expect(OVERRIDE_NEEDS_A_REASON).toContain("needs a written reason");
+    expect(OVERRIDE_NEEDS_A_REASON).not.toContain("never been observed");
+  });
+
+  /* =========================================================== THE SCALE
+
+     `StageRiskRatingReview.cls` states the review scale twice, in its header
+     and on `computedRiskGradeValue`'s describe, and enforces it NOWHERE: the
+     class validates `accountId`, `rationale` and Mandatory_comment and stops.
+     So before this, 47, 99 and 0 were all accepted by the room and all filed.
+     A grade is the whole point of the route, and one off the scale is a
+     governance record nobody can read.                                       */
+
+  it("declares the scale on both grade steps, and only on those", () => {
+    const bounded: string[] = [];
+    const a: Answers = {};
+    for (let guard = 0; guard < 32; guard++) {
+      const step = nextStep("rating", ctx, a);
+      if (!step) break;
+      if (step.bounds) bounded.push(step.key);
+      a[step.key] = step.key === "overrideComment" ? "Held." : 1;
+    }
+    expect(bounded).toEqual(["computedRiskGradeValue", "overriddenRiskGradeValue"]);
+  });
+
+  it("refuses a grade off the scale by name, with the scale stated", () => {
+    expect(GRADE_OFF_THE_SCALE).toContain(`${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}`);
+    const bounds = { min: RISK_GRADE_SCALE.min, max: RISK_GRADE_SCALE.max, whole: true, refusal: GRADE_OFF_THE_SCALE };
+    for (const off of [47, 99, 0, -3, 13, 6.5]) expect(onScale(off, bounds)).toBe(false);
+    for (const on of [1, 5, 12]) expect(onScale(on, bounds)).toBe(true);
+  });
+
+  it("refuses to compose a payload carrying a grade off the scale", () => {
+    for (const bad of [47, 99, 0]) {
+      const proposed = driveTo("rating", ctx, { computedRiskGradeValue: bad });
+      expect(buildStagePayload("rating", ctx, proposed, "key-1")).toEqual({ ok: false, blocked: GRADE_OFF_THE_SCALE });
+      const override = driveTo("rating", ctx, { overriddenRiskGradeValue: bad, overrideComment: "Downgraded on coverage." });
+      const built = buildStagePayload("rating", ctx, override, "key-1");
+      // Zero is not an override at all by the org's rule, so it must be refused
+      // as a GRADE, never accepted as a silent "no override".
+      expect(built).toEqual({ ok: false, blocked: GRADE_OFF_THE_SCALE });
+    }
+  });
+
+  it("files both grades where both are on the scale", () => {
+    const answers = driveTo("rating", ctx, {
+      computedRiskGradeValue: 4,
+      overriddenRiskGradeValue: 6,
+      overrideComment: "Downgraded on coverage.",
+    });
+    const p = (buildStagePayload("rating", ctx, answers, "key-1") as { payload: StagePayloads["risk-rating-review"] }).payload;
+    expect(p.computedRiskGradeValue).toBe(4);
+    expect(p.overriddenRiskGradeValue).toBe(6);
+    expect(p.comments).toBe("Downgraded on coverage.");
   });
 });
 
-describe("the service request is purely account-level", () => {
+describe("the service request is purely account-level, with its subject and body the right way round", () => {
   const ctx = ctxFor();
 
-  it("takes the org's word for type and origin rather than offering an invented set", () => {
-    // Case.Type and Case.Origin have never been read off this org, so there is
-    // no cached value set and the room must not compose one.
+  /* THREE DEFECTS LIVED ON FOUR LINES OF `serviceStep`, all of them against the
+     deployed StageServiceRequest.cls sitting in this repo. This block is the
+     three of them, pinned. */
+
+  it("asks WHAT THE CLIENT ASKED FOR first, because that is what becomes the Subject", () => {
+    // The Apex: requestType is "Banker-language description of what the client
+    // asked for. Becomes the case subject", and it maps
+    // 'Subject' => req.requestType. The room used to ask "What kind of request
+    // is this?" here, so a CATEGORY landed on the subject line.
     const step = nextStep("service", ctx, {})!;
-    expect(step.key).toBe("type");
+    expect(step.key).toBe("requestType");
     expect(step.kind).toBe("text");
-    expect(step.options).toBeUndefined();
+    expect(step.target).toEqual({ object: "Case", field: "Subject" });
+    expect(step.ask).toContain("What did the client ask for");
   });
 
-  it("composes the one free-text field the wire actually carries", () => {
+  it("then asks for the request IN FULL, because that is what becomes the Description", () => {
+    // summary is "The request in full, as the servicing team needs to read it"
+    // and maps 'Description' => describeWithSource(req). The room used to ask
+    // "State the subject" here, so THE SUBJECT LANDED IN THE BODY.
+    const step = nextStep("service", ctx, { requestType: "Copy of the June covenant certificate" })!;
+    expect(step.key).toBe("summary");
+    expect(step.target).toEqual({ object: "Case", field: "Description" });
+    expect(step.ask).toContain("in full");
+  });
+
+  it("asks TWO questions, not three: there is no origin step and no origin key", () => {
+    // StageServiceRequest declares no `origin` invocable variable at all. It
+    // reads Case.Type and Case.Origin off this org's own picklists through
+    // C360Picklist.preferredOrFallback. The banker answered "How did it reach
+    // us?" and the answer was dropped on the floor.
     const answers = driveTo("service", ctx, {
-      type: "Service Request",
-      origin: "Agent",
-      subject: "Payoff quote for the equipment loan",
-      detail: "Client asked by email on the 29th.",
+      requestType: "Copy of the June covenant certificate",
+      summary: "James Hartwell asked on 28 Aug for the June certificate for his own file.",
+      detail: "No credit action requested.",
     });
+    expect(Object.keys(answers)).toEqual(["requestType", "summary", "detail"]);
+    expect(Object.keys(answers)).not.toContain("origin");
+
     const built = buildStagePayload("service", ctx, answers, "key-1");
     const p = (built as { payload: StagePayloads["create-service-request"] }).payload;
     expect(p.accountId).toBe("001X");
-    expect(p.requestType).toBe("Service Request");
-    expect(p.origin).toBe("Agent");
-    expect(p.summary).toBe("Payoff quote for the equipment loan");
+    expect(p.requestType).toBe("Copy of the June covenant certificate");
+    expect(p.summary).toContain("James Hartwell asked on 28 Aug");
+    expect(p).not.toHaveProperty("origin");
     // The detail rides the AUDIT RATIONALE, which is on the wire. There is no
     // `description` key on this request class and the room does not invent one.
     expect(p).not.toHaveProperty("description");
-    expect(p.rationale).toContain("Client asked by email on the 29th.");
+    expect(p.rationale).toContain("No credit action requested.");
   });
 
-  it("offers the client's own words as a chip where the read staged a request", () => {
+  it("offers the client's own words as the SUBJECT chip, never written silently", () => {
     const withRequest = ctxFor({
       requests: [{ summary: "Please send a payoff quote", reference: { kind: "email", id: "AAM1" } }],
     } as never);
-    const step = nextStep("service", withRequest, { type: "x", origin: "y" })!;
-    expect(step.key).toBe("subject");
+    const step = nextStep("service", withRequest, {})!;
+    expect(step.key).toBe("requestType");
     expect(step.options?.[0].value).toBe("Please send a payoff quote");
+    expect(step.options?.[0].detail).toBe("from the client's request");
+  });
+
+  it("offers NO Case.Type and NO Case.Origin chips, in either state", () => {
+    /* The catalog carries both now, and the wire-arms follow-up says to pass
+       them into this room. Doing so would repeat the origin defect exactly: a
+       chip set from a field that is on no wire is a question that cannot be
+       filed. They are named in `produces` as facts the ORG sets. */
+    const first = nextStep("service", ctx, {})!;
+    const second = nextStep("service", ctx, { requestType: "x" })!;
+    for (const step of [first, second]) {
+      expect(step.options?.some((o) => o.value === "Question" || o.value === "Complaint")).toBeFalsy();
+      expect(step.options?.some((o) => o.value === "Email" || o.value === "Phone" || o.value === "Web")).toBeFalsy();
+    }
+    expect(REL_FLOWS.service.produces).toContain("read off this org's own picklists by the tool");
+    expect(REL_FLOWS.service.produces).toContain("Nobody is assigned, no turnaround is promised");
   });
 });
 
@@ -609,5 +714,504 @@ describe("the two relationship-level creates are PROPOSAL-ONLY", () => {
     for (const key of ["covenantAddsJson", "pledgeAddsJson", "newCollateral", "accountCollateral"]) {
       expect(sent).not.toContain(key);
     }
+  });
+});
+
+/* =============================================================================
+   THE COVENANT ROUTE REFUSES FIRST, AND OFFERS THE OPT-IN THE TOOL TAKES.
+
+   Two failures this holds against. The first is the worst moment the addendum
+   names: a relationship with no compliance rows was asked which covenants, then
+   a verdict each, then a figure each, then a narrative, and only then did the
+   org refuse all six. The second is quieter: `allowNonPending` has been on the
+   tool since WS0.5 and the room never offered it, so a row that was open and
+   not Pending could only ever be REFUSED.
+   ============================================================================= */
+
+const ROWLESS = {
+  covenants: {
+    covenants: [
+      { covenantId: "cov1", covenantType: "Debt Service Coverage of Borrower", thresholdValue: 1.25, actualValue: 1.38 },
+      { covenantId: "cov2", covenantType: "Minimum Liquidity", thresholdValue: 5_000_000, actualValue: 6_800_000 },
+    ],
+  },
+};
+
+describe("the covenant review says what the book cannot do, before it asks", () => {
+  it("blocks the whole route where NOT ONE covenant carries a compliance row", () => {
+    const ctx = ctxFor(ROWLESS as never);
+    const blocked = relRouteBlock("covenant", ctx);
+    expect(blocked).toContain("no open test period on any of the 2 covenants");
+    expect(blocked).toContain("recording an assessment needs a compliance row");
+    // AND IT ASKS NOTHING. Not one step is reached.
+    expect(nextStep("covenant", ctx, {})).toBeNull();
+  });
+
+  it("blocks on the package anchor before it reaches the compliance problem", () => {
+    // Hartwell's shipped snapshot carries no productPackageId, so this is the
+    // refusal the founder actually sees on the demo fixture today.
+    const ctx = ctxFor({ ...ROWLESS, snapshot: { accountId: "001X", name: "Testco" } } as never);
+    expect(relRouteBlock("covenant", ctx)).toContain("anchored on the product package");
+    expect(relRouteBlock("valuation", ctx)).toContain("anchored on the product package");
+  });
+
+  it("does not block a relationship whose rows are there", () => {
+    expect(relRouteBlock("covenant", ctxFor())).toBeNull();
+    expect(relRouteBlock("annual", ctxFor())).toBeNull();
+    expect(relRouteBlock("rating", ctxFor())).toBeNull();
+    expect(relRouteBlock("service", ctxFor())).toBeNull();
+  });
+
+  it("shows a covenant with no row DISABLED, carrying its reason, never hidden", () => {
+    const mixed = ctxFor({
+      covenants: {
+        covenants: [
+          { covenantId: "cov1", covenantType: "Debt Service Coverage", latestComplianceStatus: "Pending" },
+          { covenantId: "cov2", covenantType: "Minimum Liquidity" },
+        ],
+      },
+    } as never);
+    const step = nextStep("covenant", mixed, {})!;
+    expect(step.options?.map((o) => o.value)).toEqual(["cov1", "cov2"]);
+    expect(step.options?.[0].disabled).toBeFalsy();
+    expect(step.options?.[1].disabled).toBe(true);
+    expect(step.options?.[1].reason).toContain("no compliance row");
+  });
+
+  it("carries the read's own rail on every covenant option", () => {
+    const step = nextStep("covenant", ctxFor({
+      covenants: {
+        covenants: [
+          {
+            covenantId: "cov1",
+            covenantType: "Debt Service Coverage",
+            thresholdValue: 1.25,
+            actualValue: 1.38,
+            latestComplianceStatus: "Pending",
+          },
+        ],
+      },
+    } as never), {})!;
+    expect(step.options?.[0].detail).toContain("1.38× vs ≥ 1.25×");
+    expect(step.options?.[0].detail).toContain("row at Pending");
+  });
+});
+
+describe("the covenant review proposes the figure and offers the opt-in", () => {
+  const withRows = (statuses: string[]) =>
+    ctxFor({
+      covenants: {
+        covenants: statuses.map((status, i) => ({
+          covenantId: `cov${i + 1}`,
+          covenantType: i === 0 ? "Debt Service Coverage" : "Minimum Liquidity",
+          thresholdValue: 1.25,
+          actualValue: 1.38,
+          latestComplianceId: `a2X${i}`,
+          latestComplianceStatus: status,
+        })),
+      },
+    } as never);
+
+  it("PROPOSES the figure the read carries rather than asking cold", () => {
+    const ctx = withRows(["Pending"]);
+    const step = nextStep("covenant", ctx, { covenants: ["cov1"], covenantStatuses: { cov1: "Compliant" } })!;
+    expect(step.key).toBe("covenantObservedValues.cov1");
+    expect(step.ask).toContain("The read carries 1.38× vs ≥ 1.25×");
+    // AN OPTION, NEVER A DEFAULT. The banker still owns the answer.
+    expect(step.options?.[0].value).toBe("1.38");
+    expect(step.optional).toBe(true);
+  });
+
+  it("names the field the tool ACTUALLY writes on both display peeks", () => {
+    const ctx = withRows(["Pending"]);
+    const figure = nextStep("covenant", ctx, { covenants: ["cov1"], covenantStatuses: { cov1: "Compliant" } })!;
+    // Was LLC_BI__Observed_Value__c, which the tool does not write.
+    expect(figure.target?.field).toBe("LLC_BI__Historic_Financial_Indicator__c");
+    const basis = nextStep("covenant", ctx, {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+    })!;
+    // Was LLC_BI__Narrative__c. The tool writes Agentic_AI_Response__c.
+    expect(basis.target?.field).toBe("Agentic_AI_Response__c");
+  });
+
+  it("offers allowNonPending ONLY where a chosen row is not Pending, and says the schedule holds", () => {
+    const ctx = withRows(["In Progress"]);
+    const step = nextStep("covenant", ctx, {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+    })!;
+    expect(step.key).toBe("allowNonPending");
+    expect(step.ask).toContain("at In Progress, not Pending");
+    expect(step.options?.[0].detail).toContain("the schedule does not advance");
+  });
+
+  it("never offers it where every chosen row is Pending", () => {
+    const ctx = withRows(["Pending", "In Progress"]);
+    const answers: Answers = {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+    };
+    // cov2 is the non-Pending one and it was NOT chosen.
+    expect(nextStep("covenant", ctx, answers)!.key).toBe("assessmentNarrative");
+  });
+
+  it("travels the flag only where the banker said yes out loud", () => {
+    const ctx = withRows(["In Progress"]);
+    const base: Answers = {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+      assessmentNarrative: SKIPPED,
+    };
+    const yes = buildStagePayload("covenant", ctx, { ...base, allowNonPending: "yes" }, "key-1");
+    expect((yes as { payload: StagePayloads["covenant-review"] }).payload.allowNonPending).toBe(true);
+    // AN ABSENT KEY IS THE TOOL'S OWN DEFAULT. Sending `false` would claim the
+    // question had been asked when it had not.
+    const no = buildStagePayload("covenant", ctx, { ...base, allowNonPending: "no" }, "key-1");
+    expect((no as { payload: StagePayloads["covenant-review"] }).payload).not.toHaveProperty("allowNonPending");
+    const never = buildStagePayload("covenant", ctx, base, "key-1");
+    expect((never as { payload: StagePayloads["covenant-review"] }).payload).not.toHaveProperty("allowNonPending");
+  });
+});
+
+/* =============================================================================
+   THE VALUATION STOPS HARDCODING TWO INPUTS THE TOOL ALWAYS TOOK.
+
+   `primary: false` and `description: null` were written into every payload the
+   room composed. So a banker filing the valuation that supersedes the one on
+   file could not say so, and the appraiser who struck the figure went
+   unrecorded on a record whose whole purpose is provenance.
+   ============================================================================= */
+
+describe("the valuation collects its primary flag and its note", () => {
+  const ctx = ctxFor();
+  const upTo = (extra: Record<string, unknown>): Answers => ({
+    records: ["a35A"],
+    recordValues: { a35A: 11_400_000 },
+    valuationDate: "2026-08-31",
+    type: "Net Orderly Liquidation Value",
+    source: "Receivables Aging",
+    ...extra,
+  });
+
+  it("asks whether it becomes the primary, and says what each answer means", () => {
+    const step = nextStep("valuation", ctx, upTo({}))!;
+    expect(step.key).toBe("primary");
+    expect(step.kind).toBe("chips");
+    expect(step.optional).toBeFalsy();
+    expect(step.options?.[0].detail).toContain("supersedes");
+    expect(step.options?.[1].detail).toContain("joins the ladder");
+    expect(step.target?.field).toBe("LLC_BI__Primary__c");
+  });
+
+  it("then asks who struck the figure, and lets it be skipped", () => {
+    const step = nextStep("valuation", ctx, upTo({ primary: "yes" }))!;
+    expect(step.key).toBe("description");
+    expect(step.optional).toBe(true);
+    expect(step.target?.field).toBe("LLC_BI__Valuation_Description__c");
+  });
+
+  it("travels both when answered", () => {
+    const built = buildStagePayload(
+      "valuation",
+      ctx,
+      upTo({ primary: "yes", description: "Q3 field exam, Hilco" }),
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["collateral-valuation"] }).payload;
+    expect(p.items[0].primary).toBe(true);
+    expect(p.items[0].description).toBe("Q3 field exam, Hilco");
+  });
+
+  it("travels false and null when skipped, and never the skip sentinel", () => {
+    const built = buildStagePayload("valuation", ctx, upTo({ primary: "no", description: SKIPPED }), "key-1");
+    const p = (built as { payload: StagePayloads["collateral-valuation"] }).payload;
+    expect(p.items[0].primary).toBe(false);
+    expect(p.items[0].description).toBeNull();
+    expect(JSON.stringify(p)).not.toContain(SKIPPED);
+  });
+
+  it("names the PLEDGE lendable value on every asset option, never the asset formula", () => {
+    const withOverride = ctxFor({
+      exposure: {
+        facilities: [
+          {
+            loanId: "0Cb1",
+            status: "Active",
+            productPackageId: PACKAGE,
+            collateral: [
+              {
+                collateralId: "a35A",
+                collateralDescription: "Inventory, Fort Wayne",
+                collateralType: "UCC-Inventory",
+                collateralValue: 8_000_000,
+                currentLendableValue: 4_000_000,
+                advanceRateSource: "Pledge override",
+              },
+            ],
+          },
+        ],
+      },
+    } as never);
+    const step = nextStep("valuation", withOverride, {})!;
+    // $6.4MM would be the asset formula at the 80 percent type rate. The bank
+    // lends against the pledge, and the pledge carries a 50 percent override.
+    expect(step.options?.[0].detail).toContain("$4M lendable");
+    expect(step.options?.[0].detail).toContain("Pledge override");
+    expect(step.options?.[0].detail).not.toContain("$6.4");
+  });
+
+  it("says the org offers no BOV and no Field Exam, rather than picking one", () => {
+    const step = nextStep("valuation", ctx, {
+      records: ["a35A"],
+      recordValues: { a35A: 1 },
+      valuationDate: "2026-08-31",
+      type: "Net Orderly Liquidation Value",
+    })!;
+    expect(step.key).toBe("source");
+    expect(step.placeholder).toContain("No BOV and no Field Exam");
+  });
+});
+
+/* =============================================================================
+   THE ANNUAL REVIEW CARRIES THE SECTIONS A REAL ONE CARRIES.
+
+   Six narrative wires were declared on StageAnnualReview.Request and HARD
+   NULLED in buildStagePayload, so a review this room filed carried a position
+   and a recommendation and nothing else. What this holds is that all six now
+   reach the wire, that they reach it through ONE chip set rather than six
+   sequential questions, and that a section nobody picked stays null.
+   ============================================================================= */
+
+describe("the annual review's further sections", () => {
+  const ctx = ctxFor();
+  const base = { reviewType: "Annual", relationshipSummary: "The position.", recommendation: "Affirm at 4." };
+
+  it("offers the six sections as one chip set, defaulting to none", () => {
+    const step = nextStep("annual", ctx, base)!;
+    expect(step.key).toBe("sections");
+    expect(step.kind).toBe("multi");
+    expect(step.optional).toBe(true);
+    expect(step.options?.map((o) => o.value)).toEqual([
+      "strengths",
+      "weaknesses",
+      "collateral",
+      "guarantors",
+      "rating",
+      "financial",
+    ]);
+    // Each chip names the field it writes, so the peek is the truth.
+    expect(step.options?.[2].detail).toBe("Writes cm_Collateral_Analysis_Narrative__c.");
+  });
+
+  it("opens ONE text step per section picked, and no more", () => {
+    const one = nextStep("annual", ctx, { ...base, sections: ["collateral"] })!;
+    expect(one.key).toBe("sectionNarratives.collateral");
+    expect(one.target?.field).toBe("cm_Collateral_Analysis_Narrative__c");
+    const answers = driveTo("annual", ctx, { ...base, sections: ["collateral", "rating"] });
+    expect(Object.keys(answers)).toEqual([
+      "reviewType",
+      "relationshipSummary",
+      "recommendation",
+      "sections",
+      "sectionNarratives",
+    ]);
+  });
+
+  it("travels each picked section on its own wire, and nulls the rest", () => {
+    const built = buildStagePayload(
+      "annual",
+      ctx,
+      {
+        ...base,
+        sections: ["collateral", "rating"],
+        sectionNarratives: {
+          collateral: "A/R and inventory carry the base; the equipment number is an OLV reading.",
+          rating: "Affirm at 4 with the construction facility flagged.",
+        },
+      },
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["annual-review"] }).payload;
+    expect(p.collateralAnalysisNarrative).toContain("OLV reading");
+    expect(p.riskRatingComments).toContain("Affirm at 4");
+    expect(p.strengthsNarrative).toBeNull();
+    expect(p.weaknessNarrative).toBeNull();
+    expect(p.guarantorNarrative).toBeNull();
+    expect(p.financialAnalystNarrative).toBeNull();
+  });
+
+  it("nulls a section that was picked and then skipped, and never sends the sentinel", () => {
+    const built = buildStagePayload(
+      "annual",
+      ctx,
+      { ...base, sections: ["guarantors"], sectionNarratives: { guarantors: SKIPPED } },
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["annual-review"] }).payload;
+    expect(p.guarantorNarrative).toBeNull();
+    expect(JSON.stringify(p)).not.toContain(SKIPPED);
+  });
+
+  it("names the cm_ fields this org actually has on both narrative peeks", () => {
+    // LLC_BI__Relationship_Summary__c and LLC_BI__Recommendation__c do not
+    // exist in this org. The payload always sent the right names; the peek on
+    // the founder's screen did not.
+    const summary = nextStep("annual", ctx, { reviewType: "Annual" })!;
+    expect(summary.target?.field).toBe("cm_Relationship_Summary__c");
+    const recommendation = nextStep("annual", ctx, { reviewType: "Annual", relationshipSummary: "x" })!;
+    expect(recommendation.target?.field).toBe("cm_Recommendation_Narrative__c");
+  });
+});
+
+/* =============================================================================
+   THE RATING ROUTE COLLECTS THE OVERRIDE THE TOOL HAS ALWAYS TAKEN.
+
+   OVERRIDE_NOT_FILEABLE told the banker the override could not be filed because
+   the input's wire name had never been observed. It is deployed
+   (StageRiskRatingReview.Request.overriddenRiskGradeValue), it carries its own
+   description, and StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted
+   covers it. The room was refusing a capability the tool already had.
+
+   WHAT IS REAL is the org's Mandatory_comment rule: any override above zero
+   requires a written reason and there is no bypass.
+   ============================================================================= */
+
+describe("the grade override, and the one thing the org really refuses", () => {
+  const ctx = ctxFor();
+  const factors = {
+    cashFlowCoverage: 1.38,
+    revenueGrowth: 4.2,
+    managementExperience: 24,
+    creditScore: 740,
+  };
+
+  it("states the grade on file and offers the read's own computed figure", () => {
+    const step = nextStep("rating", ctx, factors)!;
+    expect(step.key).toBe("computedRiskGradeValue");
+    expect(step.ask).toContain("The grade on file is 4");
+    expect(step.ask).toContain("the rating review's own scale");
+    expect(step.options?.[0].value).toBe("5");
+    expect(step.options?.[0].detail).toBe("the grade the read computes");
+  });
+
+  it("asks for the override, and makes the reason MANDATORY once there is one", () => {
+    const asked = nextStep("rating", ctx, { ...factors, computedRiskGradeValue: 4 })!;
+    expect(asked.key).toBe("overriddenRiskGradeValue");
+    expect(asked.optional).toBe(true);
+
+    const withOverride = nextStep("rating", ctx, {
+      ...factors,
+      computedRiskGradeValue: 4,
+      overriddenRiskGradeValue: 5,
+    })!;
+    expect(withOverride.key).toBe("overrideComment");
+    expect(withOverride.optional).toBe(false);
+    expect(withOverride.ask).toContain("has no bypass");
+
+    const without = nextStep("rating", ctx, {
+      ...factors,
+      computedRiskGradeValue: 4,
+      overriddenRiskGradeValue: SKIPPED,
+    })!;
+    expect(without.key).toBe("overrideComment");
+    expect(without.optional).toBe(true);
+  });
+
+  it("files the override with its reason, on the deployed wire name", () => {
+    const built = buildStagePayload(
+      "rating",
+      ctx,
+      {
+        ...factors,
+        computedRiskGradeValue: 4,
+        overriddenRiskGradeValue: 5,
+        overrideComment: "Construction facility above the 70 pct policy line.",
+      },
+      "key-1",
+    );
+    expect(built.ok).toBe(true);
+    const p = (built as { payload: StagePayloads["risk-rating-review"] }).payload;
+    expect(p.overriddenRiskGradeValue).toBe(5);
+    expect(p.computedRiskGradeValue).toBe(4);
+    // THE FIELD Mandatory_comment ACTUALLY TESTS, not LLC_BI__Override_Comment__c.
+    expect(p.comments).toContain("70 pct policy line");
+  });
+
+  it("BLOCKS an override with no reason before the org has to refuse it", () => {
+    const built = buildStagePayload(
+      "rating",
+      ctx,
+      { ...factors, computedRiskGradeValue: 4, overriddenRiskGradeValue: 5, overrideComment: SKIPPED },
+      "key-1",
+    );
+    expect(built.ok).toBe(false);
+    expect((built as { blocked: string }).blocked).toBe(OVERRIDE_NEEDS_A_REASON);
+  });
+
+  it("sends no override key at all where the banker skipped it", () => {
+    const built = buildStagePayload(
+      "rating",
+      ctx,
+      { ...factors, computedRiskGradeValue: 4, overriddenRiskGradeValue: SKIPPED, overrideComment: SKIPPED },
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["risk-rating-review"] }).payload;
+    expect(p.overriddenRiskGradeValue).toBeNull();
+    expect(JSON.stringify(p)).not.toContain(SKIPPED);
+  });
+
+  it("files the grade the BANKER proposed, and falls back to the read only on a skip", () => {
+    const owned = buildStagePayload("rating", ctx, { ...factors, computedRiskGradeValue: 6 }, "key-1");
+    expect((owned as { payload: StagePayloads["risk-rating-review"] }).payload.computedRiskGradeValue).toBe(6);
+    // computedRiskRating on the read is "5". A skipped answer is not a refusal
+    // to file a grade; it is the banker taking the read's own figure.
+    const skipped = buildStagePayload("rating", ctx, { ...factors, computedRiskGradeValue: SKIPPED }, "key-1");
+    expect((skipped as { payload: StagePayloads["risk-rating-review"] }).payload.computedRiskGradeValue).toBe(5);
+  });
+
+  it("carries NO loanId, and that is the deliberate call", () => {
+    const built = buildStagePayload("rating", ctx, factors, "key-1");
+    const p = (built as { payload: StagePayloads["risk-rating-review"] }).payload;
+    // The only facility-LGD hook on any of the five wires. A facility rating is
+    // the facility room's subject; this route's whole frame is the borrower.
+    expect(p).not.toHaveProperty("loanId");
+    expect(REL_FLOWS.rating.produces).toContain("facility-level rating stays in the facility room");
+  });
+
+  it("reads a regulatory classification as a classification, never as a grade", () => {
+    expect(asksForClassification("they are special mention now", "rating")).toBe(true);
+    expect(asksForClassification("substandard", "rating")).toBe(true);
+    expect(asksForClassification("downgrade them to a 5", "rating")).toBe(false);
+    expect(asksForClassification("they are special mention now", "covenant")).toBe(false);
+    expect(NOT_A_CLASSIFICATION).toContain("this org's scale is numeric");
+  });
+});
+
+describe("a blocked route asks nothing, on EVERY route it blocks", () => {
+  /* THE HEADLESS DRIVE CAUGHT THIS on 2026-09-02, line 5. The covenant route's
+     honesty gate lived inside covenantStep, so the VALUATION route rendered
+     NO_PACKAGE_ANCHOR under its brief and then asked "which collateral are we
+     valuing?" underneath it: the room refusing and interrogating in the same
+     breath. `relRouteBlock` is the one judgement now. */
+  const noAnchor = ctxFor({ snapshot: { accountId: "001X", name: "Testco" } } as never);
+
+  it("asks nothing on the valuation with no package anchor", () => {
+    expect(relRouteBlock("valuation", noAnchor)).not.toBeNull();
+    expect(nextStep("valuation", noAnchor, {})).toBeNull();
+  });
+
+  it("asks nothing on the covenant review with no package anchor", () => {
+    expect(nextStep("covenant", noAnchor, {})).toBeNull();
+  });
+
+  it("still asks on the three routes the anchor does not gate", () => {
+    expect(nextStep("annual", noAnchor, {})).not.toBeNull();
+    expect(nextStep("rating", noAnchor, {})).not.toBeNull();
+    expect(nextStep("service", noAnchor, {})).not.toBeNull();
   });
 });

@@ -267,9 +267,62 @@ describe("what the room just did, read from the item it appended", () => {
   });
 
   it("does not narrate the room's chrome items", () => {
-    for (const kind of ["banker", "opening", "brief", "packages", "lookup", "notice", "dossier"]) {
+    for (const kind of ["banker", "opening", "brief", "packages", "lookup"]) {
       expect(subjectFor({ kind, text: "whatever" })).toBeNull();
     }
+  });
+
+  /* THE FACILITY ROOM'S OWN SHAPES, VERBATIM.
+
+     `notice` and `dossier` are shared with the relationship room by NAME AND BY
+     SHAPE, so the loop above -- which fed `{kind, text}` -- proved nothing
+     about either: the arms it was guarding read `title`/`body` and `dossier`,
+     which a bare `text` item does not carry. The three items below are what
+     `Workroom.tsx` actually appends (:278, :279, :3249, :3332), and the
+     facility room's demo ends on the dossier. Every one of them must read as
+     no remark at all. */
+  const facilityNotice = {
+    kind: "notice",
+    title: "This view is not connected to the bank's systems.",
+    body: "The connector did not answer.",
+  };
+  const facilityDossier = {
+    kind: "dossier",
+    dossier: {
+      title: "Filed against Hartwell Grocery Holdings",
+      footer: "Single-use decision token redeemed.",
+      rows: [{ label: "Commitment", value: "$20.0MM" }],
+    },
+  };
+  const facilityReply = { kind: "reply", reply: { subject: "Your facility", body: "As discussed." } };
+
+  it("does not narrate the FACILITY room's notice, dossier or reply", () => {
+    expect(subjectFor(facilityNotice)).toBeNull();
+    expect(subjectFor(facilityDossier)).toBeNull();
+    expect(subjectFor(facilityReply)).toBeNull();
+  });
+
+  it("narrates the SAME shapes once the relationship room owns them", () => {
+    const notice = subjectFor({ ...facilityNotice, room: "relationship" });
+    expect(notice).toMatchObject({ act: "refused" });
+    expect(notice?.sentence).toBe(
+      "This view is not connected to the bank's systems. The connector did not answer.",
+    );
+    const dossier = subjectFor({ ...facilityDossier, room: "relationship" });
+    expect(dossier).toMatchObject({ act: "filed", sentence: "Single-use decision token redeemed." });
+    expect(dossier?.card).toEqual({
+      title: "Filed against Hartwell Grocery Holdings",
+      rows: [{ label: "Commitment", value: "$20.0MM" }],
+    });
+  });
+
+  it("narrates a create the relationship room cannot file", () => {
+    const gap = subjectFor({
+      kind: "gap",
+      room: "relationship",
+      gap: { what: "Add a covenant", line: "I cannot file this one.", orgGap: "no deployed tool takes it" },
+    });
+    expect(gap).toMatchObject({ act: "refused", sentence: "I cannot file this one." });
   });
 });
 

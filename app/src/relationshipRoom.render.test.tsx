@@ -13,7 +13,7 @@ import { relContextFor, type RelContext, type RelFlowDeps } from "./components/r
 import type { RelOpening, RelRoute } from "./components/relationship/relRoute";
 import type { BorrowerBundle, C360Data } from "./data/contract";
 import type { StagedOutput } from "./actions/stagedPlan";
-import type { ExecuteResult, ToolOutcome } from "./channel/writeTools";
+import type { ExecuteResult, ToolOutcome, WriteActionId } from "./channel/writeTools";
 
 /* =============================================================================
    THE RELATIONSHIP ROOM, AS A RITUAL.
@@ -43,7 +43,7 @@ afterEach(() => {
 
 const PACKAGE = "a5Fbb000000IHFJEA4";
 
-function ctxFor(): RelContext {
+function ctxFor(overrides: Partial<BorrowerBundle> = {}): RelContext {
   const bundle = {
     snapshot: {
       accountId: "001X",
@@ -75,6 +75,7 @@ function ctxFor(): RelContext {
         },
       ],
     },
+    ...overrides,
   } as unknown as BorrowerBundle;
   const data = {
     meta: { generatedAt: "2026-08-31", userId: "005bb000001AAAAAAA" },
@@ -126,6 +127,9 @@ function open(args: {
   say?: string | null;
   covenantId?: string | null;
   deps?: RelFlowDeps;
+  /** A read this case needs a different shape of. */
+  bundle?: Partial<BorrowerBundle>;
+  onFiled?: (filed: { actionId: WriteActionId; result: ExecuteResult }) => void;
 } = {}): Opened {
   const bound: Opened["bound"] = [];
   const restarted: Opened["restarted"] = [];
@@ -143,10 +147,11 @@ function open(args: {
   act(() => {
     root!.render(
       <RelationshipRoom
-        ctx={ctxFor()}
+        ctx={ctxFor(args.bundle)}
         route={args.route ?? null}
         router={router}
         deps={args.deps ?? depsFor()}
+        onFiled={args.onFiled}
         onClose={() => {}}
       />,
     );
@@ -271,6 +276,51 @@ describe("the neutral five-way", () => {
     await type(room, "how is this client doing");
     expect(bound).toEqual([]);
     expect(document.body.textContent).toContain("Pick one above, or name which of the five this is.");
+  });
+
+  /* THE DRIVE'S LINE 13. "james wants the june certificate" names no review at
+     all, so before this it fell to the five-way, which reads the annual review,
+     the covenant review, a valuation and the rating back at a banker plainly
+     running none of them. */
+  /* THE DRIVE'S LINE 15. The handoff lived only past `if (!route) return`, so a
+     pledge typed at the five-way was answered with a list of four reviews the
+     banker had just asked for none of. */
+  it("hands facility work back in ONE line, before a route is bound", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "pledge the equipment to the 8M loan");
+    expect(bound).toEqual([]);
+    expect(document.body.textContent).toContain("That is facility work.");
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+  });
+
+  it("offers the service request in ONE line when the client asked for something", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "james wants the june certificate");
+    // It does NOT bind. Guessing here picks a write path.
+    expect(bound).toEqual([]);
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).toContain("which is a service request on this relationship");
+    // One offer, and the way out of it. Never the five.
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(2);
+    expect(byText(/Raise a service request/)).toBeTruthy();
+    expect(byText(/Something else/)).toBeTruthy();
+  });
+
+  it("binds the service route WITH the banker's own line, so it becomes the subject", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "james wants the june certificate");
+    click(byText(/Raise a service request/));
+    expect(bound).toEqual([
+      { route: "service", opts: { covenantId: null, say: "james wants the june certificate" } },
+    ]);
+  });
+
+  it("still offers all five on 'Something else', binding nothing", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "james wants the june certificate");
+    click(byText(/Something else/));
+    expect(bound).toEqual([]);
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(5);
   });
 
   it("keeps an unavailable route VISIBLE and disabled, with the registry's own reason", () => {
@@ -437,6 +487,11 @@ describe("the plan, the token and the dossier", () => {
     await settle();
     click(byText(/Not assessed/));
     await settle();
+    // AND THE SECTIONS CHIP SET, taken as none. Six further narratives reach
+    // the banker through one optional question rather than six sequential
+    // ones, so the shortest annual review is still three answers and a skip.
+    click(byText(/Not assessed/));
+    await settle();
     return opened;
   }
 
@@ -444,7 +499,7 @@ describe("the plan, the token and the dossier", () => {
     const { room } = await driveAnnual();
     const chip = room.querySelector(".wk-propose")!;
     expect(chip.textContent).toContain("Review & file");
-    expect(chip.textContent).toContain("3 answers collected");
+    expect(chip.textContent).toContain("4 answers collected");
   });
 
   it("stages on the chip and shows the ORG's real token, never a decoration", async () => {
@@ -553,11 +608,52 @@ describe("what this room does not do", () => {
     expect(room.querySelector(".rl-gap")!.textContent).toContain("owned but unpledged collateral record");
   });
 
-  it("refuses the grade override by name rather than guessing its wire key", async () => {
+  it("no longer refuses the override, because the tool has always taken it", async () => {
+    /* This case used to assert the opposite. The refusal said the override's
+       wire name had never been observed;
+       StageRiskRatingReview.Request.overriddenRiskGradeValue is deployed and
+       StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted covers
+       it, so the room was refusing a capability the tool already had. */
     const { room } = open({ route: "rating" });
     await settle();
     await type(room, "override the grade to 6");
-    expect(document.body.textContent).toContain("The rating override cannot be filed from here.");
+    expect(document.body.textContent).not.toContain("The rating override cannot be filed from here.");
+    expect(document.body.textContent).not.toContain("has never been observed");
+  });
+
+  /* THE SCALE IS ENFORCED IN THE ROOM, because it is enforced nowhere else.
+     `StageRiskRatingReview.cls` states 1 to 12 twice and validates neither
+     grade, so before this a 47 was read, recorded, staged and filed. */
+  it("refuses a grade off the scale by name, and keeps the question standing", async () => {
+    const { room } = open({ route: "rating" });
+    await settle();
+    for (let i = 0; i < 4; i++) await type(room, "skip"); // the four factors
+    expect(liveAsk()).toContain("What grade does this analysis support");
+
+    await type(room, "47");
+    // The refusal is the room's own sentence, not the "I could not read that"
+    // re-ask: the room read 47 perfectly well and the org cannot hold it.
+    expect(liveAsk()).toContain("scale is 1 to 12");
+    expect(document.body.textContent).not.toContain("I need a figure for that one");
+
+    await type(room, "0");
+    expect(liveAsk()).toContain("scale is 1 to 12");
+
+    /* AND NEITHER FIGURE WAS RECORDED. If 47 or 0 had been taken as the grade,
+       this 4 would land on the OVERRIDE step and the room would be asking for
+       the comment by now. It is asking for the override, so the grade step ate
+       the 4 and the two refusals cost the banker nothing but the question. */
+    await type(room, "4");
+    expect(liveAsk()).toContain("Are you overriding the computed grade?");
+  });
+
+  it("refuses a REGULATORY CLASSIFICATION and then names the scale it is filing on", async () => {
+    const { room } = open({ route: "rating" });
+    await settle();
+    await type(room, "they are special mention now");
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("regulatory categories and this org's scale is numeric");
+    expect(text).toContain("the rating review's own scale");
   });
 });
 
@@ -642,5 +738,231 @@ describe("the relationship room answers a create line the same way the workroom 
     // AND IT NEVER ASKS FOR WHAT THE ORG WORKS OUT.
     expect(words).not.toMatch(/what advance rate/i);
     expect(words).not.toMatch(/lendable value/i);
+  });
+});
+
+/* =============================================================================
+   THE REFUSAL COMES FIRST, ON THE GLASS.
+
+   The step machine's own test holds that no step is reached; this holds the
+   half a banker actually sees: the scope brief, then why the review cannot
+   close anything today, then NO first question and no "Review & file" chip.
+   ============================================================================= */
+
+describe("a route that can only refuse says so before it asks", () => {
+  it("lands the refusal under the brief, asks nothing, and offers no plan", async () => {
+    const rowless = {
+      covenants: {
+        covenants: [
+          { covenantId: "cov1", covenantType: "Debt Service Coverage of Borrower" },
+          { covenantId: "cov2", covenantType: "Minimum Liquidity" },
+        ],
+      },
+    };
+    const { room } = open({ route: "covenant", bundle: rowless });
+    await settle();
+    const text = room.textContent ?? "";
+    expect(text).toContain("no open test period on any of the 2 covenants");
+    // NO FIRST QUESTION.
+    expect(text).not.toContain("Which covenants are we assessing?");
+    // AND NO PLAN. Offering "Review & file" over a refusal would be the room
+    // contradicting itself in the same breath.
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+
+  it("refuses the VALUATION on the anchor and asks nothing under it", async () => {
+    /* The drive caught the room rendering NO_PACKAGE_ANCHOR under the brief and
+       then asking "which collateral are we valuing?" underneath it. */
+    const { room } = open({ route: "valuation", bundle: { snapshot: { accountId: "001X", name: "Hartwell" } } as never });
+    await settle();
+    expect(room.textContent).toContain("anchored on the product package");
+    expect(room.textContent).not.toContain("Which collateral are we valuing?");
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+
+  it("still runs the review where the rows are there", async () => {
+    const { room } = open({ route: "covenant" });
+    await settle();
+    expect(room.textContent).toContain("Which covenants are we assessing?");
+    expect(room.textContent).not.toContain("no open test period");
+  });
+});
+
+describe("an optional multi step can actually be skipped", () => {
+  it("takes the skip chip on the annual review's section set, and records none", async () => {
+    /* The skip used to be unreachable on a MULTI step: `answerLive` matched
+       the line against the options before it read the skip, so "Not assessed"
+       named no section and the room re-asked a question the banker had just
+       answered. The annual review's section chip set is the first optional
+       multi step in this room, which is where it surfaced. */
+    const { room } = open({ route: "annual" });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    expect(room.textContent).toContain("Anything else for the file?");
+    click(byText(/Not assessed/));
+    await settle();
+    // Answered, not re-asked: the room moved on to the plan.
+    expect(room.textContent).not.toContain("I could not read that");
+    expect(room.querySelector(".wk-propose")).not.toBeNull();
+  });
+
+  it("opens one text step for each section picked", async () => {
+    const { room } = open({ route: "annual" });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/^Collateral analysis/));
+    await settle();
+    expect(room.textContent).toContain("The collateral position, with the dates behind the values.");
+  });
+});
+
+/* =============================================================================
+   THE TOAST CLAIMED THE TRAIL AND THE ROOM WROTE NONE.
+
+   `setToast` has always said "logged to the activity trail". The room took no
+   onFiled and its host wired none, against Workroom.tsx and WorkroomHost.tsx
+   which have done both since A30. What this holds is that a filing writes
+   exactly ONE entry, that it names the record the ORG named, and that the
+   toast's claim and the trail now agree.
+   ============================================================================= */
+
+describe("a filed review lands in the activity trail", () => {
+  it("writes exactly one entry, naming the record the org named", async () => {
+    const filed: Array<{ actionId: string; result: ExecuteResult }> = [];
+    const opened = open({ route: "annual", onFiled: (f) => filed.push(f) });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Review & file/));
+    await settle();
+    click(byText(/File the review/));
+    await settle();
+
+    expect(filed).toHaveLength(1);
+    expect(filed[0].actionId).toBe("annual-review");
+    // THE ORG'S OWN RESULT, not a restatement of it.
+    expect(filed[0].result.recordName).toBe("REV-0000000012");
+    // And the toast's claim is now true. It renders in the portal beside the
+    // room rather than inside it, which is why this reads the document.
+    expect(document.body.textContent).toContain("logged to the activity trail");
+    expect(opened.room.querySelector(".wk-rescard")).not.toBeNull();
+  });
+
+  it("writes nothing where the filing never happened", async () => {
+    const filed: Array<{ actionId: string; result: ExecuteResult }> = [];
+    open({ route: "annual", onFiled: (f) => filed.push(f) });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    expect(filed).toEqual([]);
+  });
+});
+
+describe("the room answers its own three reads locally", () => {
+  it("answers a rating question from the book, binding nothing", async () => {
+    const { room, bound } = open({ route: null, question: neutralRelAsk() });
+    await settle();
+    await type(room, "what is the risk rating");
+    await settle();
+    // A READ DOES NOT PICK A REVIEW. It binds nothing and advances nothing.
+    expect(bound).toEqual([]);
+    expect(room.textContent).toContain("The grade on file for Hartwell Precision Manufacturing LLC is 4");
+    expect(room.textContent).toContain("Not the facility scale");
+  });
+
+  it("says what no read carries when asked about the reviews on file", async () => {
+    const { room } = open({ route: "annual" });
+    await settle();
+    await type(room, "when was the last review");
+    await settle();
+    expect(room.textContent).toContain("No read on this cockpit carries the credit reviews");
+    // AND IT DOES NOT ANSWER THE STEP. The review type is still open.
+    expect(room.textContent).toContain("Which review is this?");
+  });
+});
+
+/* =============================================================================
+   WHAT THE HEADLESS DRIVE CAUGHT, 2026-09-02.
+
+   Two defects that only show up with a real route binding in front of them, so
+   no unit case had ever reached either. Both are the room contradicting itself.
+   ============================================================================= */
+
+describe("the line that named the review is not an answer to its first question", () => {
+  it("does NOT record it as the case subject", async () => {
+    /* THE DRIVE FILED A CASE WHOSE SUBJECT READ "raise a service request".
+       The line bound the route, was replayed into the bound room, and the
+       service route's first step is free TEXT, so it was recorded silently.
+       The banker had not chosen a subject at all. */
+    const { room } = open({ route: "service", say: "raise a service request" });
+    await settle();
+    expect(room.textContent).toContain("What did the client ask for?");
+    // NOTHING COLLECTED. The lane is empty and the first question stands.
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(0);
+  });
+
+  it("does not turn it into a re-ask on a chips route either", async () => {
+    const { room } = open({ route: "annual", say: "annual review" });
+    await settle();
+    expect(room.textContent).toContain("Which review is this?");
+    expect(room.textContent).not.toContain("I could not read that as one of the values above");
+  });
+
+  it("still runs a line that names the route AND asks for something else", async () => {
+    const { room } = open({ route: "covenant", say: "add a covenant on the relationship" });
+    await settle();
+    // The create gap is named: the line did more than bind, so it still runs.
+    expect(room.textContent).toContain("The room can compose the covenant, and it cannot file it");
+  });
+});
+
+describe("a blocked route does not claim everything is collected", () => {
+  it("repeats the refusal rather than pointing at a chip that is not there", async () => {
+    const { room } = open({
+      route: "covenant",
+      bundle: { snapshot: { accountId: "001X", name: "Hartwell" } } as never,
+    });
+    await settle();
+    await type(room, "go on then");
+    await settle();
+    expect(room.textContent).toContain("anchored on the product package");
+    expect(room.textContent).not.toContain("The review chip below carries the next move");
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+});
+
+describe("a service request subject carrying a route word stays on the service request", () => {
+  it("records the subject rather than re-routing to the covenant review", async () => {
+    const { room, restarted } = open({ route: "service" });
+    await settle();
+    await type(room, "Copy of the June covenant compliance certificate");
+    await settle();
+    expect(restarted).toEqual([]);
+    expect(room.textContent).toContain("And the request in full");
+    expect(room.textContent).toContain("Copy of the June covenant compliance certificate");
+  });
+
+  it("still switches on the short form a banker actually uses", async () => {
+    const { room, restarted } = open({ route: "service" });
+    await settle();
+    await type(room, "covenant review");
+    await settle();
+    expect(restarted.map((r) => r.route)).toEqual(["covenant"]);
   });
 });

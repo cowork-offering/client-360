@@ -202,6 +202,19 @@ export interface BrainEnvelope {
   /** THE CLIENT'S OWN MESSAGE, where this room found one. Top level, never
    *  inside `reads`: it is a request, not a read. */
   mail?: BrainMail;
+  /**
+   * ENTITIES THE READ BLOCKS DO NOT CARRY, for the line-item rail.
+   *
+   * `resolveEntities` resolves a row's rail out of the staged plan, the
+   * covenants, the facilities, the involvements and the collateral. The
+   * RELATIONSHIP room's greeting talks about two things none of those tables
+   * holds: the risk grade on file and the reviews already filed. This is the
+   * LAST rank of that lookup, so it can only fill a name nothing else claimed.
+   *
+   * The facility room never sets it and its behaviour is therefore unchanged by
+   * construction, which is what the narrate suite pins.
+   */
+  entities?: Array<{ name: string; value: string; tone?: "warn" | "bad" }>;
   /** The conversation so far, oldest first. This is what makes it chat. */
   thread?: BrainTurn[];
   fileable?: BrainFileable;

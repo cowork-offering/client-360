@@ -194,11 +194,9 @@
 
 /* ---------------------------------------------------------- the lane fold
 
-   The ledger never grows past the room. Past the visible cap the OLDEST answers
-   fold away and the count in the lane header always states the whole review, so
-   the fold is never a place a figure can hide. */
-.rl-fold {
-  font-size: 10.5px;
-  color: var(--ink-label);
-  padding: 2px 0 6px;
-}
+   RETIRED 2026-09-02, with the rail (design/proposals/rail-scroll-addendum.md).
+   `.rl-fold` folded the OLDEST answers away past a cap of eight, which answered
+   the overflow by removing the content. `ManifestRail` bounds the lane to the
+   ROOM's height and scrolls inside it, so every answer is on the rail and the
+   head still states the whole review. A fold on top of a scroller would be two
+   answers to one question. */

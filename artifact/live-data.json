@@ -511,6 +511,7 @@
     "001bb00001DLtRMAA1": {
       "snapshot": {
         "accountId": "001bb00001DLtRMAA1",
+        "productPackageId": "a5Fbb000000HA1NEAW",
         "name": "Piedmont Precision Components, Inc.",
         "industry": "Manufacturing",
         "annualRevenue": 64500000,
@@ -892,6 +893,7 @@
     "001SAMPLE0000BRWT": {
       "snapshot": {
         "accountId": "001SAMPLE0000BRWT",
+        "productPackageId": "a5FSAMPLE00000BRWT",
         "name": "Brightwater Foods Group",
         "industry": "Diversified Holdings",
         "annualRevenue": 96000000,
@@ -1202,6 +1204,7 @@
     "001SAMPLE0000STRL": {
       "snapshot": {
         "accountId": "001SAMPLE0000STRL",
+        "productPackageId": "a5FSAMPLE00000STRL",
         "name": "Sterling Fabrication Co.",
         "industry": "Industrial Supply",
         "annualRevenue": 78500000,
@@ -1575,6 +1578,7 @@
     "001SAMPLE0000KGSL": {
       "snapshot": {
         "accountId": "001SAMPLE0000KGSL",
+        "productPackageId": "a5FSAMPLE00000KGSL",
         "name": "Kingsley Precision Works",
         "industry": "Manufacturing",
         "annualRevenue": 110000000,
@@ -1979,6 +1983,7 @@
     "001bb00001I7FPNAA3": {
       "snapshot": {
         "accountId": "001bb00001I7FPNAA3",
+        "productPackageId": "a5Fbb000000IHFJEA4",
         "annualRevenue": 85000000,
         "industry": "Manufacturing",
         "naicsCode": "332710",

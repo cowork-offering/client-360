@@ -6,8 +6,10 @@ import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
 import { resolveBundle } from "../../actions/registry";
+import { executedActivityEntry } from "../../actions/executedActivity";
 import { useApp } from "../../state/appState";
 import type { StagedCovenant, StagedOutput } from "../../actions/stagedPlan";
+import type { ExecuteResult, WriteActionId } from "../../channel/writeTools";
 import type { C360Data } from "../../data/contract";
 import { BrandGlyph } from "../brand";
 import { Peek, usePeek } from "../workroom/Peek";
@@ -24,20 +26,27 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "../workroom/entryChoreography";
-import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
+import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { Narration, useNarration } from "../../channel/Narration";
 import { subjectFor } from "../../channel/narrate";
+import { ManifestRail } from "../rail/ManifestRail";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
+import { NO_COMPLIANCE_ROW_CHIP, relBookFor, type RelBook } from "./relBook";
+import { buildRelReadCard, readRelTopic, relReadGap } from "./relReads";
+import { useClientMail } from "../workroom/clientMail";
 import { stepperState } from "../../workroom/stepper";
 import {
   FACILITY_HANDOFF,
+  CLIENT_REQUEST_OFFER,
   NEUTRAL_QUESTION,
+  RAISE_A_SERVICE_REQUEST,
   REL_ROUTE_CHIPS,
   REL_ROUTE_WORD,
   SOMETHING_ELSE,
   asksForFacilityWork,
   readRelRouteIntent,
+  readsAsClientRequest,
   readRelRouteSwitch,
   relOpeningFor,
   type RelOpening,
@@ -45,12 +54,14 @@ import {
 } from "./relRoute";
 import {
   CREATE_GAPS,
+  NAME_THE_SURFACE,
+  NOT_A_CLASSIFICATION,
+  onScale,
   NO_CONNECTOR,
-  OVERRIDE_NOT_FILEABLE,
   REL_FLOWS,
   RelFlowError,
   SKIPPED,
-  asksForOverride,
+  asksForClassification,
   covenantLabel,
   defaultRelDeps,
   dossierFooter,
@@ -60,6 +71,7 @@ import {
   nextStep,
   readCreateAsk,
   relContextFor,
+  relRouteBlock,
   reviewableCovenants,
   routeAvailability,
   stageRelPlan,
@@ -130,6 +142,9 @@ interface Opt {
   /** What the parser hears. A chip does nothing a typed line could not. */
   say: string;
   detail?: string;
+  /** The org will not take this one, and the chip says why rather than going. */
+  disabled?: boolean;
+  reason?: string;
 }
 
 type RelItem = { id: string; step: number } & (
@@ -150,14 +165,17 @@ type RelItem = { id: string; step: number } & (
        *  session that has already collected answers. Never a silent swap. */
       restart?: { route: RelRoute; label: string; say: string };
     }
-  /** THE ROOM REACHED NO ORG. Loud, in glass, with the way out of it. */
-  | { kind: "notice"; title: string; body: string }
+  /** THE ROOM REACHED NO ORG. Loud, in glass, with the way out of it.
+   *  `room` is the narration discriminator: this kind and `dossier` are shared
+   *  by NAME AND SHAPE with the facility room, whose own notice and dossier are
+   *  chrome that `subjectFor` must keep returning null for. */
+  | { kind: "notice"; room: "relationship"; title: string; body: string }
   /** A create this room can compose and cannot file, with the gap named. */
   | { kind: "gap"; gap: CreateGap }
   /** A READ QUESTION, ANSWERED. Not a step and not a gate: nothing on it is
    *  waiting for a decision, and it does not advance the review. */
   | { kind: "read"; card: ReadCardModel }
-  | { kind: "dossier"; dossier: DossierModel }
+  | { kind: "dossier"; room: "relationship"; dossier: DossierModel }
 );
 
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -190,8 +208,6 @@ const DOSSIER_FOOT_MS = 200;
 const DOSSIER_CHECK_MS = 180;
 const HALO_LIFE_MS = 5600;
 const WORD_STAGGER_MS = 26;
-/** How many collected answers the lane shows before the rest fold away. */
-const LANE_VISIBLE = 8;
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
@@ -203,6 +219,10 @@ export interface RelRouteChoice {
   label: string;
   route: RelRoute | null;
   covenantId?: string | null;
+  /** The line the chip binds WITH, where the chip is confirming a reading of
+   *  something the banker already typed. The bound room replays it, so the
+   *  client's own words become the case subject instead of being retyped. */
+  say?: string;
   /** The staged data cannot support this review. The chip STAYS, disabled,
    *  carrying the registry's own reason verbatim (A27.3): hiding it would take
    *  the map of what exists away from the banker. */
@@ -223,17 +243,23 @@ export interface RelRouterQuestion {
  * without a snapshot; without them every route reads as available, which is the
  * shell's own default and never a claim about an org.
  */
-export function neutralRelAsk(args?: { data: C360Data; accountId: string | null }): RelRouterQuestion {
+export function neutralRelAsk(args?: { data: C360Data; accountId: string | null; book?: RelBook | null }): RelRouterQuestion {
   return {
     line: NEUTRAL_QUESTION,
     chips: REL_ROUTE_CHIPS.map((c) => {
       if (!args) return { label: c.label, route: c.route };
       const availability = routeAvailability(c.route, args.data, args.accountId);
+      /* THE HONESTY GATE, ON THE CHIP (section 1.5). Where NOT ONE covenant
+         carries a compliance row the covenant route can only end in a refusal,
+         so the chip says so instead of offering it. It STAYS on the glass,
+         disabled, carrying the reason (A27.3): hiding a route takes the map
+         away from the banker. */
+      const noRows = c.route === "covenant" && args.book?.noComplianceRows === true;
       return {
         label: c.label,
         route: c.route,
-        disabled: !availability.available,
-        reason: availability.reason,
+        disabled: !availability.available || noRows,
+        reason: noRows ? NO_COMPLIANCE_ROW_CHIP : availability.reason,
       };
     }),
   };
@@ -439,13 +465,17 @@ const LANE_LABELS: Record<string, string> = {
   valuationDate: "Valuation date",
   type: "Basis",
   source: "Source",
+  primary: "Primary valuation",
+  description: "Note",
   cashFlowCoverage: "Cash-flow coverage",
   revenueGrowth: "Revenue growth",
   managementExperience: "Management experience",
   creditScore: "Credit score",
   overrideComment: "Rationale",
-  origin: "Origin",
-  subject: "Subject",
+  computedRiskGradeValue: "Proposed grade",
+  overriddenRiskGradeValue: "Override",
+  requestType: "Subject",
+  summary: "Request",
   detail: "Detail",
 };
 
@@ -453,7 +483,7 @@ function iconForAnswer(route: RelRoute, group: string): IconKind {
   if (group.startsWith("covenant")) return "covenant";
   if (group === "records" || group === "recordValues") return "collateral";
   if (group === "valuationDate" || group === "detail") return "maturity";
-  if (group === "type" || group === "source") return "pricing";
+  if (group === "type" || group === "source" || group === "primary" || group === "description") return "pricing";
   if (route === "rating") return "pricing";
   return REL_FLOWS[route].icon;
 }
@@ -469,6 +499,9 @@ export function RelationshipRoom({
   onClose,
   brain,
   deps = defaultRelDeps,
+  mail = null,
+  mailGate = true,
+  onFiled,
 }: {
   ctx: RelContext;
   /** Null while the room is still asking which review this is. */
@@ -486,9 +519,33 @@ export function RelationshipRoom({
    */
   brain?: (envelope: BrainEnvelope) => Promise<BrainReply>;
   deps?: RelFlowDeps;
+  /**
+   * THE CLIENT'S OWN MESSAGE, AND THE GATE THE GREETING WAITS ON.
+   *
+   * Injected rather than read here, exactly as the facility room does it: one
+   * `outlook_email_search` per room open, made by the host, and the room asks
+   * nothing about where the note came from. ABSENT is the channel-none case and
+   * the gate is then open on the first tick.
+   */
+  mail?: BrainMail | null;
+  mailGate?: boolean;
+  /**
+   * AN EXECUTED REVIEW LANDS IN THE TRAIL (A30).
+   *
+   * The room's toast has always said "logged to the activity trail" and the
+   * room has never written one: it took no onFiled and its host wired none,
+   * against Workroom.tsx and WorkroomHost.tsx which have done both since A30.
+   * The room hands over what it already holds; the entry is minted in actions/
+   * where every other executed action's entry is minted.
+   */
+  onFiled?: (filed: { actionId: WriteActionId; result: ExecuteResult }) => void;
 }) {
   const reduced = prefersReducedMotion();
   const brief = useMemo(() => briefFor(ctx), [ctx]);
+  /* THE BOOK, READ ONCE. What this relationship already carries, so a step does
+     not ask what the read answers and a route that can only refuse says so
+     before it asks anything. */
+  const book = useMemo(() => relBookFor(ctx), [ctx]);
   const flowSpec = route ? REL_FLOWS[route] : null;
 
   const [ask, setAsk] = useState<RelRouterQuestion | null>(() => router?.question ?? null);
@@ -551,11 +608,16 @@ export function RelationshipRoom({
   /* ---- THE RITUAL OPENS. The agent greets on the relationship, the lookup
           shimmers, and the room states its position. Under reduced motion the
           whole ritual is simply there. */
+  const openingIdRef = useRef<string>("");
   useEffect(() => {
-    setItems([
+    const opening: RelItem[] = [
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
-    ]);
+    ];
+    // The greeting's own id, so the ONE consent moment can land its remark
+    // under the greeting the banker just opened the room for.
+    openingIdRef.current = opening[0].id;
+    setItems(opening);
     tierArrived("question");
     /* THE LOOKUP LANDS ON THE POSITION, and nothing else. The route's brief is
        pushed by the BIND effect below, which owns it whether the route was bound
@@ -586,7 +648,12 @@ export function RelationshipRoom({
 
   /* ---- derived. Nothing below is stored twice. */
   const live = useMemo(() => (route ? nextStep(route, ctx, answers) : null), [route, ctx, answers]);
-  const ready = !!route && !live;
+  /* THE ROUTE CANNOT RUN AT ALL. Non-null where the review's own preconditions
+     fail on the read the room is holding, and it is the reason there is no
+     first question. A blocked route never reaches `ready`: offering "Review &
+     file" over a refusal would be the room contradicting itself. */
+  const routeBlock = useMemo(() => (route ? relRouteBlock(route, ctx) : null), [route, ctx]);
+  const ready = !!route && !live && !routeBlock;
   const approvalOpen = phase === "work" && !thinking && ready;
   const laneRows = useMemo(
     () => (route ? laneRowsFor(route, ctx, answers, order) : []),
@@ -625,12 +692,23 @@ export function RelationshipRoom({
   /* ---- THE BRIEF LANDS WHEN THE ROUTE BINDS, before the first question. A
           governance ritual states its scope before it asks anything. */
   const briefedRef = useRef<RelRoute | null>(null);
+  /** The block, read by the brief effect without joining its deps: the brief
+   *  lands once per route and must not re-land when the read is re-derived. */
+  const blockRef = useRef<string | null>(null);
+  blockRef.current = routeBlock;
   useEffect(() => {
     if (!route || !awake || briefedRef.current === route) return;
     briefedRef.current = route;
     setItems((prev) => {
       const mine = prev.length ? prev[prev.length - 1].step : 0;
-      return [...prev, { kind: "brief", id: nextId("brief"), step: mine }];
+      const landed: RelItem[] = [...prev, { kind: "brief", id: nextId("brief"), step: mine }];
+      /* AND THE REFUSAL LANDS WITH IT, BEFORE THE FIRST QUESTION. The scope,
+         then why this review cannot close anything today. Six questions and a
+         tool call ahead of the same sentence is the worst moment in the room. */
+      if (blockRef.current) {
+        landed.push({ kind: "agent", id: nextId("block"), step: mine, text: blockRef.current });
+      }
+      return landed;
     });
     // THE IDENTITY TIER. The scope blends in and the question above it leaves
     // the stage: the banker is deciding on the review now, not on which one.
@@ -695,7 +773,7 @@ export function RelationshipRoom({
           says so rather than leaving the banker to notice the chip. */
   const readyRef = useRef(false);
   useEffect(() => {
-    if (!ready || readyRef.current || phase === "filed" || !flowSpec) return;
+    if (!ready || readyRef.current || phase === "filed" || !flowSpec || routeBlock) return;
     readyRef.current = true;
     setItems((prev) => {
       const mine = prev.length ? prev[prev.length - 1].step : 0;
@@ -709,7 +787,7 @@ export function RelationshipRoom({
         },
       ];
     });
-  }, [flowSpec, phase, ready]);
+  }, [flowSpec, phase, ready, routeBlock]);
 
   /** RECORD AN ANSWER. Every answer starts a STEP (rule 31): the banker line
    *  lands, the steps before it collapse, and the machine asks the next one. */
@@ -768,6 +846,21 @@ export function RelationshipRoom({
       setThinking(true);
       try {
         await beat(started);
+        /* THE SKIP IS READ BEFORE THE KIND, and it has to be. An OPTIONAL MULTI
+           step offers the skip chip like every other optional step, and the
+           multi branch below matched it against the options first: "Not
+           assessed" named no option, so the room re-asked a question the banker
+           had just answered. The first optional multi step in this room is the
+           annual review's section chip set, which is where it surfaced. */
+        if (text === SKIP_LABEL || text.toLowerCase() === "skip") {
+          if (!live.optional) {
+            setThinking(false);
+            unreadable(live);
+            return;
+          }
+          record(live.key, live.kind === "multi" ? [] : SKIPPED, SKIP_LABEL);
+          return;
+        }
         if (live.kind === "multi") {
           // A MULTI STEP TAKES A SET. A chip contributes one id; a typed line
           // is matched against the options by name, and a line that matches
@@ -782,20 +875,20 @@ export function RelationshipRoom({
           record(live.key, matched, shown);
           return;
         }
-        if (text === SKIP_LABEL || text.toLowerCase() === "skip") {
-          if (!live.optional) {
-            setThinking(false);
-            unreadable(live);
-            return;
-          }
-          record(live.key, SKIPPED, SKIP_LABEL);
-          return;
-        }
         if (live.kind === "number") {
           const n = Number(text.replace(/[$,\s]/g, ""));
           if (!Number.isFinite(n)) {
             setThinking(false);
             unreadable(live);
+            return;
+          }
+          /* A FIGURE OFF A REAL SCALE IS REFUSED BY NAME, not re-asked as
+             unreadable. The room read it perfectly well; the org cannot hold
+             it. The refusal states the scale, so the banker knows what to say
+             next, and the question stays live. */
+          if (live.bounds && !onScale(n, live.bounds)) {
+            setThinking(false);
+            offScale(live);
             return;
           }
           record(live.key, n, shown);
@@ -818,6 +911,22 @@ export function RelationshipRoom({
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [beat, live, record],
+  );
+
+
+  /** THE FIGURE IS OFF THE STEP'S SCALE. Refused with the scale in words, and
+   *  the question left standing. */
+  const offScale = useCallback(
+    (target: RelStep) => {
+      setItems((prev) => {
+        const mine = prev.length ? prev[prev.length - 1].step : 0;
+        return [
+          ...prev,
+          { kind: "agent", id: nextId("scale"), step: mine, text: target.bounds!.refusal, options: optionsFor(target) },
+        ];
+      });
+    },
+    [],
   );
 
   /** THE ROOM COULD NOT READ THAT. It re-asks with the legal answers rather
@@ -894,6 +1003,8 @@ export function RelationshipRoom({
         route,
         ctx,
         reads,
+        mail,
+        book,
         thread: conversation(),
         collected: laneRows.map((r) => ({
           title: r.label,
@@ -901,7 +1012,7 @@ export function RelationshipRoom({
           after: r.value,
         })),
       }),
-    [conversation, ctx, laneRows, reads, route],
+    [book, conversation, ctx, laneRows, mail, reads, route],
   );
 
   const askTheDesk = useCallback(
@@ -924,6 +1035,54 @@ export function RelationshipRoom({
      session door is absent, so channel-none renders exactly today's sentences. */
   const narration = useNarration({ enabled: Boolean(brain), envelopeFor });
   const narrated = useRef(new Set<string>());
+
+  /* THE ONE CONSENT MOMENT, IN THIS ROOM TOO (SAMPLE-CHANNEL spec: consent
+     rides the greeting).
+
+     The platform asks the viewer to allow this artifact to use their Claude on
+     the FIRST call of a view, and the call waits while they decide. This room
+     never made that call from its greeting, so the dialog landed on whatever
+     line happened to narrate first, MID-REVIEW. The first call is now the one
+     the banker asked for by opening the room.
+
+     ONCE, AND AFTER BOTH GATES. `narration.open` is latched per item id, so a
+     second call was already inert; what was NOT inert is the mail ref below,
+     which a later pass would overwrite with a note that arrived after the
+     greeting had gone. `primeConsent` memoises the PROMISE and ignores every
+     later caller's prompt, so a greeting that wants the mail must wait BEFORE
+     the first call rather than recompose after it. */
+  const greetedWithMail = useRef(false);
+  const greeted = useRef(false);
+  useEffect(() => {
+    if (!brain || !awake || !openingIdRef.current || greeted.current) return;
+    if (!mailGate) return;
+    const said = `${brief.greeting} ${ask ? ask.line : brief.position}`.trim();
+    if (!said) return;
+    greetedWithMail.current = Boolean(mail);
+    greeted.current = true;
+    narration.open(openingIdRef.current, { act: "greeting", sentence: said });
+  }, [ask, awake, brain, brief.greeting, brief.position, mail, mailGate, narration]);
+
+  /* MAIL THAT MISSED THE GATE IS A SECOND REMARK, NEVER A REWRITTEN GREETING.
+     The greeting is already on the glass and it is the one call that carried
+     consent; taking it back would be the room changing its mind in front of the
+     banker. `narrate`, not `prime`: no second dialog and no second connector
+     call. A declined view deletes the greeting's own view, which silences this
+     too. */
+  const followedUp = useRef(false);
+  useEffect(() => {
+    if (!brain || !mail || followedUp.current) return;
+    if (!greeted.current || greetedWithMail.current) return;
+    const opening = narration.viewFor(openingIdRef.current);
+    if (!opening || opening.pending) return;
+    followedUp.current = true;
+    const who = mail.from ?? "the client";
+    const when = mail.received ? ` on ${mail.received}` : "";
+    narration.narrate(`${openingIdRef.current}::mail`, {
+      act: "mail",
+      sentence: `A message from ${who}${when} is open on this relationship.`,
+    });
+  }, [brain, mail, narration]);
 
   useEffect(() => {
     const last = items[items.length - 1];
@@ -1012,8 +1171,17 @@ export function RelationshipRoom({
          rather than with the card the room was already holding. */
       if (ask && router) {
         const preTopic = readTopic(text);
-        const preCard = preTopic !== null ? buildReadCard(preTopic, reads, { role: readRole(text) ?? undefined }) : null;
-        if (!preCard) {
+        const preRelTopic = preTopic === null ? readRelTopic(text) : null;
+        const preCard =
+          preTopic !== null
+            ? buildReadCard(preTopic, reads, { role: readRole(text) ?? undefined })
+            : preRelTopic
+              ? buildRelReadCard(preRelTopic, ctx)
+              : null;
+        /* A READ DOES NOT PICK A REVIEW, and that holds for this room's own
+           three as well: "what is the risk rating" is a question about the
+           book, not a request to open the rating review. */
+        if (!preCard && !preRelTopic) {
           const picked = readRelRouteIntent(text);
           if (picked) {
             setAsk(null);
@@ -1026,8 +1194,43 @@ export function RelationshipRoom({
           "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
         setStep(mine);
         setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        /* FACILITY WORK IS FACILITY WORK BEFORE A ROUTE IS BOUND TOO.
+
+           The handoff lived ONLY in the bound branch, past `if (!route) return`,
+           so "pledge the equipment to the 8M loan" typed at the five-way fell
+           through to "I can run the annual review, the covenant review, ..." and
+           listed four reviews at a banker who had just asked for none of them.
+           Caught by the relationship drive on 2026-09-02, line 15, which is
+           where the addendum expects the one-line handoff. The room now says
+           the same sentence wherever the line arrives. */
+        if (!preCard && !preRelTopic && asksForFacilityWork(text)) {
+          setItems((prev) => [...prev, { kind: "agent", id: nextId("agent"), step: mine, text: FACILITY_HANDOFF }]);
+          return;
+        }
+        /* THE CLIENT ASKED FOR SOMETHING, AND NAMED NO REVIEW. One line and one
+           chip, rather than the five-way read back at a banker who is plainly
+           running none of the four reviews. It does not bind: the chip does,
+           and it binds WITH the banker's own line, which the service route's
+           first step takes as the case subject. */
+        if (!preCard && !preRelTopic && readsAsClientRequest(text)) {
+          setAsk({
+            line: CLIENT_REQUEST_OFFER,
+            chips: [
+              { label: RAISE_A_SERVICE_REQUEST, route: "service", say: text },
+              { label: SOMETHING_ELSE, route: null },
+            ],
+          });
+          return;
+        }
         if (preCard) {
           setItems((prev) => [...prev, { kind: "read", id: nextId("read"), step: mine, card: preCard }]);
+          return;
+        }
+        if (preRelTopic) {
+          setItems((prev) => [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: relReadGap(preRelTopic, ctx) },
+          ]);
           return;
         }
         if (brain) {
@@ -1069,6 +1272,23 @@ export function RelationshipRoom({
         return;
       }
 
+      /* AND THIS ROOM'S OWN THREE, AFTER the shared five have declined the
+         line. "what is the risk rating", "when was the last review" and "what
+         has the client asked for" fall through every one of the facility
+         room's topics and used to reach the desk. The shared reader is
+         untouched by design: widening it would answer a FACILITY question that
+         reaches the desk today with a card, and that room is the demo. */
+      const relTopic = topic === null ? readRelTopic(text) : null;
+      if (relTopic) {
+        const relCard = buildRelReadCard(relTopic, ctx);
+        answer(
+          relCard
+            ? { kind: "read", id: nextId("read"), card: relCard }
+            : { kind: "agent", id: nextId("agent"), text: relReadGap(relTopic, ctx) },
+        );
+        return;
+      }
+
       /* FACILITY WORK LIVES NEXT DOOR, and the room says so in one line rather
          than routing a pledge into the nearest review. */
       if (asksForFacilityWork(text)) {
@@ -1090,10 +1310,15 @@ export function RelationshipRoom({
         return;
       }
 
-      /* THE GRADE OVERRIDE HAS NO OBSERVED WIRE NAME, so it is refused by name
-         rather than guessed at. */
-      if (asksForOverride(text, route)) {
-        answer({ kind: "agent", id: nextId("agent"), text: OVERRIDE_NOT_FILEABLE });
+      /* A REGULATORY CLASSIFICATION IS NOT A GRADE IN THIS ORG. Special
+         Mention, Substandard, Doubtful and Loss are the interagency categories
+         and this org's rating scale is numeric, so the room refuses to write
+         one into a number and then says which scale it IS filing on.
+
+         THE OVERRIDE IS NO LONGER REFUSED HERE. It is on the wire and the
+         rating route collects it, with the org's own mandatory reason. */
+      if (asksForClassification(text, route)) {
+        answer({ kind: "agent", id: nextId("agent"), text: `${NOT_A_CLASSIFICATION} ${NAME_THE_SURFACE}` });
         return;
       }
 
@@ -1101,7 +1326,9 @@ export function RelationshipRoom({
          collected against this review, so the room is simply rebuilt on the
          other one. Once anything is collected the room refuses out loud and
          offers the discard as the explicit gesture it is. */
-      const switchTo = router ? readRelRouteSwitch(text, route) : null;
+      /* THE OPEN TEXT STEP GETS ITS ANSWER. A route word inside a subject or a
+         narrative is not a request to change review; see readRelRouteSwitch. */
+      const switchTo = router ? readRelRouteSwitch(text, route, { openTextStep: live?.kind === "text" }) : null;
       if (switchTo && router) {
         if (!order.length) {
           router.onRestart(switchTo, text);
@@ -1145,10 +1372,16 @@ export function RelationshipRoom({
       }
 
       if (!live) {
+        /* A BLOCKED ROUTE HAS NO LIVE STEP AND NOTHING COLLECTED, and telling
+           the banker "everything is collected, the review chip carries the next
+           move" over a refusal with no chip under it is the room contradicting
+           itself twice in one line. Caught by the headless drive, line 4. */
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `Everything the ${REL_ROUTE_WORD[route]} needs is collected. The review chip below carries the next move.`,
+          text:
+            routeBlock ??
+            `Everything the ${REL_ROUTE_WORD[route]} needs is collected. The review chip below carries the next move.`,
         });
         return;
       }
@@ -1166,7 +1399,7 @@ export function RelationshipRoom({
       setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
       await runRelBrain(text, mine, { degrade: () => unreadable(live) });
     },
-    [answerLive, ask, awake, brain, ctx.accountName, live, order.length, reads, route, router, runRelBrain, step, unreadable],
+    [answerLive, ask, awake, brain, ctx, live, order.length, reads, route, routeBlock, router, runRelBrain, step, unreadable],
   );
 
   /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it
@@ -1180,7 +1413,7 @@ export function RelationshipRoom({
         return;
       }
       setAsk(null);
-      router.onBind(chip.route, { covenantId: chip.covenantId ?? null });
+      router.onBind(chip.route, { covenantId: chip.covenantId ?? null, say: chip.say });
     },
     [router],
   );
@@ -1192,8 +1425,22 @@ export function RelationshipRoom({
     const line = router?.say ?? null;
     if (!awake || ask || !line || saidRef.current === line) return;
     saidRef.current = line;
+    /* A LINE THAT NAMED THIS REVIEW IS NOT AN INSTRUCTION ON TOP OF THE
+       BINDING, and replaying it as one is worse than dropping it.
+
+       THE DRIVE CAUGHT THIS FILING A CASE. "raise a service request" bound the
+       route and was then replayed into the bound room, where the first step is
+       FREE TEXT, so it was recorded silently as the answer: the case Subject
+       read "raise a service request". On the annual and rating routes the same
+       replay lands on a chip or a number step and produces a re-ask the banker
+       has to read past. Neither is the banker saying anything the router has
+       not already acted on.
+
+       A line that names the route AND asks for something else still runs: only
+       the bare naming is dropped. */
+    if (route && readRelRouteIntent(line) === route && !readCreateAsk(line, route) && !isQuestion(line)) return;
     void say(line);
-  }, [ask, awake, router?.say, say]);
+  }, [ask, awake, route, router?.say, say]);
 
   /* ---- THE SIGNAL'S COVENANT IS PRESELECTED. Where the opening named one, the
           covenant review opens with it already on the list rather than making
@@ -1232,6 +1479,7 @@ export function RelationshipRoom({
       if (neverReachedTheOrg(e)) {
         push({
           kind: "notice",
+          room: "relationship",
           id: nextId("notice"),
           title: "This view is not connected to the bank's systems.",
           body: NO_CONNECTOR,
@@ -1282,12 +1530,16 @@ export function RelationshipRoom({
         tokenNote: `Single-use decision token redeemed. ${REL_FLOWS[route].filedWord} against ${ctx.accountName}.`,
         handoff: dossierHandoff(route, result),
       };
+      /* THE TRAIL, BEFORE THE TOAST THAT CLAIMS IT. The org's own result, its
+         own ids and its own sentence; nothing here is composed from what the
+         room hoped would happen. */
+      onFiled?.({ actionId: REL_FLOWS[route].actionId, result });
       setPhase("filed");
       setFlow(null);
       setLit(true);
       setItems((prev) => {
         const mine = prev.length ? prev[prev.length - 1].step : 0;
-        return [...prev, { kind: "dossier", id: nextId("dossier"), step: mine, dossier }];
+        return [...prev, { kind: "dossier", room: "relationship", id: nextId("dossier"), step: mine, dossier }];
       });
       setToast(`${REL_FLOWS[route].filedWord} · logged to the activity trail`);
     } catch (e) {
@@ -1308,7 +1560,7 @@ export function RelationshipRoom({
     } finally {
       setFiling(false);
     }
-  }, [answers, ctx, deps, filing, flow, push, route, sealed]);
+  }, [answers, ctx, deps, filing, flow, onFiled, push, route, sealed]);
 
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
   useEffect(() => {
@@ -1348,8 +1600,10 @@ export function RelationshipRoom({
   /** The tiers that left the stage, and whether they are back on it. */
   const tiersLeft = choreo.left;
   const tiersShown = choreo.summoned || histOpen;
-  const laneFolded = Math.max(0, laneRows.length - LANE_VISIBLE);
 
+  /* THE GREETING'S OWN REMARK RIDES THE OPENING BUBBLE. Every other item's
+     remark is rendered by the thread loop under `Narration`; the opening is a
+     tier and is rendered through `opening`, so its view is drawn here. */
   const openingItem = (
     <div className="wk-msg wk-agent" data-who="Agent" key="opening">
       <div className="wk-bub">
@@ -1408,6 +1662,8 @@ export function RelationshipRoom({
           </button>
         </div>
       </div>
+      <Narration view={narration.viewFor(openingIdRef.current)} />
+      <Narration view={narration.viewFor(`${openingIdRef.current}::mail`)} />
     </div>
   );
 
@@ -1602,74 +1858,78 @@ export function RelationshipRoom({
           <aside className="wk-col-r" aria-label={laneHeading}>
             {/* The lane opens empty (founder call, 2026-09-01): content arrives with
               the review, never as furniture. */}
-                        {laneRows.length > 0 && (
-            <div className="wk-man-h">
-              <span className="wk-kicker">{laneHeading}</span>
-              <span className="wk-c">
-                {laneRows.length} {laneRows.length === 1 ? "answer" : "answers"}
-              </span>
-              <button
-                type="button"
-                className="wk-dt"
-                onClick={(e) =>
-                  openPeek(e.currentTarget, {
-                    kicker: "What this review writes",
-                    width: 480,
-                    content: flowSpec ? (
-                      <>
-                        <div className="wk-prose">{flowSpec.covers}</div>
-                        <div className="wk-prose" style={{ marginTop: 10 }}>
-                          {flowSpec.produces}
-                        </div>
-                        <div className="wk-cav">
-                          Staged intent only: nothing is written until the single approval, and the plan the banker
-                          reads is the plan that executes.
-                        </div>
-                      </>
-                    ) : (
-                      <div className="wk-prose">
-                        No review is bound yet. Pick one above and this states exactly what it covers and what it
-                        files.
-                      </div>
-                    ),
-                  })
-                }
-              >
-                Scope
-              </button>
-            </div>
-            )}
-
             {laneRows.length === 0 && (
               <div className="wk-empty">
                 {flowSpec ? "Nothing collected yet. Answers land here as the review takes them." : "Pick a review to begin."}
               </div>
             )}
-            {laneFolded > 0 && <div className="rl-fold">↑ {laneFolded} earlier in this review</div>}
-            <div className="wk-ents">
-              {laneRows.slice(laneFolded).map((row) => (
-                <div className="wk-ent" key={row.key}>
-                  <TypeIcon kind={row.icon} />
-                  <span className="wk-ent-t">
-                    <b>{row.label}</b>
-                    <span>{row.value}</span>
-                  </span>
-                  {phase === "work" && (
-                    <button
-                      type="button"
-                      className="wk-ent-x"
-                      aria-label={`Take ${row.label} back off the review`}
-                      title="Take it back. The room asks again."
-                      onClick={() => drop(row.key)}
-                    >
-                      <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
-                        <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            {/* THE SHARED RAIL (design/proposals/rail-scroll-addendum.md, section 4).
+                The lane's own fold is gone with it: a fold on top of a scroller is two
+                answers to one question, and the fold answered the overflow by removing
+                the content. Every answer is on the rail, the head stays outside the
+                scroller, and the frame is the ROOM's rather than the content's. */}
+            {laneRows.length > 0 && (
+              <ManifestRail
+                heading={laneHeading}
+                count={`${laneRows.length} ${laneRows.length === 1 ? "answer" : "answers"}`}
+                label={`${laneHeading} · ${laneRows.length} ${laneRows.length === 1 ? "answer" : "answers"}`}
+                newest={laneRows[laneRows.length - 1]?.key ?? null}
+                action={
+                  <button
+                    type="button"
+                    className="wk-dt"
+                    onClick={(e) =>
+                      openPeek(e.currentTarget, {
+                        kicker: "What this review writes",
+                        width: 480,
+                        content: flowSpec ? (
+                          <>
+                            <div className="wk-prose">{flowSpec.covers}</div>
+                            <div className="wk-prose" style={{ marginTop: 10 }}>
+                              {flowSpec.produces}
+                            </div>
+                            <div className="wk-cav">
+                              Staged intent only: nothing is written until the single approval, and the plan the banker
+                              reads is the plan that executes.
+                            </div>
+                          </>
+                        ) : (
+                          <div className="wk-prose">
+                            No review is bound yet. Pick one above and this states exactly what it covers and what it
+                            files.
+                          </div>
+                        ),
+                      })
+                    }
+                  >
+                    Scope
+                  </button>
+                }
+              >
+                {laneRows.map((row) => (
+                  <div className="wk-ent" key={row.key}>
+                    <TypeIcon kind={row.icon} />
+                    <span className="wk-ent-t">
+                      <b>{row.label}</b>
+                      <span>{row.value}</span>
+                    </span>
+                    {phase === "work" && (
+                      <button
+                        type="button"
+                        className="wk-ent-x"
+                        aria-label={`Take ${row.label} back off the review`}
+                        title="Take it back. The room asks again."
+                        onClick={() => drop(row.key)}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 12 12" aria-hidden="true">
+                          <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </ManifestRail>
+            )}
           </aside>
         </div>
 
@@ -1689,7 +1949,13 @@ export function RelationshipRoom({
  *  because "not assessed" is an ANSWER a governance record should hold, not an
  *  absence the banker has to express by silence. */
 function optionsFor(step: RelStep): Opt[] | undefined {
-  const opts: Opt[] = (step.options ?? []).map((o) => ({ label: o.label, say: o.value, detail: o.detail }));
+  const opts: Opt[] = (step.options ?? []).map((o) => ({
+    label: o.label,
+    say: o.value,
+    detail: o.detail,
+    disabled: o.disabled,
+    reason: o.reason,
+  }));
   if (step.optional) opts.push({ label: SKIP_LABEL, say: SKIP_LABEL });
   return opts.length ? opts : undefined;
 }
@@ -1710,8 +1976,9 @@ function optionsFor(step: RelStep): Opt[] | undefined {
 function stepAccepts(step: RelStep, text: string): boolean {
   const line = text.trim();
   if (!line) return false;
-  if (step.kind === "multi") return matchOptions(step, line).length > 0;
+  // The skip is read before the kind, exactly as `answerLive` reads it.
   if (line === SKIP_LABEL || line.toLowerCase() === "skip") return step.optional === true;
+  if (step.kind === "multi") return matchOptions(step, line).length > 0;
   if (step.kind === "number") return Number.isFinite(Number(line.replace(/[$,\s]/g, "")));
   if (step.options?.length && step.kind === "chips") {
     return step.options.some((o) => o.value.toLowerCase() === line.toLowerCase());
@@ -1720,7 +1987,10 @@ function stepAccepts(step: RelStep, text: string): boolean {
 }
 
 function matchOptions(step: RelStep, text: string): string[] {
-  const opts = step.options ?? [];
+  /* A DISABLED OPTION IS NOT SELECTABLE BY A TYPED LINE EITHER. The chip is
+     refused on the glass and "all" must not quietly pick it up: the org would
+     refuse it anyway, and the banker would read the refusal twice. */
+  const opts = (step.options ?? []).filter((o) => !o.disabled);
   const line = text.trim().toLowerCase();
   if (!line) return [];
   if (/^(all|all of them|everything|the lot)$/.test(line)) return opts.map((o) => o.value);
@@ -1854,9 +2124,18 @@ function RelBlock({
         {item.kind === "agent" && item.options && item.options.length > 0 && (
           <div className="wk-opts">
             {item.options.map((opt) => (
-              <button type="button" className="wk-opt" key={opt.say} onClick={() => onOption(opt.say, opt.label)}>
+              <button
+                type="button"
+                className="wk-opt"
+                key={opt.say}
+                disabled={opt.disabled}
+                title={opt.disabled ? opt.reason : undefined}
+                onClick={() => onOption(opt.say, opt.label)}
+              >
                 {opt.label}
-                {opt.detail && <span className="rl-opt-d">{opt.detail}</span>}
+                {(opt.detail || (opt.disabled && opt.reason)) && (
+                  <span className="rl-opt-d">{opt.disabled && opt.reason ? opt.reason : opt.detail}</span>
+                )}
               </button>
             ))}
           </div>
@@ -2067,6 +2346,7 @@ function relBrainLane(): ((envelope: BrainEnvelope) => Promise<BrainReply>) | un
 export function RelationshipRoomHost() {
   const session = useRelationshipRoom();
   const { data, state, dispatch } = useApp();
+  const generatedAt = data.meta?.generatedAt ?? "";
 
   const accountId = session?.accountId ?? null;
   const bundle = useMemo(() => {
@@ -2082,6 +2362,39 @@ export function RelationshipRoomHost() {
     return relContextFor({ data, bundle, accountId, accountName });
   }, [accountId, accountName, bundle, data]);
 
+  /* ONE MAIL READ PER ROOM OPEN, MADE HERE (SAMPLE-CHANNEL spec, and the same
+     hook the facility room uses). The founder's "when there is an email
+     attached it should be in that first response baked in" did not reach this
+     room at all: `buildRelEnvelope` set no `mail` key, so `useClientMail` was
+     never called from here and the client's own message was invisible to the
+     second room. Net connector traffic for a room open is ONE
+     `outlook_email_search`, unchanged from the facility room's. */
+  const { note: mail, gate: mailGate } = useClientMail({
+    accountName: accountName ?? "",
+    bundle,
+    generatedAt,
+  });
+
+  /* AN EXECUTED REVIEW LANDS IN THE TRAIL (A30), the way WorkroomHost lands a
+     filed change set. The entry is minted by `executedActivityEntry`, which is
+     where every other executed action's entry is minted: five of its six action
+     ids are this room's, so it already knows how to name a covenant batch, a
+     valuation, a review, a rating and a case. */
+  const onFiled = useCallback(
+    (filed: { actionId: WriteActionId; result: ExecuteResult }) => {
+      if (!accountId) return;
+      const entry = executedActivityEntry({
+        actionId: filed.actionId,
+        outcome: filed.result,
+        target: accountName ?? undefined,
+        actor: data.meta?.user,
+        instanceUrl: data.meta?.instanceUrl,
+      });
+      if (entry) dispatch({ type: "LOG_ACTIVITY", accountId, entry });
+    },
+    [accountId, accountName, data.meta?.instanceUrl, data.meta?.user, dispatch],
+  );
+
   const close = useCallback(() => {
     if (accountId) dispatch({ type: "ARM_WASH", accountId });
     closeRelationshipRoom();
@@ -2089,7 +2402,11 @@ export function RelationshipRoomHost() {
 
   const router = useMemo<RelRouter | undefined>(() => {
     if (!session) return undefined;
-    const neutral = () => neutralRelAsk({ data, accountId: session.accountId });
+    /* THE CHIPS KNOW THE BOOK. A covenant route on a relationship carrying no
+       compliance row is offered disabled with that reason rather than taken all
+       the way to a six-question refusal. */
+    const book = ctx ? relBookFor(ctx) : null;
+    const neutral = () => neutralRelAsk({ data, accountId: session.accountId, book });
     return {
       question: session.route ? null : session.opening ? smartRelAsk(session.opening) : neutral(),
       say: session.say,
@@ -2098,7 +2415,7 @@ export function RelationshipRoomHost() {
       onBind: (route, opts) => bindRelRoute(route, opts),
       onRestart: (route, say) => restartRelRoute(route, say),
     };
-  }, [data, session]);
+  }, [ctx, data, session]);
 
   if (!ctx || !session) return null;
   /* Keyed on the route so binding one REBUILDS the room rather than carrying
@@ -2115,6 +2432,9 @@ export function RelationshipRoomHost() {
          the bridge that returns a reply, so the prop is ABSENT and the room
          keeps the step machine alone. */
       brain={relBrainLane()}
+      mail={mail}
+      mailGate={mailGate}
+      onFiled={onFiled}
       onClose={close}
     />
   );

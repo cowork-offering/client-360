@@ -22,6 +22,7 @@ import {
   type WriteActionId,
 } from "../../channel/writeTools";
 import type { IconKind } from "../workroom/TypeIcon";
+import { NO_COMPLIANCE_ROW, relBookFor, type BookCovenant } from "./relBook";
 import type { RelRoute } from "./relRoute";
 
 /* =============================================================================
@@ -95,6 +96,11 @@ export interface StepOption {
   value: string;
   /** A second line under the label, where the org has one worth reading. */
   detail?: string;
+  /** THE OPTION STAYS, DISABLED, CARRYING ITS REASON (A27.3). A covenant the
+   *  org will not accept an assessment on is shown and refused by name; hiding
+   *  it would take the map of what exists away from the banker. */
+  disabled?: boolean;
+  reason?: string;
 }
 
 export interface RelStep {
@@ -111,6 +117,11 @@ export interface RelStep {
   placeholder?: string;
   /** The org field this answer is aimed at, for the "what this writes" peek. */
   target?: { object: string; field: string };
+  /** A NUMBER STEP WHOSE SCALE IS REAL. The room refuses a figure outside it
+   *  with `refusal`, by name, before it becomes an answer. Only set where a
+   *  scale exists in the org and a number off it would be a governance record
+   *  nobody could read. */
+  bounds?: { min: number; max: number; whole: boolean; refusal: string };
 }
 
 /** Everything the banker has answered, keyed by step. Multi-answers are arrays;
@@ -156,7 +167,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The annual review covers the whole relationship: exposure, performance against the package, covenant compliance and the standing risk grade.",
     produces:
-      "It files a credit review record at In Progress carrying the narratives, then hands control to the bank's own Submit for Approval process.",
+      "It files a credit review record at In Progress carrying the narratives, then hands control to the bank's own Submit for Approval process. The review's own decision picklists are on no tool wire and stay for nCino, and the rating on file is untouched by this: changing it is the risk-rating review.",
     writeObjectLabel: "credit review",
     approveLabel: "File the review",
     filedWord: "Filed",
@@ -198,7 +209,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The risk-rating review covers the four factors the grade is built from: cash-flow coverage, revenue growth, management experience and credit score.",
     produces:
-      "It files a risk-rating review carrying the factor scores and the rationale. The grade the org computes from them is the org's, not this room's.",
+      "It files a risk-rating review at In Review carrying the factor actuals, the proposed grade and any override with its written reason. The FINAL grade is nCino's own formula over what is filed, Approved and Declined belong to the org's decisioning path, and the facility-level rating stays in the facility room.",
     writeObjectLabel: "risk-rating review",
     approveLabel: "File the rating review",
     filedWord: "Filed",
@@ -212,7 +223,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The service request covers a servicing ask on this relationship: statements, payoff quotes, document requests or account changes.",
     produces:
-      "It creates the request at status New. The tool performs no status transitions and never closes a case.",
+      "It creates the request at status New, with what the client asked for on the subject and the request in full in the body. The type and the origin are read off this org's own picklists by the tool and are not the room's to set; if the org does not offer the honest pair the case still files and the plan says which pair it used. Nobody is assigned, no turnaround is promised, the tool performs no status transitions and it never closes a case.",
     writeObjectLabel: "service request",
     approveLabel: "Log the request",
     filedWord: "Logged",
@@ -281,6 +292,14 @@ const perRecord = (a: Answers, key: string): Record<string, unknown> =>
  * read.
  */
 export function nextStep(route: RelRoute, ctx: RelContext, a: Answers): RelStep | null {
+  /* A BLOCKED ROUTE ASKS NOTHING, AND IT IS ONE TEST RATHER THAN TWO.
+     The covenant route's own honesty gate was inside `covenantStep`, so the
+     valuation route rendered NO_PACKAGE_ANCHOR under its brief and then asked
+     "which collateral are we valuing?" underneath it: the room refusing and
+     interrogating in the same breath. Caught by the headless drive on
+     2026-09-02, line 5. `relRouteBlock` is the one judgement now, and the room
+     and the machine cannot disagree about it. */
+  if (relRouteBlock(route, ctx)) return null;
   switch (route) {
     case "annual":
       return annualStep(ctx, a);
@@ -289,13 +308,72 @@ export function nextStep(route: RelRoute, ctx: RelContext, a: Answers): RelStep 
     case "valuation":
       return valuationStep(ctx, a);
     case "rating":
-      return ratingStep(a);
+      return ratingStep(ctx, a);
     case "service":
       return serviceStep(ctx, a);
   }
 }
 
-function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
+/**
+ * THE FURTHER SECTIONS OF A REAL ANNUAL REVIEW.
+ *
+ * Six narrative wires were declared on `StageAnnualReview.Request` and HARD
+ * NULLED in `buildStagePayload`, so a review this room filed carried a position
+ * and a recommendation and nothing else. A real annual review carries the
+ * collateral position, the guarantors, the rating affirmation and the financial
+ * read.
+ *
+ * OFFERED AS A CHIP SET, NOT AS SIX SEQUENTIAL QUESTIONS. The addendum's target
+ * is two or three questions, never eight: the banker picks the sections that
+ * matter on this relationship, and each pick opens ONE text step. Default is
+ * none, so a review that only needs a position and a recommendation still takes
+ * exactly the three questions it takes today.
+ */
+const ANNUAL_SECTIONS: Array<{ value: string; label: string; ask: string; field: string }> = [
+  {
+    value: "strengths",
+    label: "Strengths",
+    ask: "The strengths this review rests on.",
+    field: "cm_Strengths_Narrative__c",
+  },
+  {
+    value: "weaknesses",
+    label: "Weaknesses",
+    ask: "And the weaknesses it has to name.",
+    field: "cm_Weakness_Narrative__c",
+  },
+  {
+    value: "collateral",
+    label: "Collateral analysis",
+    ask: "The collateral position, with the dates behind the values.",
+    field: "cm_Collateral_Analysis_Narrative__c",
+  },
+  {
+    value: "guarantors",
+    label: "Guarantors",
+    ask: "The guarantors and what their support is worth.",
+    field: "cm_Guarantor_Narrative__c",
+  },
+  {
+    value: "rating",
+    label: "Rating comments",
+    ask: "The rating affirmation, in prose.",
+    field: "cm_Risk_Rating_Comments__c",
+  },
+  {
+    value: "financial",
+    label: "Financial analysis",
+    ask: "The financial read: the direction, not the level.",
+    field: "cm_Financial_Analyst_Narrative__c",
+  },
+];
+
+/** The section answer keys, so the payload reads them without a second table. */
+export const ANNUAL_SECTION_FIELDS: Record<string, string> = Object.fromEntries(
+  ANNUAL_SECTIONS.map((s) => [s.value, s.field]),
+);
+
+function annualStep(ctx: RelContext, a: Answers): RelStep | null {
   if (!answered(a, "reviewType")) {
     return {
       key: "reviewType",
@@ -313,7 +391,10 @@ function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "The position, in your own words.",
-      target: { object: "LLC_BI__Review__c", field: "LLC_BI__Relationship_Summary__c" },
+      /* THE FIELD NAMED HERE USED TO BE `LLC_BI__Relationship_Summary__c`,
+         WHICH DOES NOT EXIST IN THIS ORG. The payload has always sent the
+         correct `cm_` name; the peek on the founder's screen was wrong. */
+      target: { object: "LLC_BI__Review__c", field: "cm_Relationship_Summary__c" },
     };
   }
   if (!answered(a, "recommendation")) {
@@ -323,25 +404,66 @@ function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "The recommendation.",
-      target: { object: "LLC_BI__Review__c", field: "LLC_BI__Recommendation__c" },
+      /* Was `LLC_BI__Recommendation__c`, which does not exist here either. */
+      target: { object: "LLC_BI__Review__c", field: "cm_Recommendation_Narrative__c" },
     };
   }
+  if (!answered(a, "sections")) {
+    return {
+      key: "sections",
+      ask: "Anything else for the file?",
+      kind: "multi",
+      optional: true,
+      options: ANNUAL_SECTIONS.map((sec) => ({
+        label: sec.label,
+        value: sec.value,
+        detail: `Writes ${sec.field}.`,
+      })),
+      placeholder: "Pick the sections this review needs, or none.",
+    };
+  }
+  const picked = pickedList(a, "sections");
+  const written = perRecord(a, "sectionNarratives");
+  for (const value of picked) {
+    if (answered(written, value)) continue;
+    const sec = ANNUAL_SECTIONS.find((x) => x.value === value);
+    if (!sec) continue;
+    return {
+      key: `sectionNarratives.${value}`,
+      ask: sec.ask,
+      kind: "text",
+      optional: true,
+      placeholder: `${sec.label}, in your own words.`,
+      target: { object: "LLC_BI__Review__c", field: sec.field },
+    };
+  }
+  void ctx;
   return null;
 }
 
 function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
   const covenants = reviewableCovenants(ctx);
+  /* THE BOOK SPEAKS BEFORE THE ROOM ASKS, and `nextStep` has already asked
+     `relRouteBlock` whether this route can run at all. A second copy of that
+     judgement here is how the two come to disagree. */
+  const book = relBookFor(ctx);
+  const byId = new Map(book.covenants.map((c) => [c.covenantId, c]));
   if (!answered(a, "covenants")) {
     return {
       key: "covenants",
       ask: "Which covenants are we assessing?",
       kind: "multi",
       options: covenants.map((c) => {
+        const held = byId.get(c.covenantId!);
         const verdict = classifyCovenant(c);
         return {
           label: covenantLabel(c),
           value: c.covenantId!,
-          detail: `${verdict.label}${c.latestComplianceStatus ? ` · row at ${c.latestComplianceStatus}` : ""}`,
+          detail: [verdict.label, held?.rail, c.latestComplianceStatus ? `row at ${c.latestComplianceStatus}` : null]
+            .filter(Boolean)
+            .join(" · "),
+          disabled: held ? !held.assessable : false,
+          reason: held?.reason ?? undefined,
         };
       }),
       placeholder: "Name the covenants, or pick them above.",
@@ -365,13 +487,25 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
   for (const id of picked) {
     if (answered(observed, id)) continue;
     const cov = covenants.find((c) => c.covenantId === id);
+    const held = byId.get(id);
+    /* THE ROOM PROPOSES THE FIGURE AND ASKS FOR CONFIRMATION. It already holds
+       the actual the read carries; asking cold for a number it is looking at is
+       the "step by step, not intuitive" the founder named. The banker still
+       owns the answer: the proposal is an OPTION, never a default. */
+    const proposed = typeof cov?.actualValue === "number" ? String(cov.actualValue) : null;
     return {
       key: `covenantObservedValues.${id}`,
-      ask: `What figure was tested on the ${covenantLabel(cov ?? {})}?`,
+      ask: proposed
+        ? `The read carries ${held?.rail ?? proposed} on the ${covenantLabel(cov ?? {})}. File that figure, or give me the certificate's own.`
+        : `What figure was tested on the ${covenantLabel(cov ?? {})}?`,
       kind: "number",
       optional: true,
+      options: proposed ? [{ label: proposed, value: proposed, detail: "the figure on the read" }] : undefined,
       placeholder: "The tested figure, or skip it.",
-      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Observed_Value__c" },
+      /* THE TOOL WRITES `LLC_BI__Historic_Financial_Indicator__c`. This peek
+         used to name `LLC_BI__Observed_Value__c`, which the tool does not
+         write, so the founder was reading a wrong field name on the glass. */
+      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Historic_Financial_Indicator__c" },
     };
   }
   const reasons = perRecord(a, "covenantReasons");
@@ -387,6 +521,25 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Reason_for_Exception__c" },
     };
   }
+  /* THE OPT-IN, OFFERED ONLY WHERE A CHOSEN ROW IS NOT PENDING.
+     `allowNonPending` has been on the tool since WS0.5 and the room has never
+     offered it, so such a row could only ever be REFUSED. A write onto it is
+     stored and the covenant schedule does NOT advance, which is a governance
+     fact the banker has to opt into out loud rather than discover afterwards. */
+  const nonPending = picked.map((id) => byId.get(id)).filter((c): c is BookCovenant => Boolean(c?.needsNonPendingOptIn));
+  if (nonPending.length && !answered(a, "allowNonPending")) {
+    const at = [...new Set(nonPending.map((c) => c.complianceStatus ?? "not Pending"))].join(" and ");
+    return {
+      key: "allowNonPending",
+      ask: `${nonPending.length === 1 ? `The ${nonPending[0].name} row sits` : `${nonPending.length} of these rows sit`} at ${at}, not Pending. Record the assessment anyway?`,
+      kind: "chips",
+      options: [
+        { label: "Record it", value: "yes", detail: "The assessment is stored and the schedule does not advance." },
+        { label: "Leave those out", value: "no", detail: "Only rows at Pending are assessed." },
+      ],
+      placeholder: "Record it, or leave those out.",
+    };
+  }
   if (!answered(a, "assessmentNarrative")) {
     return {
       key: "assessmentNarrative",
@@ -394,26 +547,89 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "The basis, for the record.",
-      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Narrative__c" },
+      /* THE TOOL WRITES `Agentic_AI_Response__c`, not `LLC_BI__Narrative__c`.
+         Same correction as the observed figure above: the wire was always
+         right and the "what this writes" peek was always wrong. */
+      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "Agentic_AI_Response__c" },
     };
   }
+  return null;
+}
+
+/**
+ * THE ROUTE CANNOT RUN, AND THE ROOM SAYS SO BEFORE IT ASKS ANYTHING.
+ *
+ * Non-null where the review's own preconditions fail on the read this room is
+ * holding, so the refusal comes FIRST rather than after six questions and a
+ * tool call. This is the single worst moment the addendum names: Hartwell
+ * carries no compliance rows, so the covenant route asked which covenants, then
+ * a verdict each, then a figure each, then a narrative, and only then let the
+ * org refuse all six.
+ *
+ * IT IS NOT THE SAME TEST AS `buildStagePayload`. That one guards the WIRE and
+ * still runs; this one guards the CONVERSATION.
+ */
+/**
+ * WHAT THE ROOM CANNOT SEE, SAID OUT LOUD BEFORE THE ROUTE RUNS.
+ *
+ * `stage_annual_review` CREATES. There is no deployed path that edits a review
+ * already on file, so filing from here files a SECOND record, not an edit. The
+ * addendum wants the room to name the review already open before it asks
+ * anything; no read on this cockpit carries `LLC_BI__Review__c`, so what the
+ * room can honestly say is that it cannot see one. Those are different facts
+ * and a banker acts differently on each.
+ */
+export const ANNUAL_CREATES_A_SECOND =
+  "This tool creates a review; there is no deployed path that edits one already on file, and no read here carries the reviews this relationship already holds. So if a review is already open, filing from here files a second one. Say so and I will hold.";
+
+/** The review's own decision picklists, on no tool wire. Stated, never guessed. */
+export const DECISIONS_NOT_ON_THE_WIRE =
+  "The review's own decision fields are not on this tool: the current and recommended relationship ratings, whether a grade change is requested, whether the covenants were tested and passed, a new policy exception, sending it to credit committee, and the next review type and date. I write the affirmation in the rating comments in prose, and those picklists stay for nCino.";
+
+/** Filed is not approved, and the two fields that would say so are fenced. */
+export const COMPLETE_IS_NOT_OURS =
+  "The review is filed at In Progress, not approved. cm_Review_Stage__c and cm_Approved_Date__c are fenced from this cockpit, and submitting it for approval runs through the bank's own process.";
+
+export function relRouteBlock(route: RelRoute, ctx: RelContext): string | null {
+  if (route === "covenant") {
+    if (!ctx.productPackageId) return NO_PACKAGE_ANCHOR;
+    const book = relBookFor(ctx);
+    if (book.noComplianceRows) return NO_COMPLIANCE_ROW(book.covenants.length);
+    return null;
+  }
+  if (route === "valuation") return ctx.productPackageId ? null : NO_PACKAGE_ANCHOR;
   return null;
 }
 
 function valuationStep(ctx: RelContext, a: Answers): RelStep | null {
   const assets = valuableCollateral(ctx);
   if (!answered(a, "records")) {
+    const held = new Map(relBookFor(ctx).assets.map((x) => [x.collateralId, x]));
     return {
       key: "records",
       ask: "Which collateral are we valuing?",
       kind: "multi",
-      options: assets.map((c) => ({
-        label: collateralLabel(c),
-        value: c.collateralId!,
-        detail: [c.collateralType, typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null]
-          .filter(Boolean)
-          .join(" · "),
-      })),
+      options: assets.map((c) => {
+        const book = held.get(c.collateralId!);
+        /* THE LENDABLE VALUE ON THE OPTION IS THE PLEDGE FIGURE, which is the
+           credit figure. The asset's own formula ignores the pledge override:
+           on Hartwell inventory the asset reads $6.4MM at the 80 percent type
+           rate and the pledge reads $4.0MM at the 50 percent policy rate.
+           Printing the asset figure would print a number the bank does not
+           lend against. NO VALUATION DATE: the read carries none. */
+        return {
+          label: collateralLabel(c),
+          value: c.collateralId!,
+          detail: [
+            c.collateralType,
+            typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null,
+            book?.lendable ? `${book.lendable} lendable` : null,
+            book?.advanceRateSource,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        };
+      }),
       placeholder: "Name the assets, or pick them above.",
     };
   }
@@ -455,8 +671,38 @@ function valuationStep(ctx: RelContext, a: Answers): RelStep | null {
       ask: "And where did the figure come from?",
       kind: "chips",
       options: asOptions(VALUATION_SOURCE?.values),
-      placeholder: "The source of the number.",
+      /* THE ORG'S LIST CARRIES NEITHER A BROKER OPINION OF VALUE NOR A FIELD
+         EXAM, and a banker who says either should be told which of the org's
+         own values covers it rather than watching the room pick one silently. */
+      placeholder: "The source of the number. No BOV and no Field Exam on this org's list.",
       target: { object: "LLC_BI__Collateral_Valuation__c", field: "LLC_BI__Source__c" },
+    };
+  }
+  /* TWO INPUTS THE TOOL HAS ALWAYS TAKEN AND THE ROOM HARDCODED.
+     `primary: false` and `description: null` were written into every payload,
+     so a banker filing the valuation that supersedes the one on file could not
+     say so, and the appraiser who struck the figure went unrecorded. */
+  if (!answered(a, "primary")) {
+    return {
+      key: "primary",
+      ask: "Does this become the primary valuation on the asset?",
+      kind: "chips",
+      options: [
+        { label: "Yes", value: "yes", detail: "It supersedes the valuation on file as the primary." },
+        { label: "No", value: "no", detail: "It joins the ladder and the primary does not move." },
+      ],
+      placeholder: "Yes or no.",
+      target: { object: "LLC_BI__Collateral_Valuation__c", field: "LLC_BI__Primary__c" },
+    };
+  }
+  if (!answered(a, "description")) {
+    return {
+      key: "description",
+      ask: "Name the appraiser or the exam, for the record.",
+      kind: "text",
+      optional: true,
+      placeholder: "Who struck the figure, or skip it.",
+      target: { object: "LLC_BI__Collateral_Valuation__c", field: "LLC_BI__Valuation_Description__c" },
     };
   }
   return null;
@@ -477,9 +723,14 @@ const RATING_FACTORS: Array<{ key: string; label: string; ask: string; field: st
   { key: "creditScore", label: "credit score", ask: "And the credit score?", field: "creditScoreActual" },
 ];
 
+/** THE ONE FACTOR THIS ORG'S TEMPLATE ACTUALLY SCORES. The other three are
+ *  stored as inputs and never weighed, and the tool cannot choose the template,
+ *  so the room says which is which rather than implying a model. */
+const SCORED_FACTOR = "cashFlowCoverage";
+
 const RATING_OBJECT = "LLC_BI__Annual_Review__c";
 
-function ratingStep(a: Answers): RelStep | null {
+function ratingStep(ctx: RelContext, a: Answers): RelStep | null {
   for (const factor of RATING_FACTORS) {
     if (answered(a, factor.key)) continue;
     return {
@@ -491,77 +742,232 @@ function ratingStep(a: Answers): RelStep | null {
       target: { object: RATING_OBJECT, field: factor.field },
     };
   }
+  /* THE PROPOSED GRADE IS STATED AND OWNED, not taken silently. It used to be
+     read off `snapshot.computedRiskRating` inside `buildStagePayload` and never
+     shown, so the banker filed a grade nobody had put in front of them. The
+     read's own figure is offered as a chip; the proposal is theirs. */
+  if (!answered(a, "computedRiskGradeValue")) {
+    const computed = Number(ctx.bundle?.snapshot?.computedRiskRating);
+    const proposed = Number.isFinite(computed) ? String(computed) : null;
+    const onFile = ctx.bundle?.snapshot?.primaryRiskRating;
+    return {
+      key: "computedRiskGradeValue",
+      ask: onFile
+        ? `The grade on file is ${onFile}, on the relationship. What grade does this analysis support, on the rating review's own scale?`
+        : "What grade does this analysis support, on the rating review's own scale?",
+      kind: "number",
+      optional: true,
+      options: proposed ? [{ label: proposed, value: proposed, detail: "the grade the read computes" }] : undefined,
+      placeholder: `A grade from ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}, or skip it.`,
+      bounds: GRADE_BOUNDS,
+      target: { object: RATING_OBJECT, field: "LLC_BI__Computed_Risk_Grade_Value__c" },
+    };
+  }
+  /* THE OVERRIDE IS ON THE WIRE and the room used to refuse it by name.
+     `StageRiskRatingReview.Request.overriddenRiskGradeValue` is deployed and
+     `StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted` covers
+     it. What IS refused is an override with no written reason, which is the
+     org's own Mandatory_comment rule and has no bypass. */
+  if (!answered(a, "overriddenRiskGradeValue")) {
+    return {
+      key: "overriddenRiskGradeValue",
+      ask: "Are you overriding the computed grade? Give me the grade you are filing instead, or skip it.",
+      kind: "number",
+      optional: true,
+      placeholder: `The overriding grade, ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}, or skip it.`,
+      bounds: GRADE_BOUNDS,
+      target: { object: RATING_OBJECT, field: "LLC_BI__Overridden_Risk_Grade_Value__c" },
+    };
+  }
   if (!answered(a, "overrideComment")) {
+    const overriding = hasOverride(a);
     return {
       key: "overrideComment",
-      ask: "State the rationale for the record.",
+      /* AN OVERRIDE ABOVE ZERO MAKES THE COMMENT MANDATORY. The room says so
+         and stops it being optional, rather than letting the org refuse. */
+      ask: overriding
+        ? "An override needs a written reason. That is the org's own rule and it has no bypass."
+        : "State the rationale for the record.",
       kind: "text",
-      optional: true,
-      placeholder: "The rationale.",
+      optional: !overriding,
+      placeholder: overriding ? "The reason for the override." : "The rationale.",
       target: { object: RATING_OBJECT, field: "LLC_BI__Comments__c" },
     };
   }
   return null;
 }
 
+/** TRUE where the answers carry an override above zero. The org's own trigger
+ *  for the Mandatory_comment rule, read the same way in the step and the wire. */
+function hasOverride(a: Answers): boolean {
+  const v = num(a.overriddenRiskGradeValue);
+  return v !== null && v > 0;
+}
+
 /**
- * THE GRADE OVERRIDE IS NOT COLLECTED, and the room says so rather than taking
- * a figure it cannot file.
+ * THE OVERRIDE NEEDS A WRITTEN REASON, and that is the only thing refused.
  *
- * The staged plan writes `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool
- * almost certainly accepts an override input — but no observed request has ever
- * carried one and its wire name would be a guess. Guessing a field name is the
- * failure this campaign has already paid for twice, so the room states the gap
- * exactly as the ticket does instead of sending an invented key.
+ * This constant REPLACES `OVERRIDE_NOT_FILEABLE`, which told the banker the
+ * override could not be filed because its wire name had never been observed.
+ * That was false against the source in this repo:
+ * `StageRiskRatingReview.Request.overriddenRiskGradeValue` is deployed, carries
+ * its own description, and `StageExecuteRiskRatingReviewTest`
+ * .overrideWithACommentIsAccepted covers it. The room was refusing a capability
+ * the tool already takes.
+ *
+ * What is real is the org's `Mandatory_comment` rule: any override above zero
+ * requires `LLC_BI__Comments__c`, and it has no bypass. The room validates it
+ * before the org has to.
  */
-export const OVERRIDE_NOT_FILEABLE =
-  "The rating override cannot be filed from here. The plan writes the overridden grade, but the input's wire name has never been observed and this room does not guess one. Record the rationale and set the override in nCino.";
+export const OVERRIDE_NEEDS_A_REASON =
+  "An override above zero needs a written reason. That is the org's own rule and it has no bypass. Give me the reason and I will file both.";
+
+/**
+ * THE RATING REVIEW'S OWN SCALE, and the ONLY place the room holds it.
+ *
+ * `StageRiskRatingReview.cls` states it in its header ("the review scale here is
+ * 1 to 12") and on `computedRiskGradeValue`'s own describe ("The model output,
+ * on the 1 to 12 review scale"). It does NOT enforce it: the class validates
+ * `accountId`, `rationale` and the Mandatory_comment rule, and nothing else, so
+ * a 47, a 99 or a 0 travelled the wire and filed. The doctrine block calls this
+ * surface "unbounded" and that stays true of the ORG. It is not true of the
+ * room.
+ *
+ * The bound is written here and not read from doctrine deliberately: the
+ * doctrine block is prose the model reasons over, not a validator, and a
+ * refusal that depends on a sentence being selected is not a refusal.
+ */
+export const RISK_GRADE_SCALE = { min: 1, max: 12 } as const;
+
+/**
+ * THE GRADE IS OFF THE SCALE, refused by name with the scale stated.
+ *
+ * Zero is refused with the rest and for its own reason: on the override wire it
+ * is the org's own "no override" sentinel (`Mandatory_comment` fires above
+ * zero), so filing a zero would look like an override that needed no comment
+ * and read like a grade at the same time. The question is optional; skipping it
+ * is how a banker says nothing.
+ */
+export const GRADE_OFF_THE_SCALE =
+  `The rating review's own scale is ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}, in whole numbers, and I will not file a grade off it. Zero is not a grade on this scale either: skip the question instead. Give me a number from ${RISK_GRADE_SCALE.min} to ${RISK_GRADE_SCALE.max}.`;
+
+const GRADE_BOUNDS = {
+  min: RISK_GRADE_SCALE.min,
+  max: RISK_GRADE_SCALE.max,
+  whole: true,
+  refusal: GRADE_OFF_THE_SCALE,
+} as const;
+
+/** TRUE where a figure sits inside a step's declared scale. */
+export function onScale(n: number, b: NonNullable<RelStep["bounds"]>): boolean {
+  return Number.isFinite(n) && (!b.whole || Number.isInteger(n)) && n >= b.min && n <= b.max;
+}
+
+/** TRUE where a figure is a grade this org's review scale can hold. */
+export function onRiskGradeScale(n: number | null): boolean {
+  return n !== null && onScale(n, GRADE_BOUNDS);
+}
+
+/**
+ * SPECIAL MENTION IS NOT A GRADE IN THIS ORG.
+ *
+ * The interagency categories are the regulatory classification and this org's
+ * rating scale is numeric. Writing "Substandard" into a numeric grade field is
+ * not a thing the org can hold, and reading a number out of the word would be
+ * inventing the bank's own mapping.
+ */
+export const NOT_A_CLASSIFICATION =
+  "Special Mention, Substandard, Doubtful and Loss are the regulatory categories and this org's scale is numeric. I file the grade; the classification is assigned elsewhere and I will not write one into it.";
+
+/**
+ * FOUR GRADE SURFACES ARE LIVE HERE AND THEY DO NOT AGREE.
+ *
+ * THE RANGES OF THE OTHER THREE ARE NOT INLINED HERE. They live in the
+ * `risk-rating` doctrine block, which is where every other bank figure the
+ * model reasons over lives; a component that restates a scale is a second place
+ * for it to drift. This room's own surface IS inlined, in
+ * `RISK_GRADE_SCALE` above, because the room ENFORCES that one and a bound
+ * cannot be enforced from prose.
+ */
+export const NAME_THE_SURFACE =
+  "Four grade surfaces are live here and they do not agree: the facility's, the package's, the review's and this rating review's own. The number I am filing is on the rating review's own scale.";
+
+/** The org put this rating on a template that scores ONE factor. */
+export const SCORED_VS_STORED =
+  "This org's rating template scores cash-flow coverage and nothing else. The credit score, the management experience and the revenue growth are recorded as inputs and not weighed, and the tool cannot choose the template.";
+
+/** The dual-rating fields exist, are empty on every record, and are on no wire. */
+export const DUAL_RATING_NOT_CARRIED =
+  "The probability of default and loss given default fields exist on this object and are empty on every record here, and none is on this tool's wire. I read them; I never claim them.";
 
 /** "override the grade to 6", "downgrade it to 7 manually". */
 const OVERRIDE_ASK = /\b(override|overrid\w*)\b/i;
+
+/** The interagency categories, which this org's numeric scale does not hold. */
+const CLASSIFICATION_ASK = /\b(special\s+mention|substandard|doubtful|criticised|criticized|classif\w+)\b/i;
 
 /** TRUE where the banker asked to override the computed grade. */
 export function asksForOverride(text: string, route: RelRoute): boolean {
   return route === "rating" && OVERRIDE_ASK.test(text.trim());
 }
 
+/** TRUE where the banker named a REGULATORY CLASSIFICATION rather than a grade. */
+export function asksForClassification(text: string, route: RelRoute): boolean {
+  return route === "rating" && CLASSIFICATION_ASK.test(text.trim());
+}
+
+/**
+ * THE SERVICE REQUEST, WITH ITS SUBJECT AND ITS BODY THE RIGHT WAY ROUND.
+ *
+ * THREE DEFECTS LIVED ON FOUR LINES OF THIS FUNCTION, all of them against the
+ * deployed `StageServiceRequest.cls` in this repo.
+ *
+ * 1. THE SUBJECT AND THE BODY WERE INVERTED. The Apex is explicit:
+ *    `requestType` is "Banker-language description of what the client asked
+ *    for. Becomes the case subject" and maps `'Subject' => req.requestType`;
+ *    `summary` is "The request in full, as the servicing team needs to read it"
+ *    and maps `'Description' => describeWithSource(req)`. Both are
+ *    required=true. The room asked "What kind of request is this?" for
+ *    `requestType`, so a CATEGORY landed on the subject line, and "State the
+ *    subject" for `summary`, so THE SUBJECT LANDED IN THE DESCRIPTION BODY.
+ *
+ * 2. `origin` IS NOT A WIRE. The class declares no origin invocable variable at
+ *    all. It resolves `Case.Type` and `Case.Origin` itself through
+ *    `C360Picklist.preferredOrFallback` and reports `degradedTypeMode`. The
+ *    banker answered "How did it reach us?" and the answer was dropped on the
+ *    floor. The step and the payload key are gone.
+ *
+ * 3. `Case.Type` AND `Case.Origin` CHIPS WOULD REPEAT DEFECT 2. The catalog now
+ *    carries both, and the wire-arms follow-up says to pass them into this
+ *    room. DO NOT. Neither is on the wire, so a chip set from them is a
+ *    question that cannot be filed. They are named in `produces` as facts the
+ *    ORG sets, and never offered as chips. The catalog reaches this room for
+ *    covenantType and collateralType only.
+ */
 function serviceStep(ctx: RelContext, a: Answers): RelStep | null {
-  /* NO OPTIONS ON THESE TWO, and that is the honest shape. `Case.Type` and
-     `Case.Origin` have never been read off this org — they are absent from the
-     observed-picklist cache by design — so the room takes the banker's own word
-     and lets the tool validate. A refusal comes back carrying the LEGAL LIST,
-     which `legalValuesFrom` lifts out and the room re-offers as chips. Inventing
-     a value set here is the failure the campaign has already paid for twice. */
-  if (!answered(a, "type")) {
-    return {
-      key: "type",
-      ask: "What kind of request is this?",
-      kind: "text",
-      placeholder: "The request type.",
-      target: { object: "Case", field: "Type" },
-    };
-  }
-  if (!answered(a, "origin")) {
-    return {
-      key: "origin",
-      ask: "How did it reach us?",
-      kind: "text",
-      placeholder: "The origin.",
-      target: { object: "Case", field: "Origin" },
-    };
-  }
-  if (!answered(a, "subject")) {
+  if (!answered(a, "requestType")) {
     /* THE CLIENT'S OWN WORDS LEAD, where the read staged an inbound request.
        Offered as a chip, never written silently: a subject the banker did not
        choose is a case nobody can defend at audit. */
     const inbound = (ctx.bundle?.requests ?? [])[0]?.summary?.trim();
     return {
-      key: "subject",
-      ask: "State the subject, as it should read on the case.",
+      key: "requestType",
+      ask: "What did the client ask for? One line, as it should read on the case.",
       kind: "text",
-      options: inbound ? [{ label: inbound.slice(0, 120), value: inbound.slice(0, 120), detail: "from the client's request" }] : undefined,
-      placeholder: "The subject.",
+      options: inbound
+        ? [{ label: inbound.slice(0, 120), value: inbound.slice(0, 120), detail: "from the client's request" }]
+        : undefined,
+      placeholder: "The ask, in one line.",
       target: { object: "Case", field: "Subject" },
+    };
+  }
+  if (!answered(a, "summary")) {
+    return {
+      key: "summary",
+      ask: "And the request in full, as the servicing team needs to read it.",
+      kind: "text",
+      placeholder: "The request, in full.",
+      target: { object: "Case", field: "Description" },
     };
   }
   if (!answered(a, "detail")) {
@@ -612,12 +1018,24 @@ const text = (v: unknown): string | null => {
  */
 export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, idempotencyKey: string): PayloadResult {
   const spec = REL_FLOWS[route];
-  const typed = [text(a.relationshipSummary), text(a.recommendation), text(a.assessmentNarrative), text(a.overrideComment), text(a.detail)]
+  const typed = [
+    text(a.relationshipSummary),
+    text(a.recommendation),
+    text(a.assessmentNarrative),
+    text(a.overrideComment),
+    text(a.detail),
+  ]
     .filter((x): x is string => !!x)
     .join(" ");
   const rationale = stageRationale({ actionId: spec.actionId, accountName: ctx.accountName, typed });
 
   if (route === "annual") {
+    const written = perRecord(a, "sectionNarratives");
+    /* A SECTION TRAVELS ONLY WHERE IT WAS PICKED AND ANSWERED. A section the
+       banker never chose is null, and one they chose and skipped is null too:
+       the wire carries what was written and nothing about the choosing. */
+    const section = (value: string): string | null =>
+      pickedList(a, "sections").includes(value) ? text(written[value]) : null;
     return {
       ok: true,
       payload: {
@@ -628,13 +1046,13 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
         productPackageId: ctx.productPackageId,
         narrative: null,
         relationshipSummary: text(a.relationshipSummary),
-        strengthsNarrative: null,
-        weaknessNarrative: null,
+        strengthsNarrative: section("strengths"),
+        weaknessNarrative: section("weaknesses"),
         recommendationNarrative: text(a.recommendation),
-        collateralAnalysisNarrative: null,
-        financialAnalystNarrative: null,
-        guarantorNarrative: null,
-        riskRatingComments: null,
+        collateralAnalysisNarrative: section("collateral"),
+        financialAnalystNarrative: section("financial"),
+        guarantorNarrative: section("guarantors"),
+        riskRatingComments: section("rating"),
       },
     };
   }
@@ -663,16 +1081,17 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
     if (!assessments.length || assessments.length !== picked.length) {
       return { ok: false, blocked: "Every covenant on the list needs a verdict before the plan can be staged." };
     }
-    return {
-      ok: true,
-      payload: {
-        idempotencyKey,
-        rationale,
-        productPackageId: ctx.productPackageId,
-        assessments,
-        covenantIds: picked,
-      },
+    const payload: StagePayloads["covenant-review"] = {
+      idempotencyKey,
+      rationale,
+      productPackageId: ctx.productPackageId,
+      assessments,
+      covenantIds: picked,
     };
+    // ONLY WHERE THE BANKER SAID YES OUT LOUD. An absent key is the tool's own
+    // default of false; sending `false` would claim the question was asked.
+    if (a.allowNonPending === "yes") payload.allowNonPending = true;
+    return { ok: true, payload };
   }
 
   if (route === "valuation") {
@@ -692,8 +1111,8 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
       valuationDate,
       type: text(a.type),
       source: text(a.source),
-      description: null,
-      primary: false,
+      description: text(a.description),
+      primary: a.primary === "yes",
     };
     return {
       ok: true,
@@ -707,21 +1126,44 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
   }
 
   if (route === "rating") {
-    const computed = Number(ctx.bundle?.snapshot?.computedRiskRating);
+    // THE GRADE THE BANKER OWNS, falling back to the read's own computed figure
+    // only where they skipped the question rather than answered it.
+    const fromRead = Number(ctx.bundle?.snapshot?.computedRiskRating);
+    const answeredGrade = num(a.computedRiskGradeValue);
+    const overridden = num(a.overriddenRiskGradeValue);
+    const comments = text(a.overrideComment);
+    /* THE ORG'S OWN RULE, CHECKED BEFORE THE ORG HAS TO. `Mandatory_comment`
+       fires on any override above zero and has no bypass, so a plan that would
+       certainly be refused is blocked here with the reason in words. */
+    if (overridden !== null && overridden > 0 && !comments) {
+      return { ok: false, blocked: OVERRIDE_NEEDS_A_REASON };
+    }
+    /* AND NEITHER GRADE MAY LEAVE THE SCALE. The step refuses it first, so this
+       is the second gate rather than the only one: an answer can also arrive
+       from a chip, from the read's own computed figure, or from a restored
+       session, and none of those goes through the composer. The org enforces
+       nothing here, so if this passes a 47 the org files a 47. */
+    for (const grade of [answeredGrade, overridden]) {
+      if (grade !== null && !onRiskGradeScale(grade)) return { ok: false, blocked: GRADE_OFF_THE_SCALE };
+    }
+    const fallback = Number.isFinite(fromRead) && onRiskGradeScale(fromRead) ? fromRead : null;
     return {
       ok: true,
       payload: {
         idempotencyKey,
         accountId: ctx.accountId,
         rationale,
-        computedRiskGradeValue: Number.isFinite(computed) ? computed : null,
+        computedRiskGradeValue: answeredGrade ?? fallback,
+        overriddenRiskGradeValue: overridden,
         cashFlowCoverageActual: num(a.cashFlowCoverage),
         revenueGrowthActual: num(a.revenueGrowth),
         managementExperienceActual: num(a.managementExperience),
         creditScoreActual: num(a.creditScore),
-        comments: text(a.overrideComment),
-        // NO override key. Its wire name has never been observed, and the room
-        // does not invent one for the same reason the panel does not.
+        comments,
+        /* NO loanId. It is the only facility-LGD hook on any of the five wires,
+           and a facility rating is the facility room's subject: this route's
+           whole frame is the borrower. Left off deliberately, and `produces`
+           says so. */
       },
     };
   }
@@ -733,9 +1175,13 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
       idempotencyKey,
       accountId: ctx.accountId,
       rationale,
-      requestType: text(a.type),
-      origin: text(a.origin),
-      summary: text(a.subject),
+      // requestType BECOMES THE SUBJECT and summary BECOMES THE DESCRIPTION.
+      // The Apex says so in its own field descriptions; the room used to send
+      // these two the other way round.
+      requestType: text(a.requestType),
+      summary: text(a.summary),
+      // NO `origin`. StageServiceRequest declares no such invocable variable:
+      // it reads Case.Type and Case.Origin off this org's own picklists.
       referenceKind: req?.reference?.kind ?? null,
       referenceId: req?.reference?.id ?? null,
       referenceWebLink: req?.reference?.webLink ?? null,
@@ -921,9 +1367,19 @@ export function dossierRowsFor(route: RelRoute, ctx: RelContext, answers: Answer
 
   if (route === "rating") {
     rows.push({ icon: "commit", label: "risk-rating review", value: named(result.recordName) });
+    const overridden = num(answers.overriddenRiskGradeValue);
+    const proposed = num(answers.computedRiskGradeValue);
+    if (proposed !== null) rows.push({ icon: "commit", label: "proposed grade", value: String(proposed) });
+    if (overridden !== null) rows.push({ icon: "commit", label: "override", value: String(overridden) });
     for (const factor of RATING_FACTORS) {
       const v = num(answers[factor.key]);
-      if (v !== null) rows.push({ icon: "pricing", label: factor.label, value: String(v) });
+      if (v === null) continue;
+      /* WHICH FIGURE THE ORG ACTUALLY WEIGHS. This org put the rating on a
+         template that scores cash-flow coverage and nothing else; the other
+         three are stored as inputs. A dossier listing four factors with no
+         distinction implies a model that does not exist here. */
+      const label = factor.key === SCORED_FACTOR ? `${factor.label}, scored` : `${factor.label}, recorded`;
+      rows.push({ icon: "pricing", label, value: String(v) });
     }
     return rows;
   }
