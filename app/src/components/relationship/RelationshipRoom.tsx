@@ -24,11 +24,13 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "../workroom/entryChoreography";
-import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
+import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { Narration, useNarration } from "../../channel/Narration";
 import { subjectFor } from "../../channel/narrate";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
+import { NO_COMPLIANCE_ROW_CHIP, relBookFor, type RelBook } from "./relBook";
+import { useClientMail } from "../workroom/clientMail";
 import { stepperState } from "../../workroom/stepper";
 import {
   FACILITY_HANDOFF,
@@ -223,17 +225,23 @@ export interface RelRouterQuestion {
  * without a snapshot; without them every route reads as available, which is the
  * shell's own default and never a claim about an org.
  */
-export function neutralRelAsk(args?: { data: C360Data; accountId: string | null }): RelRouterQuestion {
+export function neutralRelAsk(args?: { data: C360Data; accountId: string | null; book?: RelBook | null }): RelRouterQuestion {
   return {
     line: NEUTRAL_QUESTION,
     chips: REL_ROUTE_CHIPS.map((c) => {
       if (!args) return { label: c.label, route: c.route };
       const availability = routeAvailability(c.route, args.data, args.accountId);
+      /* THE HONESTY GATE, ON THE CHIP (section 1.5). Where NOT ONE covenant
+         carries a compliance row the covenant route can only end in a refusal,
+         so the chip says so instead of offering it. It STAYS on the glass,
+         disabled, carrying the reason (A27.3): hiding a route takes the map
+         away from the banker. */
+      const noRows = c.route === "covenant" && args.book?.noComplianceRows === true;
       return {
         label: c.label,
         route: c.route,
-        disabled: !availability.available,
-        reason: availability.reason,
+        disabled: !availability.available || noRows,
+        reason: noRows ? NO_COMPLIANCE_ROW_CHIP : availability.reason,
       };
     }),
   };
@@ -469,6 +477,8 @@ export function RelationshipRoom({
   onClose,
   brain,
   deps = defaultRelDeps,
+  mail = null,
+  mailGate = true,
 }: {
   ctx: RelContext;
   /** Null while the room is still asking which review this is. */
@@ -486,9 +496,23 @@ export function RelationshipRoom({
    */
   brain?: (envelope: BrainEnvelope) => Promise<BrainReply>;
   deps?: RelFlowDeps;
+  /**
+   * THE CLIENT'S OWN MESSAGE, AND THE GATE THE GREETING WAITS ON.
+   *
+   * Injected rather than read here, exactly as the facility room does it: one
+   * `outlook_email_search` per room open, made by the host, and the room asks
+   * nothing about where the note came from. ABSENT is the channel-none case and
+   * the gate is then open on the first tick.
+   */
+  mail?: BrainMail | null;
+  mailGate?: boolean;
 }) {
   const reduced = prefersReducedMotion();
   const brief = useMemo(() => briefFor(ctx), [ctx]);
+  /* THE BOOK, READ ONCE. What this relationship already carries, so a step does
+     not ask what the read answers and a route that can only refuse says so
+     before it asks anything. */
+  const book = useMemo(() => relBookFor(ctx), [ctx]);
   const flowSpec = route ? REL_FLOWS[route] : null;
 
   const [ask, setAsk] = useState<RelRouterQuestion | null>(() => router?.question ?? null);
@@ -551,11 +575,16 @@ export function RelationshipRoom({
   /* ---- THE RITUAL OPENS. The agent greets on the relationship, the lookup
           shimmers, and the room states its position. Under reduced motion the
           whole ritual is simply there. */
+  const openingIdRef = useRef<string>("");
   useEffect(() => {
-    setItems([
+    const opening: RelItem[] = [
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
-    ]);
+    ];
+    // The greeting's own id, so the ONE consent moment can land its remark
+    // under the greeting the banker just opened the room for.
+    openingIdRef.current = opening[0].id;
+    setItems(opening);
     tierArrived("question");
     /* THE LOOKUP LANDS ON THE POSITION, and nothing else. The route's brief is
        pushed by the BIND effect below, which owns it whether the route was bound
@@ -894,6 +923,8 @@ export function RelationshipRoom({
         route,
         ctx,
         reads,
+        mail,
+        book,
         thread: conversation(),
         collected: laneRows.map((r) => ({
           title: r.label,
@@ -901,7 +932,7 @@ export function RelationshipRoom({
           after: r.value,
         })),
       }),
-    [conversation, ctx, laneRows, reads, route],
+    [book, conversation, ctx, laneRows, mail, reads, route],
   );
 
   const askTheDesk = useCallback(
@@ -924,6 +955,54 @@ export function RelationshipRoom({
      session door is absent, so channel-none renders exactly today's sentences. */
   const narration = useNarration({ enabled: Boolean(brain), envelopeFor });
   const narrated = useRef(new Set<string>());
+
+  /* THE ONE CONSENT MOMENT, IN THIS ROOM TOO (SAMPLE-CHANNEL spec: consent
+     rides the greeting).
+
+     The platform asks the viewer to allow this artifact to use their Claude on
+     the FIRST call of a view, and the call waits while they decide. This room
+     never made that call from its greeting, so the dialog landed on whatever
+     line happened to narrate first, MID-REVIEW. The first call is now the one
+     the banker asked for by opening the room.
+
+     ONCE, AND AFTER BOTH GATES. `narration.open` is latched per item id, so a
+     second call was already inert; what was NOT inert is the mail ref below,
+     which a later pass would overwrite with a note that arrived after the
+     greeting had gone. `primeConsent` memoises the PROMISE and ignores every
+     later caller's prompt, so a greeting that wants the mail must wait BEFORE
+     the first call rather than recompose after it. */
+  const greetedWithMail = useRef(false);
+  const greeted = useRef(false);
+  useEffect(() => {
+    if (!brain || !awake || !openingIdRef.current || greeted.current) return;
+    if (!mailGate) return;
+    const said = `${brief.greeting} ${ask ? ask.line : brief.position}`.trim();
+    if (!said) return;
+    greetedWithMail.current = Boolean(mail);
+    greeted.current = true;
+    narration.open(openingIdRef.current, { act: "greeting", sentence: said });
+  }, [ask, awake, brain, brief.greeting, brief.position, mail, mailGate, narration]);
+
+  /* MAIL THAT MISSED THE GATE IS A SECOND REMARK, NEVER A REWRITTEN GREETING.
+     The greeting is already on the glass and it is the one call that carried
+     consent; taking it back would be the room changing its mind in front of the
+     banker. `narrate`, not `prime`: no second dialog and no second connector
+     call. A declined view deletes the greeting's own view, which silences this
+     too. */
+  const followedUp = useRef(false);
+  useEffect(() => {
+    if (!brain || !mail || followedUp.current) return;
+    if (!greeted.current || greetedWithMail.current) return;
+    const opening = narration.viewFor(openingIdRef.current);
+    if (!opening || opening.pending) return;
+    followedUp.current = true;
+    const who = mail.from ?? "the client";
+    const when = mail.received ? ` on ${mail.received}` : "";
+    narration.narrate(`${openingIdRef.current}::mail`, {
+      act: "mail",
+      sentence: `A message from ${who}${when} is open on this relationship.`,
+    });
+  }, [brain, mail, narration]);
 
   useEffect(() => {
     const last = items[items.length - 1];
@@ -1350,6 +1429,9 @@ export function RelationshipRoom({
   const tiersShown = choreo.summoned || histOpen;
   const laneFolded = Math.max(0, laneRows.length - LANE_VISIBLE);
 
+  /* THE GREETING'S OWN REMARK RIDES THE OPENING BUBBLE. Every other item's
+     remark is rendered by the thread loop under `Narration`; the opening is a
+     tier and is rendered through `opening`, so its view is drawn here. */
   const openingItem = (
     <div className="wk-msg wk-agent" data-who="Agent" key="opening">
       <div className="wk-bub">
@@ -1408,6 +1490,8 @@ export function RelationshipRoom({
           </button>
         </div>
       </div>
+      <Narration view={narration.viewFor(openingIdRef.current)} />
+      <Narration view={narration.viewFor(`${openingIdRef.current}::mail`)} />
     </div>
   );
 
@@ -2067,6 +2151,7 @@ function relBrainLane(): ((envelope: BrainEnvelope) => Promise<BrainReply>) | un
 export function RelationshipRoomHost() {
   const session = useRelationshipRoom();
   const { data, state, dispatch } = useApp();
+  const generatedAt = data.meta?.generatedAt ?? "";
 
   const accountId = session?.accountId ?? null;
   const bundle = useMemo(() => {
@@ -2082,6 +2167,19 @@ export function RelationshipRoomHost() {
     return relContextFor({ data, bundle, accountId, accountName });
   }, [accountId, accountName, bundle, data]);
 
+  /* ONE MAIL READ PER ROOM OPEN, MADE HERE (SAMPLE-CHANNEL spec, and the same
+     hook the facility room uses). The founder's "when there is an email
+     attached it should be in that first response baked in" did not reach this
+     room at all: `buildRelEnvelope` set no `mail` key, so `useClientMail` was
+     never called from here and the client's own message was invisible to the
+     second room. Net connector traffic for a room open is ONE
+     `outlook_email_search`, unchanged from the facility room's. */
+  const { note: mail, gate: mailGate } = useClientMail({
+    accountName: accountName ?? "",
+    bundle,
+    generatedAt,
+  });
+
   const close = useCallback(() => {
     if (accountId) dispatch({ type: "ARM_WASH", accountId });
     closeRelationshipRoom();
@@ -2089,7 +2187,11 @@ export function RelationshipRoomHost() {
 
   const router = useMemo<RelRouter | undefined>(() => {
     if (!session) return undefined;
-    const neutral = () => neutralRelAsk({ data, accountId: session.accountId });
+    /* THE CHIPS KNOW THE BOOK. A covenant route on a relationship carrying no
+       compliance row is offered disabled with that reason rather than taken all
+       the way to a six-question refusal. */
+    const book = ctx ? relBookFor(ctx) : null;
+    const neutral = () => neutralRelAsk({ data, accountId: session.accountId, book });
     return {
       question: session.route ? null : session.opening ? smartRelAsk(session.opening) : neutral(),
       say: session.say,
@@ -2098,7 +2200,7 @@ export function RelationshipRoomHost() {
       onBind: (route, opts) => bindRelRoute(route, opts),
       onRestart: (route, say) => restartRelRoute(route, say),
     };
-  }, [data, session]);
+  }, [ctx, data, session]);
 
   if (!ctx || !session) return null;
   /* Keyed on the route so binding one REBUILDS the room rather than carrying
@@ -2115,6 +2217,8 @@ export function RelationshipRoomHost() {
          the bridge that returns a reply, so the prop is ABSENT and the room
          keeps the step machine alone. */
       brain={relBrainLane()}
+      mail={mail}
+      mailGate={mailGate}
       onClose={close}
     />
   );

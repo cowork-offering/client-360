@@ -1,4 +1,4 @@
-import type { BrainEnvelope, BrainFacility, BrainFileable, BrainTurn } from "../../channel/brainLane";
+import type { BrainEnvelope, BrainFacility, BrainFileable, BrainMail, BrainTurn } from "../../channel/brainLane";
 import { capEnvelope } from "../../channel/brainLane";
 import type { Facility } from "../../data/contract";
 import { facilityProduct } from "../../data/facilityStage";
@@ -6,6 +6,7 @@ import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
 import { buildReadBlocks, threadDigest } from "../workroom/readBlocks";
 import type { ReadSource } from "../workroom/readCard";
+import { relEntities, type RelBook } from "./relBook";
 import { CREATE_GAPS, OVERRIDE_NOT_FILEABLE, type RelContext } from "./reviewFlows";
 import { FACILITY_HANDOFF, REL_ROUTE_WORD, type RelRoute } from "./relRoute";
 
@@ -80,8 +81,16 @@ export function buildRelEnvelope(args: {
   thread?: BrainTurn[];
   /** What the review has collected so far: the question, and the answer given. */
   collected: Array<{ title: string; target: string; after: string }>;
+  /** THE CLIENT'S OWN MESSAGE, where this room found one. Top level on the
+   *  envelope, never inside `reads`: it is a request, not a read, and no figure
+   *  the room prints ever comes from it. */
+  mail?: BrainMail | null;
+  /** The book this relationship already carries, for the greeting's own rail. */
+  book?: RelBook | null;
 }): BrainEnvelope {
   const routeOpen = args.route === null;
+  const mail = args.mail ?? undefined;
+  const entities = args.book ? relEntities(args.book) : [];
   return capEnvelope({
     v: 2,
     line: args.line,
@@ -99,7 +108,11 @@ export function buildRelEnvelope(args: {
     selectedFacility: null,
     facilities: facilitiesOf(args.ctx),
     staged: args.collected,
-    reads: buildReadBlocks(args.reads),
+    /* `hasMail` adds the one line to `notCarried` that lets a reply refuse a
+       THREAD by name: this room reads one message, never a conversation. */
+    reads: buildReadBlocks(args.reads, Boolean(mail)),
+    mail,
+    entities: entities.length ? entities : undefined,
     thread: args.thread ? threadDigest(args.thread) : undefined,
     fileable: relFileable(args.route),
     grounding: "plugin-skill:workroom-brain",

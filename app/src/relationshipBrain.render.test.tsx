@@ -6,7 +6,9 @@ import { RelationshipRoom, neutralRelAsk, type RelRouter } from "./components/re
 import { closeRelationshipRoom } from "./components/relationship/relSession";
 import { relContextFor, type RelContext, type RelFlowDeps } from "./components/relationship/reviewFlows";
 import type { RelRoute } from "./components/relationship/relRoute";
-import type { BrainEnvelope, BrainReply } from "./channel/brainLane";
+import type { BrainEnvelope, BrainMail, BrainReply } from "./channel/brainLane";
+import { acquireSample, resetSessionDoor } from "./channel/sampleDoor";
+import { resetSampleMetrics, sampleTimings } from "./channel/sampleMetrics";
 import type { BorrowerBundle, C360Data } from "./data/contract";
 import type { ExecuteResult, ToolOutcome } from "./channel/writeTools";
 import type { StagedOutput } from "./actions/stagedPlan";
@@ -41,6 +43,9 @@ afterEach(() => {
   root = null;
   container = null;
   document.body.className = "";
+  delete (window as unknown as { claude?: unknown }).claude;
+  resetSessionDoor();
+  resetSampleMetrics();
 });
 
 const PACKAGE = "a5Fbb000000IHFJEA4";
@@ -130,6 +135,8 @@ function open(args: {
   route?: RelRoute | null;
   routeOpen?: boolean;
   brain?: (e: BrainEnvelope) => Promise<BrainReply>;
+  mail?: BrainMail | null;
+  mailGate?: boolean;
 }): Opened {
   const bound: Opened["bound"] = [];
   const router: RelRouter = {
@@ -151,6 +158,8 @@ function open(args: {
         router={router}
         brain={args.brain}
         deps={deps}
+        mail={args.mail ?? null}
+        mailGate={args.mailGate ?? true}
         onClose={() => {}}
       />,
     );
@@ -353,5 +362,124 @@ describe("with no bridge the room is exactly the room that shipped", () => {
     await type(room, "which covenants are on this relationship?");
 
     expect(document.body.querySelectorAll(".wk-read")).toHaveLength(1);
+  });
+});
+
+/* =============================================================================
+   CONSENT RIDES THE GREETING, IN THE SECOND ROOM TOO.
+
+   The platform's consent dialog appears on the FIRST call a view makes, and the
+   call waits while the viewer decides. This room never made that call from its
+   greeting, so the dialog landed on whatever line happened to narrate first,
+   MID-REVIEW, against the SAMPLE-CHANNEL spec's own rule. What these hold is
+   that the greeting is the first call, that it is made ONCE, that it is made
+   only after both gates, and that a room with no session door renders exactly
+   what it rendered before any of this existed.
+   ============================================================================= */
+
+/**
+ * THE SESSION DOOR at the runtime's own shape.
+ *
+ * `kind` is the DOOR's own book-keeping and never reaches the page function, so
+ * the greeting is counted through `sampleTimings()` the way the sample gate
+ * counts it, not through an option the runtime does not carry.
+ */
+async function installDoor(text: string): Promise<{ prompts: string[] }> {
+  const prompts: string[] = [];
+  (window as unknown as { claude?: unknown }).claude = {
+    use: async (name: string) =>
+      name === "sample"
+        ? async (input: string, options?: { onText?: (u: { text: string; delta: string }) => void }) => {
+            prompts.push(input);
+            options?.onText?.({ text, delta: text });
+            return { text, truncated: false, modelTierApplied: "quick" };
+          }
+        : null,
+  };
+  await act(async () => {
+    await acquireSample(50);
+  });
+  return { prompts };
+}
+
+/** How many calls this view made of a given kind. */
+const callsOfKind = (kind: string) => sampleTimings().filter((c) => c.kind === kind).length;
+
+const REMARK = [
+  "Hartwell's relationship runs six facilities and six covenants, nothing staged yet.",
+  "- **Debt Service Coverage**: the tightest ratio on the deal.",
+  "- **Risk grade**: on file, and the rating review has not moved it.",
+  "Annual review, covenants, collateral, the rating, or a service request?",
+].join("\n");
+
+describe("the greeting is the one consent moment", () => {
+  it("primes exactly once, and only after the lookup has landed", async () => {
+    const door = await installDoor(REMARK);
+    const { room } = open({ routeOpen: true, brain: async () => ({ type: "clarify", text: "?" }) as BrainReply });
+    await settle();
+    expect(callsOfKind("greeting")).toBe(1);
+    // The greeting's own sentence framed it: the deterministic greeting plus
+    // the question the room is actually asking.
+    expect(door.prompts[0]).toContain("Relationship Actions on Hartwell Precision Manufacturing LLC.");
+    expect(door.prompts[0]).toContain("Which review are we running on this relationship?");
+    expect(room).toBeTruthy();
+  });
+
+  it("waits for the mail gate rather than greeting without the client's message", async () => {
+    const door = await installDoor(REMARK);
+    open({ routeOpen: true, mailGate: false, brain: async () => ({ type: "clarify", text: "?" }) as BrainReply });
+    await settle();
+    expect(door.prompts).toEqual([]);
+    expect(callsOfKind("greeting")).toBe(0);
+  });
+
+  it("carries the client's message on the envelope the greeting is grounded in", async () => {
+    const door = await installDoor(REMARK);
+    const mail: BrainMail = {
+      source: "mailbox",
+      from: "James Hartwell",
+      received: "28 Aug 2026",
+      subject: "June covenant compliance certificate",
+    };
+    open({ routeOpen: true, mail, brain: async () => ({ type: "clarify", text: "?" }) as BrainReply });
+    await settle();
+    expect(door.prompts[0]).toContain("James Hartwell");
+    expect(door.prompts[0]).toContain("June covenant compliance certificate");
+    // The mail rides the envelope at TOP LEVEL, never inside `reads`.
+    const context = JSON.parse(door.prompts[0].slice(door.prompts[0].lastIndexOf("CONTEXT:") + 8));
+    expect(context.mail.from).toBe("James Hartwell");
+    expect(context.reads?.mail).toBeUndefined();
+    expect(context.reads.notCarried.join(" ")).toContain("thread");
+  });
+
+  it("gives the second room its own five-way arm and not the facility room's three", async () => {
+    const door = await installDoor(REMARK);
+    open({ routeOpen: true, brain: async () => ({ type: "clarify", text: "?" }) as BrainReply });
+    await settle();
+    expect(door.prompts[0]).toContain("THE ROUTE IS NOT BOUND, AND THIS IS THE RELATIONSHIP ROOM");
+    expect(door.prompts[0]).not.toContain("a modification, a renewal or a new facility");
+  });
+
+  it("renders the room's own rails beside the model's rows, and none of its own figures", async () => {
+    await installDoor(REMARK);
+    const { room } = open({ routeOpen: true, brain: async () => ({ type: "clarify", text: "?" }) as BrainReply });
+    await settle();
+    const rows = [...room.querySelectorAll(".wk-narr-row")];
+    expect(rows.length).toBeGreaterThan(0);
+    const covenant = rows.find((r) => r.textContent?.includes("Debt Service Coverage"))!;
+    // The ROOM wrote this figure, out of the read blocks. The model wrote none.
+    expect(covenant.querySelector(".wk-narr-row-v")?.textContent).toBe("1.38× vs ≥ 1.25×");
+    // A name the envelope cannot resolve renders as a plain row with no rail.
+    const grade = rows.find((r) => r.textContent?.includes("Risk grade"))!;
+    expect(grade.querySelector(".wk-narr-row-v")?.textContent).toBe("grade 4");
+  });
+
+  it("says nothing at all with no session door, exactly as it did before", async () => {
+    const { room } = open({ routeOpen: true, brain: async () => ({ type: "clarify", text: "?" }) as BrainReply });
+    await settle();
+    expect(room.querySelector(".wk-narr")).toBeNull();
+    expect(room.querySelector(".wk-headline")?.textContent).toContain(
+      "Relationship Actions on Hartwell Precision Manufacturing LLC.",
+    );
   });
 });
