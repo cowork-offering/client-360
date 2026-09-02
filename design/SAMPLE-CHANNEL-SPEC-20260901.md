@@ -187,3 +187,13 @@ Four channels, all drawn by the room, never by the model:
 The model cannot invent a component. Its vocabulary is the room's: cards, chips, lists,
 advisories. A new shape is a design-round addition, never model-authored HTML. This is the census
 and brand discipline holding while the model gets to be smart.
+
+**The entity line item (2026-09-02) is a design-round addition to channel four, not a widening of
+it by prompt.** A hyphen bullet that opens on a bold name followed by a colon renders as a ROW:
+the name, the clause, and the entity's own figure in a right-hand rail. Its vocabulary is the READ
+CARD's own row (`.wk-read-r` / `.wk-read-l` / `.wk-read-v` and the two tone rules), minus the type
+icon, because three 20px glyphs inside an agent bubble read as a second card. The model may not
+author it as HTML and it carries no control: no chip, no button, ever. **The value column comes
+from the ENVELOPE and never from the model's text** - the model writes the name and the sentence,
+the room resolves the figure out of the same envelope instance the model was handed, and a name
+the envelope cannot resolve renders as an ordinary bullet with no rail and no placeholder.
