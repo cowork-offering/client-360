@@ -3,7 +3,9 @@ import type { BrainEnvelope } from "./brainLane";
 import { LiquidMark } from "../components/workroom/Liquid";
 import {
   composeNarratePrompt,
+  GREETING_MAX_SENTENCES,
   guardFigures,
+  NARRATION_MAX_SENTENCES,
   parseNarration,
   resolveEntities,
   shouldNarrate,
@@ -35,6 +37,15 @@ export interface NarrationView {
   blocks: NarrationBlock[];
   /** TRUE from the call leaving the page until the first streamed token. */
   pending: boolean;
+  /**
+   * TRUE WHERE THE MODEL ACTUALLY SPOKE (founder drive, 2026-09-02).
+   *
+   * The room reads this to know whether it still owes the banker its own
+   * paragraph. A decline notice is the room's sentence, not the model's, so it
+   * leaves this false and the deterministic explanation stands: degrade parity
+   * is a contract and the reduction may never be one of the ways it is lost.
+   */
+  spoke: boolean;
 }
 
 export interface NarrationDeps {
@@ -92,7 +103,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
     const notice = takeDeclineNotice();
     setViews((prev) => {
       const next = { ...prev };
-      if (notice) next[id] = { blocks: [{ kind: "line", spans: [{ text: notice }] }], pending: false };
+      if (notice) next[id] = { blocks: [{ kind: "line", spans: [{ text: notice }] }], pending: false, spoke: false };
       else delete next[id];
       return next;
     });
@@ -107,7 +118,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
 
       const controller = new AbortController();
       running.current.set(id, controller);
-      setViews((prev) => ({ ...prev, [id]: { blocks: [], pending: true } }));
+      setViews((prev) => ({ ...prev, [id]: { blocks: [], pending: true, spoke: false } }));
 
       /* ONE ENVELOPE, FOR THE LIFE OF THE REMARK. The prompt the model is
          given and the book the row's figures are resolved out of must be the
@@ -118,8 +129,11 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
          half-streamed "$5.2M" is a different figure from the "$5.2MM" it is
          about to become, so marking mid-stream would flicker a warning on and
          off under a sentence the model has not finished writing. */
+      /* THE PROSE CAP IS PER ACT. Two sentences under a card, three on the
+         greeting, whose shape is the addendum's own lead, rows and close. */
+      const cap = greeting ? GREETING_MAX_SENTENCES : NARRATION_MAX_SENTENCES;
       const read = (text: string, settled = false) => {
-        const blocks = resolveEntities(parseNarration(text), envelope);
+        const blocks = resolveEntities(parseNarration(text, cap), envelope);
         return settled ? guardFigures(blocks, envelope, subject).blocks : blocks;
       };
       const prompt = composeNarratePrompt(envelope, subject);
@@ -128,14 +142,14 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
         tier: "quick",
         rung: 2,
         signal: controller.signal,
-        onText: ({ text }) => setViews((prev) => ({ ...prev, [id]: { blocks: read(text), pending: false } })),
+        onText: ({ text }) => setViews((prev) => ({ ...prev, [id]: { blocks: read(text), pending: false, spoke: true } })),
       };
 
       const call = greeting ? prime(prompt, options) : ask(prompt, options);
       void Promise.resolve(call)
         .then((text) => {
           const blocks = read(typeof text === "string" ? text : "", true);
-          if (blocks.length) setViews((prev) => ({ ...prev, [id]: { blocks, pending: false } }));
+          if (blocks.length) setViews((prev) => ({ ...prev, [id]: { blocks, pending: false, spoke: true } }));
           else settle(id);
         })
         .catch(() => settle(id))

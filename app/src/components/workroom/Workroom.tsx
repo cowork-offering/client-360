@@ -41,7 +41,7 @@ import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICan
 import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
-import { Narration, useNarration } from "../../channel/Narration";
+import { Narration, useNarration, type NarrationView } from "../../channel/Narration";
 import type { Facility } from "../../data/contract";
 import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
 import {
@@ -66,6 +66,7 @@ import {
   magnitudeAdvisories,
   provablyClean,
   qualifierFilter,
+  stagedAddress,
   readRemove,
   readPartyRemoval,
   readsThePlan,
@@ -308,6 +309,28 @@ function tierOf(item: ThreadItem): EntryTier | null {
   if (item.kind === "packages") return "identity";
   if (item.kind === "brief") return "detail";
   return null;
+}
+
+/* ================================================ ONE VOICE PER MOMENT (A)
+
+   FOUNDER, DRIVING THE THIRD PUBLISH: "a lot of chat coming through, like two
+   chats simultaneously". Under a staged card he read the room's own paragraph
+   AND the model's remark, saying the same thing twice.
+
+   THE CARD IS THE FACT AND THE SENTENCE IS THE JUDGEMENT. Where the model
+   speaks under the chips this agent line announced, the agent line steps back
+   to the address: what is staged, on which facility, before and after. The
+   Before-you-confirm advisory is not part of it and never was - it renders on
+   the chip block, it is a CHECK rather than a comment, and it stays.
+
+   AND WHERE THE MODEL DOES NOT SPEAK, NOTHING MOVES. No remark, a decline, a
+   rate limit or a timeout leaves the room's own paragraph exactly as it reads
+   today. That is why this is keyed on the REMARK and not on the feature. */
+function speaksFor(item: ThreadItem, next: ThreadItem | undefined, view: NarrationView | undefined): ThreadItem {
+  if (item.kind !== "agent" || next?.kind !== "chips") return item;
+  if (!view || (!view.pending && !view.spoke)) return item;
+  const address = stagedAddress(next.chips.map((c) => c.delta).filter((d): d is WorkroomDelta => Boolean(d)));
+  return address ? { ...item, text: address } : item;
 }
 
 /** Omit that DISTRIBUTES over the union. A plain `Omit<ThreadItem, "step">`
@@ -3562,10 +3585,17 @@ export function Workroom({
                         {summonLabel(tiersLeft.length, tiersShown)}
                       </button>
                     )}
-                    {group.items.map((item) => {
+                    {group.items.map((item, at) => {
+                      /* ONE VOICE PER MOMENT (founder drive, 2026-09-02). Where
+                         the model is speaking under the card this agent line
+                         announced, the room's own explanation steps back to the
+                         address and the remark is the prose. A remark that never
+                         arrived, declined or failed leaves the paragraph exactly
+                         where it was: degrade parity is a contract. */
+                      const spoken = speaksFor(item, group.items[at + 1], narration.viewFor(group.items[at + 1]?.id ?? ""));
                       const block = (
                         <ThreadBlock
-                          item={item}
+                          item={spoken}
                           entries={entries}
                           filedWord={vocabulary.filedWord}
                           opening={openingItem}

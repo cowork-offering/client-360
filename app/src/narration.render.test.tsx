@@ -231,6 +231,55 @@ describe("the remark lands under the card, in the room's own bubble", () => {
   });
 });
 
+describe("one voice per moment (founder drive, 2026-09-02)", () => {
+  it("puts ONE prose block under a routine card, not two", async () => {
+    const session = installSession(async () => "The pledged pool does not move with the commitment.");
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+    const atGreeting = room.querySelectorAll(".wk-narr").length;
+    const calls = session.calls.length;
+
+    await typeInto(room, "take the 15M line of credit to 20000000");
+
+    // The chip is there, the room's own sentence is under it, and the model was
+    // never asked: a plain scalar change with no advisory says the whole of
+    // itself on the chip.
+    expect(room.querySelectorAll(".wk-chip").length).toBeGreaterThan(0);
+    expect(room.querySelectorAll(".wk-narr")).toHaveLength(atGreeting);
+    expect(session.calls).toHaveLength(calls);
+    expect(room.textContent).toContain("Confirming stages the next VERSION of the package");
+  });
+
+  it("steps its own paragraph back to the address where the model DOES speak", async () => {
+    installSession(async () => "That figure is two orders out on this relationship.");
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+
+    // A magnitude advisory rides this card, so it is not routine and the model
+    // speaks. The room's own account of what a modification does steps back.
+    await typeInto(room, "take the 15M line of credit to 900000000");
+
+    const said = room.textContent ?? "";
+    expect(said).toContain("That figure is two orders out on this relationship.");
+    expect(said).not.toContain("Confirming stages the next VERSION of the package");
+    expect(said).toContain("Commitment amount on Line of Credit ($15M): $15M → $900M.");
+    // And the CHECK stays: it is not a comment, it is the thing a credit officer says.
+    expect(said).toContain("Before you confirm");
+  });
+
+  it("leaves the paragraph exactly where it is when the remark never arrives", async () => {
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+    await typeInto(room, "take the 15M line of credit to 900000000");
+
+    // No session door at all: degrade parity, byte for byte.
+    expect(room.textContent).toContain("Confirming stages the next VERSION of the package");
+  });
+});
+
 describe("the consent moment rides the greeting", () => {
   it("makes its FIRST session call at room open, before any line is typed", async () => {
     const session = installSession(async () => "One covenant tests inside 90 days.");
@@ -251,7 +300,11 @@ describe("the consent moment rides the greeting", () => {
     await settle();
     await settle();
     const atOpen = session.calls.length;
-    await typeInto(room, "take the line of credit to 20000000");
+    /* A READ, NOT A ROUTINE CONFIRM. A plain scalar term change with no
+       advisory earns no remark at all since the one-voice rule, so the line
+       that proves there is no SECOND consent has to be one the model speaks
+       on. A read is. */
+    await typeInto(room, "what covenants do we carry");
 
     expect(atOpen).toBe(1);
     expect(session.calls.length).toBeGreaterThan(atOpen);

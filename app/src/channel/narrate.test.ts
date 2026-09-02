@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   FIGURE_MARK,
+  GREETING_MAX_SENTENCES,
   NARRATION_MAX_BULLETS,
+  NARRATION_MAX_SENTENCES,
   composeNarratePrompt,
   guardFigures,
   narrationText,
@@ -339,6 +341,68 @@ const rowsOf = (raw: string, envelope: BrainEnvelope = book) => {
   const entity = blocks.find((b) => b.kind === "entity");
   return entity && entity.kind === "entity" ? entity.rows : [];
 };
+
+describe("one voice per moment (founder drive, 2026-09-02)", () => {
+  /** A routine confirm, as the chips block carries it: one scalar term change,
+   *  no advisory, no refusal. */
+  const routineChips = {
+    kind: "chips",
+    chips: [{ delta: { title: "Commitment", target: "Line of Credit", after: "$20.0MM", group: "terms" } }],
+  };
+
+  it("reads a plain scalar change with no advisory as ROUTINE", () => {
+    expect(subjectFor(routineChips)?.routine).toBe(true);
+  });
+
+  it("does not consult the model on one: the chip already says the whole of it", () => {
+    expect(shouldNarrate(subjectFor(routineChips)!)).toBe(false);
+  });
+
+  it("still speaks where the card carries an advisory", () => {
+    const subject = subjectFor({ ...routineChips, advisories: [{ id: "advice:magnitude:1" }] })!;
+    expect(subject.routine).toBe(false);
+    expect(shouldNarrate(subject)).toBe(true);
+  });
+
+  it("still speaks on a create, which is not a scalar term change", () => {
+    const subject = subjectFor({
+      kind: "chips",
+      chips: [{ delta: { title: "New covenant", target: "Line of Credit", after: ">= 1.25x", group: "covenants", op: "add" } }],
+    })!;
+    expect(subject.routine).toBe(false);
+    expect(shouldNarrate(subject)).toBe(true);
+  });
+
+  it("still speaks on a refusal", () => {
+    const subject = subjectFor({
+      kind: "chips",
+      chips: [{ refusal: { title: "Detach covenant", target: "Line of Credit", reason: "not updateable" } }],
+    })!;
+    expect(subject.routine).toBe(false);
+    expect(shouldNarrate(subject)).toBe(true);
+  });
+
+  it("caps a remark at two sentences of prose, and the rows are not prose", () => {
+    const blocks = parseNarration(
+      "One. Two. Three.\n- **DSC**: the widest cushion.\n- **AR**: on its ceiling.\nAnd a close.",
+    );
+    const lines = blocks.filter((b) => b.kind === "line");
+    expect(narrationText(lines)).toBe("One. Two.");
+    expect(blocks.some((b) => b.kind === "entity" && b.rows.length === 2)).toBe(true);
+  });
+
+  it("counts sentences ACROSS the lines, so a lead and a close is the whole budget", () => {
+    const blocks = parseNarration("A lead line.\n\nA closing line.\n\nA third the glass does not carry.");
+    expect(narrationText(blocks)).toBe("A lead line. A closing line.");
+  });
+
+  it("lets the greeting keep its third: the addendum's lead, rows and close", () => {
+    expect(GREETING_MAX_SENTENCES).toBeGreaterThan(NARRATION_MAX_SENTENCES);
+    const said = "The package is clean.\n\nJames asked for a certificate. Modify, renew, or structure something new?";
+    expect(narrationText(parseNarration(said, GREETING_MAX_SENTENCES))).toContain("Modify, renew, or structure something new?");
+    expect(narrationText(parseNarration(said))).not.toContain("Modify, renew, or structure something new?");
+  });
+});
 
 describe("a covenant as a line item, with the book's own figure beside it", () => {
   it("resolves a covenant to measured against threshold, with no colour when it is clean", () => {

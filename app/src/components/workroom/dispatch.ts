@@ -1176,6 +1176,34 @@ export function committedSentence(args: {
   return args.reply;
 }
 
+/* ================================================ ONE VOICE PER MOMENT (A)
+
+   THE BANKER READ THE ROOM TWICE (founder drive, 2026-09-02: "a lot of chat
+   coming through, like two chats simultaneously"). Under a staged card the room
+   put up its own paragraph - what a modification does to the package, what
+   confirming stages, what rides as a handoff - and the model then said the same
+   thing in its own words directly underneath it.
+
+   THE CARD IS THE FACT AND THE SENTENCE IS THE JUDGEMENT, so where the model
+   speaks the room's own explanation steps back to the ADDRESS: what is staged,
+   on which facility, from what to what. The Before-you-confirm advisory is NOT
+   part of that paragraph and never was: it renders on the chip block, it is a
+   CHECK rather than a comment, and it stays exactly where it is.
+
+   DEGRADE PARITY. Where the model is absent, declines or fails, the room's own
+   paragraph is what the banker reads, byte for byte as today. The reduction is
+   keyed on the remark, never on the feature being switched on.               */
+
+/** THE ONE-LINE ADDRESS of what a card stages, or "" where the chips carry no
+ *  staged delta (a refusal has its own reason on the chip). */
+export function stagedAddress(deltas: WorkroomDelta[]): string {
+  const said = deltas
+    .filter((d) => d.title && d.target)
+    .slice(0, 3)
+    .map((d) => `${d.title} on ${d.target}: ${d.before} → ${d.after}.`);
+  return said.join(" ");
+}
+
 /* ------------------------------------------------------------- the fast path */
 
 /**
