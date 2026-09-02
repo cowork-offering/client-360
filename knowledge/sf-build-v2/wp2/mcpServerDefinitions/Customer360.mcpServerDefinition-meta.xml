@@ -194,4 +194,12 @@
         </apiDefinition>
         <toolName>stage_renewal</toolName>
     </tools>
+    <tools>
+        <apiDefinition>
+            <apiIdentifier>aa:apex-Customer360Catalog</apiIdentifier>
+            <apiSource>API_CATALOG</apiSource>
+            <operation>Customer360Catalog</operation>
+        </apiDefinition>
+        <toolName>Customer360Catalog</toolName>
+    </tools>
 </McpServerDefinition>
