@@ -1,7 +1,8 @@
 import type { BrainReadBlocks, BrainTurn } from "../../channel/brainLane";
-import type { Facility, LegalEntity } from "../../data/contract";
+import type { Facility } from "../../data/contract";
 import { facilityProduct } from "../../data/facilityStage";
 import { fmtDate, fmtMoney } from "../../data/format";
+import { aggregateInvolvements, involvementRole, type RoleWords } from "../../data/graphAggregate";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
 import type { ReadSource } from "./readCard";
@@ -48,7 +49,15 @@ function scoped(src: ReadSource): Facility[] {
     .filter((f) => !src.productPackageId || f.productPackageId === src.productPackageId);
 }
 
-const nameOf = (f: Facility, relationship: string) => facilityProduct(f, relationship) || "Facility";
+/** THE FACILITY, NAMED SO THE DESK CAN TELL TWO OF THEM APART. This package
+ *  carries two Lines of Credit and two Equipment loans; the product word alone
+ *  names either, and a block that lists facilities by name has to name the right
+ *  one. Where the product repeats, the commitment comes with it. */
+function nameOf(f: Facility, relationship: string, among: Facility[] = []): string {
+  const product = facilityProduct(f, relationship) || "Facility";
+  const twins = among.filter((m) => (facilityProduct(m, relationship) || "Facility") === product).length > 1;
+  return twins && typeof f.committed === "number" ? `${product} (${fmtMoney(f.committed)})` : product;
+}
 
 /**
  * A PERSON OR A COMPANY, only where the ORG'S OWN WORD says so.
@@ -57,7 +66,7 @@ const nameOf = (f: Facility, relationship: string) => facilityProduct(f, relatio
  * wrote and nothing else. ABSENT IS NOT "corporate": guessing a natural person
  * from a name is exactly the kind of invention the pack forbids.
  */
-function kindOf(e: LegalEntity): "corporate" | "person" | undefined {
+function kindOf(e: RoleWords): "corporate" | "person" | undefined {
   const words = `${e.borrowerType ?? ""} ${e.relationshipType ?? ""}`.toLowerCase();
   if (/\b(individual|person|personal|natural)\b/.test(words)) return "person";
   if (/\b(corporate|corporation|entity|company|llc|business)\b/.test(words)) return "corporate";
@@ -68,7 +77,7 @@ function covenantBlock(src: ReadSource): BrainReadBlocks["covenants"] {
   const covenants = src.bundle?.covenants?.covenants ?? [];
   if (!covenants.length) return undefined;
   const facilities = scoped(src);
-  const byLoan = new Map(facilities.map((f) => [f.loanId ?? "", nameOf(f, src.accountName)]));
+  const byLoan = new Map(facilities.map((f) => [f.loanId ?? "", nameOf(f, src.accountName, facilities)]));
   return covenants.map((c) => {
     const attached = (c.attachedLoans ?? [])
       .map((a) => (a.loanId ? byLoan.get(a.loanId) : undefined))
@@ -86,28 +95,50 @@ function covenantBlock(src: ReadSource): BrainReadBlocks["covenants"] {
   });
 }
 
+/**
+ * WHO IS ON THE DEAL, ONE ROW PER PARTY PER ROLE.
+ *
+ * The org writes one involvement row per loan, so the 2026-09-02 read of
+ * Hartwell carries 22 rows for 5 parties. Sent raw, the desk answered a
+ * guarantor question with "14 guaranty rows are on this package" - a sentence
+ * about nCino's storage shape, not about the credit, and one the banker cannot
+ * act on. The block carries the SAME aggregation the card and the tab render,
+ * so an answer and the glass beside it can never disagree about who is on the
+ * deal or how many facilities they are on.
+ */
 function involvementBlock(src: ReadSource): BrainReadBlocks["involvements"] {
   const entities = src.bundle?.graph?.legalEntities ?? [];
   if (!entities.length) return undefined;
-  const byLoan = new Map(scoped(src).map((f) => [f.loanId ?? "", nameOf(f, src.accountName)]));
-  return entities.map((e) => ({
-    name: e.accountName ?? "Unnamed party",
-    role: (e.relationshipType ?? "").trim() || (e.borrowerType ?? "").trim() || "Involved",
-    kind: kindOf(e),
-    scope: (e.loanId ? byLoan.get(e.loanId) : undefined) ?? RELATIONSHIP,
-    detail:
-      typeof e.ownershipPercent === "number"
-        ? `${e.ownershipPercent}% ownership`
-        : typeof e.contingentAmount === "number"
-          ? `${fmtMoney(e.contingentAmount)} contingent`
-          : undefined,
-  }));
+  const facilities = scoped(src);
+  const byLoan = new Map(facilities.map((f) => [f.loanId ?? "", nameOf(f, src.accountName, facilities)]));
+  return aggregateInvolvements(entities).map((e) => {
+    const loans = e.loanIds.map((id) => byLoan.get(id)).filter((n): n is string => Boolean(n));
+    return {
+      name: e.accountName ?? "Unnamed party",
+      role: involvementRole(e),
+      kind: kindOf(e),
+      // The facilities BY NAME where the read carries them, because "who
+      // guarantees the construction loan" is answered off this line. A count
+      // with no names would send the desk back for a read it already has.
+      scope: loans.length ? loans.join(", ") : RELATIONSHIP,
+      facilities: loans.length || undefined,
+      detail:
+        [
+          e.guarantyAmountType ? `${e.guarantyAmountType} guaranty` : null,
+          typeof e.ownershipPercent === "number" && !e.guarantyAmountType ? `${e.ownershipPercent}% ownership` : null,
+          typeof e.contingentAmount === "number" ? `${fmtMoney(e.contingentAmount)} contingent` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+    };
+  });
 }
 
 function collateralBlock(src: ReadSource): BrainReadBlocks["collateral"] {
   const rows: NonNullable<BrainReadBlocks["collateral"]> = [];
-  for (const f of scoped(src)) {
-    const scope = nameOf(f, src.accountName);
+  const facilities = scoped(src);
+  for (const f of facilities) {
+    const scope = nameOf(f, src.accountName, facilities);
     for (const c of f.collateral ?? []) {
       rows.push({
         asset: c.collateralDescription ?? c.collateralName ?? c.collateralType ?? "Collateral",
@@ -136,9 +167,10 @@ function exposureBlock(src: ReadSource): BrainReadBlocks["exposure"] {
 }
 
 function pricingBlock(src: ReadSource): BrainReadBlocks["pricing"] {
-  const rows = scoped(src)
+  const facilities = scoped(src);
+  const rows = facilities
     .filter((f) => typeof f.interestRate === "number")
-    .map((f) => ({ facility: nameOf(f, src.accountName), rate: `${f.interestRate}%` }));
+    .map((f) => ({ facility: nameOf(f, src.accountName, facilities), rate: `${f.interestRate}%` }));
   return rows.length ? rows : undefined;
 }
 
