@@ -183,7 +183,11 @@ export function composeNarratePrompt(envelope: BrainEnvelope, subject: NarrateSu
     envelope.mail ? "mail" : null,
     envelope.routeOpen ? (envelope.room === "relationship" ? "route-open-relationship" : "route-open") : null,
   ].filter((id): id is string => id !== null);
-  const doctrine = composeDoctrine(envelope.line || subject.sentence, { mode: "narrate", include });
+  const doctrine = composeDoctrine(envelope.line || subject.sentence, {
+    mode: "narrate",
+    room: envelope.room,
+    include,
+  });
   return [
     "You are the credit brain of a relationship workroom, writing ONE short remark under a card.",
     "The workroom-brain pack (WORKROOM-BRAIN.md) is the authority. The slices you need are below.",

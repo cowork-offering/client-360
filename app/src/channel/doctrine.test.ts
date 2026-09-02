@@ -322,11 +322,11 @@ describe("the relationship room's doctrine slices", () => {
 
   for (const id of REL_BLOCKS) {
     it(`selects ${id} on its own words`, () => {
-      expect(composeDoctrine(ON_ITS_OWN_WORDS[id], { mode: "narrate" }).included).toContain(id);
+      expect(composeDoctrine(ON_ITS_OWN_WORDS[id], { mode: "narrate", room: "relationship" }).included).toContain(id);
     });
 
     it(`gives ${id} up under budget rather than dropping an always block`, () => {
-      const { included, dropped } = composeDoctrine(ON_ITS_OWN_WORDS[id], { mode: "narrate", budget: 0 });
+      const { included, dropped } = composeDoctrine(ON_ITS_OWN_WORDS[id], { mode: "narrate", room: "relationship", budget: 0 });
       expect(dropped).toContain(id);
       expect(included).toEqual(alwaysBlockIds("narrate"));
     });
@@ -354,14 +354,14 @@ describe("the relationship room's doctrine slices", () => {
       "james wants the june certificate",
     ];
     for (const line of DRIVE) {
-      const out = composeDoctrine(line, { mode: "narrate", include: ["route-open-relationship"] });
+      const out = composeDoctrine(line, { mode: "narrate", room: "relationship", include: ["route-open-relationship"] });
       expect(out.dropped, `dropped a block on "${line}"`).toEqual([]);
       expect(out.bytes).toBeLessThanOrEqual(DOCTRINE_BUDGET_BYTES);
     }
   });
 
   it("offers the second room its own five-way arm, and never the facility room's three", () => {
-    const rel = composeDoctrine("", { mode: "narrate", include: ["route-open-relationship"] });
+    const rel = composeDoctrine("", { mode: "narrate", room: "relationship", include: ["route-open-relationship"] });
     const text = rel.lines.join("\n");
     expect(rel.included).toContain("route-open-relationship");
     expect(rel.included).not.toContain("route-open");
@@ -372,7 +372,7 @@ describe("the relationship room's doctrine slices", () => {
 
   it("keeps the relationship arm out of the drop order, as the consent call's own block", () => {
     expect([...DOCTRINE_DROP_ORDER]).not.toContain("route-open-relationship");
-    const tiny = composeDoctrine("", { mode: "narrate", budget: 0, include: ["route-open-relationship"] });
+    const tiny = composeDoctrine("", { mode: "narrate", room: "relationship", budget: 0, include: ["route-open-relationship"] });
     expect(tiny.included).toContain("route-open-relationship");
     expect(tiny.dropped).not.toContain("route-open-relationship");
   });
@@ -431,3 +431,62 @@ describe("THE FACILITY GUARD: the pinned facility lines select exactly what they
     expect(included).not.toContain("route-open-relationship");
   });
 });
+
+/* =============================================================================
+   THE ROOM GATE.
+
+   The facility drive caught `coverage-math` landing on TWO facility narrations:
+   "Debt Service Coverage" is a covenant NAME the facility room says out loud,
+   and the block's match reads "coverage". Main sent nothing there; the branch
+   sent 1,150 bytes of borrowing-base method under a card about a junction.
+
+   No wording of "coverage", "rating" or "grade" can fix that, because those
+   words belong to both rooms honestly. The gate is the ROOM.
+   ============================================================================= */
+
+describe("the relationship slices are gated on the room, not only on the words", () => {
+  const FACILITY_LINES_CARRYING_THE_WORDS = [
+    "Associate the existing Debt Service Coverage of Borrower to this facility",
+    "add a Debt Service Coverage of Borrower covenant >= 1.30 tested quarterly on the 8M equipment loan",
+    "what is the coverage on the borrowing base",
+    "downgrade the grade on the equipment loan",
+    "the appraisal came back on an orderly liquidation basis",
+    "run the annual review on this relationship",
+  ];
+
+  for (const line of FACILITY_LINES_CARRYING_THE_WORDS) {
+    it(`carries no relationship slice on a facility line: "${line.slice(0, 46)}"`, () => {
+      for (const mode of ["reply", "narrate"] as const) {
+        const out = composeDoctrine(line, { mode, room: "facility" });
+        for (const id of REL_BLOCKS) expect(out.included, `${mode}: ${id}`).not.toContain(id);
+        expect(out.included).not.toContain("route-open-relationship");
+      }
+    });
+  }
+
+  it("defaults to the facility room, which is what every caller before the second room meant", () => {
+    const withNone = composeDoctrine("what is the coverage on the borrowing base", { mode: "narrate" });
+    const asFacility = composeDoctrine("what is the coverage on the borrowing base", { mode: "narrate", room: "facility" });
+    expect(withNone.included).toEqual(asFacility.included);
+  });
+
+  it("keeps the facility's own route-open arm off a relationship line", () => {
+    const out = composeDoctrine("", { mode: "narrate", room: "relationship", include: ["route-open", "route-open-relationship"] });
+    expect(out.included).toContain("route-open-relationship");
+    expect(out.included).not.toContain("route-open");
+  });
+
+  it("still selects every relationship slice in the relationship room", () => {
+    for (const id of REL_BLOCKS) {
+      expect(composeDoctrine(ON_ITS_OWN_WORDS_REL[id], { mode: "narrate", room: "relationship" }).included).toContain(id);
+    }
+  });
+});
+
+const ON_ITS_OWN_WORDS_REL: Record<(typeof REL_BLOCKS)[number], string> = {
+  "covenant-testing": "the compliance certificate was never delivered and the test date passed",
+  "valuation-basis": "the appraisal came back on an orderly liquidation basis",
+  "annual-review": "run the annual review on this relationship",
+  "risk-rating": "downgrade them a notch to special mention",
+  "coverage-math": "what is the availability on the borrowing base",
+};

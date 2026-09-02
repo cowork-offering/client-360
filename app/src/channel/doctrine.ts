@@ -28,6 +28,9 @@ import type { BrainEnvelope } from "./brainLane";
  *  the shape contract nor the wire schema. */
 export type DoctrineMode = "reply" | "narrate";
 
+/** Which room is asking. The envelope carries this already (`BrainEnvelope.room`). */
+export type DoctrineRoom = "facility" | "relationship";
+
 export interface DoctrineBlock {
   /** The block's name, as `composeDoctrine` reports it. */
   id: string;
@@ -37,6 +40,20 @@ export interface DoctrineBlock {
   always?: true;
   /** The modes that may carry it. Absent means both. */
   modes?: DoctrineMode[];
+  /**
+   * THE ROOMS THAT MAY CARRY IT. Absent means both, which is every block that
+   * shipped before the second room existed.
+   *
+   * A MATCH IS NOT A ROOM GATE, and the facility drive proved it. `coverage-math`
+   * matches "coverage", and "Debt Service Coverage" is a covenant NAME the
+   * facility room says out loud on two of its own lines, so the block landed on
+   * a facility narration where main had sent nothing: 1,150 bytes of borrowing-
+   * base method under a card about a junction. The addendum's own gate for the
+   * shared `doctrine.ts` is that the facility's selections stay unchanged block
+   * for block, and no wording of a match word like "coverage", "rating" or
+   * "grade" can meet it, because those words belong to both rooms honestly.
+   */
+  rooms?: DoctrineRoom[];
   /** The surface this block fences. Absent on an `always` block. */
   match?: RegExp;
   lines: string[];
@@ -371,6 +388,7 @@ const FIGURES: DoctrineBlock = {
 
 const ROUTE_OPEN: DoctrineBlock = {
   id: "route-open",
+  rooms: ["facility"],
   source: "the room's own router",
   modes: ["reply", "narrate"],
   lines: [
@@ -398,6 +416,7 @@ const ROUTE_OPEN: DoctrineBlock = {
 
 const COVENANT_TESTING: DoctrineBlock = {
   id: "covenant-testing",
+  rooms: ["relationship"],
   source: "4.3.1",
   match:
     /\b(tested|testing|test\s+date|certificate|compliance\s+(row|period|certificate)|measurement\s+period|ltm|trailing\s+twelve|equity\s+cure|cure\b|waiver|delinquent|undelivered)\b/i,
@@ -413,6 +432,7 @@ const COVENANT_TESTING: DoctrineBlock = {
 
 const VALUATION_BASIS: DoctrineBlock = {
   id: "valuation-basis",
+  rooms: ["relationship"],
   source: "4.4.1 and 2.6",
   match:
     /* NOT "advance rate". It is a POLICY-EXCEPTION word in the facility room
@@ -433,6 +453,7 @@ const VALUATION_BASIS: DoctrineBlock = {
 
 const ANNUAL_REVIEW: DoctrineBlock = {
   id: "annual-review",
+  rooms: ["relationship"],
   source: "4.9",
   match:
     /\b(annual\s+review|yearly\s+review|periodic\s+review|re-?underwrit\w+|renewal\s+decision|action\s+items|affirm\w*|credit\s+committee|credit\s+officer|problem\s+loan\s+review)\b/i,
@@ -447,6 +468,7 @@ const ANNUAL_REVIEW: DoctrineBlock = {
 
 const RISK_RATING: DoctrineBlock = {
   id: "risk-rating",
+  rooms: ["relationship"],
   source: "4.8",
   match:
     /\b(risk[-\s]?rating|re-?rate|re-?rating|regrade|downgrade|upgrade|notch|probability\s+of\s+default|loss\s+given\s+default|\bpd\b|\blgd\b|special\s+mention|substandard|doubtful|classification|overrid\w+|pass\/?watch|criticised|criticized|grade\s+(on\s+file|change))\b/i,
@@ -465,6 +487,7 @@ const RISK_RATING: DoctrineBlock = {
 
 const COVERAGE_MATH: DoctrineBlock = {
   id: "coverage-math",
+  rooms: ["relationship"],
   source: "4.4",
   match:
     /\b(coverage|borrowing\s+base|availability|eligible|ineligible|reserves?|\bltv\b|loan\s+to\s+value|shortfall|concentration|cross-?aged)\b/i,
@@ -486,6 +509,7 @@ const COVERAGE_MATH: DoctrineBlock = {
    consent must be undroppable. */
 const ROUTE_OPEN_RELATIONSHIP: DoctrineBlock = {
   id: "route-open-relationship",
+  rooms: ["relationship"],
   source: "the relationship room's own router",
   modes: ["reply", "narrate"],
   lines: [
@@ -606,16 +630,23 @@ export const DOCTRINE_BUDGET_BYTES = 18_000;
  */
 export function composeDoctrine(
   line: string,
-  opts: { mode?: DoctrineMode; budget?: number; include?: string[] } = {},
+  opts: { mode?: DoctrineMode; room?: DoctrineRoom; budget?: number; include?: string[] } = {},
 ): DoctrineSelection {
   const mode: DoctrineMode = opts.mode ?? "reply";
+  /* THE ROOM DEFAULTS TO THE FACILITY'S, which is what every caller that
+     predates the second room means and what every existing test asserts. */
+  const room: DoctrineRoom = opts.room ?? "facility";
   const budget = opts.budget ?? DOCTRINE_BUDGET_BYTES;
   /* BLOCKS THE CALLER KNOWS THE LINE NEEDS, which the line itself could never
      say. The greeting composes its doctrine off an EMPTY line, so a block
      gated on a word in the line is unreachable there however true it is. */
   const forced = new Set(opts.include ?? []);
 
-  const admits = (b: DoctrineBlock) => b.modes === undefined || b.modes.includes(mode);
+  /* THE ROOM GATE OUTRANKS `include`. A caller that forces a block by id is
+     saying the LINE could not ask for it, never that the other room's slice
+     should travel: the room is the harder fact. */
+  const admits = (b: DoctrineBlock) =>
+    (b.modes === undefined || b.modes.includes(mode)) && (b.rooms === undefined || b.rooms.includes(room));
   const selected = DOCTRINE_BLOCKS.filter(
     (b) => admits(b) && (b.always === true || forced.has(b.id) || (b.match !== undefined && b.match.test(line))),
   );
@@ -680,7 +711,7 @@ export function budgetPrompt(args: {
   // 1. THREAD HISTORY, oldest first. The floor is what the doctrine costs once
   // every droppable block is already gone: trimming the thread past the point
   // where even that will not fit buys nothing.
-  const doctrineFloor = composeDoctrine(envelope.line, { mode: args.mode, budget: 0 }).bytes;
+  const doctrineFloor = composeDoctrine(envelope.line, { mode: args.mode, room: envelope.room, budget: 0 }).bytes;
   if (envelope.thread?.length) {
     const thread = [...envelope.thread];
     const before = thread.length;
@@ -697,6 +728,7 @@ export function budgetPrompt(args: {
   const headroom = Math.max(0, cap - envelopeBytes() - overhead);
   const doctrine = composeDoctrine(envelope.line, {
     mode: args.mode,
+    room: envelope.room,
     budget: Math.min(headroom, DOCTRINE_BUDGET_BYTES),
   });
   // 3. The read blocks stay. There is no step that gives them up.
