@@ -4,6 +4,7 @@ import {
   clauseCount,
   committedSentence,
   fenceRefusal,
+  focusQualifier,
   magnitudeAdvisories,
   dollarFigures,
   provablyClean,
@@ -432,6 +433,72 @@ describe("\"take X off Y\" is routed by what X is, and composed from the book (E
   it("touches nothing that is not a party removal", () => {
     expect(read("increase the 15M line of credit to 20M")).toBeNull();
     expect(read("add a 1% origination fee on the 15M line of credit")).toBeNull();
+  });
+});
+
+/* ------------------------------------- N3, the dollar qualifier as focus */
+
+describe("a dollar qualifier names the facility and comes out of the line (N3)", () => {
+  const read = (line: string, ms = MEMBERS) => focusQualifier(line, ms);
+
+  it("takes the facility off a FEE line, where the engine read it as the fee", () => {
+    const out = read("add a 1% origination fee on the 15M line of credit")!;
+    expect(out.memberId).toBe(LOC);
+    expect(out.line).toBe("add a 1% origination fee");
+    expect(out.qualifier).toBe("on the 15M line of credit");
+  });
+
+  it("takes it off a POLICY EXCEPTION line and leaves the narrative whole", () => {
+    const out = read(
+      "log a policy exception on the 15M line of credit for leverage above policy approved by credit committee",
+    )!;
+    expect(out.memberId).toBe(LOC);
+    expect(out.line).toBe("log a policy exception for leverage above policy approved by credit committee");
+  });
+
+  it("takes it off a COVENANT line without touching the threshold", () => {
+    const out = read("add a debt service coverage covenant of 1.25x on the 8M equipment loan")!;
+    expect(out.memberId).toBe(EQUIPMENT);
+    expect(out.line).toBe("add a debt service coverage covenant of 1.25x");
+  });
+
+  it("takes it off a COLLATERAL line and off a PARTY line", () => {
+    expect(read("pledge the Fort Wayne equipment on the 2.5M line of credit")?.line).toBe(
+      "pledge the Fort Wayne equipment",
+    );
+    expect(read("add Elena Hartwell as a limited guarantor on the 8M equipment loan")?.line).toBe(
+      "add Elena Hartwell as a limited guarantor",
+    );
+  });
+
+  it("leaves a COMMITMENT line to the post-parse filter, which already works on it", () => {
+    expect(read("take the 2.5M line of credit to 4M")).toBeNull();
+    expect(read("increase the 15M line of credit to 20M")).toBeNull();
+  });
+
+  it("does NOT focus where the figure names two facilities", () => {
+    const twins: QualifierMember[] = [
+      { id: LOC, label: "Line of Credit", committed: 5_000_000 },
+      { id: EQUIPMENT, label: "Equipment", committed: 5_000_000 },
+    ];
+    expect(read("add a 1% origination fee on the 5M line of credit", twins)).toBeNull();
+  });
+
+  it("does NOT strip a figure that is the change's own value", () => {
+    // No preposition and no facility noun: the figure is the fee, not a name.
+    expect(read("add an origination fee of $15,000,000")).toBeNull();
+    expect(read("add a $15,000,000 origination fee")).toBeNull();
+  });
+
+  it("does NOT touch a line naming two facilities in two clauses", () => {
+    expect(
+      read("add a 1% origination fee on the 15M line of credit and a covenant on the 8M equipment loan"),
+    ).toBeNull();
+  });
+
+  it("does NOT fire where the line carries no figure the package answers to", () => {
+    expect(read("add a 1% origination fee on the 9M line of credit")).toBeNull();
+    expect(read("add a 1% origination fee")).toBeNull();
   });
 });
 

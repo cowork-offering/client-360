@@ -491,6 +491,46 @@ describe("a pledge is gathered without ever asking what the org works out", () =
   });
 });
 
+/* ================================== N3, the dollar qualifier as a focus */
+
+describe("a dollar qualifier names the facility on every line, not just a commitment", () => {
+  it("N3: stages ONE fee on the $15M line and never asks 1% or $15,000,000", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(room, "add a 1% origination fee on the 15M line of credit");
+
+    const words = said(room);
+    // THE DEFECT: the fenced engine read "15M" as the fee amount and asked.
+    expect(words).not.toMatch(/1% or \$15,000,000/);
+    expect(words).not.toMatch(/is the .*fee .*or /i);
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("Line of Credit");
+    expect(room.textContent).not.toContain("$15,000,000.00 fee");
+    // The card names the facility, which is why the room says nothing extra.
+    expect(room.textContent).toContain("Line of Credit ($15M)");
+    expect(room.textContent).toContain("1.00% of the committed amount");
+  });
+
+  it("N3: stages the policy exception on the facility the figure named", async () => {
+    const { room } = open();
+    await settle();
+    await typeInto(
+      room,
+      "log a policy exception on the 15M line of credit for leverage above policy approved by credit committee",
+    );
+
+    // The narrative survived the strip: the exception is about leverage.
+    expect(said(room).toLowerCase()).toContain("leverage");
+    expect(said(room)).not.toMatch(/1% or|\$15,000,000/);
+    expect(said(room)).toContain("Leverage above policy approved by credit committee");
+
+    await click(byText(/^Waived$/));
+    expect(chips(room)).toHaveLength(1);
+    expect(room.textContent).toContain("Line of Credit ($15M)");
+    expect(room.textContent).toContain("Leverage above policy approved by credit committee");
+  });
+});
+
 /* ================================================== the amendment in place */
 
 describe("the open card is amended, never contradicted", () => {

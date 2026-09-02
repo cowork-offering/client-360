@@ -179,6 +179,126 @@ export function qualifierFilter(
   };
 }
 
+/* ============================ THE DOLLAR QUALIFIER, READ AS FOCUS (N3)
+
+   "add a 1% origination fee on the 15M line of credit" was read by the fenced
+   engine as a $15,000,000 FEE, so it asked "is the fee 1% or $15,000,000?" -
+   and then took the banker's NEXT line as the answer to that question and
+   staged a fifteen million dollar fee. One phrase, two changes wrong.
+
+   THE QUALIFIER ONLY EVER WORKED ON COMMITMENT LINES, where the post-parse
+   filter above narrows the members after the fact. It cannot work that way on a
+   fee, an exception, a covenant, a pledge or a party: there the figure is not
+   selecting between deltas, it is being READ AS THE VALUE, and by the time the
+   filter runs the damage is in the wire.
+
+   SO IT IS PRE-EMPTED, BEFORE THE ENGINE SEES THE LINE. Where a figure resolves
+   to exactly ONE facility, the room sets its FOCUS to that facility and takes
+   the qualifier phrase out of the line. "on the 15M line of credit" then behaves
+   exactly like clicking the facility chip, which is the gesture it was always
+   standing in for. Nothing extra is said on the glass: the card names the
+   facility, as it does after a click.
+
+   FOUR GUARDS, and each one closes a way this could be wrong:
+
+     1. ONE CLAUSE. A line naming two facilities in two clauses is the brain's,
+        and stripping the first phrase would carry the second clause onto the
+        wrong member;
+     2. A SURFACE THAT MISREADS THE FIGURE. Commitment lines are left alone -
+        they work today on the filter above, and a commitment line's figure IS
+        its value;
+     3. A PREPOSITION IN FRONT AND A FACILITY NOUN BEHIND. "add a fee of
+        $15,000,000" carries a figure that happens to match a facility and names
+        no facility at all, and it must come through untouched;
+     4. EXACTLY ONE MEMBER. A figure matching two facilities names neither, and
+        the engine's own behaviour stands.
+   ============================================================================= */
+
+/** The surfaces where a dollar figure in the line is a FACILITY NAME rather
+ *  than the change's own value. Commitment is deliberately absent. */
+const QUALIFIER_SURFACE =
+  /\b(fees?|origination|arrangement|unused|upfront|waiver|exceptions?|policy|covenants?|tests?|pledges?|pledged|collateral|security|liens?|guarantors?|co-?borrowers?|borrowers?|related\s+entity|involvement)\b/i;
+
+/** The nouns that make the words after a figure a FACILITY rather than the rest
+ *  of the sentence. A member's own product words count too, and are added per
+ *  member below. */
+const FACILITY_NOUN = new Set(["line", "lines", "loan", "loans", "facility", "facilities", "credit", "revolver", "note", "notes"]);
+
+/** Words a facility phrase may carry without naming anything itself. */
+const PHRASE_FILLER = new Set(["of", "the", "a", "an"]);
+
+/** A preposition and its article, immediately in front of the figure. Without
+ *  one the figure is not naming a facility, it is being one. */
+const QUALIFIER_LEAD = /(?:\b(?:on|onto|to|for|against|under|at|in|from|across)\s+(?:the|this|our|that)\s+)$/i;
+
+/** Every dollar figure in the line, with where it sits. */
+function moneySpans(line: string): Array<{ value: number; start: number; end: number }> {
+  const out: Array<{ value: number; start: number; end: number }> = [];
+  for (const match of line.matchAll(MONEY)) {
+    const digits = match[1] ?? match[3];
+    const suffix = (match[2] ?? match[4] ?? "").toLowerCase();
+    const base = Number(digits.replace(/,/g, ""));
+    if (!Number.isFinite(base) || match.index === undefined) continue;
+    out.push({ value: base * (MAGNITUDE[suffix] ?? 1), start: match.index, end: match.index + match[0].length });
+  }
+  return out;
+}
+
+export interface FocusRead {
+  /** The facility the figure named. The room stands on it. */
+  memberId: string;
+  /** The line with the qualifier phrase taken out of it. */
+  line: string;
+  /** The phrase that came out, for the record. Never said on the glass. */
+  qualifier: string;
+}
+
+export function focusQualifier(line: string, members: QualifierMember[]): FocusRead | null {
+  if (!singleClause(line)) return null;
+  if (!QUALIFIER_SURFACE.test(line)) return null;
+
+  const hits: Array<{ member: QualifierMember; start: number; end: number }> = [];
+  for (const span of moneySpans(line)) {
+    const named = members.filter((m) => typeof m.committed === "number" && sameMoney(span.value, m.committed));
+    if (named.length !== 1) continue;
+    hits.push({ member: named[0], start: span.start, end: span.end });
+  }
+  if (hits.length !== 1) return null;
+  const { member, start, end } = hits[0];
+
+  // THE PREPOSITION IN FRONT. Without one the figure is the change's own value.
+  const lead = QUALIFIER_LEAD.exec(line.slice(0, start));
+  if (!lead) return null;
+
+  // AND THE FACILITY NOUN BEHIND, from the package's own vocabulary.
+  const own = new Set(
+    member.label
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean),
+  );
+  let cursor = end;
+  let named = false;
+  for (;;) {
+    const next = /^\s+([a-z]+)/i.exec(line.slice(cursor));
+    if (!next) break;
+    const word = next[1].toLowerCase();
+    const isNoun = FACILITY_NOUN.has(word) || own.has(word);
+    if (!isNoun && !PHRASE_FILLER.has(word)) break;
+    if (isNoun) named = true;
+    cursor += next[0].length;
+  }
+  if (!named) return null;
+
+  const qualifier = line.slice(start - lead[0].length, cursor).trim();
+  const stripped = `${line.slice(0, start - lead[0].length)} ${line.slice(cursor)}`
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:])/g, "$1")
+    .trim();
+  if (!stripped) return null;
+  return { memberId: member.id, line: stripped, qualifier };
+}
+
 /* ------------------------------------------------- the narrative, reconciled
 
    THE SENTENCE CONTRADICTED THE CHIPS (D3). "add a DSCR covenant of 1.25x on

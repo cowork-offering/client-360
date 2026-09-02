@@ -44,6 +44,7 @@ import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/br
 import {
   committedSentence,
   fenceRefusal,
+  focusQualifier,
   magnitudeAdvisories,
   provablyClean,
   qualifierFilter,
@@ -1947,7 +1948,7 @@ export function Workroom({
         answer({ kind: "agent", id: nextId("agent"), text: removalOf.text });
         return;
       }
-      const line = removalOf?.line ?? commanded ?? instruction;
+      let line = removalOf?.line ?? commanded ?? instruction;
 
       // The acknowledgment said everything it came to say. The checks are
       // settled above; there is no instruction left in the line to parse.
@@ -1972,6 +1973,34 @@ export function Workroom({
            room asked, and it must not drop the create either. The read lanes
            below take it and the create waits where it stands. */
         const reading = !commanded && (readTopic(instruction) !== null || isQuestion(instruction));
+
+        /* ============================ THE DOLLAR QUALIFIER IS A FOCUS (N3)
+
+           "on the 15M line of credit" on a FEE line was read by the fenced
+           engine as a $15,000,000 fee. The phrase is a facility name, not a
+           figure, so the room resolves it to the member, stands on that member
+           and takes the phrase out of the line before the engine sees it - and
+           says nothing extra, because the card names the facility exactly as it
+           does after a click on the strip.
+
+           NOT WHILE A CREATE IS BEING GATHERED. There the scope reader already
+           handles the qualifier correctly and owns the answer to its own
+           question, and stripping the phrase out of an answer would leave the
+           room holding nothing. */
+        const focusOn = reading || creating ? null : focusQualifier(line, qualifierMembers);
+        const focusMember = focusOn ? (brief.members.find((m) => m.id === focusOn.memberId) ?? null) : null;
+        if (focusOn && focusMember && elicitMembers.some((m) => m.id === focusMember.id)) {
+          setFocused(focusMember);
+          engine.pick(focusMember.id);
+          line = focusOn.line;
+        }
+        /* THE FOCUS THIS TURN. `focused` is React state and does not move until
+           the next render, so the create grammar is handed the member the line
+           just named rather than the one the room was standing on before it. */
+        const turnCtx: ElicitContext =
+          focusOn && focusMember
+            ? { ...elicitCtx, focused: elicitMembers.find((m) => m.id === focusMember.id) ?? elicitCtx.focused }
+            : elicitCtx;
 
         /* ====================================== THE CREATE BEING GATHERED FOR
 
@@ -2013,7 +2042,7 @@ export function Workroom({
            as navigation if nothing looks at the noun in between. A create is what
            the banker asked for; where to put it is the create's own first
            question. */
-        const opened = reading ? null : openCreate(line, elicitCtx);
+        const opened = reading ? null : openCreate(line, turnCtx);
         if (opened) {
           setSteerPending(false);
           await askCreate(opened, mine);
