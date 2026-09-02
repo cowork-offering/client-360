@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLAIM_MARK,
   FIGURE_MARK,
   GREETING_MAX_SENTENCES,
   NARRATION_MAX_BULLETS,
   NARRATION_MAX_SENTENCES,
   composeNarratePrompt,
+  guardClaims,
   guardFigures,
   narrationText,
   parseNarration,
@@ -516,6 +518,58 @@ const exceptionCard: NarrateSubject = {
 
 const guarded = (text: string, subject: NarrateSubject = exceptionCard, env: BrainEnvelope = envelope) =>
   guardFigures(parseNarration(text), env, subject);
+
+describe("the remark describes the card on the glass and nothing else", () => {
+  /* THE DRIVE'S OWN FAILURE. The card said "Commitment amount $15M -> $1". The
+     remark said the banker had moved the first payment date forward two months
+     to Oct 1, 2026. Nothing of the kind had happened, and every figure in the
+     sentence was in the envelope, so a figure guard could never catch it. */
+  const HIS_CLAIM = "The banker moved the first payment date forward two months to Oct 1, 2026.";
+
+  it("drops the sentence that claims an action nobody took", () => {
+    const guarded = guardClaims(parseNarration(`The line moves to $20.0MM. ${HIS_CLAIM}`), envelope, staged);
+    expect(narrationText(guarded.blocks)).not.toContain("moved the first payment date");
+    expect(guarded.claimed).toContain("first payment date");
+    expect(narrationText(guarded.blocks)).toContain("The line moves to $20.0MM.");
+  });
+
+  it("marks what it dropped rather than editing the remark in silence", () => {
+    const guarded = guardClaims(parseNarration(HIS_CLAIM), envelope, staged);
+    expect(narrationText(guarded.blocks)).toContain(CLAIM_MARK);
+  });
+
+  it("keeps a field the card DOES carry", () => {
+    const onTheCard: NarrateSubject = {
+      act: "staged",
+      sentence: "The first payment date goes on the plan.",
+      card: { title: "On the plan", rows: [{ label: "First payment date", value: "Oct 1, 2026", sub: "Line of Credit" }] },
+    };
+    const guarded = guardClaims(parseNarration("That settles the first payment date on this facility."), envelope, onTheCard);
+    expect(narrationText(guarded.blocks)).toContain("first payment date");
+    expect(guarded.claimed).toHaveLength(0);
+  });
+
+  it("lets a remark name what the BOOK carries: a colleague mentions the covenants", () => {
+    const guarded = guardClaims(parseNarration("The covenants on this package stay where they are."), envelope, staged);
+    expect(narrationText(guarded.blocks)).toContain("covenants");
+    expect(guarded.claimed).toHaveLength(0);
+  });
+
+  it("drops a claimed field out of a line item too, and keeps the rest", () => {
+    const said = "Two things.\n- **Line of Credit**: the commitment on it moves.\n- **Equipment**: its advance rate moves too.";
+    const guarded = guardClaims(parseNarration(said), envelope, staged);
+    const text = narrationText(guarded.blocks);
+    expect(text).toContain("Line of Credit");
+    expect(text).not.toContain("its advance rate moves too");
+    expect(guarded.claimed).toEqual(["advance rate"]);
+  });
+
+  it("still strips the emphasis off an ungrounded figure, exactly as before", () => {
+    const guarded = guardClaims(parseNarration("The cover is **$5.2MM** lendable."), envelope, staged);
+    expect(narrationText(guarded.blocks)).toContain(FIGURE_MARK);
+    expect(guarded.ungrounded).toContain("$5.2MM");
+  });
+});
 
 describe("a figure the room cannot point at is not endorsed", () => {
   it("marks the founder's own drifted sentence, figure by figure", () => {

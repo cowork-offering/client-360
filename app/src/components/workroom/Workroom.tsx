@@ -52,6 +52,7 @@ import {
   pricingLanded,
   pricingNeed,
   pricingSay,
+  readPricingAnother,
   readPricingDecline,
   readPricingFreeText,
   readPricingLine,
@@ -64,6 +65,7 @@ import {
   fenceRefusal,
   focusQualifier,
   magnitudeAdvisories,
+  misreadCommitments,
   provablyClean,
   qualifierFilter,
   stagedAddress,
@@ -76,7 +78,7 @@ import {
   retypeEntry,
   stampRemovalRoles,
   typeChoiceSay,
-  type QualifierMember,
+  type MisreadMember,
 } from "./dispatch";
 import {
   advance,
@@ -1098,12 +1100,24 @@ export function Workroom({
           the same read the strip prints and is never re-derived: the bundle's
           own figure where the room stands on one, and the member chip's own
           printed figure read back where it does not. */
-  const qualifierMembers = useMemo<QualifierMember[]>(() => {
+  /* THE DRAWN BALANCE RIDES ALONG (founder drive, 2026-09-02). A commitment
+     under what is already outstanding is not a decision the bank could take, so
+     the misread rule needs the same read the coverage advisory stands on. Null
+     where no read carries it, and the rule then says nothing. */
+  const qualifierMembers = useMemo<MisreadMember[]>(() => {
     const committed = new Map<string, number>();
+    const drawn = new Map<string, number>();
     for (const f of reads?.bundle?.exposure?.facilities ?? []) {
-      if (f.loanId && typeof f.committed === "number") committed.set(f.loanId, f.committed);
+      if (!f.loanId) continue;
+      if (typeof f.committed === "number") committed.set(f.loanId, f.committed);
+      if (typeof f.outstanding === "number") drawn.set(f.loanId, f.outstanding);
     }
-    return brief.members.map((m) => ({ id: m.id, label: m.key, committed: committed.get(m.id) ?? printedAmount(m.amount) }));
+    return brief.members.map((m) => ({
+      id: m.id,
+      label: m.key,
+      committed: committed.get(m.id) ?? printedAmount(m.amount),
+      drawn: drawn.get(m.id) ?? null,
+    }));
   }, [brief.members, reads?.bundle]);
 
   /** The relationship's committed total, in dollars, for the magnitude bound. */
@@ -1343,7 +1357,16 @@ export function Workroom({
          found no such row and refused the whole plan. The book has the answer
          and the room is already holding it. */
       const roleRead = stampRemovalRoles({ deltas: shown, book, label: memberLabel });
-      const staged = roleRead.deltas;
+
+      /* --------------------------- THE FIGURE THAT CAME OUT WRONG (B)
+
+         A commitment under what is already drawn on the facility, or under a
+         hundredth of what it carries today, is not a decision: it is a
+         mistyped figure, and the drive proved what staging one costs. The
+         magnitude rule stages and warns because too big can still be meant;
+         this one refuses, by name, and says how to put it right. */
+      const misread = misreadCommitments({ deltas: roleRead.deltas, members: qualifierMembers });
+      const staged = misread.keep;
 
       /* ------------------------------------------ THE MAGNITUDE BOUND (F5)
 
@@ -1361,8 +1384,12 @@ export function Workroom({
         : result.kind === "deltas"
           ? (result.advisories ?? [])
           : [];
+      /* AND ITS ADVISORY COMES OFF WITH IT. An advisory under a card the room
+         refused to stage is the drive's own defect from the other side: the
+         warning stayed on screen beside a chip that no longer existed. */
+      const refused = new Set(misread.refusals.map((r) => r.id.slice("misread:".length)));
       const advisories = [
-        ...engineAdvice,
+        ...engineAdvice.filter((a) => ![...refused].some((id) => a.id.includes(id))),
         ...magnitudeAdvisories({ deltas: staged, members: qualifierMembers, committed: committedTotal }),
       ];
 
@@ -1397,9 +1424,16 @@ export function Workroom({
             ? `I read "${unsound[0].d.title}" in that, but ${unsound[0].why}, so I am not putting it up as a change. ${whatICanDo(context.accountName)}`
             : roleRead.ask
               ? roleRead.ask.text
-              : !staged.length && roleRead.said.length
-                ? roleRead.said.join(" ")
-                : [
+              /* A MISREAD OWNS THE SENTENCE where nothing survived it. The
+                 engine composed its account before this rule ran and cannot
+                 know it did, so "1 of these goes on the clone" must not stand
+                 over a card that is a refusal. */
+              : !staged.length && misread.refusals.length
+                ? misread.refusals.map((r) => r.why).join(" ")
+                : !staged.length && roleRead.said.length
+                  ? roleRead.said.join(" ")
+                  : [
+                    misread.refusals.map((r) => r.why).join(" "),
                     roleRead.said.join(" "),
                     qualifier.said
                       ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
@@ -1417,7 +1451,10 @@ export function Workroom({
       ];
       const chips: ChipModel[] =
         result.kind === "deltas"
-          ? staged.map((d) => ({ key: nextId("chip"), delta: d, state: "open" }))
+          ? [
+              ...staged.map((d) => ({ key: nextId("chip"), delta: d, state: "open" as const })),
+              ...misread.refusals.map((r) => ({ key: nextId("chip"), refusal: r, state: "open" as const })),
+            ]
           : result.kind === "refusal"
             ? [{ key: nextId("chip"), refusal: result.refusal, state: "open" }]
             : [];
@@ -2301,11 +2338,19 @@ export function Workroom({
          leave the banker holding chips the room will not take. It is the same
          decision, continued: nothing new is being proposed by these lines and
          each of them is a sentence this room composed. */
+      /* THE GATE THE ROOM IS ACTUALLY STANDING ON (founder drive, 2026-09-02).
+         `pricingPending` is only set where the banker took the "Another date"
+         chip. The gate the room ASKED is derived from the plan and the read, and
+         a free-text answer belongs to it whether or not a chip was pressed:
+         that is how "actually change it to Oct 1, 2026" fell through to the
+         general parser and staged a $1 commitment. */
+      const openGate = pricingPending ?? pricingOutstanding(entries);
       const answersPricing =
         readPricingLine(trimmed, elicitMembers) !== null ||
         readPricingDecline(trimmed, elicitMembers) !== null ||
         readPricingOther(trimmed, elicitMembers) !== null ||
-        (pricingPending !== null && readPricingFreeText(trimmed, pricingPending.slot) !== null);
+        (openGate !== null &&
+          (readPricingFreeText(trimmed, openGate.slot) !== null || readPricingAnother(trimmed, openGate.slot)));
       if (openGates > 0 && !opts?.settled && !answersPricing) {
         const ack = readAcknowledgment(trimmed);
         const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
@@ -2581,12 +2626,30 @@ export function Workroom({
          Four answers and they are all sentences, so nothing about this lane is
          held between turns except the slot the room asked the banker to type a
          figure for and the facilities they left for later. */
-      if (pricingPending) {
-        const said = readPricingFreeText(instruction, pricingPending.slot);
+      /* AN ANSWER TO THE OPEN GATE IS AN ANSWER, however it is written. A date
+         in any of the four forms a banker uses, with or without a correction
+         opener in front of it, lands on the entry the room asked about. It is
+         never a new instruction: that reading is what staged a $1 commitment on
+         a $15M line and then had a model claim the date had moved. */
+      const gate = pricingPending ?? pricingOutstanding(entries);
+      if (gate) {
+        const said = readPricingFreeText(instruction, gate.slot);
         if (said) {
-          const held = pricingPending;
           setPricingPending(null);
-          await landPricing(held, said, mine);
+          await landPricing(gate, said, mine);
+          return;
+        }
+        if (readPricingAnother(instruction, gate.slot)) {
+          const on = elicitMembers.find((m) => m.id === gate.memberId);
+          setPricingPending(gate);
+          answer({
+            kind: "agent",
+            id: nextId("agent"),
+            text:
+              gate.slot === "amortisedTerm"
+                ? `Say the amortisation in months and I will put it on the ${on?.label ?? "facility"}. A number on its own is enough.`
+                : `Say the first payment date and I will put it on the ${on?.label ?? "facility"}. "Oct 1, 2026" reads the same as 2026-10-01.`,
+          });
           return;
         }
       }
@@ -2858,6 +2921,7 @@ export function Workroom({
       landPricing,
       openGates,
       pricingDeclined,
+      pricingOutstanding,
       pricingPending,
       reads,
       router,

@@ -4,7 +4,7 @@ import { LiquidMark } from "../components/workroom/Liquid";
 import {
   composeNarratePrompt,
   GREETING_MAX_SENTENCES,
-  guardFigures,
+  guardClaims,
   NARRATION_MAX_SENTENCES,
   parseNarration,
   resolveEntities,
@@ -125,7 +125,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
          same instance, or a row could print a figure from a book the model
          never saw. */
       const envelope = envelopeFor(line);
-      /* THE FIGURE GUARD RUNS ON THE FINISHED REMARK, NOT ON EVERY PARTIAL. A
+      /* THE GUARDS RUN ON THE FINISHED REMARK, NOT ON EVERY PARTIAL. A
          half-streamed "$5.2M" is a different figure from the "$5.2MM" it is
          about to become, so marking mid-stream would flicker a warning on and
          off under a sentence the model has not finished writing. */
@@ -134,7 +134,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
       const cap = greeting ? GREETING_MAX_SENTENCES : NARRATION_MAX_SENTENCES;
       const read = (text: string, settled = false) => {
         const blocks = resolveEntities(parseNarration(text, cap), envelope);
-        return settled ? guardFigures(blocks, envelope, subject).blocks : blocks;
+        return settled ? guardClaims(blocks, envelope, subject).blocks : blocks;
       };
       const prompt = composeNarratePrompt(envelope, subject);
       const options: AskSessionOptions = {

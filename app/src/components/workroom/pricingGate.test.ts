@@ -14,6 +14,8 @@ import {
   pricingOtherSay,
   pricingSay,
   readPricingDecline,
+  readDate,
+  readPricingAnother,
   readPricingFreeText,
   readPricingLine,
   readPricingOther,
@@ -289,6 +291,41 @@ describe("the answers are sentences, and they read back", () => {
     expect(readPricingFreeText("take the line to 20M", "amortisedTerm")).toBeNull();
     expect(readPricingFreeText("next October", "firstPaymentDate")).toBeNull();
     expect(readPricingFreeText("240", "firstPaymentDate")).toBeNull();
+  });
+
+  /* THE $1 COMMITMENT (founder drive, 2026-09-02). The room had asked for the
+     first payment date. He typed "actually change it to Oct 1, 2026", only
+     YYYY-MM-DD was read as a date, the line went through the general parser and
+     the "1" was staged as a commitment. */
+  it("takes the founder's own line as the date it is", () => {
+    expect(readPricingFreeText("actually change it to Oct 1, 2026", "firstPaymentDate")).toBe("2026-10-01");
+  });
+
+  it("reads a date in the forms a banker writes one", () => {
+    for (const said of ["2026-10-01", "Oct 1, 2026", "October 1st, 2026", "1 October 2026", "1st Oct 2026"]) {
+      expect(readDate(said)).toBe("2026-10-01");
+    }
+    expect(readDate("Quartober 1, 2026")).toBeNull();
+    expect(readDate("Oct 1")).toBeNull();
+    expect(readDate("2026-13-01")).toBeNull();
+  });
+
+  it("takes a correction opener off an answer, on either slot", () => {
+    expect(readPricingFreeText("make it 300 months", "amortisedTerm")).toBe("300");
+    expect(readPricingFreeText("no, 180", "amortisedTerm")).toBe("180");
+    expect(readPricingFreeText("change it to 2026-11-01", "firstPaymentDate")).toBe("2026-11-01");
+  });
+
+  it("does NOT take an instruction that happens to carry a date", () => {
+    expect(readPricingFreeText("extend the maturity to 2027-06-30", "firstPaymentDate")).toBeNull();
+    expect(readPricingFreeText("set the first payment date on the Purchase myself", "firstPaymentDate")).toBeNull();
+    expect(readPricingFreeText("take the line of credit to 20000000", "amortisedTerm")).toBeNull();
+  });
+
+  it("reads 'another date' as belonging to the question, not to the parser", () => {
+    expect(readPricingAnother("another date", "firstPaymentDate")).toBe(true);
+    expect(readPricingAnother("a different figure", "amortisedTerm")).toBe(true);
+    expect(readPricingAnother("another covenant on the line", "firstPaymentDate")).toBe(false);
   });
 });
 

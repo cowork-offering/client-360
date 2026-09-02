@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   MAGNITUDE_MULTIPLE,
+  MISREAD_FRACTION,
   clauseCount,
   committedSentence,
   fenceRefusal,
   focusQualifier,
   magnitudeAdvisories,
+  misreadCommitments,
   dollarFigures,
   provablyClean,
   qualifierFilter,
@@ -18,6 +20,7 @@ import {
   singleClause,
   typeChoiceSay,
   stampRemovalRoles,
+  type MisreadMember,
   type QualifierMember,
 } from "./dispatch";
 import { buildBook, clipTitle, type Book, type ElicitMember } from "./elicit";
@@ -197,6 +200,49 @@ describe("a commitment out of the relationship's range is challenged", () => {
 
   it("reads nothing off a package with no committed figure", () => {
     expect(magnitudeAdvisories({ deltas: [commitment("a", LOC, 900_000_000)], members: MEMBERS, committed: 0 })).toHaveLength(0);
+  });
+});
+
+/* ================================ the figure that came out wrong (B, the drive)
+
+   "COMMITMENT AMOUNT $15M -> $1", STAGED, WITH A WARNING BESIDE IT. The banker
+   was answering the pricing gate's date question. A limit under what is already
+   drawn, or under a hundredth of what the facility carries today, is a misread
+   rather than a decision, and a misread does not become a chip.               */
+
+describe("a commitment the room reads as a mistyped figure is refused, not staged", () => {
+  const drawnMembers: MisreadMember[] = [
+    { id: LOC, label: "Line of Credit", committed: 15_000_000, drawn: 9_000_000 },
+    { id: EQUIPMENT, label: "Equipment Loan", committed: 8_000_000, drawn: null },
+  ];
+
+  it("refuses the drive's own $1 and says how to put it right", () => {
+    const read = misreadCommitments({ deltas: [commitment("a", LOC, 1)], members: drawnMembers });
+    expect(read.keep).toHaveLength(0);
+    expect(read.refusals).toHaveLength(1);
+    expect(read.refusals[0].why).toMatch(/already drawn on it/);
+    expect(read.refusals[0].why).toMatch(/Say the commitment again/);
+  });
+
+  it("refuses a figure under a hundredth of the commitment where no balance is read", () => {
+    const read = misreadCommitments({ deltas: [commitment("a", EQUIPMENT, 1)], members: drawnMembers });
+    expect(read.keep).toHaveLength(0);
+    expect(read.refusals[0].why).toMatch(/under a hundredth of the \$8M it carries today/);
+  });
+
+  it("stages a real reduction: this is a misread rule, not a policy on reductions", () => {
+    const at = MISREAD_FRACTION * 15_000_000;
+    expect(misreadCommitments({ deltas: [commitment("a", LOC, 10_000_000)], members: drawnMembers }).keep).toHaveLength(1);
+    expect(misreadCommitments({ deltas: [commitment("a", EQUIPMENT, at)], members: drawnMembers }).keep).toHaveLength(1);
+  });
+
+  it("leaves a limit below zero to the magnitude rule, which already names it", () => {
+    expect(misreadCommitments({ deltas: [commitment("a", LOC, -5_000_000)], members: drawnMembers }).keep).toHaveLength(1);
+  });
+
+  it("says nothing where the read carries no figure at all", () => {
+    const blind: MisreadMember[] = [{ id: LOC, label: "Line of Credit", committed: null }];
+    expect(misreadCommitments({ deltas: [commitment("a", LOC, 1)], members: blind }).refusals).toHaveLength(0);
   });
 });
 

@@ -353,6 +353,12 @@ const FIGURES: DoctrineBlock = {
     "An advance rate is not a lendable value. A guideline is not a rate. A threshold is not a measured value. Where the card carries one of a pair, say that one and stop.",
     "IF YOU ARE UNSURE, NAME THE CARD'S FIGURE. A remark carrying the card's own number is always right; a remark carrying a number nobody read is wrong even when it happens to be close.",
     "A figure the room cannot find in what it gave you is rendered plainly and marked as not on the card, so write none you cannot point at.",
+    /* THE CLAIM OF AN ACTION (founder drive, 2026-09-02). The room staged a
+       COMMITMENT change and the remark under it said "the banker moved the
+       first payment date forward two months to Oct 1, 2026". Nothing of the
+       kind had happened. A banker reading that reads the bank's own record. */
+    "YOU DESCRIBE THE CARD ON THE GLASS AND NOTHING ELSE. Never say what the banker did, never say what moved, and never name a field or an entity the card and CONTEXT.staged do not both leave room for.",
+    "A sentence naming a field this card does not carry is DROPPED before the banker sees it, whatever else it says. Write about what is in front of you.",
   ],
 };
 

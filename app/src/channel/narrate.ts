@@ -748,6 +748,152 @@ export function guardFigures(
   return { blocks: next, ungrounded: loose };
 }
 
+/* ================================= THE CLAIM GUARD (founder drive 2026-09-02)
+
+   THE CARD SAID "COMMITMENT AMOUNT $15M -> $1". The remark under it said "the
+   banker moved the first payment date forward two months to Oct 1, 2026". The
+   date had not moved, nobody had asked for it to move, and no card on the glass
+   carried it. A figure guard cannot catch that: every number in the sentence
+   was in the envelope. What was invented was the SUBJECT.
+
+   SO THE ROOM HOLDS THE REMARK TO ITS SUBJECT. The narration doctrine now says
+   the remark describes the card on the glass and nothing else, and the prompt
+   is a request. This is the check.
+
+   A SMALL ALLOWLIST, DELIBERATELY. Only the fields and entity kinds this room
+   actually writes are policed, and one of them is policed only where the card,
+   the plan, the room's own sentence and the banker's line all fail to mention
+   it. Ordinary prose names none of them and passes through untouched, which is
+   what keeps this from becoming a censor of sentences it does not understand.
+
+   A NAMED FIELD NOBODY IS TALKING ABOUT IS A CLAIM, AND A CLAIM IS DROPPED.
+   Not de-emphasised, as an ungrounded figure is: a figure the reader can hold
+   against the card is checkable, and a sentence about a change that never
+   happened is not. There is nothing for the banker to check.                */
+
+/**
+ * THE FIELDS AND ENTITY KINDS THIS ROOM WRITES, each with the words a banker
+ * writes it in, and each with the source that entitles a remark to name it.
+ *
+ * A `field` is something a CARD moves. Naming one the card does not carry is
+ * the claim itself, so its only allowance is the card, the plan, the sentence
+ * the room already said and the line the banker typed.
+ *
+ * An `entity` is something the BOOK carries. A colleague legitimately mentions
+ * the covenants or the guarantors while pointing at a commitment change, so
+ * these are allowed the reads as well. The distinction is what keeps the guard
+ * from censoring the greeting, which is a remark about the whole book.
+ */
+const CLAIM_TERMS: Array<{ id: string; kind: "field" | "entity"; says: RegExp }> = [
+  { id: "first payment date", kind: "field", says: /\bfirst payment date\b/i },
+  { id: "amortisation term", kind: "field", says: /\bamorti[sz](?:ation|sed|zed)\s+term\b/i },
+  { id: "commitment", kind: "field", says: /\bcommitments?\b/i },
+  { id: "maturity", kind: "field", says: /\bmaturity\b/i },
+  { id: "interest rate", kind: "field", says: /\b(?:interest\s+rate|repric\w+)\b/i },
+  { id: "advance rate", kind: "field", says: /\badvance rate\b/i },
+  { id: "risk rating", kind: "field", says: /\brisk (?:rating|grade)\b/i },
+  { id: "covenant", kind: "entity", says: /\bcovenants?\b/i },
+  { id: "collateral", kind: "entity", says: /\b(?:collateral|pledges?|liens?)\b/i },
+  { id: "fee", kind: "entity", says: /\bfees?\b/i },
+  { id: "guarantor", kind: "entity", says: /\bguarant(?:or|ors|y|ee)\b/i },
+  { id: "borrower", kind: "entity", says: /\bborrowers?\b/i },
+  { id: "policy exception", kind: "entity", says: /\bpolicy exceptions?\b/i },
+];
+
+/** The terms this remark may name, as ids. */
+function allowedTerms(envelope: BrainEnvelope, subject: NarrateSubject): Set<string> {
+  const card = subject.card
+    ? [subject.card.title, ...subject.card.rows.map((r) => `${r.label} ${r.value} ${r.sub ?? ""}`)].join(" ")
+    : "";
+  const plan = envelope.staged.map((s) => `${s.title} ${s.target} ${s.after}`).join(" ");
+  const onTheGlass = `${card} ${plan} ${subject.sentence} ${envelope.line ?? ""}`;
+  const inTheBook = `${onTheGlass} ${JSON.stringify(envelope.reads ?? {})}`;
+  return new Set(
+    CLAIM_TERMS.filter((t) => t.says.test(t.kind === "field" ? onTheGlass : inTheBook)).map((t) => t.id),
+  );
+}
+
+/** The term a piece of text claims that it was not allowed to, or "". */
+function claimedTerm(text: string, allowed: Set<string>): string {
+  const hit = CLAIM_TERMS.find((t) => !allowed.has(t.id) && t.says.test(text));
+  return hit ? hit.id : "";
+}
+
+/** The mark, in the room's own words. */
+export const CLAIM_MARK = "not on the card";
+
+export interface GuardedClaims extends GuardedNarration {
+  /** The terms the remark named that the card and the plan do not carry. */
+  claimed: string[];
+}
+
+/**
+ * THE REMARK, HELD TO ITS SUBJECT AND TO ITS FIGURES.
+ *
+ * Runs {@link guardFigures} first, so a sentence that survives the claim guard
+ * still has its ungrounded figures stripped of emphasis and marked. Pure, and
+ * returns what it dropped so the suite can assert on it.
+ */
+export function guardClaims(
+  blocks: NarrationBlock[],
+  envelope: BrainEnvelope,
+  subject: NarrateSubject,
+): GuardedClaims {
+  const allowed = allowedTerms(envelope, subject);
+  const claimed: string[] = [];
+  const note = (term: string) => {
+    if (!claimed.includes(term)) claimed.push(term);
+  };
+
+  const keptSpans = (spans: NarrationSpan[]): NarrationSpan[] => {
+    const sentences = sentencesOf(spans);
+    const kept = sentences.filter((sentence) => {
+      const term = claimedTerm(sentence.map((s) => s.text).join(""), allowed);
+      if (term) note(term);
+      return !term;
+    });
+    if (kept.length === sentences.length) return spans;
+    const out: NarrationSpan[] = [];
+    kept.forEach((sentence, i) => {
+      if (i) out.push({ text: " " });
+      out.push(...sentence);
+    });
+    return out;
+  };
+
+  const held: NarrationBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === "line") {
+      const spans = keptSpans(block.spans);
+      if (spans.length) held.push({ kind: "line", spans });
+      continue;
+    }
+    if (block.kind === "bullets") {
+      const items = block.items.filter((item) => {
+        const term = claimedTerm(item.map((s) => s.text).join(""), allowed);
+        if (term) note(term);
+        return !term;
+      });
+      if (items.length) held.push({ kind: "bullets", items });
+      continue;
+    }
+    if (block.kind === "entity") {
+      const rows = block.rows.filter((row) => {
+        const term = claimedTerm(`${spanText(row.label)} ${row.spans.map((s) => s.text).join("")}`, allowed);
+        if (term) note(term);
+        return !term;
+      });
+      if (rows.length) held.push({ kind: "entity", rows });
+      continue;
+    }
+    held.push(block);
+  }
+
+  const guarded = guardFigures(held, envelope, subject);
+  if (claimed.length) guarded.blocks.push({ kind: "mark", text: `${CLAIM_MARK}: ${claimed.join(", ")}` });
+  return { ...guarded, claimed };
+}
+
 /** The plain text of a parsed remark, with every span joined. What a reader
  *  actually sees, once the markup is gone. */
 export function narrationText(blocks: NarrationBlock[]): string {
