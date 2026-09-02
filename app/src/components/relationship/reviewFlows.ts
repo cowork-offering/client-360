@@ -287,6 +287,14 @@ const perRecord = (a: Answers, key: string): Record<string, unknown> =>
  * read.
  */
 export function nextStep(route: RelRoute, ctx: RelContext, a: Answers): RelStep | null {
+  /* A BLOCKED ROUTE ASKS NOTHING, AND IT IS ONE TEST RATHER THAN TWO.
+     The covenant route's own honesty gate was inside `covenantStep`, so the
+     valuation route rendered NO_PACKAGE_ANCHOR under its brief and then asked
+     "which collateral are we valuing?" underneath it: the room refusing and
+     interrogating in the same breath. Caught by the headless drive on
+     2026-09-02, line 5. `relRouteBlock` is the one judgement now, and the room
+     and the machine cannot disagree about it. */
+  if (relRouteBlock(route, ctx)) return null;
   switch (route) {
     case "annual":
       return annualStep(ctx, a);
@@ -430,11 +438,10 @@ function annualStep(ctx: RelContext, a: Answers): RelStep | null {
 
 function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
   const covenants = reviewableCovenants(ctx);
+  /* THE BOOK SPEAKS BEFORE THE ROOM ASKS, and `nextStep` has already asked
+     `relRouteBlock` whether this route can run at all. A second copy of that
+     judgement here is how the two come to disagree. */
   const book = relBookFor(ctx);
-  /* THE BOOK SPEAKS BEFORE THE ROOM ASKS. Where NOT ONE covenant carries a
-     compliance row the review can only end in a refusal, so there is no first
-     question at all: `relRouteBlock` says it in banker language instead. */
-  if (book.noComplianceRows) return null;
   const byId = new Map(book.covenants.map((c) => [c.covenantId, c]));
   if (!answered(a, "covenants")) {
     return {

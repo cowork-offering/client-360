@@ -699,6 +699,16 @@ describe("a route that can only refuse says so before it asks", () => {
     expect(room.querySelector(".wk-propose")).toBeNull();
   });
 
+  it("refuses the VALUATION on the anchor and asks nothing under it", async () => {
+    /* The drive caught the room rendering NO_PACKAGE_ANCHOR under the brief and
+       then asking "which collateral are we valuing?" underneath it. */
+    const { room } = open({ route: "valuation", bundle: { snapshot: { accountId: "001X", name: "Hartwell" } } as never });
+    await settle();
+    expect(room.textContent).toContain("anchored on the product package");
+    expect(room.textContent).not.toContain("Which collateral are we valuing?");
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+
   it("still runs the review where the rows are there", async () => {
     const { room } = open({ route: "covenant" });
     await settle();

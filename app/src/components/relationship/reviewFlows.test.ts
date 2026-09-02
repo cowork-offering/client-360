@@ -1136,3 +1136,27 @@ describe("the grade override, and the one thing the org really refuses", () => {
     expect(NOT_A_CLASSIFICATION).toContain("this org's scale is numeric");
   });
 });
+
+describe("a blocked route asks nothing, on EVERY route it blocks", () => {
+  /* THE HEADLESS DRIVE CAUGHT THIS on 2026-09-02, line 5. The covenant route's
+     honesty gate lived inside covenantStep, so the VALUATION route rendered
+     NO_PACKAGE_ANCHOR under its brief and then asked "which collateral are we
+     valuing?" underneath it: the room refusing and interrogating in the same
+     breath. `relRouteBlock` is the one judgement now. */
+  const noAnchor = ctxFor({ snapshot: { accountId: "001X", name: "Testco" } } as never);
+
+  it("asks nothing on the valuation with no package anchor", () => {
+    expect(relRouteBlock("valuation", noAnchor)).not.toBeNull();
+    expect(nextStep("valuation", noAnchor, {})).toBeNull();
+  });
+
+  it("asks nothing on the covenant review with no package anchor", () => {
+    expect(nextStep("covenant", noAnchor, {})).toBeNull();
+  });
+
+  it("still asks on the three routes the anchor does not gate", () => {
+    expect(nextStep("annual", noAnchor, {})).not.toBeNull();
+    expect(nextStep("rating", noAnchor, {})).not.toBeNull();
+    expect(nextStep("service", noAnchor, {})).not.toBeNull();
+  });
+});
