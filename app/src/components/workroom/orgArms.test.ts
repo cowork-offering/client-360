@@ -9,6 +9,7 @@ import {
   covenantExclusionDelta,
   pledgeExclusionDelta,
   readArmRemoval,
+  readCovenantAttach,
 } from "./orgArms";
 import type { Book, ElicitMember } from "./elicit";
 import type { StagePayloads } from "../../channel/writeTools";
@@ -295,6 +296,83 @@ describe("the pledge carry exclusion (drive line 9)", () => {
     );
     expect(JSON.parse(out.covenantExclusionsJson!)).toEqual([{ covenantId: LIQUIDITY }]);
     expect(JSON.parse(out.pledgeExclusionsJson!)).toEqual([{ collateralId: RECEIVABLES }]);
+  });
+});
+
+describe("associating an existing covenant (P1)", () => {
+  const attachCtx = (over: Partial<Parameters<typeof readCovenantAttach>[0]> = {}) =>
+    readCovenantAttach({
+      covenantId: DSC,
+      test: "Debt Service Coverage of Borrower",
+      book: BOOK,
+      facilityId: EQUIPMENT,
+      facilityLabel: "Equipment ($8M)",
+      mode: "modify" as const,
+      ...over,
+    });
+
+  it("stages the junction for the covenant the book already carries", () => {
+    const read = attachCtx();
+    expect(read?.kind).toBe("attach");
+    if (read?.kind !== "attach") return;
+    expect(read.delta.kind).toBe("Associate a covenant");
+    expect(read.delta.title).toBe("Debt Service Coverage of Borrower");
+    expect(read.delta.before).toBe("on the book, with no junction to this facility");
+    expect(read.delta.after).toBe("associated to this facility, at 1.25, tested quarterly");
+    expect(read.delta.fields).toEqual(["LLC_BI__Loan_Covenant__c"]);
+    expect(armOf(read.delta)).toEqual({ kind: "covenantAttach", recordId: DSC, targetLoanId: EQUIPMENT });
+  });
+
+  it("never calls it a new covenant, and names the junction as what it authors", () => {
+    const read = attachCtx();
+    if (read?.kind !== "attach") throw new Error("expected an attach");
+    expect(read.delta.map.map((m) => m[1]).join(" ")).toContain("junction-only create");
+    expect(read.delta.map[0][1]).toBe("LLC_BI__Loan_Covenant__c");
+    expect(read.delta.kind).not.toMatch(/new covenant/i);
+  });
+
+  it("sends it as covenantAttachesJson with the covenant id", () => {
+    const read = attachCtx();
+    if (read?.kind !== "attach") throw new Error("expected an attach");
+    const out = armPayload(
+      basePayload({
+        facilityIds: [EQUIPMENT],
+        fieldChangesJson: JSON.stringify([
+          { field: read.delta.fieldWire!.field, value: read.delta.fieldWire!.value, targetLoanId: EQUIPMENT },
+        ]),
+      }),
+    );
+    expect(JSON.parse(out.covenantAttachesJson!)).toEqual([{ covenantId: DSC }]);
+  });
+
+  it("REFUSES a covenant already on that facility, in the org's own words", () => {
+    const read = attachCtx({ covenantId: LIQUIDITY, test: "Minimum Liquidity", facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+    expect(read?.kind).toBe("refusal");
+    if (read?.kind !== "refusal") return;
+    expect(read.why).toContain("already associated to the Line of Credit ($15M)");
+    expect(read.why).toContain("the carry brings that junction onto the clone by itself");
+  });
+
+  it("REFUSES a covenant this relationship does not hold", () => {
+    const read = attachCtx({ covenantId: "a3Xbb00000099ZZZAY", test: "Fixed Charge Coverage" });
+    expect(read?.kind).toBe("refusal");
+    if (read?.kind !== "refusal") return;
+    expect(read.why).toContain("not a covenant this relationship holds");
+    expect(read.why).toContain("not moved between relationships by a junction");
+  });
+
+  it("hands a renewal and a new facility back to the handoff", () => {
+    expect(attachCtx({ mode: "renew" })).toBeNull();
+    expect(attachCtx({ mode: "create" })).toBeNull();
+  });
+
+  it("says on the confirm that the record is not touched", () => {
+    const read = attachCtx();
+    if (read?.kind !== "attach") throw new Error("expected an attach");
+    const said = armConfirmSentence(read.delta, "Staged on the clone. The package total holds at $49.0M.");
+    expect(said).toContain("The covenant record itself is not touched");
+    expect(said).toContain("the threshold, the frequency and the schedule stay exactly as the borrower holds them");
+    expect(said).toContain("what this authors is the junction alone");
   });
 });
 

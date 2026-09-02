@@ -463,3 +463,65 @@ export function readArmRemoval(ctx: ArmContext): ArmRead {
       "The asset and the borrower's ownership of it are relationship records and are not touched.",
   };
 }
+
+/* ------------------------------------------ associating an existing covenant */
+
+export type AttachRead =
+  | { kind: "attach"; delta: WorkroomDelta }
+  /** The org would refuse this one, and by name. Nothing is staged. */
+  | { kind: "refusal"; why: string }
+  | null;
+
+/**
+ * THE THIRD INSTRUMENT, WIRED (P1, founder 2026-09-02).
+ *
+ * When a test is on the book and NOT on this loan there are three honest ways
+ * through it: a new covenant on the loan, ASSOCIATING the existing record to the
+ * loan, or a different test. The third chip used to stage a handoff, because
+ * `covenantAddsJson` names a covenant TYPE and sending an associate down it
+ * would mint a second covenant of the same type and report it as an association.
+ * `covenantAttachesJson` is the junction-only arm, so it is a real card now.
+ *
+ * Null hands it back to the handoff, which is still the honest answer on a
+ * renewal and on a new facility: neither of those tools carries the arm.
+ *
+ * THE TWO REFUSALS ARE THE ORG'S OWN. It refuses a covenant already attached to
+ * the facility (the per-loan dedupe, enforced server-side) and a covenant
+ * belonging to another relationship. Both are worth saying HERE rather than
+ * sending a plan up to have them said: a refusal at the confirm gate is a
+ * refusal the banker reads after signing.
+ */
+export function readCovenantAttach(args: {
+  covenantId: string | null | undefined;
+  test: string | undefined;
+  book: Book;
+  facilityId: string;
+  facilityLabel: string;
+  mode: WorkroomMode;
+}): AttachRead {
+  if (args.mode !== "modify") return null;
+  const named = args.test ?? "that covenant";
+  if (!args.covenantId) return null;
+
+  const covenant = args.book.covenants.find((c) => c.id === args.covenantId);
+  if (!covenant) {
+    return {
+      kind: "refusal",
+      why:
+        `${named} is not a covenant this relationship holds, and a covenant is not moved between relationships by a junction. ` +
+        "Associating one means attaching a record the borrower on this package already carries; a test from somewhere else has to be created here as a new covenant.",
+    };
+  }
+  if (covenant.loanIds.includes(args.facilityId)) {
+    return {
+      kind: "refusal",
+      why:
+        `${named} is already associated to the ${args.facilityLabel}, and the carry brings that junction onto the clone by itself. ` +
+        "There is nothing to author. A second junction for the same covenant on the same facility is a duplicate, and the org refuses one by name.",
+    };
+  }
+  return {
+    kind: "attach",
+    delta: covenantAttachDelta(covenant, { facilityId: args.facilityId, facilityLabel: args.facilityLabel }),
+  };
+}

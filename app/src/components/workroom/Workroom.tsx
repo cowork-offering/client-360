@@ -80,7 +80,7 @@ import {
   type PlanEntry,
   type Slots,
 } from "./elicit";
-import { armConfirmSentence, readArmRemoval } from "./orgArms";
+import { armConfirmSentence, readArmRemoval, readCovenantAttach } from "./orgArms";
 import { bareMemberPick, readSteer } from "./steer";
 import {
   TIER_STAGGER_MS,
@@ -1079,6 +1079,24 @@ export function Workroom({
     return out;
   }, [entries, items]);
 
+  /** THE ASSOCIATE, RESOLVED AGAINST THE BOOK AND THE ROUTE (P1). Null is every
+   *  create that is not an associate, and every route whose tool does not carry
+   *  the junction arm; there the handoff still says which route does. */
+  const attachFor = useCallback(
+    (draft: Draft, memberId: string) =>
+      draft.surface === "covenant" && draft.slots.associate
+        ? readCovenantAttach({
+            covenantId: draft.slots.existingCovenantId,
+            test: draft.slots.test,
+            book,
+            facilityId: memberId,
+            facilityLabel: memberLabel(memberId),
+            mode: context.mode,
+          })
+        : null,
+    [book, context.mode, memberLabel],
+  );
+
   const elicitCtx = useMemo<ElicitContext>(
     () => ({
       members: elicitMembers,
@@ -1667,7 +1685,7 @@ export function Workroom({
          none is: the create goes on the plan as a HANDOFF, which is the honest
          record and writes nothing anywhere. A room that gathered all of it and
          then went quiet would be dropping the whole thing silently (rule 8). */
-      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped, context.mode) ?? routeGap(scoped.surface, context.mode);
 
       const started = Date.now();
       setThinking(true);
@@ -1675,6 +1693,23 @@ export function Workroom({
       const refused: string[] = [];
       try {
         for (const [seq, line] of composition.lines.entries()) {
+          /* ============ THE THIRD INSTRUMENT IS A REAL CARD NOW (P1, 2026-09-02)
+
+             `covenantAttachesJson` files a junction for the covenant the book
+             already carries, so the associate chip stages instead of handing off.
+             It never goes through the parser: there is no sentence to compose,
+             because the covenant already exists and what this authors is the
+             junction alone. The two refusals the org would give are given HERE,
+             by name, rather than at the confirm gate after the banker signed. */
+          const attach = attachFor(scoped, line.memberId);
+          if (attach?.kind === "refusal") {
+            refused.push(`on the ${memberLabel(line.memberId)}, ${attach.why}`);
+            continue;
+          }
+          if (attach?.kind === "attach") {
+            got.push(attach.delta);
+            continue;
+          }
           if (routeSaid) {
             got.push(handoffEntry(scoped, elicitCtx, line.memberId, routeSaid, seq));
             continue;
@@ -1799,12 +1834,18 @@ export function Workroom({
 
       // A ROUTE THAT COULD NOT FILE IT CANNOT FILE THE CORRECTION EITHER. The
       // card is still amendable; what it corrects is the handoff on the plan.
-      const routeSaid = associateGap(scoped) ?? routeGap(scoped.surface, context.mode);
+      const routeSaid = associateGap(scoped, context.mode) ?? routeGap(scoped.surface, context.mode);
       const started = Date.now();
       setThinking(true);
       const got: WorkroomDelta[] = [];
       try {
         for (const [seq, composed] of composition.lines.entries()) {
+          const attach = attachFor(scoped, composed.memberId);
+          if (attach?.kind === "attach") {
+            got.push(attach.delta);
+            continue;
+          }
+          if (attach?.kind === "refusal") continue;
           if (routeSaid) {
             got.push(handoffEntry(scoped, elicitCtx, composed.memberId, routeSaid, seq));
             continue;

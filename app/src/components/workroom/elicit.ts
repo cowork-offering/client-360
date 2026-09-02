@@ -88,9 +88,11 @@ export interface Slots {
    * THE BANKER CHOSE TO ASSOCIATE THE COVENANT THE BOOK ALREADY CARRIES rather
    * than create a second record of the same test. In nCino that is a
    * LLC_BI__Loan_Covenant__c junction create pointing at an existing Covenant2,
-   * which is a create and not a delete - but the deployed covenant wire carries
-   * a TYPE NAME and never an existing covenant id, so the room stages it as a
-   * handoff and says so. {@link associateGap}.
+   * which is a create and not a delete. The ordinary covenant wire carries a
+   * TYPE NAME and never an existing covenant id, so this rides
+   * `covenantAttachesJson`, the junction-only arm, and stages a real card on a
+   * modification. {@link associateGap} is what is left of it on the other two
+   * routes.
    */
   associate?: boolean;
   /** The covenant record an associate would attach. The org's own id. */
@@ -1789,7 +1791,9 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
      An ASSOCIATE is a junction create for an existing Covenant2, never a
      delete, so it is inside the fence. What it is not is fileable by the
      deployed wire, which carries a type name and no covenant id: that is
-     {@link associateGap}, and the room says it rather than pretending. */
+     `covenantAttachesJson`, the junction-only arm, so on a modification the
+     third chip stages a real card. On the other two routes it is a handoff and
+     {@link associateGap} says which route carries it. */
   if (draft.surface === "covenant" && draft.slots.test) {
     const already = ctx.book.covenants.filter((c) => c.type === draft.slots.test);
     const staged = ctx.plan.filter(
@@ -2119,25 +2123,30 @@ const SURFACE_NOUN: Record<SurfaceId, string> = {
 };
 
 /**
- * ASSOCIATING AN EXISTING COVENANT, AND WHY IT RIDES THE PLAN (P1).
+ * ASSOCIATING AN EXISTING COVENANT, AND WHICH ROUTE CARRIES IT (P1).
  *
- * The MODEL is right and inside the fence: a loan junction for a Covenant2 that
- * already exists is a create, not a delete, and it is exactly what "put the test
- * the book already runs onto this loan" means in nCino.
+ * The MODEL was always right and inside the fence: a loan junction for a
+ * Covenant2 that already exists is a create, not a delete, and it is exactly
+ * what "put the test the book already runs onto this loan" means in nCino.
  *
- * The WIRE is the problem. `covenantAddsJson` carries `typeName` or `typeId` -
- * a covenant TYPE - and no field on it names an existing covenant RECORD, so
- * sending this through the deployed path would mint a second Covenant2 of the
- * same type and call it an association. That is the one thing the room may not
- * do: pretend. So it stages the decision, names the arm being built, and writes
- * nothing.
+ * The WIRE was the problem, and it is not any more. `covenantAddsJson` carries a
+ * covenant TYPE and names no covenant RECORD, so sending an associate down it
+ * would mint a second covenant of the same type and call it an association;
+ * `covenantAttachesJson` deployed on 2026-09-02 as the junction-only arm, and on
+ * a MODIFICATION the room stages a real card carrying it.
+ *
+ * It rides the modification and nothing else, so this sentence is what is left:
+ * a renewal files a new maturity and a repricing, a new facility files the
+ * product, the amount, the term and the purpose, and neither of them authors a
+ * junction. There the associate still goes on the plan for the credit file.
  */
-export function associateGap(draft: Draft): string | null {
+export function associateGap(draft: Draft, mode: WorkroomMode): string | null {
   if (draft.surface !== "covenant" || !draft.slots.associate) return null;
+  if (mode === "modify") return null;
   return (
     "Associating the covenant the book already carries is a loan-covenant junction create for an existing record, which is a create rather than a delete and is inside the fence. " +
-    "What is not there yet is the wire: the deployed covenant path carries a covenant TYPE and no field on it names an existing covenant record, so sending this down it would mint a second covenant of the same type and call it an association. " +
-    "The junction-only arm is being built on the org side. Until it is deployed this rides the plan for the credit file, with the record it would attach named on it, and nothing about it is written to the bank's systems."
+    `The arm that files one rides the modification alone: ${ROUTE_FILES[mode] ?? ""} A junction is not one of them. ` +
+    "Run it as a modification and I will stage it. Here it rides the plan for the credit file, with the record it would attach named on it, and nothing about it is written to the bank's systems."
   );
 }
 

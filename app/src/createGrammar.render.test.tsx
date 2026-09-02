@@ -358,20 +358,27 @@ describe("a covenant is gathered, grounded, and put up", () => {
     expect(room.textContent).toContain("Debt Service Coverage of Borrower >= 1.25x");
   });
 
-  it("P1: associating the existing one rides the plan and names the arm being built", async () => {
+  it("P1: associating the existing one stages a real card on the junction arm", async () => {
     const { room } = open();
     await settle();
     await typeInto(room, "add a debt service coverage of borrower covenant of 1.25x on the 8M equipment loan");
     await click(byText(/^Associate the existing Debt Service Coverage of Borrower to this facility$/));
 
-    // It goes UP: an associate is a junction create, not a delete, and the
-    // room does not refuse it.
+    // It goes UP: an associate is a junction create, not a delete, and since
+    // `covenantAttachesJson` deployed on 2026-09-02 it FILES rather than
+    // riding the plan as a handoff.
     expect(chips(room)).toHaveLength(1);
-    expect(room.textContent).toContain("Debt Service Coverage of Borrower");
-    // And it does not pretend to file. The wire carries a covenant TYPE.
+    const chip = chips(room)[0].textContent ?? "";
+    expect(chip).toContain("Associate a covenant");
+    expect(chip).toContain("Debt Service Coverage of Borrower");
+    expect(chip).toContain("on the book, with no junction to this facility");
+    expect(chip).toContain("associated to this facility, at 1.25, tested quarterly");
+
+    // And the sentence keeps the record untouched, which is the whole point.
     const words = said(room) + caveats(room) + (room.textContent ?? "");
-    expect(words).toContain("junction create for an existing record");
-    expect(words).toContain("being built on the org side");
+    expect(words).toContain("The covenant record is not touched");
+    expect(words).toContain("its threshold, its schedule and its effective date stay exactly as they are");
+    expect(words).not.toContain("being built on the org side");
     expect(words).not.toContain("Nothing here needs putting up twice");
   });
 

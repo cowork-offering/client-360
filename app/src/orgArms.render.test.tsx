@@ -229,6 +229,33 @@ describe("a pledge carry exclusion on a modification (P2 + P4)", () => {
   });
 });
 
+describe("associating an existing covenant, in the room (P1)", () => {
+  it("stages the junction card and confirms it onto the manifest", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "add a debt service coverage of borrower covenant of 1.25x on the 8M equipment loan");
+    await click(byText(/^Associate the existing Debt Service Coverage of Borrower to this facility$/));
+    await click(byText(/^Confirm$/));
+
+    expect(rail(room)).toContain("Debt Service Coverage of Borrower");
+    expect(rail(room)).toContain("associated to this facility");
+    expect(said(room)).toContain("is associated to the");
+    expect(said(room)).toContain("The covenant record itself is not touched");
+    expect(said(room)).toContain("what this authors is the junction alone");
+  });
+
+  it("keeps the handoff on a renewal, and names the route that carries the arm", async () => {
+    const room = open({ mode: "renew" });
+    await settle();
+    await typeInto(room, "add a debt service coverage of borrower covenant of 1.25x on the 8M equipment loan");
+    await click(byText(/^Associate the existing Debt Service Coverage of Borrower to this facility$/));
+
+    expect(room.textContent).toContain("rides the modification alone");
+    expect(room.textContent).toContain("Run it as a modification");
+    expect(room.textContent).not.toContain("being built on the org side");
+  });
+});
+
 describe("channel-none parity", () => {
   it("stages the same exclusion with a desk attached, and never asks it", async () => {
     const asked: BrainEnvelope[] = [];
