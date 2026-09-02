@@ -82,6 +82,16 @@ describe("the book reads what the relationship carries", () => {
     expect(book.assets.every((a) => a.lastValued === null)).toBe(true);
   });
 
+  it("reads a row from EITHER signal: an id, or that row's own status", () => {
+    // Hartwell carries neither on all six covenants, which is the case the
+    // predicate exists for. A staged status with no id is still a row.
+    const byStatus = relBookFor(ctxFor([{ ...COV, latestComplianceStatus: "Pending" }]));
+    expect(byStatus.covenants[0].assessable).toBe(true);
+    expect(byStatus.noComplianceRows).toBe(false);
+    const byId = relBookFor(ctxFor([{ ...COV, latestComplianceId: "a2X" }]));
+    expect(byId.covenants[0].assessable).toBe(true);
+  });
+
   it("says it cannot see the reviews already on file rather than implying there are none", () => {
     expect(relBookFor(ctxFor([])).reviews).toEqual({ carried: false, open: [] });
   });

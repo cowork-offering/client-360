@@ -48,6 +48,8 @@ export interface BookCovenant {
   /** The org's own latest compliance row, or null where it holds none. */
   complianceId: string | null;
   complianceStatus: string | null;
+  /** TRUE where the org holds a compliance row at all, by EITHER signal. */
+  hasRow: boolean;
   /** Days to the next test on the snapshot's clock. Negative is overdue. */
   daysToTest: number | null;
   frequency: string | null;
@@ -91,6 +93,9 @@ export interface RelBook {
   assessableCount: number;
 }
 
+/** A row that is open and NOT Pending. A write onto it is stored and the
+ *  covenant schedule does not advance; an UNKNOWN status is not claimed to be
+ *  one of those, so it needs no opt-in. */
 const NOT_PENDING = (status: string | null): boolean => status !== null && status !== "Pending";
 
 
@@ -127,6 +132,12 @@ export function relBookFor(ctx: RelContext): RelBook {
     const complianceId = c.latestComplianceId ?? null;
     const complianceStatus = c.latestComplianceStatus ?? null;
     const inactive = c.covenantStatus !== undefined && /inactive/i.test(String(c.covenantStatus));
+    /* EITHER SIGNAL IS A ROW. `latestComplianceId` is the anchor and
+       `latestComplianceStatus` is that row's own status, and a read that
+       carries one without the other still carries a row. Hartwell carries
+       NEITHER on all six covenants, which is the case this predicate exists
+       for; reading only the id would call a staged status a missing row. */
+    const hasRow = Boolean(complianceId) || Boolean(complianceStatus);
     return {
       covenantId: c.covenantId as string,
       name: covenantLabel(c),
@@ -134,15 +145,16 @@ export function relBookFor(ctx: RelContext): RelBook {
       rail: railFor(c),
       complianceId,
       complianceStatus,
+      hasRow,
       daysToTest: today ? dayDiff(c.nextEvaluationDate, today) : null,
       frequency: c.frequency ?? null,
-      assessable: Boolean(complianceId) && !inactive,
-      reason: !complianceId
+      assessable: hasRow && !inactive,
+      reason: !hasRow
         ? "nCino holds no compliance row on this covenant, so there is no open test period to close."
         : inactive
           ? "The covenant is not active, so nCino will not accept an assessment on it."
           : null,
-      needsNonPendingOptIn: Boolean(complianceId) && NOT_PENDING(complianceStatus),
+      needsNonPendingOptIn: hasRow && NOT_PENDING(complianceStatus),
     };
   });
 
@@ -165,7 +177,7 @@ export function relBookFor(ctx: RelContext): RelBook {
         ? { value: String(grade).trim(), surface: "the relationship's grade on file" }
         : null,
     reviews: { carried: false, open: [] },
-    noComplianceRows: covenants.length > 0 && covenants.every((c) => !c.complianceId),
+    noComplianceRows: covenants.length > 0 && covenants.every((c) => !c.hasRow),
     assessableCount: covenants.filter((c) => c.assessable).length,
   };
 }

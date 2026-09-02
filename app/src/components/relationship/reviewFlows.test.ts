@@ -17,6 +17,7 @@ import {
   nextStep,
   readCreateAsk,
   relContextFor,
+  relRouteBlock,
   routeAvailability,
   stageRelPlan,
   type Answers,
@@ -609,5 +610,166 @@ describe("the two relationship-level creates are PROPOSAL-ONLY", () => {
     for (const key of ["covenantAddsJson", "pledgeAddsJson", "newCollateral", "accountCollateral"]) {
       expect(sent).not.toContain(key);
     }
+  });
+});
+
+/* =============================================================================
+   THE COVENANT ROUTE REFUSES FIRST, AND OFFERS THE OPT-IN THE TOOL TAKES.
+
+   Two failures this holds against. The first is the worst moment the addendum
+   names: a relationship with no compliance rows was asked which covenants, then
+   a verdict each, then a figure each, then a narrative, and only then did the
+   org refuse all six. The second is quieter: `allowNonPending` has been on the
+   tool since WS0.5 and the room never offered it, so a row that was open and
+   not Pending could only ever be REFUSED.
+   ============================================================================= */
+
+const ROWLESS = {
+  covenants: {
+    covenants: [
+      { covenantId: "cov1", covenantType: "Debt Service Coverage of Borrower", thresholdValue: 1.25, actualValue: 1.38 },
+      { covenantId: "cov2", covenantType: "Minimum Liquidity", thresholdValue: 5_000_000, actualValue: 6_800_000 },
+    ],
+  },
+};
+
+describe("the covenant review says what the book cannot do, before it asks", () => {
+  it("blocks the whole route where NOT ONE covenant carries a compliance row", () => {
+    const ctx = ctxFor(ROWLESS as never);
+    const blocked = relRouteBlock("covenant", ctx);
+    expect(blocked).toContain("no open test period on any of the 2 covenants");
+    expect(blocked).toContain("recording an assessment needs a compliance row");
+    // AND IT ASKS NOTHING. Not one step is reached.
+    expect(nextStep("covenant", ctx, {})).toBeNull();
+  });
+
+  it("blocks on the package anchor before it reaches the compliance problem", () => {
+    // Hartwell's shipped snapshot carries no productPackageId, so this is the
+    // refusal the founder actually sees on the demo fixture today.
+    const ctx = ctxFor({ ...ROWLESS, snapshot: { accountId: "001X", name: "Testco" } } as never);
+    expect(relRouteBlock("covenant", ctx)).toContain("anchored on the product package");
+    expect(relRouteBlock("valuation", ctx)).toContain("anchored on the product package");
+  });
+
+  it("does not block a relationship whose rows are there", () => {
+    expect(relRouteBlock("covenant", ctxFor())).toBeNull();
+    expect(relRouteBlock("annual", ctxFor())).toBeNull();
+    expect(relRouteBlock("rating", ctxFor())).toBeNull();
+    expect(relRouteBlock("service", ctxFor())).toBeNull();
+  });
+
+  it("shows a covenant with no row DISABLED, carrying its reason, never hidden", () => {
+    const mixed = ctxFor({
+      covenants: {
+        covenants: [
+          { covenantId: "cov1", covenantType: "Debt Service Coverage", latestComplianceStatus: "Pending" },
+          { covenantId: "cov2", covenantType: "Minimum Liquidity" },
+        ],
+      },
+    } as never);
+    const step = nextStep("covenant", mixed, {})!;
+    expect(step.options?.map((o) => o.value)).toEqual(["cov1", "cov2"]);
+    expect(step.options?.[0].disabled).toBeFalsy();
+    expect(step.options?.[1].disabled).toBe(true);
+    expect(step.options?.[1].reason).toContain("no compliance row");
+  });
+
+  it("carries the read's own rail on every covenant option", () => {
+    const step = nextStep("covenant", ctxFor({
+      covenants: {
+        covenants: [
+          {
+            covenantId: "cov1",
+            covenantType: "Debt Service Coverage",
+            thresholdValue: 1.25,
+            actualValue: 1.38,
+            latestComplianceStatus: "Pending",
+          },
+        ],
+      },
+    } as never), {})!;
+    expect(step.options?.[0].detail).toContain("1.38× vs ≥ 1.25×");
+    expect(step.options?.[0].detail).toContain("row at Pending");
+  });
+});
+
+describe("the covenant review proposes the figure and offers the opt-in", () => {
+  const withRows = (statuses: string[]) =>
+    ctxFor({
+      covenants: {
+        covenants: statuses.map((status, i) => ({
+          covenantId: `cov${i + 1}`,
+          covenantType: i === 0 ? "Debt Service Coverage" : "Minimum Liquidity",
+          thresholdValue: 1.25,
+          actualValue: 1.38,
+          latestComplianceId: `a2X${i}`,
+          latestComplianceStatus: status,
+        })),
+      },
+    } as never);
+
+  it("PROPOSES the figure the read carries rather than asking cold", () => {
+    const ctx = withRows(["Pending"]);
+    const step = nextStep("covenant", ctx, { covenants: ["cov1"], covenantStatuses: { cov1: "Compliant" } })!;
+    expect(step.key).toBe("covenantObservedValues.cov1");
+    expect(step.ask).toContain("The read carries 1.38× vs ≥ 1.25×");
+    // AN OPTION, NEVER A DEFAULT. The banker still owns the answer.
+    expect(step.options?.[0].value).toBe("1.38");
+    expect(step.optional).toBe(true);
+  });
+
+  it("names the field the tool ACTUALLY writes on both display peeks", () => {
+    const ctx = withRows(["Pending"]);
+    const figure = nextStep("covenant", ctx, { covenants: ["cov1"], covenantStatuses: { cov1: "Compliant" } })!;
+    // Was LLC_BI__Observed_Value__c, which the tool does not write.
+    expect(figure.target?.field).toBe("LLC_BI__Historic_Financial_Indicator__c");
+    const basis = nextStep("covenant", ctx, {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+    })!;
+    // Was LLC_BI__Narrative__c. The tool writes Agentic_AI_Response__c.
+    expect(basis.target?.field).toBe("Agentic_AI_Response__c");
+  });
+
+  it("offers allowNonPending ONLY where a chosen row is not Pending, and says the schedule holds", () => {
+    const ctx = withRows(["In Progress"]);
+    const step = nextStep("covenant", ctx, {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+    })!;
+    expect(step.key).toBe("allowNonPending");
+    expect(step.ask).toContain("at In Progress, not Pending");
+    expect(step.options?.[0].detail).toContain("the schedule does not advance");
+  });
+
+  it("never offers it where every chosen row is Pending", () => {
+    const ctx = withRows(["Pending", "In Progress"]);
+    const answers: Answers = {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+    };
+    // cov2 is the non-Pending one and it was NOT chosen.
+    expect(nextStep("covenant", ctx, answers)!.key).toBe("assessmentNarrative");
+  });
+
+  it("travels the flag only where the banker said yes out loud", () => {
+    const ctx = withRows(["In Progress"]);
+    const base: Answers = {
+      covenants: ["cov1"],
+      covenantStatuses: { cov1: "Compliant" },
+      covenantObservedValues: { cov1: 1.38 },
+      assessmentNarrative: SKIPPED,
+    };
+    const yes = buildStagePayload("covenant", ctx, { ...base, allowNonPending: "yes" }, "key-1");
+    expect((yes as { payload: StagePayloads["covenant-review"] }).payload.allowNonPending).toBe(true);
+    // AN ABSENT KEY IS THE TOOL'S OWN DEFAULT. Sending `false` would claim the
+    // question had been asked when it had not.
+    const no = buildStagePayload("covenant", ctx, { ...base, allowNonPending: "no" }, "key-1");
+    expect((no as { payload: StagePayloads["covenant-review"] }).payload).not.toHaveProperty("allowNonPending");
+    const never = buildStagePayload("covenant", ctx, base, "key-1");
+    expect((never as { payload: StagePayloads["covenant-review"] }).payload).not.toHaveProperty("allowNonPending");
   });
 });

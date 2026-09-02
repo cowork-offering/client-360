@@ -62,6 +62,7 @@ import {
   nextStep,
   readCreateAsk,
   relContextFor,
+  relRouteBlock,
   reviewableCovenants,
   routeAvailability,
   stageRelPlan,
@@ -132,6 +133,9 @@ interface Opt {
   /** What the parser hears. A chip does nothing a typed line could not. */
   say: string;
   detail?: string;
+  /** The org will not take this one, and the chip says why rather than going. */
+  disabled?: boolean;
+  reason?: string;
 }
 
 type RelItem = { id: string; step: number } & (
@@ -615,7 +619,12 @@ export function RelationshipRoom({
 
   /* ---- derived. Nothing below is stored twice. */
   const live = useMemo(() => (route ? nextStep(route, ctx, answers) : null), [route, ctx, answers]);
-  const ready = !!route && !live;
+  /* THE ROUTE CANNOT RUN AT ALL. Non-null where the review's own preconditions
+     fail on the read the room is holding, and it is the reason there is no
+     first question. A blocked route never reaches `ready`: offering "Review &
+     file" over a refusal would be the room contradicting itself. */
+  const routeBlock = useMemo(() => (route ? relRouteBlock(route, ctx) : null), [route, ctx]);
+  const ready = !!route && !live && !routeBlock;
   const approvalOpen = phase === "work" && !thinking && ready;
   const laneRows = useMemo(
     () => (route ? laneRowsFor(route, ctx, answers, order) : []),
@@ -654,12 +663,23 @@ export function RelationshipRoom({
   /* ---- THE BRIEF LANDS WHEN THE ROUTE BINDS, before the first question. A
           governance ritual states its scope before it asks anything. */
   const briefedRef = useRef<RelRoute | null>(null);
+  /** The block, read by the brief effect without joining its deps: the brief
+   *  lands once per route and must not re-land when the read is re-derived. */
+  const blockRef = useRef<string | null>(null);
+  blockRef.current = routeBlock;
   useEffect(() => {
     if (!route || !awake || briefedRef.current === route) return;
     briefedRef.current = route;
     setItems((prev) => {
       const mine = prev.length ? prev[prev.length - 1].step : 0;
-      return [...prev, { kind: "brief", id: nextId("brief"), step: mine }];
+      const landed: RelItem[] = [...prev, { kind: "brief", id: nextId("brief"), step: mine }];
+      /* AND THE REFUSAL LANDS WITH IT, BEFORE THE FIRST QUESTION. The scope,
+         then why this review cannot close anything today. Six questions and a
+         tool call ahead of the same sentence is the worst moment in the room. */
+      if (blockRef.current) {
+        landed.push({ kind: "agent", id: nextId("block"), step: mine, text: blockRef.current });
+      }
+      return landed;
     });
     // THE IDENTITY TIER. The scope blends in and the question above it leaves
     // the stage: the banker is deciding on the review now, not on which one.
@@ -724,7 +744,7 @@ export function RelationshipRoom({
           says so rather than leaving the banker to notice the chip. */
   const readyRef = useRef(false);
   useEffect(() => {
-    if (!ready || readyRef.current || phase === "filed" || !flowSpec) return;
+    if (!ready || readyRef.current || phase === "filed" || !flowSpec || routeBlock) return;
     readyRef.current = true;
     setItems((prev) => {
       const mine = prev.length ? prev[prev.length - 1].step : 0;
@@ -738,7 +758,7 @@ export function RelationshipRoom({
         },
       ];
     });
-  }, [flowSpec, phase, ready]);
+  }, [flowSpec, phase, ready, routeBlock]);
 
   /** RECORD AN ANSWER. Every answer starts a STEP (rule 31): the banker line
    *  lands, the steps before it collapse, and the machine asks the next one. */
@@ -1773,7 +1793,13 @@ export function RelationshipRoom({
  *  because "not assessed" is an ANSWER a governance record should hold, not an
  *  absence the banker has to express by silence. */
 function optionsFor(step: RelStep): Opt[] | undefined {
-  const opts: Opt[] = (step.options ?? []).map((o) => ({ label: o.label, say: o.value, detail: o.detail }));
+  const opts: Opt[] = (step.options ?? []).map((o) => ({
+    label: o.label,
+    say: o.value,
+    detail: o.detail,
+    disabled: o.disabled,
+    reason: o.reason,
+  }));
   if (step.optional) opts.push({ label: SKIP_LABEL, say: SKIP_LABEL });
   return opts.length ? opts : undefined;
 }
@@ -1804,7 +1830,10 @@ function stepAccepts(step: RelStep, text: string): boolean {
 }
 
 function matchOptions(step: RelStep, text: string): string[] {
-  const opts = step.options ?? [];
+  /* A DISABLED OPTION IS NOT SELECTABLE BY A TYPED LINE EITHER. The chip is
+     refused on the glass and "all" must not quietly pick it up: the org would
+     refuse it anyway, and the banker would read the refusal twice. */
+  const opts = (step.options ?? []).filter((o) => !o.disabled);
   const line = text.trim().toLowerCase();
   if (!line) return [];
   if (/^(all|all of them|everything|the lot)$/.test(line)) return opts.map((o) => o.value);
@@ -1938,9 +1967,18 @@ function RelBlock({
         {item.kind === "agent" && item.options && item.options.length > 0 && (
           <div className="wk-opts">
             {item.options.map((opt) => (
-              <button type="button" className="wk-opt" key={opt.say} onClick={() => onOption(opt.say, opt.label)}>
+              <button
+                type="button"
+                className="wk-opt"
+                key={opt.say}
+                disabled={opt.disabled}
+                title={opt.disabled ? opt.reason : undefined}
+                onClick={() => onOption(opt.say, opt.label)}
+              >
                 {opt.label}
-                {opt.detail && <span className="rl-opt-d">{opt.detail}</span>}
+                {(opt.detail || (opt.disabled && opt.reason)) && (
+                  <span className="rl-opt-d">{opt.disabled && opt.reason ? opt.reason : opt.detail}</span>
+                )}
               </button>
             ))}
           </div>

@@ -22,6 +22,7 @@ import {
   type WriteActionId,
 } from "../../channel/writeTools";
 import type { IconKind } from "../workroom/TypeIcon";
+import { NO_COMPLIANCE_ROW, relBookFor, type BookCovenant } from "./relBook";
 import type { RelRoute } from "./relRoute";
 
 /* =============================================================================
@@ -95,6 +96,11 @@ export interface StepOption {
   value: string;
   /** A second line under the label, where the org has one worth reading. */
   detail?: string;
+  /** THE OPTION STAYS, DISABLED, CARRYING ITS REASON (A27.3). A covenant the
+   *  org will not accept an assessment on is shown and refused by name; hiding
+   *  it would take the map of what exists away from the banker. */
+  disabled?: boolean;
+  reason?: string;
 }
 
 export interface RelStep {
@@ -331,17 +337,28 @@ function annualStep(_ctx: RelContext, a: Answers): RelStep | null {
 
 function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
   const covenants = reviewableCovenants(ctx);
+  const book = relBookFor(ctx);
+  /* THE BOOK SPEAKS BEFORE THE ROOM ASKS. Where NOT ONE covenant carries a
+     compliance row the review can only end in a refusal, so there is no first
+     question at all: `relRouteBlock` says it in banker language instead. */
+  if (book.noComplianceRows) return null;
+  const byId = new Map(book.covenants.map((c) => [c.covenantId, c]));
   if (!answered(a, "covenants")) {
     return {
       key: "covenants",
       ask: "Which covenants are we assessing?",
       kind: "multi",
       options: covenants.map((c) => {
+        const held = byId.get(c.covenantId!);
         const verdict = classifyCovenant(c);
         return {
           label: covenantLabel(c),
           value: c.covenantId!,
-          detail: `${verdict.label}${c.latestComplianceStatus ? ` · row at ${c.latestComplianceStatus}` : ""}`,
+          detail: [verdict.label, held?.rail, c.latestComplianceStatus ? `row at ${c.latestComplianceStatus}` : null]
+            .filter(Boolean)
+            .join(" · "),
+          disabled: held ? !held.assessable : false,
+          reason: held?.reason ?? undefined,
         };
       }),
       placeholder: "Name the covenants, or pick them above.",
@@ -365,13 +382,25 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
   for (const id of picked) {
     if (answered(observed, id)) continue;
     const cov = covenants.find((c) => c.covenantId === id);
+    const held = byId.get(id);
+    /* THE ROOM PROPOSES THE FIGURE AND ASKS FOR CONFIRMATION. It already holds
+       the actual the read carries; asking cold for a number it is looking at is
+       the "step by step, not intuitive" the founder named. The banker still
+       owns the answer: the proposal is an OPTION, never a default. */
+    const proposed = typeof cov?.actualValue === "number" ? String(cov.actualValue) : null;
     return {
       key: `covenantObservedValues.${id}`,
-      ask: `What figure was tested on the ${covenantLabel(cov ?? {})}?`,
+      ask: proposed
+        ? `The read carries ${held?.rail ?? proposed} on the ${covenantLabel(cov ?? {})}. File that figure, or give me the certificate's own.`
+        : `What figure was tested on the ${covenantLabel(cov ?? {})}?`,
       kind: "number",
       optional: true,
+      options: proposed ? [{ label: proposed, value: proposed, detail: "the figure on the read" }] : undefined,
       placeholder: "The tested figure, or skip it.",
-      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Observed_Value__c" },
+      /* THE TOOL WRITES `LLC_BI__Historic_Financial_Indicator__c`. This peek
+         used to name `LLC_BI__Observed_Value__c`, which the tool does not
+         write, so the founder was reading a wrong field name on the glass. */
+      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Historic_Financial_Indicator__c" },
     };
   }
   const reasons = perRecord(a, "covenantReasons");
@@ -387,6 +416,25 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Reason_for_Exception__c" },
     };
   }
+  /* THE OPT-IN, OFFERED ONLY WHERE A CHOSEN ROW IS NOT PENDING.
+     `allowNonPending` has been on the tool since WS0.5 and the room has never
+     offered it, so such a row could only ever be REFUSED. A write onto it is
+     stored and the covenant schedule does NOT advance, which is a governance
+     fact the banker has to opt into out loud rather than discover afterwards. */
+  const nonPending = picked.map((id) => byId.get(id)).filter((c): c is BookCovenant => Boolean(c?.needsNonPendingOptIn));
+  if (nonPending.length && !answered(a, "allowNonPending")) {
+    const at = [...new Set(nonPending.map((c) => c.complianceStatus ?? "not Pending"))].join(" and ");
+    return {
+      key: "allowNonPending",
+      ask: `${nonPending.length === 1 ? `The ${nonPending[0].name} row sits` : `${nonPending.length} of these rows sit`} at ${at}, not Pending. Record the assessment anyway?`,
+      kind: "chips",
+      options: [
+        { label: "Record it", value: "yes", detail: "The assessment is stored and the schedule does not advance." },
+        { label: "Leave those out", value: "no", detail: "Only rows at Pending are assessed." },
+      ],
+      placeholder: "Record it, or leave those out.",
+    };
+  }
   if (!answered(a, "assessmentNarrative")) {
     return {
       key: "assessmentNarrative",
@@ -394,9 +442,36 @@ function covenantStep(ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "The basis, for the record.",
-      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "LLC_BI__Narrative__c" },
+      /* THE TOOL WRITES `Agentic_AI_Response__c`, not `LLC_BI__Narrative__c`.
+         Same correction as the observed figure above: the wire was always
+         right and the "what this writes" peek was always wrong. */
+      target: { object: "LLC_BI__Covenant_Compliance2__c", field: "Agentic_AI_Response__c" },
     };
   }
+  return null;
+}
+
+/**
+ * THE ROUTE CANNOT RUN, AND THE ROOM SAYS SO BEFORE IT ASKS ANYTHING.
+ *
+ * Non-null where the review's own preconditions fail on the read this room is
+ * holding, so the refusal comes FIRST rather than after six questions and a
+ * tool call. This is the single worst moment the addendum names: Hartwell
+ * carries no compliance rows, so the covenant route asked which covenants, then
+ * a verdict each, then a figure each, then a narrative, and only then let the
+ * org refuse all six.
+ *
+ * IT IS NOT THE SAME TEST AS `buildStagePayload`. That one guards the WIRE and
+ * still runs; this one guards the CONVERSATION.
+ */
+export function relRouteBlock(route: RelRoute, ctx: RelContext): string | null {
+  if (route === "covenant") {
+    if (!ctx.productPackageId) return NO_PACKAGE_ANCHOR;
+    const book = relBookFor(ctx);
+    if (book.noComplianceRows) return NO_COMPLIANCE_ROW(book.covenants.length);
+    return null;
+  }
+  if (route === "valuation") return ctx.productPackageId ? null : NO_PACKAGE_ANCHOR;
   return null;
 }
 
@@ -663,16 +738,17 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
     if (!assessments.length || assessments.length !== picked.length) {
       return { ok: false, blocked: "Every covenant on the list needs a verdict before the plan can be staged." };
     }
-    return {
-      ok: true,
-      payload: {
-        idempotencyKey,
-        rationale,
-        productPackageId: ctx.productPackageId,
-        assessments,
-        covenantIds: picked,
-      },
+    const payload: StagePayloads["covenant-review"] = {
+      idempotencyKey,
+      rationale,
+      productPackageId: ctx.productPackageId,
+      assessments,
+      covenantIds: picked,
     };
+    // ONLY WHERE THE BANKER SAID YES OUT LOUD. An absent key is the tool's own
+    // default of false; sending `false` would claim the question was asked.
+    if (a.allowNonPending === "yes") payload.allowNonPending = true;
+    return { ok: true, payload };
   }
 
   if (route === "valuation") {

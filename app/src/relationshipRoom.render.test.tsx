@@ -43,7 +43,7 @@ afterEach(() => {
 
 const PACKAGE = "a5Fbb000000IHFJEA4";
 
-function ctxFor(): RelContext {
+function ctxFor(overrides: Partial<BorrowerBundle> = {}): RelContext {
   const bundle = {
     snapshot: {
       accountId: "001X",
@@ -75,6 +75,7 @@ function ctxFor(): RelContext {
         },
       ],
     },
+    ...overrides,
   } as unknown as BorrowerBundle;
   const data = {
     meta: { generatedAt: "2026-08-31", userId: "005bb000001AAAAAAA" },
@@ -126,6 +127,8 @@ function open(args: {
   say?: string | null;
   covenantId?: string | null;
   deps?: RelFlowDeps;
+  /** A read this case needs a different shape of. */
+  bundle?: Partial<BorrowerBundle>;
 } = {}): Opened {
   const bound: Opened["bound"] = [];
   const restarted: Opened["restarted"] = [];
@@ -143,7 +146,7 @@ function open(args: {
   act(() => {
     root!.render(
       <RelationshipRoom
-        ctx={ctxFor()}
+        ctx={ctxFor(args.bundle)}
         route={args.route ?? null}
         router={router}
         deps={args.deps ?? depsFor()}
@@ -642,5 +645,42 @@ describe("the relationship room answers a create line the same way the workroom 
     // AND IT NEVER ASKS FOR WHAT THE ORG WORKS OUT.
     expect(words).not.toMatch(/what advance rate/i);
     expect(words).not.toMatch(/lendable value/i);
+  });
+});
+
+/* =============================================================================
+   THE REFUSAL COMES FIRST, ON THE GLASS.
+
+   The step machine's own test holds that no step is reached; this holds the
+   half a banker actually sees: the scope brief, then why the review cannot
+   close anything today, then NO first question and no "Review & file" chip.
+   ============================================================================= */
+
+describe("a route that can only refuse says so before it asks", () => {
+  it("lands the refusal under the brief, asks nothing, and offers no plan", async () => {
+    const rowless = {
+      covenants: {
+        covenants: [
+          { covenantId: "cov1", covenantType: "Debt Service Coverage of Borrower" },
+          { covenantId: "cov2", covenantType: "Minimum Liquidity" },
+        ],
+      },
+    };
+    const { room } = open({ route: "covenant", bundle: rowless });
+    await settle();
+    const text = room.textContent ?? "";
+    expect(text).toContain("no open test period on any of the 2 covenants");
+    // NO FIRST QUESTION.
+    expect(text).not.toContain("Which covenants are we assessing?");
+    // AND NO PLAN. Offering "Review & file" over a refusal would be the room
+    // contradicting itself in the same breath.
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+
+  it("still runs the review where the rows are there", async () => {
+    const { room } = open({ route: "covenant" });
+    await settle();
+    expect(room.textContent).toContain("Which covenants are we assessing?");
+    expect(room.textContent).not.toContain("no open test period");
   });
 });
