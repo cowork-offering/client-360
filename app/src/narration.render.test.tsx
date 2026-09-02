@@ -316,6 +316,74 @@ describe("the model's four channels each render through the room's own component
   });
 });
 
+/* =============================================================================
+   THE LINE ITEM, ON THE GLASS (founder, 2026-09-02).
+
+   The model writes the name and the clause. The ROOM writes the figure, out of
+   the same envelope the model was handed. And it stays a remark: a row is a
+   row, never a chip, never a button, never a second card.
+   ============================================================================= */
+
+describe("an entity reads as a line item with the book's figure beside it", () => {
+  /** The LAST remark on the glass. The greeting answers with the same stub, so
+   *  scoping to the newest bubble is what keeps this about one remark. */
+  const lastRemark = (room: HTMLElement) => [...room.querySelectorAll<HTMLElement>(".wk-narr")].pop()!;
+  const LINE_ITEMS = [
+    "Two tests are worth a second look.",
+    "- **Debt Service Coverage of Borrower**: the widest ratio cushion on the deal.",
+    "- **Piedmont Precision Components**: not a party to this package at all.",
+  ].join("\n");
+
+  it("renders its own list, with the label bold and the room's figure in the rail", async () => {
+    installSession(async () => LINE_ITEMS);
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await typeInto(room, "take the line of credit to 20000000");
+
+    const remark = lastRemark(room);
+    const rows = remark.querySelectorAll(".wk-narr-rows .wk-narr-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector("b")?.textContent).toBe("Debt Service Coverage of Borrower");
+    // THE FIGURE IS THE BOOK'S, not the model's: it never wrote one.
+    expect(rows[0].querySelector(".wk-narr-row-v")?.textContent).toBe("1.38× vs ≥ 1.25×");
+    expect(remark.querySelector(".wk-narr-rows")!.textContent).not.toMatch(/\*/);
+  });
+
+  it("gives an unresolved name no rail at all, and no placeholder", async () => {
+    installSession(async () => LINE_ITEMS);
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await typeInto(room, "take the line of credit to 20000000");
+
+    const rows = lastRemark(room).querySelectorAll(".wk-narr-rows .wk-narr-row");
+    expect(rows[1].querySelector("b")?.textContent).toBe("Piedmont Precision Components");
+    expect(rows[1].querySelector(".wk-narr-row-v")).toBeNull();
+    expect(rows[1].textContent).toContain("not a party to this package");
+  });
+
+  it("is a row and never a control: no chip, no button, in the remark bubble", async () => {
+    installSession(async () => LINE_ITEMS);
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await typeInto(room, "take the line of credit to 20000000");
+
+    const remark = lastRemark(room);
+    expect(remark.querySelector(".wk-narr-rows")).not.toBeNull();
+    expect(remark.querySelector(".wk-opt")).toBeNull();
+    expect(remark.querySelector("button")).toBeNull();
+  });
+
+  it("keeps a plain bullet run in the bullet list, never in the row list", async () => {
+    installSession(async () => "Three tests move:\n- DSC at 1.25x\n- Minimum liquidity at $2.0MM");
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await typeInto(room, "take the line of credit to 20000000");
+
+    expect(lastRemark(room).querySelector(".wk-narr-list")!.querySelectorAll("li")).toHaveLength(2);
+    expect(room.querySelector(".wk-narr-rows")).toBeNull();
+  });
+});
+
 describe("the write fence, from the room's side", () => {
   it("offers the model no door that is not a read", () => {
     for (const door of READ_DOORS) {

@@ -30,7 +30,7 @@ import { composeDoctrine } from "./doctrine";
 /* ------------------------------------------------------------ the subject */
 
 /** What the room just did, as the model is told about it. */
-export type NarrateAct = "staged" | "refused" | "answered" | "greeting";
+export type NarrateAct = "staged" | "refused" | "answered" | "greeting" | "mail";
 
 export interface NarrateSubject {
   act: NarrateAct;
@@ -78,12 +78,49 @@ export function shouldNarrate(subject: NarrateSubject): boolean {
  *  structure is allowed, a memo is not, and raw markdown never reaches glass. */
 const HOW_TO_WRITE = [
   "HOW TO WRITE IT.",
-  "Plain sentences, at most three. This is a colleague's remark beside a card, not a memo.",
-  "At most three bullets when you are listing, each one line, each starting with a hyphen.",
-  "Bold only for a figure, written **like this**. No headings, no tables, no links, no code.",
+  "THREE PARTS, IN THIS ORDER. A lead line of at most eighteen words. Then nothing, or up to three line items. Then nothing, or one closing line.",
+  "A LINE ITEM IS ONE HYPHEN BULLET THAT OPENS ON A NAME, like this: - **Line of Credit ($15.0MM)**: one sentence about it.",
+  "COPY THE NAME EXACTLY AS CONTEXT PRINTS IT: a label from CONTEXT.facilities, a name from CONTEXT.reads.covenants, a party from CONTEXT.reads.involvements, an asset from CONTEXT.reads.collateral, or a title from CONTEXT.staged. A name you cannot copy verbatim reads as a plain bullet, so guessing costs you the row.",
+  "THE ROOM PRINTS THAT ENTITY'S OWN FIGURES BESIDE YOUR LINE ITEM. Do not restate them in your words. Bold a figure only where it is one the row cannot carry, written **like this**.",
+  "Nothing else is bold. No headings, no tables, no links, no code.",
+  "Do not mix line items and plain bullets in one run. Write all of one, then all of the other.",
   "No em dashes. Never repeat the sentence the room already said; add what it could not.",
-  "Name what your remark is based on. If there is nothing worth saying, say the one thing that is and stop.",
+  "Name what your remark is based on. If there is nothing worth saying, write the lead line and stop.",
+  "IF IT RUNS LONG, CUT IN THIS ORDER. The third line item first. Then the closing line, whenever the chips on the glass or the card's own follow-up already carry the ask. Then a line item's trailing clause. Never the lead line, and never a figure.",
 ];
+
+/**
+ * WHAT THE REMARK IS ALLOWED TO WEIGH, per act.
+ *
+ * Keyed like {@link ACT_LINE} and printed under it, so the model sees the budget
+ * for the act it is writing and no other. A greeting is the banker's first look
+ * at the whole book and earns three line items; a refusal has already been made
+ * by name on the card and earns one.
+ */
+const ACT_BUDGET: Record<NarrateAct, string> = {
+  greeting:
+    "ABOUT NINETY WORDS in all. Three line items is the default here, not the exception: this is the banker's first look at the whole book.",
+  answered: "ABOUT SEVENTY-FIVE WORDS in all. Up to three line items where the read compares entities.",
+  staged:
+    "ABOUT FIFTY-FIVE WORDS in all. The card already carries the delta; your job is the consequence. One or two line items.",
+  refused: "ABOUT FORTY-FIVE WORDS in all. The card already carries the reason by name. One line item, then stop.",
+  mail: "ABOUT FIFTY-FIVE WORDS in all. One line item at most. Say what the message asks and offer the move.",
+};
+
+/**
+ * WHERE THE ROUTE STANDS, in one line the doctrine cannot take away.
+ *
+ * The room stands on a PROVISIONAL engine while the route question is open, so
+ * an envelope that simply printed its mode would tell the model this is a
+ * modification before the banker has said any such thing. That is the leak the
+ * founder read in the greeting ("which facility or facilities move"). The line
+ * travels on every narrate prompt, under the budget, and is undroppable by
+ * construction because it is not a doctrine block.
+ */
+const routeLine = (envelope: BrainEnvelope): string =>
+  envelope.routeOpen
+    ? `THE ROUTE IS NOT BOUND YET. The banker has not chosen between: ${(envelope.routeOptions ?? []).join(", ")}.`
+    : `THE ROUTE IS BOUND: this is a ${envelope.route}. Write in that route's terms and in no other's.`;
 
 const cardDigest = (subject: NarrateSubject): string[] => {
   if (!subject.card) return [];
@@ -98,6 +135,7 @@ const ACT_LINE: Record<NarrateAct, string> = {
   refused: "The room REFUSED something, by name, and named the route that does exist.",
   answered: "The room ANSWERED a read from the book it is already holding.",
   greeting: "The room has just OPENED on this relationship and greeted the banker.",
+  mail: "The client's message arrived AFTER the room greeted the banker. Say what it asks and offer the move, in one short remark.",
 };
 
 /**
@@ -121,6 +159,8 @@ export function composeNarratePrompt(envelope: BrainEnvelope, subject: NarrateSu
     "",
     `THE BANKER SAID: ${envelope.line || "(the room opened)"}`,
     ACT_LINE[subject.act],
+    ACT_BUDGET[subject.act],
+    routeLine(envelope),
     `THE ROOM SAID: ${subject.sentence}`,
     ...cardDigest(subject),
     "",
@@ -150,9 +190,33 @@ export interface NarrationSpan {
   bold?: true;
 }
 
+/**
+ * A LINE ITEM: an entity named, a sentence about it, and the BOOK'S OWN FIGURE
+ * beside it.
+ *
+ * The founder's ask, in one shape: "showing XYZ covenant as a line item with
+ * text around it". The model writes the name and the clause; the ROOM writes
+ * `value`, resolved out of the envelope by {@link resolveEntities}. They cannot
+ * disagree about a number because they are not the same source.
+ *
+ * NO `value` IS NOT AN ERROR. An entity the envelope does not carry keeps its
+ * label, its colon and its sentence, and reads on the glass as a bullet whose
+ * first words happen to be bold.
+ */
+export interface NarrationRow {
+  /** The bold head, already span-parsed. Rendered inside one `<b>`. */
+  label: NarrationSpan[];
+  /** The clause after the colon. */
+  spans: NarrationSpan[];
+  /** The BOOK'S figure, resolved from the envelope. Absent = unresolved. */
+  value?: string;
+  tone?: "warn" | "bad";
+}
+
 export type NarrationBlock =
   | { kind: "line"; spans: NarrationSpan[] }
-  | { kind: "bullets"; items: NarrationSpan[][] };
+  | { kind: "bullets"; items: NarrationSpan[][] }
+  | { kind: "entity"; rows: NarrationRow[] };
 
 /** A remark is a remark. Four blocks and three bullets is already generous for
  *  something a colleague says while pointing at a card. */
@@ -160,6 +224,27 @@ export const NARRATION_MAX_BLOCKS = 4;
 export const NARRATION_MAX_BULLETS = 3;
 
 const BULLET = /^\s*[-*•]\s+(.*)$/;
+/**
+ * A BULLET THAT OPENS ON A NAME. `- **Line of Credit ($15.0MM)**: it moves.`
+ *
+ * CANDIDACY IS STRICT AND DELIBERATELY SO. Only a bullet whose FIRST span is
+ * bold AND is immediately followed by a colon is a line item. Bold anywhere
+ * else in a bullet is a FIGURE and stays prose bold, which is what keeps the
+ * old grammar exactly as it was.
+ *
+ * STREAM-SAFE BY CONSTRUCTION: "- **Debt Serv" has no closing marker and
+ * "- **Debt Service Coverage**" has no colon yet, so both read as plain bullets
+ * until the whole head has arrived. The only mid-stream event is the value
+ * column appearing; nothing reflows twice.
+ */
+const LEAD_LABEL = /^(\*\*|__)([^\n]+?)\1\s*:\s+(.+)$/;
+/** A head shorter than this is punctuation; longer than this is a sentence. */
+const LABEL_MIN = 2;
+const LABEL_MAX = 72;
+/** The clause beside a name. Longer than this and the row is a paragraph. */
+const CLAUSE_MAX = 120;
+/** The figure in the rail. Longer than this and it is not a figure. */
+const VALUE_MAX = 24;
 const FENCE = /^\s*```/;
 const DROP = [
   /^\s*#{1,6}\s/, // a heading
@@ -206,6 +291,10 @@ function push(out: NarrationSpan[], raw: string, bold?: true): void {
 export function parseNarration(raw: string): NarrationBlock[] {
   const blocks: NarrationBlock[] = [];
   let bullets: NarrationSpan[][] | null = null;
+  /** The line-item run, beside the bullet run. Both close on the same events,
+   *  and each closes when the OTHER starts: a mixed run splits into two blocks
+   *  rather than pretending a bullet is a row. */
+  let rows: NarrationRow[] | null = null;
   // A fence takes its CONTENTS with it. Dropping the ``` lines alone would leave
   // the code on the glass, which is the one thing a fence guarantees is not prose.
   let fenced = false;
@@ -214,45 +303,222 @@ export function parseNarration(raw: string): NarrationBlock[] {
     if (bullets?.length) blocks.push({ kind: "bullets", items: bullets.slice(0, NARRATION_MAX_BULLETS) });
     bullets = null;
   };
+  const closeRows = () => {
+    if (rows?.length) blocks.push({ kind: "entity", rows: rows.slice(0, NARRATION_MAX_BULLETS) });
+    rows = null;
+  };
+  const closeRuns = () => {
+    closeBullets();
+    closeRows();
+  };
 
   for (const line of (raw ?? "").split(/\r?\n/)) {
     if (blocks.length >= NARRATION_MAX_BLOCKS) break;
     if (FENCE.test(line)) {
       fenced = !fenced;
-      closeBullets();
+      closeRuns();
       continue;
     }
     if (fenced) continue;
     if (!line.trim()) {
-      closeBullets();
+      closeRuns();
       continue;
     }
     if (DROP.some((rx) => rx.test(line))) continue;
 
     const bullet = BULLET.exec(line);
     if (bullet) {
-      const spans = spansOf(bullet[1]);
-      if (spans.length) (bullets ??= []).push(spans);
+      const row = rowOf(bullet[1]);
+      if (row) {
+        closeBullets();
+        (rows ??= []).push(row);
+      } else {
+        closeRows();
+        const spans = spansOf(bullet[1]);
+        if (spans.length) (bullets ??= []).push(spans);
+      }
       continue;
     }
-    closeBullets();
+    closeRuns();
     if (blocks.length >= NARRATION_MAX_BLOCKS) break;
     const spans = spansOf(line);
     if (spans.length) blocks.push({ kind: "line", spans });
   }
-  closeBullets();
+  closeRuns();
   return blocks.slice(0, NARRATION_MAX_BLOCKS);
+}
+
+/** A bullet read as a line item, or null where it is an ordinary bullet. */
+function rowOf(text: string): NarrationRow | null {
+  const lead = LEAD_LABEL.exec(text.trim());
+  if (!lead) return null;
+  const label = lead[2].trim();
+  if (label.length < LABEL_MIN || label.length > LABEL_MAX) return null;
+  const clause = clipWords(lead[3].trim(), CLAUSE_MAX);
+  if (!clause) return null;
+  const head = spansOf(label);
+  const spans = spansOf(clause);
+  if (!head.length || !spans.length) return null;
+  return { label: head, spans };
+}
+
+/** Clipped on a word boundary, so a long clause ends on a word. The cut point
+ *  is computed from the first {@link CLAUSE_MAX} characters and therefore does
+ *  not move as the rest of the clause streams in. */
+function clipWords(text: string, cap: number): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= cap) return line;
+  const cut = line.slice(0, cap);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > cap / 2 ? cut.slice(0, lastSpace) : cut).trim()}...`;
+}
+
+/* --------------------------------------------------- the book, beside the row
+
+   THE VALUE COMES FROM THE ENVELOPE, NEVER FROM THE MODEL'S TEXT. The model
+   writes the name and the clause; the room writes the number. They cannot
+   disagree about a figure because they are not the same source, which is the
+   whole reason a line item is safer than a bolded figure in prose.            */
+
+/** One resolvable entity, as the lookup holds it. */
+interface Resolved {
+  value: string;
+  tone?: "warn" | "bad";
+}
+
+/**
+ * A NAME, REDUCED TO ITS WORDS.
+ *
+ * Token multiset equality, so `facilityLabel`'s "$15.0MM Line of Credit" and the
+ * model's "Line of Credit ($15.0MM)" are the same facility. That is not a
+ * nicety: it is the founder's own example, and without it the shared-key form
+ * the room prints would never match the form a banker writes.
+ */
+function norm(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
+
+const spanText = (spans: NarrationSpan[]): string => spans.map((s) => s.text).join("").trim();
+
+/** One lookup, built once per envelope. FIRST WRITER WINS per key, in rank
+ *  order, so a staged title beats the covenant of the same name. */
+class EntityBook {
+  private exact = new Map<string, Resolved>();
+  private loose = new Map<string, Resolved>();
+  /**
+   * A NORMALISED KEY TWO ENTRIES IN ONE TABLE BOTH PRODUCE IS NEVER GUESSED AT.
+   *
+   * This package carries TWO Lines of Credit. Printing one facility's
+   * commitment beside the other's name is the failure that staged a reduction
+   * on the wrong line in the 2026-09-01 evening drive. An ambiguous key
+   * resolves to nothing, for good; it must never be weakened into a fuzzy
+   * match.
+   */
+  private ambiguous = new Set<string>();
+
+  /** One rank of the lookup. Ambiguity is judged WITHIN the table. */
+  add(entries: Array<{ name: string | undefined; value: string | undefined; tone?: "warn" | "bad" }>): void {
+    const seen = new Map<string, number>();
+    for (const e of entries) {
+      const name = (e.name ?? "").trim();
+      if (!name) continue;
+      const key = norm(name);
+      if (key) seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    for (const [key, count] of seen) if (count > 1) this.ambiguous.add(key);
+
+    for (const e of entries) {
+      const name = (e.name ?? "").trim();
+      const value = (e.value ?? "").trim().slice(0, VALUE_MAX).trim();
+      if (!name || !value) continue;
+      const hit: Resolved = e.tone ? { value, tone: e.tone } : { value };
+      if (!this.exact.has(name)) this.exact.set(name, hit);
+      const key = norm(name);
+      if (key && !this.ambiguous.has(key) && !this.loose.has(key)) this.loose.set(key, hit);
+    }
+  }
+
+  find(label: string): Resolved | undefined {
+    const name = label.trim();
+    if (!name) return undefined;
+    const exact = this.exact.get(name);
+    if (exact) return exact;
+    const key = norm(name);
+    if (!key || this.ambiguous.has(key)) return undefined;
+    return this.loose.get(key);
+  }
+}
+
+/** breach is loud, watch is quiet, and a clean test takes no colour at all. */
+const toneOf = (severity: string | undefined): "warn" | "bad" | undefined =>
+  severity === "breach" ? "bad" : severity === "watch" ? "warn" : undefined;
+
+/**
+ * THE ROWS, WITH THE BOOK'S FIGURES BESIDE THEM.
+ *
+ * Pure, and called from the hook rather than the component, so the renderer
+ * stays a renderer and the parser stays envelope-free.
+ *
+ * PRICING IS NOT A SOURCE. `pricing[].facility` is produced by the same
+ * `nameOf()` that produces `facilities[].label`, so every pricing key is already
+ * shadowed at the facility rank. Including it would be dead code whose only
+ * effect, if the ranks were ever reordered, is a RATE printed beside a
+ * COMMITMENT. A rate stays prose bold.
+ */
+export function resolveEntities(blocks: NarrationBlock[], envelope: BrainEnvelope): NarrationBlock[] {
+  if (!blocks.some((b) => b.kind === "entity")) return blocks;
+  const book = new EntityBook();
+
+  book.add(envelope.staged.map((s) => ({ name: s.title, value: s.after })));
+  book.add(
+    (envelope.reads?.covenants ?? []).map((c) => ({
+      name: c.name,
+      value: [c.measured, c.threshold].filter(Boolean).join(" vs "),
+      tone: toneOf(c.severity),
+    })),
+  );
+  book.add(
+    [...(envelope.selectedFacility ? [envelope.selectedFacility] : []), ...envelope.facilities].map((f) => ({
+      name: f.label,
+      value: f.commitment,
+    })),
+  );
+  book.add((envelope.reads?.involvements ?? []).map((i) => ({ name: i.name, value: i.role })));
+  book.add((envelope.reads?.collateral ?? []).map((c) => ({ name: c.asset, value: c.lendable ?? c.pledged })));
+
+  return blocks.map((block) => {
+    if (block.kind !== "entity") return block;
+    return {
+      kind: "entity",
+      rows: block.rows.map((row) => {
+        const hit = book.find(spanText(row.label));
+        if (!hit) return { label: row.label, spans: row.spans };
+        return hit.tone
+          ? { label: row.label, spans: row.spans, value: hit.value, tone: hit.tone }
+          : { label: row.label, spans: row.spans, value: hit.value };
+      }),
+    };
+  });
 }
 
 /** The plain text of a parsed remark, with every span joined. What a reader
  *  actually sees, once the markup is gone. */
 export function narrationText(blocks: NarrationBlock[]): string {
   return blocks
-    .map((b) =>
-      b.kind === "line"
-        ? b.spans.map((s) => s.text).join("")
-        : b.items.map((i) => i.map((s) => s.text).join("")).join(" "),
-    )
+    .map((b) => {
+      if (b.kind === "line") return b.spans.map((s) => s.text).join("");
+      if (b.kind === "bullets") return b.items.map((i) => i.map((s) => s.text).join("")).join(" ");
+      return b.rows
+        .map((r) => `${spanText(r.label)}: ${r.spans.map((s) => s.text).join("")}${r.value ? ` ${r.value}` : ""}`)
+        .join(" ");
+    })
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();

@@ -41,6 +41,40 @@ describe("what the room read travels with the line", () => {
     expect(row.scope.length).toBeGreaterThan(0);
   });
 
+  /* THE FIGURE IN ITS OWN UNIT (2026-09-02). The envelope carried raw numbers:
+     a threshold of "1.25" and a measured value of "5000000". A line item's rail
+     printing "5000000" is worse than no rail, so the block now formats through
+     the room's OWN covenant helpers, and the card and the remark can no longer
+     write the same test two different ways. */
+  it("prints every covenant in the unit its type carries, never a raw number", () => {
+    const by = new Map(blocks.covenants!.map((c) => [c.name, c]));
+    expect(by.get("Debt Service Coverage of Borrower")).toMatchObject({ measured: "1.38×", threshold: "≥ 1.25×" });
+    expect(by.get("Maximum Debt to Worth")).toMatchObject({ measured: "2.42×", threshold: "≤ 3.00×" });
+    // "≥", not "≤": Accounts Receivable matches neither the cap nor the floor
+    // hint list, so `covenantDirection` falls to its magnitude rule and 80
+    // against 80 reads as a floor. That is what the room's own card prints
+    // beside it, which is the only thing that matters here: one test, one unit,
+    // in both places.
+    expect(by.get("Accounts Receivable")).toMatchObject({ measured: "80%", threshold: "≥ 80%" });
+    expect(by.get("Minimum Liquidity")).toMatchObject({ measured: "$6.80M", threshold: "≥ $5M" });
+    expect(by.get("Debt Service Coverage with and without Distributions")).toMatchObject({
+      measured: "1.22×",
+      threshold: "≥ 1.15×",
+    });
+    // A test the org carries no threshold for says so, and carries no measure.
+    expect(by.get("Term Covenants")).toMatchObject({ threshold: "not carried", measured: undefined });
+    for (const row of blocks.covenants!) expect(row.threshold).not.toMatch(/^\d/);
+  });
+
+  it("carries the frequency and the verdict's own severity, for the row's colour", () => {
+    const dsc = blocks.covenants!.find((c) => c.name === "Debt Service Coverage of Borrower")!;
+    expect(dsc.frequency).toBe("Quarterly");
+    expect(dsc.severity).toBe("clear");
+    for (const row of blocks.covenants!) {
+      expect(["breach", "watch", "clear", "neutral", undefined]).toContain(row.severity);
+    }
+  });
+
   it("carries who is on the deal, with the role the org wrote", () => {
     expect(blocks.involvements?.length).toBeGreaterThan(0);
     expect(blocks.involvements!.every((r) => r.name.length > 0 && r.role.length > 0)).toBe(true);

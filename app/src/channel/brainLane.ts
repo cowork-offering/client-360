@@ -63,7 +63,12 @@ export interface BrainReadBlocks {
     measured?: string;
     lastEvaluated?: string;
     nextTest?: string;
+    /** How often the org tests it, in the org's own word. */
+    frequency?: string;
     status: string;
+    /** The verdict's own loudness, so a line item can take the room's colour
+     *  without re-deriving a verdict from a label string. */
+    severity?: "breach" | "watch" | "clear" | "neutral";
     /** The facility it is attached to, or "across the relationship". */
     scope: string;
   }>;

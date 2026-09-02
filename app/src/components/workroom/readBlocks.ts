@@ -1,6 +1,7 @@
 import type { BrainReadBlocks, BrainTurn } from "../../channel/brainLane";
 import type { Facility, LegalEntity } from "../../data/contract";
 import { facilityProduct } from "../../data/facilityStage";
+import { fmtCovThreshold, fmtCovVal } from "../../data/finance";
 import { fmtDate, fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
@@ -76,11 +77,19 @@ function covenantBlock(src: ReadSource): BrainReadBlocks["covenants"] {
     const verdict = classifyCovenant(c);
     return {
       name: (c.covenantType ?? "").trim() || "Covenant",
-      threshold: typeof c.thresholdValue === "number" ? `${c.thresholdValue}` : "not carried",
-      measured: typeof c.actualValue === "number" ? `${c.actualValue}` : undefined,
+      // IN THE COVENANT'S OWN UNIT, through the room's own formatters. A raw
+      // 5000000 on the envelope reads as "5000000" in the line item's rail,
+      // which is worse than no rail at all.
+      threshold:
+        typeof c.thresholdValue === "number"
+          ? fmtCovThreshold(c.covenantType, c.actualValue, c.thresholdValue)
+          : "not carried",
+      measured: typeof c.actualValue === "number" ? fmtCovVal(c.actualValue, c.covenantType) : undefined,
       lastEvaluated: c.lastEvaluationDate ? fmtDate(c.lastEvaluationDate) : undefined,
       nextTest: c.nextEvaluationDate ? fmtDate(c.nextEvaluationDate) : undefined,
+      frequency: c.frequency,
       status: verdict.label,
+      severity: verdict.severity,
       scope: attached.length ? attached.join(", ") : RELATIONSHIP,
     };
   });
