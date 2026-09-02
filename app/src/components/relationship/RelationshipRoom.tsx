@@ -47,12 +47,13 @@ import {
 } from "./relRoute";
 import {
   CREATE_GAPS,
+  NAME_THE_SURFACE,
+  NOT_A_CLASSIFICATION,
   NO_CONNECTOR,
-  OVERRIDE_NOT_FILEABLE,
   REL_FLOWS,
   RelFlowError,
   SKIPPED,
-  asksForOverride,
+  asksForClassification,
   covenantLabel,
   defaultRelDeps,
   dossierFooter,
@@ -458,6 +459,8 @@ const LANE_LABELS: Record<string, string> = {
   managementExperience: "Management experience",
   creditScore: "Credit score",
   overrideComment: "Rationale",
+  computedRiskGradeValue: "Proposed grade",
+  overriddenRiskGradeValue: "Override",
   origin: "Origin",
   subject: "Subject",
   detail: "Detail",
@@ -1197,10 +1200,15 @@ export function RelationshipRoom({
         return;
       }
 
-      /* THE GRADE OVERRIDE HAS NO OBSERVED WIRE NAME, so it is refused by name
-         rather than guessed at. */
-      if (asksForOverride(text, route)) {
-        answer({ kind: "agent", id: nextId("agent"), text: OVERRIDE_NOT_FILEABLE });
+      /* A REGULATORY CLASSIFICATION IS NOT A GRADE IN THIS ORG. Special
+         Mention, Substandard, Doubtful and Loss are the interagency categories
+         and this org's rating scale is numeric, so the room refuses to write
+         one into a number and then says which scale it IS filing on.
+
+         THE OVERRIDE IS NO LONGER REFUSED HERE. It is on the wire and the
+         rating route collects it, with the org's own mandatory reason. */
+      if (asksForClassification(text, route)) {
+        answer({ kind: "agent", id: nextId("agent"), text: `${NOT_A_CLASSIFICATION} ${NAME_THE_SURFACE}` });
         return;
       }
 

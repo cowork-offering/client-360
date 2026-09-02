@@ -204,7 +204,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The risk-rating review covers the four factors the grade is built from: cash-flow coverage, revenue growth, management experience and credit score.",
     produces:
-      "It files a risk-rating review carrying the factor scores and the rationale. The grade the org computes from them is the org's, not this room's.",
+      "It files a risk-rating review at In Review carrying the factor actuals, the proposed grade and any override with its written reason. The FINAL grade is nCino's own formula over what is filed, Approved and Declined belong to the org's decisioning path, and the facility-level rating stays in the facility room.",
     writeObjectLabel: "risk-rating review",
     approveLabel: "File the rating review",
     filedWord: "Filed",
@@ -295,7 +295,7 @@ export function nextStep(route: RelRoute, ctx: RelContext, a: Answers): RelStep 
     case "valuation":
       return valuationStep(ctx, a);
     case "rating":
-      return ratingStep(a);
+      return ratingStep(ctx, a);
     case "service":
       return serviceStep(ctx, a);
   }
@@ -711,9 +711,14 @@ const RATING_FACTORS: Array<{ key: string; label: string; ask: string; field: st
   { key: "creditScore", label: "credit score", ask: "And the credit score?", field: "creditScoreActual" },
 ];
 
+/** THE ONE FACTOR THIS ORG'S TEMPLATE ACTUALLY SCORES. The other three are
+ *  stored as inputs and never weighed, and the tool cannot choose the template,
+ *  so the room says which is which rather than implying a model. */
+const SCORED_FACTOR = "cashFlowCoverage";
+
 const RATING_OBJECT = "LLC_BI__Annual_Review__c";
 
-function ratingStep(a: Answers): RelStep | null {
+function ratingStep(ctx: RelContext, a: Answers): RelStep | null {
   for (const factor of RATING_FACTORS) {
     if (answered(a, factor.key)) continue;
     return {
@@ -725,38 +730,128 @@ function ratingStep(a: Answers): RelStep | null {
       target: { object: RATING_OBJECT, field: factor.field },
     };
   }
+  /* THE PROPOSED GRADE IS STATED AND OWNED, not taken silently. It used to be
+     read off `snapshot.computedRiskRating` inside `buildStagePayload` and never
+     shown, so the banker filed a grade nobody had put in front of them. The
+     read's own figure is offered as a chip; the proposal is theirs. */
+  if (!answered(a, "computedRiskGradeValue")) {
+    const computed = Number(ctx.bundle?.snapshot?.computedRiskRating);
+    const proposed = Number.isFinite(computed) ? String(computed) : null;
+    const onFile = ctx.bundle?.snapshot?.primaryRiskRating;
+    return {
+      key: "computedRiskGradeValue",
+      ask: onFile
+        ? `The grade on file is ${onFile}, on the relationship. What grade does this analysis support, on the rating review's own scale?`
+        : "What grade does this analysis support, on the rating review's own scale?",
+      kind: "number",
+      optional: true,
+      options: proposed ? [{ label: proposed, value: proposed, detail: "the grade the read computes" }] : undefined,
+      placeholder: "The grade, or skip it.",
+      target: { object: RATING_OBJECT, field: "LLC_BI__Computed_Risk_Grade_Value__c" },
+    };
+  }
+  /* THE OVERRIDE IS ON THE WIRE and the room used to refuse it by name.
+     `StageRiskRatingReview.Request.overriddenRiskGradeValue` is deployed and
+     `StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted` covers
+     it. What IS refused is an override with no written reason, which is the
+     org's own Mandatory_comment rule and has no bypass. */
+  if (!answered(a, "overriddenRiskGradeValue")) {
+    return {
+      key: "overriddenRiskGradeValue",
+      ask: "Are you overriding the computed grade? Give me the grade you are filing instead, or skip it.",
+      kind: "number",
+      optional: true,
+      placeholder: "The overriding grade, or skip it.",
+      target: { object: RATING_OBJECT, field: "LLC_BI__Overridden_Risk_Grade_Value__c" },
+    };
+  }
   if (!answered(a, "overrideComment")) {
+    const overriding = hasOverride(a);
     return {
       key: "overrideComment",
-      ask: "State the rationale for the record.",
+      /* AN OVERRIDE ABOVE ZERO MAKES THE COMMENT MANDATORY. The room says so
+         and stops it being optional, rather than letting the org refuse. */
+      ask: overriding
+        ? "An override needs a written reason. That is the org's own rule and it has no bypass."
+        : "State the rationale for the record.",
       kind: "text",
-      optional: true,
-      placeholder: "The rationale.",
+      optional: !overriding,
+      placeholder: overriding ? "The reason for the override." : "The rationale.",
       target: { object: RATING_OBJECT, field: "LLC_BI__Comments__c" },
     };
   }
   return null;
 }
 
+/** TRUE where the answers carry an override above zero. The org's own trigger
+ *  for the Mandatory_comment rule, read the same way in the step and the wire. */
+function hasOverride(a: Answers): boolean {
+  const v = num(a.overriddenRiskGradeValue);
+  return v !== null && v > 0;
+}
+
 /**
- * THE GRADE OVERRIDE IS NOT COLLECTED, and the room says so rather than taking
- * a figure it cannot file.
+ * THE OVERRIDE NEEDS A WRITTEN REASON, and that is the only thing refused.
  *
- * The staged plan writes `LLC_BI__Overridden_Risk_Grade_Value__c`, so the tool
- * almost certainly accepts an override input — but no observed request has ever
- * carried one and its wire name would be a guess. Guessing a field name is the
- * failure this campaign has already paid for twice, so the room states the gap
- * exactly as the ticket does instead of sending an invented key.
+ * This constant REPLACES `OVERRIDE_NOT_FILEABLE`, which told the banker the
+ * override could not be filed because its wire name had never been observed.
+ * That was false against the source in this repo:
+ * `StageRiskRatingReview.Request.overriddenRiskGradeValue` is deployed, carries
+ * its own description, and `StageExecuteRiskRatingReviewTest`
+ * .overrideWithACommentIsAccepted covers it. The room was refusing a capability
+ * the tool already takes.
+ *
+ * What is real is the org's `Mandatory_comment` rule: any override above zero
+ * requires `LLC_BI__Comments__c`, and it has no bypass. The room validates it
+ * before the org has to.
  */
-export const OVERRIDE_NOT_FILEABLE =
-  "The rating override cannot be filed from here. The plan writes the overridden grade, but the input's wire name has never been observed and this room does not guess one. Record the rationale and set the override in nCino.";
+export const OVERRIDE_NEEDS_A_REASON =
+  "An override above zero needs a written reason. That is the org's own rule and it has no bypass. Give me the reason and I will file both.";
+
+/**
+ * SPECIAL MENTION IS NOT A GRADE IN THIS ORG.
+ *
+ * The interagency categories are the regulatory classification and this org's
+ * rating scale is numeric. Writing "Substandard" into a numeric grade field is
+ * not a thing the org can hold, and reading a number out of the word would be
+ * inventing the bank's own mapping.
+ */
+export const NOT_A_CLASSIFICATION =
+  "Special Mention, Substandard, Doubtful and Loss are the regulatory categories and this org's scale is numeric. I file the grade; the classification is assigned elsewhere and I will not write one into it.";
+
+/**
+ * FOUR GRADE SURFACES ARE LIVE HERE AND THEY DO NOT AGREE.
+ *
+ * THE RANGES ARE NOT INLINED HERE. They live in the `risk-rating` doctrine
+ * block, which is where every other bank figure the model reasons over lives;
+ * a component that restates a scale is a second place for it to drift, and the
+ * A26.2 literal ban catches exactly that.
+ */
+export const NAME_THE_SURFACE =
+  "Four grade surfaces are live here and they do not agree: the facility's, the package's, the review's and this rating review's own. The number I am filing is on the rating review's own scale.";
+
+/** The org put this rating on a template that scores ONE factor. */
+export const SCORED_VS_STORED =
+  "This org's rating template scores cash-flow coverage and nothing else. The credit score, the management experience and the revenue growth are recorded as inputs and not weighed, and the tool cannot choose the template.";
+
+/** The dual-rating fields exist, are empty on every record, and are on no wire. */
+export const DUAL_RATING_NOT_CARRIED =
+  "The probability of default and loss given default fields exist on this object and are empty on every record here, and none is on this tool's wire. I read them; I never claim them.";
 
 /** "override the grade to 6", "downgrade it to 7 manually". */
 const OVERRIDE_ASK = /\b(override|overrid\w*)\b/i;
 
+/** The interagency categories, which this org's numeric scale does not hold. */
+const CLASSIFICATION_ASK = /\b(special\s+mention|substandard|doubtful|criticised|criticized|classif\w+)\b/i;
+
 /** TRUE where the banker asked to override the computed grade. */
 export function asksForOverride(text: string, route: RelRoute): boolean {
   return route === "rating" && OVERRIDE_ASK.test(text.trim());
+}
+
+/** TRUE where the banker named a REGULATORY CLASSIFICATION rather than a grade. */
+export function asksForClassification(text: string, route: RelRoute): boolean {
+  return route === "rating" && CLASSIFICATION_ASK.test(text.trim());
 }
 
 function serviceStep(ctx: RelContext, a: Answers): RelStep | null {
@@ -954,21 +1049,35 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
   }
 
   if (route === "rating") {
-    const computed = Number(ctx.bundle?.snapshot?.computedRiskRating);
+    // THE GRADE THE BANKER OWNS, falling back to the read's own computed figure
+    // only where they skipped the question rather than answered it.
+    const fromRead = Number(ctx.bundle?.snapshot?.computedRiskRating);
+    const answeredGrade = num(a.computedRiskGradeValue);
+    const overridden = num(a.overriddenRiskGradeValue);
+    const comments = text(a.overrideComment);
+    /* THE ORG'S OWN RULE, CHECKED BEFORE THE ORG HAS TO. `Mandatory_comment`
+       fires on any override above zero and has no bypass, so a plan that would
+       certainly be refused is blocked here with the reason in words. */
+    if (overridden !== null && overridden > 0 && !comments) {
+      return { ok: false, blocked: OVERRIDE_NEEDS_A_REASON };
+    }
     return {
       ok: true,
       payload: {
         idempotencyKey,
         accountId: ctx.accountId,
         rationale,
-        computedRiskGradeValue: Number.isFinite(computed) ? computed : null,
+        computedRiskGradeValue: answeredGrade ?? (Number.isFinite(fromRead) ? fromRead : null),
+        overriddenRiskGradeValue: overridden,
         cashFlowCoverageActual: num(a.cashFlowCoverage),
         revenueGrowthActual: num(a.revenueGrowth),
         managementExperienceActual: num(a.managementExperience),
         creditScoreActual: num(a.creditScore),
-        comments: text(a.overrideComment),
-        // NO override key. Its wire name has never been observed, and the room
-        // does not invent one for the same reason the panel does not.
+        comments,
+        /* NO loanId. It is the only facility-LGD hook on any of the five wires,
+           and a facility rating is the facility room's subject: this route's
+           whole frame is the borrower. Left off deliberately, and `produces`
+           says so. */
       },
     };
   }
@@ -1168,9 +1277,19 @@ export function dossierRowsFor(route: RelRoute, ctx: RelContext, answers: Answer
 
   if (route === "rating") {
     rows.push({ icon: "commit", label: "risk-rating review", value: named(result.recordName) });
+    const overridden = num(answers.overriddenRiskGradeValue);
+    const proposed = num(answers.computedRiskGradeValue);
+    if (proposed !== null) rows.push({ icon: "commit", label: "proposed grade", value: String(proposed) });
+    if (overridden !== null) rows.push({ icon: "commit", label: "override", value: String(overridden) });
     for (const factor of RATING_FACTORS) {
       const v = num(answers[factor.key]);
-      if (v !== null) rows.push({ icon: "pricing", label: factor.label, value: String(v) });
+      if (v === null) continue;
+      /* WHICH FIGURE THE ORG ACTUALLY WEIGHS. This org put the rating on a
+         template that scores cash-flow coverage and nothing else; the other
+         three are stored as inputs. A dossier listing four factors with no
+         distinction implies a model that does not exist here. */
+      const label = factor.key === SCORED_FACTOR ? `${factor.label}, scored` : `${factor.label}, recorded`;
+      rows.push({ icon: "pricing", label, value: String(v) });
     }
     return rows;
   }

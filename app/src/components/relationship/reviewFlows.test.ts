@@ -4,12 +4,14 @@ import type { StagedOutput } from "../../actions/stagedPlan";
 import type { ExecuteResult, StagePayloads, ToolOutcome } from "../../channel/writeTools";
 import {
   CREATE_GAPS,
+  NOT_A_CLASSIFICATION,
   NO_CONNECTOR,
-  OVERRIDE_NOT_FILEABLE,
+  OVERRIDE_NEEDS_A_REASON,
   REL_FLOWS,
   RelFlowError,
   SKIPPED,
   VALUATION_BATCH_CAP,
+  asksForClassification,
   asksForOverride,
   buildStagePayload,
   dossierRowsFor,
@@ -352,13 +354,15 @@ describe("the collateral valuation is package-anchored bulk too", () => {
 describe("the risk-rating review is account-level and carries no facility scope", () => {
   const ctx = ctxFor();
 
-  it("asks the four named factors, every one of them skippable", () => {
+  it("asks the four named factors, then the grade and the override, every one skippable", () => {
     const answers = driveTo("rating", ctx, {});
     expect(Object.keys(answers)).toEqual([
       "cashFlowCoverage",
       "revenueGrowth",
       "managementExperience",
       "creditScore",
+      "computedRiskGradeValue",
+      "overriddenRiskGradeValue",
       "overrideComment",
     ]);
   });
@@ -377,10 +381,13 @@ describe("the risk-rating review is account-level and carries no facility scope"
     expect(Object.keys(p).some((k) => /override/i.test(k))).toBe(false);
   });
 
-  it("refuses the grade override by name rather than guessing its wire key", () => {
+  it("reads an override ask, and refuses only the one thing the org refuses", () => {
     expect(asksForOverride("override the grade to 6", "rating")).toBe(true);
     expect(asksForOverride("override the grade to 6", "covenant")).toBe(false);
-    expect(OVERRIDE_NOT_FILEABLE).toContain("has never been observed");
+    // The old sentence told the banker the override could not be filed because
+    // its wire name had never been observed. It is deployed and tested.
+    expect(OVERRIDE_NEEDS_A_REASON).toContain("needs a written reason");
+    expect(OVERRIDE_NEEDS_A_REASON).not.toContain("never been observed");
   });
 });
 
@@ -964,5 +971,129 @@ describe("the annual review's further sections", () => {
     expect(summary.target?.field).toBe("cm_Relationship_Summary__c");
     const recommendation = nextStep("annual", ctx, { reviewType: "Annual", relationshipSummary: "x" })!;
     expect(recommendation.target?.field).toBe("cm_Recommendation_Narrative__c");
+  });
+});
+
+/* =============================================================================
+   THE RATING ROUTE COLLECTS THE OVERRIDE THE TOOL HAS ALWAYS TAKEN.
+
+   OVERRIDE_NOT_FILEABLE told the banker the override could not be filed because
+   the input's wire name had never been observed. It is deployed
+   (StageRiskRatingReview.Request.overriddenRiskGradeValue), it carries its own
+   description, and StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted
+   covers it. The room was refusing a capability the tool already had.
+
+   WHAT IS REAL is the org's Mandatory_comment rule: any override above zero
+   requires a written reason and there is no bypass.
+   ============================================================================= */
+
+describe("the grade override, and the one thing the org really refuses", () => {
+  const ctx = ctxFor();
+  const factors = {
+    cashFlowCoverage: 1.38,
+    revenueGrowth: 4.2,
+    managementExperience: 24,
+    creditScore: 740,
+  };
+
+  it("states the grade on file and offers the read's own computed figure", () => {
+    const step = nextStep("rating", ctx, factors)!;
+    expect(step.key).toBe("computedRiskGradeValue");
+    expect(step.ask).toContain("The grade on file is 4");
+    expect(step.ask).toContain("the rating review's own scale");
+    expect(step.options?.[0].value).toBe("5");
+    expect(step.options?.[0].detail).toBe("the grade the read computes");
+  });
+
+  it("asks for the override, and makes the reason MANDATORY once there is one", () => {
+    const asked = nextStep("rating", ctx, { ...factors, computedRiskGradeValue: 4 })!;
+    expect(asked.key).toBe("overriddenRiskGradeValue");
+    expect(asked.optional).toBe(true);
+
+    const withOverride = nextStep("rating", ctx, {
+      ...factors,
+      computedRiskGradeValue: 4,
+      overriddenRiskGradeValue: 5,
+    })!;
+    expect(withOverride.key).toBe("overrideComment");
+    expect(withOverride.optional).toBe(false);
+    expect(withOverride.ask).toContain("has no bypass");
+
+    const without = nextStep("rating", ctx, {
+      ...factors,
+      computedRiskGradeValue: 4,
+      overriddenRiskGradeValue: SKIPPED,
+    })!;
+    expect(without.key).toBe("overrideComment");
+    expect(without.optional).toBe(true);
+  });
+
+  it("files the override with its reason, on the deployed wire name", () => {
+    const built = buildStagePayload(
+      "rating",
+      ctx,
+      {
+        ...factors,
+        computedRiskGradeValue: 4,
+        overriddenRiskGradeValue: 5,
+        overrideComment: "Construction facility above the 70 pct policy line.",
+      },
+      "key-1",
+    );
+    expect(built.ok).toBe(true);
+    const p = (built as { payload: StagePayloads["risk-rating-review"] }).payload;
+    expect(p.overriddenRiskGradeValue).toBe(5);
+    expect(p.computedRiskGradeValue).toBe(4);
+    // THE FIELD Mandatory_comment ACTUALLY TESTS, not LLC_BI__Override_Comment__c.
+    expect(p.comments).toContain("70 pct policy line");
+  });
+
+  it("BLOCKS an override with no reason before the org has to refuse it", () => {
+    const built = buildStagePayload(
+      "rating",
+      ctx,
+      { ...factors, computedRiskGradeValue: 4, overriddenRiskGradeValue: 5, overrideComment: SKIPPED },
+      "key-1",
+    );
+    expect(built.ok).toBe(false);
+    expect((built as { blocked: string }).blocked).toBe(OVERRIDE_NEEDS_A_REASON);
+  });
+
+  it("sends no override key at all where the banker skipped it", () => {
+    const built = buildStagePayload(
+      "rating",
+      ctx,
+      { ...factors, computedRiskGradeValue: 4, overriddenRiskGradeValue: SKIPPED, overrideComment: SKIPPED },
+      "key-1",
+    );
+    const p = (built as { payload: StagePayloads["risk-rating-review"] }).payload;
+    expect(p.overriddenRiskGradeValue).toBeNull();
+    expect(JSON.stringify(p)).not.toContain(SKIPPED);
+  });
+
+  it("files the grade the BANKER proposed, and falls back to the read only on a skip", () => {
+    const owned = buildStagePayload("rating", ctx, { ...factors, computedRiskGradeValue: 6 }, "key-1");
+    expect((owned as { payload: StagePayloads["risk-rating-review"] }).payload.computedRiskGradeValue).toBe(6);
+    // computedRiskRating on the read is "5". A skipped answer is not a refusal
+    // to file a grade; it is the banker taking the read's own figure.
+    const skipped = buildStagePayload("rating", ctx, { ...factors, computedRiskGradeValue: SKIPPED }, "key-1");
+    expect((skipped as { payload: StagePayloads["risk-rating-review"] }).payload.computedRiskGradeValue).toBe(5);
+  });
+
+  it("carries NO loanId, and that is the deliberate call", () => {
+    const built = buildStagePayload("rating", ctx, factors, "key-1");
+    const p = (built as { payload: StagePayloads["risk-rating-review"] }).payload;
+    // The only facility-LGD hook on any of the five wires. A facility rating is
+    // the facility room's subject; this route's whole frame is the borrower.
+    expect(p).not.toHaveProperty("loanId");
+    expect(REL_FLOWS.rating.produces).toContain("facility-level rating stays in the facility room");
+  });
+
+  it("reads a regulatory classification as a classification, never as a grade", () => {
+    expect(asksForClassification("they are special mention now", "rating")).toBe(true);
+    expect(asksForClassification("substandard", "rating")).toBe(true);
+    expect(asksForClassification("downgrade them to a 5", "rating")).toBe(false);
+    expect(asksForClassification("they are special mention now", "covenant")).toBe(false);
+    expect(NOT_A_CLASSIFICATION).toContain("this org's scale is numeric");
   });
 });

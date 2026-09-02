@@ -7,7 +7,7 @@ import { isActiveFacility } from "../../data/worklist";
 import { buildReadBlocks, threadDigest } from "../workroom/readBlocks";
 import type { ReadSource } from "../workroom/readCard";
 import { relEntities, type RelBook } from "./relBook";
-import { CREATE_GAPS, OVERRIDE_NOT_FILEABLE, type RelContext } from "./reviewFlows";
+import { CREATE_GAPS, DUAL_RATING_NOT_CARRIED, OVERRIDE_NEEDS_A_REASON, type RelContext } from "./reviewFlows";
 import { FACILITY_HANDOFF, REL_ROUTE_WORD, type RelRoute } from "./relRoute";
 
 /* =============================================================================
@@ -64,8 +64,13 @@ function relFileable(route: RelRoute | null): BrainFileable {
   if (route === "valuation" || route === null) {
     cannot.push({ what: CREATE_GAPS.collateral.what, why: CREATE_GAPS.collateral.line });
   }
+  /* THE OVERRIDE IS OFF THIS LIST. It was on it, on the reasoning that the
+     input's wire name had never been observed; it is deployed and tested, so
+     the room collects it. What the desk must still refuse BY NAME is an
+     override with no written reason, and a dual rating this org does not hold. */
   if (route === "rating" || route === null) {
-    cannot.push({ what: "a risk-rating grade override", why: OVERRIDE_NOT_FILEABLE });
+    cannot.push({ what: "a grade override with no written reason", why: OVERRIDE_NEEDS_A_REASON });
+    cannot.push({ what: "a probability of default or loss given default", why: DUAL_RATING_NOT_CARRIED });
   }
   return {
     files: route ? [PRODUCES[route]] : Object.values(PRODUCES),

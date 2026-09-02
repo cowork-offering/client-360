@@ -561,11 +561,26 @@ describe("what this room does not do", () => {
     expect(room.querySelector(".rl-gap")!.textContent).toContain("owned but unpledged collateral record");
   });
 
-  it("refuses the grade override by name rather than guessing its wire key", async () => {
+  it("no longer refuses the override, because the tool has always taken it", async () => {
+    /* This case used to assert the opposite. The refusal said the override's
+       wire name had never been observed;
+       StageRiskRatingReview.Request.overriddenRiskGradeValue is deployed and
+       StageExecuteRiskRatingReviewTest.overrideWithACommentIsAccepted covers
+       it, so the room was refusing a capability the tool already had. */
     const { room } = open({ route: "rating" });
     await settle();
     await type(room, "override the grade to 6");
-    expect(document.body.textContent).toContain("The rating override cannot be filed from here.");
+    expect(document.body.textContent).not.toContain("The rating override cannot be filed from here.");
+    expect(document.body.textContent).not.toContain("has never been observed");
+  });
+
+  it("refuses a REGULATORY CLASSIFICATION and then names the scale it is filing on", async () => {
+    const { room } = open({ route: "rating" });
+    await settle();
+    await type(room, "they are special mention now");
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("regulatory categories and this org's scale is numeric");
+    expect(text).toContain("the rating review's own scale");
   });
 });
 
