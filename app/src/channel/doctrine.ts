@@ -424,11 +424,11 @@ export function composeDoctrine(
 export const PROMPT_CAP_BYTES = 48_000;
 
 export interface BudgetedPrompt {
-  /** The envelope as it should travel, with `omitted` naming what it lost. */
+  /** The envelope as it should travel. Its own `omitted` names what it lost, so
+   *  a reply can say "that is not in front of me" rather than "there is none". */
   envelope: BrainEnvelope;
+  /** The doctrine that fitted. Its own `dropped` names the blocks given up. */
   doctrine: DoctrineSelection;
-  /** Everything given up, in the order it was given up. Named, never silent. */
-  omitted: string[];
 }
 
 /**
@@ -445,7 +445,6 @@ export function budgetPrompt(args: {
 }): BudgetedPrompt {
   const cap = args.cap ?? PROMPT_CAP_BYTES;
   const overhead = args.overhead ?? 0;
-  const omitted: string[] = [];
 
   let envelope = args.envelope;
   const envelopeBytes = () => JSON.stringify(envelope).length;
@@ -462,11 +461,7 @@ export function budgetPrompt(args: {
       envelope = { ...envelope, thread: thread.length ? [...thread] : undefined };
     }
     if (thread.length !== before) {
-      envelope = {
-        ...envelope,
-        omitted: [...(envelope.omitted ?? []), "earlier conversation"],
-      };
-      omitted.push("earlier conversation");
+      envelope = { ...envelope, omitted: [...(envelope.omitted ?? []), "earlier conversation"] };
     }
   }
 
@@ -476,8 +471,6 @@ export function budgetPrompt(args: {
     mode: args.mode,
     budget: Math.min(headroom, DOCTRINE_BUDGET_BYTES),
   });
-  omitted.push(...doctrine.dropped.map((id) => `doctrine:${id}`));
-
   // 3. The read blocks stay. There is no step that gives them up.
-  return { envelope, doctrine, omitted };
+  return { envelope, doctrine };
 }

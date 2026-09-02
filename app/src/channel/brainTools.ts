@@ -77,8 +77,6 @@ export interface BrainToolsArgs {
   call?: BrainToolCall;
 }
 
-const truncate = (rows: unknown[], max: number) => (rows.length > max ? rows.slice(0, max) : rows);
-
 /**
  * THE TWO TOOLS, BUILT AND BOUND.
  *
@@ -147,16 +145,15 @@ function shapeInvolvements(payload: unknown): unknown {
   if (!slot.ok) return `The relationship graph could not be read: ${slot.error}`;
   const rows = slot.data.legalEntities ?? [];
   if (!rows.length) return "The relationship graph carries no involvement rows for this account.";
-  return truncate(
-    rows.map((r) => ({
-      name: r.accountName ?? null,
-      role: r.borrowerType ?? null,
-      // A null loanId is the org's own way of saying relationship level. It is
-      // an answer, not a gap, so it travels as one.
-      scope: r.loanId ? String(r.loanId) : "across the relationship",
-      ownership: r.ownershipPercent ?? null,
-      guaranty: r.guarantyAmountType ?? null,
-    })),
-    120,
-  );
+  // Capped, because every round re-reads everything so far and a fat result is
+  // paid for again on the next one.
+  return rows.slice(0, 120).map((r) => ({
+    name: r.accountName ?? null,
+    role: r.borrowerType ?? null,
+    // A null loanId is the org's own way of saying relationship level. It is an
+    // answer, not a gap, so it travels as one.
+    scope: r.loanId ? String(r.loanId) : "across the relationship",
+    ownership: r.ownershipPercent ?? null,
+    guaranty: r.guarantyAmountType ?? null,
+  }));
 }

@@ -244,7 +244,8 @@ export function parseNarration(raw: string): NarrationBlock[] {
   return blocks.slice(0, NARRATION_MAX_BLOCKS);
 }
 
-/** The plain text of a parsed remark, for the suite and for aria labels. */
+/** The plain text of a parsed remark, with every span joined. What a reader
+ *  actually sees, once the markup is gone. */
 export function narrationText(blocks: NarrationBlock[]): string {
   return blocks
     .map((b) =>

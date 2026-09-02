@@ -167,6 +167,15 @@ describe("the budget gives up doctrine, and never the always blocks", () => {
     expect(tight.included).toContain("covenant-levels");
   });
 
+  it("names the pack section every block is sliced from", () => {
+    // The provenance is IN the data, not in a comment beside it: a block whose
+    // source nobody can name is a rule nobody can check against the pack.
+    for (const block of DOCTRINE_BLOCKS) {
+      expect(block.source.length).toBeGreaterThan(0);
+      expect(block.lines.length).toBeGreaterThan(0);
+    }
+  });
+
   it("names what it gave up rather than trimming in silence", () => {
     const { dropped } = composeDoctrine("add a fee to the line", { budget: 0 });
     expect(dropped.length).toBeGreaterThan(0);
@@ -184,7 +193,8 @@ describe("the prompt budget drops thread history first and the read blocks never
 
   it("keeps everything when the whole prompt fits", () => {
     const out = budgetPrompt({ envelope: { ...envelope, reads, thread: [{ who: "banker", text: "hello" }] } });
-    expect(out.omitted).toEqual([]);
+    expect(out.envelope.omitted).toBeUndefined();
+    expect(out.doctrine.dropped).toEqual([]);
     expect(out.envelope.thread).toHaveLength(1);
     expect(out.envelope.reads).toBeDefined();
   });
@@ -195,7 +205,7 @@ describe("the prompt budget drops thread history first and the read blocks never
       text: `turn ${i} `.padEnd(600, "x"),
     }));
     const out = budgetPrompt({ envelope: { ...envelope, reads, thread }, cap: 12_000 });
-    expect(out.omitted).toContain("earlier conversation");
+    expect(out.envelope.omitted).toContain("earlier conversation");
     expect((out.envelope.thread ?? []).length).toBeLessThan(thread.length);
     // The reads are untouched: that is the whole rule.
     expect(out.envelope.reads).toEqual(reads);
