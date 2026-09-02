@@ -68,7 +68,13 @@ const READ_OPENER =
  *  naming two topics is answered on the first one named here rather than on
  *  whichever regex happened to run first. */
 const TOPICS: Array<[ReadTopic, RegExp]> = [
-  ["structure", /\b(borrowers?|guarantors?|entit(?:y|ies)|involvements?|parties|obligors?|co-?borrowers?|structure|who is on|who's on)\b/i],
+  /* THE VERB IS A STRUCTURE WORD TOO. "who guarantees the construction loan"
+     carried no noun from this list, matched "loan" and came back as the
+     FACILITIES card: a question about the borrowing structure answered with a
+     list of commitments. `doctrine.ts` and `ladder.ts` have classified the same
+     sentence on `guarantee\w*|guaranty` all along; this row was the one that
+     did not. */
+  ["structure", /\b(borrowers?|guarantors?|guarantee\w*|guarant(?:y|ies)|entit(?:y|ies)|involvements?|parties|obligors?|co-?borrowers?|structure|who is on|who's on)\b/i],
   ["covenants", /\b(covenants?|tests?|financial covenants?)\b/i],
   ["collateral", /\b(collateral|security|pledges?|pledged)\b/i],
   ["fees", /\b(fees?)\b/i],

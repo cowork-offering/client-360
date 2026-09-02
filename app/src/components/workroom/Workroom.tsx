@@ -37,7 +37,7 @@ import {
   readRouteSwitch,
   type SmartOpening,
 } from "./route";
-import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICanDo } from "./ask";
+import { bankerly, isQuestion, readRole, readTopic, unsoundFieldChange, whatICanDo, type ReadTopic } from "./ask";
 import { buildEnvelope, facilityLabel, politeCommand, toReadCardModel } from "./brainRoute";
 import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
@@ -70,6 +70,7 @@ import {
   openCreate,
   planAmendmentFor,
   readInto,
+  readScope,
   restateEntry,
   routeGap,
   verify,
@@ -88,7 +89,7 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "./entryChoreography";
-import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "./readCard";
+import { buildReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
 import { overdueCovenantTip, useMailTip } from "./tips";
@@ -1038,6 +1039,25 @@ export function Workroom({
     [elicitMembers],
   );
 
+  /**
+   * WHAT THE QUESTION NARROWED THE READ CARD TO.
+   *
+   * A ROLE, which has always been read here, and now a FACILITY. "who
+   * guarantees the construction loan" is a question about one loan, and a card
+   * answering it with every guarantor on the package has answered a different
+   * question. The facility is resolved by `readScope`, the SAME reader the
+   * parser resolves a member on, so the card and a staged change can never
+   * disagree about which facility a line named. An ambiguous or absent scope
+   * word narrows nothing, which is the package-wide answer as before.
+   */
+  const readNarrowing = useCallback(
+    (topic: ReadTopic, line: string): ReadOptions => {
+      if (topic !== "structure") return {};
+      return { role: readRole(line) ?? undefined, loanIds: readScope(line, elicitMembers).ids };
+    },
+    [elicitMembers],
+  );
+
   /** THE BOOK: what the relationship already carries, read off the bundle the
    *  room is already holding. No read is issued for it. */
   const book = useMemo(
@@ -1883,7 +1903,7 @@ export function Workroom({
          nothing: asking what is on a package is not choosing what to do to it. */
       if (ask && router) {
         const readAsk = readTopic(trimmed);
-        const preCard = readAsk !== null && reads ? buildReadCard(readAsk, reads, { role: readRole(trimmed) ?? undefined }) : null;
+        const preCard = readAsk !== null && reads ? buildReadCard(readAsk, reads, readNarrowing(readAsk, trimmed)) : null;
         if (!preCard) {
           const route = readRouteIntent(trimmed);
           if (route) {
@@ -2251,7 +2271,7 @@ export function Workroom({
 
          A polite COMMAND is never a read: it asked for a change. */
       const topic = commanded ? null : readTopic(instruction);
-      const localCard = topic !== null && reads ? buildReadCard(topic, reads, { role: readRole(instruction) ?? undefined }) : null;
+      const localCard = topic !== null && reads ? buildReadCard(topic, reads, readNarrowing(topic, instruction)) : null;
       if (localCard) {
         answer({ kind: "read", id: nextId("read"), card: localCard });
         return;

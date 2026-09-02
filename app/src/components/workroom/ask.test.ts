@@ -242,3 +242,33 @@ describe("no em dash reaches the glass", () => {
     expect(bankerly("Grade —")).toBe("Grade —");
   });
 });
+
+/* =============================================================================
+   THE VERB IS A STRUCTURE WORD (the 22-row book, 2026-09-02).
+
+   "who guarantees the construction loan" carried no noun from the structure
+   row, matched "loan" and came back as the FACILITIES card: a question about
+   the borrowing structure answered with a list of commitments. `doctrine.ts`
+   and `ladder.ts` have classified the same sentence on `guarantee\w*|guaranty`
+   all along.
+   ============================================================================= */
+
+describe("a guaranty question is a structure question, however it is phrased", () => {
+  for (const line of [
+    "who guarantees the construction loan?",
+    "who guarantees this credit?",
+    "which facilities does Elena guarantee?",
+    "what guaranties are on this package?",
+    "any guarantors?",
+  ]) {
+    it(`reads "${line}" as structure`, () => {
+      expect(readTopic(line)).toBe("structure");
+      expect(readRole(line)).toBe("guarantor");
+    });
+  }
+
+  it("still reads a plain facility question as facilities", () => {
+    expect(readTopic("which loans are on this package?")).toBe("facilities");
+    expect(readRole("which loans are on this package?")).toBeNull();
+  });
+});

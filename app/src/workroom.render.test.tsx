@@ -1379,6 +1379,44 @@ describe("the founder's live run — a question is never a delta", () => {
     expect(room.textContent).not.toMatch(/no member I hold/i);
   });
 
+  it("answers a guarantor question about ONE loan with that loan's guarantors", async () => {
+    /* THE 22-ROW BOOK (2026-09-02). The org writes the guaranty once per loan,
+       so the pinned read carries 14 guaranty rows over three guarantors. The
+       card used to print one line per row grouped by facility; it now prints
+       one line per guarantor, and a question that NAMES a loan narrows to it. */
+    const room = openAsking();
+    await settle();
+    await typeInto(room, "who guarantees the construction loan?");
+    const card = lastRead();
+    expect(card.dataset.topic).toBe("structure");
+    const rows = [...card.querySelectorAll<HTMLElement>(".wk-read-r")];
+    expect(rows.map((r) => r.textContent)).toHaveLength(3);
+    const text = card.textContent ?? "";
+    for (const name of ["Hartwell Industrial Holdings LLC", "James Hartwell", "Elena Hartwell"]) {
+      expect(text.split(name).length - 1, `${name} once`).toBe(1);
+    }
+    // The limited guarantor is kept AND labelled: the cap is on the amount.
+    expect(text).toContain("Limited Guarantor");
+    // The heading names the loan, and the lede counts guarantors, not org rows.
+    expect(card.querySelector(".wk-read-g")!.textContent).toContain("Construction");
+    expect(card.textContent).toContain("3 guarantors are on the Construction today");
+    expect(card.textContent).not.toContain("14 guaranty rows");
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+  });
+
+  it("answers who is on the package with every party once, not 22 org rows", async () => {
+    const room = openAsking();
+    await settle();
+    await typeInto(room, "who is on this package?");
+    const card = lastRead();
+    expect(card.dataset.topic).toBe("structure");
+    expect([...card.querySelectorAll(".wk-read-r")]).toHaveLength(5);
+    expect(card.textContent).toContain("5 parties are on this package today");
+    // The facility count is the fact six identical lines were standing in for.
+    expect(card.textContent).toContain("on 6 facilities");
+    expect(room.querySelectorAll(".wk-chip")).toHaveLength(0);
+  });
+
   it("answers the covenants question that used to stage a term change", async () => {
     const room = openAsking();
     await settle();
