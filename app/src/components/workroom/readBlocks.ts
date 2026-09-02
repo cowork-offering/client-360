@@ -151,8 +151,16 @@ function pricingBlock(src: ReadSource): BrainReadBlocks["pricing"] {
   return rows.length ? rows : undefined;
 }
 
+/** What the cockpit holds of the CORRESPONDENCE, said only where the envelope
+ *  actually carries a message. A room with no connector must not talk about a
+ *  mailbox it never looked at; a room WITH one must be able to refuse a THREAD
+ *  by name rather than passing off its single search hit as the whole
+ *  exchange. */
+const MAIL_NOT_CARRIED =
+  "correspondence beyond the one message in CONTEXT.mail - this cockpit reads one search hit, never a thread, and no attachment";
+
 /** WHAT THE ROOM HAS ALREADY READ, packed. Absent where it stands on no read. */
-export function buildReadBlocks(src: ReadSource | undefined): BrainReadBlocks | undefined {
+export function buildReadBlocks(src: ReadSource | undefined, hasMail = false): BrainReadBlocks | undefined {
   if (!src?.bundle) return undefined;
   return {
     covenants: covenantBlock(src),
@@ -160,7 +168,7 @@ export function buildReadBlocks(src: ReadSource | undefined): BrainReadBlocks | 
     collateral: collateralBlock(src),
     exposure: exposureBlock(src),
     pricing: pricingBlock(src),
-    notCarried: NOT_CARRIED,
+    notCarried: hasMail ? [...NOT_CARRIED, MAIL_NOT_CARRIED] : NOT_CARRIED,
   };
 }
 

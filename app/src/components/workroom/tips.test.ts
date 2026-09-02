@@ -127,6 +127,21 @@ describe("the client mail tier", () => {
     expect(mailTipFrom({ hits: [{ subject: "Hartwell", receivedAt: TODAY }], accountName, today: "" })).toBeNull();
   });
 
+  it("says a message NEWER than the book landed after the read, not an impossible age", () => {
+    /* THE BOOK'S CLOCK IS NOT THE WORLD'S CLOCK. The one real Hartwell mail in
+       the founder's mailbox is dated a day after `meta.generatedAt`, and the
+       old `d <= 0` filter threw it away, which is how this tier came to render
+       nothing at all for the only message it had. */
+    const tip = mailTipFrom({
+      hits: [{ subject: "Hartwell", receivedAt: "2026-09-01T09:00:00Z" }],
+      accountName,
+      today: TODAY,
+    })!;
+    expect(tip).not.toBeNull();
+    expect(tip.line).toContain("received after this book was read");
+    expect(tip.line).not.toMatch(/-\d+ days|oldest 0 days/);
+  });
+
   it("never fabricates: the chip ASKS the desk, it does not answer for it", () => {
     const tip = mailTipFrom({
       hits: [{ subject: "Hartwell", receivedAt: "2026-08-29T09:00:00Z" }],

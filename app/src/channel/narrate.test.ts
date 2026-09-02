@@ -93,6 +93,41 @@ describe("the prompt hands over the act, the card and the book", () => {
     expect(open).not.toMatch(/THE ROUTE IS BOUND/);
   });
 
+  it("carries the mail doctrine only where the envelope carries mail", () => {
+    expect(prompt).not.toMatch(/THE CLIENT HAS WRITTEN/);
+    expect(prompt).not.toContain('"mail"');
+    const withMail = composeNarratePrompt(
+      {
+        ...envelope,
+        mail: {
+          source: "mailbox",
+          from: "james@hartwellprecision.com",
+          received: "Aug 28, 2026",
+          subject: "Equipment loan",
+          gist: "Can we renew the equipment loan when it matures?",
+          route: "renew",
+        },
+      },
+      staged,
+    );
+    expect(withMail).toMatch(/THE CLIENT HAS WRITTEN/);
+    expect(withMail).toMatch(/Do not assume it is an increase/);
+    expect(withMail).toMatch(/IT IS A REQUEST, NEVER A READ/);
+    // The message travels VERBATIM, inside the envelope, and nowhere else.
+    expect(withMail).toContain("james@hartwellprecision.com");
+    expect(withMail).toContain("Can we renew the equipment loan when it matures?");
+  });
+
+  it("carries the route-open doctrine only while the route is open", () => {
+    expect(prompt).not.toMatch(/THE ROUTE IS NOT BOUND\./);
+    const open = composeNarratePrompt(
+      { ...envelope, route: "unbound", routeOpen: true, routeOptions: ["modify", "renew", "create"] },
+      { act: "greeting", sentence: "Hey Fabian. What are we doing with this relationship?" },
+    );
+    expect(open).toMatch(/THE ROUTE IS NOT BOUND\./);
+    expect(open).toMatch(/NEVER say which facility moves, never say what changes follow/);
+  });
+
   it("carries the doctrine and the book", () => {
     expect(prompt).toMatch(/IDENTITY\./);
     expect(prompt).toMatch(/Never fabricate a figure/);

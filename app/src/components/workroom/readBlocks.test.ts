@@ -103,6 +103,16 @@ describe("what the room read travels with the line", () => {
     expect(blocks.notCarried.join(" ")).toMatch(/fees/);
   });
 
+  it("refuses the THREAD by name only where the envelope actually carries mail", () => {
+    // A connector-less room must not talk about a mailbox it never looked at.
+    // A room WITH one must be able to refuse the rest of the exchange by name
+    // rather than passing its single search hit off as the whole thing.
+    expect(blocks.notCarried.join(" ")).not.toMatch(/correspondence/);
+    const withMail = buildReadBlocks(src, true)!;
+    expect(withMail.notCarried.join(" ")).toMatch(/correspondence beyond the one message/);
+    expect(withMail.notCarried.length).toBe(blocks.notCarried.length + 1);
+  });
+
   it("is absent altogether where the room stands on no read", () => {
     expect(buildReadBlocks(undefined)).toBeUndefined();
     expect(buildReadBlocks({ bundle: null, accountName: "x", productPackageId: null })).toBeUndefined();
@@ -162,6 +172,27 @@ describe("the envelope holds to its budget, and says what it dropped", () => {
     // The covenants survived: an answer without the last exchanges is a worse
     // conversation; an answer without the thresholds is a wrong one.
     expect(capped.reads?.covenants?.length).toBe(envelope.reads?.covenants?.length);
+  });
+
+  it("gives up the client's mail LAST, and names it when it does", () => {
+    const mail = {
+      source: "mailbox" as const,
+      from: "james@hartwellprecision.com",
+      received: "Aug 28, 2026",
+      subject: "Equipment loan renewal",
+      gist: "Asking whether the equipment loan can roll when it matures.",
+    };
+    // Inside the budget the mail simply travels.
+    const fits: BrainEnvelope = { ...base(), mail };
+    expect(capEnvelope(fits).mail).toEqual(mail);
+
+    // Over it, every read block goes first and the mail goes after them.
+    const over: BrainEnvelope = { ...base(), line: "x".repeat(ENVELOPE_CAP_BYTES), mail };
+    const capped = capEnvelope(over);
+    expect(capped.mail).toBeUndefined();
+    const omitted = capped.omitted ?? [];
+    expect(omitted).toContain("mail");
+    expect(omitted[omitted.length - 1]).toBe("mail");
   });
 
   it("gives up read blocks in the declared order, naming every one", () => {

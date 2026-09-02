@@ -97,6 +97,43 @@ export interface BrainReadBlocks {
   notCarried: string[];
 }
 
+/* -------------------------------------------------------- the client's mail
+
+   THE MAIL IS NOT A READ BLOCK, AND THAT IS THE POINT. `reads` means "what this
+   room has read from the BOOK". A mailbox is not the book: it is what the
+   client SAID, and what a client says is a REQUEST, never a fact about the
+   deal. Keeping it a sibling is what lets the doctrine say "never a source for
+   a figure" without contradicting "speak from CONTEXT.reads".
+
+   ONE MESSAGE, BOUNDED. Sender, date, subject and a clipped gist of the body,
+   plus a COUNT of whatever else matched. Roughly 500 bytes against a 10 KB cap.
+   No thread, no attachment, no second message: `notCarried` says so by name
+   whenever this block is present.                                            */
+
+export interface BrainMail {
+  /** As the mailbox names the sender, VERBATIM. Absent is absent: a person is
+   *  never inferred from a company name, a guarantor list or an address. */
+  from?: string;
+  /** `fmtDate` output, only where the date parsed. */
+  received?: string;
+  subject?: string;
+  /** The body preview, clipped. ONE message only. */
+  gist?: string;
+  /** Other matched messages. A COUNT, never their text. */
+  more?: number;
+  /** The message is NEWER than the book this room is standing on, so the read
+   *  predates it and nothing here reflects it. */
+  arrivedAfterBook?: true;
+  /** ONLY from a swept ClientRequest.ask, and labelled as the CLIENT'S figure.
+   *  It is what they asked for, never what the book says. */
+  asked?: { from?: string; to: string; facility?: string };
+  /** The route the message points at, read by the room's own `readRouteIntent`
+   *  over subject and gist. Absent where the message names no credit action. */
+  route?: "modify" | "renew" | "create";
+  /** Where it came from: a sweep already on the bundle, or a live read. */
+  source: "swept" | "mailbox";
+}
+
 /** One exchange of the conversation so far. The banker's words are verbatim;
  *  the room's are summarised, because a room quoting itself at length crowds
  *  out the reads the answer actually needs. */
@@ -155,6 +192,9 @@ export interface BrainEnvelope {
   staged: Array<{ title: string; target: string; after: string }>;
   /** What the room has already read. Absent where it stands on no read. */
   reads?: BrainReadBlocks;
+  /** THE CLIENT'S OWN MESSAGE, where this room found one. Top level, never
+   *  inside `reads`: it is a request, not a read. */
+  mail?: BrainMail;
   /** The conversation so far, oldest first. This is what makes it chat. */
   thread?: BrainTurn[];
   fileable?: BrainFileable;
@@ -221,6 +261,15 @@ export function capEnvelope(envelope: BrainEnvelope, cap: number = ENVELOPE_CAP_
       delete reads[block];
       omit(block);
     }
+  }
+
+  /* THE MAIL IS SURRENDERED LAST, and it is named when it is. It is not in
+     ENVELOPE_BLOCK_DROP_ORDER because that list is indexed as `reads[block]`
+     and the mail is not a read block. This step should never fire; it exists so
+     the mail can be given up rather than being the one thing that cannot. */
+  if (sizeOf(out) > cap && out.mail) {
+    delete out.mail;
+    omit("mail");
   }
   return out;
 }

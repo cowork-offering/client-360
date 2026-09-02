@@ -68,7 +68,10 @@ function installSession(answer: () => Promise<string>): { calls: string[] } {
 }
 
 /** main.tsx acquires the door before first render; the suite does the same. */
-async function openRoom(brain?: (e: BrainEnvelope) => Promise<BrainReply>) {
+async function openRoom(
+  brain?: (e: BrainEnvelope) => Promise<BrainReply>,
+  opts: { generatedAt?: string } = {},
+) {
   await acquireSample(50);
   const bundle = data.borrowers![accountId];
   const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
@@ -80,7 +83,12 @@ async function openRoom(brain?: (e: BrainEnvelope) => Promise<BrainReply>) {
       <Workroom
         context={context}
         engine={createModifyEngine({ context, data, bundle })}
-        reads={{ bundle, accountName: bundle.snapshot!.name!, productPackageId: context.productPackageId }}
+        reads={{
+          bundle,
+          accountName: bundle.snapshot!.name!,
+          productPackageId: context.productPackageId,
+          generatedAt: opts.generatedAt,
+        }}
         brain={brain}
         onClose={() => {}}
       />,
@@ -88,6 +96,37 @@ async function openRoom(brain?: (e: BrainEnvelope) => Promise<BrainReply>) {
   });
   return document.querySelector<HTMLElement>(".wk-room")!;
 }
+
+/**
+ * THE MAILBOX, AT THE SHAPE THE LIVE TOOL ACTUALLY ANSWERS IN: a BARE SINGLE
+ * OBJECT, `sender` a plain address string, the body preview under `summary`.
+ * That is the 2026-07-27 defect `unwrapMail` was hardened for, so the stub
+ * answers it rather than the documented array.
+ */
+function installMailbox(message: Record<string, unknown> | null, delayMs = 0) {
+  const claude = (window as unknown as { claude: { mcp?: unknown } }).claude;
+  claude.mcp = {
+    callTool: (_server: string, tool: string) =>
+      new Promise((resolve) =>
+        setTimeout(
+          () => resolve({ payload: tool === "outlook_email_search" && message ? message : {} }),
+          delayMs,
+        ),
+      ),
+  };
+}
+
+const HARTWELL_MAIL = {
+  uri: "m365://message/AAMk-1",
+  id: "AAMk-1",
+  subject: "Hartwell equipment loan",
+  sender: "james@hartwellprecision.com",
+  receivedDateTime: "2026-08-28T09:12:00Z",
+  sentDateTime: "2026-08-28T09:12:00Z",
+  summary: "Can we renew the equipment loan when it matures next spring?",
+  webLink: "https://outlook.office.com/mail/AAMk-1",
+  internetMessageId: "<AAMk-1@hartwell>",
+};
 
 const settle = async () => {
   await act(async () => {
@@ -392,7 +431,7 @@ describe("the write fence, from the room's side", () => {
   });
 
   it("makes no connector call at all to narrate", async () => {
-    const callTool = vi.fn(async () => ({ payload: {} }));
+    const callTool = vi.fn(async (_server: string, _tool: string) => ({ payload: {} }));
     installSession(async () => "Coverage thins on the pledged pool.");
     (window as unknown as { claude?: { use: unknown; mcp?: unknown } }).claude!.mcp = { callTool };
     const room = await openRoom(reply(CLARIFY));
@@ -400,6 +439,124 @@ describe("the write fence, from the room's side", () => {
     await typeInto(room, "take the line of credit to 20000000");
 
     expect(room.querySelector(".wk-narr")).not.toBeNull();
-    expect(callTool).not.toHaveBeenCalled();
+    /* THE ROOM READS THE MAILBOX ONCE, ON MOUNT, for the greeting's mail block
+       and the quiet tier together. That is the only connector call a room open
+       is allowed to make, and it is not the NARRATION making it: the narration
+       door is rung 2 and carries no tools at all, which the assertion below
+       and the READ_DOORS check above hold together. */
+    const tools = callTool.mock.calls.map((call) => call[1]);
+    expect(tools.every((tool) => tool === "outlook_email_search")).toBe(true);
+  });
+});
+
+
+/* =============================================================================
+   THE CLIENT'S MAIL, BAKED INTO THE GREETING (founder, 2026-09-02).
+
+   "when there is an email attached, it should be in that first response baked
+   in."
+
+   EVERY ASSERTION HERE IS ON THE PROMPT THE ROOM SENT, never on what a model
+   wrote back. What the model does with the message is the model's; what the
+   room hands it is the contract.
+   ============================================================================= */
+
+describe("the greeting carries the client's mail, or says nothing about a mailbox", () => {
+  const greeting = (calls: string[]) => calls.find((c) => /The room has just OPENED/.test(c));
+  const wait = async (ms: number) => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  };
+
+  it("says NOTHING about correspondence where there is no connector at all", async () => {
+    const session = installSession(async () => "Six facilities, all compliant.");
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+
+    expect(session.calls).toHaveLength(1);
+    const prompt = greeting(session.calls)!;
+    expect(prompt).not.toContain('"mail"');
+    expect(prompt).not.toMatch(/THE CLIENT HAS WRITTEN/);
+    // And no apology and no placeholder: a room that never looked at a mailbox
+    // has nothing to say about one.
+    expect(prompt).not.toMatch(/correspondence beyond the one message/);
+    expect(room.querySelector(".wk-narr")).not.toBeNull();
+  });
+
+  it("says nothing where the connector is there and the mailbox is empty", async () => {
+    const session = installSession(async () => "Six facilities, all compliant.");
+    installMailbox(null);
+    const room = await openRoom(reply(CLARIFY));
+    await settle();
+    await settle();
+    await settle();
+
+    expect(greeting(session.calls)).not.toContain('"mail"');
+    expect(room.querySelector(".wk-narr")).not.toBeNull();
+  });
+
+  it("bakes the sender, the date, the subject and the gist into the FIRST call", async () => {
+    const session = installSession(async () => "James has written about the equipment loan.");
+    installMailbox(HARTWELL_MAIL);
+    await openRoom(reply(CLARIFY), { generatedAt: "2026-07-25T21:04:49Z" });
+    await settle();
+    await settle();
+    await settle();
+
+    const prompt = greeting(session.calls)!;
+    expect(prompt).toContain("james@hartwellprecision.com");
+    expect(prompt).toContain("Aug 28, 2026");
+    expect(prompt).toContain("Can we renew the equipment loan when it matures next spring?");
+    expect(prompt).toMatch(/THE CLIENT HAS WRITTEN/);
+    // The message is NEWER than the book, and the doctrine tells the model to
+    // say so rather than reading the file as if it reflected the note.
+    expect(prompt).toContain('"arrivedAfterBook":true');
+    // The room read what it points at, and the model is left to decide.
+    expect(prompt).toContain('"route":"renew"');
+    // ONE consent call, whatever the mailbox did.
+    expect(session.calls).toHaveLength(1);
+    // And it can refuse the rest of the exchange by name.
+    expect(prompt).toMatch(/correspondence beyond the one message/);
+  });
+
+  it("mail that misses the gate is a SECOND remark, never a rewritten greeting", async () => {
+    const session = installSession(async () => "One more thing about the equipment loan.");
+    // Later than MAIL_GATE_MS: the greeting has already gone out.
+    installMailbox(HARTWELL_MAIL, 1600);
+    const room = await openRoom(reply(CLARIFY), { generatedAt: "2026-07-25T21:04:49Z" });
+    await settle();
+    await wait(1400);
+
+    const first = greeting(session.calls)!;
+    expect(first).not.toContain("james@hartwellprecision.com");
+    expect(session.calls).toHaveLength(1);
+
+    await wait(600);
+    await settle();
+    // A SECOND call, and it is not another greeting: no second consent moment.
+    expect(session.calls.length).toBe(2);
+    expect(session.calls[1]).toMatch(/The client's message arrived AFTER the room greeted/);
+    expect(session.calls[1]).toContain("james@hartwellprecision.com");
+    // Two bubbles under the opening, not one rewritten one.
+    expect(room.querySelectorAll(".wk-narr").length).toBe(2);
+  });
+
+  it("reads the mailbox ONCE for the greeting and the quiet tier together", async () => {
+    installSession(async () => "Six facilities, all compliant.");
+    const calls: string[] = [];
+    (window as unknown as { claude: { mcp?: unknown } }).claude.mcp = {
+      callTool: async (_server: string, tool: string) => {
+        calls.push(tool);
+        return { payload: HARTWELL_MAIL };
+      },
+    };
+    await openRoom(reply(CLARIFY), { generatedAt: "2026-07-25T21:04:49Z" });
+    await settle();
+    await settle();
+    await settle();
+
+    expect(calls.filter((t) => t === "outlook_email_search")).toHaveLength(1);
   });
 });

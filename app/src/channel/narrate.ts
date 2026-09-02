@@ -147,7 +147,13 @@ const ACT_LINE: Record<NarrateAct, string> = {
  * contract and the wire schema, because a narration may never emit either.
  */
 export function composeNarratePrompt(envelope: BrainEnvelope, subject: NarrateSubject): string {
-  const doctrine = composeDoctrine(envelope.line || subject.sentence, { mode: "narrate" });
+  /* THE TWO SLICES THE LINE CANNOT ASK FOR. A greeting's line is EMPTY, so a
+     mail block or a route-open block gated on a word would never travel on the
+     one call that carries consent. The envelope knows; the line does not. */
+  const include = [envelope.mail ? "mail" : null, envelope.routeOpen ? "route-open" : null].filter(
+    (id): id is string => id !== null,
+  );
+  const doctrine = composeDoctrine(envelope.line || subject.sentence, { mode: "narrate", include });
   return [
     "You are the credit brain of a relationship workroom, writing ONE short remark under a card.",
     "The workroom-brain pack (WORKROOM-BRAIN.md) is the authority. The slices you need are below.",

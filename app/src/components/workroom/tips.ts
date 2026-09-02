@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
 import type { BorrowerBundle, Covenant } from "../../data/contract";
 import { dayDiff } from "../../data/time";
-import { mcpAvailable } from "../../channel/mcp";
-import { matchesAccount, searchMailbox } from "../../channel/cockpitTools";
+import { matchesAccount } from "../../channel/cockpitTools";
 
 /* =============================================================================
    THE TWO QUIET TIERS UNDER THE CONVERSATION.
@@ -21,7 +19,10 @@ import { matchesAccount, searchMailbox } from "../../channel/cockpitTools";
 
      2. THE CLIENT'S UNANSWERED MAIL. The artifact declares the Microsoft 365
         connector and the cockpit already has one mail reader (`searchMailbox`).
-        The room asks it once, in the background.
+        The room asks it ONCE, in the background, and that one read now serves
+        BOTH the greeting's mail block and this tier (`clientMail.ts`). This
+        file shapes the tier's sentence out of hits it is handed; it no longer
+        does any reading of its own.
 
    HONEST STATES ARE THE WHOLE DESIGN. No channel, no signal, an error, a
    relationship whose name yields no distinctive token: NOTHING renders. No
@@ -97,6 +98,12 @@ export function overdueCovenantTip(args: {
 /** Past this a message is not "recent correspondence" any more. */
 const RECENT_DAYS = 30;
 
+/** How old the oldest one is. Age zero is not "0 days": the message landed
+ *  after the read this room is standing on, and saying so is honest where an
+ *  impossible day count is not. */
+const age = (days: number): string =>
+  days === 0 ? "received after this book was read" : `oldest ${days === 1 ? "1 day" : `${days} days`}`;
+
 /**
  * The mail signal, resolved from hits the matcher already accepted.
  *
@@ -110,11 +117,17 @@ export function mailTipFrom(args: {
   today: string;
 }): Tip | null {
   if (!args.today) return null;
+  /* A MESSAGE NEWER THAN THE BOOK IS STILL A MESSAGE. The filter used to
+     require `d <= 0`, which discarded anything dated after `meta.generatedAt`
+     and rendered this tier silent for the one real Hartwell mail in the
+     founder's own mailbox (received a day after the book was read). The book's
+     clock is not the world's clock, so a positive day count is reported as an
+     age of zero and said in words rather than thrown away. */
   const ages = args.hits
     .filter((h) => matchesAccount(h, args.accountName))
     .map((h) => dayDiff(h.receivedAt, args.today))
-    .filter((d): d is number => d !== null && d <= 0 && -d <= RECENT_DAYS)
-    .map((d) => -d);
+    .filter((d): d is number => d !== null && -d <= RECENT_DAYS)
+    .map((d) => Math.max(0, -d));
   if (!ages.length) return null;
   const oldest = Math.max(...ages);
   const count = ages.length;
@@ -122,44 +135,10 @@ export function mailTipFrom(args: {
   // which relationship this is; the line is about the mail.
   const who = args.accountName.split(/\s+/)[0];
   return {
-    line: `${count} ${count === 1 ? "email" : "emails"} from ${who} ${count === 1 ? "awaits" : "await"} a reply, oldest ${oldest === 1 ? "1 day" : `${oldest} days`}.`,
+    line: `${count} ${count === 1 ? "email" : "emails"} from ${who} ${count === 1 ? "awaits" : "await"} a reply, ${age(oldest)}.`,
     chip: {
       label: "Open the thread",
       say: `Summarise the recent correspondence from ${args.accountName} and what it is asking for.`,
     },
   };
-}
-
-/**
- * THE MAIL TIP, OR NOTHING.
- *
- * One read per room, on mount, discarded if the room closes first. Every
- * failure path is SILENT to the banker: no connector, no distinctive token, a
- * refused call, an empty mailbox — the hook stays null and the room renders one
- * line fewer. The banker is never told the room went looking.
- */
-export function useMailTip(args: { accountName: string; today: string }): Tip | null {
-  const [tip, setTip] = useState<Tip | null>(null);
-  const { accountName, today } = args;
-
-  useEffect(() => {
-    // NO CHANNEL IS NOT AN ERROR STATE, it is the common one. The room asks
-    // nothing and says nothing.
-    if (!accountName || !today || !mcpAvailable()) return;
-    let live = true;
-    void (async () => {
-      try {
-        const { hits } = await searchMailbox(accountName);
-        if (live) setTip(mailTipFrom({ hits, accountName, today }));
-      } catch {
-        // Silent by contract. A banker who is told the mailbox could not be
-        // reached learns nothing they can act on inside a credit workroom.
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [accountName, today]);
-
-  return tip;
 }
