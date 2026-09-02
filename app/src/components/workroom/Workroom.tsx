@@ -82,10 +82,12 @@ import {
 } from "./elicit";
 import {
   armConfirmSentence,
+  armOf,
   armPlanLines,
   armStageRefusal,
   armStepPairs,
   armSummary,
+  armTrailSummary,
   readArmRemoval,
   readCovenantAttach,
 } from "./orgArms";
@@ -775,7 +777,16 @@ export function Workroom({
    *  landing and the check it trips is an approval offered too early. */
   const [thinking, setThinking] = useState(false);
   /** The review card is open, and what it is holding. */
-  const [flow, setFlow] = useState<null | { staging: StagedWorkroomPlan | null; running: boolean; status: number }>(null);
+  /* `held` NAMES THE STAGED ARMS THE ORG'S PLAN DOES NOT CARRY A STEP FOR, and
+     it is a GATE rather than a sentence: while it is non-empty the approval is
+     closed and `execute` refuses, because a plan that does not contain the
+     banker's exclusion must never be executable from the card that claims it. */
+  const [flow, setFlow] = useState<null | {
+    staging: StagedWorkroomPlan | null;
+    running: boolean;
+    status: number;
+    held: string[];
+  }>(null);
   /** The approval is in flight; a second click would stage behind the first. */
   const [filing, setFiling] = useState(false);
   /** THE APPROVAL IS CLOSED FOR THIS PLAN. The call reached the org and the
@@ -2296,19 +2307,33 @@ export function Workroom({
          target, it goes to the fence where the line names something the BOOK
          carries, and it goes to the parser otherwise, where an involvement
          removal files as the carry exclusion it is. */
-      const removal = readRemove(instruction, entries, book);
+      const removal = readRemove(instruction, entries, book, elicitMembers);
       if (removal?.kind === "manifest") {
         setEntries((prev) => removeEntry(prev, removal.entry.id));
         setToast("Removed from the manifest");
+        /* AND THE WAY BACK IS THE ENTRY'S OWN. "Say it again with the figure
+           you want" is a TERM CHANGE's sentence, and a carry exclusion has no
+           figure: what putting it back means is that the new version carries
+           the junction again, exactly as the booked facility holds it. */
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `${removal.entry.title} on ${removal.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
+          text: armOf(removal.entry)
+            ? `${removal.entry.title} on ${removal.entry.target} is out of the manifest. The new version carries it again, exactly as the booked facility holds it today. Say it again to leave it off.`
+            : `${removal.entry.title} on ${removal.entry.target} is out of the manifest. Say it again to put it back, with the figure you want.`,
         });
         return;
       }
       if (removal?.kind === "ambiguous") {
         answer({ kind: "agent", id: nextId("agent"), text: removal.reason });
+        return;
+      }
+      if (removal?.kind === "ask") {
+        answer({ kind: "agent", id: nextId("agent"), text: removal.text, options: removal.options });
+        return;
+      }
+      if (removal?.kind === "gap") {
+        answer({ kind: "agent", id: nextId("agent"), text: removal.text });
         return;
       }
       if (removal?.kind === "fence") {
@@ -2656,24 +2681,32 @@ export function Workroom({
      redeems that token; Cancel drops the card and the review chip comes back. */
 
   const openFlow = useCallback(async () => {
-    setFlow({ staging: null, running: false, status: 0 });
+    setFlow({ staging: null, running: false, status: 0, held: [] });
     try {
       const staged = await engine.stagePlan(entries, context);
-      setFlow((f) => (f ? { ...f, staging: staged } : f));
       /* ================== THE PLAN HAS TO NAME EVERY ARM IT WAS SENT (2026-09-02)
 
          An exclusion writes no record, so there is no id to check afterwards and
          the PLAN STEP is the only thing that says the org took it. A manifest
          entry that reached the tool and produced no step is an entry the banker
-         would sign for and never get, so the room says so BEFORE the token is
-         spent rather than reporting it as filed afterwards. */
+         would sign for and never get.
+
+         SO IT IS A GATE, NOT A SENTENCE (2026-09-02, second pass). Saying it
+         while the staging sat on the card with its decision token left approve
+         live, and a banker who read the line and pressed the ink button anyway
+         executed a plan that does not contain their exclusion. The staging is
+         stored with the arms it is missing NAMED, and while that list is not
+         empty the approval is closed and `execute` refuses: the only ways on are
+         to take the entry off the manifest, or to discard the plan and stage
+         again. Nothing has been written either way. */
       const planned = new Set((staged.plan.steps ?? []).map((s) => s.id));
       const missing = armStepPairs(entries).filter((a) => !planned.has(a.writeStepId));
+      setFlow((f) => (f ? { ...f, staging: staged, held: missing.map((m) => `${m.title} on ${m.target}`) } : f));
       if (missing.length) {
         agent(
-          `The plan came back without a step for ${missing.map((m) => `${m.title} on ${m.target}`).join(', ')}. ` +
-            "That is the org saying it did not plan it, so I will not tell you it is going to happen. " +
-            "Nothing has been written; take it off the manifest, or stage again once the connector is on the deployed tool list.",
+          `The plan came back without a step for ${missing.map((m) => `${m.title} on ${m.target}`).join(", ")}. ` +
+            "That is the org saying it did not plan it, so I will not tell you it is going to happen, and the approval stays closed. " +
+            "Nothing has been written; take it off the manifest and say it again, or discard the plan and stage once the connector is on the deployed tool list.",
         );
       }
     } catch (e) {
@@ -2700,6 +2733,15 @@ export function Workroom({
   const execute = useCallback(async () => {
     const staging = flow?.staging;
     if (!staging?.decisionToken || filing || sealed) return;
+    // THE GATE, CHECKED WHERE THE TOKEN WOULD BE SPENT. The button is already
+    // closed; this is the half that does not depend on a rendered control.
+    if (flow?.held.length) {
+      agent(
+        `The plan carries no step for ${flow.held.join(", ")}, so there is nothing to approve here. ` +
+          "Take it off the manifest and say it again, or discard the plan and stage again. Nothing has been written.",
+      );
+      return;
+    }
     setFiling(true);
     setFlow((f) => (f ? { ...f, running: true } : f));
     try {
@@ -2756,9 +2798,12 @@ export function Workroom({
         execution: result,
         changeCount: dossier.rows.length,
         packageHref: dossier.packageHref,
-        // The arms leave no record id, so the trail would otherwise carry no
-        // account of them at all. The manifest is here; the sentence is made here.
-        arms: armSummary(entries.filter((e) => filed.has(e.id))),
+        // THE ARMS' OWN ACCOUNT, READ OFF THE ORG'S PLAN STEPS. `filed` is built
+        // inside the engine from the deltas that carry a wire, so an arm is on
+        // it whether or not the org ever planned the arm: counting the manifest
+        // here made the trail assert a covenant was left off a version the org
+        // never planned to leave it off. The steps are the only witness there is.
+        arms: armTrailSummary(entries, staging.plan.steps ?? []),
       });
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
@@ -3162,6 +3207,11 @@ export function Workroom({
                            only proof there is, and it belongs in front of the
                            approval rather than behind it. */
                         armSteps={flow.staging ? armPlanLines(entries, flow.staging.plan.steps ?? []) : []}
+                        /* AND THE ARMS THE PLAN DOES NOT CARRY A STEP FOR
+                           CLOSE THE APPROVAL. A banker cannot be offered an
+                           ink button for a plan that does not contain their
+                           exclusion. */
+                        held={flow.held}
                         approveLabel={vocabulary.approveLabel(fileable)}
                         fileable={fileable}
                         handedOff={handedOff}
@@ -3432,6 +3482,7 @@ function FlowCard({
   planSummary,
   armSaid,
   armSteps,
+  held,
   approveLabel,
   fileable,
   handedOff,
@@ -3442,7 +3493,7 @@ function FlowCard({
   onExecute,
   onOpenPeek,
 }: {
-  flow: { staging: StagedWorkroomPlan | null; running: boolean; status: number };
+  flow: { staging: StagedWorkroomPlan | null; running: boolean; status: number; held: string[] };
   approver: string;
   loadSteps: string[];
   packageName: string;
@@ -3450,6 +3501,9 @@ function FlowCard({
   planSummary: string;
   armSaid: string | null;
   armSteps: string[];
+  /** Staged arms the org's plan carries no write step for. Non-empty closes the
+   *  approval: the plan on this card does not contain them. */
+  held: string[];
   approveLabel: string;
   fileable: number;
   handedOff: number;
@@ -3533,17 +3587,23 @@ function FlowCard({
           Governance
         </button>
       </div>
+      {held.length > 0 && (
+        <div className="wk-armheld" role="status">
+          This plan carries no step for {held.join(", ")}. The approval is closed: the org did not plan it, so approving
+          here would file a version that still carries it. Take it off the manifest and say it again, or discard the plan.
+        </div>
+      )}
       <div className="wk-acts">
         <button type="button" className="eg-btn-quiet" onClick={onCancel}>
-          Cancel
+          {held.length > 0 ? "Discard the plan" : "Cancel"}
         </button>
         <button
           type="button"
           className="wk-approve eg-btn-ink"
-          disabled={!flow.staging?.decisionToken || filing || sealed}
+          disabled={!flow.staging?.decisionToken || filing || sealed || held.length > 0}
           onClick={onExecute}
         >
-          {filing ? "Working…" : sealed ? "Approval closed" : approveLabel}
+          {filing ? "Working…" : sealed || held.length > 0 ? "Approval closed" : approveLabel}
         </button>
       </div>
     </div>

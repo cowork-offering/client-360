@@ -27,7 +27,7 @@ import live from "../../artifact/live-data.json";
    facility for the new version to leave behind, and the room says where the
    covenant actually is. The covenant that IS on the $15M line of credit is the
    catalog entry called `Accounts Receivable`, which is also the name of an asset
-   pledged to the same facility — the N1/P4 collision — so the two lines below
+   pledged to the same facility (the N1/P4 collision), so the two lines below
    are the same words with one noun changed, and they reach different arms.
 
    NOTHING HERE NEEDS A BRIDGE. The last describe drives the same lines with a
@@ -73,6 +73,8 @@ function open(
     brain?: (e: BrainEnvelope) => Promise<BrainReply>;
     mode?: WorkroomMode;
     stage?: (payload: Payload) => Promise<ToolOutcome<StagedOutput>>;
+    /** Present only where a test has to prove the token was NEVER spent. */
+    execute?: (approval: unknown) => Promise<ToolOutcome<unknown>>;
   } = {},
 ) {
   const bundle = data.borrowers![accountId];
@@ -92,7 +94,13 @@ function open(
                 context,
                 data,
                 bundle,
-                deps: args.stage ? { stage: armStage(args.stage), available: () => true } : undefined,
+                deps: args.stage
+                  ? {
+                      stage: armStage(args.stage),
+                      available: () => true,
+                      ...(args.execute ? { execute: args.execute as never } : {}),
+                    }
+                  : undefined,
               })
         }
         reads={{ bundle, accountName: bundle.snapshot!.name!, productPackageId: context.productPackageId }}
@@ -344,9 +352,70 @@ describe("what the plan says back about an arm", () => {
     expect(said(room)).toContain("I will not tell you it is going to happen");
   });
 
+  /* AND SAYING IT IS NOT ENOUGH: IT IS A GATE (2026-09-02, second pass).
+
+     The sentence went up while `setFlow` had already stored the staging with
+     its decision token, so the ink button stayed live and a banker who read the
+     line and pressed it anyway executed a plan that does not carry their
+     exclusion. The plan's own steps close the approval now. */
+  it("closes the approval where the plan carries no step for a staged arm", async () => {
+    const room = open({ stage: async () => ({ ok: true as const, result: plan(["apply_changes_0"]) }) });
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await click(room.querySelector(".wk-propose")!);
+
+    const approve = document.querySelector<HTMLButtonElement>(".wk-approve")!;
+    expect(approve.disabled).toBe(true);
+    expect(approve.textContent).toBe("Approval closed");
+    // The card says why, and offers the way out.
+    expect(room.querySelector(".wk-armheld")?.textContent).toContain("This plan carries no step for Accounts Receivable on");
+    expect(byText(/^Discard the plan$/)).toBeTruthy();
+  });
+
+  it("spends no token on it: the approval is refused, not merely discouraged", async () => {
+    const executed: unknown[] = [];
+    const room = open({
+      stage: async () => ({ ok: true as const, result: plan(["apply_changes_0"]) }),
+      execute: async (approval) => {
+        executed.push(approval);
+        return { ok: true as const, result: { outcome: "filed", steps: [] } as never };
+      },
+    });
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await click(room.querySelector(".wk-propose")!);
+    await click(document.querySelector<HTMLButtonElement>(".wk-approve")!);
+
+    // NOTHING REACHED THE ORG and the room never moved to the filed scene. The
+    // same list is checked inside `execute` itself, so the refusal does not
+    // depend on a rendered control being the only thing in the way.
+    expect(executed).toHaveLength(0);
+    expect(room.querySelector(".wk-dossier")).toBeNull();
+    expect(document.querySelector<HTMLButtonElement>(".wk-approve")!.disabled).toBe(true);
+  });
+
+  it("keeps the approval OPEN where every staged arm has its step", async () => {
+    const room = open({
+      stage: async () => ({ ok: true as const, result: plan(["covenant_exclusion_0", "covenant_exclusion_verify_0"]) }),
+    });
+    await settle();
+    await typeInto(room, "remove the accounts receivable covenant from the 15M line of credit");
+    await click(byText(/^Confirm$/));
+    await click(room.querySelector(".wk-propose")!);
+
+    expect(document.querySelector<HTMLButtonElement>(".wk-approve")!.disabled).toBe(false);
+    expect(room.querySelector(".wk-armheld")).toBeNull();
+    expect(byText(/^Cancel$/)).toBeTruthy();
+  });
+
   it("shows the ORG's own refusal, attached to the entry, with the rest reported honestly", async () => {
+    /* `design/proposals/org-arms-addendum.md` verbatim. It names the RECORD and
+       no covenant type at all, which is why keying the match on the entry's
+       title found nothing: the room's own id is the only thing both sides hold. */
     const org =
-      "Covenant a3Bbb000000S0bNEAS is not attached to Line of Credit, so there is nothing for the new version to leave behind. Accounts Receivable";
+      "Covenant a3Bbb000000S0bNEAS is not attached to Line of Credit, so there is nothing for the new version to leave behind.";
     const room = open({
       stage: async () => ({ ok: false as const, error: { code: "tool_error", message: org, retryable: false } as never }),
     });

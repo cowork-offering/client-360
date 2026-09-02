@@ -1592,6 +1592,19 @@ body.wk-open #root {
   border-radius: 50%;
   background: var(--ink-faint);
 }
+/* AN ARM THE PLAN DOES NOT CARRY CLOSES THE APPROVAL, and it says so on the
+   card the approval would have been taken on. The warning hairline, never a
+   wash: it is the same key the honest refusal wears. */
+.wk-armheld {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wash-2);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--warning-prose);
+}
 .wk-tokrow {
   display: flex;
   align-items: center;

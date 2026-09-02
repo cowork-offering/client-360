@@ -13,6 +13,7 @@ import {
   armStepPairs,
   armStepSentence,
   armSummary,
+  armTrailSummary,
   isArmStep,
   readArmRemoval,
   readCovenantAttach,
@@ -409,6 +410,48 @@ describe("the confirm sentence", () => {
     const plain = { id: "x", fieldWire: { field: "LLC_BI__Payment_Schedule__c", label: "", value: "Monthly", display: "", facilityId: LOC } } as never;
     expect(armConfirmSentence(plain, "unchanged.")).toBe("unchanged.");
   });
+
+  /* THE LONG ASSET DESCRIPTIONS, WHICH ARE THE ONES THE ORG ACTUALLY HOLDS.
+     Three of Hartwell's four collateral records carry a first sentence longer
+     than the title takes, so all three truncate. With "..." as the mark the
+     confirm split the ENGINE's own opening clause at the ellipsis and spliced
+     its second half back on after the arm's sentence, so a banker read
+     "... and nothing is deleted anywhere. on Purchase: pledged to the booked
+     facility ... staged on the clone." on a removal. */
+  const LONG: Array<[string, string]> = [
+    [
+      "COL-000763",
+      "All present and future inventory at the Fort Wayne and Kokomo plants: raw bar and plate stock, work in process and finished goods. Excludes consigned material and stock over 12 months old.",
+    ],
+    [
+      "COL-000765",
+      "First mortgage on the owner-occupied Fort Wayne manufacturing campus (218,000 sq ft on 22.4 acres) and the Kokomo plant (140,000 sq ft, under expansion).",
+    ],
+    [
+      "COL-000764",
+      "Blanket lien on all production machinery and equipment at the Fort Wayne and Kokomo plants, including CNC machining centres, robotic welding cells, heat-treat furnaces and CMM inspection equipment.",
+    ],
+  ];
+
+  for (const [name, label] of LONG) {
+    it(`drops the engine's opening clause whole on ${name}, whose title has to be cut`, () => {
+      const delta = pledgeExclusionDelta(
+        { id: RECEIVABLES, label, name, kind: "UCC", value: null, lien: "1st", loanIds: [LOC] },
+        { facilityId: LOC, facilityLabel: "Purchase" },
+      );
+      const said = armConfirmSentence(
+        delta,
+        `${delta.title} on Purchase: pledged to the booked facility, and carried onto the clone today to not carried onto the new version, staged on the clone. The package total holds at $46M. What else should change?`,
+      );
+      expect(said).toContain("nothing is deleted anywhere");
+      // NOT ONE WORD OF THE ENGINE'S OPENING CLAUSE COMES BACK.
+      expect(said).not.toContain("staged on the clone");
+      expect(said).not.toContain("pledged to the booked facility");
+      // And the engine still owns the figure and the next move.
+      expect(said).toContain("The package total holds at $46M.");
+      expect(said).toContain("What else should change?");
+    });
+  }
 });
 
 describe("the write-back", () => {
@@ -525,5 +568,74 @@ describe("the write-back", () => {
   it("returns the org's sentence alone where nothing on the manifest matches it", () => {
     const org = "A covenant exclusion targets facility a4Zbb0000027MpXEAU, which is not one of the selected facilities.";
     expect(armStageRefusal(org, [covenant])).toBe(org);
+  });
+
+  /* THE ORG NAMES THE RECORD, NOT THE TITLE (R39, corrected 2026-09-02). The
+     sentence below is `design/proposals/org-arms-addendum.md` verbatim: it
+     carries the covenant ID and no covenant TYPE at all, so a title match found
+     nothing and the banker read the org's sentence with no entry attached. */
+  it("finds the entry by the RECORD ID the org names, with no type word in the sentence", () => {
+    const org =
+      "Covenant a3Xbb00000012ABCAY is not attached to Line of Credit, so there is nothing for the new version to leave behind.";
+    const said = armStageRefusal(org, [covenant, pledge, attach]);
+    expect(said).toContain(org);
+    expect(said).toContain("That is Minimum Liquidity on Line of Credit ($15M)");
+    expect(said).toContain("the other 2 entries are exactly where you left them");
+  });
+
+  it("reads the 18-character refusal and the 15-character read as the same record", () => {
+    const org = "Covenant a3Xbb00000012ABC is not attached to Line of Credit, so there is nothing to leave behind.";
+    expect(armStageRefusal(org, [covenant])).toContain("That is Minimum Liquidity");
+  });
+
+  it("attaches a PLEDGE refusal to its own entry, which no type word could ever name", () => {
+    const org = `Asset ${RECEIVABLES} is not pledged to Line of Credit, so there is nothing for the new version to leave behind.`;
+    expect(armStageRefusal(org, [covenant, pledge])).toContain("That is All present and future accounts receivable on");
+  });
+});
+
+/* ============================================ what the TRAIL says an arm did */
+
+describe("the trail counts the org's steps, never the manifest", () => {
+  const covenant = covenantExclusionDelta(BOOK.covenants[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+  const pledge = pledgeExclusionDelta(BOOK.assets[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
+  const scalar = { id: "amount:0", title: "Commitment", target: "Line of Credit ($15M)" } as never;
+
+  it("counts an arm the plan carried a step for", () => {
+    const said = armTrailSummary(
+      [covenant, pledge],
+      [{ id: "covenant_exclusion_0", state: "verified" }, { id: "pledge_exclusion_0", state: "verified" }],
+    );
+    expect(said).toBe(
+      "1 covenant left off the new version, 1 pledge left off the new version." +
+        " Nothing is deleted: the booked facilities keep everything they hold today.",
+    );
+  });
+
+  /* THE DEFECT ITSELF. `result.filed` is built inside the fenced engine from the
+     deltas that carry a wire, so an arm is on it whether or not the org planned
+     one, and the trail asserted "1 covenant left off the new version" about a
+     plan with no such step in it. */
+  it("never claims an arm the plan carried NO step for, and says the org did not plan it", () => {
+    const said = armTrailSummary([covenant], [{ id: "apply_changes_0", state: "verified" }]);
+    expect(said).not.toContain("1 covenant left off the new version");
+    expect(said).toContain("The plan carried no step for Minimum Liquidity on Line of Credit ($15M)");
+    expect(said).toContain("the new version carries it as before");
+  });
+
+  it("says so where the org's own step failed rather than counting it as done", () => {
+    const said = armTrailSummary([covenant], [{ id: "covenant_exclusion_0", state: "failed" }]);
+    expect(said).not.toContain("1 covenant left off");
+    expect(said).toContain("did not verify");
+  });
+
+  it("counts what landed and names what did not, on one plan carrying both", () => {
+    const said = armTrailSummary([covenant, pledge], [{ id: "covenant_exclusion_0", state: "verified" }]);
+    expect(said).toContain("1 covenant left off the new version.");
+    expect(said).toContain("The plan carried no step for All present and future accounts receivable");
+  });
+
+  it("leaves a plan carrying no arm with nothing to say, exactly as before the arms existed", () => {
+    expect(armTrailSummary([scalar], [{ id: "apply_changes_0", state: "verified" }])).toBeNull();
   });
 });

@@ -163,11 +163,22 @@ export function armStage(
 
 /* ------------------------------------------------------------- the deltas */
 
-/** An asset description runs to a paragraph in this org. The first sentence
- *  names it; the exclusions inside it are the credit agreement's business. */
+/**
+ * An asset description runs to a paragraph in this org. The first sentence
+ * names it; the exclusions inside it are the credit agreement's business.
+ *
+ * THE TRUNCATION MARK IS ONE CHARACTER AND IT IS NOT A FULL STOP. Three dots
+ * are a sentence end to anything that splits on one, and this title travels
+ * into {@link armConfirmSentence}, which drops the engine's opening clause by
+ * splitting the engine's reply on its sentences. COL-000763 (129 characters),
+ * COL-000765 (152) and COL-000764 (196) all truncate, and with "..." the
+ * confirm read "... and nothing is deleted anywhere. on Purchase: pledged to
+ * the booked facility ...": half the engine's own opening clause, spliced back
+ * on after the arm's sentence. One ellipsis character cannot do that.
+ */
 function assetPhrase(label: string): string {
   const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
-  return first.length > 64 ? `${first.slice(0, 61).trim()}...` : first;
+  return first.length > 64 ? `${first.slice(0, 63).trim()}\u2026` : first;
 }
 
 interface DeltaArgs {
@@ -321,7 +332,13 @@ export function covenantAttachDelta(covenant: BookCovenant, args: DeltaArgs): Wo
 export function armConfirmSentence(delta: WorkroomDelta, reply: string): string {
   const arm = armOf(delta);
   if (!arm) return reply;
-  const rest = reply.split(/(?<=\.)\s+/).slice(1).join(" ");
+  /* A RUN OF DOTS IS NOT A SENTENCE END. The engine opens its reply with the
+     entry's own title, and a truncated asset title used to carry "..." into it,
+     so the split cut the engine's opening clause in half and the second half was
+     spliced back on after the arm's sentence. The mark is one character now and
+     this boundary refuses a doubled full stop as well, so neither alone can put
+     the engine's "staged on the clone" back into a removal's confirm. */
+  const rest = reply.split(/(?<=[^.]\.)\s+/).slice(1).join(" ");
   const lede =
     arm.kind === "covenantAttach"
       ? `${delta.title} is associated to the ${delta.target} on the new version. The covenant record itself is not touched: the threshold, the frequency and the schedule stay exactly as the borrower holds them, and what this authors is the junction alone.`
@@ -644,6 +661,72 @@ export function armSummary(deltas: WorkroomDelta[]): string | null {
   return `${parts.join(", ")}.${excluded ? " Nothing is deleted: the booked facilities keep everything they hold today." : ""}`;
 }
 
+/** The case-safe half of a Salesforce id. A read may carry the 15-character
+ *  form and a refusal the 18-character one; the shorter is a prefix of the
+ *  longer, so matching on it is matching on the record. */
+const ID_PREFIX = /^[a-z0-9]{15}/;
+
+/** A step state the org uses for a step that did NOT do what it says. */
+const ARM_STEP_FAILED = /^(failed|ambiguous|skipped|refused|not_)/i;
+
+/**
+ * WHAT THE ARMS DID, FOR THE TRAIL, READ OFF THE ORG'S OWN PLAN STEPS.
+ *
+ * {@link armSummary} counts the MANIFEST, which is the right sentence in front
+ * of the approval: it says what the plan is being sent to do. It is the wrong
+ * sentence afterwards. The engine builds its filed list from the deltas that
+ * carry a wire, so an arm is reported as filed whether or not the org ever
+ * planned it, and the trail then asserted "1 covenant left off the new version"
+ * about a plan with no such step in it.
+ *
+ * So the trail counts the STEPS. An arm whose write step came back in the plan
+ * is one the org took; an arm with no step is named as one the org did not
+ * plan, and a step the org marked failed is named as one that did not land.
+ * Null where the manifest carries no arm, so every plan that filed before the
+ * arms existed reads exactly as it did.
+ */
+export function armTrailSummary(
+  deltas: WorkroomDelta[],
+  steps: Array<{ id: string; state?: string }>,
+): string | null {
+  const pairs = armStepPairs(deltas);
+  if (!pairs.length) return null;
+  const byId = new Map(steps.map((s) => [s.id, s]));
+
+  const took: ArmStepPair[] = [];
+  const unplanned: ArmStepPair[] = [];
+  const failed: ArmStepPair[] = [];
+  for (const pair of pairs) {
+    const step = byId.get(pair.writeStepId);
+    if (!step) unplanned.push(pair);
+    else if (ARM_STEP_FAILED.test(step.state ?? "")) failed.push(pair);
+    else took.push(pair);
+  }
+
+  const where = (set: ArmStepPair[]) => set.map((p) => `${p.title} on ${p.target}`).join(", ");
+  const said: string[] = [];
+  const counts: string[] = [];
+  for (const kind of ["covenantExclusion", "pledgeExclusion", "covenantAttach"] as ArmKind[]) {
+    const n = took.filter((p) => p.kind === kind).length;
+    if (n) counts.push(counted(n, ARM_DID[kind]));
+  }
+  if (counts.length) {
+    said.push(`${counts.join(", ")}.`);
+    if (took.some((p) => p.kind !== "covenantAttach")) {
+      said.push("Nothing is deleted: the booked facilities keep everything they hold today.");
+    }
+  }
+  if (unplanned.length) {
+    said.push(
+      `The plan carried no step for ${where(unplanned)}, so the org never planned ${unplanned.length === 1 ? "it" : "them"} and the new version carries ${unplanned.length === 1 ? "it" : "them"} as before.`,
+    );
+  }
+  if (failed.length) {
+    said.push(`The org's own step for ${where(failed)} did not verify, so nothing about ${failed.length === 1 ? "it" : "them"} is proved.`);
+  }
+  return said.join(" ");
+}
+
 /**
  * THE ORG REFUSED, AND THE ROOM SAYS SO IN THE ORG'S OWN WORDS.
  *
@@ -658,7 +741,19 @@ export function armSummary(deltas: WorkroomDelta[]): string | null {
  */
 export function armStageRefusal(message: string, deltas: WorkroomDelta[]): string {
   const lower = message.toLowerCase();
-  const named = deltas.filter((d) => armOf(d) && lower.includes(d.title.toLowerCase()));
+  /* THE ORG NAMES THE RECORD, NOT THE TITLE. Its refusals read "Covenant
+     a3Bbb000000S0bNEAS is not attached to Line of Credit ...": the id it was
+     sent, because the id is the only thing the room and the org both hold. A
+     title match found the entry only where the covenant type happened to appear
+     in the sentence too, and never on a pledge. The id is matched on its first
+     fifteen characters so a 15-character read and an 18-character refusal are
+     the same record, which is the org's own rule about its own ids. */
+  const named = deltas.filter((d) => {
+    const arm = armOf(d);
+    if (!arm) return false;
+    const id = arm.recordId.toLowerCase();
+    return lower.includes(ID_PREFIX.exec(id)?.[0] ?? id);
+  });
   const rest = deltas.length - named.length;
   if (!named.length) return message;
   const one = named[0];
