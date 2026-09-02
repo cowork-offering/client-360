@@ -14,7 +14,7 @@ import { Peek, usePeek } from "../workroom/Peek";
 import { GooFilter, LiquidMark } from "../workroom/Liquid";
 import { TypeIcon, type IconKind } from "../workroom/TypeIcon";
 import { ReadCard } from "../workroom/ReadCardView";
-import { isQuestion, readTopic } from "../workroom/ask";
+import { isQuestion, readRole, readTopic } from "../workroom/ask";
 import { buildReadCard, readGap, type ReadCardModel, type ReadSource } from "../workroom/readCard";
 import { toReadCardModel } from "../workroom/brainRoute";
 import {
@@ -1012,7 +1012,7 @@ export function RelationshipRoom({
          rather than with the card the room was already holding. */
       if (ask && router) {
         const preTopic = readTopic(text);
-        const preCard = preTopic !== null ? buildReadCard(preTopic, reads) : null;
+        const preCard = preTopic !== null ? buildReadCard(preTopic, reads, { role: readRole(text) ?? undefined }) : null;
         if (!preCard) {
           const picked = readRelRouteIntent(text);
           if (picked) {
@@ -1059,8 +1059,11 @@ export function RelationshipRoom({
          asking what is on the book is not choosing what to do about it, and the
          route-switch reader would otherwise have read "which covenants are on
          this relationship" as a request to change review. */
+      /* A QUESTION ABOUT GUARANTORS IS NARROWED HERE TOO. This room stands on
+         the relationship rather than on a package, so it names no facility, but
+         the ROLE it asks about is in the words either way. */
       const topic = readTopic(text);
-      const card = topic !== null ? buildReadCard(topic, reads) : null;
+      const card = topic !== null ? buildReadCard(topic, reads, { role: readRole(text) ?? undefined }) : null;
       if (card) {
         answer({ kind: "read", id: nextId("read"), card });
         return;

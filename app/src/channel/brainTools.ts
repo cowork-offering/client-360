@@ -22,6 +22,8 @@
    ============================================================================= */
 
 import type { BrainReadBlocks } from "./brainLane";
+import type { LegalEntity } from "../data/contract";
+import { aggregateInvolvements, involvementRole } from "../data/graphAggregate";
 import { callTool, SERVERS, TOOLS, unwrapInvocableOne } from "./mcp";
 import type { SampleTool, SampleToolContext } from "./sampleDoor";
 
@@ -140,20 +142,32 @@ function shapeRatios(payload: unknown): unknown {
   return out;
 }
 
+/**
+ * ONE ROW PER PARTY PER ROLE, the same shape the envelope's own block carries.
+ *
+ * The org writes the involvement once per loan: the live read of Hartwell comes
+ * back with 22 rows for 5 parties. Handed over raw, the model counts rows and
+ * reports "14 guaranty rows" as though it were fourteen obligations, and the
+ * live tool would contradict the aggregated block sitting in the same context.
+ * Aggregating here is not a correction of the org - the loan ids all travel.
+ */
 function shapeInvolvements(payload: unknown): unknown {
-  const slot = unwrapInvocableOne<{ legalEntities?: Array<Record<string, unknown>> }>(payload);
+  const slot = unwrapInvocableOne<{ legalEntities?: LegalEntity[] }>(payload);
   if (!slot.ok) return `The relationship graph could not be read: ${slot.error}`;
   const rows = slot.data.legalEntities ?? [];
   if (!rows.length) return "The relationship graph carries no involvement rows for this account.";
   // Capped, because every round re-reads everything so far and a fat result is
-  // paid for again on the next one.
-  return rows.slice(0, 120).map((r) => ({
-    name: r.accountName ?? null,
-    role: r.borrowerType ?? null,
-    // A null loanId is the org's own way of saying relationship level. It is an
-    // answer, not a gap, so it travels as one.
-    scope: r.loanId ? String(r.loanId) : "across the relationship",
-    ownership: r.ownershipPercent ?? null,
-    guaranty: r.guarantyAmountType ?? null,
-  }));
+  // paid for again on the next one. The cap now bites on PARTIES, not on rows.
+  return aggregateInvolvements(rows)
+    .slice(0, 120)
+    .map((r) => ({
+      name: r.accountName ?? null,
+      role: involvementRole(r),
+      // No loan id at all is the org's own way of saying relationship level. It
+      // is an answer, not a gap, so it travels as one.
+      scope: r.loanIds.length ? `${r.loanIds.length} ${r.loanIds.length === 1 ? "facility" : "facilities"}` : "across the relationship",
+      loanIds: r.loanIds.length ? r.loanIds : undefined,
+      ownership: r.ownershipPercent,
+      guaranty: r.guarantyAmountType ?? null,
+    }));
 }

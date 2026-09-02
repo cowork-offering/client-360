@@ -1,6 +1,7 @@
-import type { BorrowerBundle, Covenant, Facility, LegalEntity } from "../../data/contract";
+import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
 import { facilityProduct, shortFacilityName } from "../../data/facilityStage";
 import { fmtDate, fmtMoney, fmtPct } from "../../data/format";
+import { aggregateInvolvements, involvementRole, isGuarantyRole, type AggregatedInvolvement } from "../../data/graphAggregate";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
 import type { IconKind } from "./TypeIcon";
@@ -61,6 +62,15 @@ export interface ReadCardModel {
 /** What the QUESTION narrowed the card to, where it narrowed it to anything. */
 export interface ReadOptions {
   role?: "guarantor";
+  /**
+   * The facilities the question named, resolved by the caller against the same
+   * members the parser resolves on. Empty or absent asks about the package.
+   *
+   * "who guarantees the construction loan" is a question about ONE loan, and a
+   * card that answers it with every guarantor on the package has answered a
+   * different question.
+   */
+  loanIds?: string[];
 }
 
 export interface ReadSource {
@@ -95,65 +105,102 @@ const money = (n: number | null | undefined) => (typeof n === "number" ? fmtMone
 
 /* ---------------------------------------------------------------- structure */
 
-/** The role an involvement plays, in the org's own word. The graph read names
- *  it `relationshipType`; `borrowerType` is the fallback the same rows carry
- *  when the relationship type is blank, and "Involved" is the honest last
- *  resort — a role we cannot read is not a borrower by default. */
-function roleOf(e: LegalEntity): string {
-  return (e.relationshipType ?? "").trim() || (e.borrowerType ?? "").trim() || "Involved";
+/**
+ * THE FACILITY, NAMED SO A BANKER CAN TELL TWO OF THEM APART.
+ *
+ * `facilityProduct` gives the product word, and this package carries two Lines
+ * of Credit and two Equipment loans. Where the product repeats, the commitment
+ * comes with it, which is the same disambiguation the room's own member labels
+ * make.
+ */
+function labelFor(f: Facility, among: Facility[], relationship: string): string {
+  const product = nameOf(f, relationship);
+  const twins = among.filter((m) => nameOf(m, relationship) === product).length > 1;
+  return twins && typeof f.committed === "number" ? `${product} (${fmtMoney(f.committed)})` : product;
 }
 
-/** IS THIS ROW A GUARANTY. Both `Guarantor` and `Limited Guarantor` are, and so
- *  is the graph read's own "Personal Guaranty" wording: a limited guaranty is a
- *  guaranty with a cap on it, and answering "who guarantees this" without the
- *  limited ones would leave a real obligor off the answer. */
-const isGuaranty = (e: LegalEntity): boolean => /guarant/i.test(roleOf(e));
-
+/**
+ * THE ORG STORES ONE INVOLVEMENT ROW PER LOAN, AND THE CARD IS NOT A DUMP OF IT.
+ *
+ * The 2026-09-02 read of Hartwell carries 22 rows for 5 parties. Listed raw,
+ * the card said "Hartwell Industrial Holdings LLC, Guarantor" six times and the
+ * envelope beside it said "14 guaranty rows", which is a sentence about the
+ * org's storage shape rather than about the credit. One row per party per role,
+ * carrying the facilities behind it, is the same fact said once.
+ */
 function structureCard(src: ReadSource, opts: ReadOptions = {}): ReadCardModel | null {
   const entities = src.bundle?.graph?.legalEntities ?? [];
   if (!entities.length) return null;
-  const facilities = scoped(src);
+
+  const packageFacilities = scoped(src);
+  /* THE QUESTION NARROWS THE FACILITIES. A loan the question named that is not
+     on this package narrows nothing: the package is what the room stands on. */
+  const named = new Set((opts.loanIds ?? []).filter(Boolean));
+  const onlyOn = packageFacilities.filter((f) => f.loanId && named.has(f.loanId));
+  const facilities = onlyOn.length ? onlyOn : packageFacilities;
+  const label = (f: Facility) => labelFor(f, packageFacilities, src.accountName);
+  /** The one loan the question named, where it named exactly one of ours. */
+  const only = onlyOn.length === 1 && packageFacilities.length > 1 ? onlyOn[0] : null;
+
   const byLoan = new Map(facilities.map((f) => [f.loanId ?? "", f]));
+  // A row with no loan id is relationship-wide: it is on every facility of the
+  // package, including whichever one the question named.
   const all = entities.filter((e) => !e.loanId || byLoan.has(e.loanId));
+
   /* THE QUESTION NARROWS THE CARD (E7). A question about guarantors is answered
      with the guarantors; where the read carries none, the card says so with the
      whole structure under it rather than rendering a heading over no rows. */
-  const asked = opts.role === "guarantor" ? all.filter(isGuaranty) : all;
+  const asked = opts.role === "guarantor" ? all.filter(isGuarantyRole) : all;
   const narrowed = opts.role === "guarantor" && asked.length > 0;
-  const inScope = narrowed ? asked : all;
+  const rows = aggregateInvolvements(narrowed ? asked : all);
 
+  const where = only ? `the ${label(only)}` : "this package";
+
+  const row = (e: AggregatedInvolvement): ReadRow => {
+    const loans = e.loanIds
+      .map((id) => byLoan.get(id))
+      .filter((f): f is Facility => Boolean(f))
+      .map(label);
+    return {
+      icon: "package",
+      label: e.accountName ?? "Unnamed party",
+      // The role the org wrote, on the row, because a card that groups by scope
+      // has to say what each party IS or it has not answered the question.
+      value: involvementRole(e),
+      detail:
+        [
+          e.guarantyAmountType || null,
+          loans.length === 1 ? `on the ${loans[0]}` : loans.length > 1 ? `on ${loans.length} facilities` : null,
+          typeof e.ownershipPercent === "number" && !e.guarantyAmountType ? `${fmtPct(e.ownershipPercent)} ownership` : null,
+          typeof e.contingentAmount === "number" ? `${fmtMoney(e.contingentAmount)} contingent` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+    };
+  };
+
+  /* GROUPED BY SCOPE, NOT BY FACILITY. Grouping by facility was what forced one
+     line per facility per party; the row now carries its own facilities, so the
+     only split left is the one the org itself makes between a row hung off a
+     loan and a row hung off the relationship. */
   const groups: ReadGroup[] = [];
-  const row = (e: LegalEntity): ReadRow => ({
-    icon: "package",
-    label: e.accountName ?? "Unnamed party",
-    value: roleOf(e),
-    detail:
-      typeof e.ownershipPercent === "number"
-        ? `${fmtPct(e.ownershipPercent)} ownership`
-        : typeof e.contingentAmount === "number"
-          ? `${fmtMoney(e.contingentAmount)} contingent`
-          : undefined,
-  });
-
-  // ROLE-GROUPED, PER FACILITY. A borrower on one member and a guarantor on
-  // another is two different facts about the same name, and a flat list of
-  // names loses exactly the thing the question was asking about.
-  for (const f of facilities) {
-    const rows = inScope.filter((e) => e.loanId === f.loanId).map(row);
-    if (rows.length) groups.push({ heading: nameOf(f, src.accountName), rows });
-  }
-  const relationshipWide = inScope.filter((e) => !e.loanId).map(row);
+  const onFacilities = rows.filter((e) => e.loanIds.length).map(row);
+  if (onFacilities.length) groups.push({ heading: only ? label(only) : "On this package", rows: onFacilities });
+  const relationshipWide = rows.filter((e) => !e.loanIds.length).map(row);
   if (relationshipWide.length) groups.push({ heading: "Across the relationship", rows: relationshipWide });
   if (!groups.length) return null;
 
-  const total = groups.reduce((n, g) => n + g.rows.length, 0);
+  // The lede counts PARTIES, not rows: a party holding two roles is two rows
+  // and one name, and "6 guarantors" over four people is the multiplicity bug
+  // moved into a number.
+  const total = new Set(groups.flatMap((g) => g.rows).map((r) => r.label)).size;
   return {
     topic: "structure",
     lede: narrowed
-      ? `${total} ${total === 1 ? "guaranty row is" : "guaranty rows are"} on this package today, by facility. Limited guarantors are guarantors: the cap is on the amount, not on the obligation.`
+      ? `${total} ${total === 1 ? "guarantor is" : "guarantors are"} on ${where} today, each once with the role the org wrote. Limited guarantors are guarantors: the cap is on the amount, not on the obligation.`
       : opts.role === "guarantor"
-        ? `This read carries no guaranty rows on these facilities. What it does carry is ${total} ${total === 1 ? "party" : "parties"}, by facility.`
-        : `${total} ${total === 1 ? "party is" : "parties are"} on this package today, by facility.`,
+        ? `This read carries no guaranty rows on ${where}. What it does carry is ${total} ${total === 1 ? "party" : "parties"}, with the role each holds.`
+        : `${total} ${total === 1 ? "party is" : "parties are"} on ${where} today, each once, with the role it holds and the facilities behind it.`,
     groups,
     followUp: "Who should be added or taken off, and on which facility?",
   };

@@ -140,20 +140,47 @@ describe("liveInvolvements is the N4 gap, read live", () => {
       { inputs: [{ accountId: ANCHOR.accountId }] },
       expect.anything(),
     );
+    /* ONE ROW PER PARTY PER ROLE. The org writes the involvement once per loan,
+       so the live read of a real book comes back with 22 rows for 5 parties;
+       handed over raw the model counts rows and calls them obligations. The
+       loan ids all travel, so nothing the org said is lost. */
     expect(out).toEqual([
       {
         name: "Hartwell Precision Manufacturing LLC",
         role: "Borrower",
         scope: "across the relationship",
+        loanIds: undefined,
         ownership: 100,
         guaranty: null,
       },
       {
         name: "Hartwell Industrial Holdings LLC",
         role: "Guarantor",
-        scope: "a4Zbb0000027MaYEAU",
+        scope: "1 facility",
+        loanIds: ["a4Zbb0000027MaYEAU"],
         ownership: null,
         guaranty: null,
+      },
+    ]);
+  });
+
+  it("collapses the org's row-per-loan into one row per party, keeping the loans", async () => {
+    const sixLoans = ["L1", "L2", "L3", "L4", "L5", "L6"].map((loanId) => ({
+      accountName: "Hartwell Industrial Holdings LLC",
+      borrowerType: "Guarantor",
+      guarantyAmountType: "Unlimited",
+      loanId,
+    }));
+    const call = stub({ content: [{ isSuccess: true, outputValues: { legalEntities: sixLoans } }] });
+    const [, parties] = buildBrainTools({ anchor: ANCHOR, call });
+    expect(await parties.execute({}, ctx)).toEqual([
+      {
+        name: "Hartwell Industrial Holdings LLC",
+        role: "Guarantor",
+        scope: "6 facilities",
+        loanIds: ["L1", "L2", "L3", "L4", "L5", "L6"],
+        ownership: null,
+        guaranty: "Unlimited",
       },
     ]);
   });

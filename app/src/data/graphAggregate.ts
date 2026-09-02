@@ -13,9 +13,12 @@
        halves are NOT equally informative — "Parent, 100 percent" and "Child,
        null" are the same holding-company edge seen from opposite ends.
 
-     - INVOLVEMENTS repeat PER FACILITY. The same Borrower row appears once for
-       every loan in the package: 6 identical rows at 100 percent for one
-       borrower with six facilities.
+     - INVOLVEMENTS repeat PER FACILITY, FOR EVERY PARTY. The org writes one
+       row per (party, role, loan), so the 2026-09-02 read of Hartwell carries
+       22 rows for 5 parties: the borrower on 7 loans, two unlimited guarantors
+       on 6 each, a limited guarantor on 2, a related entity on 1. Six identical
+       lines told a banker nothing the first one did not; twenty-two lines over
+       five names is worse, because it reads as twenty-two obligations.
 
    Collapsing is a presentation decision, not a data correction. The tool
    returns true org rows; the tab is what owes the banker one line per real
@@ -128,16 +131,45 @@ export interface AggregatedInvolvement {
   loanIds: string[];
 }
 
+/** The two fields any involvement row carries a role in, raw or aggregated. */
+export interface RoleWords {
+  relationshipType?: string | null;
+  borrowerType?: string | null;
+}
+
 /**
- * One row per (entity, role), with the facility count.
+ * The role an involvement row plays, in the org's own word.
  *
- * The org records the involvement once per loan, so a borrower on six
- * facilities produces six identical rows. Six identical lines tell a banker
- * nothing they did not know from the first; "6 facilities" tells them the shape
- * of the package.
+ * `relationshipType` is the graph read's own role word and `borrowerType` is
+ * what the same rows carry when it is blank. "Involved" is the honest last
+ * resort: a role we cannot read is not a borrower by default.
+ */
+export function involvementRole(e: RoleWords): string {
+  return (e.relationshipType ?? "").trim() || (e.borrowerType ?? "").trim() || "Involved";
+}
+
+/** IS THIS ROW A GUARANTY. `Guarantor`, `Limited Guarantor` and the graph
+ *  read's own "Personal Guaranty" wording all are: a limited guaranty is a
+ *  guaranty with a cap on it, and answering "who guarantees this" without the
+ *  limited ones would leave a real obligor off the answer. */
+export const isGuarantyRole = (e: RoleWords): boolean => /guarant/i.test(involvementRole(e));
+
+/**
+ * One row per (party, role), with the facility count and the loans behind it.
+ *
+ * The org records the involvement once per loan, so a borrower on seven
+ * facilities produces seven identical rows and a guarantor on six produces six.
+ * Those lines tell a banker nothing they did not know from the first; "6
+ * facilities" tells them the shape of the obligation.
+ *
+ * THE COUNT IS DISTINCT LOANS, NOT ROWS. A read that carries the same party on
+ * the same loan twice is duplication of exactly the kind this module exists to
+ * collapse, and counting it as two facilities would put the multiplicity back
+ * in a number instead of in a list. A group carrying no loan id at all is
+ * relationship-wide and counts as the one involvement it is.
  */
 export function aggregateInvolvements(entities: LegalEntity[] | undefined): AggregatedInvolvement[] {
-  const groups = new Map<string, AggregatedInvolvement & { firstSeen: number }>();
+  const groups = new Map<string, AggregatedInvolvement & { firstSeen: number; rows: number }>();
 
   (entities ?? []).forEach((e, i) => {
     const key = `${e.accountName ?? ""}|${e.borrowerType ?? ""}|${e.relationshipType ?? ""}`;
@@ -145,10 +177,13 @@ export function aggregateInvolvements(entities: LegalEntity[] | undefined): Aggr
     const loanId = typeof e.loanId === "string" ? e.loanId : undefined;
 
     if (existing) {
-      existing.facilityCount += 1;
+      existing.rows += 1;
       if (loanId && !existing.loanIds.includes(loanId)) existing.loanIds.push(loanId);
-      // A percent recorded on any row of the group is the group's percent.
+      // A percent, a guaranty type or a contingent amount recorded on ANY row of
+      // the group is the group's: the org leaves the field blank on the copies.
       existing.ownershipPercent = existing.ownershipPercent ?? num(e.ownershipPercent);
+      existing.guarantyAmountType = existing.guarantyAmountType ?? (e.guarantyAmountType ?? undefined);
+      existing.contingentAmount = existing.contingentAmount ?? num(e.contingentAmount);
       return;
     }
 
@@ -162,12 +197,75 @@ export function aggregateInvolvements(entities: LegalEntity[] | undefined): Aggr
       facilityCount: 1,
       loanIds: loanId ? [loanId] : [],
       firstSeen: i,
+      rows: 1,
     });
   });
 
   return [...groups.values()]
     .sort((a, b) => a.firstSeen - b.firstSeen)
-    .map(({ firstSeen: _firstSeen, ...row }) => row);
+    .map(({ firstSeen: _firstSeen, rows, ...row }) => ({ ...row, facilityCount: row.loanIds.length || rows }));
+}
+
+/* ------------------------------------------------------------- the roster
+
+   ONE PARTY, ONE LINE, WHATEVER THE READ CALLS THEM.
+
+   The two graph reads describe the same people from different sides, and on a
+   real book they OVERLAP: Hartwell Industrial Holdings is the 100 percent
+   parent in `connections` AND the unlimited guarantor on all six loans in
+   `legalEntities`. Rendering the connection in one card and the involvement in
+   another put the same name on the graph tab three times (2026-09-02, the
+   22-row read), which is the standing rule broken by two reads instead of by
+   one. The roster is the join: every party the relationship carries, once,
+   holding everything both reads know about them. */
+
+export interface RosterParty {
+  /** The name, spelled the way the read that carries it spells it. */
+  name: string;
+  counterpartyId?: string;
+  /** The ownership edge, where the connections read carries one for this name. */
+  connection?: CollapsedConnection;
+  /** Every involvement this party holds, one row per role. */
+  involvements: AggregatedInvolvement[];
+}
+
+/**
+ * EVERY PARTY ON THIS RELATIONSHIP, ONCE.
+ *
+ * Connections first, in the order they collapse, then the parties only the
+ * involvement rows name. Joined on the NAME, because the involvement rows carry
+ * no account id: the graph read gives ids to counterparties and not to legal
+ * entities, so the name is the only key both sides hold.
+ */
+export function relationshipRoster(
+  connections: Connection[] | undefined,
+  entities: LegalEntity[] | undefined,
+): RosterParty[] {
+  const out: RosterParty[] = [];
+  const byName = new Map<string, RosterParty>();
+
+  for (const c of collapseConnections(connections)) {
+    const name = (c.counterpartyName ?? "").trim();
+    if (!name) continue;
+    const party: RosterParty = { name, counterpartyId: c.counterpartyId, connection: c, involvements: [] };
+    byName.set(name.toLowerCase(), party);
+    out.push(party);
+  }
+
+  for (const e of aggregateInvolvements(entities)) {
+    const name = (e.accountName ?? "").trim();
+    if (!name) continue;
+    const held = byName.get(name.toLowerCase());
+    if (held) {
+      held.involvements.push(e);
+      continue;
+    }
+    const party: RosterParty = { name, involvements: [e] };
+    byName.set(name.toLowerCase(), party);
+    out.push(party);
+  }
+
+  return out;
 }
 
 

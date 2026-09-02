@@ -72,12 +72,19 @@ export interface BrainReadBlocks {
     /** The facility it is attached to, or "across the relationship". */
     scope: string;
   }>;
+  /** ONE ROW PER PARTY PER ROLE, never one per org row. The org writes the
+   *  involvement once per loan, and a desk sent 22 rows for 5 parties answers a
+   *  guarantor question with a count of rows. */
   involvements?: Array<{
     name: string;
     role: string;
     /** Only where the org's OWN word says so. Absent is not "corporate". */
     kind?: "corporate" | "person";
+    /** The facilities this party holds this role on, by name, or "across the
+     *  relationship" where the org hung the row off no loan. */
     scope: string;
+    /** How many facilities `scope` names. Absent where it names none. */
+    facilities?: number;
     detail?: string;
   }>;
   collateral?: Array<{

@@ -85,6 +85,29 @@ describe("what the room read travels with the line", () => {
     }
   });
 
+  it("sends ONE row per party per role, never the org's row per loan", () => {
+    /* The org writes the involvement once per loan: the pinned read carries 22
+       rows for 5 parties, 14 of them guaranty rows. Sent raw, the desk answered
+       a guarantor question with "14 guaranty rows are on this package", which is
+       a sentence about nCino's storage shape and not about the credit. */
+    const raw = src.bundle!.graph!.legalEntities!;
+    expect(raw.length).toBe(22);
+    const rows = blocks.involvements!;
+    expect(rows.map((r) => [r.name, r.role, r.facilities])).toEqual([
+      ["Hartwell Precision Manufacturing LLC", "Borrower", 6],
+      ["Hartwell Industrial Holdings LLC", "Guarantor", 6],
+      ["James Hartwell", "Guarantor", 6],
+      ["Elena Hartwell", "Limited Guarantor", 2],
+      ["Hartwell Logistics LLC", "Related Entity", 1],
+    ]);
+    // The facilities travel BY NAME, so "who guarantees the construction loan"
+    // is answered off this block rather than sent back for another read. Two
+    // Lines of Credit and two Equipment loans sit on this package, so the name
+    // carries the commitment wherever the product word alone names both.
+    expect(rows[3].scope).toBe("Construction, Line of Credit ($15M)");
+    expect(rows[1].scope).toContain("Line of Credit ($2.50M)");
+  });
+
   it("carries the exposure and the pricing AS STORED", () => {
     expect(blocks.exposure?.committed).toMatch(/^\$/);
     expect(blocks.exposure?.drawn).toMatch(/^\$/);
