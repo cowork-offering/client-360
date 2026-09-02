@@ -261,6 +261,13 @@ collateral chips on `value` (the id) with `label` for display, and send `typeId`
 
 ### Reaching the tool
 
+**Deploy the classes and the definition as TWO deploys, in that order.** A check-only that carried
+the Apex AND the McpServerDefinition in one package validated all 13 components cleanly and then
+never started its Apex tests, three times in a row (the same package minus the definition ran its
+113 tests in about thirteen minutes). The definition itself validates fine on its own. So: deploy
+the Apex with the tests first, then the definition, rather than losing an hour to a run that looks
+hung.
+
 The tool is registered in `knowledge/sf-build-v2/wp2/mcpServerDefinitions/Customer360.mcpServerDefinition-meta.xml`
 as a 25th `<tools>` block. That file was verified byte-equal to what the org currently holds (its
 24 tools, retrieved live 2026-09-02) before the block was added, so deploying it adds one tool and

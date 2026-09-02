@@ -2555,7 +2555,7 @@ global with sharing class StageLoanModification {
         if (!byId.containsKey(targetId)) {
             throw new ToolException(
                 'A ' + what + ' targets facility ' + targetId + ', which is not one of the selected facilities. ' +
-                'An exclusion only makes sense on a facility this plan is versioning.'
+                'This plan can only touch a facility it is versioning.'
             );
         }
         return targetId;
