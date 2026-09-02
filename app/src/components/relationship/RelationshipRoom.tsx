@@ -6,8 +6,10 @@ import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
 import { resolveBundle } from "../../actions/registry";
+import { executedActivityEntry } from "../../actions/executedActivity";
 import { useApp } from "../../state/appState";
 import type { StagedCovenant, StagedOutput } from "../../actions/stagedPlan";
+import type { ExecuteResult, WriteActionId } from "../../channel/writeTools";
 import type { C360Data } from "../../data/contract";
 import { BrandGlyph } from "../brand";
 import { Peek, usePeek } from "../workroom/Peek";
@@ -30,6 +32,7 @@ import { Narration, useNarration } from "../../channel/Narration";
 import { subjectFor } from "../../channel/narrate";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
 import { NO_COMPLIANCE_ROW_CHIP, relBookFor, type RelBook } from "./relBook";
+import { buildRelReadCard, readRelTopic, relReadGap } from "./relReads";
 import { useClientMail } from "../workroom/clientMail";
 import { stepperState } from "../../workroom/stepper";
 import {
@@ -488,6 +491,7 @@ export function RelationshipRoom({
   deps = defaultRelDeps,
   mail = null,
   mailGate = true,
+  onFiled,
 }: {
   ctx: RelContext;
   /** Null while the room is still asking which review this is. */
@@ -515,6 +519,16 @@ export function RelationshipRoom({
    */
   mail?: BrainMail | null;
   mailGate?: boolean;
+  /**
+   * AN EXECUTED REVIEW LANDS IN THE TRAIL (A30).
+   *
+   * The room's toast has always said "logged to the activity trail" and the
+   * room has never written one: it took no onFiled and its host wired none,
+   * against Workroom.tsx and WorkroomHost.tsx which have done both since A30.
+   * The room hands over what it already holds; the entry is minted in actions/
+   * where every other executed action's entry is minted.
+   */
+  onFiled?: (filed: { actionId: WriteActionId; result: ExecuteResult }) => void;
 }) {
   const reduced = prefersReducedMotion();
   const brief = useMemo(() => briefFor(ctx), [ctx]);
@@ -1122,8 +1136,17 @@ export function RelationshipRoom({
          rather than with the card the room was already holding. */
       if (ask && router) {
         const preTopic = readTopic(text);
-        const preCard = preTopic !== null ? buildReadCard(preTopic, reads, { role: readRole(text) ?? undefined }) : null;
-        if (!preCard) {
+        const preRelTopic = preTopic === null ? readRelTopic(text) : null;
+        const preCard =
+          preTopic !== null
+            ? buildReadCard(preTopic, reads, { role: readRole(text) ?? undefined })
+            : preRelTopic
+              ? buildRelReadCard(preRelTopic, ctx)
+              : null;
+        /* A READ DOES NOT PICK A REVIEW, and that holds for this room's own
+           three as well: "what is the risk rating" is a question about the
+           book, not a request to open the rating review. */
+        if (!preCard && !preRelTopic) {
           const picked = readRelRouteIntent(text);
           if (picked) {
             setAsk(null);
@@ -1138,6 +1161,13 @@ export function RelationshipRoom({
         setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
         if (preCard) {
           setItems((prev) => [...prev, { kind: "read", id: nextId("read"), step: mine, card: preCard }]);
+          return;
+        }
+        if (preRelTopic) {
+          setItems((prev) => [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: relReadGap(preRelTopic, ctx) },
+          ]);
           return;
         }
         if (brain) {
@@ -1176,6 +1206,23 @@ export function RelationshipRoom({
       const card = topic !== null ? buildReadCard(topic, reads, { role: readRole(text) ?? undefined }) : null;
       if (card) {
         answer({ kind: "read", id: nextId("read"), card });
+        return;
+      }
+
+      /* AND THIS ROOM'S OWN THREE, AFTER the shared five have declined the
+         line. "what is the risk rating", "when was the last review" and "what
+         has the client asked for" fall through every one of the facility
+         room's topics and used to reach the desk. The shared reader is
+         untouched by design: widening it would answer a FACILITY question that
+         reaches the desk today with a card, and that room is the demo. */
+      const relTopic = topic === null ? readRelTopic(text) : null;
+      if (relTopic) {
+        const relCard = buildRelReadCard(relTopic, ctx);
+        answer(
+          relCard
+            ? { kind: "read", id: nextId("read"), card: relCard }
+            : { kind: "agent", id: nextId("agent"), text: relReadGap(relTopic, ctx) },
+        );
         return;
       }
 
@@ -1281,7 +1328,7 @@ export function RelationshipRoom({
       setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
       await runRelBrain(text, mine, { degrade: () => unreadable(live) });
     },
-    [answerLive, ask, awake, brain, ctx.accountName, live, order.length, reads, route, router, runRelBrain, step, unreadable],
+    [answerLive, ask, awake, brain, ctx, live, order.length, reads, route, router, runRelBrain, step, unreadable],
   );
 
   /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it
@@ -1397,6 +1444,10 @@ export function RelationshipRoom({
         tokenNote: `Single-use decision token redeemed. ${REL_FLOWS[route].filedWord} against ${ctx.accountName}.`,
         handoff: dossierHandoff(route, result),
       };
+      /* THE TRAIL, BEFORE THE TOAST THAT CLAIMS IT. The org's own result, its
+         own ids and its own sentence; nothing here is composed from what the
+         room hoped would happen. */
+      onFiled?.({ actionId: REL_FLOWS[route].actionId, result });
       setPhase("filed");
       setFlow(null);
       setLit(true);
@@ -1423,7 +1474,7 @@ export function RelationshipRoom({
     } finally {
       setFiling(false);
     }
-  }, [answers, ctx, deps, filing, flow, push, route, sealed]);
+  }, [answers, ctx, deps, filing, flow, onFiled, push, route, sealed]);
 
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
   useEffect(() => {
@@ -2235,6 +2286,26 @@ export function RelationshipRoomHost() {
     generatedAt,
   });
 
+  /* AN EXECUTED REVIEW LANDS IN THE TRAIL (A30), the way WorkroomHost lands a
+     filed change set. The entry is minted by `executedActivityEntry`, which is
+     where every other executed action's entry is minted: five of its six action
+     ids are this room's, so it already knows how to name a covenant batch, a
+     valuation, a review, a rating and a case. */
+  const onFiled = useCallback(
+    (filed: { actionId: WriteActionId; result: ExecuteResult }) => {
+      if (!accountId) return;
+      const entry = executedActivityEntry({
+        actionId: filed.actionId,
+        outcome: filed.result,
+        target: accountName ?? undefined,
+        actor: data.meta?.user,
+        instanceUrl: data.meta?.instanceUrl,
+      });
+      if (entry) dispatch({ type: "LOG_ACTIVITY", accountId, entry });
+    },
+    [accountId, accountName, data.meta?.instanceUrl, data.meta?.user, dispatch],
+  );
+
   const close = useCallback(() => {
     if (accountId) dispatch({ type: "ARM_WASH", accountId });
     closeRelationshipRoom();
@@ -2274,6 +2345,7 @@ export function RelationshipRoomHost() {
       brain={relBrainLane()}
       mail={mail}
       mailGate={mailGate}
+      onFiled={onFiled}
       onClose={close}
     />
   );

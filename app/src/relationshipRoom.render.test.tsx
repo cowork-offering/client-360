@@ -13,7 +13,7 @@ import { relContextFor, type RelContext, type RelFlowDeps } from "./components/r
 import type { RelOpening, RelRoute } from "./components/relationship/relRoute";
 import type { BorrowerBundle, C360Data } from "./data/contract";
 import type { StagedOutput } from "./actions/stagedPlan";
-import type { ExecuteResult, ToolOutcome } from "./channel/writeTools";
+import type { ExecuteResult, ToolOutcome, WriteActionId } from "./channel/writeTools";
 
 /* =============================================================================
    THE RELATIONSHIP ROOM, AS A RITUAL.
@@ -129,6 +129,7 @@ function open(args: {
   deps?: RelFlowDeps;
   /** A read this case needs a different shape of. */
   bundle?: Partial<BorrowerBundle>;
+  onFiled?: (filed: { actionId: WriteActionId; result: ExecuteResult }) => void;
 } = {}): Opened {
   const bound: Opened["bound"] = [];
   const restarted: Opened["restarted"] = [];
@@ -150,6 +151,7 @@ function open(args: {
         route={args.route ?? null}
         router={router}
         deps={args.deps ?? depsFor()}
+        onFiled={args.onFiled}
         onClose={() => {}}
       />,
     );
@@ -740,5 +742,76 @@ describe("an optional multi step can actually be skipped", () => {
     click(byText(/^Collateral analysis/));
     await settle();
     expect(room.textContent).toContain("The collateral position, with the dates behind the values.");
+  });
+});
+
+/* =============================================================================
+   THE TOAST CLAIMED THE TRAIL AND THE ROOM WROTE NONE.
+
+   `setToast` has always said "logged to the activity trail". The room took no
+   onFiled and its host wired none, against Workroom.tsx and WorkroomHost.tsx
+   which have done both since A30. What this holds is that a filing writes
+   exactly ONE entry, that it names the record the ORG named, and that the
+   toast's claim and the trail now agree.
+   ============================================================================= */
+
+describe("a filed review lands in the activity trail", () => {
+  it("writes exactly one entry, naming the record the org named", async () => {
+    const filed: Array<{ actionId: string; result: ExecuteResult }> = [];
+    const opened = open({ route: "annual", onFiled: (f) => filed.push(f) });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Review & file/));
+    await settle();
+    click(byText(/File the review/));
+    await settle();
+
+    expect(filed).toHaveLength(1);
+    expect(filed[0].actionId).toBe("annual-review");
+    // THE ORG'S OWN RESULT, not a restatement of it.
+    expect(filed[0].result.recordName).toBe("REV-0000000012");
+    // And the toast's claim is now true. It renders in the portal beside the
+    // room rather than inside it, which is why this reads the document.
+    expect(document.body.textContent).toContain("logged to the activity trail");
+    expect(opened.room.querySelector(".wk-rescard")).not.toBeNull();
+  });
+
+  it("writes nothing where the filing never happened", async () => {
+    const filed: Array<{ actionId: string; result: ExecuteResult }> = [];
+    open({ route: "annual", onFiled: (f) => filed.push(f) });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    expect(filed).toEqual([]);
+  });
+});
+
+describe("the room answers its own three reads locally", () => {
+  it("answers a rating question from the book, binding nothing", async () => {
+    const { room, bound } = open({ route: null, question: neutralRelAsk() });
+    await settle();
+    await type(room, "what is the risk rating");
+    await settle();
+    // A READ DOES NOT PICK A REVIEW. It binds nothing and advances nothing.
+    expect(bound).toEqual([]);
+    expect(room.textContent).toContain("The grade on file for Hartwell Precision Manufacturing LLC is 4");
+    expect(room.textContent).toContain("Not the facility scale");
+  });
+
+  it("says what no read carries when asked about the reviews on file", async () => {
+    const { room } = open({ route: "annual" });
+    await settle();
+    await type(room, "when was the last review");
+    await settle();
+    expect(room.textContent).toContain("No read on this cockpit carries the credit reviews");
+    // AND IT DOES NOT ANSWER THE STEP. The review type is still open.
+    expect(room.textContent).toContain("Which review is this?");
   });
 });
