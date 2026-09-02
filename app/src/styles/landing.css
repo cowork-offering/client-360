@@ -623,3 +623,58 @@ body.on-client .topnav {
 .whisper .wbody:active {
   transform: scale(0.98);
 }
+
+/* --------------------------------------------------------- the intent whisper
+   The same glass as rule 59's whisper, in the same corner, carrying a different
+   fact: something the banker already said elsewhere, offered as work. TWO chips
+   rather than a ✕, because "Later" has to be an answer a banker can give.
+
+   It stacks ABOVE the rule 59 whisper's seat when both are up, so neither
+   covers the other and the FAB keeps its own air. */
+.whisper.intent-whisper {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-width: 372px;
+  cursor: default;
+  bottom: calc(var(--fab-bottom) + var(--fab-size) + 14px);
+}
+.whisper.intent-whisper .wbody {
+  cursor: default;
+  align-items: flex-start;
+}
+.whisper.intent-whisper .c360-glyph {
+  margin-top: 2px;
+}
+.iw-chips {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.iw-chip {
+  border: 1px solid var(--glass-hairline);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.18s var(--ease-out), transform 0.12s var(--ease-out);
+}
+.iw-chip:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+.iw-chip:active {
+  transform: scale(0.97);
+}
+.iw-chip.iw-open {
+  background: var(--brand);
+  border-color: transparent;
+  color: #fff;
+}
+.iw-chip.iw-open:hover {
+  filter: brightness(1.08);
+}

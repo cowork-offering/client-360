@@ -137,8 +137,12 @@ export interface BrainMail {
   /** The route the message points at, read by the room's own `readRouteIntent`
    *  over subject and gist. Absent where the message names no credit action. */
   route?: "modify" | "renew" | "create";
-  /** Where it came from: a sweep already on the bundle, or a live read. */
-  source: "swept" | "mailbox";
+  /** Where it came from: a sweep already on the bundle, a live read, or an
+   *  INTENT carried in from a conversation that happened somewhere else. The
+   *  third is not a mailbox read and never claims to be one; it travels in this
+   *  block because it is the same fact — what someone said — arriving by a
+   *  different door. */
+  source: "swept" | "mailbox" | "intent";
 }
 
 /** One exchange of the conversation so far. The banker's words are verbatim;

@@ -170,6 +170,16 @@ export function useClientMail(args: {
   bundle: BorrowerBundle | null;
   /** `meta.generatedAt`. Nothing here reaches a clock. */
   generatedAt: string;
+  /**
+   * THE INTENT THIS ROOM WAS OPENED FROM, as a mail block.
+   *
+   * It WINS over both reads, and not by richness: it is the reason the room is
+   * open. A greeting that led with an unrelated message while the banker
+   * watched their own forwarded instruction being typed in would be the room
+   * talking past them. Absent — every room not opened from an intent — and the
+   * swept/live contest below is exactly what it was.
+   */
+  intentNote?: BrainMail | null;
 }): { note: BrainMail | null; hits: MailHit[]; gate: boolean } {
   const { accountName, bundle, generatedAt } = args;
   const swept = useMemo(() => mailNoteFromBundle(bundle, generatedAt), [bundle, generatedAt]);
@@ -203,6 +213,9 @@ export function useClientMail(args: {
     };
   }, [accountName, generatedAt]);
 
-  const note = richness(live.note) > richness(swept) ? live.note : swept;
-  return { note, hits: live.hits, gate: opened || swept !== null };
+  const read = richness(live.note) > richness(swept) ? live.note : swept;
+  const note = args.intentNote ?? read;
+  // An intent needs no mailbox: the room does not hold its greeting for a read
+  // it is not going to lead with.
+  return { note, hits: live.hits, gate: !!args.intentNote || opened || swept !== null };
 }

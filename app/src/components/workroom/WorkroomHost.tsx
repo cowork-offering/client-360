@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { resolveBundle } from "../../actions/registry";
+import { noteFiled } from "../../intent/open";
 import { workroomActivityEntry } from "../../actions/executedActivity";
 import { askBrain, brainReachable, type BrainEnvelope } from "../../channel/brainLane";
 import { bookedFacilities } from "../../data/facilityStage";
@@ -169,6 +170,9 @@ export function WorkroomHost() {
         pricing: filed.pricing,
       });
       if (entry) dispatch({ type: "LOG_ACTIVITY", accountId: context.accountId, entry });
+      /* AN EXECUTED PLAN SPENDS THE INTENT THAT OPENED THE ROOM. Bookkeeping in
+         the store for whoever wrote it; never a gate on the dossier. */
+      noteFiled(context.accountId);
     },
     [context, data.meta?.user, dispatch],
   );

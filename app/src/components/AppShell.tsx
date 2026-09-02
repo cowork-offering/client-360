@@ -3,6 +3,7 @@ import { useApp } from "../state/appState";
 import { TopBar } from "./TopBar";
 import { Landing } from "./Landing";
 import { Whisper } from "./Whisper";
+import { IntentWhisper } from "./IntentWhisper";
 import { AccountWorkspace } from "./AccountWorkspace";
 import { ChatFab } from "./ChatFab";
 import { CommandPalette } from "./CommandPalette";
@@ -97,6 +98,10 @@ export function AppShell() {
         </main>
       </div>
       {home && <Whisper row={topRow} />}
+      {/* THE INTENT LANE'S ONE SURFACE. It renders null on every view with no
+          pending intent for where the banker is standing, which is every view
+          on a page with no store at all. */}
+      <IntentWhisper />
       <ChatFab />
       <CommandPalette />
       {/* The workroom is a FULL-SURFACE overlay over the cockpit, so it mounts
