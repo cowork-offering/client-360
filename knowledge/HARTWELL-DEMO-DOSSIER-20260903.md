@@ -53,7 +53,7 @@ Six booked facilities, $46.0M committed, $31.03M drawn.
 | Loan | Id | Committed | Drawn | Product | Purpose | Rate | Term | Amortisation | First payment | Maturity |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Revolving line | `a4Zbb0000027MaYEAU` | $15,000,000 | $9,200,000 | Line of Credit | Working capital | SOFR + 2.25%, 6.58% all-in | 24 mo | Interest only, bullet | 2025-04-15 | 2027-03-15 |
-| Seasonal line | `a4Zbb0000027MttEAE` | $2,500,000 | $1,150,000 | Line of Credit | Working capital | SOFR + 2.50%, 6.83% all-in | 24 mo | Interest only, bullet | 2025-04-15 | 2027-03-15 |
+| Seasonal line | `a4Zbb0000027MttEAE` | $2,500,000 | $1,150,000 | Line of Credit | Working capital | SOFR + 2.50%, 6.83% all-in | 24 mo | Interest only, bullet | 2025-07-30 | 2027-03-15 |
 | Equipment term | `a4Zbb0000027MnREAU` | $8,000,000 | $5,900,000 | Equipment | Equipment purchase | 6.45% fixed | 60 mo | 84 mo | 2026-04-20 | 2031-03-15 |
 | Construction | `a4Zbb0000027Mp3EAE` | $12,000,000 | $7,350,000 | Construction | Business expansion | SOFR + 2.75%, 7.08% all-in | 60 mo | 240 mo | 2026-04-01 | 2031-03-15 |
 | Purchase | `a4Zbb0000027MqfEAE` | $5,000,000 | $4,420,000 | Purchase | Commercial real estate purchase | 6.20% fixed | 60 mo | 180 mo | 2026-04-10 | 2031-03-15 |
