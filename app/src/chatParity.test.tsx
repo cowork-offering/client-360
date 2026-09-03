@@ -157,8 +157,26 @@ describe("A33.6.1 — the chat path and the panel path stage the same thing", ()
     const labels = panelChips().map((b) => b.textContent!.trim());
     teardown();
     expect(labels.length).toBeGreaterThan(0);
+    /* When every suggested chip is room-owned there is nothing to prove here,
+       and that is the correct outcome rather than a skipped truth. */
 
-    for (const label of labels) {
+    /* THE ROOMS TOOK THE ROOM-COVERED ACTIONS (founder, 2026-09-03): a chip for
+       a modification, renewal, new facility or a relationship review opens the
+       room rather than the ticket, so panel parity is only provable for the
+       actions the panel still owns. */
+    const ROOM_OWNED = new Set([
+      "Loan Modification",
+      "Renewal",
+      "New Facility Request",
+      "Covenant Review",
+      "Collateral Valuation",
+      "Annual Review",
+      "Risk Rating Review",
+      "Create Service Request",
+    ]);
+    const panelLabels = labels.filter((l) => !ROOM_OWNED.has(l));
+
+    for (const label of panelLabels) {
       const fromRow = await stageViaClientActions(label);
       const fromChat = await stageViaChatChip(label);
 
@@ -178,18 +196,12 @@ describe("A33.6.1 — the chat path and the panel path stage the same thing", ()
     }
   });
 
-  it("carries the staged client request into the ticket from either path", async () => {
+  it("carries the staged client request into the ticket from the actions row", async () => {
+    // The chat chip for this action opens the relationship room now, so the
+    // carried request is proven through the row path alone.
     const label = ACTIONS_BY_ID["create-service-request"].label;
-    installMcp();
-    mount();
-    openAccount();
-    openAssist();
-    const hasChip = panelChips().some((b) => b.textContent?.trim() === label);
-    teardown();
-    if (!hasChip) return; // ordering is data-driven; parity is proven above
-
-    const fromChat = await stageViaChatChip(label);
+    const fromRow = await stageViaClientActions(label);
     // Sterling has an inbound request staged; the ticket opens carrying it.
-    expect(String(fromChat.summary ?? "")).toContain("Revolver");
+    expect(String(fromRow.summary ?? "")).toContain("Revolver");
   });
 });
