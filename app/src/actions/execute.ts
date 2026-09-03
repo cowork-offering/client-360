@@ -19,6 +19,7 @@ import type { BorrowerBundle, C360Data, Id } from "../data/contract";
 import { askCopilot } from "../channel/cockpitTools";
 import { refreshBoom } from "../channel/cockpitTools";
 import { mcpAvailable } from "../channel/mcp";
+import { normaliseBoom } from "../../../client-360/render/boom-normalise.mjs";
 import type { ClientAction } from "./registry";
 
 export type ExecutionMode = "tools" | "analysis" | "prompt";
@@ -64,11 +65,17 @@ export async function executeAction(args: {
     const boom = await refreshBoom(bundle?.snapshot?.name ?? accountName);
     const patch: Partial<BorrowerBundle> = {};
     if (boom.ratios || boom.spread) {
-      patch.boom = {
+      // THE SAME NORMALISER THE ASSEMBLER RUNS (client-360/render/boom-normalise.mjs). The
+      // connector hands back boom_get_ratios / boom_get_spread as they come off the wire, and
+      // merging those raw envelopes onto the bundle is what used to leave the Financials tab
+      // reading Boom's display CARDS array as if it were the ratio object. Normalise once, here,
+      // and the tab and the covenant challenge keep reading one shape.
+      const merged = normaliseBoom({
         ...(bundle?.boom ?? {}),
-        ...(boom.ratios ? { ratios: (boom.ratios as { ratios?: unknown }).ratios ?? boom.ratios } : {}),
+        ...(boom.ratios ? { ratios: boom.ratios } : {}),
         ...(boom.spread ? { spread: boom.spread } : {}),
-      } as BorrowerBundle["boom"];
+      });
+      if (merged) patch.boom = merged;
     }
     return { mode, patch, storedAt: boom.storedAt, text: "Spread financials refreshed from the gateway." };
   }

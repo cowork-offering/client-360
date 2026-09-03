@@ -17,6 +17,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { normaliseC360Boom } from "../../client-360/render/boom-normalise.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..", "..");
@@ -27,8 +28,13 @@ const templateFile = resolve(root, "artifact", "customer-360-template.html");
 const FULL_TAG = '<script id="c360-data" type="application/json">/*__C360_DATA__*/</script>';
 
 const tpl = readFileSync(templateFile, "utf8");
-const data = readFileSync(dataFile, "utf8");
-JSON.parse(data); // data must be valid JSON before it goes anywhere
+
+// ONE Boom shape (item 6): normalise before injection so the Financials tab and the covenant
+// challenge read the same object: display fields derived from the raw boom_get_ratios /
+// boom_get_spread payloads, which stay underneath at boom.ratios.raw and boom.spread.file.
+// Idempotent: a data file that already carries the normalised shape is unchanged by this.
+const parsedData = JSON.parse(readFileSync(dataFile, "utf8")); // must be valid JSON before it goes anywhere
+const data = JSON.stringify(normaliseC360Boom(parsedData));
 
 const occurrences = tpl.split(FULL_TAG).length - 1;
 if (occurrences !== 1) {

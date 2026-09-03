@@ -56,6 +56,10 @@
 // Reports code bytes vs data bytes separately. After writing, stats the file to self-verify the
 // bytes actually on disk match what was measured (Codex round 2 finding 6).
 //
+// Boom normalisation (boom-normalise.mjs) runs BEFORE validation, so the covenant challenge and
+// the Financials tab read one shape: display fields derived from the raw payloads, raw payloads
+// kept under boom.spread.file / boom.ratios.raw.
+//
 // A5: the validation stage (validateC360, SR 11-7 covenant challenge + data-quality sweep) is
 // mandatory and runs before injection, across every bundle in `borrowers` (not just the anchor);
 // assertValidationSurfaces() asserts the surfaces actually landed (regression guard). There is no
@@ -85,6 +89,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { validateC360, challengeCount } from "./validate-c360.mjs";
+import { normaliseC360Boom } from "./boom-normalise.mjs";
 import {
   ContractError,
   assertBorrowersStructure,
@@ -214,6 +219,14 @@ const stagedCount = Object.keys(data.borrowers).length;
 // borrowers[anchorId] so every downstream stage sees ONE object. Any input-supplied top-level
 // `borrower` is advisory only and is overwritten here, never diffed (see deriveAnchorBorrower).
 data.borrower = deriveAnchorBorrower(data);
+
+// ---------------------------------------------------------------- ONE Boom shape (item 6)
+// The Financials tab and the covenant challenge used to read different `boom` shapes, so whichever
+// one the agent staged, the other silently rendered nothing. Normalise HERE, once, before either
+// sees the data: the display fields are derived from the raw payloads, and the raw boom_get_spread
+// `file` / boom_get_ratios `raw` stay underneath for provenance. Idempotent, so re-assembling data
+// that is already normalised changes nothing.
+normaliseC360Boom(data);
 
 // ---------------------------------------------------------------- deterministic validation stage (A5)
 // SR 11-7 effective challenge: recompute covenants from the Boom spread + run the data-quality

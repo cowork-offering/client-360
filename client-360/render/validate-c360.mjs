@@ -3,8 +3,14 @@
 //
 // This module recomputes covenant figures from the Boom spread and runs a data-quality sweep. It is
 // the ONLY source of the challenge/dataQuality numbers: LLMs never compute these figures. Everything
-// here is pure arithmetic over data already fetched into C360_DATA. It augments the data object
-// IN PLACE (and returns it) with two new surfaces:
+// here is pure arithmetic over data already fetched into C360_DATA.
+//
+// It reads the NORMALISED Boom shape (client-360/render/boom-normalise.mjs): the raw
+// boom_get_spread payload under `boom.spread.file`, and boom_get_ratios `raw` under
+// `boom.ratios.raw`. The assemblers normalise before this runs, so this stage and the Financials
+// tab read ONE shape.
+//
+// It augments the data object IN PLACE (and returns it) with two new surfaces:
 //
 //   • <bundle>.covenantChallenge[] — per covenant, the Boom-implied value beside the nCino actual,
 //     with a corroborated / diverges / not-computable verdict. Divergence is a REVIEW FLAG, never a
@@ -19,17 +25,40 @@
 // With --out it writes the augmented JSON; without, it prints a human summary and writes nothing.
 // No dependencies beyond node built-ins. Node 18+.
 import { readFileSync, writeFileSync } from "node:fs";
+import { indexSpreadFile, ratiosAsOf, REVENUE_CODES } from "./boom-normalise.mjs";
 
 // ---------------------------------------------------------------- formula registry
 // covenantType → standard-definition recompute. Matched case-insensitively by substring, in order.
 // `unit`: "ratio" rounds to 2dp, "dollars" rounds to whole dollars.
+//
+// EVERY INPUT NAMES THE CODES BOOM ACTUALLY EMITS, as `{ key, codes[], abs?, derive? }`:
+//
+//   codes[]  spread accountCodes, tried in order. A `ratios:<field>` entry reads boom_get_ratios
+//            `raw` instead of the chart, and is offered ONLY when the ratios' `asOf` is the period
+//            being recomputed. That is the only way EBITDA reaches this table: Boom's accountCode
+//            chart carries no depreciation and amortisation line at all (the cash-flow D&A row has
+//            no accountCode), so no spread code can produce an EBITDA.
+//   abs      the spread signs expenses negative (interest_expense arrives as -1,076,000). A
+//            coverage definition ADDS an expense to the denominator; taking the sign as given
+//            would subtract it and print a coverage ratio nothing in the deal supports.
+//   derive   last resort: sum whichever of the listed codes the period carries. Total debt needs
+//            it, because Boom emits the facility lines and not a total_debt row.
+//
+// A CODE BOOM DOES NOT EMIT IS NEVER SWAPPED FOR A LOOKALIKE. CPLTD is the case that matters:
+// `st_loans_payable_bank` is "Line of Credit and Current Portion of Long-Term Debt", so reading it
+// as CPLTD would load the whole revolver into debt service and report a DSC that is not the
+// covenant's. Missing stays missing, and the note names every code that was tried.
 const FORMULAS = [
   {
     match: ["debt service coverage"],
     direction: "min",
     unit: "ratio",
     formula: "Adjusted EBITDA / (Interest Expense + CPLTD)",
-    inputs: ["adjusted_ebitda", "interest_expense", "current_portion_ltd"],
+    inputs: [
+      { key: "adjusted_ebitda", codes: ["adjusted_ebitda", "ratios:ebitda"] },
+      { key: "interest_expense", codes: ["interest_expense"], abs: true },
+      { key: "current_portion_ltd", codes: ["current_portion_ltd", "cpltd_bank", "current_maturities_ltd"] },
+    ],
     compute: (v) => v.adjusted_ebitda / (v.interest_expense + v.current_portion_ltd),
   },
   {
@@ -37,7 +66,14 @@ const FORMULAS = [
     direction: "max",
     unit: "ratio",
     formula: "Total Debt / Total Equity",
-    inputs: ["total_debt", "total_equity"],
+    inputs: [
+      {
+        key: "total_debt",
+        codes: ["total_debt", "ratios:totalDebt"],
+        derive: ["st_loans_payable_bank", "current_portion_ltd", "long_term_debt_bank"],
+      },
+      { key: "total_equity", codes: ["total_equity", "total_stockholders_equity"] },
+    ],
     compute: (v) => v.total_debt / v.total_equity,
   },
   {
@@ -45,7 +81,7 @@ const FORMULAS = [
     direction: "min",
     unit: "dollars",
     formula: "Cash & Equivalents",
-    inputs: ["cash_and_equivalents"],
+    inputs: [{ key: "cash_and_equivalents", codes: ["cash_and_equivalents", "cash"] }],
     compute: (v) => v.cash_and_equivalents,
   },
   {
@@ -53,7 +89,7 @@ const FORMULAS = [
     direction: "max",
     unit: "dollars",
     formula: "Capital Expenditures (FY)",
-    inputs: ["capital_expenditures"],
+    inputs: [{ key: "capital_expenditures", codes: ["capital_expenditures", "purchases_of_ppe"], abs: true }],
     compute: (v) => v.capital_expenditures,
   },
 ];
@@ -63,31 +99,63 @@ const CHECK_TYPES = [
   "boom-period-mismatch", "coverage-null", "util-null",
 ];
 
+const isNum = (n) => typeof n === "number" && Number.isFinite(n);
 const round2 = (n) => Math.round(n * 100) / 100;
 const roundBy = (n, unit) => (unit === "ratio" ? round2(n) : Math.round(n));
 
-// FY2025 > FY2024. Pick the latest period key across a spread's line items by trailing year.
-function latestPeriod(periodKeys) {
-  const yearOf = (k) => { const m = String(k).match(/(\d{4})/); return m ? Number(m[1]) : -Infinity; };
-  return [...periodKeys].sort((a, b) => yearOf(b) - yearOf(a))[0];
+// Flatten a boom.spread onto the RAW payload it keeps under `spread.file`, indexed
+// accountCode → period end date → value. The end date is the only period identity that means
+// anything: `periodValues` is keyed by the period's UUID, and reading a year out of a UUID is
+// exactly how "the latest period" used to resolve to a random one.
+function indexSpread(spread) {
+  const flat = indexSpreadFile(spread && spread.file);
+  return flat ? { index: flat.index, period: flat.latest } : null;
 }
 
-// Flatten a boom.spread into { accountCode: { period: value } } across all financial statements.
-function indexSpread(spread) {
-  const file = spread && spread.file;
-  const statements = file && Array.isArray(file.financialStatements) ? file.financialStatements : null;
-  if (!statements) return null;
-  const index = {};
-  const periods = new Set();
-  for (const st of statements) {
-    for (const li of st.lineItems || []) {
-      if (!li || !li.accountCode || !li.periodValues) continue;
-      index[li.accountCode] = li.periodValues;
-      for (const p of Object.keys(li.periodValues)) periods.add(p);
+/** boom_get_ratios `raw`, but ONLY when its asOf is the period being recomputed. A ratio computed
+ *  for another year is a different fact, not a fallback. */
+function ratiosFor(boom, period) {
+  const ratios = boom && boom.ratios;
+  if (!ratios || !period || ratiosAsOf(ratios) !== period) return null;
+  return ratios.raw && typeof ratios.raw === "object" ? ratios.raw : null;
+}
+
+/**
+ * Resolve one formula input for a period.
+ *
+ * Returns `{ value, source, tried }`, where `source` is the code that satisfied it (or
+ * "derived: a + b"), and `tried` is every code that was looked for, so a not-computable covenant
+ * can say what was missing instead of naming one code the spread never had.
+ */
+function resolveInput(spec, index, period, ratiosRaw) {
+  const tried = [];
+  const signed = (v) => (spec.abs ? Math.abs(v) : v);
+
+  for (const code of spec.codes || []) {
+    tried.push(code);
+    if (code.startsWith("ratios:")) {
+      const v = ratiosRaw ? ratiosRaw[code.slice("ratios:".length)] : undefined;
+      if (isNum(v)) return { value: signed(v), source: code, tried };
+      continue;
     }
+    const row = index[code];
+    const v = row ? row[period] : undefined;
+    if (isNum(v)) return { value: signed(v), source: code, tried };
   }
-  if (!periods.size) return null;
-  return { index, period: latestPeriod(periods) };
+
+  if (spec.derive) {
+    const parts = [];
+    let sum = 0;
+    for (const code of spec.derive) {
+      tried.push(code);
+      const row = index[code];
+      const v = row ? row[period] : undefined;
+      if (isNum(v)) { sum += signed(v); parts.push(code); }
+    }
+    if (parts.length) return { value: sum, source: `derived: ${parts.join(" + ")}`, tried };
+  }
+
+  return { value: null, source: null, tried };
 }
 
 function matchFormula(covenantType) {
@@ -105,9 +173,10 @@ const nCinoCompliant = (cov) => {
 function buildChallenge(bundle) {
   const covenants = (bundle && bundle.covenants && Array.isArray(bundle.covenants.covenants))
     ? bundle.covenants.covenants : [];
-  const spread = bundle && bundle.boom ? bundle.boom.spread : null;
-  const flat = spread ? indexSpread(spread) : null;
+  const boom = (bundle && bundle.boom) ? bundle.boom : null;
+  const flat = boom && boom.spread ? indexSpread(boom.spread) : null;
   const period = flat ? flat.period : null;
+  const ratiosRaw = ratiosFor(boom, period);
 
   const noteFor = (p) =>
     `Boom-implied value uses standard ratio definitions over the latest spread period (${p}); ` +
@@ -129,7 +198,7 @@ function buildChallenge(bundle) {
       note: "",
     };
 
-    if (!bundle.boom) {
+    if (!boom) {
       entry.note = "Boom spread not on file for this borrower — no source to recompute the covenant.";
       out.push(entry); continue;
     }
@@ -138,21 +207,26 @@ function buildChallenge(bundle) {
       out.push(entry); continue;
     }
     if (!flat) {
-      entry.note = "Boom spread carries no line-item periods — cannot recompute.";
+      entry.note = "Boom spread carries no raw line items under spread.file, so nothing can be recomputed.";
       out.push(entry); continue;
     }
+
     const inputs = {};
+    const sources = {};
     let missing = null;
-    for (const code of spec.inputs) {
-      const pv = flat.index[code];
-      const val = pv ? pv[period] : undefined;
-      if (typeof val !== "number") { missing = code; break; }
-      inputs[code] = val;
+    for (const input of spec.inputs) {
+      const got = resolveInput(input, flat.index, period, ratiosRaw);
+      if (got.value === null) { missing = { key: input.key, tried: got.tried }; break; }
+      inputs[input.key] = got.value;
+      sources[input.key] = got.source;
     }
     if (missing) {
-      entry.note = `Spread has no numeric "${missing}" in period ${period} — cannot recompute.`;
+      entry.note =
+        `Boom carries no "${missing.key}" for period ${period}. Tried ${missing.tried.join(", ")}. ` +
+        `Not recomputed; the covenant stands on the nCino actual alone.`;
       out.push(entry); continue;
     }
+
     const raw = spec.compute(inputs);
     if (!Number.isFinite(raw)) {
       entry.note = `Recompute produced a non-finite value (check denominators) for period ${period}.`;
@@ -160,7 +234,7 @@ function buildChallenge(bundle) {
     }
 
     const value = roundBy(raw, spec.unit);
-    entry.boomImplied = { value, formula: spec.formula, inputs, period };
+    entry.boomImplied = { value, formula: spec.formula, inputs, sources, period };
     entry.delta = roundBy(value - Number(entry.nCinoActual), spec.unit);
     entry.note = noteFor(period);
 
@@ -253,14 +327,20 @@ function buildDataQuality(data) {
     if (b.boom && b.boom.ratios && b.boom.spread) {
       const rawRev = b.boom.ratios.raw && b.boom.ratios.raw.revenue;
       const flat = indexSpread(b.boom.spread);
-      const spreadRev = flat && flat.index.sales_revenue ? flat.index.sales_revenue[flat.period] : undefined;
+      // Boom's income statement names revenue net_sales_revenue; the older code looked only for
+      // sales_revenue, so the cross-check never had a figure to compare and never fired.
+      let revCode = null, spreadRev;
+      for (const code of REVENUE_CODES) {
+        const v = flat && flat.index[code] ? flat.index[code][flat.period] : undefined;
+        if (typeof v === "number") { revCode = code; spreadRev = v; break; }
+      }
       if (typeof rawRev === "number" && typeof spreadRev === "number" && spreadRev !== 0) {
         const pct = Math.abs(rawRev - spreadRev) / Math.abs(spreadRev);
         if (pct > 0.01) {
           const asOf = b.boom.ratios.asOf || "ratios period";
           findings.push({
             severity: "warn", code: "boom-period-mismatch", ...acct,
-            message: `Boom ratios revenue $${rawRev.toLocaleString()} (asOf ${asOf}) differs from spread sales_revenue $${spreadRev.toLocaleString()} (${flat.period}) by ${(pct * 100).toFixed(1)}%.`,
+            message: `Boom ratios revenue $${rawRev.toLocaleString()} (asOf ${asOf}) differs from spread ${revCode} $${spreadRev.toLocaleString()} (${flat.period}) by ${(pct * 100).toFixed(1)}%.`,
           });
         }
       }

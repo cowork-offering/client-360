@@ -10,6 +10,13 @@
    ============================================================================= */
 
 
+import type {
+  BoomRawRatios,
+  NormalisedBoom,
+  NormalisedBoomLineItem,
+  NormalisedBoomPeriod,
+} from "../../../client-360/render/boom-normalise.mjs";
+
 export type Id = string;
 
 /* =============================================================================
@@ -84,7 +91,12 @@ export const PROVENANCE = {
   "borrower.boom.ratios.ebitdaMargin": { kind: "BOOM", source: "boom_get_ratios — EBITDA ÷ revenue" },
   "borrower.boom.ratios.totalLeverage": { kind: "BOOM", source: "boom_get_ratios — debt ÷ EBITDA" },
   "borrower.boom.ratios.interestCoverage": { kind: "BOOM", source: "boom_get_ratios — EBITDA ÷ interest expense" },
+  "borrower.boom.ratios.asOf": { kind: "BOOM", source: "boom_get_ratios: the period those ratios were computed for. EBITDA is bound to it and to no other period" },
+  "borrower.boom.ratios.raw": { kind: "BOOM", source: "boom_get_ratios: `raw` verbatim, the numeric contract (margins as FRACTIONS). The display fields beside it are DERIVED from this by client-360/render/boom-normalise.mjs" },
   "borrower.boom.spread.sourceFile": { kind: "BOOM", source: "boom_get_spread — originating workbook filename" },
+  "borrower.boom.spread.file": { kind: "BOOM", source: "boom_get_spread: `file` verbatim (financialStatements[] by accountCode, periodValues by period id). The covenant challenge recomputes from this; the presigned downloadUrl is never staged" },
+  "borrower.boom.spread.periods[]": { kind: "DERIVED", source: "boom-normalise.mjs: one row per spread period end date; ebitda/margin ONLY on the ratios.asOf period, because the chart carries no D&A" },
+  "borrower.boom.spread.lineItems[]": { kind: "DERIVED", source: "boom-normalise.mjs: LTM vs prior FY over the two latest spread periods; expense lines absolute, EBITDA from ratios.raw with a null prior year" },
   "borrower.boom.spread": { kind: "BOOM", source: "boom_get_spread" },
 
   // --- rendered narrative / anchor chrome (F2) -------------------------------
@@ -557,34 +569,35 @@ export interface Renewal {
   hasActiveRenewalLoan?: boolean;
 }
 
-export interface BoomPeriod {
-  period?: string;
-  revenue?: number;
-  ebitda?: number;
-  margin?: number;
-}
+/* -----------------------------------------------------------------------------
+   THE BOOM SHAPE. ONE shape, normalised once in the assembler.
 
-export interface BoomLineItem {
-  line?: string;
-  ltm?: number;
-  priorFy?: number;
-}
+   Two consumers used to disagree about what `bundle.boom` is: the Financials tab read the display
+   object, validate-c360.mjs read the raw boom_get_spread payload, and whichever one the agent
+   staged, the other rendered nothing. Both now read the output of
+   client-360/render/boom-normalise.mjs, which is the source of these types. The RAW connector
+   payloads survive underneath it:
 
-export interface Boom {
-  ratios?: {
-    revenue?: number;
-    ebitda?: number;
-    ebitdaMargin?: number;
-    totalLeverage?: number;
-    interestCoverage?: number;
-  };
-  spread?: {
-    sourceFile?: string;
-    periods?: BoomPeriod[];
-    lineItems?: BoomLineItem[];
-  };
-  note?: string;
-}
+     boom.ratios.raw    boom_get_ratios `raw`, verbatim. Numbers as Boom emits them, so margins are
+                        FRACTIONS here (0.0812) while the display `ebitdaMargin` beside it is the
+                        PERCENT (8.12) the tab prints.
+     boom.ratios.asOf   the date those ratios were computed for. It is what binds EBITDA to one
+                        period and to no other.
+     boom.spread.file   boom_get_spread `file`, verbatim: financialStatements[] with lineItems keyed
+                        by accountCode and periodValues keyed by the period's UUID id. The covenant
+                        challenge recomputes from THIS, never from the display fields.
+
+   PRIOR-YEAR EBITDA IS NULL, NEVER DERIVED. Boom's accountCode chart carries no depreciation and
+   amortisation line at all, so an EBITDA exists only for `ratios.asOf`. Deriving one for the prior
+   year out of operating profit would print an understated figure as though the spread contained it.
+
+   The presigned `downloadUrl` Boom returns beside `file` is a short-lived S3 credential and is
+   never staged into C360_DATA.
+   ----------------------------------------------------------------------------- */
+export type { BoomRawRatios };
+export type BoomPeriod = NormalisedBoomPeriod;
+export type BoomLineItem = NormalisedBoomLineItem;
+export type Boom = NormalisedBoom;
 
 /** Boom-vs-nCino effective-challenge entry (SR 11-7 corroboration). */
 export interface CovenantChallenge {

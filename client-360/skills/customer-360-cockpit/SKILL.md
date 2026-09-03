@@ -125,6 +125,14 @@ doors rule above) for the anchor, and for worklist accounts where the file exist
 and the call is cheap. If either fails or no file exists, set that bundle's `boom` to `null` — **never
 fabricate**. The Financials tab renders an honest gap state.
 
+**Stage BOTH results as the connector returned them**, `"boom": { "ratios": <boom_get_ratios
+result>, "spread": <boom_get_spread result> }`, and let the assembler shape them. Do NOT hand-write
+the display fields: the assembler derives them and would overwrite yours anyway. See "The Boom
+payload" below for what it derives and why.
+
+**Drop `spread.file.downloadUrl` before staging.** It is a presigned S3 URL that expires in minutes,
+and a published artifact is not a place to put a credential.
+
 ### (e) OPTIONAL — M365 client-request intake
 
 **Opportunistic by design: if M365 is not connected, SKIP THIS ENTIRE STEP SILENTLY.** No error, no
@@ -183,7 +191,7 @@ carries the provenance map.
     "<accountId>": {
       "snapshot": {}, "graph": {}, "exposure": {}, "covenants": {},
       "opportunities": {}, "signals": {},          // raw tool responses, VERBATIM
-      "boom": { "ratios": {}, "spread": {} },      // or null
+      "boom": { "ratios": {}, "spread": {} },      // the two Boom results VERBATIM, or null
       "verdict": "…",                              // agent-composed, live figures only
       "anchors": [ { "label": "…", "value": "…", "sub": "…", "dir": null } ],
       "activity": [ /* only from REAL sources — see below */ ],
@@ -226,6 +234,49 @@ hand; run `node client-360/render/skill-blocks.mjs` and the release gate checks 
 <!-- BEGIN GENERATED permitted-reason-codes (node client-360/render/skill-blocks.mjs) -->
 `COVENANT_BREACH` · `COVENANT_DUE` · `MATURITY_NEAR` · `MODIFICATION_CLUSTER` · `GUARANTOR_SIGNAL` · `RECENTLY_MODIFIED`
 <!-- END GENERATED permitted-reason-codes -->
+
+### The Boom payload (ONE shape, normalised by the assembler)
+
+Two consumers read `bundle.boom`: the Financials tab and the covenant challenge. They used to
+disagree about its shape, so whichever one you staged, the other silently rendered nothing. The
+assembler now normalises once (`client-360/render/boom-normalise.mjs`) and both read the result.
+The types are in `app/src/data/contract.ts`.
+
+**You stage the raw results. The assembler adds the display fields:**
+
+```jsonc
+"boom": {
+  "ratios": {
+    "revenue": 64486000, "ebitda": 5234000,   // DERIVED by the assembler from ratios.raw
+    "ebitdaMargin": 8.12,                     // PERCENT here; Boom's raw is the FRACTION 0.0812
+    "totalLeverage": 3.85, "interestCoverage": 2.64,
+    "asOf": "2025-12-31",                     // boom_get_ratios asOf, the period those ratios are for
+    "raw": { /* boom_get_ratios `raw`, VERBATIM */ }
+  },
+  "spread": {
+    "sourceFile": "…xlsx",                    // DERIVED from file.fileName
+    "periods":   [ { "period": "FY2025", "revenue": 64486000, "ebitda": 5234000, "margin": 8.1 } ],
+    "lineItems": [ { "line": "Revenue", "ltm": 64486000, "priorFy": 59915000 } ],
+    "file": { /* boom_get_spread `file`, VERBATIM, minus downloadUrl */ }
+  },
+  "note": "Source: Boom spreading …"
+}
+```
+
+- **The raw payloads are the source of truth.** The covenant challenge recomputes from
+  `spread.file.financialStatements[]` and never from the display fields.
+- **Periods key on `periods[].endDate`, not on the period id.** Boom keys `periodValues` by a period
+  UUID; the statement's own `periods[]` is the only place that id is tied to a date.
+- **PRIOR-YEAR EBITDA IS NULL, NEVER DERIVED.** Boom's accountCode chart carries no depreciation and
+  amortisation line at all, so an EBITDA exists for exactly one period, the one `ratios.asOf` names.
+  A prior year computed from operating profit alone would print an understated figure as though the
+  spread contained it. The tab renders the gap.
+- **Expense lines arrive negative** (`interest_expense: -1076000`). The challenge takes them
+  absolute; anything you read by hand should too.
+- **A covenant Boom cannot support stays `not-computable`,** and the note names every accountCode
+  that was tried. Piedmont's DSC and Fixed Asset Purchases sit there today: Boom emits no CPLTD line
+  (`st_loans_payable_bank` is "Line of Credit AND Current Portion of Long-Term Debt", not CPLTD) and
+  no capex accountCode. Never substitute a lookalike code to make a number appear.
 
 ### Obtaining `meta.userId`
 
@@ -403,6 +454,19 @@ lane never subscribes, and every governed action is refused before it reaches th
 the page says "the publisher forgot the manifest", so a missing grant looks exactly like a broken
 cockpit. If a banker reports the cockpit is offline, check the publish call's `capabilities` first.
 
+**What the manifest asks of the banker.** Opening a cockpit published with it raises **two consent
+prompts, once each**: one for the connectors (Customer 360, IDB Gateway, Microsoft 365, listed
+together) and one for the database that holds the intent store. Answer both and the room is online;
+answer neither and it reads offline exactly as it does with no manifest at all.
+
+**The grant is PER VIEWER.** Your consent is not the next banker's. Whoever opens the URL is asked
+themselves, and the page then calls the org as **them**, with their permissions and their Salesforce
+identity, which is the point: nothing in the page holds a shared credential.
+
+**A page carrying an mcp grant cannot be shared publicly.** It stays organization-internal, by the
+host's rule and not by ours. Never offer a public link to a cockpit, and never promise a client or
+anyone outside the org a look at one: the link will simply not open for them.
+
 **Updates are full-replace only:** rebuild the whole `C360_DATA`, re-run the assembler to a fresh
 `--out`, and `update_artifact` by file path. Never edit rendered HTML or inject JSON by hand.
 
@@ -547,7 +611,7 @@ a decision is the banker's).
    "add Elena Hartwell as limited guarantor on the 8M equipment loan", "add a 1% origination fee to LOC".
    Never invent a figure the source did not state; leave it out and the room will ask.
 3. Pick the room and route. facility: modify | renew | create. relationship: annual | covenant |
-   valuation | rating | service.
+   valuation | rating | service | intake. A route the room does not bind refuses the whole document.
 4. **Resolve the target artifact FIRST.** An intent is written to one specific published cockpit,
    and writing it to the wrong one is a silent no-op: the banker's room never whispers.
    - **If this session published a cockpit**, the target is the URL **the Artifact tool returned on
@@ -567,3 +631,31 @@ a decision is the banker's).
 6. Tell the banker in one line what was written and that the cockpit will whisper it. The cockpit
    moves status to opened, then done after Execute; read it back with read_db when asked.
 Contract and worked example: design/proposals/intent-handoff-addendum.md.
+
+### The intent shape, as the page validates it
+
+Verified against `app/src/intent/contract.ts` (`readIntentDoc`). **Collection `intents`**, document
+id free-form and treated as opaque (the convention above is ours, not a rule).
+
+| Field | Rule the page enforces |
+|---|---|
+| `accountId` | REQUIRED, `^001` plus alphanumerics, 15 to 18 characters total |
+| `accountName` | REQUIRED, non-empty, clipped to 200 characters |
+| `room` | REQUIRED, `facility` or `relationship` |
+| `route` | REQUIRED, and it must belong to the room: facility binds `modify` / `renew` / `create`, relationship binds `annual` / `covenant` / `valuation` / `rating` / `service` / `intake` |
+| `lines[]` | REQUIRED, at least one usable string. At most **12** are kept, each clipped to **400** characters; a non-string entry is dropped |
+| `context.summary` | optional, clipped to **600** characters |
+| `context.source.kind` | `email`, `chat` or `meeting`. Anything else, or absent, reads as `chat` |
+| `context.source.id` / `.subject` / `.from` / `.received` | optional, each clipped to 200 characters |
+| `createdAt` | ISO instant, clipped to 200 characters |
+| `status` | `pending`, `opened` or `done`. Anything else reads as `pending` |
+| `productPackageId` | OPTIONAL, 15 to 18 alphanumerics. It answers the "which package?" question the room would otherwise ask; a value of another shape is ignored, and an id naming no package on the relationship binds nothing |
+
+**Clipping never refuses; a missing or malformed REQUIRED field refuses the whole document, silently
+and totally.** There is no half-read intent and no error surfaced to the banker: the cockpit simply
+behaves as though the collection were empty. So an intent that never whispers is usually an
+`accountId`, a `room`/`route` pairing or an empty `lines[]`, not a broken page.
+
+**The page writes back**, to the same document: `status` (`pending` to `opened` when the room opens
+it, to `done` after Execute), `openedAt` (an ISO instant) and `openedBy` (the viewer's display name,
+or "the signed-in banker" when the page has no name for them). Never author those three yourself.
