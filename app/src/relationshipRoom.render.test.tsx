@@ -330,6 +330,80 @@ describe("the neutral six-way", () => {
     expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(6);
   });
 
+  /* A FIELD EXAM IS NOT ONE OF THE FIVE. No route word matches "field exam",
+     "collateral audit" or "inventory count", so every one of them fell to the
+     five-way: a list of reviews read back at a banker who asked for a person to
+     go and count the inventory. One sentence and the two chips that apply. */
+  const EXAM_ASKS = [
+    "can we get a field exam scheduled on the borrowing base",
+    "field audit",
+    "collateral audit",
+    "AR audit",
+    "inventory count",
+  ];
+
+  for (const ask of EXAM_ASKS) {
+    it(`answers "${ask}" with the honesty line and never the menu`, async () => {
+      const { room, bound } = open({ question: neutralRelAsk() });
+      await type(room, ask);
+      // It does NOT bind. The chips do, and only on a tap.
+      expect(bound).toEqual([]);
+      expect(document.body.textContent).toContain("A field exam is not something this room files.");
+      expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+      expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(2);
+      expect(byText(/Service request: field exam/)).toBeTruthy();
+      expect(byText(/^Covenant review$/)).toBeTruthy();
+    });
+  }
+
+  it("binds the service route WITH the banker's own line, so the exam ask is the subject", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "can we get a field exam scheduled on the borrowing base");
+    click(byText(/Service request: field exam/));
+    expect(bound).toEqual([
+      { route: "service", opts: { covenantId: null, say: "can we get a field exam scheduled on the borrowing base" } },
+    ]);
+  });
+
+  it("binds the covenant review on the other chip, on the borrowing base the exam would feed", async () => {
+    const { room, bound } = open({ question: neutralRelAsk() });
+    await type(room, "field audit");
+    click(byText(/^Covenant review$/));
+    expect(bound).toEqual([{ route: "covenant", opts: { covenantId: null, say: undefined } }]);
+  });
+
+  it("keeps that chip VISIBLE and disabled where no covenant carries a compliance row", async () => {
+    const { room, bound } = open({
+      question: neutralRelAsk(),
+      // The same covenant, with neither compliance signal. A covenant review
+      // on this relationship could only end in a refusal, and the chip says so.
+      bundle: { covenants: { covenants: [{ covenantId: "cov1", covenantType: "Debt Service Coverage" }] } } as never,
+    });
+    await type(room, "collateral audit");
+    const chip = byText(/^Covenant review/)!;
+    expect(chip.hasAttribute("disabled")).toBe(true);
+    expect(chip.textContent).toContain("carries an open test period, so there is nothing to assess");
+    click(chip);
+    expect(bound).toEqual([]);
+  });
+
+  it("leaves the five routes exactly where they were", async () => {
+    for (const [line, route] of [
+      ["collateral valuation", "valuation"],
+      ["run the covenant review", "covenant"],
+      ["annual review", "annual"],
+      ["risk rating", "rating"],
+      ["raise a service request", "service"],
+    ] as const) {
+      const { room, bound } = open({ question: neutralRelAsk() });
+      await type(room, line);
+      expect(bound, line).toEqual([{ route, opts: { say: line } }]);
+      expect(document.body.textContent, line).not.toContain("A field exam is not something this room files.");
+      act(() => root?.unmount());
+      container?.remove();
+    }
+  });
+
   it("keeps an unavailable route VISIBLE and disabled, with the registry's own reason", () => {
     const empty = { borrowers: { "001X": {} }, borrower: {}, portfolio: { accounts: [] }, meta: {} } as unknown as C360Data;
     const question = neutralRelAsk({ data: empty, accountId: "001X" });

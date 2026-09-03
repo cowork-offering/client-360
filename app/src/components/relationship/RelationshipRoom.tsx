@@ -41,6 +41,7 @@ import { subjectFor } from "../../channel/narrate";
 import { ManifestRail } from "../rail/ManifestRail";
 import { REL_ROUTE_WORDS, buildRelEnvelope } from "./relBrain";
 import { NO_COMPLIANCE_ROW_CHIP, relBookFor, type RelBook } from "./relBook";
+import { COVENANT_REVIEW, FIELD_EXAM_OFFER, STAGE_A_FIELD_EXAM, asksForFieldExam } from "./fieldExam";
 import { buildRelReadCard, readRelTopic, relReadGap } from "./relReads";
 import { useClientMail } from "../workroom/clientMail";
 import { useRoomFeed } from "../../intent/feed";
@@ -1318,6 +1319,28 @@ export function RelationshipRoom({
           setItems((prev) => [...prev, { kind: "agent", id: nextId("agent"), step: mine, text: FACILITY_HANDOFF }]);
           return;
         }
+        /* A FIELD EXAM IS NOT ONE OF THE FIVE, AND SAYING SO BEATS THE MENU.
+           No route word matches "field exam", "collateral audit" or "inventory
+           count", so all of them fell to the five-way. One sentence and the two
+           chips that actually apply; the service chip carries the banker's own
+           line through as the case subject, exactly as the client request one
+           does. The covenant chip is disabled with the book's own reason where
+           this relationship carries no compliance row to assess. */
+        if (!preCard && !preRelTopic && asksForFieldExam(text)) {
+          setAsk({
+            line: FIELD_EXAM_OFFER,
+            chips: [
+              { label: STAGE_A_FIELD_EXAM, route: "service", say: text },
+              {
+                label: COVENANT_REVIEW,
+                route: "covenant",
+                disabled: book.noComplianceRows,
+                reason: book.noComplianceRows ? NO_COMPLIANCE_ROW_CHIP : undefined,
+              },
+            ],
+          });
+          return;
+        }
         /* THE CLIENT ASKED FOR SOMETHING, AND NAMED NO REVIEW. One line and one
            chip, rather than the five-way read back at a banker who is plainly
            running none of the four reviews. It does not bind: the chip does,
@@ -1528,7 +1551,7 @@ export function RelationshipRoom({
       setItems((prev) => [...prev, relBankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
       await runRelBrain(text, mine, { degrade: () => unreadable(live) });
     },
-    [answerLive, ask, awake, brain, ctx, live, order.length, reads, route, routeBlock, router, runRelBrain, step, unreadable],
+    [answerLive, ask, awake, book, brain, ctx, live, order.length, reads, route, routeBlock, router, runRelBrain, step, unreadable],
   );
 
   /** THE QUESTION IS ANSWERED BY A CHIP. "Something else" answers nothing: it

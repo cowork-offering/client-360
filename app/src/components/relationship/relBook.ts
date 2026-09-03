@@ -1,3 +1,4 @@
+import { assetValuation, valuationLine, valuationsOf } from "../../data/collateralValuation";
 import type { Collateral, Covenant } from "../../data/contract";
 import { fmtCovThreshold, fmtCovVal } from "../../data/finance";
 import { fmtMoney } from "../../data/format";
@@ -20,17 +21,19 @@ import { collateralLabel, covenantLabel, reviewableCovenants, valuableCollateral
    not one of them is answered on the banker's behalf. A governance record filed
    under a default nobody chose is the failure this whole room exists to avoid.
 
-   EVERY ABSENCE IS HONEST AND NAMED. Two things a banker would expect here are
-   deliberately missing because the READ DOES NOT CARRY THEM, not because they
-   were forgotten:
+   VALUATION DATES ARE NOW CARRIED, AND STILL ONLY WHERE THE READ HOLDS THEM.
+   The bundle stages the latest `LLC_BI__Collateral_Valuation__c` row per asset
+   (date, basis, source, cycle, next due), so `lastValued` is a date on an asset
+   the read holds one for and the book can say when a figure is due again. An
+   asset the read stages no valuation for still says so BY NAME: absent is "the
+   read does not carry it", never "never valued". Every string below comes from
+   `data/collateralValuation.ts`, which the collateral card and the envelope
+   also print through, so no two surfaces can date one asset differently.
 
-     - VALUATION DATES. `Customer360Exposure` returns collateralId, name,
-       description, amountPledged, lendable value and advanceRateSource, and no
-       dates at all. So `lastValued` is null on every asset and the room says
-       nothing about staleness. Surfacing LLC_BI__Valuation_Date__c and
-       LLC_BI__Next_Revaluation_Due_Date__c is a read-side change on an existing
-       tool; until it lands, "33 days past its revaluation date" is not sayable
-       and must not be said.
+   EVERY ABSENCE IS HONEST AND NAMED. One thing a banker would expect here is
+   deliberately missing because the READ DOES NOT CARRY IT, not because it was
+   forgotten:
+
      - REVIEWS ALREADY FILED. No read on this cockpit carries
        `LLC_BI__Review__c`, so `reviews.carried` is false and the annual route
        says it CANNOT see whether one is already open rather than implying there
@@ -74,8 +77,14 @@ export interface BookAsset {
   lendable: string | null;
   value: string | null;
   advanceRateSource: string | null;
-  /** NULL ON EVERY ASSET TODAY. The read carries no valuation date. */
-  lastValued: null;
+  /** The last valuation date as the glass prints dates, or null where the read
+   *  stages no valuation on this asset. Was `null` on every asset until the
+   *  bundle started carrying the valuation read. */
+  lastValued: string | null;
+  /** The whole clock as one line: when it was struck, on what basis, and when
+   *  it falls due. The card, the chooser and the envelope all print THIS, so no
+   *  two surfaces can date one asset differently. */
+  valuation: string;
 }
 
 export interface RelBook {
@@ -158,6 +167,7 @@ export function relBookFor(ctx: RelContext): RelBook {
     };
   });
 
+  const valuations = valuationsOf(ctx.bundle);
   const assets: BookAsset[] = valuableCollateral(ctx).map((c: Collateral) => ({
     collateralId: c.collateralId as string,
     name: collateralLabel(c),
@@ -165,7 +175,8 @@ export function relBookFor(ctx: RelContext): RelBook {
     lendable: typeof c.currentLendableValue === "number" ? fmtMoney(c.currentLendableValue) : null,
     value: typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null,
     advanceRateSource: c.advanceRateSource ?? null,
-    lastValued: null,
+    lastValued: assetValuation(c, valuations).lastValued,
+    valuation: valuationLine(c, valuations),
   }));
 
   const grade = ctx.bundle?.snapshot?.primaryRiskRating;

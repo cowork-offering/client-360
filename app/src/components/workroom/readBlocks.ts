@@ -1,4 +1,5 @@
 import type { BrainReadBlocks, BrainTurn } from "../../channel/brainLane";
+import { valuationLine, valuationsOf } from "../../data/collateralValuation";
 import type { Facility } from "../../data/contract";
 import { facilityProduct } from "../../data/facilityStage";
 import { fmtCovThreshold, fmtCovVal } from "../../data/finance";
@@ -146,6 +147,7 @@ function involvementBlock(src: ReadSource): BrainReadBlocks["involvements"] {
 function collateralBlock(src: ReadSource): BrainReadBlocks["collateral"] {
   const rows: NonNullable<BrainReadBlocks["collateral"]> = [];
   const facilities = scoped(src);
+  const valuations = valuationsOf(src.bundle);
   for (const f of facilities) {
     const scope = nameOf(f, src.accountName, facilities);
     for (const c of f.collateral ?? []) {
@@ -156,6 +158,7 @@ function collateralBlock(src: ReadSource): BrainReadBlocks["collateral"] {
         pledged: typeof c.amountPledged === "number" ? fmtMoney(c.amountPledged) : undefined,
         lendable: typeof c.currentLendableValue === "number" ? fmtMoney(c.currentLendableValue) : undefined,
         scope,
+        valuation: valuationLine(c, valuations),
       });
     }
   }

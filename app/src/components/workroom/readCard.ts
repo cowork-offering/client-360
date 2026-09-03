@@ -1,3 +1,4 @@
+import { assetValuation, valuationLine, valuationsOf } from "../../data/collateralValuation";
 import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
 import { facilityProduct, shortFacilityName } from "../../data/facilityStage";
 import { fmtDate, fmtMoney, fmtPct } from "../../data/format";
@@ -269,6 +270,7 @@ function covenantsCard(src: ReadSource): ReadCardModel | null {
 
 function collateralCard(src: ReadSource): ReadCardModel | null {
   const facilities = scoped(src);
+  const valuations = valuationsOf(src.bundle);
   const groups: ReadGroup[] = [];
   let counted = 0;
   for (const f of facilities) {
@@ -281,9 +283,17 @@ function collateralCard(src: ReadSource): ReadCardModel | null {
         typeof c.advanceRate === "number" ? `${c.advanceRate}% advance` : null,
         c.lienPosition ? `lien ${c.lienPosition}` : null,
         c.pledgedStatus,
+        /* WHEN IT WAS LAST VALUED AND WHEN IT IS DUE AGAIN. A pledge figure
+           with no clock beside it reads the same whether the number was struck
+           last month or two years ago, and those are a different credit. */
+        valuationLine(c, valuations),
       ]
         .filter(Boolean)
         .join(" · "),
+      /* THE QUIET TONE, NOT THE LOUD ONE. A revaluation past its date is a
+         housekeeping fact on a performing asset, not a bad debt: status lives
+         in the ink and the ink here is a warning, never an alarm. */
+      tone: assetValuation(c, valuations).overdue ? "warn" : undefined,
     }));
     if (rows.length) {
       counted += rows.length;
