@@ -175,7 +175,12 @@ describe("the sweep", () => {
       // 900ms after that, so read it inside that window.
       await vi.advanceTimersByTimeAsync(4_500);
     });
-    expect(document.querySelector('[role="status"]')?.textContent).toContain("Everything current, nothing new.");
+    const status = document.querySelector('[role="status"]')?.textContent ?? "";
+    expect(status).toContain("Everything current, nothing new.");
+    /* REACHABILITY LEADS THE SUMMARY. "Everything current" on its own was read
+       as an all-clear even when a line had quietly failed, which is how a
+       transient covenant read came to look like a failing covenant position. */
+    expect(status).toContain("Reachable, 9 lines refreshed.");
   });
 
   it("keeps the workspace when a read fails", async () => {

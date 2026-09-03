@@ -1,9 +1,8 @@
 import { useApp } from "../state/appState";
-import { fmtMoney, fmtPct } from "../data/format";
+import { fmtClock, fmtMoney, fmtPct, fmtRelative } from "../data/format";
 import { useCountUp } from "../data/motion";
 import { mcpAvailable } from "../channel/mcp";
 import { useLivePortfolio } from "../channel/useLivePortfolio";
-import { fmtRelative } from "../data/format";
 
 /* =============================================================================
    THE KPI BAND — the landing's second beat.
@@ -122,13 +121,36 @@ export function KpiBand() {
       ))}
       {(live.storedAt != null || live.failure) && (
         <div className="kpi-live">
-          {live.storedAt != null && (
+          {live.storedAt != null && !live.failure && (
             <span style={{ color: "var(--ink-faint)" }}>
               Live book data as of {fmtRelative(new Date(live.storedAt).toISOString(), data.meta?.generatedAt ?? "")}
             </span>
           )}
           {live.failure && (
-            <span style={{ color: live.failure.retract ? "var(--critical)" : "var(--warning)" }}>{live.failure.fix}</span>
+            <span style={{ color: live.failure.retract ? "var(--critical)" : "var(--warning)" }}>
+              {live.failure.fix}
+              {/* Freshness comes off the served result's cache stamp, never a
+                  clock read here: it says when the figures on screen were true,
+                  which is the one thing a stale band has to be honest about. */}
+              {live.storedAt != null && (
+                <span style={{ color: "var(--ink-faint)" }}> Last good data, {fmtClock(new Date(live.storedAt).toISOString())}.</span>
+              )}
+            </span>
+          )}
+          {live.failure && live.retry && (
+            /* QUIET, and a real gesture: the watch is torn down and registered
+               again, which is the only recovery for a registration that failed
+               outright. The banner itself clears on the next good event, not on
+               the click. */
+            <button
+              type="button"
+              onClick={live.retry}
+              disabled={live.retrying}
+              className="c360-press rounded-[6px] border border-border px-2 py-[2px] text-[11px] font-semibold disabled:opacity-50"
+              style={{ color: "var(--ink-muted)" }}
+            >
+              {live.retrying ? "Retrying…" : "Retry"}
+            </button>
           )}
         </div>
       )}
