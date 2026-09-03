@@ -55,7 +55,7 @@ export function ReferenceCitation({ reference }: { reference?: ActivityEntry["re
    modification tab, not our workroom. I need it sleek and elegant.")
 
    ONE COMPACT ROW. The subject, who sent it, when, and the ask in one line.
-   THE BODY IS NOT IN THE DEFAULT DOM AT ALL — it arrives on one click and
+   THE BODY IS NOT IN THE DEFAULT DOM AT ALL. It arrives on one click and
    leaves on the next, which is the difference between a trail and an inbox.
 
    ONE QUIET ACTION, and it opens OUR facility workroom on this message (rule

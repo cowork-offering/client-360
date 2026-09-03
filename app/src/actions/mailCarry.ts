@@ -12,7 +12,7 @@ import type { BrainMail } from "../channel/brainLane";
    bundle and off the mailbox, and picks the richer of the two. Neither of those
    knows WHICH message the banker just clicked. A relationship carrying three
    open messages would open the room on whichever the sweep landed first, which
-   is the room talking past the banker — the same failure the intent handoff
+   is the room talking past the banker, which is the failure the intent handoff
    fixed for a carried-in instruction.
 
    IT CARRIES A NOTE, NEVER A FIGURE. What is stored is the same `BrainMail`

@@ -149,8 +149,8 @@ describe("A30.1/A30.2 — Activity tab", () => {
     mount();
     click(openRow("Sterling Fabrication"));
     /* The kind chip is gone from a MESSAGE row: the row is already unlike every
-       other entry on the trail — it carries the sender, the ask on one line and
-       the room's own pill — and a chip on top of that is the pill soup the
+       other entry on the trail: it carries the sender, the ask on one line and
+       the room's own pill, and a chip on top of that is the pill soup the
        trail bans. Every other kind is untouched. */
     const row = document.querySelector("[data-mail-row]")!;
     expect(row).toBeTruthy();
@@ -176,7 +176,7 @@ describe("A30.3 — detail popup", () => {
      pop up still opens up the old loan modification tab, not our workroom").
      It is a compact row whose one action is the facility workroom. The popup,
      and the registry next steps it ends in, are unchanged on every entry that
-     is not a client message — which is what these tests now drive. */
+     is not a client message, which is what these tests now drive. */
   function openSterlingAnalysis() {
     mount();
     click(openRow("Sterling Fabrication"));

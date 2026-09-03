@@ -319,7 +319,7 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
     requests = matched.map((m) => {
       // NO NEXT STEP IS HUNG OFF AN INBOUND MESSAGE (founder, 2026-09-03). It
       // used to carry one, pointing at the registry's `loan-modification`
-      // action, which is the PRE-WORKROOM action panel — so an arriving mail
+      // action, which is the PRE-WORKROOM action panel, so an arriving mail
       // opened the old tab from three surfaces at once (the popup, the chat
       // chips and the actions panel all read `detail.nextSteps`). The trail row
       // opens the facility workroom on the message instead; see

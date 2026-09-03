@@ -24,14 +24,14 @@ import { readMailRequest, type MailRequest, type RequestIntent } from "./mailInt
    REGISTRY's `loan-modification` action, which is the pre-workroom action tab.
    So an arriving message read as a paragraph and opened the old panel.
 
-   WHAT THIS MODULE IS. The read behind ONE compact row — sender, subject, the
-   ask in one line, the time — and the gesture that opens the facility workroom
+   WHAT THIS MODULE IS. The read behind ONE compact row (sender, subject, the
+   ask in one line, the time) and the gesture that opens the facility workroom
    on that message. Nothing here renders and nothing here writes.
 
    THE ASK IS DERIVED THE WAY THE GREETING DERIVES IT, and from the same
    function: `readMailRequest` is the cockpit's one mail reader for a request,
    and this is a second consumer of it, never a second parser. A FIGURE THE MAIL
-   DID NOT STATE IS NEVER PRINTED — not even the book's own commitment, which
+   DID NOT STATE IS NEVER PRINTED, not even the book's own commitment, which
    `describeRequest` is allowed to fall back to because it renders under a
    suggestion card that says whose number it is. On a trail row there is no such
    frame, so only the client's own figures are shown.
@@ -139,7 +139,7 @@ export function readMailRow(entry: ActivityEntry, bundle: BorrowerBundle | null)
 /**
  * The message as the greeting's own mail block.
  *
- * `source: "swept"` is the honest label — this message came off a sync sweep
+ * `source: "swept"` is the honest label. This message came off a sync sweep
  * and is on the bundle. The block is byte-compatible with what
  * `mailNoteFromBundle` produces; what it adds is WHICH message, so a
  * relationship carrying several opens the room on the one the banker clicked.
@@ -235,7 +235,7 @@ export function openMailRoom(args: {
 
    The sweep is the only way mail enters this cockpit, so the arrival is a
    gesture the banker already made. What it earns is one line in the corner
-   offering the room — the same glass, the same chips and the same manners as
+   offering the room: the same glass, the same chips and the same manners as
    the intent whisper, because it is the same kind of fact: something someone
    said, waiting to become work.                                             */
 

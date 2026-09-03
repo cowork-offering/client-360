@@ -72,7 +72,7 @@ const openRow = (name: string) =>
  * THE CONNECTOR, ANSWERING ONE TOOL.
  *
  * The mailbox answers; every other read THROWS, which is the sweep's own
- * partial path — the section keeps its last-good value. That matters here: a
+ * partial path: the section keeps its last-good value. That matters here, a
  * detail tool answering an empty envelope would blank `exposure`, and the ask
  * is derived against the facilities the book holds.
  */
