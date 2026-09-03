@@ -17,6 +17,14 @@ full artifact replace.
 
 ---
 
+## PREREQUISITE, before STEP 0: the viewer's connectors, by exact name
+
+The rendered page calls the viewer's own claude.ai connectors by display name: `Customer 360`,
+`IDB Gateway`, `Microsoft 365`. If the viewer's Customer 360 connector carries any other name,
+the page reports offline and every sync line fails even though this session's tools work. When
+the badge says offline or the sync reports every line unreachable, ask the viewer to check the
+connector's name under claude.ai Settings > Connectors before anything else.
+
 ## STEP 0 — WAIT for the Customer360 server (before anything else)
 
 MCP servers connect lazily; at session start `customer360` often shows "still connecting". You MUST:
