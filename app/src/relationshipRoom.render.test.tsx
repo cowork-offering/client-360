@@ -627,6 +627,42 @@ describe("the plan, the token and the dossier", () => {
     expect(room.querySelector(".wk-flowcard")).toBeNull();
   });
 
+  /* ============ THE FILED FINALE, IN THE SECOND ROOM (founder, 2026-09-03)
+
+     One grammar with the facility room: the review's answers and the steps that
+     collected them leave the stage, the card is the only thing left in a centred
+     pane, the rail says one line, and the afterglow offers the ONE door this
+     room has. Its dossier files against the relationship rather than a package
+     record and carries no href, so there is no nCino link and none is invented. */
+  it("cleans the room up around the card once the review is filed", async () => {
+    const { room } = await driveAnnual();
+    const before = room.querySelectorAll("[data-ex-id]").length;
+    click(room.querySelector(".wk-propose")!);
+    await settle();
+    click(byText(/File the review/));
+    await settle();
+
+    const left = [...room.querySelectorAll("[data-ex-id]:not([data-finale])")];
+    expect(left).toHaveLength(1);
+    expect(left[0].querySelector(".wk-rescard")).toBeTruthy();
+    expect(room.querySelectorAll('[data-ex-id][data-finale="gone"]').length).toBe(before);
+    expect(room.querySelector(".wk-thread")!.getAttribute("data-finale")).toBe("still");
+    expect(room.querySelector(".wk-rescard")!.closest("[data-finale-card]")).toBeTruthy();
+
+    // The rail says one line and its answers go off stage, still mounted.
+    expect(room.querySelector('[data-rail="filed"]')!.textContent).toContain("Filed · 4 answers");
+    const answers = [...room.querySelectorAll(".wk-ent")];
+    expect(answers).toHaveLength(4);
+    for (const answer of answers) expect(answer.getAttribute("data-finale")).toBe("gone");
+
+    // One line, one door, and no link where there is no record to link to.
+    const after = room.querySelector(".wk-afterglow")!;
+    expect(after.textContent).toContain("The review is closed");
+    expect(after.querySelector("a")).toBeNull();
+    expect([...after.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Close the room"]);
+    expect(room.querySelector<HTMLInputElement>(".wk-txt")!.placeholder).toBe("Anything else on this relationship?");
+  });
+
   it("gives no connector a surface of its own, and burns no token getting there", async () => {
     const execute = vi.fn();
     const { room } = await driveAnnual(depsFor({ available: () => false, execute }));
