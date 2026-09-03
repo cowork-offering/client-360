@@ -161,7 +161,13 @@ export function orgValues(catalog: OrgCatalog | null | undefined, key: CatalogKe
 export function orgAccepted(catalog: OrgCatalog | null | undefined, key: CatalogKey): string[] {
   const entry = catalogField(catalog, key);
   if (!entry) return [];
-  return entry.acceptedValues.length ? entry.acceptedValues : entry.values.map((v) => v.label);
+  if (!entry.acceptedValues.length) return entry.values.map((v) => v.label);
+  /* A lookup-backed field keeps its accepted list as record IDS (the catalog
+     read says so on its note); the room speaks labels, so each accepted entry
+     resolves through the value list. Founder, 2026-09-03: eight chips rendered
+     as a33... ids on the intake's asset question. */
+  const byId = new Map(entry.values.map((v) => [v.value, v.label] as const));
+  return entry.acceptedValues.map((a) => byId.get(a) ?? a);
 }
 
 /** The values the org offers that the write path will REFUSE. Named rather than
@@ -169,8 +175,10 @@ export function orgAccepted(catalog: OrgCatalog | null | undefined, key: Catalog
 export function orgRefused(catalog: OrgCatalog | null | undefined, key: CatalogKey): string[] {
   const entry = catalogField(catalog, key);
   if (!entry || !entry.acceptedValues.length) return [];
+  /* Accepted entries can be ids (lookup catalogs) or labels; a value is refused
+     only when neither its id nor its label is on the list. */
   const ok = new Set(entry.acceptedValues);
-  return entry.values.map((v) => v.label).filter((label) => !ok.has(label));
+  return entry.values.filter((v) => !ok.has(v.value) && !ok.has(v.label)).map((v) => v.label);
 }
 
 /**
