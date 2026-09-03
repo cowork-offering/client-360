@@ -54,3 +54,15 @@
   color: var(--ink-muted);
   padding-bottom: 2px;
 }
+
+/* The ask lists several packages as cards; they breathe more than the peek
+   does (founder, 2026-09-03: "the cards too tight to each other"). */
+.wk-pkgask {
+  gap: 14px;
+}
+.wk-pkgask .wk-pkgask-h {
+  padding-bottom: 6px;
+}
+.wk-pkgask .wk-pkg {
+  padding: 14px 16px;
+}
