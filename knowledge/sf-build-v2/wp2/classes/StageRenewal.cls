@@ -38,6 +38,12 @@
  * ONE plan, ONE plan hash and ONE decision token, carrying N per-facility typed steps. The selection
  * contract lives in C360Facilities, shared with stage_loan_modification so the two cannot drift.
  *
+ * NET-NEW FACILITIES (founder, 2026-09-03: "Do we allow new loans to be created as part of the
+ * modification and renewal? This should be fully possible."). The renewal takes `newFacilitiesJson`
+ * on the same shape the modification does, validated by C360NewFacilities so the two cannot drift,
+ * and NARRATES it: execution of a renewal is held, so the facilities are planned, hashed and
+ * confirmed rather than filed. The modification is the route that executes one today.
+ *
  * INPUT SHAPE AND THE required=true TRAP (lesson 16aa). `required=true` on an @InvocableVariable is
  * enforced by the REST Actions API BEFORE Apex runs, and NO Apex unit test can see it, because a
  * direct test invocation constructs the Request itself. A tool that grows an alternative input shape
@@ -66,6 +72,8 @@ global with sharing class StageRenewal {
         global Date newMaturityDate;
         @InvocableVariable(label='Requested Rate' description='Optional repricing.')
         global Decimal requestedRate;
+        @InvocableVariable(label='New Facilities JSON' description='Optional. NET-NEW FACILITIES filed on the NEW package version this renewal creates: [{"label"? ("new:1", defaulted by position), "product" (an exact Commercial Loan record-type product: Construction, Deposit, Equipment, HELOC, Line of Credit, Purchase), "amount", "termMonths", "purpose", "amortizedTermMonths"?, "firstPaymentDate"? (YYYY-MM-DD)}]. A renewal versions the whole package, and new money on the version being approved is ordinary nCino practice. EXECUTION OF A RENEWAL IS HELD, so this plan NARRATES the facilities rather than filing them: the shape is validated against the org here so a future execute wave inherits a plan it can honour rather than a story it has to contradict.')
+        global String newFacilitiesJson;
     }
 
     global class PlanStep {
@@ -145,6 +153,10 @@ global with sharing class StageRenewal {
         global List<PlannedFacility> facilities;
         @InvocableVariable(label='Facility Count')
         global Integer facilityCount;
+        @InvocableVariable(label='New Facility Count' description='Net-new facilities this plan would file on the new package version. Zero is the ordinary answer.')
+        global Integer newFacilityCount;
+        @InvocableVariable(label='New Facility Labels' description='The labels the plan names them by, in the order they were sent.')
+        global List<String> newFacilityLabels;
         @InvocableVariable(label='Replayed')
         global Boolean replayed;
     }
@@ -166,7 +178,7 @@ global with sharing class StageRenewal {
      */
     @InvocableMethod(
         label='stage_renewal'
-        description='Validate a package-anchored facility renewal and return an immutable execution plan with a plan hash. Takes either the single loanId or facilityIds, the member facilities of the package, never both. Writes nothing. Execution is HELD in this wave: a credit action requires a Booked facility, and Booked is unreachable through the API because nCino requires a human Submit for Approval.'
+        description='Validate a package-anchored facility renewal and return an immutable execution plan with a plan hash. Takes either the single loanId or facilityIds, the member facilities of the package, never both. NET-NEW FACILITIES may ride the same request in newFacilitiesJson and are validated against the org\'s own product catalog, though a renewal NARRATES them rather than filing them. Writes nothing. Execution is HELD in this wave: a credit action requires a Booked facility, and Booked is unreachable through the API because nCino requires a human Submit for Approval.'
     )
     global static List<Response> stage(List<Request> requests) {
         List<Response> out = new List<Response>();
@@ -176,6 +188,9 @@ global with sharing class StageRenewal {
                 res.result = build(req);
                 res.ok = true;
             } catch (ToolException e) {
+                res.ok = false;
+                res.error = err('VALIDATION_FAILED', e.getMessage(), null, req.idempotencyKey);
+            } catch (C360NewFacilities.NewFacilityException e) {
                 res.ok = false;
                 res.error = err('VALIDATION_FAILED', e.getMessage(), null, req.idempotencyKey);
             } catch (C360Facilities.SelectionException e) {
@@ -213,6 +228,11 @@ global with sharing class StageRenewal {
         List<LLC_BI__Loan__c> facilities =
             C360Facilities.validate(readFacilities(selected), selected, packageId, 'Renewals');
         Map<Id, Integer> carryoverByFacility = C360Facilities.covenantCarryover(selected);
+        // NET-NEW FACILITIES ON THE NEW VERSION (founder, 2026-09-03). Validated against the org's
+        // own product catalog here, exactly as the modification validates them, so the two routes
+        // cannot answer the same request differently.
+        List<C360NewFacilities.NewFacility> newFacilities =
+            C360NewFacilities.parse(req.newFacilitiesJson, 'renewal');
 
         // nCino package methodology (founder correction, 2026-08-30): a renewal never versions a
         // loan alone. The credit action rolls the WHOLE package: every eligible member is cloned
@@ -324,6 +344,13 @@ global with sharing class StageRenewal {
                 .onObject('LLC_BI__Loan_Covenant__c', new List<String>{ 'replicas retargeted at the clones, verified by count' })
                 .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
         );
+        for (Integer i = 0; i < newFacilities.size(); i++) {
+            C360NewFacilities.NewFacility nf = newFacilities[i];
+            C360NewFacilities.putResolved(resolved, i, nf);
+            steps.addAll(C360NewFacilities.steps(i, nf, 'the new package version'));
+        }
+        resolved.put('newFacilityCount', newFacilities.size());
+
         steps.add(
             new C360Plan.Step('observe_side_effects', C360Plan.TYPE_OBSERVED, 'A new Opportunity is auto-created on every renewal')
                 .wakes(new List<String>{ 'nCino renewal automation' })
@@ -357,6 +384,16 @@ global with sharing class StageRenewal {
                 : 'Each renewal auto-creates a new Opportunity, so this plan would produce ' + n + ' of them, and a renewal is effectively irreversible once run.'
         );
         warnings.add('LLC_BI__Renewal_Number__c must be set explicitly or left to the invocable. A blank number yields a facility named _Rnull and breaks core sync.');
+        warnings.addAll(C360NewFacilities.warnings(newFacilities, 'the new package version'));
+        if (!newFacilities.isEmpty()) {
+            warnings.add(
+                'EXECUTION IS HELD, so the ' + String.valueOf(newFacilities.size()) + ' net-new ' +
+                (newFacilities.size() == 1 ? 'facility above is' : 'facilities above are') +
+                ' PLANNED and not filed. The shape was validated against the org\'s own product catalog at stage time, ' +
+                'so the plan a future execute wave runs is the one confirmed here. To file a new facility today, run it ' +
+                'as a modification, which executes, or as its own new-facility action against the current package.'
+            );
+        }
         if (n > 1) {
             warnings.add(
                 'This is one plan over ' + n + ' facilities on the same package, under a single confirmation and a single decision token. ' +
@@ -386,6 +423,9 @@ global with sharing class StageRenewal {
             '; the rest carry unchanged' +
             (excludedNames.isEmpty() ? '. ' : ', and ' + String.join(excludedNames, ', ') + ' stays on the current version because it is not Booked/Open. ') +
             'The new maturity applies to the ' + (n == 1 ? 'clone' : 'clones') + ' only; every original loan and the current package stay untouched. ' +
+            (newFacilities.isEmpty() ? '' : String.valueOf(newFacilities.size()) + ' NET-NEW ' +
+                (newFacilities.size() == 1 ? 'facility is' : 'facilities are') + ' planned on the new version beside the clones: ' +
+                C360NewFacilities.labelList(newFacilities) + '. ') +
             'NOTHING IS WRITTEN AND NOTHING WILL BE: execution is held. ' + heldReason;
 
         String planJson = C360Plan.serializePlan(summary, steps, warnings, provenance, resolved);
@@ -410,6 +450,11 @@ global with sharing class StageRenewal {
         r.covenantCarryoverCount = carryover;
         r.facilities = planned;
         r.facilityCount = n;
+        r.newFacilityCount = newFacilities.size();
+        r.newFacilityLabels = new List<String>();
+        for (C360NewFacilities.NewFacility nf : newFacilities) {
+            r.newFacilityLabels.add(nf.label);
+        }
         r.steps = toWireSteps(steps);
         return r;
     }

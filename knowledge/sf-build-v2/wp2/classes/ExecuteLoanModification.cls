@@ -320,6 +320,34 @@ global with sharing class ExecuteLoanModification {
         global String verification;
     }
 
+    /** One net-new facility this run filed on the new package version. */
+    global class NewFacilityResult {
+        @InvocableVariable(label='Label' description='The label the plan named it by before it had an id: new:1, new:2.')
+        global String label;
+        @InvocableVariable(label='Loan Id')
+        global String loanId;
+        @InvocableVariable(label='Record Name' description='The name the ORG assigned. A before-save flow rebuilds it as Account - Product - Amount.')
+        global String recordName;
+        @InvocableVariable(label='Product')
+        global String product;
+        @InvocableVariable(label='Amount')
+        global Decimal amount;
+        @InvocableVariable(label='Term Months')
+        global Decimal termMonths;
+        @InvocableVariable(label='Stage')
+        global String stage;
+        @InvocableVariable(label='Product Package Id' description='The NEW package version, which is the whole point of filing it here.')
+        global String productPackageId;
+        @InvocableVariable(label='Involvement Id' description='The borrowing-structure row. A facility insert creates none on its own.')
+        global String involvementId;
+        @InvocableVariable(label='Primary Loan Purpose' description='What the plan carries for the Loan Detail nCino creates after this transaction.')
+        global String purpose;
+        @InvocableVariable(label='Purpose Written' description='True where the Loan Detail was already there and the purpose landed on it; false where it is still the org\'s own async transaction to create.')
+        global Boolean purposeWritten;
+        @InvocableVariable(label='Verification')
+        global String verification;
+    }
+
     /** One policy exception this run logged against a clone and the borrower. */
     global class PolicyExceptionResult {
         @InvocableVariable(label='Exception Id')
@@ -367,6 +395,8 @@ global with sharing class ExecuteLoanModification {
         global List<PledgeResult> pledges;
         @InvocableVariable(label='Policy Exceptions' description='One entry per policy exception this run logged against a clone and the borrower, each re-read after the write. A committed exception is also transmitted to the bank\'s external change-stream endpoint by the org\'s own PolicyExceptionCDC trigger.')
         global List<PolicyExceptionResult> policyExceptions;
+        @InvocableVariable(label='New Facilities' description='One entry per NET-NEW facility this run filed on the new package version, each re-read after the write with the name the org assigned it. Empty on every plan that adds none.')
+        global List<NewFacilityResult> newFacilities;
         @InvocableVariable(label='Terminal State' description='success, partial or failed.')
         global String terminalState;
         @InvocableVariable(label='Steps')
@@ -404,7 +434,7 @@ global with sharing class ExecuteLoanModification {
      */
     @InvocableMethod(
         label='execute_loan_modification'
-        description='Execute a plan staged by stage_loan_modification, behind the single-use decision token. Invokes nCino\'s credit action as a PACKAGE VERSIONING move: all eligible members roll into a new package, the staged changes land on the selected clones only, and every original loan and the current package stay untouched. Verifies the new package, each clone and its chain junction row by re-query. Booking the new version still requires nCino\'s Submit for Approval.'
+        description='Execute a plan staged by stage_loan_modification, behind the single-use decision token. Invokes nCino\'s credit action as a PACKAGE VERSIONING move: all eligible members roll into a new package, the staged changes land on the selected clones only, and every original loan and the current package stay untouched. Where the plan carries newFacilitiesJson it also FILES those net-new facilities on the new package version once the clones exist, with the borrower on each one\'s borrowing structure, and resolves every arm that named one by its label. Verifies the new package, each clone, each new facility and every chain junction row by re-query. Booking the new version still requires nCino\'s Submit for Approval.'
     )
     global static List<Response> run(List<Request> requests) {
         List<Response> out = new List<Response>();
@@ -929,6 +959,8 @@ global with sharing class ExecuteLoanModification {
         Integer feeAddCount = feeCountRaw == null ? 0 : Integer.valueOf(feeCountRaw);
         Decimal pledgeCountRaw = C360Plan.asDecimal(v.get('pledgeAddCount'));
         Integer pledgeAddCount = pledgeCountRaw == null ? 0 : Integer.valueOf(pledgeCountRaw);
+        Decimal newFacilityCountRaw = C360Plan.asDecimal(v.get('newFacilityCount'));
+        Integer newFacilityCount = newFacilityCountRaw == null ? 0 : Integer.valueOf(newFacilityCountRaw);
 
         // The staged roll list. nCino package methodology: the credit action versions the WHOLE
         // package, so the plan carries every eligible member, not just the selected ones. The
@@ -1016,6 +1048,12 @@ global with sharing class ExecuteLoanModification {
                 C360Plan.setState(steps, 'pledge_add_' + pl, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'pledge_verify_' + pl, C360Plan.STATE_SKIPPED, null);
             }
+            for (Integer nfx = 0; nfx < newFacilityCount; nfx++) {
+                C360Plan.setState(steps, 'new_facility_' + nfx, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'new_facility_involve_' + nfx, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'new_facility_verify_' + nfx, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'new_facility_purpose_' + nfx, C360Plan.STATE_SKIPPED, null);
+            }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_FAILED, null);
             throw new EngineException(why);
@@ -1058,6 +1096,12 @@ global with sharing class ExecuteLoanModification {
                 C360Plan.setState(steps, 'collateral_own_' + pl, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'pledge_add_' + pl, C360Plan.STATE_SKIPPED, null);
                 C360Plan.setState(steps, 'pledge_verify_' + pl, C360Plan.STATE_SKIPPED, null);
+            }
+            for (Integer nfx = 0; nfx < newFacilityCount; nfx++) {
+                C360Plan.setState(steps, 'new_facility_' + nfx, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'new_facility_involve_' + nfx, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'new_facility_verify_' + nfx, C360Plan.STATE_SKIPPED, null);
+                C360Plan.setState(steps, 'new_facility_purpose_' + nfx, C360Plan.STATE_SKIPPED, null);
             }
             C360Plan.setState(steps, 'held_execution', C360Plan.STATE_SKIPPED, null);
             C360ActionStaging.recordOutcome(stg, steps, C360Plan.TERMINAL_PARTIAL, null);
@@ -1353,6 +1397,7 @@ global with sharing class ExecuteLoanModification {
             out.fees = intendedFees(v);
             out.pledges = intendedPledges(v);
             out.policyExceptions = intendedPolicyExceptions(v);
+            out.newFacilities = intendedNewFacilities(v);
             out.facilities = results;
             out.steps = toWireSteps(steps);
             out.terminalState = C360Plan.terminalState(steps);
@@ -1372,6 +1417,7 @@ global with sharing class ExecuteLoanModification {
         out.fees = armed.fees;
         out.pledges = armed.pledges;
         out.policyExceptions = armed.policyExceptions;
+        out.newFacilities = armed.newFacilities;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;
@@ -1393,7 +1439,10 @@ global with sharing class ExecuteLoanModification {
                 (armed.pledges.size() == 1 ? '' : 's') + ' on the clone' + (armed.pledges.size() == 1 ? '' : 's')) +
             (armed.policyExceptions.isEmpty() ? '' : ', ' + armed.policyExceptions.size() + ' policy exception' +
                 (armed.policyExceptions.size() == 1 ? '' : 's') + ' logged on the clone' +
-                (armed.policyExceptions.size() == 1 ? '' : 's') + ' and the borrower') + '. ' +
+                (armed.policyExceptions.size() == 1 ? '' : 's') + ' and the borrower') +
+            (armed.newFacilities == null || armed.newFacilities.isEmpty() ? '' :
+                ', ' + armed.newFacilities.size() + ' NET-NEW ' +
+                (armed.newFacilities.size() == 1 ? 'facility' : 'facilities') + ' filed on the new version') + '. ' +
             (armed.facilities.size() == 1
                 ? armed.facilities[0].outcome
                 : 'See each facility for its clone and what was applied.') +
@@ -1447,6 +1496,9 @@ global with sharing class ExecuteLoanModification {
         public Id accountId;
         public Id newPkgId;
         public Map<Id, Id> cloneByParent;
+        /** The facilities THIS RUN created on the new version, by the label the plan named them by.
+         *  Empty on every plan that adds none, which is almost all of them. */
+        public Map<String, Id> newFacilityByLabel = new Map<String, Id>();
         public List<Id> rollMembers;
         public List<ParentSnapshot> snapshots;
 
@@ -1484,6 +1536,7 @@ global with sharing class ExecuteLoanModification {
                 outcome.fees = intendedFees(v);
                 outcome.pledges = intendedPledges(v);
                 outcome.policyExceptions = intendedPolicyExceptions(v);
+                outcome.newFacilities = intendedNewFacilities(v);
                 outcome.facilities = results;
                 outcome.terminalState = C360Plan.terminalState(steps);
             }
@@ -1508,8 +1561,30 @@ global with sharing class ExecuteLoanModification {
         public List<FeeResult> fees;
         public List<PledgeResult> pledges;
         public List<PolicyExceptionResult> policyExceptions;
+        public List<NewFacilityResult> newFacilities;
         public List<FacilityResult> facilities;
         public String terminalState;
+    }
+
+    /**
+     * WHERE AN ARM LANDS: the clone of a booked member, or a facility THIS RUN just created.
+     *
+     * A net-new facility has no id at stage time, so the plan names it by a LABEL and this is the
+     * one place the label becomes an id. Every arm that may target one asks here rather than reading
+     * `cloneByParent` directly, which is what keeps the two shapes from being resolved two different
+     * ways in eight places.
+     *
+     * @param job The arm plan, carrying both maps.
+     * @param v The staged plan values.
+     * @param prefix The arm's own plan-value prefix, for example 'covenantAdd0'.
+     * @return The loan the arm writes against, or null where the plan named one this run cannot find.
+     */
+    private static Id armTarget(ArmPlan job, Map<String, Object> v, String prefix) {
+        String label = C360Plan.asString(v.get(prefix + '.targetNewLabel'));
+        if (String.isNotBlank(label)) {
+            return job.newFacilityByLabel.get(label);
+        }
+        return job.cloneByParent.get(C360Plan.asId(v.get(prefix + '.targetLoanId')));
     }
 
     /** The arm, wherever it runs. Writes to the new version only; never to a parent. */
@@ -1625,6 +1700,203 @@ global with sharing class ExecuteLoanModification {
             update as user toUpdate;
         }
 
+        // ---- THE NET-NEW FACILITIES ON THE NEW VERSION (founder, 2026-09-03).
+        //
+        // They are filed HERE, after the clones exist and before anything that could target one,
+        // for two reasons that are the same reason twice. The package version has to exist, because
+        // the whole point of adding a facility inside a modification is that it lands on the version
+        // being approved rather than on a package nobody is looking at. And every other arm below
+        // may name one by its LABEL, so the ids have to be real before the first of them runs.
+        //
+        // THE FLAGS ARE FALSE. A facility filed here is a NEW loan, not a version of one: it carries
+        // no LLC_BI__LoanRenewal__c row and no Is_Modification, because saying otherwise would report
+        // it as somebody's clone in every chain read the bank has.
+        //
+        // A FIELD CHANGE AIMED AT ONE RIDES ITS INSERT rather than a second update. The field wave
+        // for the clones runs above, against loans that already exist; here the record is being
+        // written for the first time, so the same coerced value goes on the same DML. That is one
+        // insert instead of an insert and an update, and on this hop the query budget it saves is
+        // nCino's rather than ours.
+        //
+        // THE PURPOSE IS THE ONE THING THIS TRANSACTION MAY NOT BE ABLE TO FINISH.
+        // LLC_BI__Primary_Loan_Purpose__c lives on the Loan Detail, which nCino creates from an
+        // after-commit flow in a transaction of its own (probe 5). Where the child is already there
+        // the purpose is written and proven; where it is not, the step says so in the banker's own
+        // words. It is a HANDOFF either way, which is the honest type for a statement about what the
+        // org still has to do, and it is what keeps a run that filed everything it could from
+        // reporting itself as partial over a record that does not exist yet.
+        Integer newFacilityCount = intCount(v.get('newFacilityCount'));
+        List<NewFacilityResult> newFacilityResults = new List<NewFacilityResult>();
+        List<C360NewFacilities.NewFacility> planned = new List<C360NewFacilities.NewFacility>();
+        if (newFacilityCount > 0) {
+            List<LLC_BI__Loan__c> filed = new List<LLC_BI__Loan__c>();
+            for (Integer i = 0; i < newFacilityCount; i++) {
+                C360NewFacilities.NewFacility nf = C360NewFacilities.fromResolved(v, i);
+                planned.add(nf);
+
+                NewFacilityResult nr = new NewFacilityResult();
+                nr.label = nf.label;
+                nr.product = nf.product;
+                nr.amount = nf.amount;
+                nr.termMonths = nf.termMonths;
+                nr.purpose = nf.purpose;
+                nr.purposeWritten = false;
+                nr.productPackageId = job.newPkgId;
+                newFacilityResults.add(nr);
+
+                Map<String, Object> newFields =
+                    C360NewFacilities.loanFields(job.accountId, job.newPkgId, nf.product, nf.amount);
+                LLC_BI__Loan__c record = C360NewFacilities.newLoan(job.accountId, job.newPkgId, nf);
+                for (Integer fi = 0; fi < fieldChangeCount; fi++) {
+                    if (C360Plan.asString(v.get('fieldChange' + fi + '.targetNewLabel')) != nf.label) {
+                        continue;
+                    }
+                    String fcField = String.valueOf(v.get('fieldChange' + fi + '.field'));
+                    Object fcValue = coerceStagedFieldValue(
+                        String.valueOf(v.get('fieldChange' + fi + '.type')),
+                        String.valueOf(v.get('fieldChange' + fi + '.valueJson'))
+                    );
+                    record.put(fcField, fcValue);
+                    newFields.put(fcField, fcValue);
+                }
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN, C360WriteGuard.OP_CREATE, newFields);
+                filed.add((LLC_BI__Loan__c) C360WriteGuard.stripAndVerify(record, C360NewFacilities.LOAN_MUST_SURVIVE));
+            }
+            insert as user filed;
+            for (Integer i = 0; i < filed.size(); i++) {
+                job.newFacilityByLabel.put(planned[i].label, filed[i].Id);
+                newFacilityResults[i].loanId = filed[i].Id;
+                C360Plan.setState(steps, 'new_facility_' + i, C360Plan.STATE_VERIFIED,
+                    'Facility ' + filed[i].Id + ' filed at Qualification on package version ' + job.newPkgId + '.');
+            }
+
+            // THE BORROWING STRUCTURE, which a facility insert does NOT create on its own (proven
+            // with a control, LESSONS 15u). Ownership only, never a contingent amount beside it.
+            List<LLC_BI__Legal_Entities__c> borrowerRows = new List<LLC_BI__Legal_Entities__c>();
+            for (LLC_BI__Loan__c l : filed) {
+                Map<String, Object> invFields = C360NewFacilities.involvementFields(job.accountId, l.Id, job.newPkgId);
+                C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE, invFields);
+                borrowerRows.add((LLC_BI__Legal_Entities__c) C360WriteGuard.stripAndVerify(
+                    C360NewFacilities.newInvolvement(job.accountId, l.Id, job.newPkgId),
+                    C360NewFacilities.INVOLVEMENT_MUST_SURVIVE
+                ));
+            }
+            insert as user borrowerRows;
+
+            Set<Id> filedIds = new Map<Id, LLC_BI__Loan__c>(filed).keySet();
+            Map<Id, Id> involvementByLoan = new Map<Id, Id>();
+            for (LLC_BI__Legal_Entities__c e : [
+                SELECT Id, LLC_BI__Loan__c FROM LLC_BI__Legal_Entities__c
+                WHERE LLC_BI__Loan__c IN :filedIds WITH USER_MODE
+            ]) {
+                involvementByLoan.put(e.LLC_BI__Loan__c, e.Id);
+            }
+            Map<Id, LLC_BI__Loan__c> filedBack = new Map<Id, LLC_BI__Loan__c>([
+                SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Status__c, LLC_BI__Product__c, LLC_BI__Amount__c,
+                       LLC_BI__Term_Months__c, LLC_BI__Amortized_Term_Months__c, LLC_BI__First_Payment_Date__c,
+                       LLC_BI__Product_Package__c, LLC_BI__Loan_Detail__c
+                FROM LLC_BI__Loan__c WHERE Id IN :filedIds WITH USER_MODE
+            ]);
+
+            List<LLC_BI__Loan_Detail__c> purposeRows = new List<LLC_BI__Loan_Detail__c>();
+            List<Integer> purposeOfRow = new List<Integer>();
+            for (Integer i = 0; i < filed.size(); i++) {
+                LLC_BI__Loan__c back = filedBack.get(filed[i].Id);
+                if (back != null && back.LLC_BI__Loan_Detail__c != null && String.isNotBlank(planned[i].purpose)) {
+                    purposeRows.add(new LLC_BI__Loan_Detail__c(
+                        Id = back.LLC_BI__Loan_Detail__c,
+                        LLC_BI__Primary_Loan_Purpose__c = planned[i].purpose
+                    ));
+                    purposeOfRow.add(i);
+                }
+            }
+            if (!purposeRows.isEmpty()) {
+                update as user purposeRows;
+                for (Integer k : purposeOfRow) {
+                    newFacilityResults[k].purposeWritten = true;
+                }
+            }
+
+            for (Integer i = 0; i < filed.size(); i++) {
+                String ns = String.valueOf(i);
+                NewFacilityResult nr = newFacilityResults[i];
+                LLC_BI__Loan__c back = filedBack.get(filed[i].Id);
+                Id involvementId = involvementByLoan.get(filed[i].Id);
+                nr.involvementId = involvementId;
+                C360Plan.setState(
+                    steps, 'new_facility_involve_' + ns,
+                    involvementId == null ? C360Plan.STATE_FILED_UNVERIFIED : C360Plan.STATE_VERIFIED,
+                    involvementId == null
+                        ? 'The borrower row was inserted but could not be read back.'
+                        : 'The borrower is on the new facility\'s borrowing structure at 100 percent ownership.'
+                );
+
+                if (back == null) {
+                    nr.verification = 'The insert returned success but the facility could not be read back.';
+                    C360Plan.setState(steps, 'new_facility_verify_' + ns, C360Plan.STATE_FILED_UNVERIFIED, nr.verification);
+                    C360Plan.setState(steps, 'new_facility_purpose_' + ns, C360Plan.STATE_FILED_UNVERIFIED,
+                        'The facility could not be read back, so nothing is claimed about its Loan Detail.');
+                    continue;
+                }
+                nr.recordName = back.Name;
+                nr.stage = back.LLC_BI__Stage__c;
+                nr.productPackageId = back.LLC_BI__Product_Package__c;
+
+                List<String> proven = new List<String>();
+                List<String> unproven = new List<String>();
+                if (back.LLC_BI__Product_Package__c == job.newPkgId) {
+                    proven.add('it sits on the new package version ' + job.newPkgId);
+                } else {
+                    unproven.add('it sits on package ' + back.LLC_BI__Product_Package__c + ', not the new version');
+                }
+                if (back.LLC_BI__Product__c == planned[i].product) {
+                    proven.add('the org kept product ' + back.LLC_BI__Product__c);
+                } else {
+                    unproven.add('the org stored product ' + back.LLC_BI__Product__c + ' rather than ' + planned[i].product);
+                }
+                if (back.LLC_BI__Amount__c == planned[i].amount) {
+                    proven.add('the commitment reads ' + String.valueOf(back.LLC_BI__Amount__c));
+                } else {
+                    unproven.add('the commitment reads ' + String.valueOf(back.LLC_BI__Amount__c) + ' rather than ' + String.valueOf(planned[i].amount));
+                }
+                if (back.LLC_BI__Term_Months__c == planned[i].termMonths) {
+                    proven.add('the term reads ' + String.valueOf(back.LLC_BI__Term_Months__c) + ' months');
+                } else {
+                    unproven.add('the term reads ' + String.valueOf(back.LLC_BI__Term_Months__c) + ' rather than ' + String.valueOf(planned[i].termMonths));
+                }
+                if (planned[i].amortizedTermMonths != null) {
+                    if (back.LLC_BI__Amortized_Term_Months__c == planned[i].amortizedTermMonths) {
+                        proven.add('the amortised term reads ' + String.valueOf(back.LLC_BI__Amortized_Term_Months__c));
+                    } else {
+                        unproven.add('the amortised term reads ' + String.valueOf(back.LLC_BI__Amortized_Term_Months__c));
+                    }
+                }
+                if (planned[i].firstPaymentDate != null) {
+                    if (back.LLC_BI__First_Payment_Date__c == planned[i].firstPaymentDate) {
+                        proven.add('the first payment date reads ' + String.valueOf(back.LLC_BI__First_Payment_Date__c));
+                    } else {
+                        unproven.add('the first payment date reads ' + String.valueOf(back.LLC_BI__First_Payment_Date__c));
+                    }
+                }
+                nr.verification = 'The org named this facility ' + back.Name + '. ' + String.join(proven, '; ') +
+                    (unproven.isEmpty() ? '.' : '. Not proven: ' + String.join(unproven, '; ') + '.');
+                C360Plan.setState(
+                    steps, 'new_facility_verify_' + ns,
+                    unproven.isEmpty() ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED,
+                    nr.verification
+                );
+                C360Plan.setState(
+                    steps, 'new_facility_purpose_' + ns, C360Plan.STATE_VERIFIED,
+                    nr.purposeWritten == true
+                        ? 'The primary loan purpose "' + planned[i].purpose + '" is set on Loan Detail ' +
+                          back.LLC_BI__Loan_Detail__c + '.'
+                        : 'nCino creates the Loan Detail for this facility in its own transaction moments after the ' +
+                          'filing, so it cannot be seen from here. The primary loan purpose "' + planned[i].purpose +
+                          '" is on this plan and is the one thing on it a person still sets in nCino.'
+                );
+            }
+        }
+
         // ---- The junction carry. nCino's engine copies NOTHING here: the related-lists copy
         // configuration only ever fed the retired classic wizard's checklist (verified live
         // 2026-08-30: all eight defaults flipped on, engine run, zero junction rows landed, no copy
@@ -1692,7 +1964,7 @@ global with sharing class ExecuteLoanModification {
             feeResults.add(fr);
 
             Id feeTargetParent = C360Plan.asId(v.get('feeAdd' + fs + '.targetLoanId'));
-            Id feeCloneId = job.cloneByParent.get(feeTargetParent);
+            Id feeCloneId = armTarget(job, v, 'feeAdd' + fs);
             if (feeCloneId == null) {
                 String feeWhy = 'No modification clone could be read for the facility this fee targets, so the fee was not created.';
                 C360Plan.setState(steps, 'fee_add_' + fs, C360Plan.STATE_FAILED, feeWhy);
@@ -1809,7 +2081,7 @@ global with sharing class ExecuteLoanModification {
             String covFrequency = String.valueOf(v.get('covenantAdd' + cs + '.frequency'));
             Date covEffective = C360Plan.asDate(v.get('covenantAdd' + cs + '.effectiveDate'));
             Id covTargetParent = C360Plan.asId(v.get('covenantAdd' + cs + '.targetLoanId'));
-            Id covCloneId = job.cloneByParent.get(covTargetParent);
+            Id covCloneId = armTarget(job, v, 'covenantAdd' + cs);
 
             if (covCloneId == null || covTypeId == null || cr.threshold == null) {
                 String covWhy = covCloneId == null
@@ -1930,7 +2202,7 @@ global with sharing class ExecuteLoanModification {
             Decimal invOwnership = C360Plan.asDecimal(v.get('involvement' + vs + '.ownership'));
             Id invTargetParent = C360Plan.asId(v.get('involvement' + vs + '.targetLoanId'));
             Id invSourceRowId = C360Plan.asId(v.get('involvement' + vs + '.sourceRowId'));
-            Id invCloneId = job.cloneByParent.get(invTargetParent);
+            Id invCloneId = armTarget(job, v, 'involvement' + vs);
 
             if (invCloneId == null || invAccountId == null) {
                 String invWhy = invCloneId == null
@@ -2089,7 +2361,7 @@ global with sharing class ExecuteLoanModification {
 
             Id attachCovenantId = C360Plan.asId(v.get('covenantAttach' + ats + '.covenantId'));
             Id attachParent = C360Plan.asId(v.get('covenantAttach' + ats + '.targetLoanId'));
-            Id attachClone = job.cloneByParent.get(attachParent);
+            Id attachClone = armTarget(job, v, 'covenantAttach' + ats);
             if (attachClone == null || attachCovenantId == null) {
                 String attachWhy = attachClone == null
                     ? 'No modification clone could be read for the facility this association targets, so the junction was not created.'
@@ -2176,10 +2448,15 @@ global with sharing class ExecuteLoanModification {
             for (Integer i = 0; i < fieldChangeCount; i++) {
                 changedFields.add(String.valueOf(v.get('fieldChange' + i + '.field')));
             }
+            // The read covers the clones AND the facilities this run created: a field change may
+            // target either, and a change staged onto a new facility rode its insert rather than a
+            // clone update, so a read of the clones alone would report it as landing nowhere.
+            Set<Id> fieldTargets = new Set<Id>(cloneIds);
+            fieldTargets.addAll(job.newFacilityByLabel.values());
             Map<Id, SObject> dynamicClones = new Map<Id, SObject>();
-            if (!cloneIds.isEmpty()) {
+            if (!fieldTargets.isEmpty()) {
                 String dynQuery = 'SELECT Id, ' + String.join(new List<String>(changedFields), ', ') +
-                    ' FROM LLC_BI__Loan__c WHERE Id IN :cloneIds WITH USER_MODE';
+                    ' FROM LLC_BI__Loan__c WHERE Id IN :fieldTargets WITH USER_MODE';
                 for (SObject row : Database.query(dynQuery)) {
                     dynamicClones.put((Id) row.get('Id'), row);
                 }
@@ -2194,10 +2471,10 @@ global with sharing class ExecuteLoanModification {
                     String.valueOf(v.get('fieldChange' + fi + '.valueJson'))
                 );
                 fcr.value = String.valueOf(expected);
-                Id fcCloneId = job.cloneByParent.get(C360Plan.asId(v.get('fieldChange' + fi + '.targetLoanId')));
+                Id fcCloneId = armTarget(job, v, 'fieldChange' + fi);
                 fieldChangeResults.add(fcr);
                 if (fcCloneId == null || !dynamicClones.containsKey(fcCloneId)) {
-                    fcr.verification = 'No clone could be read back for the facility this change targets.';
+                    fcr.verification = 'No facility on the new version could be read back for the target of this change.';
                     C360Plan.setState(steps, 'field_change_' + fi, C360Plan.STATE_FAILED, fcr.verification);
                     continue;
                 }
@@ -2205,7 +2482,7 @@ global with sharing class ExecuteLoanModification {
                 Object actual = dynamicClones.get(fcCloneId).get(fcr.field);
                 Boolean landed = actual == expected || String.valueOf(actual) == String.valueOf(expected);
                 fcr.verification = landed
-                    ? fcr.label + ' reads back at ' + String.valueOf(actual) + ' on the clone.'
+                    ? fcr.label + ' reads back at ' + String.valueOf(actual) + ' on the new version.'
                     : fcr.label + ' did not land: staged ' + String.valueOf(expected) + ', reads back ' + String.valueOf(actual) + '.';
                 C360Plan.setState(steps, 'field_change_' + fi,
                     landed ? C360Plan.STATE_VERIFIED : C360Plan.STATE_FILED_UNVERIFIED, fcr.verification);
@@ -2259,6 +2536,7 @@ global with sharing class ExecuteLoanModification {
         outcome.fees = feeResults;
         outcome.pledges = pledgeResults;
         outcome.policyExceptions = policyExceptionResults;
+        outcome.newFacilities = newFacilityResults;
         outcome.facilities = results;
         outcome.terminalState = C360Plan.terminalState(steps);
         return outcome;
@@ -2502,7 +2780,7 @@ global with sharing class ExecuteLoanModification {
             cloneOf.add(null);
 
             Id targetParent = C360Plan.asId(v.get('pledgeAdd' + ps + '.targetLoanId'));
-            Id cloneId = job.cloneByParent.get(targetParent);
+            Id cloneId = armTarget(job, v, 'pledgeAdd' + ps);
             if (cloneId == null) {
                 String why = 'No modification clone could be read for the facility this pledge targets, so nothing was created.';
                 C360Plan.setState(steps, 'collateral_create_' + ps, C360Plan.STATE_FAILED, why);
@@ -2742,6 +3020,12 @@ global with sharing class ExecuteLoanModification {
             ids.add('policy_exception_add_' + i);
             ids.add('policy_exception_verify_' + i);
         }
+        for (Integer i = 0; i < intCount(v.get('newFacilityCount')); i++) {
+            ids.add('new_facility_' + i);
+            ids.add('new_facility_involve_' + i);
+            ids.add('new_facility_verify_' + i);
+            ids.add('new_facility_purpose_' + i);
+        }
         Set<String> owned = new Set<String>(ids);
         for (C360Plan.Step s : steps) {
             if (!owned.contains(s.id)) {
@@ -2777,6 +3061,24 @@ global with sharing class ExecuteLoanModification {
             cr.operator = String.valueOf(v.get('covenantAttach' + i + '.operator'));
             cr.verification = ARM_WAITING;
             out.add(cr);
+        }
+        return out;
+    }
+
+    /** The net-new facilities the plan carries, reported as intent while the arm has not run. */
+    private static List<NewFacilityResult> intendedNewFacilities(Map<String, Object> v) {
+        List<NewFacilityResult> out = new List<NewFacilityResult>();
+        for (Integer i = 0; i < intCount(v.get('newFacilityCount')); i++) {
+            C360NewFacilities.NewFacility nf = C360NewFacilities.fromResolved(v, i);
+            NewFacilityResult nr = new NewFacilityResult();
+            nr.label = nf.label;
+            nr.product = nf.product;
+            nr.amount = nf.amount;
+            nr.termMonths = nf.termMonths;
+            nr.purpose = nf.purpose;
+            nr.purposeWritten = false;
+            nr.verification = ARM_WAITING;
+            out.add(nr);
         }
         return out;
     }
@@ -2990,6 +3292,7 @@ global with sharing class ExecuteLoanModification {
         out.fees = armed.fees;
         out.pledges = armed.pledges;
         out.policyExceptions = armed.policyExceptions;
+        out.newFacilities = armed.newFacilities;
         out.facilities = armed.facilities;
         out.steps = toWireSteps(armed.steps);
         out.terminalState = armed.terminalState;

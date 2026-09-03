@@ -43,6 +43,15 @@
  * requiredness is enforced in Apex, where it can also say WHICH facility is wrong. `idempotencyKey`,
  * `productPackageId` and `rationale` keep required=true: both shapes need all three.
  *
+ * NET-NEW FACILITIES INSIDE THE MODIFICATION (founder, 2026-09-03: "Do we allow new loans to be
+ * created as part of the modification and renewal? This should be fully possible."). Because the
+ * credit action versions the PACKAGE, the new version is the right place for new money, and adding a
+ * facility to it is what a bank does rather than filing a separate credit action against a package
+ * nobody is approving. `newFacilitiesJson` carries them, C360NewFacilities owns the shape so the
+ * create route and this one cannot drift, and every other arm may name one by its LABEL because the
+ * id does not exist until execute time. A carry exclusion is the one arm that may NOT: there is
+ * nothing on a facility being created for the new version to leave behind.
+ *
  * Org contract: A33.4.1. Two corrections carried from probe 5: LLC_BI__RootLoanId__c DOES NOT EXIST
  * on Loan in this org, so nothing here walks a chain through it; and the org rewrites the loan name,
  * so no name is echoed anywhere in this plan.
@@ -91,6 +100,8 @@ global with sharing class StageLoanModification {
         global String covenantAttachesJson;
         @InvocableVariable(label='Policy Exception Adds JSON' description='Optional. POLICY EXCEPTIONS authored on the CLONE and anchored on the borrower: [{"title" (the exception\'s readable name, <=80 chars), "status" (Waived|Mitigated|Unmitigated), "mitigationReasons"? (up to 3, <=100 chars each), "severity"?, "severityValue"?, "code"?, "type"? (defaults to "Policy"), "targetLoanId"?}]. TITLE IS REQUIRED: Name on this object is plain text rather than an autonumber, and the org\'s trigger stack backfills an omitted one with the record\'s own 15-character Id, so an unnamed exception is a row nobody can find. STATUS IS REQUIRED: the org defaults a new row to Unmitigated, which reads as a decision rather than as an absent value. A Mitigated exception needs at least one mitigation reason and an Unmitigated one may carry none, because "nothing mitigates this" and "here is what mitigates it" cannot both be true on one record. Over-long reasons are refused with their length, never truncated. WARNING: a committed write here fires the org-local PolicyExceptionCDC trigger, which POSTs the serialised record to an external AWS EventBridge endpoint. No approval starts and no email fires (probed 2026-08-31), but the record\'s data leaves the org. targetLoanId may be omitted when exactly one facility is selected.')
         global String policyExceptionAddsJson;
+        @InvocableVariable(label='New Facilities JSON' description='Optional. NET-NEW FACILITIES filed on the NEW package version this modification creates: [{"label"? ("new:1", "new:2", defaulted by position), "product" (an exact Commercial Loan record-type product: Construction, Deposit, Equipment, HELOC, Line of Credit, Purchase), "amount", "termMonths", "purpose" (the primary loan purpose), "amortizedTermMonths"?, "firstPaymentDate"? (YYYY-MM-DD)}]. In nCino a modification versions the whole PACKAGE, and adding a facility to the version being approved is ordinary practice; this is that, rather than a separate credit action on the current package. Each facility is filed at Qualification/Open with the borrower on its borrowing structure, carries no chain row and no modification flag because it is a new loan rather than a version of one, and takes the two pricing prerequisites where they are given. The purpose lands on the Loan Detail nCino creates in its own transaction after the filing, so it is written where that record has already appeared and reported as a handoff where it has not. Every other arm of this same request may target a new facility by its LABEL in place of targetLoanId, so a covenant, a party, a pledge, a fee or a field change can be staged onto a facility that has no id yet.')
+        global String newFacilitiesJson;
     }
 
     /** One of the four scalars, aimed at ONE selected facility. */
@@ -112,6 +123,9 @@ global with sharing class StageLoanModification {
         /** The coerced value, re-serialized for the plan. */
         public String valueJson;
         public Id targetLoanId;
+        /** Set instead of targetLoanId where the target is a NET-NEW facility this same plan
+         *  creates, named by its label ("new:1"). The id does not exist until execute time. */
+        public String targetNewLabel;
     }
 
     /** One parsed borrowing-structure amendment, resolved against the org. */
@@ -122,6 +136,9 @@ global with sharing class StageLoanModification {
         public String accountName;
         public Decimal ownership;
         public Id targetLoanId;
+        /** Set instead of targetLoanId where the target is a NET-NEW facility this same plan
+         *  creates, named by its label ("new:1"). The id does not exist until execute time. */
+        public String targetNewLabel;
         /** The involvement row a REMOVE excludes from the carry, resolved at stage time. */
         public Id sourceRowId;
     }
@@ -174,6 +191,9 @@ global with sharing class StageLoanModification {
         public Decimal threshold;
         public String operator;
         public Id targetLoanId;
+        /** Set instead of targetLoanId where the target is a NET-NEW facility this same plan
+         *  creates, named by its label ("new:1"). The id does not exist until execute time. */
+        public String targetNewLabel;
     }
 
     /** One parsed net-new fee, resolved against the org's own fee picklists. */
@@ -192,6 +212,9 @@ global with sharing class StageLoanModification {
         public String paidBy;
         public Boolean isIncome;
         public Id targetLoanId;
+        /** Set instead of targetLoanId where the target is a NET-NEW facility this same plan
+         *  creates, named by its label ("new:1"). The id does not exist until execute time. */
+        public String targetNewLabel;
     }
 
     /** One parsed pledge, in whichever of its two shapes the caller sent. */
@@ -221,6 +244,9 @@ global with sharing class StageLoanModification {
         /** The asset as the plan names it, which is the description or the autonumber. */
         public String assetLabel;
         public Id targetLoanId;
+        /** Set instead of targetLoanId where the target is a NET-NEW facility this same plan
+         *  creates, named by its label ("new:1"). The id does not exist until execute time. */
+        public String targetNewLabel;
     }
 
     /** One parsed policy exception, resolved against the org's own status picklist. */
@@ -250,6 +276,9 @@ global with sharing class StageLoanModification {
         public String frequency;
         public Date effectiveDate;
         public Id targetLoanId;
+        /** Set instead of targetLoanId where the target is a NET-NEW facility this same plan
+         *  creates, named by its label ("new:1"). The id does not exist until execute time. */
+        public String targetNewLabel;
     }
 
     global class PlanStep {
@@ -329,6 +358,10 @@ global with sharing class StageLoanModification {
         global List<PlannedFacility> facilities;
         @InvocableVariable(label='Facility Count')
         global Integer facilityCount;
+        @InvocableVariable(label='New Facility Count' description='Net-new facilities this plan files on the new package version. Zero is the ordinary answer.')
+        global Integer newFacilityCount;
+        @InvocableVariable(label='New Facility Labels' description='The labels the other arms of this request may target, in the order they were sent.')
+        global List<String> newFacilityLabels;
         @InvocableVariable(label='Replayed')
         global Boolean replayed;
     }
@@ -350,7 +383,7 @@ global with sharing class StageLoanModification {
      */
     @InvocableMethod(
         label='stage_loan_modification'
-        description='Validate a package-anchored facility modification and return an immutable execution plan with a plan hash. Takes either the single loanId or facilityIds, the member facilities of the package, never both. Writes nothing: execute_loan_modification runs the plan behind the single-use decision token. Executing produces a modification clone at Qualification; booking that clone still requires nCino\'s human Submit for Approval.'
+        description='Validate a package-anchored facility modification and return an immutable execution plan with a plan hash. Takes either the single loanId or facilityIds, the member facilities of the package, never both. NET-NEW FACILITIES may ride the same request in newFacilitiesJson: a modification versions the whole package, and a new loan on the version being approved is ordinary nCino practice, so a covenant, a party, a pledge, a fee or a field change may target one by its label (new:1) in place of targetLoanId. Writes nothing: execute_loan_modification runs the plan behind the single-use decision token. Executing produces a modification clone at Qualification; booking that clone still requires nCino\'s human Submit for Approval.'
     )
     global static List<Response> stage(List<Request> requests) {
         List<Response> out = new List<Response>();
@@ -360,6 +393,9 @@ global with sharing class StageLoanModification {
                 res.result = build(req);
                 res.ok = true;
             } catch (ToolException e) {
+                res.ok = false;
+                res.error = err('VALIDATION_FAILED', e.getMessage(), null, req.idempotencyKey);
+            } catch (C360NewFacilities.NewFacilityException e) {
                 res.ok = false;
                 res.error = err('VALIDATION_FAILED', e.getMessage(), null, req.idempotencyKey);
             } catch (C360Facilities.SelectionException e) {
@@ -393,8 +429,9 @@ global with sharing class StageLoanModification {
             String.isBlank(req.involvementChangesJson) && String.isBlank(req.fieldChangesJson) &&
             String.isBlank(req.feeAddsJson) && String.isBlank(req.pledgeAddsJson) &&
             String.isBlank(req.policyExceptionAddsJson) && String.isBlank(req.covenantExclusionsJson) &&
-            String.isBlank(req.pledgeExclusionsJson) && String.isBlank(req.covenantAttachesJson)) {
-            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a covenant association, a covenant or pledge carry exclusion, a borrowing-structure change, a field change, a fee add, a collateral pledge, or a policy exception.');
+            String.isBlank(req.pledgeExclusionsJson) && String.isBlank(req.covenantAttachesJson) &&
+            String.isBlank(req.newFacilitiesJson)) {
+            throw new ToolException('At least one requested change is required: amount, maturity date, rate, term, a covenant add, a covenant association, a covenant or pledge carry exclusion, a borrowing-structure change, a field change, a fee add, a collateral pledge, a policy exception, or a net-new facility on the new version.');
         }
         if (req.requestedAmount != null && req.requestedAmount <= 0) {
             throw new ToolException('requestedAmount must be greater than zero.');
@@ -425,17 +462,22 @@ global with sharing class StageLoanModification {
         }
 
         List<String> covenantWarnings = new List<String>();
+        // THE NET-NEW FACILITIES ARE READ FIRST, because every other arm may name one. A label is
+        // resolved against this list at stage time, so an arm aimed at a facility nobody staged is
+        // refused here rather than landing nowhere at execute time.
+        List<C360NewFacilities.NewFacility> newFacilities =
+            C360NewFacilities.parse(req.newFacilitiesJson, 'modification');
         List<ScalarChange> scalarChanges = parseScalarChanges(req, facilities);
-        List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, covenantWarnings);
-        List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, covenantWarnings);
-        List<FieldChange> fieldChanges = parseFieldChanges(req, facilities);
-        List<FeeAdd> feeAdds = parseFeeAdds(req, facilities);
-        List<PledgeAdd> pledgeAdds = parsePledgeAdds(req, facilities);
+        List<CovenantAdd> covenantAdds = parseCovenantAdds(req, facilities, newFacilities, covenantWarnings);
+        List<InvolvementChange> involvementChanges = parseInvolvementChanges(req, facilities, newFacilities, covenantWarnings);
+        List<FieldChange> fieldChanges = parseFieldChanges(req, facilities, newFacilities);
+        List<FeeAdd> feeAdds = parseFeeAdds(req, facilities, newFacilities);
+        List<PledgeAdd> pledgeAdds = parsePledgeAdds(req, facilities, newFacilities);
         Integer createdAssets = newCollaterals(pledgeAdds);
         List<PolicyExceptionAdd> policyExceptionAdds = parsePolicyExceptionAdds(req, facilities);
         List<CovenantExclusion> covenantExclusions = parseCovenantExclusions(req, facilities);
         List<PledgeExclusion> pledgeExclusions = parsePledgeExclusions(req, facilities);
-        List<CovenantAttach> covenantAttaches = parseCovenantAttaches(req, facilities, covenantWarnings);
+        List<CovenantAttach> covenantAttaches = parseCovenantAttaches(req, facilities, newFacilities, covenantWarnings);
         // A plan that excludes a covenant from a facility's carry AND associates the same covenant
         // to that facility's clone says two opposite things about one junction. The arm would honour
         // both in order and the banker would read "removed" beside a covenant that is there.
@@ -574,6 +616,18 @@ global with sharing class StageLoanModification {
                 .provenBy('SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c IN :cloneIds')
         );
 
+        // NET-NEW FACILITIES ON THE NEW VERSION (founder, 2026-09-03). A modification versions the
+        // whole package, and the bank puts new money on the version being approved rather than on a
+        // package nobody is looking at. The facilities are filed AFTER the clones exist and after
+        // the carry, so they land on the new package version alongside them, and every arm below may
+        // name one by its label instead of by an id it cannot have yet.
+        for (Integer i = 0; i < newFacilities.size(); i++) {
+            C360NewFacilities.NewFacility nf = newFacilities[i];
+            C360NewFacilities.putResolved(resolved, i, nf);
+            steps.addAll(C360NewFacilities.steps(i, nf, 'the new package version'));
+        }
+        resolved.put('newFacilityCount', newFacilities.size());
+
         // Net-new covenants: created on the borrower account, attached to the CLONE of the targeted
         // member on the new version. SAFE by live probe (2026-08-30): a Covenant2 insert plus its
         // junction mints no compliance row, starts no approval and sends no email; the unrecallable
@@ -589,7 +643,8 @@ global with sharing class StageLoanModification {
             resolved.put('covenantAdd' + s + '.frequency', a.frequency);
             resolved.put('covenantAdd' + s + '.effectiveDate', a.effectiveDate);
             resolved.put('covenantAdd' + s + '.targetLoanId', String.valueOf(a.targetLoanId));
-            String targetName = facilityById.get(a.targetLoanId).Name;
+            resolved.put('covenantAdd' + s + '.targetNewLabel', a.targetNewLabel);
+            String targetName = armTargetName(a.targetLoanId, a.targetNewLabel, facilityById, newFacilities);
             steps.add(
                 new C360Plan.Step('covenant_create_' + s, C360Plan.TYPE_WRITE,
                     'Create net-new covenant on the borrower: ' + a.typeName + ' ' + a.operator + ' ' +
@@ -631,7 +686,8 @@ global with sharing class StageLoanModification {
             resolved.put('covenantAttach' + s8 + '.threshold', ca.threshold);
             resolved.put('covenantAttach' + s8 + '.operator', ca.operator);
             resolved.put('covenantAttach' + s8 + '.targetLoanId', String.valueOf(ca.targetLoanId));
-            String attachTarget = facilityById.get(ca.targetLoanId).Name;
+            resolved.put('covenantAttach' + s8 + '.targetNewLabel', ca.targetNewLabel);
+            String attachTarget = armTargetName(ca.targetLoanId, ca.targetNewLabel, facilityById, newFacilities);
             steps.add(
                 new C360Plan.Step('covenant_associate_' + s8, C360Plan.TYPE_WRITE,
                     'Associate the existing covenant ' + ca.covenantName + ' (' + ca.typeName +
@@ -663,7 +719,8 @@ global with sharing class StageLoanModification {
             resolved.put('involvement' + s2 + '.ownership', ic.ownership);
             resolved.put('involvement' + s2 + '.targetLoanId', String.valueOf(ic.targetLoanId));
             resolved.put('involvement' + s2 + '.sourceRowId', ic.sourceRowId == null ? null : String.valueOf(ic.sourceRowId));
-            String targetName2 = facilityById.get(ic.targetLoanId).Name;
+            resolved.put('involvement' + s2 + '.targetNewLabel', ic.targetNewLabel);
+            String targetName2 = armTargetName(ic.targetLoanId, ic.targetNewLabel, facilityById, newFacilities);
             if (ic.op == 'add') {
                 steps.add(
                     new C360Plan.Step('involvement_change_' + s2, C360Plan.TYPE_WRITE,
@@ -771,7 +828,8 @@ global with sharing class StageLoanModification {
             resolved.put('fieldChange' + s3 + '.type', fc.fieldType);
             resolved.put('fieldChange' + s3 + '.valueJson', fc.valueJson);
             resolved.put('fieldChange' + s3 + '.targetLoanId', String.valueOf(fc.targetLoanId));
-            String targetName3 = facilityById.get(fc.targetLoanId).Name;
+            resolved.put('fieldChange' + s3 + '.targetNewLabel', fc.targetNewLabel);
+            String targetName3 = armTargetName(fc.targetLoanId, fc.targetNewLabel, facilityById, newFacilities);
             steps.add(
                 new C360Plan.Step('field_change_' + s3, C360Plan.TYPE_WRITE,
                     'Set ' + fc.fieldLabel + ' (' + fc.fieldName + ') to ' + displayValue(fc) + ' on the clone of ' + targetName3)
@@ -798,7 +856,8 @@ global with sharing class StageLoanModification {
             resolved.put('feeAdd' + s5 + '.paidBy', fa.paidBy);
             resolved.put('feeAdd' + s5 + '.isIncome', fa.isIncome);
             resolved.put('feeAdd' + s5 + '.targetLoanId', String.valueOf(fa.targetLoanId));
-            String targetName4 = facilityById.get(fa.targetLoanId).Name;
+            resolved.put('feeAdd' + s5 + '.targetNewLabel', fa.targetNewLabel);
+            String targetName4 = armTargetName(fa.targetLoanId, fa.targetNewLabel, facilityById, newFacilities);
             steps.add(
                 new C360Plan.Step('fee_add_' + s5, C360Plan.TYPE_WRITE,
                     'Add ' + fa.description + ' to the clone of ' + targetName4 + ': ' + feePhrase(fa) +
@@ -849,7 +908,8 @@ global with sharing class StageLoanModification {
             resolved.put('pledgeAdd' + s6 + '.pledgedStatus', pa.pledgedStatus);
             resolved.put('pledgeAdd' + s6 + '.assetLabel', pa.assetLabel);
             resolved.put('pledgeAdd' + s6 + '.targetLoanId', String.valueOf(pa.targetLoanId));
-            String targetName5 = facilityById.get(pa.targetLoanId).Name;
+            resolved.put('pledgeAdd' + s6 + '.targetNewLabel', pa.targetNewLabel);
+            String targetName5 = armTargetName(pa.targetLoanId, pa.targetNewLabel, facilityById, newFacilities);
 
             if (pa.isNew) {
                 steps.add(
@@ -1048,6 +1108,7 @@ global with sharing class StageLoanModification {
                     'reports what the org worked out.')
             );
         }
+        warnings.addAll(C360NewFacilities.warnings(newFacilities, 'the new package version'));
         if (!pledgeAdds.isEmpty()) {
             Integer noLien = 0;
             for (PledgeAdd pa : pledgeAdds) {
@@ -1133,6 +1194,10 @@ global with sharing class StageLoanModification {
             (scalarChanges.isEmpty() ? '' : String.valueOf(scalarChanges.size()) + ' scalar ' +
                 (scalarChanges.size() == 1 ? 'change is' : 'changes are') + ' aimed at a NAMED member each, so a clone takes ' +
                 'only what was staged on it and the warnings say which figure lands where. ') +
+            (newFacilities.isEmpty() ? '' : String.valueOf(newFacilities.size()) + ' NET-NEW ' +
+                (newFacilities.size() == 1 ? 'facility is' : 'facilities are') + ' filed on the new version beside the clones: ' +
+                C360NewFacilities.labelList(newFacilities) + '. Each is a new loan rather than a version of an existing one, ' +
+                'so it carries the borrower on its own structure and no chain row at all. ') +
             (covenantAdds.isEmpty() ? '' : String.valueOf(covenantAdds.size()) + ' net-new covenant' +
                 (covenantAdds.size() == 1 ? ' is' : 's are') + ' created on the borrower and attached to the ' +
                 (covenantAdds.size() == 1 ? 'clone' : 'clones') + ', born Pending and Active. ') +
@@ -1195,6 +1260,11 @@ global with sharing class StageLoanModification {
         r.covenantCarryoverCount = carryover;
         r.facilities = planned;
         r.facilityCount = n;
+        r.newFacilityCount = newFacilities.size();
+        r.newFacilityLabels = new List<String>();
+        for (C360NewFacilities.NewFacility nf : newFacilities) {
+            r.newFacilityLabels.add(nf.label);
+        }
         r.steps = toWireSteps(steps);
         return r;
     }
@@ -1253,7 +1323,12 @@ global with sharing class StageLoanModification {
      * the target must be one of the selected facilities. An equivalent covenant already attached
      * to the target is NAMED as a warning before the banker confirms. Nothing is created here.
      */
-    private static List<CovenantAdd> parseCovenantAdds(Request req, List<LLC_BI__Loan__c> facilities, List<String> warnings) {
+    private static List<CovenantAdd> parseCovenantAdds(
+        Request req,
+        List<LLC_BI__Loan__c> facilities,
+        List<C360NewFacilities.NewFacility> newFacilities,
+        List<String> warnings
+    ) {
         List<CovenantAdd> out = new List<CovenantAdd>();
         if (String.isBlank(req.covenantAddsJson)) {
             return out;
@@ -1275,20 +1350,21 @@ global with sharing class StageLoanModification {
             a.operator = m.get('operator') == null ? null : String.valueOf(m.get('operator')).trim();
             a.frequency = m.get('frequency') == null ? 'Quarterly' : String.valueOf(m.get('frequency')).trim();
             a.effectiveDate = m.get('effectiveDate') == null ? Date.today() : Date.valueOf(String.valueOf(m.get('effectiveDate')));
-            a.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            a.targetNewLabel = armLabel(m.get('targetLoanId'), newFacilities, 'covenant add');
+            a.targetLoanId = a.targetNewLabel == null ? C360Plan.asId(m.get('targetLoanId')) : null;
             if (a.threshold == null) {
                 throw new ToolException('A covenant add needs a threshold. The threshold IS the covenant; without one there is nothing for a review cycle to test.');
             }
             if (a.operator == null || !validOps.contains(a.operator)) {
                 throw new ToolException('A covenant add needs an operator, one of < <= = >= >. Supplied: ' + a.operator + '.');
             }
-            if (a.targetLoanId == null) {
+            if (a.targetNewLabel == null && a.targetLoanId == null) {
                 if (facilities.size() != 1) {
                     throw new ToolException('targetLoanId is required on each covenant add when more than one facility is selected.');
                 }
                 a.targetLoanId = facilities[0].Id;
             }
-            if (!byId.containsKey(a.targetLoanId)) {
+            if (a.targetNewLabel == null && !byId.containsKey(a.targetLoanId)) {
                 throw new ToolException(
                     'A covenant add targets facility ' + a.targetLoanId + ', which is not one of the selected facilities. ' +
                     'The covenant attaches to the CLONE of a facility this plan modifies.'
@@ -1301,7 +1377,11 @@ global with sharing class StageLoanModification {
         // needs to hear is what the facility carries today.
         Set<Id> targetIds = new Set<Id>();
         for (CovenantAdd a : out) {
-            targetIds.add(a.targetLoanId);
+            // A net-new facility carries no junction yet, so it has nothing for the connectedness
+            // check to find and nothing the carry could duplicate.
+            if (a.targetLoanId != null) {
+                targetIds.add(a.targetLoanId);
+            }
         }
         for (LLC_BI__Loan_Covenant__c j : [
             SELECT LLC_BI__Loan__c, LLC_BI__Covenant2__r.LLC_BI__Covenant_Type__c,
@@ -1351,7 +1431,11 @@ global with sharing class StageLoanModification {
      *
      * Nothing is created here. The arm hop of the execute pair writes the rows.
      */
-    private static List<FeeAdd> parseFeeAdds(Request req, List<LLC_BI__Loan__c> facilities) {
+    private static List<FeeAdd> parseFeeAdds(
+        Request req,
+        List<LLC_BI__Loan__c> facilities,
+        List<C360NewFacilities.NewFacility> newFacilities
+    ) {
         List<FeeAdd> out = new List<FeeAdd>();
         if (String.isBlank(req.feeAddsJson)) {
             return out;
@@ -1438,14 +1522,15 @@ global with sharing class StageLoanModification {
             // "Costs" row is a third-party charge passing through.
             fa.isIncome = fa.recordType == 'Fees';
 
-            fa.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
-            if (fa.targetLoanId == null) {
+            fa.targetNewLabel = armLabel(m.get('targetLoanId'), newFacilities, 'fee add');
+            fa.targetLoanId = fa.targetNewLabel == null ? C360Plan.asId(m.get('targetLoanId')) : null;
+            if (fa.targetNewLabel == null && fa.targetLoanId == null) {
                 if (facilities.size() != 1) {
                     throw new ToolException('targetLoanId is required on each fee add when more than one facility is selected.');
                 }
                 fa.targetLoanId = facilities[0].Id;
             }
-            if (!byId.containsKey(fa.targetLoanId)) {
+            if (fa.targetNewLabel == null && !byId.containsKey(fa.targetLoanId)) {
                 throw new ToolException(
                     'A fee add targets facility ' + fa.targetLoanId + ', which is not one of the selected facilities. ' +
                     'A fee is created on the CLONE of a facility this plan modifies.'
@@ -1557,7 +1642,11 @@ global with sharing class StageLoanModification {
      *
      * Nothing is created here. The arm hop of the execute pair writes the rows.
      */
-    private static List<PledgeAdd> parsePledgeAdds(Request req, List<LLC_BI__Loan__c> facilities) {
+    private static List<PledgeAdd> parsePledgeAdds(
+        Request req,
+        List<LLC_BI__Loan__c> facilities,
+        List<C360NewFacilities.NewFacility> newFacilities
+    ) {
         List<PledgeAdd> out = new List<PledgeAdd>();
         if (String.isBlank(req.pledgeAddsJson)) {
             return out;
@@ -1610,17 +1699,21 @@ global with sharing class StageLoanModification {
             }
         }
         // What each selected facility already secures, so a duplicate is named rather than filed.
-        Map<Id, Set<Id>> pledgedByFacility = new Map<Id, Set<Id>>();
+        // KEYED ON THE TARGET, WHICHEVER SHAPE IT HAS. A net-new facility has no id yet, so its
+        // bucket is its label; without that every new facility on one plan would share one bucket
+        // and the second pledge onto the second facility would read as a duplicate of the first.
+        Map<String, Set<Id>> pledgedByFacility = new Map<String, Set<Id>>();
         Set<Id> selectedIds = byId.keySet();
         if (!existingIds.isEmpty()) {
             for (LLC_BI__Loan_Collateral2__c p : [
                 SELECT LLC_BI__Loan__c, LLC_BI__Collateral__c FROM LLC_BI__Loan_Collateral2__c
                 WHERE LLC_BI__Loan__c IN :selectedIds AND LLC_BI__Collateral__c IN :existingIds WITH USER_MODE
             ]) {
-                if (!pledgedByFacility.containsKey(p.LLC_BI__Loan__c)) {
-                    pledgedByFacility.put(p.LLC_BI__Loan__c, new Set<Id>());
+                String bucket = String.valueOf(p.LLC_BI__Loan__c);
+                if (!pledgedByFacility.containsKey(bucket)) {
+                    pledgedByFacility.put(bucket, new Set<Id>());
                 }
-                pledgedByFacility.get(p.LLC_BI__Loan__c).add(p.LLC_BI__Collateral__c);
+                pledgedByFacility.get(bucket).add(p.LLC_BI__Collateral__c);
             }
         }
         List<LLC_BI__Collateral_Type__c> types = typeWords.isEmpty()
@@ -1647,14 +1740,15 @@ global with sharing class StageLoanModification {
                 );
             }
 
-            pa.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
-            if (pa.targetLoanId == null) {
+            pa.targetNewLabel = armLabel(m.get('targetLoanId'), newFacilities, 'pledge');
+            pa.targetLoanId = pa.targetNewLabel == null ? C360Plan.asId(m.get('targetLoanId')) : null;
+            if (pa.targetNewLabel == null && pa.targetLoanId == null) {
                 if (facilities.size() != 1) {
                     throw new ToolException('targetLoanId is required on each pledge when more than one facility is selected.');
                 }
                 pa.targetLoanId = facilities[0].Id;
             }
-            if (!byId.containsKey(pa.targetLoanId)) {
+            if (pa.targetNewLabel == null && !byId.containsKey(pa.targetLoanId)) {
                 throw new ToolException(
                     'A pledge targets facility ' + pa.targetLoanId + ', which is not one of the selected facilities. ' +
                     'A pledge is authored on the CLONE of a facility this plan modifies.'
@@ -1709,14 +1803,16 @@ global with sharing class StageLoanModification {
                 }
                 // Already on the facility, so the carry brings it onto the clone by itself; or named
                 // twice by this same plan, which is the same duplicate arriving from the other side.
-                Set<Id> already = pledgedByFacility.get(pa.targetLoanId);
+                String bucket = targetKey(pa.targetLoanId, pa.targetNewLabel);
+                Set<Id> already = pledgedByFacility.get(bucket);
                 if (already == null) {
                     already = new Set<Id>();
-                    pledgedByFacility.put(pa.targetLoanId, already);
+                    pledgedByFacility.put(bucket, already);
                 }
                 if (already.contains(pa.collateralId)) {
                     throw new ToolException(
-                        'Collateral ' + asset.Name + ' is already pledged to ' + byId.get(pa.targetLoanId).Name +
+                        'Collateral ' + asset.Name + ' is already pledged to ' +
+                        (pa.targetNewLabel == null ? byId.get(pa.targetLoanId).Name : pa.targetNewLabel) +
                         ', or this plan pledges it there twice. Either way the modification carries one pledge onto ' +
                         'the clone, and a second row there is a duplicate rather than a second lien.'
                     );
@@ -2246,7 +2342,11 @@ global with sharing class StageLoanModification {
      * validated against the org's active values — a refusal carries the legal list, so the caller
      * can correct itself with the org's vocabulary rather than guessing again.
      */
-    private static List<FieldChange> parseFieldChanges(Request req, List<LLC_BI__Loan__c> facilities) {
+    private static List<FieldChange> parseFieldChanges(
+        Request req,
+        List<LLC_BI__Loan__c> facilities,
+        List<C360NewFacilities.NewFacility> newFacilities
+    ) {
         List<FieldChange> out = new List<FieldChange>();
         if (String.isBlank(req.fieldChangesJson)) {
             return out;
@@ -2290,14 +2390,15 @@ global with sharing class StageLoanModification {
             FieldChange fc = new FieldChange();
             fc.fieldName = apiName;
             fc.fieldLabel = dfr.getLabel();
-            fc.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
-            if (fc.targetLoanId == null) {
+            fc.targetNewLabel = armLabel(m.get('targetLoanId'), newFacilities, 'field change');
+            fc.targetLoanId = fc.targetNewLabel == null ? C360Plan.asId(m.get('targetLoanId')) : null;
+            if (fc.targetNewLabel == null && fc.targetLoanId == null) {
                 if (facilities.size() != 1) {
                     throw new ToolException('targetLoanId is required on each field change when more than one facility is selected.');
                 }
                 fc.targetLoanId = facilities[0].Id;
             }
-            if (!byId.containsKey(fc.targetLoanId)) {
+            if (fc.targetNewLabel == null && !byId.containsKey(fc.targetLoanId)) {
                 throw new ToolException('A field change targets facility ' + fc.targetLoanId + ', which is not one of the selected facilities.');
             }
             coerceFieldValue(fc, dfr, m.get('value'));
@@ -2373,7 +2474,12 @@ global with sharing class StageLoanModification {
      * it excludes from the carry, at stage time, so the banker confirms a named row rather than a
      * description — and an account involved under two roles is refused until the role settles it.
      */
-    private static List<InvolvementChange> parseInvolvementChanges(Request req, List<LLC_BI__Loan__c> facilities, List<String> warnings) {
+    private static List<InvolvementChange> parseInvolvementChanges(
+        Request req,
+        List<LLC_BI__Loan__c> facilities,
+        List<C360NewFacilities.NewFacility> newFacilities,
+        List<String> warnings
+    ) {
         List<InvolvementChange> out = new List<InvolvementChange>();
         if (String.isBlank(req.involvementChangesJson)) {
             return out;
@@ -2393,17 +2499,29 @@ global with sharing class StageLoanModification {
             ic.accountId = C360Plan.asId(m.get('accountId'));
             ic.accountName = m.get('accountName') == null ? null : String.valueOf(m.get('accountName')).trim();
             ic.ownership = C360Plan.asDecimal(m.get('ownership'));
-            ic.targetLoanId = C360Plan.asId(m.get('targetLoanId'));
+            ic.targetNewLabel = armLabel(m.get('targetLoanId'), newFacilities, 'borrowing-structure change');
+            ic.targetLoanId = ic.targetNewLabel == null ? C360Plan.asId(m.get('targetLoanId')) : null;
             if (ic.op != 'add' && ic.op != 'remove') {
                 throw new ToolException('Each borrowing-structure change carries op "add" or "remove". Supplied: ' + ic.op + '.');
             }
-            if (ic.targetLoanId == null) {
+            // A REMOVE is a CARRY EXCLUSION: the parent keeps its row and the new version starts
+            // without it. A facility this plan is creating carries nothing to leave behind, so a
+            // remove aimed at one is not a narrower version of the same act, it is a request with
+            // no referent at all.
+            if (ic.targetNewLabel != null && ic.op == 'remove') {
+                throw new ToolException(
+                    'A borrowing-structure REMOVE targets ' + ic.targetNewLabel + ', which is a facility this plan is ' +
+                    'creating. A remove is a carry exclusion and a new facility carries nothing: it starts with the ' +
+                    'borrower alone, and anybody else on it is an ADD.'
+                );
+            }
+            if (ic.targetNewLabel == null && ic.targetLoanId == null) {
                 if (facilities.size() != 1) {
                     throw new ToolException('targetLoanId is required on each borrowing-structure change when more than one facility is selected.');
                 }
                 ic.targetLoanId = facilities[0].Id;
             }
-            if (!byId.containsKey(ic.targetLoanId)) {
+            if (ic.targetNewLabel == null && !byId.containsKey(ic.targetLoanId)) {
                 throw new ToolException(
                     'A borrowing-structure change targets facility ' + ic.targetLoanId + ', which is not one of the selected facilities.'
                 );
@@ -2415,11 +2533,17 @@ global with sharing class StageLoanModification {
                     throw new ToolException('An involvement ADD names its role, one of: ' + String.join(ok, ', ') + '. Supplied: ' + ic.role + '.');
                 }
                 resolveAccount(ic);
-                for (LLC_BI__Legal_Entities__c e : [
-                    SELECT Id, LLC_BI__Borrower_Type__c FROM LLC_BI__Legal_Entities__c
-                    WHERE LLC_BI__Loan__c = :ic.targetLoanId AND LLC_BI__Account__c = :ic.accountId
-                    WITH USER_MODE
-                ]) {
+                // The already-involved warning reads the TARGET's own structure. A facility this
+                // plan creates has none yet, so the query is skipped rather than run against null.
+                List<LLC_BI__Legal_Entities__c> onTarget = new List<LLC_BI__Legal_Entities__c>();
+                if (ic.targetNewLabel == null) {
+                    onTarget = [
+                        SELECT Id, LLC_BI__Borrower_Type__c FROM LLC_BI__Legal_Entities__c
+                        WHERE LLC_BI__Loan__c = :ic.targetLoanId AND LLC_BI__Account__c = :ic.accountId
+                        WITH USER_MODE
+                    ];
+                }
+                for (LLC_BI__Legal_Entities__c e : onTarget) {
                     warnings.add(
                         ic.accountName + ' is ALREADY involved on ' + byId.get(ic.targetLoanId).Name + ' as ' +
                         e.LLC_BI__Borrower_Type__c + ', and the carry will bring that row onto the clone. This plan adds a ' +
@@ -2541,6 +2665,54 @@ global with sharing class StageLoanModification {
         } catch (Exception e) {
             throw new ToolException('"' + String.valueOf(raw) + '" is not a Salesforce id, so it cannot be a ' + fieldName + '.');
         }
+    }
+
+    /* ---------------------------------------------------------------- the label target
+
+       A NET-NEW FACILITY HAS NO ID UNTIL EXECUTE TIME (founder, 2026-09-03). A covenant, a party, a
+       pledge, a fee or a field change staged onto a facility this same plan is CREATING therefore
+       cannot name it by id: it names it by LABEL, and the execute leg resolves the label to the id
+       it minted. This is the only forward reference in the package and it is deliberately narrow.
+
+       The arms that take one are the ADDS. A carry exclusion is refused on a label by construction
+       and needs no check: a new facility carries no junction for the new version to leave behind,
+       so there is nothing there to exclude. */
+
+    /**
+     * The label an arm entry targets, or null where it targets a facility by id.
+     *
+     * @param raw The caller's targetLoanId, which may be an id, a label or nothing.
+     * @param newFacilities The net-new facilities this plan creates.
+     * @param what The arm being staged, for the banker copy.
+     * @return The canonical label, or null.
+     */
+    private static String armLabel(Object raw, List<C360NewFacilities.NewFacility> newFacilities, String what) {
+        String label = C360NewFacilities.canonicalLabel(raw);
+        if (label == null) {
+            return null;
+        }
+        C360NewFacilities.byLabel(label, newFacilities, what);
+        return label;
+    }
+
+    /** How the plan names an arm's target, whether it is a booked member or one this plan creates. */
+    private static String armTargetName(
+        Id targetLoanId,
+        String targetNewLabel,
+        Map<Id, LLC_BI__Loan__c> facilityById,
+        List<C360NewFacilities.NewFacility> newFacilities
+    ) {
+        if (targetNewLabel == null) {
+            return facilityById.get(targetLoanId).Name;
+        }
+        return targetNewLabel + ', ' + C360NewFacilities.phrase(
+            C360NewFacilities.byLabel(targetNewLabel, newFacilities, 'plan step')
+        );
+    }
+
+    /** One dedupe bucket per target, whichever of the two shapes the target has. */
+    private static String targetKey(Id targetLoanId, String targetNewLabel) {
+        return targetNewLabel == null ? String.valueOf(targetLoanId) : targetNewLabel;
     }
 
     /** The target facility for one exclusion entry, with the same rule the other arms use. */
@@ -2797,7 +2969,12 @@ global with sharing class StageLoanModification {
      * the carry will bring an attached one onto the clone by itself and a second junction would be
      * a duplicate nobody asked for.
      */
-    private static List<CovenantAttach> parseCovenantAttaches(Request req, List<LLC_BI__Loan__c> facilities, List<String> warnings) {
+    private static List<CovenantAttach> parseCovenantAttaches(
+        Request req,
+        List<LLC_BI__Loan__c> facilities,
+        List<C360NewFacilities.NewFacility> newFacilities,
+        List<String> warnings
+    ) {
         List<CovenantAttach> out = new List<CovenantAttach>();
         if (String.isBlank(req.covenantAttachesJson)) {
             return out;
@@ -2826,8 +3003,14 @@ global with sharing class StageLoanModification {
                     'CREATED goes in covenantAddsJson instead, with its type and threshold.'
                 );
             }
-            ca.targetLoanId = exclusionTarget(m.get('targetLoanId'), facilities, byId, 'covenant association');
-            resolveCovenantAttach(ca, borrowerId, byId.get(ca.targetLoanId).Name);
+            ca.targetNewLabel = armLabel(m.get('targetLoanId'), newFacilities, 'covenant association');
+            ca.targetLoanId = ca.targetNewLabel == null
+                ? exclusionTarget(m.get('targetLoanId'), facilities, byId, 'covenant association')
+                : null;
+            // resolveCovenantAttach proves the covenant belongs to this borrower and is not already
+            // on the target. On a new facility the second half is true by construction: the query it
+            // runs against a null loan id returns nothing, which is the right answer.
+            resolveCovenantAttach(ca, borrowerId, armTargetName(ca.targetLoanId, ca.targetNewLabel, byId, newFacilities));
             String pairKey = String.valueOf(ca.covenantId) + ':' + String.valueOf(ca.targetLoanId);
             if (seen.contains(pairKey)) {
                 throw new ToolException(
