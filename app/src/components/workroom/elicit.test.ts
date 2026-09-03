@@ -87,7 +87,7 @@ function ctxWith(over: Partial<ElicitContext> = {}): ElicitContext {
 /** The real deterministic parser, on the real read. Every composed sentence in
  *  this file goes through it. */
 function realEngine() {
-  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
   return { engine: createModifyEngine({ context, data, bundle }), context };
 }
 

@@ -8,12 +8,22 @@ and the other place is stale.
 Account `001bb00001I7FPNAA3`, org `bankinggpt-at`
 (`accenture-d8--bankinggpt.sandbox.my.salesforce.com`).
 
-**Status, 2026-09-03.** Everything below is LIVE in the org and in the bundle
-unless a section carries a **NOT BUILT** banner. Four do: the second package
-(2.2), the pricing stream components (2.4), two of the three opportunities (6)
-and the whole audit trail (7). Nothing in a
-NOT BUILT section may be said on stage: it does not exist and the screen will
-not show it.
+**Status, 2026-09-03, after phase 2.** There are now TWO truths to keep apart,
+and this file marks which is which on every section.
+
+- **ORG** is `bankinggpt-at`. It holds two packages, eight booked facilities,
+  pricing components on all eight, five opportunities and fifty action-history
+  entries.
+- **SCREEN** is `artifact/live-data.json`, which is what the cockpit renders
+  tonight. It still holds ONE package and the pre-phase-2 reads.
+
+**Say only what the SCREEN holds.** Where the two differ, the section says so
+under a **SCREEN SHOWS** line. The bundle was refreshed from the org and then
+rolled back inside this session because the refresh turns Hartwell into a
+two-package relationship, which fires the greeting's package ask and breaks 188
+data-pinned assertions across nineteen suites. That reconciliation is real work
+and it is not four hours before a demo work. The org is finished and waiting;
+the bundle catches up in phase 3.
 
 ---
 
@@ -76,14 +86,22 @@ screen. It now reads 2027-03-15 with the other line. The construction facility r
 2026-11-01 and the three other term loans read 2030-09-20, 2028-05-10 and 2030-02-18;
 all four now read 2031-03-15.
 
-### 2.2 Hartwell Real Estate Package - NOT BUILT
+### 2.2 Hartwell Real Estate Package - BUILT IN THE ORG
 
-**This package does not exist in the org.** It was specified and not created,
-because a second package half-built is worse than no second package, and the
-session ran out of time after the facility enrichment. Hartwell carries ONE
-package tonight. Do not mention a real estate package on stage.
+Package `a5Fbb000000J6BNEA0`. Two booked facilities, `a4Zbb000002ICnxEAG` (the
+$6.5M CRE term) and `a4Zbb000002ICnyEAG` (the $1.5M equipment note), both with
+purpose, rate, term, amortisation, first payment, a pricing stream with rate and
+payment components, the operating company as borrower and James Hartwell as
+unlimited guarantor. Collateral is `a35bb0000019cv7AAA` (the 1400 Industrial
+Parkway plant, $8.4M, MAI as-is, 2026-01-15) and `a35bb0000019cv8AAA` (the
+inspection and metrology fleet, $2.1M, 2026-01-20), pledged at lendable value
+with first lien on each. COV-000646 is associated to the CRE loan.
 
-The specification is kept below for whoever builds it next. Two booked
+**SCREEN SHOWS: one package.** Tonight's bundle predates this. Do not mention a
+real estate package on stage, and do not read the $54.0M or $57.0M totals off
+this section.
+
+Two booked
 facilities, $8.0M committed, $7.67M drawn.
 
 | Loan | Committed | Drawn | Product | Purpose | Rate | Term | Amortisation | First payment | Maturity |
@@ -113,16 +131,19 @@ appears in section 2.2 belongs to a package that does not exist.
 Every booked facility carries a pricing stream with a rate component and a payment
 component, on the Flowers For Dreams pattern:
 
-**NOT BUILT this session.** Only the two C&I lines carry seeded rate and payment
-components, exactly as they did this morning. The four term loans carry their
-rate on the loan record itself (`LLC_BI__Current_Interest_Rate__c`), which is
-what the facility card reads, so no card shows a gap. The stream components are
-a second surface the demo does not open.
+**BUILT.** All eight booked facilities carry a pricing stream flagged as both
+rate and payment stream, with a rate component (`Interest_Rate_Type` Fixed,
+`Term_Unit` Unit_Months, `Frequency_Monthly`) and a payment component
+(`Frequency_Monthly`, interest and principal on the six that amortise, interest
+only on the two lines). Payments are computed from the amortisation term, not
+typed: $118,601.93 on the $8M equipment note, $93,612.99 on the construction
+facility, $42,735.01 on the purchase loan, $52,397.67 on the $3.5M equipment
+note, $47,889.96 on the CRE term, $22,346.84 on the $1.5M equipment note, and
+interest only of $50,446.67 and $6,545.42 on the two lines.
 
-The pattern for whoever adds them: rate component `Interest_Rate_Type = Fixed`,
-`Term_Unit = Unit_Months`, frequency `Frequency_Monthly`; payment component
-frequency `Frequency_Monthly`, includes Interest and Principal for the term
-loans, Interest only for the lines.
+The two streams that predate this build were corrected rather than rebuilt: the
+revolving line still priced at 7.6 percent against a loan reading 6.58, and the
+seasonal line still ended on the retired 2026-06-30 maturity.
 
 ---
 
@@ -162,7 +183,7 @@ performing borrower where the work is administrative, not a workout.
 | COL-000762 | `a35bb0000013xz3AAA` | UCC | Accounts | Accounts receivable, eligible. Excludes invoices over 90 days past due, uninsured foreign debtors, intercompany and contra accounts. 20 percent concentration cap per debtor. | $12,000,000 | 2026-08-31 | Borrowing base certificate | 1st | 80% | $15M line, $2.5M line |
 | COL-000763 | `a35bb0000013y0fAAA` | UCC | Inventory | Inventory at Fort Wayne and Kokomo: raw bar and plate stock, work in process, finished goods. Excludes consigned material and stock over 12 months old. | $8,000,000 | 2026-08-31 | Borrowing base certificate | 1st | 50% | $15M line |
 | COL-000764 | `a35bb0000013y2HAAQ` | UCC | Equipment | Blanket lien on all production machinery: 14 multi-axis CNC centres incl. Mazak Integrex i-400 (2022) and DMG Mori NTX 2500 (2023), grinding and EDM cells. | $10,000,000 | 2026-05-22 | Orderly liquidation appraisal | 1st | 75% | $8M equipment, $3.5M equipment |
-| COL-000765 | `a35bb0000013y3tAAA` | Real Estate | Warehouse / Industrial | First mortgage, 4820 Adams Center Road, Fort Wayne IN 46806 (218,000 sq ft on 22.4 acres) and 2100 Home Avenue, Kokomo IN 46902 (140,000 sq ft, under expansion). | $14,000,000 | 2026-06-04 | MAI appraisal, as-is | 1st | 75% | $12M construction, $5M purchase, $6.5M CRE term |
+| COL-000765 | `a35bb0000013y3tAAA` | Real Estate | Warehouse / Industrial | First mortgage, 4820 Industrial Parkway, Fort Wayne IN 46806 (218,000 sq ft on 22.4 acres) and 1175 Commerce Drive, Kokomo IN 46902 (140,000 sq ft, under expansion). | $14,000,000 | 2026-06-04 | MAI appraisal, as-is | 1st | 75% | $12M construction, $5M purchase, $6.5M CRE term |
 Four pledges, all four already in the org with these descriptors, values,
 valuation dates, methods, lien positions and advance rates. Nothing here was
 invented this session.
@@ -197,22 +218,34 @@ right answer when someone asks is that it is out of the credit box.
 | Hartwell Industrial - CNC Cell Equipment Expansion | Qualification | $3,000,000 | 2026-11-14 | Finance the fifth multi-axis cell at Kokomo; the Proposal-stage $3M equipment facility already sits on the C&I package. |
 | Hartwell Industrial - Interest Rate Swap | Qualification | $12,000,000 | 2026-12-12 | Fix the floating construction exposure for five years ahead of the 2031 maturity. |
 
-**Only the first exists** (`006bb00000tsmeNAAQ`, Proposal, $185,000, closing
-2026-10-30). The CNC cell and the swap were specified and **NOT BUILT**. The
-opportunities pane shows one row tonight. The $3M Proposal-stage equipment
-facility on the C&I package IS real and is the thing to point at when the CNC
-cell comes up.
+**The org already holds five, and they are better than the three specified
+above.** The opportunities read returns: the $12M working capital line renewal
+(Approval / Loan Committee), equipment finance for a CNC machining cell (Credit
+Underwriting, $4.2M), FX hedging on EUR supplier exposure (Qualification,
+$320,000), Treasury Services Expansion (`006bb00000tsmeNAAQ`, Proposal,
+$185,000) and a commercial card program (Needs Analysis, $95,000). Nothing had
+to be invented; the equipment expansion, the treasury cross-sell and the hedge
+all exist under their own names.
+
+**SCREEN SHOWS: one row**, the Treasury Services Expansion. The other four
+arrive with the phase 3 bundle refresh.
 
 ---
 
-## 7. Audit trail, last 90 days - NOT BUILT
+## 7. Audit trail - REAL IN THE ORG, EMPTY ON THE SCREEN
 
-**The activity feed is empty and stays empty tonight.** The ten entries below
-were specified and not written. The bundle's `activity` array for Hartwell is
-`[]`, the feed renders its own gap state, and that gap is honest. Do not
-narrate a history the screen cannot show.
+The action history read works and returns **fifty entries** for Hartwell, built
+from the real `cm_Action_Staging__c` rows this project's own runs have left
+behind: staged and executed modifications, covenant work, valuations. Nothing
+had to be fabricated. Some of those rows point at facilities that later got
+reverted, so the feed needs a pass for debris before it is shown.
 
-Kept for whoever builds it, oldest first:
+**SCREEN SHOWS: nothing.** The bundle's `activity` array for Hartwell is `[]`
+and the feed renders its own gap state. Do not narrate a history the screen
+cannot show tonight.
+
+The invented ten below are now redundant and are kept only as a record of what
+was specified before the real read was known to work:
 
 | Date | Entry |
 |---|---|
@@ -291,8 +324,10 @@ numbers are real.
 
 ## 9. What to say if a figure is challenged
 
-- **Committed and drawn**: $46.0M committed, $31.03M drawn, 67.5 percent
-  utilised, one package. Unchanged from this morning.
+- **Committed and drawn**: on the SCREEN, $46.0M committed and $31.03M drawn,
+  67.5 percent utilised, one package. In the ORG the exposure read now returns
+  $57.0M committed and $38.7M outstanding across two packages, counting the $3M
+  Proposal facility in the commitment. Quote the screen.
 - **Revenue**: $64.2M LTM. The account record previously carried $85M in the annual
   revenue field, which was wrong against the spread. It has been corrected to $64.2M.
 - **Risk rating**: 4 on the relationship. Two facilities carry a 5 at facility level,
