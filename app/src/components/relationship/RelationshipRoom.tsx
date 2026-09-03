@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion } from "../../data/motion";
@@ -33,6 +33,7 @@ import {
   useSettleChoreography,
   type SettledRow,
 } from "../workroom/settle";
+import { FINALE_SWEEP_MS, finaleAttrs, railFiledLine, useFinale, withFinale } from "../workroom/finale";
 import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { readCatalog, type OrgCatalog } from "../../channel/catalog";
@@ -243,6 +244,12 @@ const DOSSIER_ROW_MS = 300;
 const DOSSIER_FOOT_MS = 200;
 const DOSSIER_CHECK_MS = 180;
 const HALO_LIFE_MS = 5600;
+
+/* ---- the finale's two sentences (founder, 2026-09-03). The line under the card
+   is the room saying it is FINISHED rather than merely stopped; the prompt is the
+   other half of the same claim, and it is the facility room's word for word. */
+const REL_AFTERGLOW_LINE = "The review is closed. Nothing else is waiting on you.";
+const REL_FILED_PROMPT = "Anything else on this relationship?";
 const WORD_STAGGER_MS = 26;
 
 let seq = 0;
@@ -651,6 +658,15 @@ export function RelationshipRoom({
      grammar, both rooms: an answered step leaves the stage in the room's own
      exit and one compact row stands for it. */
   const settle = useSettleChoreography(reduced);
+  /* THE FILED FINALE, THE SAME ONE (founder, 2026-09-03). One grammar with the
+     facility room, down to the class names: the room exhales, the card ascends
+     alone, and one quiet line sits under it. See components/workroom/finale.ts.
+
+     THIS ROOM'S CARD CARRIES NO LINK. Its dossier has no `packageHref` - the
+     review files against the relationship, not a package record - so the
+     afterglow offers the one door there is rather than inventing a second. */
+  const finale = useFinale(reduced);
+  const { begin: beginFinale, exitOf: finaleExit, state: finaleState } = finale;
   const { settle: settleItems } = settle;
   const { peek, openPeek, closePeek } = usePeek();
 
@@ -1812,6 +1828,16 @@ export function RelationshipRoom({
     }
   }, [answers, ctx, deps, filing, flow, onFiled, push, route, sealed]);
 
+  /* ---- the room exhales when the card lands. The exit set is everything above
+          the dossier, fixed at this instant, so a line that arrives afterwards
+          slots under the card instead of joining the drain. */
+  useEffect(() => {
+    if (phase !== "filed") return;
+    const list = itemsRef.current;
+    const at = list.findIndex((i) => i.kind === "dossier");
+    beginFinale((at < 0 ? list : list.slice(0, at)).map((i) => i.id));
+  }, [beginFinale, phase]);
+
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
   useEffect(() => {
     if (!lit || reduced) return;
@@ -2036,6 +2062,8 @@ export function RelationshipRoom({
             <div className="wk-col-l">
               <section
                 className={`wk-thread ${hidden.length ? "wk-hashist" : ""} ${histOpen ? "wk-masked" : ""}`}
+                /* THE PANE CENTRES WHAT IS LEFT once the drain is over. */
+                data-finale={finaleState === "still" ? "still" : undefined}
                 ref={threadRef}
               >
                 {grouped.map((group) => (
@@ -2066,6 +2094,7 @@ export function RelationshipRoom({
                           packages={ctx.packages}
                           onAnchorPackage={onAnchorPackage}
                           lit={lit}
+                          hold={item.kind === "dossier" ? finale.hold : 0}
                           onOpenPeek={openPeek}
                           onOption={(sayText, label) => void say(sayText, label)}
                           expanded={item.kind === "settled" ? settle.isOpen(item.id) : false}
@@ -2084,6 +2113,26 @@ export function RelationshipRoom({
                         />
                       );
                       const tier = relTierOf(item, detailId);
+                      const inWave = finaleExit(item.id);
+                      const leaves = inWave === null ? null : finaleAttrs(inWave, finaleState);
+                      /* THE CARD IS THE ONE THING THAT ASCENDS, on the wrapper it
+                         already had, with the finale's two clocks riding down as
+                         custom properties. */
+                      const star =
+                        item.kind === "dossier"
+                          ? ({ "--wk-fin-hold": `${finale.hold}ms`, "--wk-fin-sweep": `${FINALE_SWEEP_MS}ms` } as CSSProperties)
+                          : null;
+                      /* AND WHAT LANDED BESIDE THE CARD WAITS FOR IT. The drafted
+                         reply rides the filing's own tail and the purpose
+                         footnote arrives seconds later; both were appearing at
+                         full strength while the star was still on its way in,
+                         which put the secondary content on the glass first. They
+                         hold until the card has finished arriving and then slide
+                         in under it. */
+                      const after =
+                        finaleState !== "off" && inWave === null && item.kind !== "dossier"
+                          ? ({ "--wk-fin-hold": `${finale.hold}ms` } as CSSProperties)
+                          : null;
                       /* AN ANSWERED STEP LEAVES THE STAGE AND STAYS MOUNTED
                          (rule 1). The wrapper is one shape at every moment, so
                          React never remounts a bubble mid-speech. The settled
@@ -2093,9 +2142,15 @@ export function RelationshipRoom({
                           <div
                             key={item.id}
                             data-ex-id={item.id}
-                            {...settleAttrs(
-                              item.kind === "settled" ? "on" : settle.stateOf(item.id),
-                              settle.heightOf(item.id),
+                            data-finale-card={star ? "" : undefined}
+                            data-finale-after={after ? "" : undefined}
+                            {...withFinale(
+                              settleAttrs(
+                                item.kind === "settled" ? "on" : settle.stateOf(item.id),
+                                settle.heightOf(item.id),
+                              ),
+                              leaves,
+                              star ?? after,
                             )}
                           >
                             {/* THE INNER ROW IS WHAT COLLAPSES. See workroom.css:
@@ -2110,7 +2165,7 @@ export function RelationshipRoom({
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED, so an absence
                          contract can tell "faded out" from "gone". */
                       return (
-                        <div key={item.id} {...tierAttrs(tier, choreo.stateOf(tier), tiersShown)}>
+                        <div key={item.id} {...withFinale(tierAttrs(tier, choreo.stateOf(tier), tiersShown), leaves)}>
                           {block}
                         </div>
                       );
@@ -2147,6 +2202,20 @@ export function RelationshipRoom({
                     <span>Composing…</span>
                   </div>
                 )}
+                {/* THE QUIET AFTERGLOW. One line, and the one door this room has:
+                    its dossier files against the relationship rather than a
+                    package record, so there is no nCino link to offer and none is
+                    invented. */}
+                {finaleState === "still" && (
+                  <div className="wk-afterglow" data-finale="afterglow">
+                    <span>{REL_AFTERGLOW_LINE}</span>
+                    <div className="wk-ag-acts">
+                      <button type="button" className="wk-dt" onClick={onClose}>
+                        Close the room
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
 
               <div className="wk-sugg" />
@@ -2160,7 +2229,10 @@ export function RelationshipRoom({
                   disabled={!awake || phase === "filed"}
                   placeholder={
                     phase === "filed"
-                      ? `${flowSpec?.filedWord ?? "Filed"}. The room holds.`
+                      ? // THE ROOM IS STILL ALIVE (founder, 2026-09-03). The card
+                        // already says the filing landed; the prompt saying it
+                        // again was the room announcing its own end twice.
+                        REL_FILED_PROMPT
                       : !awake
                         ? "Reading the relationship…"
                         : ask
@@ -2265,8 +2337,22 @@ export function RelationshipRoom({
                   </button>
                 }
               >
-                {laneRows.map((row) => (
-                  <div className="wk-ent" key={row.key}>
+                {/* THE RAIL DRAINS WITH THE THREAD. The answers stay MOUNTED as
+                    they go off stage: they are the review's own record and an
+                    absence contract must still be able to read them. */}
+                {finaleState === "still" && (
+                  <div className="wk-railfiled" data-rail="filed">
+                    <TypeIcon kind={flowSpec?.icon ?? "commit"} />
+                    <span>
+                      {railFiledLine(laneRows.length, flowSpec?.filedWord ?? "Filed", ["answer", "answers"])}
+                    </span>
+                  </div>
+                )}
+                {laneRows.map((row, i) => (
+                  <div
+                    {...withFinale({ className: "wk-ent" }, finaleState === "off" ? null : finaleAttrs(i, finaleState))}
+                    key={row.key}
+                  >
                     <TypeIcon kind={row.icon} />
                     <span className="wk-ent-t">
                       <b>{row.label}</b>
@@ -2367,6 +2453,7 @@ function RelBlock({
   packages,
   onAnchorPackage,
   lit,
+  hold,
   onOpenPeek,
   onOption,
   onRestart,
@@ -2380,6 +2467,8 @@ function RelBlock({
   packages: PackageEntry[];
   onAnchorPackage: (productPackageId: string) => void;
   lit: boolean;
+  /** THE FINALE'S DRAIN, in ms, so the card's paced reveal waits it out. */
+  hold: number;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
   onOption: (say: string, label: string) => void;
   onRestart: (restart: { route: RelRoute; say: string }) => void;
@@ -2554,7 +2643,7 @@ function RelBlock({
     const d = item.dossier;
     return (
       <>
-        <RelDossier dossier={d} lit={lit} />
+        <RelDossier dossier={d} lit={lit} hold={hold} />
         <div className="wk-tokline">
           <span className="wk-tick">✓</span>
           <span>{d.tokenNote}</span>
@@ -2764,8 +2853,10 @@ function RelFlowCard({
    hairline draws across, each real row materialises ~300ms apart, a second
    hairline, then the check pops last. The halo behind it is the filing's only
    light and it breathes out on its own. */
-function RelDossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
-  let t = DOSSIER_HEADER_MS;
+function RelDossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: boolean; hold?: number }) {
+  /* THE CARD CONSTRUCTS ITSELF AFTER THE ROOM HAS CLEARED. `hold` is the
+     finale's drain; every delay below is offset by it. Zero outside a finale. */
+  let t = hold + DOSSIER_HEADER_MS;
   const header = t;
   t += DOSSIER_LINE_MS;
   const firstLine = t;

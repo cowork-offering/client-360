@@ -2869,3 +2869,180 @@ body.wk-open #root {
     animation: none;
   }
 }
+
+
+/* =============================================================================
+   THE FILED FINALE (founder, 2026-09-03).
+
+   "When the modification is done, can we gently and elegantly clean up the
+   room, a cinematic kind of creation success with that card. Right now the room
+   stays like nothing happened. But elegant."
+
+   THREE BEATS. The room exhales, the card ascends alone, and one quiet line
+   with two doors sits under it. The clocks live in components/workroom/finale.ts;
+   the distances and the light live here, and this block is LAST in the sheet on
+   purpose: every state it overrides - a tier's exit, a settled exchange's
+   arrival, the aura's endless turn - is written with the same weight, so the
+   finale wins on order rather than on a specificity arms race.
+
+   NOTHING HERE IS A NEW VOCABULARY. The sink is the tier fade with its sign
+   flipped, the ascent is the compile card's in-place resolve, and the light is
+   the dossier's own aura taken round exactly once.
+   ============================================================================= */
+
+/* ---- beat 1: the room exhales. Down, never up: the settle exit rises, and the
+        finale must not read as one more settle. */
+.wk-fin-out[data-finale="exhale"] {
+  pointer-events: none;
+  animation: wk-fin-sink var(--wk-fin-ms, 600ms) var(--ease-out) var(--wk-fin-at, 0ms) both;
+}
+@keyframes wk-fin-sink {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    grid-template-rows: 1fr;
+  }
+  70% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+    filter: blur(4px);
+    grid-template-rows: 0fr;
+  }
+}
+/* THE INNER ROW SQUEEZES WITH THE TRACK. A grid row can be 0fr and still hold a
+   child at its intrinsic height, so the same `min-height: 0` / `overflow:
+   hidden` the settle exit relies on is what lets the wave close its own space.
+   A tier has no inner row and simply sinks: it is already off stage in every
+   case but a summon, and a summoned tier leaving with the rest is correct. */
+.wk-fin-out[data-finale="exhale"] > .wk-ex-in {
+  min-height: 0;
+  overflow: hidden;
+  height: var(--wk-ex-h, auto);
+}
+/* Off stage: mounted, laid out nowhere, and taking no gap with it. */
+.wk-fin-gone[data-finale="gone"] {
+  display: none;
+}
+
+/* ---- beat 2: the card ascends. It is the only thing left in the pane, so the
+        pane centres it rather than leaving it pinned to a top edge it no longer
+        shares with anything. */
+.wk-thread[data-finale="still"] {
+  justify-content: center;
+}
+/* The same in-place resolve the compile card's pane uses, slower and with the
+   scale the founder asked for: 0.97 up to true size while the opacity comes in.
+   No blur and no filter on this one - the card is glass with its own
+   backdrop-filter, and a filter on an ancestor would flatten it. */
+.wk-ex[data-finale-card] > .wk-ex-in {
+  animation: wk-fin-ascend 500ms var(--ease-settle) var(--wk-fin-hold, 0ms) both;
+}
+@keyframes wk-fin-ascend {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* ONE ENTRANCE, NOT THREE. The arriving-exchange rise would run on the card and
+   on the token line under it while the wrapper is already scaling, and the card
+   paces its own rows from the inside (rc-h, rc-line, rc-r, rc-f). The wrapper
+   carries the arrival; the card carries the reveal. */
+.wk-ex[data-finale-card][data-settle-state] > .wk-ex-in > * {
+  animation: none;
+}
+/* ONE SLOW PASS OF THE RAINBOW, THEN STILL. The aura is the card's own light and
+   it turns forever while the halo is lit; here it goes round EXACTLY ONCE over
+   ~2.6s and holds. `both` on a single iteration is what makes "settles to still"
+   a resting state rather than a paused animation waiting to be resumed. */
+.wk-ex[data-finale-card] .wk-rescard > .aura {
+  animation:
+    aurarot var(--wk-fin-sweep, 2600ms) linear var(--wk-fin-hold, 0ms) 1 both,
+    wk-fin-glow var(--wk-fin-sweep, 2600ms) var(--ease-out) var(--wk-fin-hold, 0ms) 1 both;
+}
+@keyframes wk-fin-glow {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.42;
+  }
+  100% {
+    opacity: 0.12;
+  }
+}
+
+/* WHAT LANDED BESIDE THE CARD WAITS FOR IT. The drafted reply rides the filing's
+   own tail and the purpose footnote arrives seconds later; both used to appear at
+   full strength while the star was still on its way in. The track opens and the
+   content rises 500ms after the card starts, so the secondary content lands under
+   a card that has already finished arriving, and the card is never pushed by a
+   space opening under it mid-ascent. */
+.wk-ex[data-finale-after] {
+  animation: wk-ex-open var(--wk-settle-ms, 420ms) var(--ease-settle) calc(var(--wk-fin-hold, 0ms) + 500ms) both;
+}
+.wk-ex[data-finale-after] > .wk-ex-in > * {
+  animation: wk-ex-rise 300ms var(--ease-settle) calc(var(--wk-fin-hold, 0ms) + 500ms) both;
+}
+
+/* ---- beat 3: the afterglow. One line, two quiet doors, and the room is
+        honestly over rather than merely stopped. */
+.wk-afterglow {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  /* A beat behind the card, so the doors arrive under a card that has arrived. */
+  animation: wk-fin-after 520ms var(--ease-settle) 260ms both;
+}
+@keyframes wk-fin-after {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-afterglow .wk-ag-acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* The doors wear the room's own quiet control. A finale is not the place for a
+   second button weight. */
+.wk-afterglow a.wk-dt {
+  text-decoration: none;
+}
+
+/* ---- the rail drains with the thread. The staged cards are the ledger of what
+        is ABOUT to be written, and after the filing nothing is. */
+.wk-railfiled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  animation: wk-fin-after 420ms var(--ease-settle) both;
+}
+
+/* NOTHING IS NEEDED FOR REDUCED MOTION, and that is the point of doing the beat
+   in JS. The global kill-switch in electric-glass.css stops every animation
+   above; the finale lands straight on `still` rather than draining, so no node
+   is ever left mid-exit by a keyframe that did not run, the card is simply
+   present at its resting opacity, the sweep never starts and the aura goes back
+   to being the halo it always was. */
