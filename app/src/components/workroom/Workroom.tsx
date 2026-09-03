@@ -154,6 +154,7 @@ import { mailTipFrom, overdueCovenantTip } from "./tips";
 import { useClientMail } from "./clientMail";
 import { useRoomFeed } from "../../intent/feed";
 import { intentFor, intentMailNote } from "../../intent/open";
+import { carriedMailFor } from "../../actions/mailCarry";
 import { sourcePhrase } from "../../intent/contract";
 import "../../styles/workroom.css";
 import { ManifestRail } from "../rail/ManifestRail";
@@ -838,10 +839,12 @@ export function Workroom({
     accountName: context.accountName,
     bundle: reads?.bundle ?? null,
     generatedAt: reads?.generatedAt ?? "",
-    /* THE ROOM SAYS WHERE THE WORK CAME FROM. Null for every room the banker
-       opened themselves, and the greeting is then byte-identical to the one it
-       has always composed. */
-    intentNote: intentMailNote(intentFor(context.accountId)),
+    /* THE ROOM SAYS WHERE THE WORK CAME FROM. An intent carried in from another
+       conversation, or the trail's own message the banker just opened the room
+       on: both are the reason the room is open, so both outrank the mailbox
+       contest. Null for every room the banker opened themselves, and the
+       greeting is then byte-identical to the one it has always composed. */
+    intentNote: carriedMailFor(context.accountId) ?? intentMailNote(intentFor(context.accountId)),
   });
   const mail = useMemo(
     () => mailTipFrom({ hits: mailHits, accountName: context.accountName, today: reads?.generatedAt ?? "" }),

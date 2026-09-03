@@ -4,6 +4,7 @@ import { TopBar } from "./TopBar";
 import { Landing } from "./Landing";
 import { Whisper } from "./Whisper";
 import { IntentWhisper } from "./IntentWhisper";
+import { MailWhisper } from "./MailWhisper";
 import { AccountWorkspace } from "./AccountWorkspace";
 import { ChatFab } from "./ChatFab";
 import { CommandPalette } from "./CommandPalette";
@@ -102,6 +103,7 @@ export function AppShell() {
           pending intent for where the banker is standing, which is every view
           on a page with no store at all. */}
       <IntentWhisper />
+      <MailWhisper />
       <ChatFab />
       <CommandPalette />
       {/* The workroom is a FULL-SURFACE overlay over the cockpit, so it mounts

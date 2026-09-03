@@ -3,6 +3,7 @@ import { useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { mcpAvailable } from "../channel/mcp";
 import { runSyncSweep, type SyncLine } from "../channel/syncSweep";
+import { noteMailArrival } from "../actions/mailRow";
 import { dataVersionOf, saveOverlay } from "../state/syncOverlay";
 import { diffBundles, deltaReport, type DeltaField } from "../data/delta";
 import type { BorrowerBundle } from "../data/contract";
@@ -182,7 +183,12 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
         storedAt: result.storedAt ?? state.liveStoredAt[accountId],
         fetchedAt: { ...(state.slowTierFetchedAt[accountId] ?? {}), ...result.fetchedAt },
       });
-      if (result.requests.length) dispatch({ type: "INGEST_REQUESTS", accountId, entries: result.requests });
+      if (result.requests.length) {
+        dispatch({ type: "INGEST_REQUESTS", accountId, entries: result.requests });
+        /* THE ARRIVAL IS A WHISPER, NOT A POPUP. The corner offers the newest
+           message and the room it points at; nothing opens on its own. */
+        noteMailArrival(accountId, accountName, result.requests);
+      }
     } catch {
       // A sweep that falls over keeps the workspace exactly as it was. The
       // per-line failures already said what did not come back.

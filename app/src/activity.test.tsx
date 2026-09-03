@@ -145,10 +145,16 @@ describe("A30.1/A30.2 — Activity tab", () => {
     expect(text).toMatch(/\d+d ago|today|yesterday|mo ago/);
   });
 
-  it("marks the client request visually distinct with a Client request chip", () => {
+  it("marks an arriving client message as its own kind of row", () => {
     mount();
     click(openRow("Sterling Fabrication"));
-    expect(container!.textContent).toContain("Client request");
+    /* The kind chip is gone from a MESSAGE row: the row is already unlike every
+       other entry on the trail: it carries the sender, the ask on one line and
+       the room's own pill, and a chip on top of that is the pill soup the
+       trail bans. Every other kind is untouched. */
+    const row = document.querySelector("[data-mail-row]")!;
+    expect(row).toBeTruthy();
+    expect(row.textContent).toContain("Open in workroom");
   });
 
   it("renders the source reference as plain text, never a link (A29)", () => {
@@ -166,19 +172,30 @@ describe("A30.1/A30.2 — Activity tab", () => {
 });
 
 describe("A30.3 — detail popup", () => {
-  function openSterlingRequest() {
+  /* AN INBOUND MESSAGE NO LONGER OPENS THIS POPUP (founder, 2026-09-03: "the
+     pop up still opens up the old loan modification tab, not our workroom").
+     It is a compact row whose one action is the facility workroom. The popup,
+     and the registry next steps it ends in, are unchanged on every entry that
+     is not a client message, which is what these tests now drive. */
+  function openSterlingAnalysis() {
     mount();
     click(openRow("Sterling Fabrication"));
-    click(byText(/Revolver increase request received/)!);
+    click(byText(/Headroom analysis concluded/)!);
   }
 
-  it("opens with the ask, reference and linked verdict", () => {
-    openSterlingRequest();
+  it("is not what an arriving client message opens", () => {
+    mount();
+    click(openRow("Sterling Fabrication"));
+    expect(document.querySelector("[data-mail-row]")).toBeTruthy();
+    expect(modal()).toBeNull();
+  });
+
+  it("opens on a system entry with its verdict and reference", () => {
+    openSterlingAnalysis();
     const m = modal()!;
     expect(m).toBeTruthy();
-    expect(m.textContent).toContain("The ask");
-    // A31.2: this entry's steps live on the linked analysis, so no empty section.
-    expect(m.textContent).not.toContain("Suggested next steps");
+    expect(m.textContent).toContain("Verdict");
+    expect(m.textContent).toContain("Headroom analysis concluded");
   });
 
   it("always ends in Suggested next steps resolved through the registry", () => {
@@ -214,14 +231,14 @@ describe("A30.3 — detail popup", () => {
   });
 
   it("closes on Escape", () => {
-    openSterlingRequest();
+    openSterlingAnalysis();
     expect(modal()).toBeTruthy();
     press("Escape");
     expect(modal()).toBeNull();
   });
 
   it("traps Tab inside the popup", () => {
-    openSterlingRequest();
+    openSterlingAnalysis();
     const m = modal()!;
     expect(document.activeElement).toBe(m);
     act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
@@ -233,7 +250,7 @@ describe("A31.1 — overlays escape the app tree and outrank the nav", () => {
   it("portals the activity modal to <body>, not inside the scrolling workspace", () => {
     mount();
     click(openRow("Sterling Fabrication"));
-    click(byText(/Revolver increase request received/)!);
+    click(byText(/Headroom analysis concluded/)!);
     const m = modal()!;
     // Portalled: the modal is NOT a descendant of the app container, so no
     // ancestor stacking context or overflow can clip it.
@@ -244,7 +261,7 @@ describe("A31.1 — overlays escape the app tree and outrank the nav", () => {
   it("stacks the modal above the nav via the shared z-scale", () => {
     mount();
     click(openRow("Sterling Fabrication"));
-    click(byText(/Revolver increase request received/)!);
+    click(byText(/Headroom analysis concluded/)!);
     const overlay = modal()!.parentElement as HTMLElement;
     expect(overlay.getAttribute("style") ?? "").toContain("--z-modal");
     // The token scale itself guarantees the ordering.
@@ -268,9 +285,9 @@ describe("A31.1 — overlays escape the app tree and outrank the nav", () => {
 describe("A31.2 — no empty sections in the detail modal", () => {
   it("omits Suggested next steps when the entry has none of its own", () => {
     mount();
-    click(openRow("Sterling Fabrication"));
-    // The REQUEST entry's next steps live on the linked ANALYSIS entry.
-    click(byText(/Revolver increase request received/)!);
+    click(openRow("Piedmont Precision"));
+    // A covenant evaluation carries no steps of its own and no linked analysis.
+    click(byText(/Debt Service Coverage Ratio tested/)!);
     expect(modal()!.textContent).not.toContain("Suggested next steps");
   });
 
@@ -283,8 +300,8 @@ describe("A31.2 — no empty sections in the detail modal", () => {
 
   it("renders no section header with empty content", () => {
     mount();
-    click(openRow("Sterling Fabrication"));
-    click(byText(/Revolver increase request received/)!);
+    click(openRow("Piedmont Precision"));
+    click(byText(/Debt Service Coverage Ratio tested/)!);
     const sections = [...modal()!.querySelectorAll("section")];
     expect(sections.length).toBeGreaterThan(0);
     for (const s of sections) {
