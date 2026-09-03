@@ -78,11 +78,18 @@ describe("reading the observed action-history envelope", () => {
     expect((await fetchActionHistory("001X")).rows).toEqual([]);
   });
 
-  it("sends the account id and a limit, as one input row", async () => {
+  /* THE KEY IS `maxResults` AND IT WAS `limit` FOR AS LONG AS THIS TOOL SHIPPED.
+     Verified against bankinggpt-at on 2026-09-03: `limit` answers INVALID_INPUT,
+     "An invocable variable wasn't found for Apex action Customer360ActionHistory:
+     limit". This test asserted the wrong key from the declared shape, so it
+     agreed with the client all the way through a defect the org refused every
+     time — which is exactly what a test written from a spec rather than from a
+     wire can do. */
+  it("sends the account id and maxResults, as one input row", async () => {
     const callTool = installMcp(observed({ count: 0, entries: [] }));
     await fetchActionHistory("001bb00001DLtRMAA1", 25);
     const input = callTool.mock.calls[0][2] as { inputs: Array<Record<string, unknown>> };
-    expect(input.inputs).toEqual([{ accountId: "001bb00001DLtRMAA1", limit: 25 }]);
+    expect(input.inputs).toEqual([{ accountId: "001bb00001DLtRMAA1", maxResults: 25 }]);
   });
 
   it("raises the element's own error when the invocable reports failure", async () => {

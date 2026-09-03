@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom, neutralAsk, smartAsk, type RouterQuestion } from "./components/workroom/Workroom";
 import type { SmartOpening } from "./components/workroom/route";
+import type { SettleDeps } from "./components/workroom/settleExecution";
 import { clearComposed, createScriptedEngine, type WorkroomEngine } from "./workroom/engine";
 import { NO_CONNECTOR_REFUSAL } from "./workroom/explain";
 import { createModifyEngine } from "./workroom/modifyEngine";
@@ -58,12 +59,12 @@ function contextFor(mode: WorkroomMode, packageId: string | null = "a5Fbb000000I
   };
 }
 
-function openWith(context: WorkroomContext, engine: WorkroomEngine) {
+function openWith(context: WorkroomContext, engine: WorkroomEngine, settleDeps?: SettleDeps) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<Workroom context={context} engine={engine} onClose={() => {}} />);
+    root!.render(<Workroom context={context} engine={engine} settleDeps={settleDeps} onClose={() => {}} />);
   });
   return document.querySelector<HTMLElement>(".wk-room")!;
 }
@@ -934,7 +935,17 @@ describe("a failed execute is a sentence, and it closes the approval", () => {
         throw { code: "TOKEN_REFUSED", server: "customer360" };
       },
     };
-    return openWith(context, engine);
+    /* THE ORG SAYS THE ROW IS STILL `Staged`, which is how the room knows the
+       token was never redeemed and this refusal is the whole truth. Two reads,
+       because one can catch a real dispatch between the callout and the claim. */
+    let clock = 0;
+    return openWith(context, engine, {
+      readState: async () => ({ stagingId: "STG", status: "Staged" }),
+      wait: async (ms: number) => {
+        clock += ms;
+      },
+      now: () => clock,
+    });
   }
 
   it("says what came back, and never says [object Object]", async () => {
@@ -961,10 +972,177 @@ describe("a failed execute is a sentence, and it closes the approval", () => {
     click(byText(/^Approve and file /));
     await settle();
 
-    expect(room.textContent).toContain("may have completed despite the error");
     const approve = room.querySelector<HTMLButtonElement>(".wk-approve")!;
     expect(approve.disabled).toBe(true);
     expect(approve.textContent).toBe("Approval closed");
+    /* AND IT NO LONGER GUESSES (2026-09-03). The room used to add "the filing
+       may have completed despite the error; do not approve again, check the
+       staging record" to every failure that had reached the org. On the
+       founder's live run the filing HAD completed, so the warning was both
+       frightening and wrong. The org's own refusal is now the whole answer. */
+    expect(room.textContent).not.toContain("may have completed despite the error");
+    expect(room.textContent).not.toContain("Do not approve again");
+  });
+});
+
+/* =============================================================================
+   SURFACE — A FILING THE ROOM CANNOT SEE THE END OF.
+
+   The connector's invocation timeout is shorter than a modification carrying a
+   net-new facility: the founder's run took 55 seconds and the answer never came
+   back. The engine now waits on the org's own staging record; the ROOM's job is
+   to say so quietly, land the ordinary executed card when the answer arrives,
+   and — when the wait budget runs out — offer to ask the org again rather than
+   to approve again.
+   ============================================================================= */
+
+describe("a filing whose answer was lost", () => {
+  /** THE LOST ANSWER, in the shape the connector actually rejects with. */
+  const LOST = { code: "upstream_error", server: "customer360", message: "Timeout while invoking the tool ExecuteLoanModification" };
+
+  /**
+   * The room, on its own storyline engine, with the execute made to lose its
+   * answer the first N times and the org's trail scripted alongside.
+   *
+   * The wrapper delegates to THIS engine and no other: a second scripted engine
+   * has staged nothing and would refuse the approval the room is holding.
+   */
+  function roomLosing(loseTimes: number, statuses: Array<string | undefined>) {
+    const context = contextFor("modify");
+    const scripted = createScriptedEngine(context);
+    let lost = 0;
+    const calls = { execute: 0, reads: 0 };
+    const engine: WorkroomEngine = {
+      ...scripted,
+      execute: async (approval) => {
+        calls.execute += 1;
+        if (lost < loseTimes) {
+          lost += 1;
+          throw LOST;
+        }
+        return scripted.execute(approval);
+      },
+    };
+    let clock = 0;
+    const room = openWith(context, engine, {
+      readState: async () => {
+        const status = statuses[Math.min(calls.reads, statuses.length - 1)];
+        calls.reads += 1;
+        return status ? { stagingId: "STG", status } : undefined;
+      },
+      wait: async (ms: number) => {
+        clock += ms;
+      },
+      now: () => clock,
+    });
+    return { room, calls };
+  }
+
+  async function approve() {
+    await stageTheFirstBeat();
+    for (const b of buttons().filter((x) => x.textContent === "Acknowledge")) click(b);
+    await settle();
+    await openPlan();
+    click(byText(/^Approve and file /));
+    await settle();
+  }
+
+  it("says one quiet line, waits out the org, and lands the ordinary executed card", async () => {
+    // Two polls of Executing — where consuming the token leaves the row — then
+    // the terminal status the founder's own run ended on.
+    const { room, calls } = roomLosing(1, ["Executing", "Executing", "Partial"]);
+    await approve();
+
+    expect(room.textContent).toContain("Filing in progress, nCino is still writing");
+    // THE CARD LANDS EXACTLY AS ON A NORMAL SUCCESS. A recovered filing that
+    // rendered differently would teach the banker to distrust the honest one.
+    expect(room.querySelector(".wk-rescard")).toBeTruthy();
+    expect(room.textContent).not.toContain("Do not approve again");
+    expect(room.textContent).not.toContain("may have completed despite the error");
+    // ONE filing call and ONE replay. The room never files twice.
+    expect(calls.execute).toBe(2);
+  });
+
+  it("offers a status re-read, not an approval, when the budget runs out", async () => {
+    const { room, calls } = roomLosing(1, ["Executing"]);
+    await approve();
+
+    // The approval is closed and stays closed.
+    const approveBtn = room.querySelector<HTMLButtonElement>(".wk-approve")!;
+    expect(approveBtn.disabled).toBe(true);
+    expect(room.textContent).toContain("Nothing needs approving again");
+    expect(room.querySelector(".wk-rescard")).toBeNull();
+    // The budget was spent on READS. The tool was called once, to file.
+    expect(calls.execute).toBe(1);
+  });
+
+  it("the chip asks the org again, and lands the card without a second approval", async () => {
+    const context = contextFor("modify");
+    const scripted = createScriptedEngine(context);
+    let lost = false;
+    let status = "Executing";
+    let executes = 0;
+    let clock = 0;
+    const room = openWith(
+      context,
+      {
+        ...scripted,
+        execute: async (approval) => {
+          executes += 1;
+          if (lost) return scripted.execute(approval);
+          lost = true;
+          throw LOST;
+        },
+      },
+      {
+        readState: async () => ({ stagingId: "STG", status }),
+        wait: async (ms: number) => {
+          clock += ms;
+        },
+        now: () => clock,
+      },
+    );
+    await approve();
+
+    const chip = buttons().find((b) => b.textContent === "Check the filing")!;
+    expect(chip).toBeTruthy();
+    // The banker reads the line; the org finishes while they do.
+    status = "Completed";
+    clock = 0;
+    click(chip);
+    await settle();
+
+    // The card landed, and the plan is off the stage exactly as on a filing that
+    // answered the first time — the approve control goes with it.
+    expect(room.querySelector(".wk-rescard")).toBeTruthy();
+    expect(room.querySelector(".wk-approve")).toBeNull();
+    // Still ONE filing call, plus the one replay the chip spent.
+    expect(executes).toBe(2);
+  });
+
+  it("says a terminal failure as the org's own fact, and never as a timeout", async () => {
+    const { room, calls } = roomLosing(1, ["Failed"]);
+    await approve();
+
+    expect(room.textContent).toContain("The org reports this filing as failed");
+    expect(room.textContent).not.toContain("Nothing needs approving again: the plan is with the org");
+    expect(room.querySelector(".wk-rescard")).toBeNull();
+    expect(calls.execute).toBe(1);
+  });
+
+  it("a plan that never reached an org is not waited on at all", async () => {
+    const context = contextFor("modify");
+    const scripted = createScriptedEngine(context);
+    const readState = vi.fn();
+    const room = openWith(
+      context,
+      { ...scripted, execute: async () => { throw { code: "server_not_connected", server: "customer360" }; } },
+      { readState, wait: async () => {}, now: () => 0 },
+    );
+    await approve();
+
+    expect(readState).not.toHaveBeenCalled();
+    expect(room.querySelector(".wk-rescard")).toBeNull();
   });
 });
 
