@@ -1,7 +1,17 @@
 import { fmtMoney } from "../../data/format";
 import { catalogField } from "../../workroom/fieldCatalog";
 import type { IntentResult, WorkroomAdvisory, WorkroomDelta, WorkroomRefusal } from "../../workroom/types";
-import { clipTitle, facilitiesFor, readScope, rolesOnFacility, samePartyName, type Book, type BookAsset, type ElicitMember } from "./elicit";
+import {
+  clipTitle,
+  facilitiesFor,
+  pledgeAssetTitle,
+  readScope,
+  rolesOnFacility,
+  samePartyName,
+  type Book,
+  type BookAsset,
+  type ElicitMember,
+} from "./elicit";
 
 /* =============================================================================
    THE DISPATCH RULE, AND THE TWO SAFETY LAYERS BESIDE IT.
@@ -640,6 +650,30 @@ export function stampRemovalRoles(args: {
   }
 
   return { deltas: out, said, ask };
+}
+
+/* ---------------------------------------------- THE SHORT TITLE ON A PLEDGE
+   (founder finding, 2026-09-03.)
+
+   He pledged the account's blanket AR collateral and the cards and the
+   confirm sentence printed the org's full legal description as the asset's
+   name. The guided lane's own fix is `restateEntry` (`elicit.ts`); a line
+   typed straight through and resolved cleanly on the first try never reaches
+   it: `compose`, `verify` and `restateEntry` are the GUIDED lane's own
+   pipeline, and a "provably clean" parse is handed to the room untouched by
+   any of them. This is the same correction, applied where the direct lane
+   actually needs it: `Workroom.tsx`'s `renderParse`, right beside the other
+   post-parse layers this file exists to hold. */
+
+/** Every pledge delta in the set, titled off the short asset title rather
+ *  than off the fenced engine's own full-description title. Every other
+ *  field is untouched: the wire, the info panel's `map`, the plan hash. */
+export function shortenPledgeTitles(deltas: WorkroomDelta[], book: Book): WorkroomDelta[] {
+  return deltas.map((d) => {
+    if (!d.pledgeWire) return d;
+    const short = pledgeAssetTitle(d.pledgeWire, book);
+    return short && short !== d.title ? { ...d, title: short, badge: `${short} → ${d.after}` } : d;
+  });
 }
 
 /* ------------------------------- "take X off Y" AND THE SENTENCE IT BECOMES

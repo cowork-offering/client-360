@@ -260,7 +260,7 @@ describe("the pledge carry exclusion (drive line 9)", () => {
   it("titles it with the asset rather than with the credit-agreement paragraph", () => {
     const read = readArmRemoval(pledgeCtx());
     if (read?.kind !== "exclusion") throw new Error("expected an exclusion");
-    expect(read.delta.title).toBe("All present and future accounts receivable");
+    expect(read.delta.title).toBe("Accounts Receivable · All present and future accounts…");
   });
 
   it("resolves the collateral id the read carries onto the wire", () => {
@@ -602,7 +602,7 @@ describe("the write-back", () => {
 
   it("attaches a PLEDGE refusal to its own entry, which no type word could ever name", () => {
     const org = `Asset ${RECEIVABLES} is not pledged to Line of Credit, so there is nothing for the new version to leave behind.`;
-    expect(armStageRefusal(org, [covenant, pledge])).toContain("That is All present and future accounts receivable on");
+    expect(armStageRefusal(org, [covenant, pledge])).toContain("That is Accounts Receivable · All present and future accounts… on");
   });
 });
 
@@ -644,7 +644,7 @@ describe("the trail counts the org's steps, never the manifest", () => {
   it("counts what landed and names what did not, on one plan carrying both", () => {
     const said = armTrailSummary([covenant, pledge], [{ id: "covenant_exclusion_0", state: "verified" }]);
     expect(said).toContain("1 covenant left off the new version.");
-    expect(said).toContain("The plan carried no step for All present and future accounts receivable");
+    expect(said).toContain("The plan carried no step for Accounts Receivable · All present and future accounts…");
   });
 
   it("leaves a plan carrying no arm with nothing to say, exactly as before the arms existed", () => {

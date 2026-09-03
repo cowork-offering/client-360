@@ -1099,7 +1099,7 @@ describe("create then pledge, end to end (P3)", () => {
     // assets are offered here, which is where that choice belongs.
     const ask = advance(openCreate("pledge something to the Purchase", ctx)!, ctx).ask!;
     expect(ask.slot).toBe("asset");
-    expect(ask.options.map((o) => o.label)).toContain("A new asset");
+    expect(ask.options.map((o) => o.label)).toContain("None of these, a new asset");
     // And a create is never answered with "pledge something the deal already
     // carries", which was the pointless fallback (P3).
     let draft = openCreate("pledge a new forklift fleet worth $2,000,000 to the Purchase", ctx)!;

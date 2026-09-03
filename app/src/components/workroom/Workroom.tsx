@@ -73,6 +73,7 @@ import {
   misreadCommitments,
   provablyClean,
   qualifierFilter,
+  shortenPledgeTitles,
   stagedAddress,
   readRemove,
   readPartyRemoval,
@@ -97,6 +98,7 @@ import {
   handoffEntry,
   openCreate,
   planAmendmentFor,
+  pledgeAlreadySettled,
   readInto,
   readScope,
   restateEntry,
@@ -117,6 +119,7 @@ import {
   armStepPairs,
   armSummary,
   armTrailSummary,
+  pledgeExistingDelta,
   readArmRemoval,
   readCovenantAttach,
 } from "./orgArms";
@@ -1724,6 +1727,29 @@ export function Workroom({
     [book, context.mode, memberLabel],
   );
 
+  /**
+   * AN EXISTING ASSET, PLEDGED ONTO A KNOWN FACILITY, WITHOUT RE-PARSING
+   * (founder finding, 2026-09-03). The asset was already resolved against the
+   * book before the create reached this function, and the facility is the
+   * fan-out's own `memberId`, so there is nothing left for the parser to
+   * settle. Null on every other surface, and on a net-new asset: that one
+   * still composes a sentence, because the fenced engine authors the whole
+   * chain (the asset, the ownership, the pledge) and this room does not.
+   */
+  const pledgeFor = useCallback(
+    (draft: Draft, memberId: string) => {
+      if (draft.surface !== "collateral" || draft.slots.isNew || !draft.slots.assetId) return null;
+      const asset = book.assets.find((a) => a.id === draft.slots.assetId);
+      if (!asset) return null;
+      return pledgeExistingDelta(asset, {
+        facilityId: memberId,
+        facilityLabel: memberLabel(memberId),
+        second: draft.slots.second,
+      });
+    },
+    [book, memberLabel],
+  );
+
   const elicitCtx = useMemo<ElicitContext>(
     () => ({
       /* THE FACILITIES THIS PLAN IS CREATING ARE IN SCOPE. Every create the
@@ -1822,9 +1848,14 @@ export function Workroom({
          room asks for no amount, and where the model is speaking the sentence
          steps back to the address: a note that lived only there would be lost
          exactly when it is being explained. Same idiom as the pricing gate's. */
-      const staged = note
+      const notedStaged = note
         ? misread.keep.map((d) => ({ ...d, caveat: [d.caveat, note].filter(Boolean).join(" ") }))
         : misread.keep;
+      /* THE SHORT TITLE ON A PLEDGE (founder finding, 2026-09-03). A line
+         typed straight through and resolved cleanly never reaches the guided
+         lane's own fix (`restateEntry`), so this is the direct lane's: see
+         `shortenPledgeTitles` in `dispatch.ts`. */
+      const staged = shortenPledgeTitles(notedStaged, book);
 
       /* ------------------------------------------ THE MAGNITUDE BOUND (F5)
 
@@ -2473,7 +2504,24 @@ export function Workroom({
          relationship already carries is NAMED and offered rather than staged a
          second time in silence. */
       const aware = awarenessFor(d, elicitCtx);
-      const notes = [aware.onThePlan, aware.onTheBook].filter((n): n is string => Boolean(n));
+      /* A PLEDGE FANNED OUT OVER SEVERAL FACILITIES SETTLES THE ALREADY-
+         PLEDGED ONES AS ROWS, NOT AS ONE PROSE SENTENCE NAMING THEM TOGETHER
+         (founder finding, 2026-09-03). `aware.onTheBook` still carries that
+         sentence for the room's OTHER surfaces, and for a collateral create
+         that skips EVERY facility it names (the early return just below,
+         unchanged): there `alreadyRows` would have nothing to sit beside.
+         Only where some facilities are fresh and some are already on the
+         book does the sentence give way to a card per skipped facility. */
+      const alreadyRows =
+        d.surface === "collateral" && d.slots.assetId && aware.alreadyOn?.length && aware.fresh.length
+          ? (() => {
+              const asset = book.assets.find((a) => a.id === d.slots.assetId);
+              return asset
+                ? aware.alreadyOn!.map((id) => pledgeAlreadySettled(asset, { facilityId: id, facilityLabel: memberLabel(id) }))
+                : [];
+            })()
+          : [];
+      const notes = [aware.onThePlan, alreadyRows.length ? null : aware.onTheBook].filter((n): n is string => Boolean(n));
       if (!aware.fresh.length) {
         // THE CREATE STAYS ALIVE. The banker was offered a way through it, so
         // the next line is an answer to that offer rather than a new sentence
@@ -2544,6 +2592,18 @@ export function Workroom({
             got.push(attach.delta);
             continue;
           }
+          /* AN EXISTING ASSET, KEYED TO THIS FACILITY DIRECTLY, NEVER RE-
+             PARSED (founder finding, 2026-09-03). The asset was resolved
+             against the book before this create was composed, and the
+             facility is this line's own `memberId`: there is nothing left
+             for a re-sent sentence to settle, and two facilities that share
+             a product word cannot defeat a resolution this room never asks
+             the parser to redo. */
+          const pledge = pledgeFor(scoped, line.memberId);
+          if (pledge) {
+            got.push(pledge);
+            continue;
+          }
           if (routeSaid) {
             got.push(handoffEntry(scoped, elicitCtx, line.memberId, routeSaid, seq));
             continue;
@@ -2609,13 +2669,18 @@ export function Workroom({
           kind: "chips",
           id: nextId("chips"),
           step: mine,
-          chips: withGaps.map((x) => ({ key: nextId("chip"), delta: x, state: "open" as ChipState })),
+          chips: [
+            ...withGaps.map((x) => ({ key: nextId("chip"), delta: x, state: "open" as ChipState })),
+            // THE SETTLED ROWS. A facility already carrying the pledge reads
+            // as one of these, beside the cards that actually stage.
+            ...alreadyRows.map((r) => ({ key: nextId("chip"), refusal: r, state: "open" as ChipState })),
+          ],
         },
       ]);
       setSuggestion(engine.suggest());
       return withGaps;
     },
-    [amendPlanEntry, beat, context, elicitCtx, engine, memberLabel],
+    [amendPlanEntry, beat, book, context, elicitCtx, engine, memberLabel, pledgeFor],
   );
 
   /**

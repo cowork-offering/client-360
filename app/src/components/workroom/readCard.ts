@@ -5,6 +5,7 @@ import { fmtDate, fmtMoney, fmtPct } from "../../data/format";
 import { aggregateInvolvements, involvementRole, isGuarantyRole, type AggregatedInvolvement } from "../../data/graphAggregate";
 import { isActiveFacility } from "../../data/worklist";
 import { classifyCovenant } from "../../domain/covenantStatus";
+import { shortAssetTitle } from "../../domain/collateralAssets";
 import type { IconKind } from "./TypeIcon";
 import { iconForProduct } from "./TypeIcon";
 import type { ReadTopic } from "./ask";
@@ -276,7 +277,11 @@ function collateralCard(src: ReadSource): ReadCardModel | null {
   for (const f of facilities) {
     const rows: ReadRow[] = (f.collateral ?? []).map((c) => ({
       icon: "collateral",
-      label: c.collateralDescription ?? c.collateralName ?? c.collateralType ?? "Collateral",
+      // THE SHORT TITLE, never the full legal description (founder finding,
+      // 2026-09-03): the org's own type and a compact descriptor, the same
+      // shortener the pledge lane and the collateral pane read an asset's
+      // name through.
+      label: shortAssetTitle(c.collateralType, c.collateralDescription, c.collateralName ?? c.collateralType ?? "Collateral"),
       value: money(c.amountPledged),
       detail: [
         c.collateralType,

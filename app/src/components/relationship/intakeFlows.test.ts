@@ -587,6 +587,92 @@ describe("the collateral intake", () => {
   });
 });
 
+/* =============================================================================
+   THE FIRST STEP: FILE A NEW ASSET, OR IS THIS ONE THE BOOK ALREADY HOLDS?
+   (founder, 2026-09-03, the same fix as the facility room's pledge lane:
+   "is it not offering the collaterals from my account to pledge towards it?")
+   ============================================================================= */
+
+/** `ctxFor`'s own facility plus one whose only pledge reads Inactive, so the
+ *  asset it names carries no ACTIVE pledge anywhere: "Unpledged" on the
+ *  collateral pane, and the set this step offers. */
+function ctxWithUnpledged(): RelContext {
+  const bundle = {
+    snapshot: { accountId: ACCOUNT, name: "Hartwell Precision Manufacturing LLC", productPackageId: "a5F1" },
+    graph: { connections: [], legalEntities: [{ accountName: "Hartwell Precision Manufacturing LLC" }] },
+    covenants: { covenants: [] },
+    exposure: {
+      facilities: [
+        {
+          loanId: "0Cb1",
+          status: "Active",
+          collateral: [{ collateralId: "a341", collateralType: "Equipment", collateralDescription: "CNC line" }],
+        },
+        {
+          loanId: "0Cb2",
+          status: "Active",
+          collateral: [
+            {
+              collateralId: "a342",
+              collateralType: "UCC-Accounts",
+              collateralDescription: "All present and future accounts receivable. Excludes invoices over 90 days past due.",
+              pledgedStatus: "Inactive",
+            },
+          ],
+        },
+      ],
+    },
+  } as unknown as BorrowerBundle;
+  const data = { meta: { generatedAt: AS_OF } } as unknown as C360Data;
+  return relContextFor({ data, bundle, accountId: ACCOUNT, accountName: "Hartwell Precision Manufacturing LLC", catalog: CATALOG });
+}
+
+describe("the collateral intake's first step: new asset, or one the book already holds", () => {
+  it("is skipped where the account holds no unpledged asset (ctxFor's own facility is actively pledged)", () => {
+    const ctx = ctxFor();
+    const step = nextStep("intake", ctx, { intakeKind: "collateral" })!;
+    expect(step.key).toBe("colType.0");
+  });
+
+  it("lists the unpledged asset by its short title, plus 'a new asset', before the type question", () => {
+    const ctx = ctxWithUnpledged();
+    const step = nextStep("intake", ctx, { intakeKind: "collateral" })!;
+    expect(step.key).toBe("colExisting.0");
+    expect(step.ask).toBe("File a new asset, or is this one the book already holds?");
+    const labels = step.options?.map((o) => o.label) ?? [];
+    expect(labels).toContain("A new asset");
+    const existing = labels.find((l) => l !== "A new asset")!;
+    expect(existing).toContain("UCC-Accounts");
+    // THE SHORT TITLE, never the full legal description.
+    expect(existing).not.toContain("Excludes invoices over 90 days past due");
+    expect(existing.length).toBeLessThan(70);
+  });
+
+  it("picking the existing asset hands off without filing anything", () => {
+    const ctx = ctxWithUnpledged();
+    const a: Answers = { intakeKind: "collateral" };
+    answer(a, "colExisting.0", "existing:a342");
+    const step = nextStep("intake", ctx, a)!;
+    expect(step.key).toBe("colExistingHandoff");
+    expect(step.ask).toContain("already on the book");
+    expect(step.ask).toContain("Facility Actions");
+    // NOTHING IS FILED. The type question never ran, so the draft never
+    // resolved a `collateralType` and the payload has nothing to send.
+    expect(collateralDrafts(ctx, a)).toHaveLength(0);
+    const payload = buildIntakePayload(ctx, a, "idem-1");
+    expect(payload.ok).toBe(false);
+  });
+
+  it("picking 'a new asset' continues into the ordinary type question unchanged", () => {
+    const ctx = ctxWithUnpledged();
+    const a: Answers = { intakeKind: "collateral" };
+    answer(a, "colExisting.0", "new");
+    const step = nextStep("intake", ctx, a)!;
+    expect(step.key).toBe("colType.0");
+    expect(step.ask).toContain(NO_PLEDGE_NO_LIEN);
+  });
+});
+
 /* ------------------------------------------------------------- the payload */
 
 describe("the wire carries the frozen contract's keys and no others", () => {
