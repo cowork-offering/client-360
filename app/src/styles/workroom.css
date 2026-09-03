@@ -1245,6 +1245,29 @@ body.wk-open #root {
 .wk-kind.wk-refusal {
   color: var(--warning);
 }
+/* THE DERIVED BADGE (Cowork feedback, 2026-09-03). A change the ROOM added,
+   never the banker (the pricing gate's amortised term and first payment
+   date, today). Same calm wash-2 surface as `.wk-kind` (rule: status lives in
+   the ink, never a tinted fill); italic is the only thing that tells it apart
+   from a kind, because it is not naming what the change is, only who asked
+   for it. The one-line reason rides the native title tooltip, so this spends
+   no words the thread's own budget has to answer for. */
+.wk-derived {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 600;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  background: var(--wash-2);
+  border: 1px solid var(--border);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
 .wk-tgt {
   font-size: 10.6px;
   color: var(--ink-label);

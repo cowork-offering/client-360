@@ -190,6 +190,7 @@ import {
 } from "./settle";
 import { useStageGate } from "./stage";
 import { FINALE_SWEEP_MS, finaleAttrs, useFinale, withFinale } from "./finale";
+import { countPhrase, countSplit, derivedReasonOf, splitClause, withDerivedSplit } from "./derivedDelta";
 import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
@@ -921,6 +922,10 @@ export function Workroom({
   onFiled?: (filed: {
     execution: WorkroomExecution;
     changeCount: number;
+    /** Of `changeCount`, what the banker typed vs what the pricing gate
+     *  added on its own (Cowork feedback, 2026-09-03). See `derivedDelta.ts`. */
+    requestedCount?: number;
+    derivedCount?: number;
     packageHref: string | null;
     /** What the org arms did, in banker language, or null where none rode. */
     arms: string | null;
@@ -1446,7 +1451,7 @@ export function Workroom({
           kind: "agent",
           id: nextId("agent"),
           step: 0,
-          text: `Picking up where you left off: ${resumed.length} ${resumed.length === 1 ? one : many} on the manifest.`,
+          text: `Picking up where you left off: ${countPhrase(resumed.length, resumed.length === 1 ? one : many, resumed)} on the manifest.`,
         },
       ]);
     };
@@ -3604,7 +3609,7 @@ export function Workroom({
         answer({
           kind: "agent",
           id: nextId("agent"),
-          text: `${entries.length} ${entries.length === 1 ? one : many} ${
+          text: `${countPhrase(entries.length, entries.length === 1 ? one : many, entries)} ${
             entries.length === 1 ? "is" : "are"
           } staged on this ${ROUTE_WORD[context.mode]}, so the room is locked to it. Starting a ${
             ROUTE_WORD[switchTo]
@@ -3807,7 +3812,7 @@ export function Workroom({
         if (staged.length) {
           const card = planReadCard(
             staged,
-            `The manifest holds ${staged.length} ${staged.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1]}.`,
+            `The manifest holds ${countPhrase(staged.length, staged.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1], staged)}.`,
             vocabulary.nextMove,
           );
           /* AND A FACILITY WHOSE PRICING WAS LEFT FOR LATER SAYS SO ON THE PLAN
@@ -4734,11 +4739,16 @@ export function Workroom({
       // THE DOSSIER IS BUILT FROM THE REAL MANIFEST AND THE REAL RESULT, before
       // anything is cleared. Every row is a change that actually filed.
       const filed = new Map(result.filed.map((f) => [f.deltaId, f]));
+      const filedEntries = entries.filter((e) => filed.has(e.id));
+      // THE FILED SET'S OWN SPLIT, for the trail entry below (Cowork feedback,
+      // 2026-09-03): the dossier already only counts what was actually
+      // written, and the requested/derived split rides the same set rather
+      // than the whole manifest, so a handed-off entry never inflates either
+      // side of it.
+      const filedSplit = countSplit(filedEntries);
       const dossier: DossierModel = {
         packageName: brief.packageName,
-        rows: entries
-          .filter((e) => filed.has(e.id))
-          .map((e) => ({ icon: iconForDelta(e), label: `${e.target} · ${e.title.toLowerCase()}`, value: e.after })),
+        rows: filedEntries.map((e) => ({ icon: iconForDelta(e), label: `${e.target} · ${e.title.toLowerCase()}`, value: e.after })),
         // The card's last line is the ORG'S OWN verification claim where the
         // result carries one. It is never a slogan the room made up about a
         // write it cannot see.
@@ -4784,6 +4794,8 @@ export function Workroom({
       onFiled?.({
         execution: result,
         changeCount: dossier.rows.length,
+        requestedCount: filedSplit.requested,
+        derivedCount: filedSplit.derived,
         packageHref: dossier.packageHref,
         // THE ARMS' OWN ACCOUNT, READ OFF THE ORG'S PLAN STEPS. `filed` is built
         // inside the engine from the deltas that carry a wire, so an arm is on
@@ -5398,8 +5410,8 @@ export function Workroom({
                       <button type="button" className="wk-propose" onClick={() => void openFlow()}>
                         <TypeIcon kind="commit" />
                         <span>
-                          {entries.length} {entries.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1]} on
-                          the manifest · <b>Review &amp; execute</b>
+                          {countPhrase(entries.length, entries.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1], entries)}{" "}
+                          on the manifest · <b>Review &amp; execute</b>
                         </span>
                       </button>
                     )}
@@ -5411,6 +5423,12 @@ export function Workroom({
                         packageName={brief.packageName}
                         planTitle={vocabulary.planTitle}
                         planSummary={figures.planSummary}
+                        /* THE SAME SPLIT THE RAIL HEAD NOW CARRIES, on the card
+                           that sits right above the Execute button, the room's
+                           own "review/execute summary" (Cowork feedback,
+                           2026-09-03). Null on an ordinary plan, so this reads
+                           exactly as it always has. */
+                        derivedNote={splitClause(entries)}
                         /* WHAT THE ARMS DO, ON THE CARD THE BANKER SIGNS. A
                            plan carrying none reads exactly as it always has. */
                         armSaid={armSummary(entries)}
@@ -5654,8 +5672,14 @@ export function Workroom({
             {entries.length > 0 && (
               <ManifestRail
                 heading={manifestHeading}
-                count={figures.countLine}
-                label={`${manifestHeading} · ${figures.countLine}`}
+                /* THE RAIL HEAD SAYS WHAT IT SAID BEFORE, WIDENED. Whisper feedback,
+                   2026-09-03: two lines landed four cards and the head said "4
+                   changes" with no word for the two the pricing gate added on its
+                   own. `figuresFor`'s own count line is never re-derived, only
+                   split, right after its leading clause and before the member
+                   counts it already carries. */
+                count={withDerivedSplit(figures.countLine, entries)}
+                label={`${manifestHeading} · ${withDerivedSplit(figures.countLine, entries)}`}
                 newest={entries[entries.length - 1]?.id ?? null}
                 action={
                   <button
@@ -5689,6 +5713,7 @@ export function Workroom({
                 {entries.map((delta, i) => {
                   const filed = filedById.get(delta.id);
                   const drains = finaleState === "off" ? null : finaleAttrs(i, finaleState);
+                  const derivedReason = derivedReasonOf(delta);
                   return (
                     <div
                       {...withFinale({ className: `wk-ent ${filed ? "wk-filed" : ""}`.trim() }, drains)}
@@ -5706,7 +5731,14 @@ export function Workroom({
                           })
                         }
                       >
-                        <b>{delta.title}</b>
+                        <b>
+                          {delta.title}
+                          {derivedReason && (
+                            <span className="wk-derived" title={derivedReason}>
+                              Derived
+                            </span>
+                          )}
+                        </b>
                         <span>
                           {delta.target} · {delta.before} → {delta.after}
                         </span>
@@ -5763,6 +5795,7 @@ function FlowCard({
   packageName,
   planTitle,
   planSummary,
+  derivedNote,
   armSaid,
   armSteps,
   held,
@@ -5782,6 +5815,10 @@ function FlowCard({
   packageName: string;
   planTitle: string;
   planSummary: string;
+  /** "2 requested · 2 derived", or null on a plan the pricing gate did not
+   *  touch. Read alongside `planSummary` rather than folded into it, so the
+   *  fenced sentence `figuresFor` composed never has to be re-parsed. */
+  derivedNote: string | null;
   armSaid: string | null;
   armSteps: string[];
   /** Staged arms the org's plan carries no write step for. Non-empty closes the
@@ -5848,6 +5885,7 @@ function FlowCard({
       </div>
       <div className="wk-s">
         {planSummary} on {packageName}
+        {derivedNote && <> · {derivedNote}</>}
         {armSaid && <> {armSaid}</>}
         {armSteps.length > 0 && (
           <ul className="wk-armsteps">
@@ -6457,11 +6495,21 @@ function DeltaCard({
   onConfirm: () => void;
   onDiscard: () => void;
 }) {
+  /* THE DERIVED BADGE (Cowork feedback, 2026-09-03). A change the ROOM added,
+     never the banker (today, the pricing gate's amortised term and first
+     payment date). The one-line reason rides the native title tooltip so
+     nothing here spends the thread's word budget; see derivedDelta.ts. */
+  const derivedReason = derivedReasonOf(delta);
   return (
     <div className={`wk-chip tnum ${confirmed ? "wk-confirmed" : ""}`}>
       <div className="wk-dl">
         <TypeIcon kind={iconForDelta(delta)} />
         <span className={`wk-kind ${delta.kindTone ? `wk-${delta.kindTone}` : ""}`}>{delta.kind}</span>
+        {derivedReason && (
+          <span className="wk-derived" title={derivedReason}>
+            Derived
+          </span>
+        )}
         <span className="wk-tgt">{delta.target}</span>
       </div>
       <div className="wk-line">

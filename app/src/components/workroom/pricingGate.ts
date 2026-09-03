@@ -117,6 +117,25 @@ export function carriesPricing(entries: WorkroomDelta[], memberId: string, slot:
   return entries.some((e) => e.member === memberId && e.fieldWire?.field === PRICING_FIELD[slot]);
 }
 
+/**
+ * WHY THIS ENTRY IS ON THE PLAN WITHOUT THE BANKER HAVING NAMED IT (Cowork
+ * feedback, 2026-09-03). A whisper naming only an amount and a term landed
+ * FOUR cards, because this gate adds the amortised term and the first payment
+ * date once either scalar moves, and the manifest said "4 changes" with
+ * nothing telling the banker two of them were the room's own doing.
+ *
+ * READ STRUCTURALLY, off the field the delta wires, rather than a flag set at
+ * construction: the entry lands through `Workroom.tsx`'s `landPricing`, off
+ * `engine.parseIntent`, and the engine is byte-fenced (`workroom/engine.ts`),
+ * so there is no construction site in this tree to mark. The two fields this
+ * gate owns are the only ones that answer true; every other delta, including
+ * an amount or a term the banker DID name, reads null here.
+ */
+export function pricingDerivedReason(delta: WorkroomDelta): string | null {
+  const field = delta.fieldWire?.field;
+  return field === PRICING_FIELD.amortisedTerm || field === PRICING_FIELD.firstPaymentDate ? PRICING_WHY : null;
+}
+
 /** Does the BOOK already carry it? Absent is UNKNOWN, and unknown is asked. */
 export function bookCarriesPricing(facility: Facility | null | undefined, slot: PricingSlot): boolean {
   if (!facility) return false;
