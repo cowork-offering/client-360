@@ -114,6 +114,21 @@ const readStage = (page) =>
     };
   });
 
+/* THE PACKAGE ASK. Hartwell's org grew a second package (2026-09-03), so the
+   room now opens on `.wk-pkgask` — one `.wk-pkg` card per package, radio-style
+   — before anything else, where it used to bind silently. The card's own text
+   never says "C&I" or "Industrial" (`packageLabel` in actions/schemas.ts
+   builds it off the booked products' type words, "Non-Real Estate" and "Real
+   Estate", which both packages' labels contain as a substring of each other),
+   so the pick goes by the C&I package's own record id instead: a5Fbb000000IHFJEA4,
+   the same id every other drive and test in this session anchors on. A no-op
+   wherever the ask is not on stage. */
+const pickCNIPackage = async (page) => {
+  const clicked = await jsClick(page, '.wk-pkg[data-pkg="a5Fbb000000IHFJEA4"]');
+  if (clicked) await sleep(1800);
+  return clicked;
+};
+
 async function openRoom(page, { relationship = false } = {}) {
   await page.goto(TARGET, { waitUntil: "load" });
   await sleep(1600);
@@ -123,6 +138,7 @@ async function openRoom(page, { relationship = false } = {}) {
   await sleep(700);
   await jsClick(page, relationship ? "#actRelationship" : "#actFacility");
   await sleep(3600);
+  await pickCNIPackage(page);
 }
 
 /* =========================================================== 1. the intent run */
@@ -141,6 +157,7 @@ async function intentRun(browser) {
   // THE WHISPER. The intent lane offers the relationship the intent names.
   const took = await clickText(page, "button", "^Open$");
   await sleep(4200);
+  await pickCNIPackage(page);
 
   const steps = [];
   const snap = async (label) => {
