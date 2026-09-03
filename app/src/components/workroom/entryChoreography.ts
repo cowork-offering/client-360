@@ -64,6 +64,17 @@ export interface EntryChoreography {
   stateOf: (tier: EntryTier) => TierState;
   /** A tier's content just landed. Everything above it leaves the stage. */
   arrive: (tier: EntryTier) => void;
+  /**
+   * EVERY TIER LEAVES (founder, 2026-09-03).
+   *
+   * The tiers retire each other in order, so the LAST one - the facilities in
+   * the facility room, the first collected question in the relationship room -
+   * had nothing above it to push it off and stayed on the stage under every
+   * card the banker went on to stage. The first card is what earns its exit:
+   * from that moment the banker is deciding on the card, not on the strip, and
+   * the greeting, the package and the facilities are all one summon away.
+   */
+  retire: () => void;
   /** Back to the calm stage: nothing has arrived, nothing has left. */
   reset: () => void;
   /** The tiers that have left the stage and can be brought back. */
@@ -81,6 +92,14 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
   }));
   const [summoned, setSummoned] = useState(false);
   const timers = useRef<number[]>([]);
+  /* THE ENTRY IS OVER (founder drive, 2026-09-03). Once the room has retired
+     its tiers, a tier still on its arrival beat must not walk back onto the
+     stage behind the card the banker is now deciding on. An intent that feeds
+     its first line while the facility strip is still on its 620ms beat did
+     exactly that, and the strip stood under every card of the drive. A tier
+     that arrives after the retirement arrives ALREADY FADED: mounted,
+     summonable, and off the stage where it belongs. */
+  const retired = useRef(false);
 
   useEffect(
     () => () => {
@@ -94,6 +113,7 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
     (tier: EntryTier) => {
       setStates((prev) => {
         if (prev[tier] === "on") return prev;
+        if (retired.current) return prev[tier] === "faded" ? prev : { ...prev, [tier]: "faded" as TierState };
         const next = { ...prev, [tier]: "on" as TierState };
         for (const above of TIER_ORDER.slice(0, TIER_ORDER.indexOf(tier))) {
           // A tier that never landed has nothing to retire, and one already
@@ -118,9 +138,30 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
     [reduced],
   );
 
+  const retire = useCallback(() => {
+    retired.current = true;
+    setStates((prev) => {
+      if (!TIER_ORDER.some((k) => prev[k] === "on")) return prev;
+      const next = { ...prev };
+      for (const k of TIER_ORDER) if (next[k] === "on") next[k] = reduced ? "faded" : "leaving";
+      return next;
+    });
+    if (reduced) return;
+    const t = window.setTimeout(() => {
+      setStates((prev) => {
+        if (!TIER_ORDER.some((k) => prev[k] === "leaving")) return prev;
+        const next = { ...prev };
+        for (const k of TIER_ORDER) if (next[k] === "leaving") next[k] = "faded";
+        return next;
+      });
+    }, TIER_EXIT_MS);
+    timers.current.push(t);
+  }, [reduced]);
+
   const reset = useCallback(() => {
     for (const t of timers.current) window.clearTimeout(t);
     timers.current = [];
+    retired.current = false;
     setStates({ question: "waiting", identity: "waiting", detail: "waiting" });
     setSummoned(false);
   }, []);
@@ -128,7 +169,7 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
   const left = useMemo(() => TIER_ORDER.filter((t) => states[t] === "leaving" || states[t] === "faded"), [states]);
   const stateOf = useCallback((tier: EntryTier) => states[tier], [states]);
 
-  return { stateOf, arrive, reset, left, summoned, setSummoned };
+  return { stateOf, arrive, retire, reset, left, summoned, setSummoned };
 }
 
 /**

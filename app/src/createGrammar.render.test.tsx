@@ -295,7 +295,11 @@ describe("the sentence over the chips says what the chips say", () => {
     // longer reaches.
     expect(words).not.toContain("it lands on all of them");
     expect(words).not.toContain("Line of Credit ($15M)");
-    expect(words).toContain("1 of these go on the clone");
+    /* THE CLONE COUNT IS THE CARD'S OWN (founder, 2026-09-03). The cards are on
+       the glass, side by side, and the banker can count them; the sentence is
+       kept only where nothing was drawn. What the room still OWES here is the
+       reading, and that is what the line above holds. */
+    expect(words).not.toContain("of these go on the clone");
   });
 });
 

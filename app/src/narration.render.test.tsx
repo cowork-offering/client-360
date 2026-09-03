@@ -248,7 +248,12 @@ describe("one voice per moment (founder drive, 2026-09-02)", () => {
     expect(room.querySelectorAll(".wk-chip").length).toBeGreaterThan(0);
     expect(room.querySelectorAll(".wk-narr")).toHaveLength(atGreeting);
     expect(session.calls).toHaveLength(calls);
-    expect(room.textContent).toContain("Confirming stages the next VERSION of the package");
+    /* THE VERSION FACT, SHORTENED TO ONE SENTENCE AND SAID ONCE PER PLAN
+       (founder, 2026-09-03). The methodology paragraph under every card was two
+       sentences of nCino mechanics; what a banker needs before pressing Confirm
+       is that nothing booked moves until the bank approves. */
+    expect(room.textContent).toContain("Confirming stages the next version of the package");
+    expect(room.textContent).not.toContain("every eligible member rolls into it");
   });
 
   it("steps its own paragraph back to the address where the model DOES speak", async () => {
@@ -276,7 +281,12 @@ describe("one voice per moment (founder drive, 2026-09-02)", () => {
     await typeInto(room, "take the 15M line of credit to 900000000");
 
     // No session door at all: degrade parity, byte for byte.
-    expect(room.textContent).toContain("Confirming stages the next VERSION of the package");
+    /* THE VERSION FACT, SHORTENED TO ONE SENTENCE AND SAID ONCE PER PLAN
+       (founder, 2026-09-03). The methodology paragraph under every card was two
+       sentences of nCino mechanics; what a banker needs before pressing Confirm
+       is that nothing booked moves until the bank approves. */
+    expect(room.textContent).toContain("Confirming stages the next version of the package");
+    expect(room.textContent).not.toContain("every eligible member rolls into it");
   });
 });
 
@@ -681,7 +691,10 @@ describe("the greeting reads as a lead, the items and a close", () => {
     await settle();
 
     const bubble = opening(room).querySelector(".wk-bub")!;
-    const parts = [...bubble.children].map((el) => el.className);
+    /* `wk-narr-block` is the paced-reveal marker (founder, 2026-09-03): a
+       remark that landed whole still arrives a block at a time. The SHAPE is
+       what this test is about, so it reads the first class of each part. */
+    const parts = [...bubble.children].map((el) => el.className.split(" ")[0]);
     expect(parts).toEqual(["wk-narr-line", "wk-narr-rows", "wk-narr-line"]);
 
     const lead = bubble.querySelector(".wk-narr-line")!.textContent!;

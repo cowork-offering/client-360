@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion } from "../../data/motion";
@@ -13,7 +13,7 @@ import type { ExecuteResult, WriteActionId } from "../../channel/writeTools";
 import type { C360Data } from "../../data/contract";
 import { BrandGlyph } from "../brand";
 import { Peek, usePeek } from "../workroom/Peek";
-import { GooFilter, LiquidMark } from "../workroom/Liquid";
+import { GooFilter, LiquidMark, Orbit } from "../workroom/Liquid";
 import { TypeIcon, type IconKind } from "../workroom/TypeIcon";
 import { ReadCard } from "../workroom/ReadCardView";
 import { isQuestion, readRole, readTopic } from "../workroom/ask";
@@ -26,6 +26,13 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "../workroom/entryChoreography";
+import {
+  expandLabel,
+  rowForStep,
+  settleAttrs,
+  useSettleChoreography,
+  type SettledRow,
+} from "../workroom/settle";
 import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { Narration, useNarration } from "../../channel/Narration";
@@ -37,6 +44,7 @@ import { buildRelReadCard, readRelTopic, relReadGap } from "./relReads";
 import { useClientMail } from "../workroom/clientMail";
 import { useRoomFeed } from "../../intent/feed";
 import { intentFor, intentMailNote, noteFiled } from "../../intent/open";
+import { sourcePhrase } from "../../intent/contract";
 import { stepperState } from "../../workroom/stepper";
 import {
   FACILITY_HANDOFF,
@@ -178,6 +186,12 @@ type RelItem = { id: string; step: number } & (
    *  waiting for a decision, and it does not advance the review. */
   | { kind: "read"; card: ReadCardModel }
   | { kind: "dossier"; room: "relationship"; dossier: DossierModel }
+  /** AN ANSWERED STEP (the settle choreography). What was recorded and how, in
+   *  one row, over the exchange it replaced. The exchange stays mounted under
+   *  it and the row brings it back. */
+  | { kind: "settled"; row: SettledRow; covers: string[] }
+  /** A LINE THE ROOM WAS FED (the intent handoff). One marker, not a bubble. */
+  | { kind: "fed"; text: string; from: string }
 );
 
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -213,6 +227,18 @@ const WORD_STAGGER_MS = 26;
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
+
+/**
+ * THE LINE, AS THE THREAD SHOWS IT.
+ *
+ * A line the BANKER typed is a banker bubble. A line the room was FED by an
+ * intent is not: nobody in this room said it, and drawing it as if they had was
+ * one instruction rendered twice.
+ */
+const relBankerLine = (step: number, text: string, from?: string): RelItem =>
+  from
+    ? { kind: "fed", id: nextId("fed"), step, text, from }
+    : { kind: "banker", id: nextId("banker"), step, text };
 
 /** The chip a banker taps to leave an optional step unanswered. */
 const SKIP_LABEL = "Not assessed";
@@ -553,6 +579,16 @@ export function RelationshipRoom({
   const [ask, setAsk] = useState<RelRouterQuestion | null>(() => router?.question ?? null);
   const [items, setItems] = useState<RelItem[]>([]);
   const [step, setStep] = useState(0);
+  /* THE THREAD, THE THIRD TIER AND THE LIVE QUESTION'S NUMBER, read through
+     refs. The settle names the items it covers without the callbacks that
+     settle depending on the thread's identity, which is rebuilt on every word
+     of the room's own speech. */
+  const itemsRef = useRef<RelItem[]>([]);
+  itemsRef.current = items;
+  const detailIdRef = useRef<string | null>(null);
+  const liveKickerRef = useRef<string | undefined>(undefined);
+  /** Where the line currently in flight came from, or null for a typed one. */
+  const fedRef = useRef<string | null>(null);
   const [histOpen, setHistOpen] = useState(false);
   const [answers, setAnswers] = useState<Answers>({});
   /** The order the answers were collected in, so the lane reads as a ledger. */
@@ -572,7 +608,12 @@ export function RelationshipRoom({
      own scope brief and the detail is the first collected question, because
      that is what this room's tiers ARE. */
   const choreo = useEntryChoreography(reduced);
-  const { arrive: tierArrived } = choreo;
+  const { arrive: tierArrived, retire: retireTiers } = choreo;
+  /* THE SETTLE CHOREOGRAPHY, IN THIS ROOM TOO (founder, 2026-09-03). One
+     grammar, both rooms: an answered step leaves the stage in the room's own
+     exit and one compact row stands for it. */
+  const settle = useSettleChoreography(reduced);
+  const { settle: settleItems } = settle;
   const { peek, openPeek, closePeek } = usePeek();
 
   const roomRef = useRef<HTMLDivElement | null>(null);
@@ -725,11 +766,15 @@ export function RelationshipRoom({
   const detailTimer = useRef(0);
   /** The one agent bubble that IS the third tier (the first question). */
   const [detailId, setDetailId] = useState<string | null>(null);
+  detailIdRef.current = detailId;
   useEffect(() => () => window.clearTimeout(detailTimer.current), []);
   useEffect(() => {
     if (!route || !awake || !live || thinking || phase === "filed") return;
     if (askedRef.current === live.key) return;
     askedRef.current = live.key;
+    const kicker = `Step ${order.length + 1} of ${planned}`;
+    // The number the row will carry once this question is answered.
+    liveKickerRef.current = kicker;
     const push1 = (id: string) =>
       setItems((prev) => {
         const mine = prev.length ? prev[prev.length - 1].step : 0;
@@ -740,7 +785,7 @@ export function RelationshipRoom({
             id,
             step: mine,
             text: live.ask,
-            kicker: `Step ${order.length + 1} of ${planned}`,
+            kicker,
             options: optionsFor(live),
           },
         ];
@@ -791,6 +836,41 @@ export function RelationshipRoom({
     });
   }, [flowSpec, phase, ready, routeBlock]);
 
+  /**
+   * THE STEP THAT WAS JUST ANSWERED, OFF THE STAGE, UNDER ONE ROW.
+   *
+   * The exchange is everything in the step the room was standing on: the
+   * question with its number, its chips, and whatever the banker said to it.
+   * The ROW lands in the NEW step, so it stays on the glass while the step that
+   * produced it collapses behind the history chip as it always has.
+   */
+  const settleStep = useCallback(
+    (row: SettledRow, at: number): boolean => {
+      const prev = itemsRef.current;
+      if (!prev.length) return false;
+      const mine = prev[prev.length - 1].step;
+      const covers: string[] = [];
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const it = prev[i];
+        if (it.step !== mine || it.kind === "settled") break;
+        // A TIER IS NOT PART OF THE EXCHANGE. The first question is the third
+        // entry tier and has its own choreography and its own summon; settling
+        // it here would give one node two owners. The walk steps past it.
+        if (relTierOf(it, detailIdRef.current)) continue;
+        covers.unshift(it.id);
+      }
+      /* THE ROW LANDS EVEN WHERE IT COVERS NOTHING. The first question is a
+         tier, so the step that answers it has no exchange of its own to retire
+         - and a ritual that produced a receipt for every step but the first
+         would leave the banker wondering what happened to step one. */
+      const rowId = nextId("settled");
+      if (covers.length) settleItems(covers, rowId);
+      setItems((p) => [...p, { kind: "settled", id: rowId, step: at, row, covers }]);
+      return true;
+    },
+    [settleItems],
+  );
+
   /** RECORD AN ANSWER. Every answer starts a STEP (rule 31): the banker line
    *  lands, the steps before it collapse, and the machine asks the next one. */
   const record = useCallback(
@@ -799,7 +879,15 @@ export function RelationshipRoom({
       setStep(mine);
       setHistOpen(false);
       setFlow(null);
-      setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: said }]);
+      /* THE ANSWERED STEP SETTLES INTO ONE ROW (founder, 2026-09-03). "Step 3 of
+         6", what the banker answered, and the way back to the question. The
+         review's own numbering travels on the row: a banker three questions
+         into a six-question ritual should not have to count rows to know it. */
+      /* THE ROW IS THE RECEIPT, so the banker's echo under it would be the
+         answer printed twice, eight pixels apart. It is dropped where a row
+         landed and kept where none did (a room with no thread yet). */
+      const receipted = settleStep(rowForStep(liveKickerRef.current, said), mine);
+      if (!receipted) setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: said }]);
       setAnswers((prev) => {
         const next = { ...prev };
         assign(next, key, value);
@@ -807,7 +895,7 @@ export function RelationshipRoom({
       });
       setOrder((prev) => (prev.includes(key) ? prev : [...prev, key]));
     },
-    [step],
+    [settleStep, step],
   );
 
   /** UN-ANSWER. A governance ledger is not a manifest of writes, so a row comes
@@ -1164,9 +1252,12 @@ export function RelationshipRoom({
    * review, asks for facility work, or asks for a create this room cannot file.
    */
   const say = useCallback(
-    async (heard: string, said?: string) => {
+    async (heard: string, said?: string, opts?: { fed?: string }) => {
       const text = heard.trim();
       if (!text || !awake) return;
+      /* WHERE THIS LINE CAME FROM, for the one commit that renders it. The feed
+         is serial by construction, so there is exactly one line in flight. */
+      fedRef.current = opts?.fed ?? null;
 
       /* A READ DOES NOT PICK A REVIEW (F1). The route gate used to intercept
          every line, so a question about the book was answered with the five-way
@@ -1195,7 +1286,7 @@ export function RelationshipRoom({
         const five =
           "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
         setStep(mine);
-        setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        setItems((prev) => [...prev, relBankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
         /* FACILITY WORK IS FACILITY WORK BEFORE A ROUTE IS BOUND TOO.
 
            The handoff lived ONLY in the bound branch, past `if (!route) return`,
@@ -1253,7 +1344,7 @@ export function RelationshipRoom({
         setHistOpen(false);
         setItems((prev) => [
           ...prev,
-          { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() },
+          relBankerLine(mine, (said ?? heard).trim(), opts?.fed),
           { ...item, step: mine } as RelItem,
         ]);
       };
@@ -1306,7 +1397,7 @@ export function RelationshipRoom({
         setHistOpen(false);
         setItems((prev) => [
           ...prev,
-          { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() },
+          relBankerLine(mine, (said ?? heard).trim(), opts?.fed),
           { kind: "gap", id: nextId("gap"), step: mine, gap: CREATE_GAPS[create] },
         ]);
         return;
@@ -1357,7 +1448,7 @@ export function RelationshipRoom({
       if (isQuestion(text) && brain) {
         setStep(mine);
         setHistOpen(false);
-        setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        setItems((prev) => [...prev, relBankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
         await runRelBrain(text, mine, {
           degrade: () =>
             setItems((prev) => [
@@ -1398,7 +1489,7 @@ export function RelationshipRoom({
       }
       setStep(mine);
       setHistOpen(false);
-      setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+      setItems((prev) => [...prev, relBankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
       await runRelBrain(text, mine, { degrade: () => unreadable(live) });
     },
     [answerLive, ask, awake, brain, ctx, live, order.length, reads, route, routeBlock, router, runRelBrain, step, unreadable],
@@ -1452,7 +1543,27 @@ export function RelationshipRoom({
      the review is filed. Nothing is staged on the banker's behalf: the review
      card and its token are where they have always been. */
   const feedReady = awake && !ask && phase === "work" && !thinking && !filing && flow === null;
-  useRoomFeed({ room: "relationship", accountId: ctx.accountId, ready: feedReady, say });
+  /* A FED LINE IS NOT A BANKER BUBBLE (founder, 2026-09-03). It renders as one
+     marker naming where it came from; it still travels through the SAME `say`,
+     the same steps and the same refusals. */
+  const feedFrom = useMemo(() => {
+    const intent = intentFor(ctx.accountId);
+    return intent ? `From ${sourcePhrase(intent.context.source)}` : null;
+  }, [ctx.accountId]);
+  const sayFed = useCallback((line: string) => say(line, undefined, { fed: feedFrom ?? undefined }), [feedFrom, say]);
+  const feed = useRoomFeed({ room: "relationship", accountId: ctx.accountId, ready: feedReady, say: sayFed });
+
+  /* ============ THE SCOPE LEAVES WHEN THE FIRST STEP SETTLES (founder, 2026-09-03)
+
+     The tiers retire each other in order, so the third one - the first
+     collected question - had nothing above it to push it off and stood under
+     every later step. The first ANSWER earns its exit: from there the banker is
+     working the ritual, and the greeting, the scope and the first question are
+     all one summon away in the control that already says so. */
+  const answered = order.length > 0;
+  useEffect(() => {
+    if (answered) retireTiers();
+  }, [answered, retireTiers]);
 
   /* ---- THE SIGNAL'S COVENANT IS PRESELECTED. Where the opening named one, the
           covenant review opens with it already on the list rather than making
@@ -1751,6 +1862,8 @@ export function RelationshipRoom({
                           lit={lit}
                           onOpenPeek={openPeek}
                           onOption={(sayText, label) => void say(sayText, label)}
+                          expanded={item.kind === "settled" ? settle.isOpen(item.id) : false}
+                          onExpand={settle.toggle}
                           onRestart={(restart) => {
                             setAnswers({});
                             setOrder([]);
@@ -1765,12 +1878,16 @@ export function RelationshipRoom({
                         />
                       );
                       const tier = relTierOf(item, detailId);
+                      /* AN ANSWERED STEP LEAVES THE STAGE AND STAYS MOUNTED
+                         (rule 1). The wrapper is one shape at every moment, so
+                         React never remounts a bubble mid-speech. The settled
+                         ROW is never wrapped: it is what replaces the step. */
                       if (!tier)
                         return (
-                          <Fragment key={item.id}>
+                          <div key={item.id} {...settleAttrs(item.kind === "settled" ? "on" : settle.stateOf(item.id))}>
                             {block}
                             <Narration view={narration.viewFor(item.id)} />
-                          </Fragment>
+                          </div>
                         );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED, so an absence
                          contract can tell "faded out" from "gone". */
@@ -1868,6 +1985,16 @@ export function RelationshipRoom({
 
           {/* ======================== THE RIGHT LANE: position, then the ledger */}
           <aside className="wk-col-r" aria-label={laneHeading}>
+            {/* THE FEED'S OWN PROGRESS (rule 3), in the lane head beside the
+                ledger. The thread is what was SAID; a queue position is not. */}
+            {feed.total > 0 && (
+              <div className="wk-feedhead" data-feed="progress">
+                <span>From the intent</span>
+                <b>
+                  {feed.index} of {feed.total} settled
+                </b>
+              </div>
+            )}
             {/* The lane opens empty (founder call, 2026-09-01): content arrives with
               the review, never as furniture. */}
             {laneRows.length === 0 && (
@@ -2021,6 +2148,8 @@ function RelBlock({
   onOpenPeek,
   onOption,
   onRestart,
+  expanded,
+  onExpand,
 }: {
   item: RelItem;
   opening: ReactNode;
@@ -2029,8 +2158,60 @@ function RelBlock({
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
   onOption: (say: string, label: string) => void;
   onRestart: (restart: { route: RelRoute; say: string }) => void;
+  /** Is this settled row's exchange currently back on the stage? */
+  expanded: boolean;
+  /** The banker asked for a settled step back, or to put it away. */
+  onExpand: (rowId: string) => void;
 }) {
   if (item.kind === "opening") return <>{opening}</>;
+
+  /* THE SETTLED ROW (rule 1, this room's nouns). An answered step: its number,
+     what was recorded, and the way back to the question. One grammar with the
+     facility room, down to the class names. */
+  if (item.kind === "settled") {
+    const face = (
+      <>
+        {item.row.kicker && <span className="wk-settled-k">{item.row.kicker}</span>}
+        <span className="wk-settled-w">{item.row.what}</span>
+        <span className="wk-settled-dot" aria-hidden="true">
+          ·
+        </span>
+        <span className="wk-settled-h">{item.row.how}</span>
+      </>
+    );
+    // NOTHING TO BRING BACK, NO CONTROL. The first question is a tier and the
+    // summon already owns it; a second control for the same intent is the
+    // busyness this pass exists to remove.
+    if (!item.covers.length) {
+      return (
+        <div className="wk-settled wk-settled-flat" data-settled-row={item.id}>
+          {face}
+        </div>
+      );
+    }
+    return (
+      <button
+        type="button"
+        className="wk-settled"
+        data-settled-row={item.id}
+        aria-expanded={expanded}
+        onClick={() => onExpand(item.id)}
+      >
+        {face}
+        <span className="wk-settled-x">{expandLabel(expanded)}</span>
+      </button>
+    );
+  }
+
+  /* THE FED LINE MARKER (rule 3). An intent's instruction, said once, in the
+     room's quietest type. Nobody in this room typed it. */
+  if (item.kind === "fed") {
+    return (
+      <div className="wk-fed" data-fed="line">
+        <span className="wk-fed-src">{item.from}:</span> <span className="wk-fed-line">{item.text}</span>
+      </div>
+    );
+  }
 
   if (item.kind === "lookup") {
     return (
@@ -2191,35 +2372,48 @@ function RelFlowCard({
   onExecute: () => void;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
 }) {
-  if (flow.running) {
-    return (
-      <div className="wk-flowcard wk-flowload wk-lit">
-        <span className="aura" aria-hidden="true" />
-        <div className="wk-top">
-          <LiquidMark />
-          <div className="wk-lstat">
-            {spec.loadSteps.map((s, i) => (
-              <span className={i === flow.status ? "wk-on" : ""} key={s}>
-                {s}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="skel" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </div>
-      </div>
-    );
-  }
-
   const plan: StagedOutput | null = flow.staging?.plan ?? null;
   const refused = (plan?.covenants ?? []).filter((c) => c.state && c.state !== "planned");
   const held = plan?.executionHeld === true;
 
+  /* ONE CARD, MORPHING (founder, 2026-09-03). The same rule as the facility
+     room's: one root node, the orbit circling behind it while the room
+     compiles and settling to still when the plan lands, and only the pane
+     inside it crossing over. Never a second card appended below the first. */
+  /* COMPILING IS "THE PLAN IS NOT HERE YET", not "a tool is in flight". The
+     room opens this card the moment the banker asks for the plan and the org
+     is asked for it a frame later, so `running` alone would leave the card
+     showing a confirmation with nothing to confirm for the length of a round
+     trip. `staging` arriving IS the plan being ready. */
+  const compiling = flow.running || !flow.staging;
   return (
-    <div className="wk-flowcard">
+    <div
+      className={`wk-flowcard wk-compile${compiling ? " wk-flowload wk-lit" : " wk-compiled"}`}
+      data-card="compile"
+      data-compile-state={compiling ? "compiling" : "ready"}
+    >
+      <Orbit still={!compiling} />
+      <span className="aura" aria-hidden="true" />
+      {compiling ? (
+        <div className="wk-pane" key="compiling">
+          <div className="wk-top">
+            <LiquidMark />
+            <div className="wk-lstat">
+              {spec.loadSteps.map((s, i) => (
+                <span className={i === flow.status ? "wk-on" : ""} key={s}>
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="skel" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
+      ) : (
+        <div className="wk-pane" key="ready">
       <div className="wk-t">
         <TypeIcon kind={spec.icon} />
         <span>{spec.word}</span>
@@ -2291,6 +2485,8 @@ function RelFlowCard({
           {filing ? "Working…" : sealed ? "Approval closed" : held ? "Held by the org" : spec.approveLabel}
         </button>
       </div>
+        </div>
+      )}
     </div>
   );
 }

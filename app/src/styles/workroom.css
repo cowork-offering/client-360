@@ -310,6 +310,116 @@ body.wk-open #root {
 .wk-tier-back {
   animation: wk-tier-in 340ms var(--ease-settle) both;
 }
+/* ==================================================== THE SETTLE CHOREOGRAPHY
+   An exchange that has been decided leaves the stage (founder, 2026-09-03) and
+   one compact row takes its place. The EXIT IS THE TIER FADE: the same 520ms,
+   the same rise, the same word-speech blur. One exit vocabulary, not two.
+
+   The wrapper is present on every exchange item at every moment, so React never
+   remounts a bubble and no word speech restarts mid-conversation. */
+.wk-ex {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.wk-ex-out {
+  animation: wk-tier-out 520ms var(--ease-out) both;
+  pointer-events: none;
+}
+/* Off stage. Collapsed, NOT unmounted, and one click away from coming back. */
+.wk-ex-gone {
+  display: none;
+}
+/* Brought back from its settled row. Quieter than the first arrival. */
+.wk-ex-back {
+  animation: wk-tier-in 340ms var(--ease-settle) both;
+}
+
+/* THE SETTLED ROW. What settled, how, and the way back to the whole exchange.
+   Quiet by construction: it is a receipt, and a receipt that shouted would be
+   the accumulation this pass exists to remove. */
+.wk-settled {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--glass-hairline);
+  border-radius: 999px;
+  box-shadow: var(--glass-rim);
+  text-align: left;
+}
+/* A row with nothing to bring back is not a control. Same face, no affordance. */
+.wk-settled-flat {
+  cursor: default;
+}
+.wk-settled-k {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+.wk-settled-w {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.wk-settled-dot {
+  opacity: 0.5;
+}
+.wk-settled-x {
+  margin-left: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 180ms var(--ease-out);
+}
+.wk-settled:hover .wk-settled-x,
+.wk-settled:focus-visible .wk-settled-x,
+.wk-settled[aria-expanded="true"] .wk-settled-x {
+  opacity: 0.75;
+}
+
+/* THE FED LINE. An intent's instruction, in the room's quietest type. Not a
+   bubble: nobody in this room said it. */
+.wk-fed {
+  align-self: flex-start;
+  max-width: 88%;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  border-left: 2px solid var(--glass-hairline);
+  padding-left: 10px;
+}
+.wk-fed-src {
+  font-weight: 700;
+}
+.wk-fed-line {
+  color: var(--ink);
+}
+
+/* THE FEED'S OWN PROGRESS, in the right lane's head where the ledger lives.
+   Never in the thread: how far down a queue the room is is not a thing anybody
+   said, and the thread is what was said. */
+.wk-feedhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.wk-feedhead b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
 /* The one control that brings them back. Same glass as the history chip, in
    the thread rather than floating over it, because it is about THIS read. */
 .wk-summon {
@@ -2498,4 +2608,68 @@ body.wk-open #root {
   display: inline-flex;
   align-items: center;
   padding: 8px 14px;
+}
+
+
+/* ================================================== THE PACED STREAM (rule C)
+   The remark is released at a steady word rate (channel/streamPacer.ts). Two
+   things belong on the glass rather than in the pacer: each released word fades
+   in where it lands, and the block holds its height while it writes so nothing
+   under it walks down the page a line at a time. */
+.wk-narr-live {
+  min-height: 3.6em;
+}
+/* A SPAN ONLY ANIMATES WHEN IT MOUNTS. React reconciles the remark's spans by
+   index, so the ones already on the glass keep their nodes and their animation
+   does not re-run; only the words the pacer has just released are new. */
+.wk-narr-live .wk-narr-line span,
+.wk-narr-live .wk-narr-list li,
+.wk-narr-live .wk-narr-row {
+  animation: wk-word-in 120ms var(--ease-out) both;
+}
+@keyframes wk-word-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-narr-live {
+    min-height: 0;
+  }
+  .wk-narr-live .wk-narr-line span,
+  .wk-narr-live .wk-narr-list li,
+  .wk-narr-live .wk-narr-row {
+    animation: none;
+  }
+}
+
+
+/* A REMARK THAT LANDED WHOLE STILL ARRIVES A BLOCK AT A TIME. The lead line is
+   read before the rows land under it. While the pacer is running the words are
+   already arriving one at a time and this does not apply. */
+.wk-narr-block {
+  animation: wk-block-in 260ms var(--ease-settle) both;
+}
+@keyframes wk-block-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-narr-live .wk-narr-block {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-narr-block {
+    animation: none;
+  }
 }

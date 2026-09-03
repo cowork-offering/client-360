@@ -394,7 +394,12 @@ describe("the guided steps", () => {
     expect(byText(/^Problem Loan$/)).toBeTruthy();
     click(byText(/^Annual$/));
     await settle();
-    expect(room.querySelector(".wk-banker")!.textContent).toContain("Annual");
+    /* THE ANSWER IS THE SETTLED ROW NOW (founder, 2026-09-03). An answered step
+       leaves the stage and one numbered row stands for it, so the banker echo
+       under the row would be the same word printed twice, eight pixels apart.
+       What is asserted is unchanged: the tap SAID the value and the room took
+       it. It says it off the receipt rather than off the echo. */
+    expect(room.querySelector(".wk-settled")!.textContent).toContain("Annual");
     expect(liveAsk()).toContain("State the relationship position");
   });
 
