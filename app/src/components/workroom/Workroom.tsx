@@ -825,6 +825,7 @@ export function Workroom({
   onOpenAssist,
   brain,
   instanceUrl,
+  approverUserId,
   onFiled,
   onClose,
   onAnchor,
@@ -832,6 +833,9 @@ export function Workroom({
   settleDeps = LIVE_SETTLE,
 }: {
   context: WorkroomContext;
+  /** The Salesforce USER ID for the writes. Resolved by the host from
+   *  `meta.userId`; `context.approver` is the display name in this seat. */
+  approverUserId?: string;
   /**
    * THE MEMBERS A CREDIT ACTION CAN RUN AGAINST, by loan id.
    *
@@ -4694,18 +4698,31 @@ export function Workroom({
          the executed card carries about the purpose. A plan that filed no new
          facility never calls it at all. */
       if (stagedNewFacilities(entries).length) {
+        /* The org wants the USER ID here, and `context.approver` is the display
+           name in this seat (the fenced opener stages it for the greeting; the
+           engine's own execute re-resolves quietly, which is why the filing
+           works). Resolve the same way, and never send a name (founder,
+           2026-09-03: "Invalid id: Fabian Goetzens"). */
+        const approverId = approverUserId ?? context.approver;
+        /* A purpose miss is a runtime footnote, not a moment: one quiet line,
+           model hushed, never a remark that could out-claim the card (the model
+           narrated "the facility remains unfiled", which was false). */
+        const quiet = (text: string) => {
+          hushRef.current?.();
+          push({ kind: "agent", id: nextId("agent"), text, statusChip: true });
+        };
         try {
-          const finished = await completeNewFacilityDetail(staging.stagingId, context.approver);
+          const finished = await completeNewFacilityDetail(staging.stagingId, approverId);
           if (finished.ok) {
-            agent(finished.result.outcome);
+            quiet(finished.result.outcome);
           } else {
-            agent(
+            quiet(
               `The facility is filed and its purpose is not: ${finished.error.message} ` +
                 "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
             );
           }
         } catch (e) {
-          agent(
+          quiet(
             `The facility is filed and its purpose is not: ${readableError(e)} ` +
               "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
           );

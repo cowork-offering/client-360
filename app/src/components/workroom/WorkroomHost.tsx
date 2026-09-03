@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { resolveApproverUserId } from "../../channel/writeTools";
 import { resolveBundle } from "../../actions/registry";
 import { noteFiled } from "../../intent/open";
 import { workroomActivityEntry } from "../../actions/executedActivity";
@@ -218,6 +219,7 @@ export function WorkroomHost() {
       /* The org's own Lightning host, never a guessed My Domain. Absent leaves
          the dossier's link unrendered rather than wrong (A29). */
       instanceUrl={data.meta?.instanceUrl}
+      approverUserId={resolveApproverUserId(data.meta) ?? undefined}
       onFiled={onFiled}
       /* THE GLASS LIFTS, AND THE WASH SETTLES (rule 62). Every route out of the
          room — the close button, Escape, the scrim — comes through this one
