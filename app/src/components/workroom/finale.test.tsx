@@ -4,9 +4,11 @@ import { act, type CSSProperties } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   FINALE_EXHALE_MS,
+  FINALE_HANDOVER_MS,
   FINALE_STAGGER_CAP,
   FINALE_STAGGER_MS,
   finaleAttrs,
+  finaleCardHoldMs,
   finaleDrainMs,
   finaleHoldMs,
   railFiledLine,
@@ -65,6 +67,15 @@ describe("the drain's clocks", () => {
     expect(finaleDrainMs(1)).toBe(FINALE_EXHALE_MS);
     expect(finaleDrainMs(50)).toBe(FINALE_EXHALE_MS + FINALE_STAGGER_CAP * FINALE_STAGGER_MS);
   });
+
+  it("hands the card in over the tail of the wave, never after it", () => {
+    // The room must never go empty between the two beats.
+    expect(finaleCardHoldMs(16)).toBe(finaleDrainMs(16) - FINALE_HANDOVER_MS);
+    expect(finaleCardHoldMs(16)).toBeLessThan(finaleDrainMs(16));
+    // And a one-item room still gets a real wait rather than a negative one.
+    expect(finaleCardHoldMs(1)).toBe(Math.max(0, FINALE_EXHALE_MS - FINALE_HANDOVER_MS));
+    expect(finaleCardHoldMs(1)).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("the finale runs once, over a set fixed at the filing", () => {
@@ -76,7 +87,7 @@ describe("the finale runs once, over a set fixed at the filing", () => {
 
     act(() => finale().begin(["a", "b", "c"]));
     expect(finale().state).toBe("exhale");
-    expect(finale().hold).toBe(finaleDrainMs(3));
+    expect(finale().hold).toBe(finaleCardHoldMs(3));
     // Top to bottom, one beat apart.
     expect(finale().exitOf("a")).toBe(0);
     expect(finale().exitOf("c")).toBe(2);

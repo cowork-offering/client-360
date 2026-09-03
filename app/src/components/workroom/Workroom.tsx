@@ -5260,6 +5260,17 @@ export function Workroom({
                         item.kind === "dossier"
                           ? ({ "--wk-fin-hold": `${finale.hold}ms`, "--wk-fin-sweep": `${FINALE_SWEEP_MS}ms` } as CSSProperties)
                           : null;
+                      /* AND WHAT LANDED BESIDE THE CARD WAITS FOR IT. The drafted
+                         reply rides the filing's own tail and the purpose
+                         footnote arrives seconds later; both were appearing at
+                         full strength while the star was still on its way in,
+                         which put the secondary content on the glass first. They
+                         hold until the card has finished arriving and then slide
+                         in under it. */
+                      const after =
+                        finaleState !== "off" && inWave === null && item.kind !== "dossier"
+                          ? ({ "--wk-fin-hold": `${finale.hold}ms` } as CSSProperties)
+                          : null;
                       /* AN EXCHANGE THAT SETTLED LEAVES THE STAGE AND STAYS
                          MOUNTED (rule 1). The wrapper is the same shape at every
                          moment, so React never remounts the bubble and its word
@@ -5272,13 +5283,14 @@ export function Workroom({
                             key={item.id}
                             data-ex-id={item.id}
                             data-finale-card={star ? "" : undefined}
+                            data-finale-after={after ? "" : undefined}
                             {...withFinale(
                               settleAttrs(
                                 item.kind === "settled" ? "on" : settle.stateOf(item.id),
                                 settle.heightOf(item.id),
                               ),
                               leaves,
-                              star,
+                              star ?? after,
                             )}
                           >
                             {/* THE INNER ROW IS WHAT COLLAPSES. A grid track can

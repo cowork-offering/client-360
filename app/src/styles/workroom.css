@@ -2981,6 +2981,19 @@ body.wk-open #root {
   }
 }
 
+/* WHAT LANDED BESIDE THE CARD WAITS FOR IT. The drafted reply rides the filing's
+   own tail and the purpose footnote arrives seconds later; both used to appear at
+   full strength while the star was still on its way in. The track opens and the
+   content rises 500ms after the card starts, so the secondary content lands under
+   a card that has already finished arriving, and the card is never pushed by a
+   space opening under it mid-ascent. */
+.wk-ex[data-finale-after] {
+  animation: wk-ex-open var(--wk-settle-ms, 420ms) var(--ease-settle) calc(var(--wk-fin-hold, 0ms) + 500ms) both;
+}
+.wk-ex[data-finale-after] > .wk-ex-in > * {
+  animation: wk-ex-rise 300ms var(--ease-settle) calc(var(--wk-fin-hold, 0ms) + 500ms) both;
+}
+
 /* ---- beat 3: the afterglow. One line, two quiet doors, and the room is
         honestly over rather than merely stopped. */
 .wk-afterglow {

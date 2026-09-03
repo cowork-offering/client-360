@@ -61,6 +61,22 @@ export const FINALE_STAGGER_CAP = 8;
 /** One slow pass of the rainbow behind the card, then still. Never a loop. */
 export const FINALE_SWEEP_MS = 2600;
 
+/**
+ * HOW FAR THE CARD'S ASCENT OVERLAPS THE END OF THE DRAIN.
+ *
+ * THE TWO BEATS HAND OVER, THEY DO NOT QUEUE. A card that waited for the LAST
+ * item to finish sinking left the pane empty for the length of its own fade -
+ * about four hundred milliseconds of nothing, which reads as a glitch and not as
+ * a breath (measured on the drive, 2026-09-03: the frame at 200ms into the drain
+ * was a blank room). The ascent starts while the last few items are still on
+ * their way out, so the room never goes empty and the whole thing reads as one
+ * continuous motion.
+ *
+ * It is the stagger cap's own width, which is exactly the span the last items
+ * occupy: the card comes in over precisely the tail of the wave.
+ */
+export const FINALE_HANDOVER_MS = FINALE_STAGGER_CAP * FINALE_STAGGER_MS;
+
 /** Where an item's exit starts, by its place in the thread. */
 export function finaleHoldMs(index: number): number {
   return Math.min(Math.max(index, 0), FINALE_STAGGER_CAP) * FINALE_STAGGER_MS;
@@ -69,6 +85,11 @@ export function finaleHoldMs(index: number): number {
 /** How long the whole drain takes for a room holding `count` items. */
 export function finaleDrainMs(count: number): number {
   return FINALE_EXHALE_MS + finaleHoldMs(count - 1);
+}
+
+/** When the card starts arriving: the tail of the drain, never after it. */
+export function finaleCardHoldMs(count: number): number {
+  return Math.max(0, finaleDrainMs(count) - FINALE_HANDOVER_MS);
 }
 
 /**
@@ -85,12 +106,13 @@ export interface Finale {
   /**
    * HOW LONG THE CARD WAITS BEFORE IT ASCENDS.
    *
-   * The drain's own length, and zero where there is no drain. The card is
+   * The tail of the drain, and zero where there is no drain. The card is
    * MOUNTED throughout - it is the filing's own output and a test must be able
    * to read it whatever the clock is doing - so the wait is a delay on its
    * entrance and on every paced row inside it, never a mount gate. The room
    * exhales first and the card arrives into the space that made room for it,
-   * which is the order the founder asked for.
+   * overlapping the tail of the wave by {@link FINALE_HANDOVER_MS} so the pane
+   * never goes empty between the two beats.
    */
   hold: number;
   /**
@@ -129,7 +151,7 @@ export function useFinale(reduced: boolean): Finale {
         return;
       }
       const drain = finaleDrainMs(itemIds.length);
-      setHold(drain);
+      setHold(finaleCardHoldMs(itemIds.length));
       setState("exhale");
       timer.current = window.setTimeout(() => setState("still"), drain);
     },
