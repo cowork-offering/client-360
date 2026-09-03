@@ -4,6 +4,7 @@ import { loadC360 } from "./data/load";
 import { AppProvider } from "./state/appState";
 import { AppShell } from "./components/AppShell";
 import { BrandGlyph } from "./components/brand";
+import { GlassFilters } from "./components/GlassFilters";
 
 type LoadState = { status: "loading" } | { status: "ready"; data: C360Data } | { status: "empty" };
 
@@ -21,6 +22,19 @@ export function App() {
     };
   }, []);
 
+  // THE FILTER SHEET SITS OUTSIDE THE LOAD STATES. Every state paints glass,
+  // the boot scene included, and a url() reference that resolves to nothing
+  // silently drops the whole backdrop-filter declaration, so the sheet has to
+  // be in the document before the first frosted pixel, not after the data.
+  return (
+    <>
+      <GlassFilters />
+      {body(ls)}
+    </>
+  );
+}
+
+function body(ls: LoadState) {
   if (ls.status === "loading") return <Boot />;
   if (ls.status === "empty") {
     return (

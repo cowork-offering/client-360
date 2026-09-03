@@ -295,3 +295,133 @@
     transition: none !important;
   }
 }
+
+/* ============================================================================
+   REFRACTIVE GLASS (founder brief, 2026-09-03), BEHIND `html.eg-refract`.
+
+   "Blur averages the pixels behind your panel, real glass bends them." The
+   bend is an SVG displacement map (components/GlassFilters.tsx) fed into
+   backdrop-filter AHEAD of the blur, so the backdrop is displaced while it is
+   still sharp and only then softened. Put the blur first and there is nothing
+   left to bend.
+
+   THE BLUR COMES DOWN WITH IT, and that is not a taste call. A 30-38px frost
+   averages the backdrop to a flat field before the eye can read any structure
+   in it, and a bent flat field is still a flat field. Refract mode runs at half
+   the frost, read off each surface's own --eg-blur so the two scales cannot
+   drift apart, which is where the large shapes behind the glass (a card edge,
+   a heading, a table rule) survive far enough to be seen wobbling.
+
+   THE SAFARI FALLBACK IS THE DECLARATION ORDER, NOT A FEATURE QUERY. WebKit
+   rejects url() inside backdrop-filter and drops that declaration on the floor;
+   the plain declaration IMMEDIATELY ABOVE it has already been accepted, so
+   Safari keeps a straight blur and Chromium takes the second, later, winning
+   one. Both lines are required and the order between them is load-bearing.
+   The -webkit- line stays plain for the same reason it exists at all: pre-18
+   WebKit reads only that property, and it would reject the url() too.
+
+   THE CENSUS IS UNTOUCHED. This block changes no box-shadow and no border, and
+   the computed backdrop-filter still contains `blur`, which is how the probe
+   finds a glass surface at all. Three rims in, three rims out.
+
+   OFF BY DEFAULT. Without the class on <html> nothing below matches and the
+   cockpit is byte-for-byte the frost it shipped as.
+   ========================================================================== */
+
+/* THE BIG SURFACES. `.eg-glass` covers the one sheet (hero, room, bar, panel,
+   chat); the named selectors are the surfaces that hand-rolled the recipe
+   before it was a sheet and still carry their own blur: the room's manifest
+   chips, its notices and dossier, the top bar, the whisper, the toast. */
+html.eg-refract .eg-glass,
+html.eg-refract .topbar,
+html.eg-refract .whisper,
+html.eg-refract .wk-notice,
+html.eg-refract .wk-ent,
+html.eg-refract .wk-rescard,
+html.eg-refract .wk-toast {
+  --eg-rblur: calc(var(--eg-blur, 30px) * 0.5);
+  --eg-rsat: var(--eg-sat, 1.8);
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-refract) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+
+/* The hand-rolled surfaces never set --eg-blur, so they state their own half. */
+html.eg-refract .topbar {
+  --eg-rblur: calc(var(--blur-bar) * 0.5);
+  --eg-rsat: 1.85;
+}
+html.eg-refract .whisper,
+html.eg-refract .wk-toast {
+  --eg-rblur: 17px;
+}
+html.eg-refract .wk-notice,
+html.eg-refract .wk-ent,
+html.eg-refract .wk-rescard {
+  --eg-rblur: calc(var(--blur-workroom) * 0.5);
+}
+
+/* THE SMALL ONES, SECOND, SO THEY WIN ON SOURCE ORDER at equal specificity.
+   `#eg-refract-soft` throws a third as far over a shorter wavelength: a small
+   piece of glass is a thinner piece of glass, and a 34px pill given the pane's
+   throw does not bend, it melts. */
+html.eg-refract .eg-glass-chip,
+html.eg-refract .eg-glass-satellite,
+html.eg-refract .wk-hist,
+html.eg-refract .wk-propose {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-refract-soft) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+html.eg-refract .wk-hist {
+  --eg-rblur: 10px;
+  --eg-rsat: 1.6;
+}
+html.eg-refract .wk-propose {
+  --eg-rblur: 12px;
+  --eg-rsat: 1.7;
+}
+
+/* `.eg-glass-micro` (the narrator chip under the FAB) IS PUT BACK ON PLAIN
+   FROST, last, because it wears `.eg-glass` and would otherwise inherit the
+   bend from the first rule. It is a 7px-radius sliver: at that radius the
+   displaced corners have nowhere to land and the edge turns to mush, the same
+   geometry that already exempts it from the triple rim. It is the one surface
+   the bend makes worse rather than better. */
+html.eg-refract .eg-glass-micro {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+}
+
+/* THE WORKROOM PANE IS OFF THE BEND BY DEFAULT, ON THE PERFORMANCE GATE.
+
+   The pane is the one glass surface that repaints on every streamed narration
+   token, and it is full-viewport, so it is also the most expensive backdrop in
+   the app. Measured headless (3s rAF counter while text is appended to the
+   room's last agent bubble, medians of three runs): 14.4 fps with the pane's
+   backdrop-filter removed ENTIRELY, 9.3 fps on today's 30px frost, 6.3 fps
+   with the bend. The box those numbers came off is a 4-core software
+   rasteriser, so the pane never reaches 50 fps there in ANY mode, the no-glass
+   floor included. The 50 fps gate therefore cannot be cleared on this
+   evidence, and the gate's own fallback applies: the pane keeps plain frost
+   and the bend goes on the static surfaces (bar, hero, rail chips, satellites,
+   pills). Re-measure on real hardware before reversing this.
+
+   THE PANE VARIANT IS STILL BUILDABLE, behind its own class, because the call
+   is the founder's and he has to be able to see it. `?refract=2` adds
+   `eg-refract-pane` alongside `eg-refract`, which is what the compare page's
+   pane column was shot through. It does not ship on `?refract=1`. */
+html.eg-refract .eg-glass-workroom {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+}
+html.eg-refract-pane .eg-glass-workroom {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-refract) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
