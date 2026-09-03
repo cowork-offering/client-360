@@ -59,6 +59,11 @@ export type SettleState = "on" | "leaving" | "settled" | "shown";
 export interface SettledRow {
   what: string;
   how: string;
+  /** WHERE IN THE RITUAL THIS WAS, where the room numbers its steps. The
+   *  relationship room's questions arrive as "Step 3 of 6"; a settled row that
+   *  dropped the number would leave the banker counting rows to find out how
+   *  far through the review they are. The facility room sets none. */
+  kicker?: string;
 }
 
 /** The arrow the room prints between a before and an after. The same glyph the
@@ -199,6 +204,17 @@ export function settleAttrs(state: SettleState): {
   if (state === "settled")
     return { className: "wk-ex wk-ex-gone", "data-settle-state": "settled", "aria-hidden": "true" };
   return { className: "wk-ex", "data-settle-state": "on" };
+}
+
+/**
+ * THE ROW AN ANSWERED REVIEW STEP BECOMES.
+ *
+ * The relationship room's ritual is numbered, so the number travels: "Step 3 of
+ * 6", then what the banker answered. The question itself is in the exchange
+ * under it, which is where a question belongs once it has been answered.
+ */
+export function rowForStep(kicker: string | undefined, said: string): SettledRow {
+  return { what: said, how: "recorded", kicker };
 }
 
 /** What the expand affordance on a settled row says. The banker's word for what

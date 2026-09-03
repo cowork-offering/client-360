@@ -4615,6 +4615,7 @@ function ThreadBlock({
         aria-expanded={expanded}
         onClick={() => onExpand(item.id)}
       >
+        {item.row.kicker && <span className="wk-settled-k">{item.row.kicker}</span>}
         <span className="wk-settled-w">{item.row.what}</span>
         <span className="wk-settled-dot" aria-hidden="true">
           ·

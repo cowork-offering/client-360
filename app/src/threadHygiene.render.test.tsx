@@ -12,6 +12,12 @@ import { __resetFeedForTests, stageFeed } from "./intent/feed";
 import { consumeIntent, __resetIntentsForTests } from "./intent/store";
 import type { IntentDoc } from "./intent/contract";
 import { ACT_WORDS } from "./channel/narrate";
+import { RelationshipRoom, neutralRelAsk } from "./components/relationship/RelationshipRoom";
+import { relContextFor, type RelFlowDeps } from "./components/relationship/reviewFlows";
+import type { RelRoute } from "./components/relationship/relRoute";
+import type { BorrowerBundle } from "./data/contract";
+import type { StagedOutput } from "./actions/stagedPlan";
+import type { ExecuteResult, ToolOutcome } from "./channel/writeTools";
 import { resetCatalog } from "./channel/catalog";
 import { acquireSample, resetSessionDoor } from "./channel/sampleDoor";
 import type { C360Data } from "./data/contract";
@@ -157,6 +163,133 @@ const settledAway = (room: HTMLElement) => [...room.querySelectorAll<HTMLElement
  *  header, the composer, the rail) is not the thread and is not counted. */
 const threadWords = (room: HTMLElement): number =>
   (room.querySelector(".wk-thread")?.textContent ?? "").split(/\s+/).filter(Boolean).length;
+
+
+/* ------------------------------------------------ the relationship room's own
+
+   Injected deps, exactly as relationshipRoom.render.test.tsx does it: not one
+   assertion below reaches a connector. */
+
+const REL_PACKAGE = "a5Fbb000000IHFJEA4";
+
+function relCtx() {
+  const bundle = {
+    snapshot: {
+      accountId: "001X",
+      name: "Hartwell Precision Manufacturing LLC",
+      productPackageId: REL_PACKAGE,
+      primaryRiskRating: "4",
+      computedRiskRating: "5",
+    },
+    exposure: {
+      totalCommitted: 18_400_000,
+      facilities: [
+        {
+          loanId: "0Cb1",
+          status: "Active",
+          productPackageId: REL_PACKAGE,
+          committed: 10_000_000,
+          collateral: [{ collateralId: "a35A", collateralName: "COL-000762", collateralType: "Equipment" }],
+        },
+      ],
+    },
+    covenants: {
+      covenants: [
+        {
+          covenantId: "cov1",
+          covenantType: "Debt Service Coverage",
+          nextEvaluationDate: "2026-09-06",
+          lastEvaluationStatus: "Compliant",
+          latestComplianceStatus: "Pending",
+        },
+      ],
+    },
+  } as unknown as BorrowerBundle;
+  const relData = {
+    meta: { generatedAt: "2026-08-31", userId: "005bb000001AAAAAAA" },
+    portfolio: { accounts: [] },
+    borrower: bundle,
+    borrowers: { "001X": bundle },
+  } as unknown as C360Data;
+  return relContextFor({
+    data: relData,
+    bundle,
+    accountId: "001X",
+    accountName: "Hartwell Precision Manufacturing LLC",
+  });
+}
+
+const REL_PLAN: StagedOutput = {
+  stagingId: "a8abb00001KtalSAAR",
+  planHash: "hash-wxyz",
+  decisionToken: "6b3490fc91cfc47256b488c8bd783add",
+  summary: "Files an annual credit review at In Progress.",
+  steps: [],
+  warnings: [],
+  suggestions: [],
+};
+
+const REL_RESULT: ExecuteResult = {
+  stagingId: "a8abb00001KtalSAAR",
+  terminalState: "success",
+  outcome: "The review was created and verified.",
+  recordName: "REV-0000000012",
+  status: "In Progress",
+  steps: [],
+};
+
+const relDeps = (): RelFlowDeps => ({
+  available: () => true,
+  newKey: () => "key-1",
+  stage: async () => ({ ok: true, result: REL_PLAN }) as ToolOutcome<StagedOutput>,
+  execute: async () => ({ ok: true, result: REL_RESULT }) as ToolOutcome<ExecuteResult>,
+});
+
+function openRel(args: { route: RelRoute }) {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root!.render(
+      <RelationshipRoom
+        ctx={relCtx()}
+        route={args.route}
+        router={{
+          question: null,
+          say: null,
+          preselectCovenantId: null,
+          neutral: () => neutralRelAsk(),
+          onBind: () => {},
+          onRestart: () => {},
+        }}
+        deps={relDeps()}
+        onClose={() => {}}
+      />,
+    );
+  });
+  return { room: document.querySelector<HTMLElement>(".wk-room")! };
+}
+
+const relSettle = settle;
+const relClick = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+/** Answer the live step with the first chip the room offers. A chip SAYS the
+ *  value: it rides the same recorder a typed line does. */
+async function relAnswer(room: HTMLElement) {
+  await relType(room, "Annual");
+}
+
+async function relType(room: HTMLElement, text: string) {
+  const input = room.querySelector<HTMLInputElement>(".wk-txt")!;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  act(() => {
+    setter.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await settle();
+  await settle();
+}
 
 /* ============================================ 0. the focus click, one bubble */
 
@@ -472,5 +605,61 @@ describe("the budget is enforced on the glass, not only asked for (founder, 2026
     expect(ACT_WORDS.staged).toBeLessThan(ACT_WORDS.answered);
     expect(ACT_WORDS.staged).toBeLessThanOrEqual(35);
     expect(ACT_WORDS.refused).toBeLessThanOrEqual(25);
+  });
+});
+
+/* ==================================================== 5. the relationship room */
+
+describe("the relationship room settles its steps the same way (rule 5)", () => {
+  it("turns an answered step into ONE numbered row, mounted and summonable", async () => {
+    const { room } = openRel({ route: "annual" });
+    await relSettle();
+    await relSettle();
+
+    // The room is asking a numbered question, as the ritual does.
+    expect(room.textContent).toMatch(/Step 1 of \d/);
+    const asked = room.querySelector<HTMLElement>(".wk-thread")!.textContent!;
+
+    await relAnswer(room);
+
+    const rows = [...room.querySelectorAll<HTMLElement>(".wk-settled")];
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    // The number travels on the row: a banker three questions into six should
+    // not have to count rows to find out how far through the review they are.
+    expect(rows[0].textContent).toMatch(/Step 1 of \d/);
+    expect(rows[0].textContent).toContain("recorded");
+
+    expect(asked).toContain("Step 1 of");
+    /* THE FIRST QUESTION IS A TIER and the summon already owns it, so its row
+       carries no second control for the same intent. Every step after it is an
+       ordinary exchange and settles like one. */
+    expect(rows[0].tagName).toBe("DIV");
+
+    await relType(room, "The relationship is performing to plan and the position is unchanged.");
+    const both = [...room.querySelectorAll<HTMLElement>(".wk-settled")];
+    expect(both.length).toBeGreaterThanOrEqual(2);
+    const second = both[1] as HTMLButtonElement;
+    expect(second.tagName).toBe("BUTTON");
+
+    // FADED IS NOT GONE. The exchange is still in the document, hidden, and one
+    // click from being back.
+    const away = [...room.querySelectorAll<HTMLElement>('[data-settle-state="settled"]')];
+    expect(away.length).toBeGreaterThan(0);
+    for (const node of away) expect(node.getAttribute("aria-hidden")).toBe("true");
+
+    relClick(second);
+    await relSettle();
+    expect(room.querySelectorAll('[data-settle-state="settled"]')).toHaveLength(0);
+    expect(room.querySelectorAll('[data-settle-state="shown"]').length).toBeGreaterThan(0);
+  });
+
+  it("retires the scope tier once the first step settles (rule 4)", async () => {
+    const { room } = openRel({ route: "annual" });
+    await relSettle();
+    await relSettle();
+    await relAnswer(room);
+    // Every tier is off the stage and the summon that brings them back is there.
+    expect(room.querySelector('[data-tier="detail"]')?.getAttribute("data-tier-state")).toBe("faded");
+    expect(room.querySelector('[data-summon="tiers"]')).not.toBeNull();
   });
 });
