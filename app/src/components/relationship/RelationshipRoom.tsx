@@ -13,7 +13,7 @@ import type { ExecuteResult, WriteActionId } from "../../channel/writeTools";
 import type { C360Data } from "../../data/contract";
 import { BrandGlyph } from "../brand";
 import { Peek, usePeek } from "../workroom/Peek";
-import { GooFilter, LiquidMark } from "../workroom/Liquid";
+import { GooFilter, LiquidMark, Orbit } from "../workroom/Liquid";
 import { TypeIcon, type IconKind } from "../workroom/TypeIcon";
 import { ReadCard } from "../workroom/ReadCardView";
 import { isQuestion, readRole, readTopic } from "../workroom/ask";
@@ -2368,35 +2368,48 @@ function RelFlowCard({
   onExecute: () => void;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
 }) {
-  if (flow.running) {
-    return (
-      <div className="wk-flowcard wk-flowload wk-lit">
-        <span className="aura" aria-hidden="true" />
-        <div className="wk-top">
-          <LiquidMark />
-          <div className="wk-lstat">
-            {spec.loadSteps.map((s, i) => (
-              <span className={i === flow.status ? "wk-on" : ""} key={s}>
-                {s}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="skel" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </div>
-      </div>
-    );
-  }
-
   const plan: StagedOutput | null = flow.staging?.plan ?? null;
   const refused = (plan?.covenants ?? []).filter((c) => c.state && c.state !== "planned");
   const held = plan?.executionHeld === true;
 
+  /* ONE CARD, MORPHING (founder, 2026-09-03). The same rule as the facility
+     room's: one root node, the orbit circling behind it while the room
+     compiles and settling to still when the plan lands, and only the pane
+     inside it crossing over. Never a second card appended below the first. */
+  /* COMPILING IS "THE PLAN IS NOT HERE YET", not "a tool is in flight". The
+     room opens this card the moment the banker asks for the plan and the org
+     is asked for it a frame later, so `running` alone would leave the card
+     showing a confirmation with nothing to confirm for the length of a round
+     trip. `staging` arriving IS the plan being ready. */
+  const compiling = flow.running || !flow.staging;
   return (
-    <div className="wk-flowcard">
+    <div
+      className={`wk-flowcard wk-compile${compiling ? " wk-flowload wk-lit" : " wk-compiled"}`}
+      data-card="compile"
+      data-compile-state={compiling ? "compiling" : "ready"}
+    >
+      <Orbit still={!compiling} />
+      <span className="aura" aria-hidden="true" />
+      {compiling ? (
+        <div className="wk-pane" key="compiling">
+          <div className="wk-top">
+            <LiquidMark />
+            <div className="wk-lstat">
+              {spec.loadSteps.map((s, i) => (
+                <span className={i === flow.status ? "wk-on" : ""} key={s}>
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="skel" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
+      ) : (
+        <div className="wk-pane" key="ready">
       <div className="wk-t">
         <TypeIcon kind={spec.icon} />
         <span>{spec.word}</span>
@@ -2468,6 +2481,8 @@ function RelFlowCard({
           {filing ? "Working…" : sealed ? "Approval closed" : held ? "Held by the org" : spec.approveLabel}
         </button>
       </div>
+        </div>
+      )}
     </div>
   );
 }

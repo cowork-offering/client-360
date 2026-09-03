@@ -691,7 +691,10 @@ describe("the greeting reads as a lead, the items and a close", () => {
     await settle();
 
     const bubble = opening(room).querySelector(".wk-bub")!;
-    const parts = [...bubble.children].map((el) => el.className);
+    /* `wk-narr-block` is the paced-reveal marker (founder, 2026-09-03): a
+       remark that landed whole still arrives a block at a time. The SHAPE is
+       what this test is about, so it reads the first class of each part. */
+    const parts = [...bubble.children].map((el) => el.className.split(" ")[0]);
     expect(parts).toEqual(["wk-narr-line", "wk-narr-rows", "wk-narr-line"]);
 
     const lead = bubble.querySelector(".wk-narr-line")!.textContent!;

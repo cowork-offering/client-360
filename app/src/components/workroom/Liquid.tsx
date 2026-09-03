@@ -42,3 +42,27 @@ export function LiquidMark({ mini = true }: { mini?: boolean }) {
     </span>
   );
 }
+
+/* =============================================================================
+   THE ORBIT - the compile card's own ambient glow (founder, 2026-09-03).
+
+   The compiling card and the confirmation card are ONE card that morphs, and
+   the light behind it is what makes the morph read as one thing happening
+   rather than as two cards swapping. Three brand-tinted blobs travel a slow
+   circle behind the glass through the SAME metaball filter the liquid mark
+   uses: it is the room's existing vocabulary at a larger radius, never a new
+   one.
+
+   WHEN THE PLAN LANDS, THE GLOW SETTLES TO STILL. The blobs stop where they
+   are; they do not vanish. The card is still warm, it is simply no longer
+   working, and that is the difference the banker reads.
+   ============================================================================= */
+export function Orbit({ still = false }: { still?: boolean }) {
+  return (
+    <span className={`wk-orbit${still ? " wk-orbit-still" : ""}`} aria-hidden="true" data-orbit={still ? "still" : "circling"}>
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}

@@ -245,7 +245,7 @@ const relDeps = (): RelFlowDeps => ({
   execute: async () => ({ ok: true, result: REL_RESULT }) as ToolOutcome<ExecuteResult>,
 });
 
-function openRel(args: { route: RelRoute }) {
+function openRel(args: { route: RelRoute; deps?: RelFlowDeps }) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -262,7 +262,7 @@ function openRel(args: { route: RelRoute }) {
           onBind: () => {},
           onRestart: () => {},
         }}
-        deps={relDeps()}
+        deps={args.deps ?? relDeps()}
         onClose={() => {}}
       />,
     );
@@ -661,5 +661,72 @@ describe("the relationship room settles its steps the same way (rule 5)", () => 
     // Every tier is off the stage and the summon that brings them back is there.
     expect(room.querySelector('[data-tier="detail"]')?.getAttribute("data-tier-state")).toBe("faded");
     expect(room.querySelector('[data-summon="tiers"]')).not.toBeNull();
+  });
+});
+
+/* ============================================== B. one card, morphing in place */
+
+describe("the compile card resolves in place, never into a second card", () => {
+  async function driveToPlan(room: HTMLElement) {
+    // The annual review's four answers, on the chips the room offers.
+    const pick = async (re: RegExp) => {
+      const b = [...document.body.querySelectorAll("button")].find((x) => re.test(x.textContent ?? ""));
+      relClick(b!);
+      await settle();
+      await settle();
+    };
+    await pick(/^Annual$/);
+    await pick(/Not assessed/);
+    await pick(/Not assessed/);
+    await pick(/Not assessed/);
+    const chip = room.querySelector<HTMLButtonElement>(".wk-propose");
+    relClick(chip!);
+    return chip;
+  }
+
+  it("is ONE node that carries the compile state, before and after", async () => {
+    /* THE ORG IS HELD MID-STAGE, so the compiling half is observable. With a
+       stub that resolves at once the card is ready before the test can look,
+       which is the honest reason this holds the promise open. */
+    let release: (() => void) | null = null;
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const { room } = openRel({
+      route: "annual",
+      deps: {
+        ...relDeps(),
+        stage: async () => {
+          await held;
+          return { ok: true, result: REL_PLAN } as ToolOutcome<StagedOutput>;
+        },
+      },
+    });
+    await relSettle();
+    await driveToPlan(room);
+
+    // Mid-compile: one card, saying so, with the glow circling behind it.
+    const compiling = room.querySelector<HTMLElement>('[data-card="compile"]');
+    expect(compiling).not.toBeNull();
+    expect(compiling!.getAttribute("data-compile-state")).toBe("compiling");
+    expect(compiling!.querySelector('[data-orbit="circling"]')).not.toBeNull();
+
+    await act(async () => {
+      release!();
+      await held;
+    });
+    await relSettle();
+    await relSettle();
+    await relSettle();
+
+    // THE SAME NODE, RESOLVED. Not a second card appended below the first.
+    const cards = [...room.querySelectorAll<HTMLElement>('[data-card="compile"]')];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toBe(compiling);
+    expect(cards[0].getAttribute("data-compile-state")).toBe("ready");
+    // And the glow settles to still rather than disappearing: the card is warm,
+    // it is simply no longer working.
+    expect(cards[0].querySelector('[data-orbit="still"]')).not.toBeNull();
+    expect(cards[0].textContent).toContain("decision token");
   });
 });

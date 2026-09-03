@@ -103,3 +103,122 @@
     transform: none;
   }
 }
+
+
+/* =============================================================================
+   THE ORBIT - the compile card's ambient glow (founder, 2026-09-03).
+
+   The compiling card and the confirmation card are ONE card that morphs, and
+   this is the light that makes the morph read as one thing happening. Three
+   brand-tinted blobs travel a slow circle behind the glass through the SAME
+   metaball filter the liquid mark uses. Larger radius, same vocabulary.
+
+   IT SETTLES TO STILL WHEN THE PLAN LANDS. `animation-play-state: paused` stops
+   the blobs where they are rather than removing them: the card is still warm,
+   it is simply no longer working.
+
+   IT NEVER TAKES A POINTER AND NEVER ENTERS THE GLASS CENSUS: no backdrop
+   filter, no border, nothing to rim. */
+.wk-orbit {
+  position: absolute;
+  inset: -22px;
+  z-index: 0;
+  pointer-events: none;
+  filter: url(#wk-goo);
+  opacity: 0.9;
+  transition: opacity 520ms var(--ease-out);
+}
+.wk-orbit i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 74px;
+  height: 74px;
+  margin: -37px 0 0 -37px;
+  border-radius: 50%;
+  opacity: 0.13;
+  transform-origin: 50% 50%;
+}
+/* The Electric Glass ink, spread across the three: brand, the accent's quiet
+   tone, and the teal the page's own ground already carries. */
+.wk-orbit i:nth-child(1) {
+  background: var(--brand);
+  animation: wk-orbit-1 7.2s linear infinite;
+}
+.wk-orbit i:nth-child(2) {
+  background: var(--accent-quiet);
+  animation: wk-orbit-2 9.1s linear infinite;
+}
+.wk-orbit i:nth-child(3) {
+  background: rgb(5, 242, 219);
+  animation: wk-orbit-3 8.3s linear infinite;
+  opacity: 0.1;
+}
+/* STILL. Stopped where they stand, and a shade quieter. */
+.wk-orbit-still {
+  opacity: 0.55;
+}
+.wk-orbit-still i {
+  animation-play-state: paused;
+}
+@keyframes wk-orbit-1 {
+  from {
+    transform: rotate(0deg) translateX(96px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(96px) rotate(-360deg);
+  }
+}
+@keyframes wk-orbit-2 {
+  from {
+    transform: rotate(140deg) translateX(112px) rotate(-140deg);
+  }
+  to {
+    transform: rotate(500deg) translateX(112px) rotate(-500deg);
+  }
+}
+@keyframes wk-orbit-3 {
+  from {
+    transform: rotate(260deg) translateX(84px) rotate(-260deg);
+  }
+  to {
+    transform: rotate(620deg) translateX(84px) rotate(-620deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-orbit i {
+    animation: none;
+  }
+}
+
+/* THE PANE THAT CROSSES OVER. The card keeps its identity; only what is inside
+   it changes, and it fades in where the last one stood rather than cutting. */
+.wk-compile {
+  position: relative;
+  isolation: isolate;
+}
+.wk-compile .wk-pane {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: wk-pane-in 320ms var(--ease-settle) both;
+}
+@keyframes wk-pane-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-compile .wk-pane {
+    animation: none;
+  }
+}

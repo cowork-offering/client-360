@@ -22,6 +22,8 @@ import {
   takeDeclineNotice,
   type AskSessionOptions,
 } from "./sampleDoor";
+import { startPacer, type Pacer } from "./streamPacer";
+import { prefersReducedMotion } from "../data/motion";
 
 /* =============================================================================
    THE REMARK, ON THE GLASS — the thin hook and the one component.
@@ -36,8 +38,15 @@ import {
    the same room thinking, not as a second system loading.
    ============================================================================= */
 
+/** The beat between one block of a landed remark and the next. The founder's
+ *  own cadence for a paced reveal is 250 to 400ms; this is the middle of it. */
+export const BLOCK_BEAT_MS = 300;
+
 export interface NarrationView {
   blocks: NarrationBlock[];
+  /** THE PACER IS STILL RELEASING. The block reserves its height while this is
+   *  true, so the pane below it does not walk up and down the page. */
+  streaming?: boolean;
   /** TRUE from the call leaving the page until the first streamed token. */
   pending: boolean;
   /**
@@ -83,6 +92,8 @@ export interface NarrationHook {
 export function useNarration(deps: NarrationDeps): NarrationHook {
   const [views, setViews] = useState<Record<string, NarrationView>>({});
   const running = useRef(new Map<string, AbortController>());
+  /** One pacer per remark, cancelled with the room. */
+  const pacers = useRef(new Map<string, Pacer>());
   /** ONE REMARK PER ITEM, EVER. The hook's returned object changes identity as
    *  the remark streams, so a caller's effect will re-fire on its own updates:
    *  without this latch that is an infinite loop rather than a second remark. */
@@ -93,9 +104,12 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
 
   useEffect(() => {
     const inflight = running.current;
+    const paced = pacers.current;
     return () => {
       for (const controller of inflight.values()) controller.abort();
       inflight.clear();
+      for (const p of paced.values()) p.cancel();
+      paced.clear();
     };
   }, []);
 
@@ -150,22 +164,53 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
         return clipBudget(settled ? guardClaims(held, envelope, subject).blocks : held, budget);
       };
       const prompt = composeNarratePrompt(envelope, subject);
+
+      /* ============ THE REMARK ARRIVES AT A READABLE PACE (founder, 2026-09-03)
+
+         "The streamed narration feels stuck and jerky." It was: the door hands
+         over whatever the model produced since the last callback, and a model
+         produces in bursts, so the glass showed a stall and then a paragraph.
+
+         THE PACER BUFFERS AND RELEASES AT A STEADY WORD RATE, on the frame
+         clock. Every guard still runs on the prefix exactly as it ran on the
+         raw delta - the pacer cannot change what a remark SAYS, only when the
+         reader gets to see it - and the last emit is the door's own text, byte
+         for byte. Under reduced motion there is no pacer at all. */
+      const pacer = startPacer({
+        instant: prefersReducedMotion(),
+        emit: (visible, done) =>
+          setViews((prev) => ({
+            ...prev,
+            [id]: { blocks: read(visible, done), pending: false, spoke: true, streaming: !done },
+          })),
+      });
+      pacers.current.set(id, pacer);
+
       const options: AskSessionOptions = {
         kind: greeting ? "greeting" : "narrate",
         tier: "quick",
         rung: 2,
         signal: controller.signal,
-        onText: ({ text }) => setViews((prev) => ({ ...prev, [id]: { blocks: read(text), pending: false, spoke: true } })),
+        onText: ({ text }) => pacer.push(text),
       };
 
       const call = greeting ? prime(prompt, options) : ask(prompt, options);
       void Promise.resolve(call)
         .then((text) => {
-          const blocks = read(typeof text === "string" ? text : "", true);
-          if (blocks.length) setViews((prev) => ({ ...prev, [id]: { blocks, pending: false, spoke: true } }));
-          else settle(id);
+          const settled = typeof text === "string" ? text : "";
+          /* THE FINAL TEXT DRAINS THROUGH THE SAME PACER, so a remark that
+             arrived in one burst still reads as writing rather than as a wall.
+             An EMPTY remark has nothing to pace and settles at once. */
+          if (read(settled, true).length) pacer.finish(settled);
+          else {
+            pacer.cancel();
+            settle(id);
+          }
         })
-        .catch(() => settle(id))
+        .catch(() => {
+          pacer.cancel();
+          settle(id);
+        })
         .finally(() => running.current.delete(id));
     },
     [ask, enabled, envelopeFor, prime, settle],
@@ -201,13 +246,25 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
     );
   }
   if (!view.blocks.length) return null;
+  /* NO LAYOUT THRASH WHILE IT WRITES (founder, 2026-09-03). A remark that grows
+     a line at a time walks everything under it down the page a line at a time.
+     The block reserves three lines of height while the pacer is releasing and
+     lets go the moment it finishes, so the pane settles once instead of on
+     every frame. */
   return (
-    <div className="wk-msg wk-agent wk-narr" data-who="Agent">
-      <div className="wk-bub">
+    <div className="wk-msg wk-agent wk-narr" data-who="Agent" data-streaming={view.streaming ? "true" : undefined}>
+      <div className={`wk-bub${view.streaming ? " wk-narr-live" : ""}`}>
         {view.blocks.map((block, i) => {
+          /* NEVER A SIMULTANEOUS DUMP (founder, 2026-09-03). A remark that
+             landed whole - the door answered in one go, or the reader has
+             asked for no pacing - still arrives a block at a time, one beat
+             apart, so the lead line is read before the rows land under it.
+             While the PACER is running the words are already arriving one at a
+             time and a second stagger on top of it would fight it. */
+          const beat = view.streaming ? undefined : { animationDelay: `${i * BLOCK_BEAT_MS}ms` };
           if (block.kind === "line")
             return (
-              <p className="wk-narr-line" key={i}>
+              <p className="wk-narr-line wk-narr-block" style={beat} key={i}>
                 {block.spans.map((span, j) =>
                   span.bold ? <b key={j}>{span.text}</b> : <span key={j}>{span.text}</span>,
                 )}
@@ -215,7 +272,7 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
             );
           if (block.kind === "bullets")
             return (
-              <ul className="wk-narr-list" key={i}>
+              <ul className="wk-narr-list wk-narr-block" style={beat} key={i}>
                 {block.items.map((item, j) => (
                   <li key={j}>
                     {item.map((span, k) => (span.bold ? <b key={k}>{span.text}</b> : <span key={k}>{span.text}</span>))}
@@ -239,7 +296,7 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
              the mark. A SEPARATE list, so a resolved run never lands in
              `.wk-narr-list` and the bullet contract stays exactly as it was. */
           return (
-            <ul className="wk-narr-rows" key={i}>
+            <ul className="wk-narr-rows wk-narr-block" style={beat} key={i}>
               {block.rows.map((row, j) => (
                 <li className={`wk-narr-row${row.tone ? ` wk-${row.tone}` : ""}`} key={j}>
                   <span className="wk-narr-row-l">

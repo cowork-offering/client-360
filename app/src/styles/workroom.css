@@ -2609,3 +2609,67 @@ body.wk-open #root {
   align-items: center;
   padding: 8px 14px;
 }
+
+
+/* ================================================== THE PACED STREAM (rule C)
+   The remark is released at a steady word rate (channel/streamPacer.ts). Two
+   things belong on the glass rather than in the pacer: each released word fades
+   in where it lands, and the block holds its height while it writes so nothing
+   under it walks down the page a line at a time. */
+.wk-narr-live {
+  min-height: 3.6em;
+}
+/* A SPAN ONLY ANIMATES WHEN IT MOUNTS. React reconciles the remark's spans by
+   index, so the ones already on the glass keep their nodes and their animation
+   does not re-run; only the words the pacer has just released are new. */
+.wk-narr-live .wk-narr-line span,
+.wk-narr-live .wk-narr-list li,
+.wk-narr-live .wk-narr-row {
+  animation: wk-word-in 120ms var(--ease-out) both;
+}
+@keyframes wk-word-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-narr-live {
+    min-height: 0;
+  }
+  .wk-narr-live .wk-narr-line span,
+  .wk-narr-live .wk-narr-list li,
+  .wk-narr-live .wk-narr-row {
+    animation: none;
+  }
+}
+
+
+/* A REMARK THAT LANDED WHOLE STILL ARRIVES A BLOCK AT A TIME. The lead line is
+   read before the rows land under it. While the pacer is running the words are
+   already arriving one at a time and this does not apply. */
+.wk-narr-block {
+  animation: wk-block-in 260ms var(--ease-settle) both;
+}
+@keyframes wk-block-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-narr-live .wk-narr-block {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wk-narr-block {
+    animation: none;
+  }
+}

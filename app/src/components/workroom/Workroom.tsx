@@ -26,7 +26,7 @@ import type { SourceChip } from "../../workroom/scripts";
 import { BrandGlyph } from "../brand";
 import { odoRoll } from "../Odometer";
 import { Peek, usePeek } from "./Peek";
-import { GooFilter, LiquidMark } from "./Liquid";
+import { GooFilter, LiquidMark, Orbit } from "./Liquid";
 import { TypeIcon, iconForDelta, iconForMember, type IconKind } from "./TypeIcon";
 import {
   NEUTRAL_QUESTION,
@@ -146,6 +146,7 @@ import {
   useSettleChoreography,
   type SettledRow,
 } from "./settle";
+import { useStageGate } from "./stage";
 import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
@@ -470,6 +471,21 @@ function ineligibleReason(m: PackageMember): string {
 function isLive(item: ThreadItem): boolean {
   if (item.kind === "chips") return item.chips.some((c) => c.state === "open" && !!c.delta);
   if (item.kind === "challenge") return !item.acked;
+  return false;
+}
+
+/**
+ * SOMETHING WAITING ON THE BANKER (the stage cap, founder 2026-09-03).
+ *
+ * Wider than {@link isLive}, which is about GATES - what stops a new
+ * instruction. This is about WEIGHT: a question with its answers on the table
+ * is not a gate (the banker may type past it) and it is absolutely something
+ * they still have to deal with. At most two of these are ever on the stage.
+ */
+function asksSomething(item: ThreadItem): boolean {
+  if (item.kind === "chips") return item.chips.some((c) => c.state === "open");
+  if (item.kind === "challenge") return !item.acked;
+  if (item.kind === "agent") return !!item.options?.length;
   return false;
 }
 
@@ -947,6 +963,16 @@ export function Workroom({
   const settle = useSettleChoreography(reduced);
   const itemsRef = useRef<ThreadItem[]>([]);
   itemsRef.current = items;
+  /* THE STAGE CAP (founder, 2026-09-03). At most two things waiting on the
+     banker; what does not fit waits its turn and lands as the stage clears. An
+     item that has SETTLED is off the stage and does not count, which is what
+     makes the settle choreography and the cap one mechanism rather than two. */
+  const liveOnStage = items.reduce(
+    (n, item) => (asksSomething(item) && settle.stateOf(item.id) !== "settled" ? n + 1 : n),
+    0,
+  );
+  const gate = useStageGate({ live: liveOnStage, reduced });
+  const { enqueue } = gate;
   const { settle: settleItems } = settle;
 
   /**
@@ -3415,19 +3441,36 @@ export function Workroom({
             // CHECKS COME TO YOU. The check a confirm trips arrives back in the
             // conversation the moment it becomes true, never in a separate tab.
             ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), step: mine, challenge, acked: false }] : []),
-            ...(gate
-              ? [
-                  {
-                    kind: "agent" as const,
-                    id: nextId("agent"),
-                    step: mine,
-                    text: cutPricingWhy(gate.text, PRICING_WHY, whySaid),
-                    options: gate.options,
-                  },
-                ]
-              : []),
           ];
         });
+        /* AND THE PRICING QUESTION WAITS ITS TURN (the stage cap). A confirm
+           that tripped a check has already put one thing in front of the
+           banker; the question the version needs lands when they have dealt
+           with it. Nothing is lost: it is queued, in order, and released the
+           moment the stage clears. */
+        if (gate) {
+          /* WHAT THE STAGE WILL HOLD ONCE THIS COMMIT HAS LANDED: the check, if
+             the confirm tripped one, and the answer's own chips where the engine
+             put a question on it. Two is the cap, so a confirm that raised both
+             holds the pricing question back until one of them is dealt with. */
+          const liveAfter = (challenge ? 1 : 0) + (options?.length ? 1 : 0);
+          enqueue(() =>
+            setItems((prev) => {
+              const mine = prev.length ? prev[prev.length - 1].step : 0;
+              return [
+                ...prev,
+                {
+                  kind: "agent",
+                  id: nextId("agent"),
+                  step: mine,
+                  text: cutPricingWhy(gate.text, PRICING_WHY, whySaid),
+                  options: gate.options,
+                },
+              ];
+            }),
+            liveAfter,
+          );
+        }
       });
       setSuggestion(engine.suggest());
     },
@@ -3435,6 +3478,7 @@ export function Workroom({
       afterSettle,
       elicitMembers,
       engine,
+      enqueue,
       entries,
       figures.committedMM,
       pricingOutstanding,
@@ -4394,30 +4438,51 @@ function FlowCard({
   onExecute: () => void;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
 }) {
-  if (flow.running) {
-    return (
-      <div className="wk-flowcard wk-flowload wk-lit">
-        <span className="aura" aria-hidden="true" />
-        <div className="wk-top">
-          <LiquidMark />
-          <div className="wk-lstat">
-            {loadSteps.map((s, i) => (
-              <span className={i === flow.status ? "wk-on" : ""} key={s}>
-                {s}
-              </span>
-            ))}
+  /* ============ ONE CARD, MORPHING (founder, 2026-09-03)
+
+     The room used to swap a "compiling" card for a "confirmation" card. Two
+     cards for one moment, and the second one read as a new thing arriving
+     rather than as the first one finishing.
+
+     IT IS ONE ROOT NODE NOW. `data-compile-state` says where it stands, the
+     ORBIT circles behind it through the room's own metaball filter while it
+     works and SETTLES TO STILL when the plan lands, and only the pane inside it
+     crosses over - keyed, so React fades the new content in where the old one
+     stood. Nothing is appended below anything. */
+  /* COMPILING IS "THE PLAN IS NOT HERE YET", not "a tool is in flight". The
+     room opens this card the moment the banker asks for the plan and the org
+     is asked for it a frame later, so `running` alone would leave the card
+     showing a confirmation with nothing to confirm for the length of a round
+     trip. `staging` arriving IS the plan being ready. */
+  const compiling = flow.running || !flow.staging;
+  return (
+    <div
+      className={`wk-flowcard wk-compile${compiling ? " wk-flowload wk-lit" : " wk-compiled"}`}
+      data-card="compile"
+      data-compile-state={compiling ? "compiling" : "ready"}
+    >
+      <Orbit still={!compiling} />
+      <span className="aura" aria-hidden="true" />
+      {compiling ? (
+        <div className="wk-pane" key="compiling">
+          <div className="wk-top">
+            <LiquidMark />
+            <div className="wk-lstat">
+              {loadSteps.map((s, i) => (
+                <span className={i === flow.status ? "wk-on" : ""} key={s}>
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="skel" aria-hidden="true">
+            <i />
+            <i />
+            <i />
           </div>
         </div>
-        <div className="skel" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="wk-flowcard">
+      ) : (
+        <div className="wk-pane" key="ready">
       <div className="wk-t">
         <TypeIcon kind="package" />
         <span>{planTitle}</span>
@@ -4486,6 +4551,8 @@ function FlowCard({
           {filing ? "Working…" : sealed || held.length > 0 ? "Approval closed" : approveLabel}
         </button>
       </div>
+        </div>
+      )}
     </div>
   );
 }
