@@ -158,16 +158,18 @@ function toHistoryRow(raw: Record<string, unknown>): ActionHistoryRow | null {
 /**
  * The durable action trail for one account, newest first.
  *
- * SEAMED like WP5: built against the DECLARED shape while the Apex lane
- * deploys. Until the tool exists the call fails with a not-in-manifest code,
- * which the sweep treats as "not part of this view" and drops silently — the
- * cockpit shows the session echo alone, exactly as it does today.
+ * THE INPUT KEY IS `maxResults` (live-verified 2026-09-03, org bankinggpt-at).
+ * It was `limit` here from the day this was seamed, and the org answered every
+ * call with INVALID_INPUT: "An invocable variable wasn't found for Apex action
+ * Customer360ActionHistory: limit". The sweep drops a failing tool silently, so
+ * the durable trail never loaded and the cockpit showed the session echo alone
+ * — which read exactly like a tool that had not deployed yet. It had.
  */
 export async function fetchActionHistory(accountId: Id, limit = 25): Promise<{ rows: ActionHistoryRow[]; storedAt?: number }> {
   const res = await callTool(
     SERVERS.customer360,
     TOOLS.actionHistory,
-    { inputs: [{ accountId, limit }] },
+    { inputs: [{ accountId, maxResults: limit }] },
     { read: true, cache: { staleTime: 15_000 } },
   );
   const slot = unwrapInvocable<Record<string, unknown>>(res.payload, 1)[0];
@@ -181,6 +183,46 @@ export async function fetchActionHistory(accountId: Id, limit = 25): Promise<{ r
     ? raw.map((r) => toHistoryRow((r ?? {}) as Record<string, unknown>)).filter((r): r is ActionHistoryRow => r !== null)
     : [];
   return { rows, storedAt: res.cache?.storedAt };
+}
+
+/** The statuses the staging record only reaches once the run is over. Anything
+ *  else — Staged, Executing — means the org is still writing. `Executing` is
+ *  reached the moment the token is consumed and STAYS there across the engine
+ *  hop's interim write, which is why a poller may not settle on it. */
+const TERMINAL_STATUS = new Set(["Completed", "Partial", "Failed"]);
+
+export function isTerminalStatus(status: string | undefined): boolean {
+  return !!status && TERMINAL_STATUS.has(status);
+}
+
+/**
+ * ONE staging row, read fresh, for a room waiting on a filing it lost the answer to.
+ *
+ * Uncached and un-retried on purpose. `fetchActionHistory` holds its answer for
+ * 15 seconds because the activity tab has no reason to ask more often; a poller
+ * asking every three seconds and being handed the same cached row would watch a
+ * finished run forever.
+ *
+ * Returns undefined when the row is not on the trail yet, which is a state and
+ * not an error: the trail is Private to the acting banker and a row that has not
+ * committed is a row nobody can see.
+ */
+export async function readActionState(accountId: Id, stagingId: string): Promise<ActionHistoryRow | undefined> {
+  const res = await callTool(
+    SERVERS.customer360,
+    TOOLS.actionHistory,
+    { inputs: [{ accountId, maxResults: 25 }] },
+    { cache: false },
+  );
+  const slot = unwrapInvocable<Record<string, unknown>>(res.payload, 1)[0];
+  if (!slot.ok) throw { code: "tool_error", message: slot.error, fix: slot.error };
+  const raw = (slot.data as { entries?: unknown }).entries;
+  if (!Array.isArray(raw)) return undefined;
+  for (const r of raw) {
+    const row = toHistoryRow((r ?? {}) as Record<string, unknown>);
+    if (row && row.stagingId === stagingId) return row;
+  }
+  return undefined;
 }
 
 /* --------------------------------------------------------------- mailbox */

@@ -8,6 +8,7 @@ import { readableError, type PackageChoice, type WorkroomEngine, type WorkroomSu
 import { addEntry, addressManifest, figuresFor, removeEntry } from "../../workroom/manifest";
 import { vocabularyFor } from "../../workroom/modes";
 import { stepperState } from "../../workroom/stepper";
+import { awaitFiling, FILED_FAILED, FILING_IN_FLIGHT, LIVE_SETTLE, STILL_WRITING, type SettleDeps } from "./settleExecution";
 import type {
   DraftedReply,
   HaveRow,
@@ -318,6 +319,11 @@ type ThreadItem = { id: string; step: number } & (
        *  and the room said what it holds. `subjectFor` reads it and the model is
        *  never asked, so a focus click puts ONE bubble on the glass. */
       routine?: boolean;
+      /** THE ONE CHIP THAT IS NOT A SENTENCE. Every other chip in this room SAYS
+       *  something and rides the parser; this one asks the ORG what a filing
+       *  already with it finally did. It exists because the alternative offer —
+       *  approve again — is the one gesture that must never be made twice. */
+      statusChip?: boolean;
     }
   /** The opening read: the greeting, the position, the ask it arrived on, and
    *  what the room read to say it. One bubble, because it is one sentence. */
@@ -633,6 +639,19 @@ function reachedTheOrg(e: unknown): boolean {
   return /token_refused|already been used|already redeemed/.test(text);
 }
 
+/**
+ * TRUE where nothing can have been written, so there is nothing to wait for.
+ *
+ * Two shapes qualify and no others. A refusal the engine raised BEFORE it
+ * dispatched carries `dispatched: false` — it says so about itself. And a room
+ * that never had an org to reach carries the channel-none codes. Anything else,
+ * a timeout above all, may have filed: `undefined` is not `false`, and the whole
+ * point of the wait is that an ambiguous transport outcome is not evidence.
+ */
+function nothingWasFiled(e: unknown): boolean {
+  return neverReachedTheOrg(e) || (e as { dispatched?: unknown } | null | undefined)?.dispatched === false;
+}
+
 /** TRUE where the room never reached an org at all. THE CHANNEL-NONE DOCTRINE:
  *  no connector means no plan, nothing simulated, and no token ever burnt. This
  *  is the one failure that earns a surface of its own rather than a sentence in
@@ -807,6 +826,7 @@ export function Workroom({
   onClose,
   onAnchor,
   onExecuted,
+  settleDeps = LIVE_SETTLE,
 }: {
   context: WorkroomContext;
   /**
@@ -897,6 +917,9 @@ export function Workroom({
    * a room that dispatched would also rebuild its own engine mid-scene.
    */
   onExecuted?: (committedDeltaMM: number) => void;
+  /** THE WAIT, INJECTED, for the same reason the engine is: the room is testable
+   *  against a scripted org and ships against the live action trail. */
+  settleDeps?: SettleDeps;
 }) {
   const brief = useMemo(() => engine.brief(context), [engine, context]);
   const packageChoiceCount = brief.packageChoices.length;
@@ -4439,12 +4462,16 @@ export function Workroom({
     }
   }, [agent, context, engine, entries, lostPricingCause, push, relayError]);
 
-  const execute = useCallback(async () => {
+  /* `resume` is the STATUS RE-READ, and only the status chip passes it. It is
+     not a second approval and it cannot become one: the engine answers a resume
+     off the staging record, and the approve control stays sealed throughout. */
+  const execute = useCallback(async (resume = false) => {
     const staging = flow?.staging;
-    if (!staging?.decisionToken || filing || sealed) return;
+    if (!staging?.decisionToken || filing) return;
+    if (!resume && sealed) return;
     // THE GATE, CHECKED WHERE THE TOKEN WOULD BE SPENT. The button is already
     // closed; this is the half that does not depend on a rendered control.
-    if (flow?.held.length) {
+    if (!resume && flow?.held.length) {
       agent(
         `The plan carries no step for ${flow.held.join(", ")}, so there is nothing to approve here. ` +
           "Take it off the manifest and say it again, or discard the plan and stage again. Nothing has been written.",
@@ -4454,12 +4481,65 @@ export function Workroom({
     setFiling(true);
     setFlow((f) => (f ? { ...f, running: true } : f));
     try {
-      const result = await engine.execute({
+      const approval = {
         stagingId: staging.stagingId,
         planHash: staging.planHash,
         decisionToken: staging.decisionToken,
         approverUserId: context.approver,
-      });
+      };
+
+      /* WAIT ON THE ORG, THEN ASK THE TOOL WHAT IT DID.
+
+         Both halves matter. The wait is the only thing that can tell a filing
+         still running from one that finished; asking the tool again under the
+         SAME idempotency key is the only thing that can produce the executed
+         card, and it files nothing — the Apex answers a known key off the
+         staging record before any check runs.
+
+         Null means the room has already said what happened and there is no card
+         to land. */
+      const waitOut = async (refusal: unknown): Promise<WorkroomExecution | null> => {
+        const verdict = await awaitFiling(context.accountId, staging.stagingId, settleDeps);
+        setFlow((f) => (f ? { ...f, running: false } : f));
+        /* THE TOKEN WAS NEVER REDEEMED, so the refusal the room is already
+           holding is the whole truth. Re-raised to the ordinary catch, which
+           says the org's own words and closes the approval. */
+        if (verdict.kind === "never-ran") throw refusal;
+        if (verdict.kind === "unsettled") {
+          setSealed(true);
+          push({ kind: "agent", id: nextId("agent"), text: STILL_WRITING, statusChip: true });
+          return null;
+        }
+        if (verdict.status === "Failed") {
+          setSealed(true);
+          agent(FILED_FAILED);
+          return null;
+        }
+        setFlow((f) => (f ? { ...f, running: true } : f));
+        return engine.execute(approval);
+      };
+
+      let landed: WorkroomExecution | null;
+      if (resume) {
+        // THE STATUS CHIP. The plan is already with the org under a spent token,
+        // so this re-enters the wait and never the approval.
+        agent(FILING_IN_FLIGHT);
+        landed = await waitOut(new Error(STILL_WRITING));
+      } else {
+        try {
+          landed = await engine.execute(approval);
+        } catch (e) {
+          /* THE ANSWER WAS LOST, NOT THE FILING. Only a failure that PROVES
+             nothing was written skips the wait; everything else is ambiguous,
+             and the room reads the org rather than guessing at it. Waiting costs
+             one read a second and can never write. */
+          if (nothingWasFiled(e)) throw e;
+          agent(FILING_IN_FLIGHT);
+          landed = await waitOut(e);
+        }
+      }
+      if (!landed) return;
+      const result = landed;
 
       // THE DOSSIER IS BUILT FROM THE REAL MANIFEST AND THE REAL RESULT, before
       // anything is cleared. Every row is a change that actually filed.
@@ -4568,19 +4648,21 @@ export function Workroom({
       // approval still where the banker left it, rather than as a dead button.
       setFlow((f) => (f ? { ...f, running: false } : f));
       relayError(readableError(e));
-      // AND ONLY WHERE A RETRY IS HONEST. Once the call has reached the org the
-      // token may be spent and the write may have landed, so the room stops
-      // offering the gesture rather than arming a retry that would bounce on a
-      // burnt single-use token and tell the banker nothing about what the org
-      // did.
-      if (reachedTheOrg(e)) {
-        setSealed(true);
-        agent("The filing may have completed despite the error. Do not approve again; check the staging record.");
-      }
+      /* AND ONLY WHERE A RETRY IS HONEST. Once the call has reached the org the
+         token may be spent and the write may have landed, so the room stops
+         offering the gesture rather than arming a retry that would bounce on a
+         burnt single-use token and tell the banker nothing about what the org did.
+
+         WHAT THE ROOM NO LONGER ADDS HERE (2026-09-03) is "the filing may have
+         completed despite the error. Do not approve again; check the staging
+         record." It was a guess dressed as a warning, and on the founder's live
+         run the filing HAD completed. A lost answer never reaches this catch any
+         more: it is waited out above, against the record that knows. */
+      if (reachedTheOrg(e)) setSealed(true);
     } finally {
       setFiling(false);
     }
-  }, [agent, brief.baselineCommittedMM, brief.packageName, context.approver, context.productPackageId, elicitMembers, engine, entries, figures.committedMM, filing, flow, instanceUrl, onExecuted, onFiled, pricingDeclined, sealed, vocabulary.filedWord]);
+  }, [agent, brief.baselineCommittedMM, brief.packageName, context.approver, context.productPackageId, elicitMembers, engine, entries, figures.committedMM, filing, flow, instanceUrl, onExecuted, onFiled, pricingDeclined, push, relayError, sealed, vocabulary.filedWord]);
 
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
   useEffect(() => {
@@ -5001,6 +5083,7 @@ export function Workroom({
                           onAcknowledge={acknowledge}
                           onTakeAdvice={takeAdvice}
                           onOption={(sayText, label) => void say(sayText, label)}
+                          onStatus={() => void execute(true)}
                           onRestartRoute={restartRoute}
                           expanded={item.kind === "settled" ? settle.isOpen(item.id) : false}
                           onExpand={settle.toggle}
@@ -5544,6 +5627,7 @@ function ThreadBlock({
   onAcknowledge,
   onTakeAdvice,
   onOption,
+  onStatus,
   onRestartRoute,
   expanded,
   onExpand,
@@ -5567,6 +5651,8 @@ function ThreadBlock({
   onAcknowledge: (id: string) => void;
   onTakeAdvice: (blockId: string, advisory: WorkroomAdvisory) => void;
   onOption: (say: string, label: string) => void;
+  /** Ask the org what a filing already with it finally did. Reads, never writes. */
+  onStatus: () => void;
   onRestartRoute: (restart: { route: WorkroomMode; say: string }) => void;
   /** Is this settled row's exchange currently back on the stage? */
   expanded: boolean;
@@ -5746,6 +5832,17 @@ function ThreadBlock({
                   {opt.label}
                 </button>
               ))}
+            </div>
+          )}
+          {/* ASK THE ORG AGAIN. The wait budget ran out with the filing still in
+              flight; this re-reads the staging record and lands the executed
+              card the moment the org finishes. It spends nothing: the token was
+              spent by the approval this is waiting on. */}
+          {item.kind === "agent" && item.statusChip && (
+            <div className="wk-opts">
+              <button type="button" className="wk-opt" onClick={onStatus}>
+                Check the filing
+              </button>
             </div>
           )}
           {/* THE EXPLICIT RESTART. It is a chip and not an ink button on
