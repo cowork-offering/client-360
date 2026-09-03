@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useApp } from "../state/appState";
 import { buildWorklistRows, type WorklistRow } from "../data/worklistRows";
 import { fmtMoney, fmtDays } from "../data/format";
-import { gradeTone } from "../data/finance";
+import { gradeColor } from "./RiskGrade";
 import type { ReasonCode } from "../data/contract";
 import { REASON_META } from "./reasons";
 import { CopyPromptDialog } from "./CopyPromptDialog";
@@ -43,13 +43,6 @@ const REASON_TONE: Record<ReasonCode, Status["tone"]> = {
   RECENTLY_MODIFIED: "mut",
 };
 
-const GRADE_TONE: Record<string, Status["tone"]> = {
-  green: "good",
-  amber: "warn",
-  red: "bad",
-  purple: "acc",
-  neutral: "mut",
-};
 
 /** The row's status line. A reason that HAS a date says the date: "Test due" on
  *  its own is a category, "Test due · 2d ago" is the reason you are looking at
@@ -57,9 +50,9 @@ const GRADE_TONE: Record<string, Status["tone"]> = {
  *  borrowing one. */
 function statusesFor(r: WorklistRow): Status[] {
   const out: Status[] = [];
-  if (r.riskRating != null) {
-    out.push({ tone: GRADE_TONE[gradeTone(r.riskRating)] ?? "mut", text: `Grade ${r.riskRating}` });
-  }
+  /* The grade left the pill row (founder, 2026-09-03: "I really hate how
+     grade 6 floats around in there"). It renders as the row's own quiet ring
+     instead, the same instrument the client hero uses, scaled down. */
   for (const code of r.reasons) {
     const short = REASON_META[code].short;
     let text = short;
@@ -171,6 +164,26 @@ export function Worklist() {
                   </span>
                 </span>
                 <span className="sts">
+                  {r.riskRating != null && (
+                    <span className="wl-grade" title={`nCino risk rating · Grade ${r.riskRating}`}>
+                      <svg viewBox="0 0 20 20" aria-hidden="true">
+                        <circle cx="10" cy="10" r="8" fill="none" stroke="var(--row-divider)" strokeWidth="2.4" />
+                        <circle
+                          cx="10"
+                          cy="10"
+                          r="8"
+                          fill="none"
+                          stroke={gradeColor(String(r.riskRating)) ?? "var(--ink-faint)"}
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          strokeDasharray={2 * Math.PI * 8}
+                          strokeDashoffset={(2 * Math.PI * 8 * (8 - Math.min(8, Number(r.riskRating) || 0))) / 8}
+                          transform="rotate(-90 10 10)"
+                        />
+                      </svg>
+                      <i>{r.riskRating}</i>
+                    </span>
+                  )}
                   {statusesFor(r).map((s) => (
                     <span key={s.text} className={`st ${s.tone}`}>
                       {s.text}
