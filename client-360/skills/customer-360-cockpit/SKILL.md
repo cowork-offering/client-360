@@ -455,3 +455,36 @@ single worst failure mode in this skill.
 - **A closed facility is not booked exposure** — the client treats a facility as active only when
   `status` is absent or "Active"; closed/paid-off ones are excluded from maturity signals and coverage
   math. Pass `status` through verbatim when the org carries it.
+
+## Intent handoff: open a workroom from this chat
+
+When the banker discusses a client in this chat (an email, a meeting, a request with many
+attributes) and wants the cockpit to open the right workroom holding it, do NOT describe the
+steps back: write an INTENT and the open cockpit reacts live (a whisper, then Open flies to the
+account, binds the route and feeds the lines through the room's own staging, pausing only where
+a decision is the banker's).
+
+1. Resolve the account. Baked borrowers: Hartwell Precision Manufacturing LLC 001bb00001I7FPNAA3,
+   Piedmont Precision Components 001bb00001DLtRMAA1, Brightwater Foods Group 001SAMPLE0000BRWT,
+   Sterling Fabrication Co. 001SAMPLE0000STRL, Kingsley Precision Works 001SAMPLE0000KGSL.
+   Any other org relationship: call Customer360SearchAccounts (input `name`, partial) and take the
+   accountId; the cockpit reads that relationship live before opening it.
+2. Compose the lines in the room's own grammar, one per change, in the banker's words, e.g.
+   "increase the 15M line of credit to 20M", "give the 8M equipment loan a 84 month term",
+   "add a Debt Service Coverage of Borrower covenant >= 1.30 tested quarterly on the 8M equipment loan",
+   "remove the Accounts Receivable covenant from the 15M line of credit",
+   "add Elena Hartwell as limited guarantor on the 8M equipment loan", "add a 1% origination fee to LOC".
+   Never invent a figure the source did not state; leave it out and the room will ask.
+3. Pick the room and route. facility: modify | renew | create. relationship: annual | covenant |
+   valuation | rating | service.
+4. Write the document with the Artifact tool: action write_db, db_op set,
+   url https://claude.ai/code/artifact/91b5e835-5536-4f23-950e-4cde7941cf7f, collection `intents`,
+   doc_id `int-<yyyymmdd>-<slug>-<nn>`, data:
+   {"accountId","accountName","room","route","lines":[...],
+    "context":{"summary":"who asked for what, in one or two sentences",
+               "source":{"kind":"email"|"chat"|"meeting","id"?,"subject"?,"from"?,"received"?}},
+    "createdAt":"<ISO instant>","status":"pending"}
+   The source is named as the source names it (never inferred from the relationship).
+5. Tell the banker in one line what was written and that the cockpit will whisper it. The cockpit
+   moves status to opened, then done after Execute; read it back with read_db when asked.
+Contract and worked example: design/proposals/intent-handoff-addendum.md.
