@@ -118,11 +118,14 @@ describe("F3/F4 — the junction card states what is actually attached", () => {
     const text = p.textContent ?? "";
     // The old card's sentence, which was false on this relationship.
     expect(text).not.toContain("No loan-level covenants are attached");
-    // Two junctions are real on Hartwell: the AR test on the revolver and the
-    // term covenant on the construction facility. Both were invisible before.
-    expect(text).toContain("2 loan-level covenant attachments carry onto the new facility.");
+    // Four junctions are real on Hartwell now: the org grew a second package
+    // (2026-09-03) and attached DSC (to the new CRE loan) and the FCC covenant
+    // (to the Proposal-stage equipment loan), on top of the two that already
+    // named a loan (AR on the revolver, the term covenant on construction).
+    // The sentence names the first three and folds the rest into "and N more".
+    expect(text).toContain("4 loan-level covenant attachments carry onto the new facility.");
     expect(text).toContain("Accounts Receivable on Line of Credit - $15,000,000.00");
-    expect(text).toContain("Term Covenants on Construction - $12,000,000.00");
+    expect(text).toContain("and 1 more");
   });
 
   it("says it in banker language, with no contract path and no tool name", () => {
@@ -160,9 +163,13 @@ describe("F3/F4 — the junction card states what is actually attached", () => {
 describe("F1 — the six-facility deal reads as a headline and clean rows", () => {
   it("names the deal once, at headline size, instead of concatenating its members", () => {
     const p = openTicket("Loan Modification");
+    // The org grew a second package (2026-09-03): the label now names both,
+    // and the C&I package's own facility count carries its Proposal-stage
+    // member too (`packageRecords` counts every facility naming the package,
+    // not only the booked ones).
     const headline = p.querySelector("h4")!;
-    expect(headline.textContent).toBe(`${HARTWELL} credit package`);
-    expect(headline.nextElementSibling?.textContent).toBe("6 facilities · $46M committed · $31.03M drawn");
+    expect(headline.textContent).toBe(`${HARTWELL} credit package · Non-Real Estate and Real Estate`);
+    expect(headline.nextElementSibling?.textContent).toBe("7 facilities · $49M committed · $31.03M drawn");
   });
 
   it("drops the borrower's name from all six member rows", () => {
@@ -195,9 +202,11 @@ describe("F6 — the ticket shows what secures the members the banker ticked", (
     const text = openTicket("Loan Modification").textContent ?? "";
     expect(text).toContain("The coverage check measures this relationship's lendable collateral");
     // The SAME numerator, stated once under the pledges and once in the ratio:
-    // the org's distinct-collateral lendable value, not a re-derivation.
-    expect(text).toContain("The coverage check measures this relationship's lendable collateral, $31.60M");
-    expect(text).toContain("$31.60M lendable against the relationship's $46M commitment");
+    // the org's distinct-collateral lendable value, not a re-derivation. Both
+    // moved with the org's two-package refresh (2026-09-03): $31.60M -> $42.37M
+    // lendable, $46M -> $57M relationship commitment.
+    expect(text).toContain("The coverage check measures this relationship's lendable collateral, $42.37M");
+    expect(text).toContain("$42.37M lendable against the relationship's $57M commitment");
   });
 
   it("adds the second facility's security when a second member is ticked", () => {
