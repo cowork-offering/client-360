@@ -148,11 +148,16 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
     .filter(Boolean)
     .sort()
     .pop();
-  const nextReview = lastReview
-    ? new Date(new Date(lastReview.slice(0, 10)).setFullYear(new Date(lastReview.slice(0, 10)).getFullYear() + 1))
-        .toISOString()
-        .slice(0, 10)
-    : null;
+  /* The org's own field first (LLC_BI__Next_Review_Date__c on the Account,
+     carried on the snapshot); the trail derivation is the fallback. */
+  const snapReview = (bundle.snapshot as { nextReviewDate?: string; lastReviewDate?: string } | undefined) ?? {};
+  const nextReview =
+    snapReview.nextReviewDate ??
+    (lastReview
+      ? new Date(new Date(lastReview.slice(0, 10)).setFullYear(new Date(lastReview.slice(0, 10)).getFullYear() + 1))
+          .toISOString()
+          .slice(0, 10)
+      : null);
 
   const days = nearest?.daysUntilMaturity ?? null;
   const clockColor = days == null ? "var(--ink-faint)" : days < 45 ? "var(--critical)" : days < 120 ? "var(--warning)" : "var(--positive)";
@@ -275,7 +280,9 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
               <span className="n">{fmtDate(nextReview)}</span>
             </div>
             <div className="note">
-              On the annual cycle from the review completed {fmtDate(lastReview?.slice(0, 10))}. Derived, not a field on the account.
+              {snapReview.nextReviewDate
+                ? `nCino Next Review Date on the relationship${snapReview.lastReviewDate ? `; last review ${fmtDate(snapReview.lastReviewDate)}` : ""}.`
+                : `On the annual cycle from the review completed ${fmtDate(lastReview?.slice(0, 10))}. Derived, not a field on the account.`}
             </div>
           </>
         ) : (
