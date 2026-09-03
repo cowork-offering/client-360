@@ -117,6 +117,8 @@ export function rowForChallenge(challenge: WorkroomChallenge): SettledRow {
 export interface SettleChoreography {
   /** Where a thread item stands. Anything this has never settled is `on`. */
   stateOf: (itemId: string) => SettleState;
+  /** The height it had when it was told to go, for the exit to start from. */
+  heightOf: (itemId: string) => number | null;
   /**
    * An exchange settled: these items leave the stage together, under one row.
    *
@@ -126,7 +128,7 @@ export interface SettleChoreography {
    * flight - which is precisely the window the intent feed used to say its next
    * line straight over the confirm the banker had just made.
    */
-  settle: (itemIds: readonly string[], rowId: string, land?: () => void) => void;
+  settle: (itemIds: readonly string[], rowId: string, land?: () => void, instant?: boolean) => void;
   /** The banker asked for a settled exchange back, or put it away again. */
   toggle: (rowId: string) => void;
   /** Is this row's exchange currently back on the stage? */
@@ -140,6 +142,25 @@ export interface SettleChoreography {
 interface Tracked {
   rowId: string;
   state: "leaving" | "settled";
+  /** THE HEIGHT THE EXCHANGE ACTUALLY HAD when it was told to go.
+   *
+   * FOUNDER, 2026-09-03: the collapse "starts from the true height (no late
+   * relayout)". A remark that was still writing itself when the banker
+   * confirmed would grow INSIDE a node that is collapsing, and the animation
+   * would be chasing a target that moved under it. The height is measured once,
+   * at the instant of the settle, and the inner row is pinned to it for the
+   * length of the exit. */
+  heightPx: number | null;
+}
+
+/** What the node is right now, in pixels, or null off a browser. */
+function measure(itemId: string): number | null {
+  if (typeof document === "undefined") return null;
+  if (!/^[A-Za-z0-9:_-]+$/.test(itemId)) return null;
+  const el = document.querySelector<HTMLElement>(`[data-ex-id="${itemId}"]`);
+  if (!el) return null;
+  const h = Math.round(el.getBoundingClientRect().height);
+  return h > 0 ? h : null;
 }
 
 export function useSettleChoreography(reduced: boolean): SettleChoreography {
@@ -156,23 +177,31 @@ export function useSettleChoreography(reduced: boolean): SettleChoreography {
   );
 
   const settle = useCallback(
-    (itemIds: readonly string[], rowId: string, land?: () => void) => {
+    (itemIds: readonly string[], rowId: string, land?: () => void, instant = false) => {
       if (!itemIds.length) {
         land?.();
         return;
       }
-      const state: Tracked["state"] = reduced ? "settled" : "leaving";
+      /* `instant` IS THE RESTORED SESSION. A room reopened on a manifest the
+         banker built yesterday has no business animating six exchanges out: they
+         were never on this stage. They mount already settled. */
+      const still = reduced || instant;
+      const state: Tracked["state"] = still ? "settled" : "leaving";
+      /* MEASURED BEFORE THE CLASS CHANGES, which is the only moment the node is
+         still at its full height AND has finished laying out. */
+      const heights = new Map<string, number | null>();
+      for (const id of itemIds) heights.set(id, still ? null : measure(id));
       setTracked((prev) => {
         const next = { ...prev };
         for (const id of itemIds) {
           // AN EXCHANGE SETTLES ONCE. A second settle over the same item would
           // restart its exit and re-point its row at a receipt it never had.
           if (next[id]) continue;
-          next[id] = { rowId, state };
+          next[id] = { rowId, state, heightPx: heights.get(id) ?? null };
         }
         return next;
       });
-      if (reduced) {
+      if (still) {
         land?.();
         return;
       }
@@ -217,8 +246,9 @@ export function useSettleChoreography(reduced: boolean): SettleChoreography {
 
   const leaving = useMemo(() => Object.values(tracked).some((t) => t.state === "leaving"), [tracked]);
   const isOpen = useCallback((rowId: string) => open.has(rowId), [open]);
+  const heightOf = useCallback((itemId: string) => tracked[itemId]?.heightPx ?? null, [tracked]);
 
-  return { stateOf, settle, toggle, isOpen, leaving, reset };
+  return { stateOf, heightOf, settle, toggle, isOpen, leaving, reset };
 }
 
 /**
@@ -241,13 +271,17 @@ export interface SettleAttrs {
 
 const CLOCK = { "--wk-settle-ms": `${SETTLE_EXIT_MS}ms` } as CSSProperties;
 
-export function settleAttrs(state: SettleState): SettleAttrs {
-  if (state === "shown") return { className: "wk-ex wk-ex-back", "data-settle-state": "shown", style: CLOCK };
+const clockAt = (heightPx: number | null): CSSProperties =>
+  heightPx === null ? CLOCK : ({ ...CLOCK, "--wk-ex-h": `${heightPx}px` } as CSSProperties);
+
+export function settleAttrs(state: SettleState, heightPx: number | null = null): SettleAttrs {
+  const style = clockAt(heightPx);
+  if (state === "shown") return { className: "wk-ex wk-ex-back", "data-settle-state": "shown", style };
   if (state === "leaving")
-    return { className: "wk-ex wk-ex-out", "data-settle-state": "leaving", style: CLOCK, "aria-hidden": "true" };
+    return { className: "wk-ex wk-ex-out", "data-settle-state": "leaving", style, "aria-hidden": "true" };
   if (state === "settled")
-    return { className: "wk-ex wk-ex-gone", "data-settle-state": "settled", style: CLOCK, "aria-hidden": "true" };
-  return { className: "wk-ex", "data-settle-state": "on", style: CLOCK };
+    return { className: "wk-ex wk-ex-gone", "data-settle-state": "settled", style, "aria-hidden": "true" };
+  return { className: "wk-ex", "data-settle-state": "on", style };
 }
 
 /**
@@ -259,6 +293,26 @@ export function settleAttrs(state: SettleState): SettleAttrs {
  */
 export function rowForStep(kicker: string | undefined, said: string): SettledRow {
   return { what: said, how: "recorded", kicker };
+}
+
+/**
+ * THE ROW AN EXCHANGE GETS WHEN NOBODY DECIDED IT.
+ *
+ * FOUNDER, 2026-09-03: "it should only show the latest action; as I was testing
+ * right now it showed basically the full end." The settle only ever fired on a
+ * DECISION - a confirm, a discard, an acknowledge, an answered step - so an
+ * exchange nobody decided (a read the room answered, a line it refused, a fed
+ * line that produced no card, everything a restored session mounts) stayed on
+ * the stage for the rest of the session.
+ *
+ * THE SWEEP SETTLES THEM TOO, and it needs a receipt for each. This composes one
+ * out of what the exchange actually was, in the same two fields: what it was
+ * about, and what happened to it.
+ */
+export function rowForRead(what: string, how: string): SettledRow {
+  const said = (what ?? "").replace(/\s+/g, " ").trim();
+  const short = said.length > 64 ? `${said.slice(0, 64).replace(/\s+\S*$/, "")}...` : said;
+  return { what: short || "Earlier", how };
 }
 
 /** What the expand affordance on a settled row says. The banker's word for what

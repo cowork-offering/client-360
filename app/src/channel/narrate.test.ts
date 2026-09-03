@@ -776,3 +776,77 @@ describe("a remark may not contradict its own card", () => {
     expect(narrationText(guarded.blocks)).not.toContain(CLAIM_MARK);
   });
 });
+
+/* ============ THE ROUTE IS THE ROUTE (founder, 2026-09-03)
+
+   On a MODIFICATION the remark said the line reprices "effective with the
+   staged renewal". There was no renewal. */
+
+describe("a remark may not name a credit action nobody opened", () => {
+  const card: NarrateSubject = {
+    act: "staged",
+    sentence: "The rate goes on the plan.",
+    card: { title: "On the plan", rows: [{ label: "Interest rate", value: "7.25%", sub: "Line of Credit" }] },
+  };
+  const bound = (route: string): BrainEnvelope => ({ ...envelope, route, routeOpen: false } as BrainEnvelope);
+
+  it("drops the founder's own sentence: a renewal named inside a modification", () => {
+    const kept = "The cover behind the facility thins as it grows.";
+    const guarded = guardClaims(
+      parseNarration(`The line reprices effective with the staged renewal. ${kept}`),
+      bound("modify"),
+      card,
+    );
+    expect(narrationText(guarded.blocks)).not.toContain("renewal");
+    expect(narrationText(guarded.blocks)).toContain(kept);
+  });
+
+  it("leaves the BOUND route's own word alone", () => {
+    const said = "This modification carries the change on one facility.";
+    expect(narrationText(guardClaims(parseNarration(said), bound("modify"), card).blocks)).toContain("modification");
+    const renew = "This renewal carries the change on one facility.";
+    expect(narrationText(guardClaims(parseNarration(renew), bound("renew"), card).blocks)).toContain("renewal");
+  });
+
+  it("says nothing about routes while the route is still OPEN", () => {
+    // The greeting's whole job is to offer the three; the client's mail asking
+    // for a renewal is the most useful thing it can say.
+    const open = { ...envelope, route: "unbound", routeOpen: true } as BrainEnvelope;
+    const said = "James asked to renew the equipment loan; open the renewal?";
+    expect(narrationText(guardClaims(parseNarration(said), open, { act: "greeting", sentence: "" }).blocks)).toContain(
+      "renewal",
+    );
+  });
+});
+
+/* ============ THE ROWS' OWN RAILS ARE NOT PROSE (founder, 2026-09-03) */
+
+describe("a remark may not recite the rails beside it", () => {
+  const rowsRemark = [
+    "The package holds through the increase.",
+    "- **Debt Service Coverage of Borrower**: the widest cushion on the deal.",
+    "- **Maximum Debt to Worth**: room before it binds.",
+  ].join("\n");
+
+  const withRails = (env: BrainEnvelope) => resolveEntities(parseNarration(rowsRemark, 3), env);
+
+  it("drops a sentence that repeats TWO figures the rows already print", () => {
+    const blocks = withRails(envelope);
+    const rails = blocks.flatMap((b) => (b.kind === "entity" ? b.rows.map((r) => r.value ?? "") : [])).filter(Boolean);
+    if (rails.length < 2) return; // the fixture book carries no rails; nothing to hold
+    const recital = `All covenants remain compliant, with DSCR at ${rails[0]} and leverage at ${rails[1]}.`;
+    const guarded = guardClaims([...blocks, ...parseNarration(recital)], envelope, { act: "greeting", sentence: "" });
+    expect(narrationText(guarded.blocks)).not.toContain("All covenants remain compliant");
+  });
+
+  /* ONE RAIL FIGURE IS A REFERENCE. It is how a banker knows WHICH facility, and
+     the greeting's close line is signed-off copy that carries one. */
+  it("leaves a sentence carrying ONE of them alone", () => {
+    const blocks = withRails(envelope);
+    const rails = blocks.flatMap((b) => (b.kind === "entity" ? b.rows.map((r) => r.value ?? "") : [])).filter(Boolean);
+    if (!rails.length) return;
+    const close = `James asked to renew the ${rails[0]} facility; open it?`;
+    const guarded = guardClaims([...blocks, ...parseNarration(close)], envelope, { act: "greeting", sentence: "" });
+    expect(narrationText(guarded.blocks)).toContain("James asked");
+  });
+});
