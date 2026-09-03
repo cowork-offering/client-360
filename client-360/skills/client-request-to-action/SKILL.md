@@ -18,6 +18,21 @@ the workflow has to deliver it exactly.
 
 ---
 
+## Handoff first
+
+**When a cockpit is reachable, this ask becomes an INTENT, not a staged plan.** Compose the lines in
+the room's grammar and hand them to the facility workroom; the banker watches it stage there. The
+routing table is in `agents/customer-360.md` and in the `customer-360-cockpit` skill, which also
+carries the intent shape and the `write_db` protocol. This ask is room `facility`, route `modify`,
+and collateral pledged to one of these facilities belongs on that same route: a pledge versions the
+package, which is a modification.
+
+Steps 1 to 3 below run either way: they are how you understand the ask and read the relationship.
+**Steps 4 to 8 are the explicit opt-in path** and run only when the banker asks to act without the
+room ("do it here", "no cockpit") or no cockpit can be resolved. Then nothing about them is relaxed.
+
+---
+
 ## 1. Take the request
 
 The request reaches you one of three ways.
@@ -86,9 +101,10 @@ a credit officer would want to see.
 
 ---
 
-## 4. Stage the modification
+## 4. Stage the modification (opt-in path)
 
-One call, package anchored, over the facilities the request touches.
+One call, package anchored, over the facilities the request touches. Reachable cockpit, no confirmed
+opt-in: stop above and write the intent instead.
 
 ```json
 {

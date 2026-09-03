@@ -15,6 +15,23 @@ assessments written and verified individually.
 
 ---
 
+## Handoff first
+
+**When a cockpit is reachable, this ask becomes an INTENT, not a staged plan.** Compose the lines in
+the room's grammar and hand them to the relationship workroom; the banker watches it stage there. The
+routing table is in `agents/customer-360.md` and in the `customer-360-cockpit` skill, which also
+carries the intent shape and the `write_db` protocol.
+
+**Assessing** covenants is room `relationship`, route `covenant`. Adding or removing a covenant is a
+different ask and routes by where it attaches: a covenant **on a loan** is room `facility` route
+`modify`, and a covenant **at relationship level** is room `relationship` route `intake`.
+
+Steps 1 to 3 below run either way: they are how you read the package and reach an assessment.
+**Steps 4 to 7 are the explicit opt-in path** and run only when the banker asks to act without the
+room ("do it here", "no cockpit") or no cockpit can be resolved.
+
+---
+
 ## 1. Read the covenant package
 
 `Customer360Covenants` for the account returns `covenants[]` and a `note`. Each covenant carries, in
@@ -79,7 +96,9 @@ assessment.
 
 ---
 
-## 4. Stage the whole package as one plan
+## 4. Stage the whole package as one plan (opt-in path)
+
+Reachable cockpit, no confirmed opt-in: stop above and write the intent instead.
 
 ```json
 {

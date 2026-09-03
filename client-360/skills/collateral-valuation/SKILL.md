@@ -14,6 +14,23 @@ anchored on one product package, and every collateral in the batch has to be pro
 
 ---
 
+## Handoff first
+
+**When a cockpit is reachable, this ask becomes an INTENT, not a staged batch.** Compose the lines in
+the room's grammar and hand them to the relationship workroom; the banker watches it stage there. The
+routing table is in `agents/customer-360.md` and in the `customer-360-cockpit` skill, which also
+carries the intent shape and the `write_db` protocol.
+
+Valuing collateral that is **already pledged** is room `relationship`, route `valuation`. Two nearby
+asks route elsewhere and are the ones most easily got wrong: pledging collateral **to a facility**,
+new or already held, is room `facility` route `modify`, and registering a collateral **asset with
+nothing pledged** is room `relationship` route `intake`.
+
+Steps 1 and 2 below run either way. **Steps 3 to 6 are the explicit opt-in path** and run only when
+the banker asks to act without the room ("do it here", "no cockpit") or no cockpit can be resolved.
+
+---
+
 ## 1. Resolve the deal and the collateral pool
 
 1. `Customer360Exposure` for the account returns `facilities[]`, each with `productPackageId` and its
@@ -50,7 +67,9 @@ will not move here.
 
 ---
 
-## 3. Stage the batch
+## 3. Stage the batch (opt-in path)
+
+Reachable cockpit, no confirmed opt-in: stop above and write the intent instead.
 
 ```json
 {

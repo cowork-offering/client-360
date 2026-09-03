@@ -86,10 +86,78 @@ stops there, and saying anything else is a claim the org will not back.
 
 ---
 
+## Handoff first: the room stages, chat does not
+
+**When a cockpit is reachable, an actionable ask is handed to it. You do not execute it here.**
+Reachable means one of two things: this session published a cockpit, or `assets/cockpit.json` names
+the canonical one. Either way a banker has a room, and the room is where work becomes visible.
+
+Your job in that case is four steps and a sentence:
+
+1. understand the ask;
+2. resolve the account (a baked id, or `Customer360SearchAccounts`);
+3. compose the lines in the room's own grammar, one change per line, in the banker's words;
+4. write the intent (collection `intents`; shape, target resolution and the `write_db` protocol are
+   in the `customer-360-cockpit` skill);
+5. say one line: what was written, and that the cockpit is whispering it.
+
+**In handoff mode you never call a `stage_*` or an `execute_*` tool.** Not to be helpful, not to save
+the banker a click, not because the ask looked small. A banker who mentions a new collateral gets an
+intent waiting in the room, not a modification staged behind their back.
+
+**Direct staging is the explicit opt-in path.** It runs when the banker asks to act without the room
+("do it here", "no cockpit", "skip the cockpit"), or when no cockpit is reachable at all. Then the
+write discipline below applies unchanged: stage, present verbatim, the human confirms, execute behind
+the token, verify by re-query. Nothing about it is relaxed, and nothing about it is the default.
+
+### The routing table
+
+Map the ask to exactly one room and one route. A route the room does not bind refuses the whole
+document, silently, so this is the part to get right before writing anything.
+
+<!-- BEGIN GENERATED handoff-routing (node client-360/render/handoff-routing.mjs) -->
+| What the ask changes | Room | Route |
+|---|---|---|
+| A facility that already exists changes: amount, rate, maturity, term, a fee, a party on the loan, a covenant on the loan, or collateral pledged to it, whether the collateral is new or already held. A pledge to a facility rightly versions the package, and that is a modification, not a mistake. | `facility` | `modify` |
+| An existing facility is renewed. | `facility` | `renew` |
+| A facility that does not exist yet is structured. It rides inside a `modify` document instead when other changes travel with it. | `facility` | `create` |
+| A collateral ASSET is registered with nothing pledged, a new party joins the relationship, or a covenant is written at relationship level. | `relationship` | `intake` |
+| Collateral that is already pledged is valued. | `relationship` | `valuation` |
+| Covenants are assessed against the evidence. | `relationship` | `covenant` |
+| An annual or ad-hoc credit review is opened. | `relationship` | `annual` |
+| A risk rating is reviewed. | `relationship` | `rating` |
+| A servicing ask is raised. | `relationship` | `service` |
+
+**Facility, worked.**
+
+- "James attached an appraisal for the Kokomo plant expansion, $6.5M, real estate; he wants it as security on the construction loan" is `facility` / `modify`, one line: `pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000`.
+- "March is coming and the 15M line needs to roll" is `facility` / `renew`, one line: `renew the 15M line of credit`.
+
+**Relationship, worked.**
+
+- "register the Kokomo plant as an asset of the relationship, nothing pledged yet" is `relationship` / `intake`, one line: `add collateral: Kokomo plant expansion, real estate`.
+- "the field exam on the receivables came back at 4.2M" is `relationship` / `valuation`, one line: `value the pledged accounts receivable at 4,200,000, field exam dated 12 September 2026`.
+
+The two collateral rows are the pair most easily confused. Collateral pledged TO a facility is a facility modification. A collateral asset registered ON the relationship, with no pledge, is a relationship intake.
+<!-- END GENERATED handoff-routing -->
+
+### The line you say afterwards
+
+One sentence. No restating of figures, no plan summary, and never "I have staged": in handoff mode
+you staged nothing.
+
+> Written to the cockpit: the modification is waiting on Hartwell, open it from the whisper.
+
+---
+
 ## Command routing: match intent to ONE action, FIRST
 
 Read this table before picking a skill. Map what the banker said to exactly one row. Most friction
 comes from conflating "open the relationship" with "act on it".
+
+**These rows name the skill that owns the ask. They do not override handoff first.** Where a row
+names a `stage_*` call, that call belongs to the explicit opt-in path; in handoff mode the same ask
+becomes an intent on the room and route the table above gives it.
 
 | The banker says | Do EXACTLY this | Do NOT |
 |---|---|---|
@@ -233,6 +301,9 @@ These are absolute. Each one exists because the org, the vendor or a regulator m
    an execute returned `ok: false`, report the org's message in one sentence and stop.
 9. **No hand-built visuals.** The cockpit artifact and the MCP tool responses are the deliverable.
    Your addition is prose and the confirmation gesture.
+10. **Never stage from chat while a room is reachable.** The banker asked in conversation; the work
+    belongs in the room they can see. Write the intent and say the one line. Only the banker's
+    explicit "do it here", or a cockpit that genuinely cannot be resolved, opens the direct path.
 
 ---
 

@@ -536,6 +536,12 @@ are well-formed instructions naming the account and id:
 | `Structure a new facility request for <name> (<id>).` | the **`relationship-actions`** skill, new facility workflow |
 | `Create a service request for <name> (<id>).` | the **`relationship-actions`** skill, service request workflow |
 
+**The write-shaped rows go through the room.** A prompt that names a modification, renewal, new
+facility, review, valuation, covenant assessment or service request is an actionable ask like any
+other, so it becomes an intent on the room and route the routing table gives it, not a staged plan in
+chat. The guided skill named in the row composes the lines; it stages directly only on the explicit
+opt-in path.
+
 **Governed writes exist, and they are governed.** Every one of them stages first, shows the org's plan
 and every warning verbatim, waits for the banker's confirmation in words, executes behind a single-use
 decision token bound to the running identity, and verifies by re-query. The guided skills carry that
@@ -593,11 +599,44 @@ single worst failure mode in this skill.
 
 ## Intent handoff: open a workroom from this chat
 
-When the banker discusses a client in this chat (an email, a meeting, a request with many
-attributes) and wants the cockpit to open the right workroom holding it, do NOT describe the
-steps back: write an INTENT and the open cockpit reacts live (a whisper, then Open flies to the
-account, binds the route and feeds the lines through the room's own staging, pausing only where
-a decision is the banker's).
+**Handoff first.** Anything actionable a banker says in this chat goes to the room that owns it, as
+an INTENT, whenever a cockpit is reachable: this session published one, or `assets/cockpit.json`
+names the canonical one. Do NOT describe the steps back, and do NOT call a `stage_*` or `execute_*`
+tool from chat to get ahead of the room. Write the intent and the open cockpit reacts live (a
+whisper, then Open flies to the account, binds the route and feeds the lines through the room's own
+staging, pausing only where a decision is the banker's). Direct staging from chat is the explicit
+opt-in path: the banker says "do it here" or "no cockpit", or no cockpit can be resolved at all, and
+then the guided skills run their governed pattern unchanged.
+
+### The routing table
+
+<!-- BEGIN GENERATED handoff-routing (node client-360/render/handoff-routing.mjs) -->
+| What the ask changes | Room | Route |
+|---|---|---|
+| A facility that already exists changes: amount, rate, maturity, term, a fee, a party on the loan, a covenant on the loan, or collateral pledged to it, whether the collateral is new or already held. A pledge to a facility rightly versions the package, and that is a modification, not a mistake. | `facility` | `modify` |
+| An existing facility is renewed. | `facility` | `renew` |
+| A facility that does not exist yet is structured. It rides inside a `modify` document instead when other changes travel with it. | `facility` | `create` |
+| A collateral ASSET is registered with nothing pledged, a new party joins the relationship, or a covenant is written at relationship level. | `relationship` | `intake` |
+| Collateral that is already pledged is valued. | `relationship` | `valuation` |
+| Covenants are assessed against the evidence. | `relationship` | `covenant` |
+| An annual or ad-hoc credit review is opened. | `relationship` | `annual` |
+| A risk rating is reviewed. | `relationship` | `rating` |
+| A servicing ask is raised. | `relationship` | `service` |
+
+**Facility, worked.**
+
+- "James attached an appraisal for the Kokomo plant expansion, $6.5M, real estate; he wants it as security on the construction loan" is `facility` / `modify`, one line: `pledge new collateral on the construction loan: Kokomo plant expansion, real estate, valued at 6,500,000`.
+- "March is coming and the 15M line needs to roll" is `facility` / `renew`, one line: `renew the 15M line of credit`.
+
+**Relationship, worked.**
+
+- "register the Kokomo plant as an asset of the relationship, nothing pledged yet" is `relationship` / `intake`, one line: `add collateral: Kokomo plant expansion, real estate`.
+- "the field exam on the receivables came back at 4.2M" is `relationship` / `valuation`, one line: `value the pledged accounts receivable at 4,200,000, field exam dated 12 September 2026`.
+
+The two collateral rows are the pair most easily confused. Collateral pledged TO a facility is a facility modification. A collateral asset registered ON the relationship, with no pledge, is a relationship intake.
+<!-- END GENERATED handoff-routing -->
+
+### Writing the intent
 
 1. Resolve the account. Baked borrowers: Hartwell Precision Manufacturing LLC 001bb00001I7FPNAA3,
    Piedmont Precision Components 001bb00001DLtRMAA1, Brightwater Foods Group 001SAMPLE0000BRWT,
@@ -610,8 +649,8 @@ a decision is the banker's).
    "remove the Accounts Receivable covenant from the 15M line of credit",
    "add Elena Hartwell as limited guarantor on the 8M equipment loan", "add a 1% origination fee to LOC".
    Never invent a figure the source did not state; leave it out and the room will ask.
-3. Pick the room and route. facility: modify | renew | create. relationship: annual | covenant |
-   valuation | rating | service | intake. A route the room does not bind refuses the whole document.
+3. Pick the room and the route from the routing table above, by what the ask CHANGES. A route the
+   room does not bind refuses the whole document.
 4. **Resolve the target artifact FIRST.** An intent is written to one specific published cockpit,
    and writing it to the wrong one is a silent no-op: the banker's room never whispers.
    - **If this session published a cockpit**, the target is the URL **the Artifact tool returned on
@@ -628,8 +667,11 @@ a decision is the banker's).
                "source":{"kind":"email"|"chat"|"meeting","id"?,"subject"?,"from"?,"received"?}},
     "createdAt":"<ISO instant>","status":"pending"}
    The source is named as the source names it (never inferred from the relationship).
-6. Tell the banker in one line what was written and that the cockpit will whisper it. The cockpit
-   moves status to opened, then done after Execute; read it back with read_db when asked.
+6. Tell the banker in ONE line what was written and that the cockpit is whispering it. Do not restate
+   the figures, do not summarise the plan, and never say "I have staged": in handoff mode you staged
+   nothing. `Written to the cockpit: the modification is waiting on Hartwell, open it from the
+   whisper.` The cockpit moves status to opened, then done after Execute; read it back with read_db
+   when asked.
 Contract and worked example: design/proposals/intent-handoff-addendum.md.
 
 ### The intent shape, as the page validates it

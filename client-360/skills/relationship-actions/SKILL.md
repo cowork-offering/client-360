@@ -16,6 +16,28 @@ runs without a token by design. See that section.
 
 ---
 
+## Handoff first
+
+**When a cockpit is reachable, every one of these asks becomes an INTENT, not a staged plan.**
+Compose the lines in the room's grammar and hand them to the room; the banker watches it stage there.
+The routing table is in `agents/customer-360.md` and in the `customer-360-cockpit` skill, which also
+carries the intent shape and the `write_db` protocol. These five workflows route:
+
+| Workflow | Room | Route |
+|---|---|---|
+| Service request | `relationship` | `service` |
+| Annual review | `relationship` | `annual` |
+| Risk rating review | `relationship` | `rating` |
+| New facility | `facility` | `create`, or a `modify` document when other changes ride along |
+| Renewal | `facility` | `renew` |
+
+Reading the relationship, resolving the package and restating the ask run either way. **Every
+`stage_*` and `execute_*` step below is the explicit opt-in path** and runs only when the banker asks
+to act without the room ("do it here", "no cockpit") or no cockpit can be resolved. Then the governed
+pattern applies unchanged.
+
+---
+
 ## Service request
 
 The servicing ask that is not a credit action: a wire template change, a statement re-issue, an
