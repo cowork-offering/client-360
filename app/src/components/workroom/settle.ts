@@ -77,12 +77,24 @@ const TO = "→";
  * title and the new figure where there was nothing before it (an add); the
  * title alone where the entry carries no figure at all (a removal, a pledge).
  */
+/** The longest a "before" may be and still read as a FIGURE. Past this it is
+ *  the engine explaining that it has no value to show ("this read does not
+ *  carry today's value"), which is a sentence, and a receipt is not a place for
+ *  a sentence. */
+const BEFORE_MAX = 24;
+
 export function rowForDelta(delta: WorkroomDelta, how: string): SettledRow {
   const before = (delta.before ?? "").trim();
   const after = (delta.after ?? "").trim();
-  if (before && after && before !== after) return { what: `${before} ${TO} ${after}`, how };
-  if (after) return { what: `${delta.title} ${after}`.trim(), how };
-  return { what: delta.title, how };
+  /* THE FIELD'S NAME, WITHOUT ITS PARENTHETICAL. "Amortisation term (months)"
+     is the manifest's heading; on a row that already prints "240 months" the
+     unit in brackets is the same word twice. */
+  const field = delta.title.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (before && before.length <= BEFORE_MAX && after && before !== after) {
+    return { what: `${before} ${TO} ${after}`, how };
+  }
+  if (after) return { what: `${field} ${after}`.trim(), how };
+  return { what: field || delta.title, how };
 }
 
 /** The row an acknowledged check becomes. The VERDICT is the check's own short
@@ -95,8 +107,16 @@ export function rowForChallenge(challenge: WorkroomChallenge): SettledRow {
 export interface SettleChoreography {
   /** Where a thread item stands. Anything this has never settled is `on`. */
   stateOf: (itemId: string) => SettleState;
-  /** An exchange settled: these items leave the stage together, under one row. */
-  settle: (itemIds: readonly string[], rowId: string) => void;
+  /**
+   * An exchange settled: these items leave the stage together, under one row.
+   *
+   * `land` is what comes NEXT, and it runs in the SAME TASK as the exit
+   * completing. Two timers at the same delay are two tasks with a render
+   * between them, and in that render the room has no open gate and no exit in
+   * flight - which is precisely the window the intent feed used to say its next
+   * line straight over the confirm the banker had just made.
+   */
+  settle: (itemIds: readonly string[], rowId: string, land?: () => void) => void;
   /** The banker asked for a settled exchange back, or put it away again. */
   toggle: (rowId: string) => void;
   /** Is this row's exchange currently back on the stage? */
@@ -126,8 +146,11 @@ export function useSettleChoreography(reduced: boolean): SettleChoreography {
   );
 
   const settle = useCallback(
-    (itemIds: readonly string[], rowId: string) => {
-      if (!itemIds.length) return;
+    (itemIds: readonly string[], rowId: string, land?: () => void) => {
+      if (!itemIds.length) {
+        land?.();
+        return;
+      }
       const state: Tracked["state"] = reduced ? "settled" : "leaving";
       setTracked((prev) => {
         const next = { ...prev };
@@ -139,7 +162,10 @@ export function useSettleChoreography(reduced: boolean): SettleChoreography {
         }
         return next;
       });
-      if (reduced) return;
+      if (reduced) {
+        land?.();
+        return;
+      }
       const t = window.setTimeout(() => {
         setTracked((prev) => {
           if (!itemIds.some((id) => prev[id]?.state === "leaving")) return prev;
@@ -147,6 +173,7 @@ export function useSettleChoreography(reduced: boolean): SettleChoreography {
           for (const id of itemIds) if (next[id]?.state === "leaving") next[id] = { ...next[id], state: "settled" };
           return next;
         });
+        land?.();
       }, SETTLE_EXIT_MS);
       timers.current.push(t);
     },

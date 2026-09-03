@@ -845,9 +845,9 @@ export function RelationshipRoom({
    * produced it collapses behind the history chip as it always has.
    */
   const settleStep = useCallback(
-    (row: SettledRow, at: number) => {
+    (row: SettledRow, at: number): boolean => {
       const prev = itemsRef.current;
-      if (!prev.length) return;
+      if (!prev.length) return false;
       const mine = prev[prev.length - 1].step;
       const covers: string[] = [];
       for (let i = prev.length - 1; i >= 0; i--) {
@@ -866,6 +866,7 @@ export function RelationshipRoom({
       const rowId = nextId("settled");
       if (covers.length) settleItems(covers, rowId);
       setItems((p) => [...p, { kind: "settled", id: rowId, step: at, row, covers }]);
+      return true;
     },
     [settleItems],
   );
@@ -882,8 +883,11 @@ export function RelationshipRoom({
          6", what the banker answered, and the way back to the question. The
          review's own numbering travels on the row: a banker three questions
          into a six-question ritual should not have to count rows to know it. */
-      settleStep(rowForStep(liveKickerRef.current, said), mine);
-      setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: said }]);
+      /* THE ROW IS THE RECEIPT, so the banker's echo under it would be the
+         answer printed twice, eight pixels apart. It is dropped where a row
+         landed and kept where none did (a room with no thread yet). */
+      const receipted = settleStep(rowForStep(liveKickerRef.current, said), mine);
+      if (!receipted) setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: said }]);
       setAnswers((prev) => {
         const next = { ...prev };
         assign(next, key, value);

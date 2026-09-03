@@ -128,6 +128,7 @@ import {
 import {
   capSentences,
   cardFigures,
+  cutCloneCount,
   cutFigureEcho,
   cutPricingWhy,
   cutTail,
@@ -141,7 +142,6 @@ import {
   expandLabel,
   rowForChallenge,
   rowForDelta,
-  SETTLE_EXIT_MS,
   settleAttrs,
   useSettleChoreography,
   type SettledRow,
@@ -988,9 +988,12 @@ export function Workroom({
    * motion that wait is zero.
    */
   const settleExchange = useCallback(
-    (row: SettledRow): number => {
+    (row: SettledRow, land?: () => void): void => {
       const prev = itemsRef.current;
-      if (!prev.length) return 0;
+      if (!prev.length) {
+        land?.();
+        return;
+      }
       const mine = prev[prev.length - 1].step;
       const covers: string[] = [];
       for (let i = prev.length - 1; i >= 0; i--) {
@@ -998,25 +1001,16 @@ export function Workroom({
         if (it.step !== mine || it.kind === "settled" || tierOf(it)) break;
         covers.unshift(it.id);
       }
-      if (!covers.length) return 0;
+      if (!covers.length) {
+        land?.();
+        return;
+      }
       const rowId = nextId("settled");
-      settleItems(covers, rowId);
+      settleItems(covers, rowId, land);
       setItems((p) => [...p, { kind: "settled", id: rowId, step: mine, row, covers }]);
-      return reduced ? 0 : SETTLE_EXIT_MS;
     },
-    [reduced, settleItems],
+    [settleItems],
   );
-
-  /** LAND THIS AFTER THE EXIT. Immediate under reduced motion, which is also
-   *  what every jsdom test sees, so the suite never chases a timer it did not
-   *  ask for. */
-  const afterSettle = useCallback((wait: number, land: () => void) => {
-    if (wait <= 0) {
-      land();
-      return;
-    }
-    window.setTimeout(land, wait);
-  }, []);
 
   /* ------------------------------------------ THE "ANYTHING ELSE" TAIL (rule d)
 
@@ -1046,7 +1040,8 @@ export function Workroom({
   const roomSentence = useCallback(
     (text: string, staged: readonly WorkroomDelta[]): string => {
       const withoutTail = cutTail(text, vocabulary.nextMove, queuedRef.current);
-      return capSentences(cutFigureEcho(withoutTail, cardFigures(staged)));
+      const withoutCount = cutCloneCount(withoutTail, staged.length);
+      return capSentences(cutFigureEcho(withoutCount, cardFigures(staged)));
     },
     [vocabulary.nextMove],
   );
@@ -3253,6 +3248,14 @@ export function Workroom({
   const lastItem = items[items.length - 1];
   const awaitingChoice =
     !!lastItem && lastItem.kind === "agent" && (!!lastItem.options?.length || !!lastItem.restart);
+  /* AND A SETTLE IN FLIGHT IS THE ROOM HOLDING SOMETHING (founder drive,
+     2026-09-03). The exit takes 520ms and what follows it - the answer, the
+     check it tripped, the question the version needs - lands after it. For
+     that half second the room has no open gate and looked free, so the feed
+     said its next line straight over the top of the confirm the banker had
+     just made. `settle.leaving` closes it, and the STAGE CAP closes the wider
+     case: nothing is fed while anything is already waiting on the banker or
+     waiting its turn to be asked. */
   const feedReady =
     awake &&
     !ask &&
@@ -3260,6 +3263,9 @@ export function Workroom({
     !thinking &&
     !filing &&
     openGates === 0 &&
+    liveOnStage === 0 &&
+    gate.queued === 0 &&
+    !settle.leaving &&
     flow === null &&
     creating === null &&
     pricingPending === null &&
@@ -3396,11 +3402,15 @@ export function Workroom({
          of an add and says nothing at all about a removal. A banker signing a
          carry exclusion is entitled to read on the confirm itself that the
          booked loan is untouched and that the clone is what starts without it. */
-      const said = committedSentence({
-        reply: armConfirmSentence(delta, reply),
-        delta,
-        before: figures.committedMM * 1e6,
-      });
+      const said = cutTail(
+        committedSentence({
+          reply: armConfirmSentence(delta, reply),
+          delta,
+          before: figures.committedMM * 1e6,
+        }),
+        vocabulary.nextMove,
+        queuedRef.current,
+      );
       /* ============ THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02)
 
          A confirmed amount or term change leaves a version nobody can price
@@ -3426,13 +3436,16 @@ export function Workroom({
          what settled and how. WHAT COMES NEXT WAITS FOR THAT EXIT. A check or a
          pricing question landing over an exchange that is still fading is
          exactly the pile-up this pass exists to remove. */
-      const wait = settleExchange(rowForDelta(delta, "confirmed"));
       /* THE PRICING REASON IS SAID ONCE PER FACILITY. Both of a facility's two
          questions carry it from the fenced composer; the second one has already
          been told. */
       const whySaid = gate ? pricingWhySaid.current.has(gate.need.memberId) : false;
       if (gate) pricingWhySaid.current.add(gate.need.memberId);
-      afterSettle(wait, () => {
+      /* WHAT COMES NEXT, LANDING IN THE SAME TASK AS THE EXIT COMPLETING. Two
+         timers at the same delay are two tasks with a render between them, and
+         in that render the room holds no gate and no exit - which is the window
+         the intent feed used to say its next line straight over this confirm. */
+      const landAfterExit = () => {
         setItems((prev) => {
           const mine = prev.length ? prev[prev.length - 1].step : 0;
           return [
@@ -3471,17 +3484,18 @@ export function Workroom({
             liveAfter,
           );
         }
-      });
+      };
+      settleExchange(rowForDelta(delta, "confirmed"), landAfterExit);
       setSuggestion(engine.suggest());
     },
     [
-      afterSettle,
       elicitMembers,
       engine,
       enqueue,
       entries,
       figures.committedMM,
       pricingOutstanding,
+      vocabulary.nextMove,
       reads?.generatedAt,
       settleChip,
       settleExchange,
@@ -3502,18 +3516,16 @@ export function Workroom({
          in a confirm. The row says which it was. */
       if (chip.delta) {
         settleChip(blockId, chip.key, "discarded");
-        const wait = settleExchange(rowForDelta(chip.delta, "discarded"));
         const line = `Dropped. ${chip.delta.title} on ${chip.delta.target} is not staged and the package has not moved. ${tailNow(vocabulary.nextMove)}`.trim();
-        afterSettle(wait, () => agent(line));
+        settleExchange(rowForDelta(chip.delta, "discarded"), () => agent(line));
       } else {
         settleChip(blockId, chip.key, "confirmed");
-        const wait = settleExchange({ what: chip.refusal?.title ?? "Refused", how: "understood" });
         const line = `That one stays off the manifest, for the reason above. ${tailNow(vocabulary.nextMove)}`.trim();
-        afterSettle(wait, () => agent(line));
+        settleExchange({ what: chip.refusal?.title ?? "Refused", how: "understood" }, () => agent(line));
       }
       setSuggestion(engine.suggest());
     },
-    [afterSettle, agent, engine, settleChip, settleExchange, tailNow, vocabulary.nextMove],
+    [agent, engine, settleChip, settleExchange, tailNow, vocabulary.nextMove],
   );
 
   /**

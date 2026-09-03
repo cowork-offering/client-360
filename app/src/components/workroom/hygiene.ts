@@ -135,6 +135,21 @@ export function cutVersionParagraph(reply: string, first: boolean): string {
  *  only where it actually went out. */
 export const carriesVersionParagraph = (reply: string): boolean => VERSION_PARAGRAPH.test(reply);
 
+/* --------------------------------------------- b2. the clone count, on the card
+
+   "1 of these goes on the clone." The cards are on the glass, side by side, and
+   the banker can count them without help. The sentence exists for the case
+   where nothing was drawn - a refusal, a handoff - and there it earns its
+   words. Beside a card it is the room reading its own card out loud. */
+
+const CLONE_COUNT = /\b\d+ of these (?:goes|go) on the clone\.\s*/g;
+
+/** Drop the clone count where cards are on the glass to be counted. */
+export function cutCloneCount(text: string, cards: number): string {
+  if (cards < 1) return text;
+  return text.replace(CLONE_COUNT, "").replace(/\s{2,}/g, " ").trim();
+}
+
 /* ------------------------------------------- c. the pricing reason, once
 
    nCino wants four fields and the room asks for two of them, one at a time. The

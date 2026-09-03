@@ -92,6 +92,14 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
   }));
   const [summoned, setSummoned] = useState(false);
   const timers = useRef<number[]>([]);
+  /* THE ENTRY IS OVER (founder drive, 2026-09-03). Once the room has retired
+     its tiers, a tier still on its arrival beat must not walk back onto the
+     stage behind the card the banker is now deciding on. An intent that feeds
+     its first line while the facility strip is still on its 620ms beat did
+     exactly that, and the strip stood under every card of the drive. A tier
+     that arrives after the retirement arrives ALREADY FADED: mounted,
+     summonable, and off the stage where it belongs. */
+  const retired = useRef(false);
 
   useEffect(
     () => () => {
@@ -105,6 +113,7 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
     (tier: EntryTier) => {
       setStates((prev) => {
         if (prev[tier] === "on") return prev;
+        if (retired.current) return prev[tier] === "faded" ? prev : { ...prev, [tier]: "faded" as TierState };
         const next = { ...prev, [tier]: "on" as TierState };
         for (const above of TIER_ORDER.slice(0, TIER_ORDER.indexOf(tier))) {
           // A tier that never landed has nothing to retire, and one already
@@ -130,6 +139,7 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
   );
 
   const retire = useCallback(() => {
+    retired.current = true;
     setStates((prev) => {
       if (!TIER_ORDER.some((k) => prev[k] === "on")) return prev;
       const next = { ...prev };
@@ -151,6 +161,7 @@ export function useEntryChoreography(reduced: boolean): EntryChoreography {
   const reset = useCallback(() => {
     for (const t of timers.current) window.clearTimeout(t);
     timers.current = [];
+    retired.current = false;
     setStates({ question: "waiting", identity: "waiting", detail: "waiting" });
     setSummoned(false);
   }, []);
