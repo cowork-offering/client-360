@@ -16,45 +16,69 @@ import { installIntentReadout, startIntentWatch } from "./intent/store";
    boot rather than watched, because the class drives a static stylesheet branch
    and re-reading it would only invite a surface to depend on the query string.
 
-     ?refract=1  (or #refract)  the bend on the static surfaces. This is the
-                                configuration the performance gate allows.
-     ?refract=2  (or #refract2) the same, PLUS the workroom pane, which the
-                                gate took off by default. See the pane note in
-                                electric-glass.css.
+     ?refract=1  (or #refract)   THE BEND. Every glass surface including the
+                                 workroom pane, which the founder approved on
+                                 2026-09-03 after seeing it, plus the pane's
+                                 depth pass. The headless fps numbers in the
+                                 addendum still stand and are still worth
+                                 reading; the call on them is his to make on
+                                 his own machine.
+     ?refract=2  (or #refract2)  KEPT AS AN ALIAS of 1. It used to be the only
+                                 way to get the pane on the bend; every link
+                                 already written with it lands where it did.
+     ?refract=3  (or #refract3)  LIQUID. The bend turned up until it is the
+                                 point rather than a suggestion: clearer glass
+                                 over a thinner frost, an edge lens instead of
+                                 a uniform wobble, chromatic fringe at the rim,
+                                 a ground that drifts, and a specular sweep.
 
-   `window.c360Refract(on, pane)` flips the same classes live, which is how the
-   A/B gets judged side by side in one tab instead of two. */
+   `window.c360Refract(on, liquid)` flips the same classes live, which is how
+   the A/B gets judged side by side in one tab instead of three. */
 declare global {
   interface Window {
-    c360Refract?: (on: boolean, pane?: boolean) => { refract: boolean; pane: boolean };
+    c360Refract?: (on: boolean, liquid?: boolean) => { refract: boolean; liquid: boolean };
   }
 }
 
 const REFRACT_CLASS = "eg-refract";
+/* The pane class survives its own promotion. The stylesheet still branches on
+   it, and holding it means an old ?refract=2 link and the live A/B helper both
+   keep working without a second code path. */
 const PANE_CLASS = "eg-refract-pane";
+const LIQUID_CLASS = "eg-liquid";
 
-function setRefract(on: boolean, pane = false) {
+function setRefract(on: boolean, liquid = false) {
   const root = document.documentElement;
   root.classList.toggle(REFRACT_CLASS, on);
-  root.classList.toggle(PANE_CLASS, on && pane);
-  return { refract: on, pane: on && pane };
+  root.classList.toggle(PANE_CLASS, on);
+  root.classList.toggle(LIQUID_CLASS, on && liquid);
+  return { refract: on, liquid: on && liquid };
 }
 
-/** "" | "1" | "2", read off the query string first and the hash second. */
+/** "" | "1" | "2" | "3", read off the query string first and the hash second. */
 function refractRequested() {
   try {
     const q = new URLSearchParams(window.location.search).get("refract");
     const h = window.location.hash.replace(/^#/, "");
-    const v = q != null ? q : h === "refract" ? "1" : h === "refract2" ? "2" : "";
-    if (v === "" || v === "0" || v === "false") return { on: false, pane: false };
-    return { on: true, pane: v === "2" || v === "pane" };
+    const v =
+      q != null
+        ? q
+        : h === "refract"
+          ? "1"
+          : h === "refract2"
+            ? "2"
+            : h === "refract3"
+              ? "3"
+              : "";
+    if (v === "" || v === "0" || v === "false") return { on: false, liquid: false };
+    return { on: true, liquid: v === "3" || v === "liquid" };
   } catch {
-    return { on: false, pane: false };
+    return { on: false, liquid: false };
   }
 }
 
 const requested = refractRequested();
-setRefract(requested.on, requested.pane);
+setRefract(requested.on, requested.liquid);
 window.c360Refract = setRefract;
 
 const root = document.getElementById("root");
