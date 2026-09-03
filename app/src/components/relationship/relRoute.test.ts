@@ -53,9 +53,19 @@ function due(days: number, type = "Debt Service Coverage", id = "cov-1"): Covena
   };
 }
 
-describe("the five routes", () => {
-  it("offers exactly five, in the governance calendar's order", () => {
-    expect(REL_ROUTE_CHIPS.map((c) => c.route)).toEqual(["annual", "covenant", "valuation", "rating", "service"]);
+describe("the six routes", () => {
+  /* THE FIVE REVIEWS IN THE GOVERNANCE CALENDAR'S ORDER, then the one that
+     AUTHORS. The intake is not a review and sits last for that reason: a banker
+     scanning for a review meets the five first. */
+  it("offers exactly six, the five reviews first and the intake last", () => {
+    expect(REL_ROUTE_CHIPS.map((c) => c.route)).toEqual([
+      "annual",
+      "covenant",
+      "valuation",
+      "rating",
+      "service",
+      "intake",
+    ]);
   });
 
   it("names each route in banker grammar", () => {

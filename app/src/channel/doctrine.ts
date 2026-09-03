@@ -485,6 +485,23 @@ const RISK_RATING: DoctrineBlock = {
   ],
 };
 
+const INTAKE: DoctrineBlock = {
+  id: "intake",
+  rooms: ["relationship"],
+  source: "2.4, 2.6 and the create grammar",
+  match:
+    /\b(add|adding|create|creating|author\w*|register|net-?new|brand[- ]new|newly\s+(?:bought|acquired|financed)|intake|onboard\w*|put\s+(?:a|another))\b/i,
+  lines: [
+    "RELATIONSHIP INTAKE, TWO LEVELS. A covenant carrying only an account junction is RELATIONSHIP level and belongs to the borrower; one carrying a loan junction is facility level and belongs in the facility room. The intake authors the first and never the second, and the empty attached-loans list is the answer rather than a gap.",
+    "WHAT THE HUMAN OWNS on a covenant: the test, the direction, the threshold, the schedule and the date it runs from. The threshold comes from the approved credit agreement and from nowhere else. Propose a direction from the family convention if you must, say it is a proposal, and never set a threshold.",
+    "WHAT THE HUMAN OWNS on an asset: what it is, what kind the org calls it, what it is worth, on what basis, from what source, where it is and who owns it. The advance rate, the lendable value and every record name are the org's arithmetic. Never ask for them and never state them.",
+    "THE EFFECTIVE DATE IS SET ONCE and never updated: the whole compliance schedule is counted from it. Getting a covenant right at creation is the whole game, because every junction field is non-updateable and an amend or a detach is refused.",
+    "AN INTAKE MINTS NO COMPLIANCE ROW, raises no approval and sends no email. A covenant add is safe. Do not claim a test has been scheduled, run or passed because it was filed.",
+    "AN ASSET FILED HERE IS OWNED AND UNPLEDGED. The ownership junction is written and no loan-collateral pledge and no lien is. Coverage does not move, no facility becomes better secured, and pledging is a facility action. Say so rather than letting the silence read as security.",
+    "THE TYPE NAME IS THE ORG'S OWN RECORD, for both. The tool matches the covenant type and the collateral type by name against the org's catalogs, so a near miss is refused by index rather than filed as something adjacent. Offer the org's names; never a name you composed.",
+  ],
+};
+
 const COVERAGE_MATH: DoctrineBlock = {
   id: "coverage-math",
   rooms: ["relationship"],
@@ -513,10 +530,10 @@ const ROUTE_OPEN_RELATIONSHIP: DoctrineBlock = {
   source: "the relationship room's own router",
   modes: ["reply", "narrate"],
   lines: [
-    "THE ROUTE IS NOT BOUND, AND THIS IS THE RELATIONSHIP ROOM. Five questions are open: the annual review, the covenant review, the collateral valuation, the risk-rating review and the service request. None of them has been asked yet.",
-    "Do not write as if any one of them were running. Never say which covenants are being assessed, never say what is being valued, never propose a grade, never draft a review section, and never compose a case.",
+    "THE ROUTE IS NOT BOUND, AND THIS IS THE RELATIONSHIP ROOM. Six questions are open: the annual review, the covenant review, the collateral valuation, the risk-rating review, the service request, and putting a covenant or an asset onto the relationship. None of them has been asked yet.",
+    "Do not write as if any one of them were running. Never say which covenants are being assessed, never say what is being valued, never propose a grade, never draft a review section, never compose a case, and never author a covenant or an asset.",
     "Lead on the POSITION of the relationship: what it holds, whether the tests are clean and when they are next due, whether the collateral numbers are current, the grade on file and when it was last looked at, and whether anything is staged.",
-    "The chips for CONTEXT.routeOptions are on the glass. Your closing line points at them, or at the one route CONTEXT.mail names. It never invents a sixth.",
+    "The chips for CONTEXT.routeOptions are on the glass. Your closing line points at them, or at the one route CONTEXT.mail names. It never invents a seventh.",
   ],
 };
 
@@ -551,6 +568,7 @@ export const DOCTRINE_BLOCKS: DoctrineBlock[] = [
   ANNUAL_REVIEW,
   RISK_RATING,
   COVERAGE_MATH,
+  INTAKE,
   MAIL,
   ROUTE_OPEN,
   ROUTE_OPEN_RELATIONSHIP,
@@ -584,6 +602,7 @@ export const DOCTRINE_DROP_ORDER = [
   "annual-review",
   "risk-rating",
   "coverage-math",
+  "intake",
   "credit-policy",
   "pricing",
   "covenant-families",

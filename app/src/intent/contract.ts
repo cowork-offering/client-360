@@ -24,7 +24,8 @@ export const INTENT_COLLECTION = "intents";
 export type IntentRoom = "facility" | "relationship";
 
 /** The routes the two rooms bind. The first three are the facility room's
- *  engines; the last five are the relationship room's reviews. */
+ *  engines; the last six are the relationship room's, five reviews and the
+ *  intake that authors. */
 export type IntentRoute =
   | "modify"
   | "renew"
@@ -33,7 +34,8 @@ export type IntentRoute =
   | "covenant"
   | "valuation"
   | "rating"
-  | "service";
+  | "service"
+  | "intake";
 
 export type IntentStatus = "pending" | "opened" | "done";
 
@@ -67,7 +69,7 @@ export interface IntentDoc {
 }
 
 const FACILITY_ROUTES: IntentRoute[] = ["modify", "renew", "create"];
-const RELATIONSHIP_ROUTES: IntentRoute[] = ["annual", "covenant", "valuation", "rating", "service"];
+const RELATIONSHIP_ROUTES: IntentRoute[] = ["annual", "covenant", "valuation", "rating", "service", "intake"];
 const SOURCE_KINDS = ["email", "chat", "meeting"];
 
 /** Caps. A document that arrives longer than this is clipped, never refused:
@@ -169,6 +171,7 @@ export const ROUTE_WORD: Record<IntentRoute, string> = {
   valuation: "collateral valuation",
   rating: "risk-rating review",
   service: "service request",
+  intake: "relationship intake",
 };
 
 /** Where the intent came from, in the whisper's grammar. */

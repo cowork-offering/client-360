@@ -251,16 +251,23 @@ describe("the smart opening", () => {
     click(byText(/Something else/));
     expect(bound).toEqual([]);
     expect(document.body.textContent).toContain("Which review are we running on this relationship?");
-    for (const label of ["Annual review", "Covenant review", "Collateral valuation", "Risk-rating review", "Service request"]) {
+    for (const label of [
+      "Annual review",
+      "Covenant review",
+      "Collateral valuation",
+      "Risk-rating review",
+      "Service request",
+      "Add a covenant or an asset",
+    ]) {
       expect(byText(new RegExp(label))).toBeTruthy();
     }
   });
 });
 
-describe("the neutral five-way", () => {
-  it("offers all five and binds the one the banker taps", () => {
+describe("the neutral six-way", () => {
+  it("offers all six and binds the one the banker taps", () => {
     const { bound } = open({ question: neutralRelAsk() });
-    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(5);
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(6);
     click(byText(/Collateral valuation/));
     expect(bound[0].route).toBe("valuation");
   });
@@ -275,7 +282,7 @@ describe("the neutral five-way", () => {
     const { room, bound } = open({ question: neutralRelAsk() });
     await type(room, "how is this client doing");
     expect(bound).toEqual([]);
-    expect(document.body.textContent).toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).toContain("Pick one above, or name which of the six this is.");
   });
 
   /* THE DRIVE'S LINE 13. "james wants the june certificate" names no review at
@@ -290,7 +297,7 @@ describe("the neutral five-way", () => {
     await type(room, "pledge the equipment to the 8M loan");
     expect(bound).toEqual([]);
     expect(document.body.textContent).toContain("That is facility work.");
-    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the six this is.");
   });
 
   it("offers the service request in ONE line when the client asked for something", async () => {
@@ -298,7 +305,7 @@ describe("the neutral five-way", () => {
     await type(room, "james wants the june certificate");
     // It does NOT bind. Guessing here picks a write path.
     expect(bound).toEqual([]);
-    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the six this is.");
     expect(document.body.textContent).toContain("which is a service request on this relationship");
     // One offer, and the way out of it. Never the five.
     expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(2);
@@ -315,12 +322,12 @@ describe("the neutral five-way", () => {
     ]);
   });
 
-  it("still offers all five on 'Something else', binding nothing", async () => {
+  it("still offers all six on 'Something else', binding nothing", async () => {
     const { room, bound } = open({ question: neutralRelAsk() });
     await type(room, "james wants the june certificate");
     click(byText(/Something else/));
     expect(bound).toEqual([]);
-    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(5);
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(6);
   });
 
   it("keeps an unavailable route VISIBLE and disabled, with the registry's own reason", () => {

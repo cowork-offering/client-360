@@ -28,6 +28,7 @@ import {
 } from "../workroom/entryChoreography";
 import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
+import { readCatalog, type OrgCatalog } from "../../channel/catalog";
 import { Narration, useNarration } from "../../channel/Narration";
 import { subjectFor } from "../../channel/narrate";
 import { ManifestRail } from "../rail/ManifestRail";
@@ -73,6 +74,7 @@ import {
   nextStep,
   readCreateAsk,
   relContextFor,
+  relReadyLine,
   relRouteBlock,
   reviewableCovenants,
   routeAvailability,
@@ -87,6 +89,7 @@ import {
   type RelStep,
   type StagedRelPlan,
 } from "./reviewFlows";
+import { intakeRows } from "./intakeFlows";
 import {
   bindRelRoute,
   closeRelationshipRoom,
@@ -420,6 +423,12 @@ interface LaneRow {
 }
 
 function laneRowsFor(route: RelRoute, ctx: RelContext, answers: Answers, order: string[]): LaneRow[] {
+  /* THE INTAKE LANE READS AS WHAT IS BEING FILED, one row per covenant and one
+     per asset, rather than one row per answer. Eleven rows behind three
+     covenants is a transcript; the banker is filing covenants, so the lane says
+     covenants. The rows come from the same drafts the payload is built from, so
+     the lane and the wire cannot describe different things. */
+  if (route === "intake") return intakeRows(ctx, answers);
   const covenants = reviewableCovenants(ctx);
   const assets = valuableCollateral(ctx);
   const rows: LaneRow[] = [];
@@ -479,9 +488,13 @@ const LANE_LABELS: Record<string, string> = {
   requestType: "Subject",
   summary: "Request",
   detail: "Detail",
+  intakeKind: "Intake",
+  intakeKindPick: "Intake",
 };
 
 function iconForAnswer(route: RelRoute, group: string): IconKind {
+  if (group.startsWith("cov")) return "covenant";
+  if (group.startsWith("col")) return "collateral";
   if (group.startsWith("covenant")) return "covenant";
   if (group === "records" || group === "recordValues") return "collateral";
   if (group === "valuationDate" || group === "detail") return "maturity";
@@ -785,11 +798,11 @@ export function RelationshipRoom({
           kind: "agent",
           id: nextId("ready"),
           step: mine,
-          text: `That is everything the ${REL_ROUTE_WORD[flowSpec.route]} needs. Review the plan below, then file it.`,
+          text: relReadyLine(flowSpec.route, ctx, answers),
         },
       ];
     });
-  }, [flowSpec, phase, ready, routeBlock]);
+  }, [answers, ctx, flowSpec, phase, ready, routeBlock]);
 
   /** RECORD AN ANSWER. Every answer starts a STEP (rule 31): the banker line
    *  lands, the steps before it collapse, and the machine asks the next one. */
@@ -1193,7 +1206,7 @@ export function RelationshipRoom({
         }
         const mine = step + 1;
         const five =
-          "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
+          "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request, and I can put a new covenant or a new asset onto the relationship. Pick one above, or name which of the six this is.";
         setStep(mine);
         setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
         /* FACILITY WORK IS FACILITY WORK BEFORE A ROUTE IS BOUND TOO.
@@ -2369,10 +2382,28 @@ export function RelationshipRoomHost() {
   }, [data, state.livePatches, accountId]);
 
   const accountName = session?.accountName ?? null;
+
+  /* THE ORG'S OWN CHIP SETS, ONE READ PER HOST MOUNT (`Workroom.tsx` does the
+     same and `readCatalog` is its own cache, so the two rooms share the round
+     trip). Only the INTAKE route reads it: it is the one route that files a
+     type by NAME, so the names have to be the org's. Null leaves the intake
+     asking the banker to write the name, which is the channel-none doctrine
+     applied to a catalog, and every other route is untouched. */
+  const [catalog, setCatalog] = useState<OrgCatalog | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readCatalog().then((c) => {
+      if (live) setCatalog(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const ctx = useMemo<RelContext | null>(() => {
     if (!accountId || !accountName) return null;
-    return relContextFor({ data, bundle, accountId, accountName });
-  }, [accountId, accountName, bundle, data]);
+    return relContextFor({ data, bundle, accountId, accountName, catalog });
+  }, [accountId, accountName, bundle, catalog, data]);
 
   /* ONE MAIL READ PER ROOM OPEN, MADE HERE (SAMPLE-CHANNEL spec, and the same
      hook the facility room uses). The founder's "when there is an email

@@ -8,6 +8,7 @@ import { assertNoRecordIds, type StagedOutput } from "../../actions/stagedPlan";
 import { validatePlan } from "../../actions/transitionAllowlist";
 import { newRequestId } from "../../channel/adapter";
 import { mcpAvailable } from "../../channel/mcp";
+import type { OrgCatalog } from "../../channel/catalog";
 import {
   executeAction,
   parseLegalValues,
@@ -23,7 +24,23 @@ import {
 } from "../../channel/writeTools";
 import type { IconKind } from "../workroom/TypeIcon";
 import { NO_COMPLIANCE_ROW, relBookFor, type BookCovenant } from "./relBook";
-import type { RelRoute } from "./relRoute";
+import {
+  answered,
+  asOptions,
+  num,
+  perRecord,
+  pickedList,
+  text,
+  type Answers,
+  type RelStep,
+} from "./relStep";
+import {
+  buildIntakePayload,
+  intakeConfirmSentence,
+  intakeDossierRows,
+  intakeStep,
+} from "./intakeFlows";
+import { REL_ROUTE_WORD, type RelRoute } from "./relRoute";
 
 /* =============================================================================
    THE FIVE REVIEWS — ONE STEP MACHINE OVER THE FLOWS THAT ALREADY EXIST.
@@ -69,6 +86,19 @@ export interface RelContext {
   asOf: string | null;
   /** The Salesforce user id `execute_*` will accept, or null. */
   approver: string | null;
+  /**
+   * THE ORG'S OWN CHIP SETS, where the view has read them.
+   *
+   * Only the INTAKE route uses it, and only for the two lookup catalogs it
+   * files a NAME against: the covenant types and the collateral types. The five
+   * reviews are unchanged and still stand on the observed describes, because a
+   * review picks from a list the tool validates rather than naming a record.
+   *
+   * NULL IS A STATE. No connector, or a tool the client's schema cache has not
+   * caught up with, leaves the intake chips empty and the banker naming the type
+   * themselves, which is the channel-none doctrine applied to a catalog.
+   */
+  catalog?: OrgCatalog | null;
 }
 
 export function relContextFor(args: {
@@ -76,6 +106,7 @@ export function relContextFor(args: {
   bundle: BorrowerBundle | null;
   accountId: string;
   accountName: string;
+  catalog?: OrgCatalog | null;
 }): RelContext {
   return {
     accountId: args.accountId,
@@ -84,56 +115,20 @@ export function relContextFor(args: {
     productPackageId: args.bundle?.snapshot?.productPackageId ?? null,
     asOf: args.data.meta?.generatedAt ?? null,
     approver: resolveApproverUserId(args.data.meta),
+    catalog: args.catalog ?? null,
   };
 }
 
-/* --------------------------------------------------------------- the steps */
+/* --------------------------------------------------------------- the steps
 
-export type StepKind = "chips" | "multi" | "text" | "number" | "date";
+   THE STEP PRIMITIVES NOW LIVE IN `relStep.ts` and are re-exported here
+   unchanged. The INTAKE route describes its questions in the same grammar and
+   reads the same answer map, and it cannot import this module back without a
+   cycle. Every name below is the one this file has exported since the room
+   shipped, so no caller anywhere changes.                                   */
 
-export interface StepOption {
-  label: string;
-  value: string;
-  /** A second line under the label, where the org has one worth reading. */
-  detail?: string;
-  /** THE OPTION STAYS, DISABLED, CARRYING ITS REASON (A27.3). A covenant the
-   *  org will not accept an assessment on is shown and refused by name; hiding
-   *  it would take the map of what exists away from the banker. */
-  disabled?: boolean;
-  reason?: string;
-}
-
-export interface RelStep {
-  /** Where the answer lands in the answer map. */
-  key: string;
-  /** The question, banker-formal. One sentence, no exclamation points. */
-  ask: string;
-  kind: StepKind;
-  /** Closed-set answers, offered as chips. Every value here is the ORG's own. */
-  options?: StepOption[];
-  /** The step may be answered with "Not assessed" and left out of the payload. */
-  optional?: boolean;
-  /** The composer's placeholder while this step is live. */
-  placeholder?: string;
-  /** The org field this answer is aimed at, for the "what this writes" peek. */
-  target?: { object: string; field: string };
-  /** A NUMBER STEP WHOSE SCALE IS REAL. The room refuses a figure outside it
-   *  with `refusal`, by name, before it becomes an answer. Only set where a
-   *  scale exists in the org and a number off it would be a governance record
-   *  nobody could read. */
-  bounds?: { min: number; max: number; whole: boolean; refusal: string };
-}
-
-/** Everything the banker has answered, keyed by step. Multi-answers are arrays;
- *  per-record answers are keyed maps. */
-export type Answers = Record<string, unknown>;
-
-/** The sentinel a banker's "skip" writes, so an optional step that was ANSWERED
- *  WITH NOTHING is distinguishable from one never reached. */
-export const SKIPPED = "__skipped__";
-
-const isSkipped = (v: unknown) => v === SKIPPED;
-const answered = (a: Answers, key: string) => Object.prototype.hasOwnProperty.call(a, key);
+export type { StepKind, StepOption, RelStep, Answers } from "./relStep";
+export { SKIPPED } from "./relStep";
 
 /* -------------------------------------------------------------- the briefs */
 
@@ -215,6 +210,31 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     filedWord: "Filed",
     loadSteps: ["Scoring the factors", "Filing the rating review", "Verifying the record"],
   },
+  /**
+   * THE SIXTH, AND THE ONLY ONE THAT AUTHORS.
+   *
+   * The five above act on records the org already holds. This one puts a
+   * covenant or an asset ONTO the relationship, which is the pair of creates
+   * `CREATE_GAPS` has named as unfileable since the room shipped. What closes
+   * them is the org side: `stage_relationship_intake` authors an
+   * `LLC_BI__Covenant2__c` with an `LLC_BI__Account_Covenant__c` junction and no
+   * loan junction, and an `LLC_BI__Collateral__c` with its
+   * `LLC_BI__Account_Collateral__c` ownership junction and NO pledge.
+   */
+  intake: {
+    route: "intake",
+    actionId: "relationship-intake",
+    word: "Relationship Intake",
+    icon: "package",
+    covers:
+      "The intake covers what goes onto the relationship itself: a covenant the approved credit agreement struck, or an asset the borrower owns that no facility is secured by yet.",
+    produces:
+      "It authors the records and their account junctions and nothing else. A covenant lands on the borrower with no loan junction, so it is a relationship-level test; an asset lands with its ownership junction and no pledge and no lien, so nothing about coverage moves. The compliance schedule, the advance rate and the lendable value are the org's own arithmetic and are never asked for or claimed.",
+    writeObjectLabel: "relationship record",
+    approveLabel: "File them",
+    filedWord: "Filed",
+    loadSteps: ["Composing the intake", "Writing the records", "Verifying the junctions"],
+  },
   service: {
     route: "service",
     actionId: "create-service-request",
@@ -274,15 +294,6 @@ const VALUATION_BASIS = observedOptions("LLC_BI__Collateral_Valuation__c", "LLC_
 const VALUATION_SOURCE = observedOptions("LLC_BI__Collateral_Valuation__c", "LLC_BI__Source__c");
 const EXCEPTION_REASON = observedOptions("LLC_BI__Covenant_Compliance2__c", "LLC_BI__Reason_for_Exception__c");
 
-const asOptions = (values: readonly string[] | undefined): StepOption[] =>
-  (values ?? []).map((v) => ({ label: v, value: v }));
-
-const pickedList = (a: Answers, key: string): string[] =>
-  Array.isArray(a[key]) ? (a[key] as unknown[]).filter((v): v is string => typeof v === "string") : [];
-
-const perRecord = (a: Answers, key: string): Record<string, unknown> =>
-  a[key] && typeof a[key] === "object" && !Array.isArray(a[key]) ? (a[key] as Record<string, unknown>) : {};
-
 /**
  * THE NEXT QUESTION, or null when the flow has everything its tool demands.
  *
@@ -311,6 +322,8 @@ export function nextStep(route: RelRoute, ctx: RelContext, a: Answers): RelStep 
       return ratingStep(ctx, a);
     case "service":
       return serviceStep(ctx, a);
+    case "intake":
+      return intakeStep(ctx, a);
   }
 }
 
@@ -995,18 +1008,6 @@ export type PayloadResult =
   | { ok: true; payload: StagePayloads[keyof StagePayloads] }
   | { ok: false; blocked: string };
 
-const num = (v: unknown): number | null => {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v !== "string" || !v.trim()) return null;
-  const n = Number(v.replace(/[$,\s]/g, ""));
-  return Number.isFinite(n) ? n : null;
-};
-
-const text = (v: unknown): string | null => {
-  if (isSkipped(v)) return null;
-  return typeof v === "string" && v.trim() ? v.trim() : null;
-};
-
 /**
  * BUILD THE TOOL PAYLOAD from what the banker answered.
  *
@@ -1028,6 +1029,13 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
     .filter((x): x is string => !!x)
     .join(" ");
   const rationale = stageRationale({ actionId: spec.actionId, accountName: ctx.accountName, typed });
+
+  /* THE INTAKE IS ANCHORED ON THE RELATIONSHIP, NOT ON THE PACKAGE, so it is
+     read before the package-anchored routes and composes its own wire. The
+     rationale is composed inside the intake module, over the notes the banker
+     wrote on the drafts, because those are per covenant rather than one
+     narrative for the whole exercise. */
+  if (route === "intake") return buildIntakePayload(ctx, a, idempotencyKey);
 
   if (route === "annual") {
     const written = perRecord(a, "sectionNarratives");
@@ -1187,6 +1195,20 @@ export function buildStagePayload(route: RelRoute, ctx: RelContext, a: Answers, 
       referenceWebLink: req?.reference?.webLink ?? null,
     },
   };
+}
+
+/**
+ * THE LINE THE ROOM SAYS THE MOMENT THE LAST QUESTION IS ANSWERED.
+ *
+ * Four of the six routes have nothing to add to it: the plan the org stages is
+ * about to say what it will write, in the org's own summary, and a second
+ * sentence from the room ahead of it would be the room speaking for the tool.
+ * The INTAKE is the exception, because what it does NOT do is the fact a banker
+ * has to hear before the plan lands: an asset filed here secures nothing.
+ */
+export function relReadyLine(route: RelRoute, ctx: RelContext, answers: Answers): string {
+  const base = `That is everything the ${REL_ROUTE_WORD[route]} needs. Review the plan below, then file it.`;
+  return route === "intake" ? `${intakeConfirmSentence(ctx, answers)} ${base}` : base;
 }
 
 const NO_PACKAGE_ANCHOR =
@@ -1359,6 +1381,13 @@ export function dossierRowsFor(route: RelRoute, ctx: RelContext, answers: Answer
     return rows;
   }
 
+  if (route === "intake") {
+    /* THE ORG'S OWN IDS, ONE PER RECORD. `items[]` is the same wire key both
+       bulk tools already answer under, and a row the org did not name reads as
+       filed and unverified, which is what a failed read-back actually is. */
+    return intakeDossierRows(ctx, answers, result.items);
+  }
+
   if (route === "annual") {
     rows.push({ icon: "package", label: "credit review", value: named(result.recordName) });
     if (result.status) rows.push({ icon: "maturity", label: "status", value: result.status });
@@ -1482,5 +1511,16 @@ export function readCreateAsk(text: string, route: RelRoute): keyof typeof CREAT
    as the Client Actions panel does (A27.3): hiding it would take the map away
    from the banker. */
 export function routeAvailability(route: RelRoute, data: C360Data, accountId: string | null) {
-  return ACTIONS_BY_ID[REL_FLOWS[route].actionId].availability(data, accountId);
+  const action = ACTIONS_BY_ID[REL_FLOWS[route].actionId];
+  /* THE INTAKE CARRIES NO CLIENT ACTIONS CARD, and that is deliberate rather
+     than an omission. The registry is the map of what the ANALYSIS panel offers,
+     and every card on it is a tile the founder's own panel renders; the intake
+     is a room route whose write arm is not deployed yet, so putting a tile on
+     that panel would advertise a door the org has not opened. Its availability
+     is the relationship itself, which is all an account-anchored create needs.
+
+     THE CHIP IS NEVER HIDDEN EITHER WAY (A27.3). What the registry decides is
+     whether a route's chip is offered as live or shown disabled with a reason. */
+  if (!action) return { available: Boolean(accountId) };
+  return action.availability(data, accountId);
 }
