@@ -345,6 +345,70 @@ public with sharing class C360WriteGuard {
     };
 
     /**
+     * PER-TOOL OBJECT FENCES (2026-09-03, relationship intake).
+     *
+     * The table above fences OBJECTS. That was enough while every arm that could reach an object
+     * was the same arm, and it stopped being enough the day a tool arrived whose whole identity is
+     * what it must NOT touch. Relationship intake files covenants and assets on the BORROWER: a
+     * covenant with its relationship junction and no loan junction, an asset with its ownership
+     * junction and no pledge. Both of those junctions are on the object table as legitimate
+     * creates, because the modification arm authors them, so the object fence alone would let this
+     * tool attach relationship rows to a facility and never say a word.
+     *
+     * So a tool may declare a NARROWER set than the object table permits, and the fence is by
+     * subtraction only: a tool key can take objects away and can never add one, because everything
+     * that passes here still passes assertAllowed() afterwards with the same states and the same
+     * forbidden fields. Nothing that called assertAllowed() before calls anything different now.
+     *
+     * The alternative was a code path that simply never inserts a loan junction. That is not a
+     * control: it is an absence, it cannot be tested by calling the same entry point the tool
+     * calls, and the whole reason this class exists is that "the tool does not do that" is a
+     * weaker sentence than "the tool is refused if it tries".
+     */
+    private static final Map<String, Set<String>> TOOL_CREATE_OBJECTS = new Map<String, Set<String>>{
+        // stage_relationship_intake / execute_relationship_intake. Five objects, all relationship
+        // level. OBJ_LOAN_COVENANT and OBJ_PLEDGE are deliberately absent: attaching intake to a
+        // facility is a different action with its own confirmation.
+        'relationship-intake' => new Set<String>{
+            OBJ_COVENANT, OBJ_ACCOUNT_COVENANT, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_VALUATION
+        }
+    };
+
+    /**
+     * The gate for a tool that fences itself more narrowly than the object table does.
+     *
+     * @param toolId The tool key, one of the keys of TOOL_CREATE_OBJECTS.
+     * @param objectApiName The target object API name.
+     * @param operation One of OP_CREATE, OP_UPDATE, OP_DELETE, OP_CARRY.
+     * @param values The field values the tool intends to write, keyed by field API name.
+     * @throws GuardException when the tool has no fence, when the object is outside that tool's
+     *         fence, or for any reason assertAllowed would refuse it.
+     */
+    public static void assertAllowedForTool(
+        String toolId,
+        String objectApiName,
+        String operation,
+        Map<String, Object> values
+    ) {
+        Set<String> permitted = TOOL_CREATE_OBJECTS.get(toolId);
+        if (permitted == null) {
+            throw new GuardException(
+                'Refused: no per-tool object fence is declared for ' + toolId + '. A tool that asks to be fenced by name ' +
+                'must be on the table before it writes anything.'
+            );
+        }
+        if (!permitted.contains(objectApiName)) {
+            List<String> ok = new List<String>(permitted);
+            ok.sort();
+            throw new GuardException(
+                'Refused: ' + toolId + ' may not write ' + objectApiName + '. It writes only [' + String.join(ok, ', ') +
+                ']. Anything outside that list is a different action with its own confirmation.'
+            );
+        }
+        assertAllowed(objectApiName, operation, values);
+    }
+
+    /**
      * The single gate every domain write in this package passes through (A33.5.8 doctrine).
      *
      * @param objectApiName The target object API name.

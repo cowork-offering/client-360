@@ -196,6 +196,22 @@
     </tools>
     <tools>
         <apiDefinition>
+            <apiIdentifier>aa:apex-StageRelationshipIntake</apiIdentifier>
+            <apiSource>API_CATALOG</apiSource>
+            <operation>StageRelationshipIntake</operation>
+        </apiDefinition>
+        <toolName>stage_relationship_intake</toolName>
+    </tools>
+    <tools>
+        <apiDefinition>
+            <apiIdentifier>aa:apex-ExecuteRelationshipIntake</apiIdentifier>
+            <apiSource>API_CATALOG</apiSource>
+            <operation>ExecuteRelationshipIntake</operation>
+        </apiDefinition>
+        <toolName>execute_relationship_intake</toolName>
+    </tools>
+    <tools>
+        <apiDefinition>
             <apiIdentifier>aa:apex-Customer360Catalog</apiIdentifier>
             <apiSource>API_CATALOG</apiSource>
             <operation>Customer360Catalog</operation>
