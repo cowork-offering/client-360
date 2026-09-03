@@ -119,28 +119,34 @@ describe("the baked bundle IS the observed envelope", () => {
 describe("Hartwell renders the org's relationship coverage, not a sum", () => {
   const bundle = LIVE.borrowers![HARTWELL];
 
-  it("shows 1.02x over the distinct collateral", () => {
+  it("shows 1.09x over the distinct collateral", () => {
+    // The org grew a second package (2026-09-03): seven distinct collateral
+    // records now (the four original plus the plant, the CNC-cell equipment
+    // behind the Proposal loan, and the metrology fleet), $42.37M lendable.
     const text = renderExposure(bundle);
-    expect(text).toContain("1.02×");
-    expect(text).toContain(money(31_600_000));
-    expect(text).toContain("across 4 collateral records");
+    expect(text).toContain("1.09×");
+    expect(text).toContain(money(42_370_000));
+    expect(text).toContain("across 7 collateral records");
   });
 
-  it("never renders the double-counted 59.2MM", () => {
+  it("never renders the double-counted 69.97MM", () => {
     const pledges = (bundle.exposure?.facilities ?? []).flatMap((f) => f.collateral ?? []);
     const doubleCounted = pledges.reduce((n, p) => n + (p.currentLendableValue ?? 0), 0);
-    expect(doubleCounted).toBe(59_200_000);
+    expect(doubleCounted).toBe(69_970_000);
 
     const text = renderExposure(bundle);
     expect(text).not.toContain(money(doubleCounted));
     // And the ratio that sum would have produced.
-    expect(text).not.toContain("1.91×");
+    expect(text).not.toContain("1.81×");
   });
 
-  it("says the relationship clears its floor while two facilities do not", () => {
+  it("says the relationship clears its floor while three facilities do not", () => {
+    // The org grew a second package (2026-09-03): nine facilities now, and a
+    // third one (the new CRE Purchase loan, 0.99x) reads under-covered
+    // alongside the original two.
     const text = renderExposure(bundle);
     expect(text).toContain("Covered");
-    expect(text).toContain("2 of 6 facilities are under-covered at facility level.");
+    expect(text).toContain("3 of 9 facilities are under-covered at facility level.");
   });
 });
 
@@ -166,11 +172,14 @@ describe("the true positives a credit officer must see at a glance", () => {
     expect(text).toContain("0.53×");
   });
 
-  it("flags exactly the two facilities the org flagged", () => {
+  it("flags exactly the three facilities the org flagged", () => {
+    // The org grew a second package (2026-09-03): the new CRE Purchase loan
+    // (0.99x) reads under-covered too, alongside the original Construction
+    // (0.75x) and Equipment (0.53x) facilities.
     const flagged = (bundle.exposure?.facilities ?? []).filter((f) => f.coverageShortfall);
-    expect(flagged.map((f) => f.coverageRatio)).toEqual([0.75, 0.53]);
+    expect(flagged.map((f) => f.coverageRatio)).toEqual([0.75, 0.99, 0.53]);
     const text = renderExposure(bundle);
-    expect((text.match(/Shortfall/g) ?? []).length).toBe(2);
+    expect((text.match(/Shortfall/g) ?? []).length).toBe(3);
   });
 
   it("shows every facility's pledged share, and the drawn balances that are now real", () => {
