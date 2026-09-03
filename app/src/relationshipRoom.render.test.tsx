@@ -637,18 +637,21 @@ describe("the plan, the token and the dossier", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("closes the approval once the call has reached the org", async () => {
+  it("waits on the org once the call has reached it, and never offers the approval again", async () => {
+    let clock = 0;
     const { room } = await driveAnnual(
       depsFor({
         execute: async () =>
           ({ ok: false, error: { code: "TOKEN_REFUSED", message: "The token has already been used." } }) as ToolOutcome<ExecuteResult>,
+        settle: { readState: async () => undefined, wait: async () => undefined, now: () => (clock += 100_000) },
       }),
     );
     click(room.querySelector(".wk-propose")!);
     await settle();
     click(byText(/File the review/));
     await settle();
-    expect(room.textContent).toContain("The filing may have completed despite the error.");
+    expect(room.textContent).toContain("Filing in progress, nCino is still writing.");
+    expect(room.textContent).toContain("Nothing needs approving again");
     expect(byText(/Approval closed/)!.hasAttribute("disabled")).toBe(true);
   });
 

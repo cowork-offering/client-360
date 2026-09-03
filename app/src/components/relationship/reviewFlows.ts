@@ -1,3 +1,4 @@
+import type { SettleDeps } from "../workroom/settleExecution";
 import type { BorrowerBundle, C360Data, Collateral, Covenant } from "../../data/contract";
 import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
@@ -1290,6 +1291,9 @@ export interface RelFlowDeps {
   /** Is there a connector at all. The channel-none doctrine turns on this. */
   available: () => boolean;
   newKey: () => string;
+  /** How the room waits on the org after a dispatched call lost its answer.
+   *  Injected so a test does not spend ninety real seconds; live by default. */
+  settle?: SettleDeps;
 }
 
 export const defaultRelDeps: RelFlowDeps = {

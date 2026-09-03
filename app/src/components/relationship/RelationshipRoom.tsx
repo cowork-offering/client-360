@@ -111,6 +111,7 @@ import { newRequestId } from "../../channel/adapter";
 import { ComposerPlus } from "../composer/ComposerPlus";
 import { EMPTY_BOOK } from "../workroom/elicit";
 import type { PackageEntry } from "../../book/packages";
+import { awaitFiling, FILED_FAILED, FILING_IN_FLIGHT, LIVE_SETTLE, STILL_WRITING } from "../workroom/settleExecution";
 import "../../styles/workroom.css";
 import "../../styles/package-anchor.css";
 import "../../styles/relationship.css";
@@ -1745,18 +1746,41 @@ export function RelationshipRoom({
     }
     setFiling(true);
     setFlow((f) => (f ? { ...f, running: true } : f));
+    /* ONE CALL, REPLAYABLE. The org answers a spent idempotency key off the
+       staging record before any check runs, so asking again after a timeout
+       files nothing and produces the executed result the first answer lost. */
+    const stagingId = staging.stagingId;
+    const planHash = staging.planHash;
+    const decisionToken = staging.decisionToken;
+    const approverUserId = ctx.approver;
+    const run = () =>
+      executeRelPlan(route, { idempotencyKey: keyRef.current, stagingId, planHash, decisionToken, approverUserId }, deps);
     try {
-      const result = await executeRelPlan(
-        route,
-        {
-          idempotencyKey: keyRef.current,
-          stagingId: staging.stagingId,
-          planHash: staging.planHash,
-          decisionToken: staging.decisionToken,
-          approverUserId: ctx.approver,
-        },
-        deps,
-      );
+      let result: Awaited<ReturnType<typeof executeRelPlan>>;
+      try {
+        result = await run();
+      } catch (e) {
+        /* THE CALL REACHED THE ORG AND THE ANSWER DID NOT COME BACK: a filing
+           in progress, not a failure. Wait on the org's own trail, then ask the
+           tool again under the same key. Never a second approval. */
+        if (!(e instanceof RelFlowError && e.dispatched)) throw e;
+        push({ kind: "agent", id: nextId("agent"), text: FILING_IN_FLIGHT });
+        const verdict = await awaitFiling(ctx.accountId, stagingId, deps.settle ?? LIVE_SETTLE);
+        setFlow((f) => (f ? { ...f, running: false } : f));
+        if (verdict.kind === "never-ran") throw e;
+        if (verdict.kind === "unsettled") {
+          setSealed(true);
+          push({ kind: "agent", id: nextId("agent"), text: STILL_WRITING });
+          return;
+        }
+        if (verdict.status === "Failed") {
+          setSealed(true);
+          push({ kind: "agent", id: nextId("agent"), text: FILED_FAILED });
+          return;
+        }
+        setFlow((f) => (f ? { ...f, running: true } : f));
+        result = await run();
+      }
       const dossier: DossierModel = {
         title: REL_FLOWS[route].word,
         rows: dossierRowsFor(route, ctx, answers, result),
@@ -1779,18 +1803,10 @@ export function RelationshipRoom({
     } catch (e) {
       setFlow((f) => (f ? { ...f, running: false } : f));
       push({ kind: "agent", id: nextId("agent"), text: readableError(e) });
-      // ONCE THE CALL HAS REACHED THE ORG the token may be spent and the write
-      // may have landed, so the room stops offering the gesture rather than
-      // arming a retry that would bounce on a burnt single-use token and tell
-      // the banker nothing about what the org did.
-      if (e instanceof RelFlowError && e.dispatched) {
-        setSealed(true);
-        push({
-          kind: "agent",
-          id: nextId("agent"),
-          text: "The filing may have completed despite the error. Do not approve again; check the staging record.",
-        });
-      }
+      /* A dispatched call that the wait could not settle has already said so
+         above and sealed the approval; anything else is the org's own refusal,
+         said in its own words, with the plan still staged. */
+      if (e instanceof RelFlowError && e.dispatched) setSealed(true);
     } finally {
       setFiling(false);
     }
