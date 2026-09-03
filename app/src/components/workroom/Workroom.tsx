@@ -173,6 +173,7 @@ import { useRoomFeed } from "../../intent/feed";
 import { intentFor, intentMailNote } from "../../intent/open";
 import { carriedMailFor } from "../../actions/mailCarry";
 import { sourcePhrase } from "../../intent/contract";
+import { ComposerPlus } from "../composer/ComposerPlus";
 import "../../styles/workroom.css";
 import { ManifestRail } from "../rail/ManifestRail";
 
@@ -979,6 +980,9 @@ export function Workroom({
    *  have landed. The honest move is to stop offering the gesture and say why. */
   const [sealed, setSealed] = useState(false);
   const [draft, setDraft] = useState("");
+  /** The composer input, so the plus menu can write into it and land the caret
+   *  on the placeholder it left behind. */
+  const composerRef = useRef<HTMLInputElement | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   /** The halo is execute's ONLY light, and it breathes out ~5s after landing. */
   const [lit, setLit] = useState(false);
@@ -4463,6 +4467,7 @@ export function Workroom({
               {/* The composer SLEEPS until the brief lands (rule 30). */}
               <div className="wk-composer eg-pill">
                 <input
+                  ref={composerRef}
                   className="wk-txt"
                   value={draft}
                   disabled={!awake || phase === "filed"}
@@ -4485,6 +4490,7 @@ export function Workroom({
                   }}
                   aria-label="Say what should change"
                 />
+                <ComposerPlus room="facility" members={elicitMembers} facilities={reads?.bundle?.exposure?.facilities ?? []} book={book} disabled={!awake || phase === "filed"} input={composerRef} onDraft={setDraft} />
                 <button
                   type="button"
                   className="wk-send"
