@@ -115,4 +115,3 @@ export function buildThreads(): Thread[] {
   }
   return out;
 }
-

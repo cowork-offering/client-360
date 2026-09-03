@@ -8,6 +8,7 @@ import { relOpeningForAccount } from "./relationship/RelationshipRoom";
 import { mcpAvailable } from "../channel/mcp";
 import { MIN_QUERY, searchAccounts, type AccountMatch } from "../book/search";
 import { announce, bookHas, openAccountLive } from "../book/dynamicBook";
+import { currentGlass, setGlass } from "../glassMode";
 import "../styles/cmdk.css";
 
 /* =============================================================================
@@ -203,6 +204,37 @@ export function CommandPalette() {
       label: "Back to worklist",
       kind: "View",
       run: () => dispatch({ type: "GO_HOME" }),
+    });
+
+    /* THE MATERIAL, SWITCHABLE MID-DEMO (founder, 2026-09-03). Liquid is the
+       default and there is no URL to type on a shared screen, so the way back
+       to the frost is a palette row like any other. Two rows rather than one
+       toggle: a toggle row has to say what it will do, which means its label
+       changes under the reader between one keystroke and the next, and a
+       palette whose rows rename themselves is a palette you cannot aim at.
+
+       The switch is two classList calls in glassMode.ts and the next paint. No
+       reload, no remount, nothing here re-renders: the stylesheet is doing all
+       of it. The choice is written to localStorage so the next open keeps it,
+       and a browser that refuses storage still gets the switch for this view.
+
+       ONLY THE TWO MODES A HUMAN WOULD ASK FOR. `?refract=1`, the subtle bend,
+       is a preview lane for judging the two lenses side by side and it has no
+       row: nobody stands in front of a client and asks for the middle one. */
+    const glass = currentGlass();
+    out.push({
+      id: "view:glass-liquid",
+      label: "Glass: liquid",
+      kind: "View",
+      aka: `refraction bend lens ${glass === "liquid" ? "current active on" : "switch turn on"}`,
+      run: () => setGlass("liquid"),
+    });
+    out.push({
+      id: "view:glass-frost",
+      label: "Glass: frost",
+      kind: "View",
+      aka: `plain blur no refraction ${glass === "frost" ? "current active" : "switch turn off"}`,
+      run: () => setGlass("frost"),
     });
 
     return out;

@@ -158,10 +158,25 @@
      are composed. The outer hairline is DARK — a white border makes glass glow
      instead of reading as a cut edge, which is the bug this rule exists for. */
   --glass-hairline: rgba(0, 0, 0, 0.06);
+  /* THE RIM IS THE SLAB'S THICKNESS, AND IT IS EXACTLY THREE LINES (the glass
+     census counts `inset` and expects 3, forever). Reworked 2026-09-03 for the
+     refraction pass: a lit edge needs a LIT SIDE and a SHADOW SIDE, which the
+     old rim did not have. It drew white on top and a softer white underneath,
+     so both edges caught the same light and the pane read as a decal. Now:
+       1. top, 1px of near-solid white, the edge the room's light lands on,
+          crisp (0 blur) rather than the old 1px smudge, which is what makes it
+          read as an EDGE instead of a glow;
+       2. bottom, 1px of ink at low alpha, the underside of the slab, turned
+          away from the light. This is the line that gives the panel depth;
+       3. the full 1px ring, white and quiet, so the left and right sides are
+          still cut rather than open. It sits UNDER the other two (box-shadow
+          paints first-listed on top), and it came down from .28 to .22 so the
+          new dark bottom is not washed out by the ring crossing it.
+     The outer hairline above stays DARK and stays untouched. */
   --glass-rim:
-    inset 0 1px 1px rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.35),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22);
   /* THE BLUR SCALE, by surface size (rule 71). Depth of field is a function of
      how big the pane of glass is and nothing else. The .eg-glass modifiers read
      these, so a surface picks a modifier and never types a number. */

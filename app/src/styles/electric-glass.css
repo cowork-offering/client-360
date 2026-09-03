@@ -295,3 +295,469 @@
     transition: none !important;
   }
 }
+
+/* ============================================================================
+   THE GROUND SHEET: the structure the bend acts on.
+
+   Refraction over a flat field is invisible and the cockpit ground is flat by
+   design, so the bend needs SOMETHING behind the glass. It was four coarse
+   violet strands for about an hour on 2026-09-03 and the founder killed them
+   on sight: "I hate those thick lines. I like the lines in the header as we
+   have right now, but not everywhere." No linework on the page ground, at any
+   alpha. The landing's own weave is untouched and stays exactly where it is.
+
+   What is left is the sheet the drifting blooms hang on, and it exists only in
+   liquid mode: an empty, inert, pointer-transparent layer in every other mode.
+   z -1 keeps it under every written thing while staying above the body's own
+   gradients, and it never creates work: no state, no rAF, no listeners.
+   ========================================================================== */
+.ground-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   REFRACTIVE GLASS (founder brief, 2026-09-03), BEHIND `html.eg-refract`.
+
+   "Blur averages the pixels behind your panel, real glass bends them." The
+   bend is an SVG displacement map (components/GlassFilters.tsx) fed into
+   backdrop-filter AHEAD of the blur, so the backdrop is displaced while it is
+   still sharp and only then softened. Put the blur first and there is nothing
+   left to bend.
+
+   THE BLUR COMES DOWN WITH IT, and that is not a taste call. A 30-38px frost
+   averages the backdrop to a flat field before the eye can read any structure
+   in it, and a bent flat field is still a flat field. Refract mode runs at half
+   the frost, read off each surface's own --eg-blur so the two scales cannot
+   drift apart, which is where the large shapes behind the glass (a card edge,
+   a heading, a table rule) survive far enough to be seen wobbling.
+
+   THE SAFARI FALLBACK IS THE DECLARATION ORDER, NOT A FEATURE QUERY. WebKit
+   rejects url() inside backdrop-filter and drops that declaration on the floor;
+   the plain declaration IMMEDIATELY ABOVE it has already been accepted, so
+   Safari keeps a straight blur and Chromium takes the second, later, winning
+   one. Both lines are required and the order between them is load-bearing.
+   The -webkit- line stays plain for the same reason it exists at all: pre-18
+   WebKit reads only that property, and it would reject the url() too.
+
+   THE CENSUS IS UNTOUCHED. This block changes no box-shadow and no border, and
+   the computed backdrop-filter still contains `blur`, which is how the probe
+   finds a glass surface at all. Three rims in, three rims out.
+
+   OFF BY DEFAULT. Without the class on <html> nothing below matches and the
+   cockpit is byte-for-byte the frost it shipped as.
+   ========================================================================== */
+
+/* THE BIG SURFACES. `.eg-glass` covers the one sheet (hero, room, bar, panel,
+   chat); the named selectors are the surfaces that hand-rolled the recipe
+   before it was a sheet and still carry their own blur: the room's manifest
+   chips, its notices and dossier, the top bar, the whisper, the toast. */
+html.eg-refract .eg-glass,
+html.eg-refract .topbar,
+html.eg-refract .whisper,
+html.eg-refract .wk-notice,
+html.eg-refract .wk-ent,
+html.eg-refract .wk-rescard,
+html.eg-refract .wk-toast {
+  --eg-rblur: calc(var(--eg-blur, 30px) * 0.5);
+  --eg-rsat: var(--eg-sat, 1.8);
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-refract) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+
+/* The hand-rolled surfaces never set --eg-blur, so they state their own half. */
+html.eg-refract .topbar {
+  --eg-rblur: calc(var(--blur-bar) * 0.5);
+  --eg-rsat: 1.85;
+}
+html.eg-refract .whisper,
+html.eg-refract .wk-toast {
+  --eg-rblur: 17px;
+}
+html.eg-refract .wk-notice,
+html.eg-refract .wk-ent,
+html.eg-refract .wk-rescard {
+  --eg-rblur: calc(var(--blur-workroom) * 0.5);
+}
+
+/* THE SMALL ONES, SECOND, SO THEY WIN ON SOURCE ORDER at equal specificity.
+   `#eg-refract-soft` throws a third as far over a shorter wavelength: a small
+   piece of glass is a thinner piece of glass, and a 34px pill given the pane's
+   throw does not bend, it melts. */
+html.eg-refract .eg-glass-chip,
+html.eg-refract .eg-glass-satellite,
+html.eg-refract .wk-hist,
+html.eg-refract .wk-propose {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-refract-soft) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+html.eg-refract .wk-hist {
+  --eg-rblur: 10px;
+  --eg-rsat: 1.6;
+}
+html.eg-refract .wk-propose {
+  --eg-rblur: 12px;
+  --eg-rsat: 1.7;
+}
+
+/* `.eg-glass-micro` (the narrator chip under the FAB) IS PUT BACK ON PLAIN
+   FROST, last, because it wears `.eg-glass` and would otherwise inherit the
+   bend from the first rule. It is a 7px-radius sliver: at that radius the
+   displaced corners have nowhere to land and the edge turns to mush, the same
+   geometry that already exempts it from the triple rim. It is the one surface
+   the bend makes worse rather than better. */
+html.eg-refract .eg-glass-micro {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+}
+
+/* THE WORKROOM PANE IS ON THE BEND (founder, 2026-09-03, after seeing it).
+
+   It was off by default until then, on a performance reading that still
+   stands and is still worth having: 3s rAF counter while text is appended to
+   the room's last agent bubble, medians of three runs, headless, 4-core
+   software rasteriser, no GPU. 14.4 fps with the pane's backdrop-filter
+   removed ENTIRELY, 9.3 fps on the 30px frost, 6.3 fps with the bend. The
+   pane never reaches 50 fps on that box in ANY mode, the no-glass floor
+   included, which is what made the number unusable as a gate rather than what
+   made the bend expensive. The founder judges it on his own machine.
+
+   `eg-refract-pane` is kept as the selector and is now set by every refract
+   mode, so every ?refract=2 link ever written still lands exactly here. */
+html.eg-refract-pane .eg-glass-workroom {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-refract) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+
+/* ============================================================================
+   THE PANE'S DEPTH (founder, 2026-09-03: "a bit more depth would be
+   appreciated"). A slab that floats, in ON and in LIQUID both.
+
+   EVERY PIECE OF IT IS OUTSIDE THE INSET LIST. The census counts `inset` in the
+   computed box-shadow of every backdrop-filter surface and expects exactly
+   three, forever. The two drop shadows therefore go into `--eg-drop`, which
+   `.eg-glass` already appends AFTER `--glass-rim`; the bevel is a pseudo-
+   element with no shadow at all; and the heavier shadow side is the SAME three
+   insets with the second one's alpha moved. Three in, three out.
+   ========================================================================== */
+html.eg-refract .eg-glass-workroom {
+  /* a) TWO SHADOWS, NOT ONE. The wide one is the room's distance from the page
+        and is nearly all penumbra; the tight one is the contact shadow that
+        stops a floating slab from looking pasted on. A single shadow can be
+        one or the other and reads as neither. */
+  --eg-drop:
+    0 40px 120px -30px rgba(16, 4, 30, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  /* c) THE SHADOW SIDE, HARDER. Same three lines the rest of the app carries,
+        with the underside taken from .10 to .16: the pane is the thickest
+        piece of glass in the cockpit and it should have the deepest edge. */
+  --glass-rim:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+/* b) THE BEVEL: 2px of ground edge, lit from the top left and turning to ink at
+      the bottom right. A gradient border is a masked pseudo-element because CSS
+      has no gradient border-color: paint the gradient, then punch the middle
+      out with two masks composited so only the padding ring survives. No
+      box-shadow, so the census never sees it. */
+html.eg-refract .wk-room::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  padding: 2px;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.12) 34%,
+    rgba(26, 7, 54, 0.04) 62%,
+    rgba(26, 7, 54, 0.12) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* d) THE PAGE DIMS INSTEAD OF DISSOLVING. The room used to sit over a 16% scrim
+      AND a 3px blur on the whole page, which flattened the backdrop before the
+      pane ever saw it: a bend needs something with an edge behind it, and the
+      page had been averaged out before it got there. The scrim comes down to
+      10% and the pre-blur to 1px, which is enough separation to read as depth
+      and little enough to leave the pane something to bend. */
+html.eg-refract .wk-scrim {
+  background: rgba(26, 7, 54, 0.1);
+  animation-duration: 300ms;
+}
+html.eg-refract body.wk-open #root {
+  filter: blur(1px) saturate(0.9);
+  opacity: 0.92;
+}
+
+/* ============================================================================
+   LIQUID (founder, 2026-09-03: "more prominent"), BEHIND `html.eg-refract.eg-liquid`.
+
+   The ON pass is a correct bend that almost nobody can see, and the reason is
+   arithmetic rather than taste: a 15 to 19px frost averages the backdrop
+   before the displacement can move anything worth seeing, and a 55 to 66
+   percent white tint puts most of what is left behind a wall. Liquid spends
+   the two things ON was saving.
+
+     1  CLEARER GLASS.  tint .22-.35, frost 6-10px. What is behind the panel is
+                        MEANT to be legible; that is what makes it glass rather
+                        than paper. The pane keeps a top-to-bottom gradient so
+                        the room's own body copy still has a floor to sit on.
+     2  EDGE LENS.      #eg-liquid, GlassFilters.tsx: near-nothing in the
+                        middle, 48-64 at the rim.
+     3  ABERRATION.     three channels, three throws, rim only.
+     4  A GROUND THAT MOVES. blooms at .10-.14 on a 78s drift, so the bend is
+                        visible while nothing is being scrolled at all.
+     5  SPECULAR SWEEP. one 900ms streak on mount and on hover. Never loops:
+                        a looping highlight is a screensaver, not a material.
+
+   THE RIM AND THE HAIRLINE ARE UNTOUCHED. Nothing below writes a box-shadow or
+   a border, so the census stays at three insets and the dark outer hairline
+   survives every mode.
+   ========================================================================== */
+
+/* 1. CLEARER GLASS. The tint is a token on every sheet surface, so this is one
+   assignment and not a sweep through the stylesheet. The frost is set as
+   --eg-rblur directly rather than by halving --eg-blur: the refract halving
+   exists to keep the two scales from drifting, and here the frost is being
+   taken somewhere the frost scale does not go. */
+html.eg-liquid .eg-glass,
+html.eg-liquid .topbar,
+html.eg-liquid .whisper,
+html.eg-liquid .wk-notice,
+html.eg-liquid .wk-ent,
+html.eg-liquid .wk-rescard,
+html.eg-liquid .wk-toast {
+  --eg-rblur: 9px;
+  --eg-tint: rgba(255, 255, 255, 0.3);
+}
+html.eg-liquid .eg-glass-chip,
+html.eg-liquid .eg-glass-satellite,
+html.eg-liquid .wk-hist,
+html.eg-liquid .wk-propose {
+  /* A chip is small and sits on top of everything; at .22 it disappears into
+     its own backdrop, so the small glass keeps a little more body. */
+  --eg-rblur: 7px;
+  --eg-tint: rgba(255, 255, 255, 0.35);
+}
+html.eg-liquid .topbar,
+html.eg-liquid .whisper,
+html.eg-liquid .wk-toast,
+html.eg-liquid .wk-notice,
+html.eg-liquid .wk-ent,
+html.eg-liquid .wk-rescard,
+html.eg-liquid .wk-hist,
+html.eg-liquid .wk-propose {
+  /* The hand-rolled surfaces predate the sheet and paint their own body. */
+  background: var(--eg-tint);
+}
+
+/* THE ROOM IS WHERE THE READING HAPPENS, so it is the one surface that does not
+   take a flat 30 percent. A top-to-bottom gradient keeps the header end of the
+   pane dense enough for the narration to sit on and lets the foot of it go to
+   water, which is also where the client page underneath is most worth seeing.
+   Measured: the room's body copy holds AA against the busiest backdrop the
+   cockpit can put behind it (the numbers are in the addendum). */
+html.eg-liquid .eg-glass-workroom {
+  --eg-rblur: 10px;
+  --eg-tint: rgba(250, 251, 255, 0.34);
+  background:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0) 100%),
+    var(--eg-tint);
+}
+/* The message column carries its own floor, because a wall of body copy over
+   clear glass is the one place clarity and legibility actually trade. It is a
+   plain background on a plain element: no second backdrop-filter, so the census
+   still sees the same surfaces it saw before. */
+html.eg-liquid .wk-col-l {
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.34) 0%,
+    rgba(255, 255, 255, 0.3) 74%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+}
+
+/* 2 and 3. THE LENS AND THE FRINGE. Same shape as the eg-refract block above and
+   for the same reasons: the plain declaration first so WebKit keeps a frost,
+   the url() second so Chromium takes the lens, big surfaces before small ones
+   so source order settles the tie. */
+html.eg-liquid .eg-glass,
+html.eg-liquid .topbar,
+html.eg-liquid .whisper,
+html.eg-liquid .wk-notice,
+html.eg-liquid .wk-ent,
+html.eg-liquid .wk-rescard,
+html.eg-liquid .wk-toast {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-liquid) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+html.eg-liquid .eg-glass-chip,
+html.eg-liquid .eg-glass-satellite,
+html.eg-liquid .wk-hist,
+html.eg-liquid .wk-propose {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-liquid-soft) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+html.eg-liquid.eg-refract-pane .eg-glass-workroom {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: url(#eg-liquid) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+/* The narrator sliver stays off the lens for the reason it is off the bend and
+   off the triple rim: at a 7px radius an 18px rim mask has nowhere to land. */
+html.eg-liquid .eg-glass-micro {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+}
+
+/* 4. THE GROUND THAT MOVES. Two blooms on one element, drifting on a 78s
+   loop. TRANSFORM ONLY: a moving background-position repaints the layer every
+   frame, a transform does not. It is the answer to the honest complaint about
+   the ON pass, which is that the bend only announces itself while something is
+   being scrolled behind it. */
+html.eg-liquid .ground-blooms {
+  position: absolute;
+  inset: -22%;
+  /* THE ALPHAS ARE THE WHOLE ARGUMENT. They were .13 and .11 for one round and
+     that reads as a tinted page, which is not what the ground is for. At .06
+     and .05 they sit within half a step of the canvas's own sanctioned teal
+     (.04) and the page still reads as the Apple canvas: measured, the blooms
+     add a mean 1.18 of 255 over the bare ground against 2.43 at .13/.11, while
+     the glass keeps most of what it had (satellites 5.08 against 5.99, hero
+     0.73 against 1.30).
+
+     LARGE AND SOFT, not small and tight. Tighter blooms give more gradient per
+     unit of colour, which is the efficient trade on paper, but a 300px blob
+     reads as a graphic on the page and a 620px wash reads as light in the
+     room. The canvas already has two large soft radials; these are two more. */
+  background:
+    radial-gradient(620px 420px at 22% 30%, rgba(5, 242, 219, 0.06) 0%, transparent 60%),
+    radial-gradient(700px 460px at 78% 68%, rgba(161, 0, 255, 0.05) 0%, transparent 62%);
+  animation: eg-drift 78s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes eg-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+/* 5. THE SPECULAR SWEEP. A soft diagonal streak crossing each surface ONCE on
+   mount and once per hover, on a pseudo-element so it never touches a surface's
+   own background (the hero paints two radials into its; the sweep would have
+   erased them). Named surfaces only, and every one of them was checked for a
+   free ::before before it went on this list. */
+html.eg-liquid .wk-room::before,
+html.eg-liquid .hero::before,
+html.eg-liquid .topbar::before,
+html.eg-liquid .arcbtn::before,
+html.eg-liquid .wk-ent::before,
+html.eg-liquid .whisper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  background: linear-gradient(
+    104deg,
+    transparent 34%,
+    rgba(255, 255, 255, 0.16) 46%,
+    rgba(255, 255, 255, 0.05) 52%,
+    transparent 62%
+  );
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  background-position: 132% 0;
+  animation: eg-sweep 900ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) 240ms 1 both;
+}
+/* Hover replays it as a TRANSITION rather than a second animation, because an
+   animation cannot be restarted from CSS without removing the element from the
+   flow. The return leg is instant: a streak that slides back out is a toggle,
+   and a highlight is an event. */
+html.eg-liquid .hero:hover::before,
+html.eg-liquid .topbar:hover::before,
+html.eg-liquid .arcbtn:hover::before,
+html.eg-liquid .wk-ent:hover::before,
+html.eg-liquid .whisper:hover::before {
+  background-position: -32% 0;
+  transition: background-position 900ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@keyframes eg-sweep {
+  from {
+    background-position: 132% 0;
+  }
+  to {
+    background-position: -32% 0;
+  }
+}
+
+/* THE IDLE PARK (founder, 2026-09-03: "the mock reacts slowly"). Thirty seconds
+   with no pointer, key, wheel, scroll or touch, or a hidden tab, and both the
+   drift and the sweep stop. GroundSheet.tsx owns the class and carries the
+   honest note about what it is worth: the frame cost in liquid is the lens, not
+   the animation, so this is a battery argument, not a frame-rate one. */
+html.eg-idle .ground-blooms,
+html.eg-idle .wk-room::before,
+html.eg-idle .hero::before,
+html.eg-idle .topbar::before,
+html.eg-idle .arcbtn::before,
+html.eg-idle .wk-ent::before,
+html.eg-idle .whisper::before {
+  animation-play-state: paused;
+}
+
+/* The drift and the sweep are decoration, and decoration stops when the reader
+   has asked for it to. The block at the top of this file already kills every
+   animation and transition under the query; this is the belt for the two that
+   would otherwise be the most noticeable if it ever stopped matching. */
+@media (prefers-reduced-motion: reduce) {
+  html.eg-liquid .ground-blooms {
+    animation: none !important;
+    transform: none !important;
+  }
+  html.eg-liquid .wk-room::before,
+  html.eg-liquid .hero::before,
+  html.eg-liquid .topbar::before,
+  html.eg-liquid .arcbtn::before,
+  html.eg-liquid .wk-ent::before,
+  html.eg-liquid .whisper::before {
+    display: none;
+  }
+}

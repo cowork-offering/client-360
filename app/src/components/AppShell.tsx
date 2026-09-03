@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useApp } from "../state/appState";
+import { GroundSheet } from "./GroundSheet";
 import { TopBar } from "./TopBar";
 import { Landing } from "./Landing";
 import { Whisper } from "./Whisper";
@@ -71,6 +72,12 @@ export function AppShell() {
        hero could never leave the top of the screen. Both views are documents
        now, exactly as the mint has them. */
     <div className="flex min-h-screen flex-col">
+      {/* THE GROUND, BEFORE ANY OF IT. Refraction bends what is behind a panel
+          and the cockpit canvas is flat by design, so on the main pages the
+          bend had nothing to act on. In liquid mode this is what it acts on:
+          two slow blooms, and no linework, which the founder ruled out for the
+          page ground on 2026-09-03. */}
+      <GroundSheet />
       <TopBar />
       <div className="flex flex-1">
         <main className="flex flex-1 flex-col">
