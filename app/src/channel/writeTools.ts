@@ -803,6 +803,24 @@ export interface StagePayloads {
      *  holds them. The org refuses a duplicate junction and a covenant
      *  belonging to another relationship, each by name. */
     covenantAttachesJson?: string | null;
+    /** NET-NEW FACILITIES ON THE NEW VERSION (founder, 2026-09-03), JSON-encoded:
+     *  [{label?, product, amount, termMonths, purpose, amortizedTermMonths?,
+     *  firstPaymentDate?}]. `product` is an org-exact Commercial Loan record-type
+     *  value; the org would STORE anything else and render it wrong, so the tool
+     *  refuses it by name against the catalog it holds.
+     *
+     *  A modification versions the whole PACKAGE, so the new version is where
+     *  new money belongs: the facility is filed on it beside the clones, at
+     *  Qualification with the borrower on its own borrowing structure, carrying
+     *  no chain row and no modification flag because it is a new loan rather
+     *  than a version of one. Every other arm of the same request may target it
+     *  by its LABEL ("new:1") in place of `targetLoanId`, because the id does not
+     *  exist until execution.
+     *
+     *  The PURPOSE lands on the Loan Detail, which nCino creates in its own
+     *  transaction after the filing; the org writes it where that record is
+     *  already there and reports a handoff where it is not. */
+    newFacilitiesJson?: string | null;
   };
   /**
    * RELATIONSHIP INTAKE, built to the frozen contract (2026-09-03).

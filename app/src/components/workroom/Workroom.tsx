@@ -117,6 +117,7 @@ import {
   readArmRemoval,
   readCovenantAttach,
 } from "./orgArms";
+import { newFacilityDelta, readNewFacility, stagedNewFacilities } from "./newFacilityArm";
 import { readCatalog, reconcileChips, type OrgCatalog } from "../../channel/catalog";
 import { bareMemberPick, readSteer } from "./steer";
 import {
@@ -2923,6 +2924,65 @@ export function Workroom({
            instead" still moves the room, and it keeps "modify a new loan" out of
            the origination room over a line that asked to change something that is
            already booked. */
+        /* ========================= A NEW FACILITY ON THE VERSION BEING APPROVED
+
+           (Founder, 2026-09-03: "Do we allow new loans to be created as part of
+           the modification and renewal? This should be fully possible.")
+
+           This runs IN FRONT of the steer, because the steer's answer to "add a
+           new equipment loan" was to restart the room in the create route, and a
+           restart throws away the manifest the banker has been building. On a
+           modification the line is not navigation at all: the credit action
+           versions the whole PACKAGE, and a new loan on the version being
+           approved is where new money belongs.
+
+           The elicitation is stateless. Each question's chips type back the whole
+           sentence with one more answer in it, so the room re-reads the line and
+           reaches the same place rather than holding a half-built facility
+           between turns. The pricing gate is two of those questions, on the same
+           terms a commitment change gets them. */
+        const newFacility = reading ? null : readNewFacility({
+          line,
+          mode: context.mode,
+          members: elicitMembers,
+          staged: stagedNewFacilities(entries).length,
+          generatedAt: reads?.generatedAt,
+        });
+        if (newFacility) {
+          if (newFacility.kind === "ask") {
+            answer({ kind: "agent", id: nextId("agent"), text: newFacility.text, options: newFacility.options });
+            return;
+          }
+          if (newFacility.kind === "handoff") {
+            answer({ kind: "agent", id: nextId("agent"), text: newFacility.text });
+            return;
+          }
+          const anchor = focused ?? brief.members.find(isEligible) ?? brief.members[0] ?? null;
+          if (!anchor) {
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: "This package carries no booked member to anchor the credit action on, so there is no version for a new facility to land on.",
+            });
+            return;
+          }
+          const delta = newFacilityDelta(newFacility.spec, {
+            anchorId: anchor.id,
+            anchorLabel: facilityLabel(anchor, brief.members),
+          });
+          setItems((prev) => [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: newFacility.said },
+            {
+              kind: "chips",
+              id: nextId("chips"),
+              step: mine,
+              chips: [{ key: nextId("chip"), delta, state: "open" }],
+            },
+          ]);
+          return;
+        }
+
         const steer = reading ? null : readSteer(line, elicitMembers);
         if (steer) {
           if (steer.kind === "new-facility") {

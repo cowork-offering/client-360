@@ -2522,7 +2522,16 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
    The grammar is the shell's and it is the same on every route. The WIRE is
    the route's, and it is not: a renewal files a new maturity and a repricing,
    a new facility files four scalars against the package anchor, and neither of
-   them carries a covenant or a pledge. A room that gathered a complete covenant
+   them carries a covenant or a pledge.
+
+   WHAT THIS TABLE IS NOT ABOUT, SINCE 2026-09-03. It says nothing about a NEW
+   FACILITY on the version being approved. That is not a covenant or a pledge
+   arriving on the wrong route: a modification versions the whole PACKAGE, so a
+   new loan on the new version is ordinary practice, `newFacilitiesJson` carries
+   it and `newFacilityArm.ts` stages the card. This table is still exactly right
+   about the three surfaces it names, and it has never governed that one.
+
+   A room that gathered a complete covenant
    on the renewal route and then said nothing about it would be dropping the
    whole thing silently (rule 8); a room that staged it as though it were going
    to be written would be worse.
@@ -2536,7 +2545,9 @@ export function compose(draft: Draft, ctx: ElicitContext): Composition {
  *  the modification: it files covenants and pledges and needs no caveat. */
 const ROUTE_FILES: Record<WorkroomMode, string | null> = {
   modify: null,
-  renew: "The renewal files a new maturity and a repricing, and nothing else moves onto the clone.",
+  renew:
+    "The renewal files a new maturity and a repricing onto the clone, and plans a net-new facility on the new version without filing one, " +
+    "because execution of a renewal is held.",
   create: "The new facility files the product, the amount, the term and the purpose against the package anchor, and nothing else.",
 };
 

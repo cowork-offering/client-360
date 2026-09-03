@@ -58,8 +58,13 @@ export function readSteer(line: string, members: ElicitMember[]): Steer | null {
   if (!text || !ANOTHER.test(text)) return null;
   if (CREATE_NOUN.test(text)) return null;
 
-  /* AN ORIGINATION VERB OPENS THE OTHER ROOM. "add a new loan" is a new
-     facility, and the room says so and hands over rather than steering. */
+  /* AN ORIGINATION VERB OPENS THE OTHER ROOM, ON THE ROUTES WHERE THAT IS TRUE.
+     Since 2026-09-03 it is not true on a modification: the credit action
+     versions the whole PACKAGE and a new loan belongs on the version being
+     approved, so `newFacilityArm.ts` reads the line IN FRONT of this module and
+     stages a card without restarting the room. What reaches here is a line on
+     the create route, where opening that room is the right answer, or a line
+     this reader matches and the facility grammar does not. */
   if (ORIGINATE_VERB.test(text) && /\ba\s+new\b|\banother\b/i.test(text) && !WORK_VERB.test(text)) {
     return {
       kind: "new-facility",
