@@ -181,10 +181,12 @@ describe("watchTool", () => {
     expect(typeof stop).toBe("function");
 
     handler!({ type: "data", result: { payload: { x: 1 }, cache: { storedAt: 9, revalidating: true } } });
-    handler!({ type: "error", error: { code: "server_unavailable", retryable: true } });
+    // A failure the platform did NOT stamp retryable reaches the handler at
+    // once; the retryable one is the retry path, tested below.
+    handler!({ type: "error", error: { code: "not_in_manifest" } });
 
     expect(events[0].data).toMatchObject({ payload: { x: 1 } });
-    expect(events[1].failure).toMatchObject({ code: "server_unavailable", retryable: true });
+    expect(events[1].failure).toMatchObject({ code: "not_in_manifest" });
     stop();
     expect(unsub).toHaveBeenCalled();
   });

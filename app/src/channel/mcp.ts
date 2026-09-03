@@ -317,7 +317,60 @@ export interface CallOptions {
   signal?: AbortSignal;
 }
 
-const jitter = (ms: number) => ms + Math.floor(Math.random() * 250);
+/* ------------------------------------------------------------ retry policy
+
+   ONE policy, for READS ONLY, shared by `callTool` and by the watch wrapper
+   below. The Salesforce-hosted MCP session expires on idle, so the first call
+   after a pause fails `server_unavailable` (stamped retryable) and the very
+   next one succeeds once the connector has re-handshaked. Surfacing that first
+   failure to the banker is the defect: it reads as an outage and, on a watch
+   with no polling, it stuck until the view remounted.
+
+   The rules are the contract's, not ours: at most ONE retry per user-visible
+   refresh, after a short randomised delay, honoring `retryAfterMs` when the
+   platform sent one, and NEVER for a write: `server_unavailable` on a write
+   is an ambiguous outcome, not proof the tool did not run. Authz denials are
+   never retried unattended either: repeating them cannot succeed on its own. */
+
+export const RETRY_MIN_MS = 500;
+export const RETRY_MAX_MS = 1500;
+/** The shell clamps `retryAfterMs` at 60s; never wait longer than that. */
+const RETRY_CEILING_MS = 60_000;
+
+/** Randomised 500-1500ms, never earlier than the platform's own `retryAfterMs`. */
+export function retryDelayMs(failure: { retryAfterMs?: number }, random: () => number = Math.random): number {
+  const jittered = RETRY_MIN_MS + Math.floor(random() * (RETRY_MAX_MS - RETRY_MIN_MS + 1));
+  return Math.min(Math.max(jittered, failure.retryAfterMs ?? 0), RETRY_CEILING_MS);
+}
+
+/** May this READ failure be retried once, unattended? Only on the platform's
+ *  own stamp, and never for a denial that a retry could not fix. */
+export function isRetryableRead(failure: McpFailure): boolean {
+  return failure.retryable === true && !failure.retract && !failure.noCapability;
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/* ------------------------------------------------- connector activity meter
+
+   Two facts the keep-alive needs and nothing else reads: is a call happening
+   right now, and when did the last one start. Both are about the CONNECTOR
+   SESSION, not about data, so they live at the seam that owns every call.  */
+
+let inFlightCalls = 0;
+let lastCallStartedAt = 0;
+
+/** True while at least one connector call is in flight. */
+export function connectorBusy(): boolean {
+  return inFlightCalls > 0;
+}
+
+/** When the most recent connector call STARTED (epoch ms), 0 if none has.
+ *  Session warmth only, never a data freshness claim, which comes off
+ *  `result.cache.storedAt`. */
+export function lastConnectorCallAt(): number {
+  return lastCallStartedAt;
+}
 
 /** Call a connector tool. Resolves with the unwrapped envelope, or rejects
  *  with a normalized {@link McpFailure} — never a raw platform error. */
@@ -333,11 +386,17 @@ export async function callTool<T = unknown>(
   }
 
   const invoke = async (): Promise<McpOk<T>> => {
-    const result = await api.callTool(server, tool, input, {
-      cache: options.cache,
-      signal: options.signal,
-    });
-    return { payload: result.payload as T, cache: result.cache, raw: result };
+    inFlightCalls += 1;
+    lastCallStartedAt = Date.now();
+    try {
+      const result = await api.callTool(server, tool, input, {
+        cache: options.cache,
+        signal: options.signal,
+      });
+      return { payload: result.payload as T, cache: result.cache, raw: result };
+    } finally {
+      inFlightCalls -= 1;
+    }
   };
 
   try {
@@ -345,9 +404,8 @@ export async function callTool<T = unknown>(
   } catch (err) {
     const failure = describeFailure(err, server, tool);
     // AT MOST one retry, reads only, only when the platform stamped it.
-    if (options.read && failure.retryable) {
-      const delay = Math.min(failure.retryAfterMs ?? 400, 60_000);
-      await new Promise((r) => setTimeout(r, jitter(delay)));
+    if (options.read && isRetryableRead(failure)) {
+      await sleep(retryDelayMs(failure));
       try {
         return await invoke();
       } catch (err2) {
@@ -360,7 +418,13 @@ export async function callTool<T = unknown>(
 
 /** Register a live subscription. Returns a SYNCHRONOUS unsubscribe; store it
  *  before anything can fire. All failures — registration included — arrive on
- *  the handler as error events, so the caller keeps its static experience. */
+ *  the handler as error events, so the caller keeps its static experience.
+ *
+ *  A watch is a READ, so it carries the same retry-once policy `callTool` does:
+ *  a retryable failure is re-read once after a randomised 500-1500ms before the
+ *  handler is told anything went wrong. That is the whole fix for the banner
+ *  that stuck after an idle MCP session expired: the re-handshake lands inside
+ *  the retry window and the viewer never sees a failure at all. */
 export function watchTool(
   server: string,
   tool: string,
@@ -373,16 +437,61 @@ export function watchTool(
     handler({ failure: describeFailure({ code: "capability_disabled" }, server, tool) });
     return () => {};
   }
+
+  let stopped = false;
+  let retrying = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const deliver = (result: McpCallResult) =>
+    handler({ data: { payload: result.payload, cache: result.cache, raw: result } });
+
+  const onFailure = (failure: McpFailure) => {
+    if (stopped) return;
+    // A retry already in flight owns this refresh: a second error event while
+    // it runs must not start a second retry, and must not raise the banner the
+    // retry is about to settle.
+    if (retrying) return;
+    if (!isRetryableRead(failure)) {
+      handler({ failure });
+      return;
+    }
+    retrying = true;
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (stopped) return;
+      // Re-read the SAME identity with a forced refresh: the result also
+      // overwrites the cache entry the watch replays from.
+      void (async () => {
+        try {
+          const result = await api.callTool(server, tool, input, { cache: { refresh: true } });
+          retrying = false;
+          if (!stopped) deliver(result ?? {});
+        } catch (err) {
+          retrying = false;
+          if (!stopped) handler({ failure: describeFailure(err, server, tool) });
+        }
+      })();
+    }, retryDelayMs(failure));
+  };
+
+  let stop: () => void = () => {};
   try {
-    return api.watchTool(
+    stop = api.watchTool(
       server,
       tool,
       input,
       (ev) => {
+        if (stopped) return;
         if (ev.type === "data") {
-          handler({ data: { payload: ev.result.payload, cache: ev.result.cache, raw: ev.result } });
+          // Live data cancels a pending retry: the refresh already landed.
+          retrying = false;
+          if (timer !== undefined) {
+            clearTimeout(timer);
+            timer = undefined;
+          }
+          deliver(ev.result);
         } else {
-          handler({ failure: describeFailure(ev.error, server, tool) });
+          onFailure(describeFailure(ev.error, server, tool));
         }
       },
       {
@@ -395,6 +504,15 @@ export function watchTool(
     handler({ failure: describeFailure(e, server, tool) });
     return () => {};
   }
+
+  return () => {
+    stopped = true;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    stop();
+  };
 }
 
 /* ------------------------------------------------------ envelope unwrapping

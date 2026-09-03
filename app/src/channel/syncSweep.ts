@@ -46,6 +46,12 @@ export interface SyncResult {
   history?: ActionHistoryRow[];
   /** True when a read failed and its section kept the previous value. */
   partial: boolean;
+  /** Lines whose own call came back with data this sweep. */
+  refreshed: number;
+  /** Lines that failed TRANSIENTLY, after `callTool` had already retried once.
+   *  These are "still unreachable", which is a different sentence from a line
+   *  that refused for a reason a retry could never fix. */
+  unreachable: number;
   /** Slow-tier reads that actually ran, so the caller can remember when. */
   fetchedAt?: Record<string, number>;
 }
@@ -185,8 +191,10 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   // moves; the bridge simply stops seeing a burst.
   //
   // There is NO retry here on purpose. `callTool` already retries once for a
-  // read the platform stamped retryable, so a second layer would mean two
-  // retries and a bigger burst — the opposite of the fix.
+  // read the platform stamped retryable (the one policy, shared with the
+  // watches, see `retryDelayMs` in channel/mcp.ts), so a second layer here
+  // would mean two retries and a bigger burst: the opposite of the fix. A line
+  // that still fails after that retry is what `unreachable` counts.
   const pace = createPacer({ gap: opts.launchGapMs ?? LAUNCH_GAP_MS, limit: opts.maxInFlight ?? MAX_IN_FLIGHT, sleep });
 
   // Nothing here may reject unhandled while a slower line is still displaying.
@@ -232,6 +240,8 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   const patch: Partial<BorrowerBundle> = {};
   let storedAt: number | undefined;
   let partial = false;
+  let refreshed = 0;
+  let unreachable = 0;
   let requests: ActivityEntry[] = [];
   let clientRequests: ClientRequest[] = [];
   let historyRows: ActionHistoryRow[] | undefined;
@@ -259,6 +269,10 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
         return;
       }
       partial = true;
+      // Retryable ⇒ the platform stamped it and `callTool` already spent the
+      // one retry. Anything else refused for its own reason and is not an
+      // unreachability claim.
+      if ((outcome.e as McpFailure)?.retryable === true) unreachable += 1;
       line.state = "failed";
       line.detail = (outcome.e as McpFailure)?.fix ?? KEPT;
       emit();
@@ -272,6 +286,7 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
       line.detail = landed.failed;
     } else {
       line.state = "done";
+      refreshed += 1;
       if (landed) line.detail = landed;
     }
     emit();
@@ -349,5 +364,20 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
     return matched.length ? `${matched.length} matched` : "nothing new";
   });
 
-  return { lines, patch, storedAt, requests, clientRequests, history: historyRows, partial, fetchedAt };
+  return { lines, patch, storedAt, requests, clientRequests, history: historyRows, partial, refreshed, unreachable, fetchedAt };
+}
+
+/**
+ * The one sentence the console closes on about REACHABILITY.
+ *
+ * The banker needs to know which of two things happened: the org answered and
+ * the relationship was refreshed, or a line is still unreachable after the
+ * retry the read layer already spent. Collapsing those into one "partial" was
+ * how a transient covenant read came to look like a failing covenant position.
+ */
+export function reachReport({ refreshed, unreachable }: { refreshed: number; unreachable: number }): string {
+  if (unreachable > 0) {
+    return `${unreachable} ${unreachable === 1 ? "line" : "lines"} still unreachable after retry.`;
+  }
+  return `Reachable, ${refreshed} ${refreshed === 1 ? "line" : "lines"} refreshed.`;
 }

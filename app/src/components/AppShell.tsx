@@ -13,6 +13,7 @@ import { EmptyState } from "./ui";
 import { WorkroomHost } from "./workroom/WorkroomHost";
 import { RelationshipRoomHost } from "./relationship/RelationshipRoom";
 import { buildWorklistRows } from "../data/worklistRows";
+import { useKeepAlive } from "../channel/keepAlive";
 
 type ViewRef = React.RefObject<HTMLDivElement | null>;
 
@@ -40,6 +41,10 @@ function useViewSwitch(home: ViewRef, account: ViewRef, current: "home" | "accou
 
 export function AppShell() {
   const { data, worklist, state } = useApp();
+  /* KEEP THE CONNECTOR SESSION WARM while the cockpit is open. One cheap read
+     every four minutes, silent, paused while the page is hidden. See
+     channel/keepAlive.ts for why the Salesforce-hosted session needs it. */
+  useKeepAlive();
   const staged =
     state.accountId
       ? (data.borrowers ?? {})[state.accountId] ??

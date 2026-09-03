@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useApp } from "../state/appState";
 import { Portal } from "./Portal";
 import { mcpAvailable } from "../channel/mcp";
-import { runSyncSweep, type SyncLine } from "../channel/syncSweep";
+import { reachReport, runSyncSweep, type SyncLine } from "../channel/syncSweep";
 import { noteMailArrival } from "../actions/mailRow";
 import { dataVersionOf, saveOverlay } from "../state/syncOverlay";
 import { diffBundles, deltaReport, type DeltaField } from "../data/delta";
@@ -150,6 +150,11 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
     const before = bundle;
     let deltas: DeltaField[] = [];
     let requestCount = 0;
+    /* Reachability is its own sentence, ahead of the delta. "Everything
+       current, nothing new" after a line failed transiently read as an
+       all-clear, which is part of why the covenant position looked like it was
+       failing on Sync. */
+    let reach: string | null = null;
     try {
       const result = await runSyncSweep({
         accountId,
@@ -163,6 +168,7 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
       // what the org just returned, merged the same way the view merges it.
       deltas = diffBundles(before, { ...before, ...result.patch });
       requestCount = result.requests.length;
+      reach = reachReport(result);
 
       // The client's ask enters by the SAME door a staged request does, so the
       // modification ticket prefills from it with CLIENT_REQUEST provenance and
@@ -193,7 +199,7 @@ export function SyncButton({ accountId, accountName, bundle }: { accountId: stri
       // A sweep that falls over keeps the workspace exactly as it was. The
       // per-line failures already said what did not come back.
     } finally {
-      const summary = deltaReport(deltas, requestCount);
+      const summary = [reach, deltaReport(deltas, requestCount)].filter(Boolean).join(" ");
       setReport(summary);
       // Hold the report on the console briefly, then lift the scrim and let
       // the changed values pulse where they sit.

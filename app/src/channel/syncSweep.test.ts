@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runSyncSweep } from "./syncSweep";
-import { DETAIL_TOOLS, SERVERS, TOOLS } from "./mcp";
+import { reachReport, runSyncSweep } from "./syncSweep";
+import { DETAIL_TOOLS, RETRY_MAX_MS, SERVERS, TOOLS } from "./mcp";
 import { diffBundles, deltaReport } from "../data/delta";
 import type { BorrowerBundle } from "../data/contract";
 import envelopes from "../data/observed-exposure-envelopes.json";
@@ -278,5 +278,87 @@ describe("the overlay carries the coverage members the org added", () => {
     expect(drawnNoCover[0].coverageNote).toContain("no collateral is pledged");
     expect(exp.facilities![2].collateral![0].amountPledged).toBe(5_000_000);
     expect(exp.facilities![2].collateral![0].advanceRateSource).toBe("Collateral type default");
+  });
+});
+
+describe("reachability is its own sentence on the console", () => {
+  /* THE FOUNDER'S SYMPTOM: the covenant position looked like it was "failing on
+     Sync". It was not. An idle-expired MCP session failed the covenant read
+     transiently, the line degraded correctly, and the summary then said
+     "Everything current, nothing new", which reads as an all-clear over a
+     section that never came back. Reachability now gets its own sentence, and
+     it distinguishes a transient miss from a refusal a retry cannot fix. */
+
+  const allGood = () => installMcp((_s, tool) => (tool === TOOLS.mailSearch ? { payload: { value: [] } } : ok({ ok: true })));
+
+  it("says how many lines refreshed when the org answered", async () => {
+    allGood();
+    const result = await runSyncSweep(SWEEP);
+    expect(result.unreachable).toBe(0);
+    expect(result.refreshed).toBe(9); // portfolio + six detail + history + mail
+    expect(reachReport(result)).toBe("Reachable, 9 lines refreshed.");
+  });
+
+  it("retries a retryable line ONCE, and says nothing about it when the retry lands", async () => {
+    vi.useFakeTimers();
+    let covenantAttempts = 0;
+    installMcp((_s, tool) => {
+      if (tool === TOOLS.mailSearch) return { payload: { value: [] } };
+      if (tool === TOOLS.covenants) {
+        covenantAttempts += 1;
+        if (covenantAttempts === 1) throw { code: "server_unavailable", message: "session expired", retryable: true };
+      }
+      return ok({ ok: true });
+    });
+
+    const run = runSyncSweep(SWEEP);
+    await vi.advanceTimersByTimeAsync(RETRY_MAX_MS + 50);
+    const result = await run;
+    vi.useRealTimers();
+
+    expect(covenantAttempts).toBe(2); // the one retry, spent inside callTool
+    expect(result.lines.find((l) => l.id === "covenants")!.state).toBe("done");
+    expect(result.unreachable).toBe(0);
+    expect(reachReport(result)).toBe("Reachable, 9 lines refreshed.");
+  });
+
+  it("reports a line STILL unreachable after that retry", async () => {
+    vi.useFakeTimers();
+    let covenantAttempts = 0;
+    installMcp((_s, tool) => {
+      if (tool === TOOLS.mailSearch) return { payload: { value: [] } };
+      if (tool === TOOLS.covenants) {
+        covenantAttempts += 1;
+        throw { code: "server_unavailable", message: "session expired", retryable: true };
+      }
+      return ok({ ok: true });
+    });
+
+    const run = runSyncSweep(SWEEP);
+    await vi.advanceTimersByTimeAsync(RETRY_MAX_MS + 50);
+    const result = await run;
+    vi.useRealTimers();
+
+    expect(covenantAttempts).toBe(2);
+    const line = result.lines.find((l) => l.id === "covenants")!;
+    expect(line.state).toBe("failed");
+    expect(line.detail).toContain("briefly unreachable");
+    expect(result.unreachable).toBe(1);
+    expect(reachReport(result)).toBe("1 line still unreachable after retry.");
+    // The section kept its previous value, exactly as before.
+    expect(result.patch.covenants).toBeUndefined();
+    expect(result.patch.exposure).toBeDefined();
+  });
+
+  it("does NOT call a refusal unreachable: only a retryable failure is", async () => {
+    installMcp((_s, tool) => {
+      if (tool === TOOLS.mailSearch) return { payload: { value: [] } };
+      if (tool === TOOLS.covenants) throw { code: "tool_error", message: "no access to covenants" };
+      return ok({ ok: true });
+    });
+    const result = await runSyncSweep(SWEEP);
+    expect(result.lines.find((l) => l.id === "covenants")!.state).toBe("failed");
+    expect(result.unreachable).toBe(0);
+    expect(reachReport(result)).toBe("Reachable, 8 lines refreshed.");
   });
 });
