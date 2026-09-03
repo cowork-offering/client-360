@@ -26,6 +26,7 @@
    ============================================================================= */
 
 import type { Connection, LegalEntity } from "./contract";
+import { fmtMoney } from "./format";
 
 /**
  * Roles the MIRROR side generates: the same edge, described from the far end.
@@ -319,4 +320,140 @@ export function aggregateGuarantorSignals(
   return [...groups.values()]
     .sort((a, b) => a.firstSeen - b.firstSeen)
     .map(({ firstSeen: _f, ...row }) => row);
+}
+
+
+/* ------------------------------------------------------ the party edges
+
+   EVERY PARTY EDGE TERMINATES ON THE BORROWER ACCOUNT.
+
+   Founder, 2026-09-03, anchored on the graph pane: "line from James Hartwell is
+   not going to the borrower." Two defects sat behind the one symptom.
+
+     - Only parties carrying an ownership percent became nodes. A guarantor with
+       no equity reached the glass as a text row in a side card with no edge at
+       all, so the read's own answer to "who guarantees this" was drawn nowhere.
+
+     - The party that DID get an edge and happened to sit directly above the
+       borrower got a straight vertical path, whose bounding box is zero pixels
+       wide. An objectBoundingBox gradient refuses to paint a shape with no
+       width (SVG 1.1 §13.2.4), so that one edge rendered as nothing.
+
+   The graph the two reads support is a STAR: the borrower account in the
+   middle, ONE edge per party, the role on the edge. Facilities are not nodes
+   and must not become them — a guarantor on six of seven loans is one
+   obligation with a coverage count, not six lines into six boxes.
+   ======================================================================== */
+
+/** Which way the ownership runs, told by the role word the collapse kept. */
+export type EdgeDirection = "toBorrower" | "fromBorrower";
+
+/** Roles where the COUNTERPARTY holds the equity: the arrow lands on the
+ *  borrower. Both halves of the Hartwell read are here — the holding company
+ *  is the "Parent", the two people are "Owner" and "Co-Owner". */
+const PARTY_OWNS_ACCOUNT = /owner|parent|shareholder|member|principal|holding/i;
+/** Roles where the ACCOUNT holds the equity: the arrow points back at the
+ *  party. "Child" survives the mirror collapse only when no side described the
+ *  counterparty in its own terms, and then it is the fact. */
+const ACCOUNT_OWNS_PARTY = /child|subsidiar/i;
+
+export function edgeDirection(roles: string[]): EdgeDirection {
+  if (roles.some((r) => PARTY_OWNS_ACCOUNT.test(r))) return "toBorrower";
+  return roles.some((r) => ACCOUNT_OWNS_PARTY.test(r)) ? "fromBorrower" : "toBorrower";
+}
+
+export interface PartyEdge {
+  /** The party, and the source node of the edge. */
+  name: string;
+  counterpartyId?: string;
+  /** Every role this party holds, once each, connection role first. */
+  roles: string[];
+  /** The edge label: the roles, the guaranty type and cap, the coverage. */
+  label: string;
+  /** Equity in the borrower, and ONLY from the connections read. */
+  ownershipPercent: number | null;
+  direction: EdgeDirection;
+}
+
+export interface PartyGraph {
+  /** The one node every edge terminates on. */
+  borrowerName: string;
+  /** What the involvement read says about the borrower itself. */
+  borrowerLabel: string;
+  edges: PartyEdge[];
+}
+
+/** Push a segment unless the label already carries that word. */
+function pushOnce(into: string[], seen: Set<string>, word: string | null | undefined): void {
+  const w = (word ?? "").trim();
+  if (!w || seen.has(w.toLowerCase())) return;
+  seen.add(w.toLowerCase());
+  into.push(w);
+}
+
+/**
+ * One party's roles, in the org's own words, on one line.
+ *
+ * The guaranty type and its cap ride with the guaranty role, and the coverage
+ * count rides with the involvement it counts: "Guarantor · Unlimited · 6
+ * facilities" is the shape of the obligation said once.
+ *
+ * THE INVOLVEMENT'S OWN `ownershipPercent` IS NOT EQUITY. The org writes 100 on
+ * a guaranty row for the share of the obligation, and on the borrower's own row
+ * for the share it borrows. Printing it beside a name in an ownership tree
+ * claims a stake the credit file does not record, so equity comes from the
+ * connections read alone.
+ */
+function partyLabel(connectionRole: string | undefined, involvements: AggregatedInvolvement[]): string {
+  const segs: string[] = [];
+  const seen = new Set<string>();
+  pushOnce(segs, seen, connectionRole);
+  for (const e of involvements) {
+    pushOnce(segs, seen, involvementRole(e));
+    if (e.guarantyAmountType) segs.push(e.guarantyAmountType);
+    if (isGuarantyRole(e) && e.contingentAmount != null) segs.push(fmtMoney(e.contingentAmount));
+    if (e.facilityCount > 1) segs.push(`${e.facilityCount} facilities`);
+  }
+  return segs.join(" · ");
+}
+
+/**
+ * THE STAR: the borrower account, and one edge per party onto it.
+ *
+ * Built off the roster, so a party the two reads both name is one edge holding
+ * everything both know — never one edge for the ownership and a second for the
+ * guaranty. The borrower's own involvement is not an edge to itself: it is the
+ * label on the node the edges land on.
+ */
+export function partyGraph(
+  connections: Connection[] | undefined,
+  entities: LegalEntity[] | undefined,
+  borrowerName: string,
+): PartyGraph {
+  const key = borrowerName.trim().toLowerCase();
+  const roster = relationshipRoster(connections, entities);
+  let borrowerLabel = "";
+  const edges: PartyEdge[] = [];
+
+  for (const p of roster) {
+    if (p.name.trim().toLowerCase() === key) {
+      borrowerLabel = partyLabel(undefined, p.involvements);
+      continue;
+    }
+    const roles = [
+      ...(p.connection?.role ? [p.connection.role] : []),
+      ...p.involvements.map(involvementRole),
+    ].filter((r, i, all) => all.findIndex((o) => o.toLowerCase() === r.toLowerCase()) === i);
+
+    edges.push({
+      name: p.name,
+      counterpartyId: p.counterpartyId,
+      roles,
+      label: partyLabel(p.connection?.role, p.involvements),
+      ownershipPercent: p.connection?.ownershipPercent ?? null,
+      direction: edgeDirection(roles),
+    });
+  }
+
+  return { borrowerName, borrowerLabel, edges };
 }
