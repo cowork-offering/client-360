@@ -72,7 +72,13 @@ body.wk-open #root {
 /* ------------------------------------------------------------------- room
    ENTRANCE IS OPACITY-ONLY. Safari tears the blur on any transform animated
    over a rounded backdrop-filter surface. The seed circle carries all the
-   travel (rule 58); the room simply arrives. */
+   travel (rule 58); the room simply arrives.
+
+   THE PANE PAINTS NO GLASS OF ITS OWN (GLASS-LEAN, founder, 2026-09-03: input
+   latency on liquid, worst here). `.wk-glass-sheet` below carries the tint,
+   the blur, the rim and the hairline now; this element keeps only what a
+   repaint of its streaming content never touches: position, overflow, the
+   drop shadow (electric-glass.css) and the bevel (`.wk-room::after`). */
 .wk-room {
   position: fixed;
   inset: 14px;
@@ -81,17 +87,60 @@ body.wk-open #root {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  animation: wk-fade 300ms var(--ease-settle) both;
+}
+
+/* THE PANE'S GLASS SHEET, and the whole reason it exists: `backdrop-filter`
+   forces a CPU rasterisation of everything under it on every change to what it
+   covers, and the pane's own content (the narration streaming in) changed on
+   every frame while it sat on the SAME element as the filter. Splitting the
+   filter onto a childless, contentless layer means the sheet only has to be
+   re-rasterised when the CLIENT PAGE moves behind it, never when the room's
+   own text repaints.
+
+   ONE ELEMENT, THREE JOBS: the tint background that used to live on `.wk-room`
+   itself (the two blooms are the room's own light, riding over the material
+   tint below them, same as before); the blur, in electric-glass.css, which
+   reads the SAME `--eg-blur` / `--eg-tint` / `--eg-rblur` custom properties
+   `.eg-glass-workroom` still sets on the pane, because a custom property
+   inherits from an ancestor to a descendant and this sheet is exactly that;
+   and the triple rim plus the dark hairline, so the glass census still counts
+   one backdrop-filter surface with three insets here, just moved one element
+   down. `translateZ(0)` promotes it to its own compositor layer, so a paint on
+   the pane's content never has to walk back up through the filtered layer to
+   get composited. */
+.wk-glass-sheet {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transform: translateZ(0);
+  z-index: 0;
   /* The two blooms ride ON TOP of the glass tint the material class sets, so
      the recipe stays in one place and this only adds the room's own light. */
   background:
     radial-gradient(640px 300px at 88% -10%, rgba(161, 0, 255, 0.045) 0%, transparent 58%),
     radial-gradient(480px 260px at -4% 104%, rgba(5, 242, 219, 0.035) 0%, transparent 55%),
     var(--eg-tint);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--ink);
-  animation: wk-fade 300ms var(--ease-settle) both;
+}
+
+/* EVERYTHING THE BANKER READS SITS ABOVE THE SHEET. The header, the earlier-
+   steps chip and the body are the pane's only real children besides the sheet
+   (the toast is a fourth, and Peek portals out rather than nesting here); none
+   of them types its own z-index, so this is the one place that promise is
+   kept.
+
+   `:has(> .wk-glass-sheet)` keeps this off RelationshipRoom.tsx's own
+   `.wk-room.eg-glass-workroom` (a separate pane, no sheet child, out of scope
+   here): without it every child of THAT room would also be pinned to
+   position:relative/z-index:1 for no reason. */
+.wk-room.eg-glass-workroom:has(> .wk-glass-sheet) > :not(.wk-glass-sheet) {
+  position: relative;
+  z-index: 1;
 }
 
 /* Button reset, at ZERO specificity. `.wk-room button` (0,1,1) outranks every

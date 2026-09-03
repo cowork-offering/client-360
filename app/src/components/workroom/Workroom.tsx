@@ -4979,6 +4979,16 @@ export function Workroom({
           aria-modal="true"
           aria-label={title}
         >
+          {/* THE PANE'S OWN GLASS, ON ITS OWN LAYER (founder, 2026-09-03: input
+              latency on liquid, worst in this room). The pane used to carry its
+              backdrop-filter on the same element as its streaming content, so
+              every narration repaint re-ran Chromium's CPU rasterisation of the
+              url() lens over the WHOLE pane. This childless sheet is the only
+              thing that paints the tint, the blur and the rim now; the pane
+              itself keeps layout, overflow, the drop shadow and the bevel, and
+              its content sits in its own stacking layer above the sheet. See
+              electric-glass.css / workroom.css for the recipe. */}
+          <div className="wk-glass-sheet" aria-hidden="true" />
           {/* ONE SLIM LINE (rule 44): the mark, one word, four dots, close. */}
           <header className="wk-head">
             <BrandGlyph />

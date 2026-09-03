@@ -124,6 +124,53 @@
   --eg-tint: rgba(250, 251, 255, 0.56);
   --eg-drop: 0 30px 90px rgba(16, 4, 30, 0.35);
 }
+
+/* THE PANE NEVER PAINTS ITS OWN GLASS (GLASS-LEAN, founder, 2026-09-03: input
+   latency on liquid, worst in the workroom). `.wk-glass-sheet` (workroom.css)
+   is a childless layer that now carries the tint, the blur and the rim; every
+   custom property above (`--eg-blur`, `--eg-sat`, `--eg-tint`, `--eg-drop`,
+   and the mode blocks below that still target `.eg-glass-workroom` to set
+   `--eg-rblur` / `--glass-rim` / `--eg-drop`) keeps being set HERE, on the
+   pane, because a custom property inherits down to the sheet and would not
+   inherit back up if it moved there instead.
+
+   `!important` IS THE POINT, not a shortcut around one. `.eg-glass` and every
+   per-mode block below it (`html.eg-refract .eg-glass`, `html.eg-liquid
+   .eg-glass`, …) still match this element, because it still needs to be one
+   of them for its custom properties to resolve, and several of those blocks
+   carry more classes in their selector than a plain override of
+   `.wk-room.eg-glass-workroom` does. This is the one property set on this
+   element that must never lose that fight, in this mode or the next one
+   anybody adds.
+
+   `:has(> .wk-glass-sheet)` IS THE SCOPE, NOT DECORATION. RelationshipRoom.tsx
+   renders its own, separate `.wk-room.eg-glass.eg-glass-workroom` pane (a
+   second flow, out of scope for this pass) with no sheet child of its own;
+   without this guard the reset below would strip ITS backdrop-filter too and
+   leave it with nothing painting at all. */
+.wk-room.eg-glass-workroom:has(> .wk-glass-sheet) {
+  background: none !important;
+  border: none !important;
+  box-shadow: var(--eg-drop) !important;
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* THE SHEET'S OWN RECIPE, FROST DEFAULT. Same shape as `.eg-glass` above,
+   read off the same custom properties by inheritance, because `.wk-glass-sheet`
+   deliberately carries no material class of its own: it is not a second
+   place the recipe is written down, it is the first one's values landing on a
+   different element. The mode blocks below layer the bend on top of this the
+   same way they used to layer it on the pane. */
+.wk-glass-sheet {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim);
+}
+
 .eg-glass-bar {
   --eg-blur: var(--blur-bar);
   --eg-sat: 1.85;
@@ -431,8 +478,14 @@ html.eg-refract .eg-glass-micro {
    made the bend expensive. The founder judges it on his own machine.
 
    `eg-refract-pane` is kept as the selector and is now set by every refract
-   mode, so every ?refract=2 link ever written still lands exactly here. */
-html.eg-refract-pane .eg-glass-workroom {
+   mode, so every ?refract=2 link ever written still lands exactly here.
+
+   GLASS-LEAN: this used to land on `.eg-glass-workroom` (the pane) directly;
+   it now lands on its `.wk-glass-sheet`, which is the only element left that
+   is allowed to carry a backdrop-filter. `--eg-rblur` / `--eg-rsat` are still
+   set on the pane by the generic `html.eg-refract .eg-glass` block above, and
+   the sheet reads them the same way it reads every other custom property. */
+html.eg-refract-pane .eg-glass-workroom .wk-glass-sheet {
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
   backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
@@ -589,10 +642,16 @@ html.eg-liquid .wk-propose {
    pane dense enough for the narration to sit on and lets the foot of it go to
    water, which is also where the client page underneath is most worth seeing.
    Measured: the room's body copy holds AA against the busiest backdrop the
-   cockpit can put behind it (the numbers are in the addendum). */
+   cockpit can put behind it (the numbers are in the addendum).
+
+   `--eg-rblur` / `--eg-tint` stay set HERE, on the pane, because the sheet
+   reads them by inheritance; the background they feed moved to the sheet
+   itself, below, since the pane no longer paints one. */
 html.eg-liquid .eg-glass-workroom {
   --eg-rblur: 10px;
   --eg-tint: rgba(250, 251, 255, 0.34);
+}
+html.eg-liquid .eg-glass-workroom .wk-glass-sheet {
   background:
     linear-gradient(to bottom, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0) 100%),
     var(--eg-tint);
@@ -659,8 +718,10 @@ html.eg-liquid .wk-propose {
   backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
 }
 
-/* THE BIG LENS: the pane and the bar. */
-html.eg-liquid.eg-refract-pane .eg-glass-workroom,
+/* THE BIG LENS: the pane and the bar. The pane's half of this used to read
+   `html.eg-liquid.eg-refract-pane .eg-glass-workroom`; it now reads its
+   `.wk-glass-sheet`, for the same reason every other mode block above does. */
+html.eg-liquid.eg-refract-pane .eg-glass-workroom .wk-glass-sheet,
 html.eg-liquid .topbar {
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
