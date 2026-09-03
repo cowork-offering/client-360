@@ -3162,3 +3162,167 @@ body.wk-open #root {
   max-width: 420px;
   line-height: 1.5;
 }
+
+/* ---- what was filed, on the card that survives the drain (founder, 2026-09-04:
+        "the cinematic closing with the button, please include the card with WHAT
+        HAS BEEN GENERATED as well; cinematic, elegant").
+
+        THE RAIL WAS THE ONLY SURFACE THAT LISTED THE WRITES with their org ids,
+        and beat one wipes it. The ledger moves onto the card, in the rail's own
+        grammar: icon, title, target, before → after, id. The rows are a GRID and
+        not a stack of flex lines, because a ledger a banker reads down has to
+        align down; every cell keeps its column whether or not its neighbour has
+        content, which is why each class names its own track. */
+.wk-ex[data-finale-card] .wk-rescard {
+  /* The star fills the pane the finale centred for it. 420px is the width of a
+     card that says four things; this one says the whole change set. */
+  max-width: none;
+  width: 100%;
+}
+.wk-rescard .rc-fl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+.wk-rescard .rc-fl-h,
+.wk-rescard .rc-fl-r {
+  opacity: 0;
+  animation: wk-fl-rise var(--wk-fl-ms, 320ms) var(--ease-settle) forwards;
+}
+@keyframes wk-fl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.wk-rescard .rc-fl-h {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding-top: 2px;
+}
+.wk-rescard .rc-fl-t {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.wk-rescard .rc-fl-n {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.wk-rescard .rc-fl-r {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+.wk-rescard .rc-fl-r .tico {
+  grid-column: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+}
+.wk-rescard .rc-fl-r .tico svg {
+  width: 11px;
+  height: 11px;
+}
+.wk-rescard .rc-fl-l {
+  grid-column: 2;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+}
+.wk-rescard .rc-fl-l b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-rescard .rc-fl-tg {
+  grid-column: 3;
+  min-width: 0;
+  font-size: 10.6px;
+  color: var(--ink-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wk-rescard .rc-fl-d {
+  grid-column: 4;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.wk-rescard .rc-fl-was {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-faint);
+}
+.wk-rescard .rc-fl-arw {
+  color: var(--ink-faint);
+}
+.wk-rescard .rc-fl-now {
+  color: var(--ink);
+  font-weight: 600;
+}
+/* THE PROOF, QUIET. The same mono id the rail card carried, at the same weight:
+   it is evidence a banker pastes into a search, never a badge. */
+.wk-rescard .rc-fl-id,
+.wk-rescard .rc-fl-off {
+  grid-column: 5;
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+/* NOTHING WAS WRITTEN, SAID IN THE ID'S OWN PLACE. A blank column would read as
+   a filed row whose id did not fit; the word is the honest cell. */
+.wk-rescard .rc-fl-off {
+  font-family: inherit;
+  font-style: italic;
+}
+/* NARROW GLASS: the target folds under the title and the ledger keeps its two
+   figures on the right, which is the pair a banker scans. */
+@media (max-width: 700px) {
+  .wk-rescard .rc-fl-r {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+  }
+  .wk-rescard .rc-fl-tg {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .wk-rescard .rc-fl-d {
+    grid-column: 3;
+  }
+  .wk-rescard .rc-fl-id,
+  .wk-rescard .rc-fl-off {
+    grid-column: 3;
+    grid-row: 2;
+  }
+}
+/* The kill-switch in electric-glass.css stops the rise; the rows are hidden at
+   rest and would stay hidden, so they are restored here rather than in the
+   sheet's own reduced-motion block, which this section is written after. */
+@media (prefers-reduced-motion: reduce) {
+  .wk-rescard .rc-fl-h,
+  .wk-rescard .rc-fl-r {
+    opacity: 1;
+    transform: none;
+  }
+}

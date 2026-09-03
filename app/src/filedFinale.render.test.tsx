@@ -3,9 +3,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Workroom } from "./components/workroom/Workroom";
-import { clearComposed, createScriptedEngine } from "./workroom/engine";
+import { clearComposed, createScriptedEngine, type WorkroomEngine } from "./workroom/engine";
 import { doorFor } from "./workroom/modes";
-import type { WorkroomContext } from "./workroom/types";
+import type { WorkroomContext, WorkroomExecution } from "./workroom/types";
+import { FILED_LIST_MS, FILED_ROW_MS, FILED_ROW_STAGGER_MS, filedRowAt } from "./components/workroom/FiledList";
 
 /* =============================================================================
    THE FILED FINALE (founder, 2026-09-03).
@@ -59,8 +60,11 @@ const buttons = () => [...document.body.querySelectorAll("button")];
 const byText = (re: RegExp) => buttons().find((b) => re.test(b.textContent ?? ""));
 const click = (el: Element | undefined) => act(() => el!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
-/** Drive the scripted room all the way to the dossier, the way a banker does. */
-async function fileAPlan() {
+/** Drive the scripted room all the way to the dossier, the way a banker does.
+ *  `bend` re-shapes the storyline engine where a case needs a plan the drive
+ *  does not produce on its own: an entry the ROOM added, or a filing the org
+ *  only half took. */
+async function fileAPlan(bend?: (engine: WorkroomEngine) => WorkroomEngine) {
   const context: WorkroomContext = {
     mode: "modify",
     door: doorFor("modify", PACKAGE_ID),
@@ -77,7 +81,7 @@ async function fileAPlan() {
     root!.render(
       <Workroom
         context={context}
-        engine={createScriptedEngine(context)}
+        engine={(bend ?? ((e: WorkroomEngine) => e))(createScriptedEngine(context))}
         instanceUrl={INSTANCE}
         onClose={() => {
           closed += 1;
@@ -100,10 +104,43 @@ async function fileAPlan() {
   const before = room.querySelectorAll("[data-ex-id]").length;
   click(room.querySelector<HTMLButtonElement>(".wk-propose")!);
   await settle();
+  /* WHAT THE GLASS LOOKS LIKE WHILE THE PLAN IS STILL OPEN: the rail is
+     carrying the ledger and the card does not exist yet. */
+  const staged = { sections: room.querySelectorAll(".rc-fl").length, rail: room.querySelectorAll(".wk-ent").length };
   click(byText(/^Approve and file /));
   await settle();
-  return { room, before };
+  return { room, before, staged };
 }
+
+/** The second entry, stamped as one the ROOM added rather than the banker. The
+ *  storyline engine composes no `wire`, so the pricing gate's own rule can
+ *  never fire here; `derivedReason` is `derivedDelta.ts`'s documented escape
+ *  hatch and it is what a real derived entry reaches the rail as. */
+const withADerivedEntry = (engine: WorkroomEngine): WorkroomEngine => ({
+  ...engine,
+  parseIntent: async (text, context) => {
+    const out = await engine.parseIntent(text, context);
+    if (out.kind !== "deltas") return out;
+    return {
+      ...out,
+      deltas: out.deltas.map((d, i) => (i === 1 ? { ...d, derivedReason: "The room added this so the plan can be priced." } : d)),
+    };
+  },
+});
+
+/** The org took the first entry and handed the second back. */
+const withAHandoff = (engine: WorkroomEngine): WorkroomEngine => ({
+  ...engine,
+  execute: async (approval) => {
+    const out: WorkroomExecution = await engine.execute(approval);
+    const [kept, off] = out.filed;
+    return {
+      ...out,
+      filed: [kept],
+      handoffs: [{ deltaId: off.deltaId, title: "the second change", reason: "No deployed tool files this one." }],
+    };
+  },
+});
 
 /** Everything the reader can still meet in the thread. */
 const onStage = (room: HTMLElement) => [...room.querySelectorAll("[data-ex-id]:not([data-finale])")];
@@ -205,5 +242,107 @@ describe("the quiet afterglow", () => {
     expect(room.querySelector(".wk-col-r")!.getAttribute("data-finale")).toBe("still");
     expect((room.matches(".wk-room") ? room : room.querySelector(".wk-room")!).getAttribute("data-finale")).toBe("still");
     expect(room.textContent).not.toContain("The workroom holds");
+  });
+});
+
+/* =============================================================================
+   WHAT WAS FILED, ON THE CARD (founder, 2026-09-04).
+
+   "The cinematic closing with the button, please include the card with WHAT HAS
+   BEEN GENERATED as well; cinematic, elegant."
+
+   THE RAIL WAS THE ONLY SURFACE THAT LISTED THE WRITES with the org record ids
+   that prove them, and beat one wipes it. What is under test is that the card
+   left standing carries that ledger: the same entries, in the same order, with
+   the same ids, the same Derived badges and the same counts the rail head had.
+   ============================================================================= */
+
+const ledgerRows = (room: HTMLElement) => [...room.querySelectorAll(".wk-rescard .rc-fl-r")];
+
+describe("the card carries what was filed", () => {
+  it("lists exactly the rail's entries, in rail order, with the ids the rail showed", async () => {
+    const { room } = await fileAPlan();
+    const rail = [...room.querySelectorAll(".wk-ent")];
+    const rows = ledgerRows(room);
+    expect(rows).toHaveLength(rail.length);
+
+    // SAME ROWS, SAME ORDER. Read against the rail rather than a hard list, so
+    // the claim is "the card says what the rail said" and not "the drive stages
+    // these two".
+    expect(rows.map((r) => r.querySelector(".rc-fl-l b")!.textContent)).toEqual(
+      rail.map((e) => e.querySelector(".wk-ent-t b")!.firstChild!.textContent),
+    );
+    // AND THE PROOF TRAVELS WITH THEM: the org record id per row, the same id
+    // the drained rail card is still carrying off stage.
+    expect(rows.map((r) => r.querySelector(".rc-fl-id")!.textContent)).toEqual(
+      rail.map((e) => e.querySelector(".wk-filedbar .wk-id")!.textContent),
+    );
+    // The target and the delta ride each row too: a ledger with neither is a
+    // list of titles.
+    expect(rows[0].querySelector(".rc-fl-tg")!.textContent!.length).toBeGreaterThan(0);
+    expect(rows[0].querySelector(".rc-fl-was")!.textContent).toBe("$15,000,000");
+    expect(rows[0].querySelector(".rc-fl-now")!.textContent).toBe("$18,000,000");
+  });
+
+  it("counts the set in its head, and badges only the entries the room added", async () => {
+    const { room } = await fileAPlan(withADerivedEntry);
+    expect(room.querySelector(".wk-rescard .rc-fl-n")!.textContent).toBe("2 changes · 1 requested · 1 derived");
+
+    const rows = ledgerRows(room);
+    const badged = rows.filter((r) => r.querySelector(".wk-derived"));
+    expect(badged).toHaveLength(1);
+    // The badged row is the SECOND one, which is the entry the bend marked, and
+    // it is the same row the rail badged.
+    expect(rows.indexOf(badged[0])).toBe(1);
+    expect([...room.querySelectorAll(".wk-ent")][1].querySelector(".wk-derived")).toBeTruthy();
+  });
+
+  it("reads a plain count where nothing on the plan was derived", async () => {
+    const { room } = await fileAPlan();
+    expect(room.querySelector(".wk-rescard .rc-fl-n")!.textContent).toBe("2 changes");
+    expect(room.querySelector(".wk-rescard .wk-derived")).toBeNull();
+  });
+
+  it("names the handoff where the org wrote no record, rather than leaving a blank", async () => {
+    const { room } = await fileAPlan(withAHandoff);
+    const rows = ledgerRows(room);
+    // BOTH ENTRIES ARE STILL LISTED. What the room staged is the ledger; what
+    // the org took is what the id column says.
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector(".rc-fl-id")).toBeTruthy();
+    expect(rows[1].querySelector(".rc-fl-id")).toBeNull();
+    expect(rows[1].querySelector(".rc-fl-off")!.textContent).toBe("Handed off");
+    expect(rows[1].querySelector(".rc-fl-off")!.getAttribute("title")).toBe("No deployed tool files this one.");
+  });
+
+  it("is absent while the room is still open, because the rail is saying it", async () => {
+    const { room, staged } = await fileAPlan();
+    /* THE LEDGER IS ON THE GLASS EXACTLY ONCE AT EVERY MOMENT. While the plan
+       was open the rail was carrying it and the card did not exist. */
+    expect(staged.rail).toBe(2);
+    expect(staged.sections).toBe(0);
+    // And after the filing it is there exactly once: on the card, inside it.
+    const sections = [...room.querySelectorAll(".rc-fl")];
+    expect(sections).toHaveLength(1);
+    expect(sections[0].closest(".wk-rescard")).toBeTruthy();
+  });
+
+  it("reveals the rows after the card's own reveal, 60ms apart, inside 1.2s", async () => {
+    const { room } = await fileAPlan();
+    const at = (el: Element) => Number.parseInt((el as HTMLElement).style.animationDelay, 10);
+    const card = room.querySelector(".wk-rescard")!;
+    // The card's last beat: the footer's check. The head comes after it.
+    const check = at(card.querySelector(".rc-f .ok")!);
+    const head = at(card.querySelector(".rc-fl-h")!);
+    expect(head).toBeGreaterThan(check);
+
+    const rows = ledgerRows(room).map(at);
+    expect(rows[1] - rows[0]).toBe(FILED_ROW_STAGGER_MS);
+    // The whole list, head to the last row finishing, inside the founder's 1.2s.
+    expect(rows[rows.length - 1] + FILED_ROW_MS - head).toBeLessThanOrEqual(FILED_LIST_MS);
+    /* AND THE CAP HOLDS FOR A PLAN THIS DRIVE CANNOT STAGE. Twenty entries
+       would be a 1.2s wave of their own; past the cap the rows share the last
+       beat, so the budget is a promise and not a coincidence of this plan. */
+    expect(filedRowAt(200) + FILED_ROW_MS).toBeLessThanOrEqual(FILED_LIST_MS);
   });
 });
