@@ -161,9 +161,28 @@ export class ArmRefusal extends Error {}
  * exactly the wire it has been filing on since August.
  */
 export function armPayload(payload: ModificationPayload): ModificationPayload {
-  const raw: FieldChange[] = payload.fieldChangesJson ? (JSON.parse(payload.fieldChangesJson) as FieldChange[]) : [];
+  /* THE SELECTION IS BOOKED MEMBERS ONLY (2026-09-03).
+
+     `wirePayload` builds `facilityIds` from the union of every delta's target,
+     and since a covenant, a party, a pledge or a fee may now target a facility
+     this same plan is CREATING, that union can carry a label. `facilityIds` is
+     the credit action's member SELECTION and the org validates every entry as a
+     booked facility on the package, so a label there refuses the whole plan.
+
+     It comes out here, and only here, which keeps the fenced engine's own
+     accounting (the scalar-leak backstop reads the same union) unchanged. Each
+     arm keeps its `targetLoanId`: that is where the label belongs and the org
+     resolves it to the loan it just wrote. */
+  const selection = payload.facilityIds ?? null;
+  const booked = selection ? selection.filter((id) => !isNewFacilityLabel(id)) : null;
+  const withSelection: ModificationPayload =
+    booked && booked.length !== selection!.length ? ({ ...payload, facilityIds: booked } as ModificationPayload) : payload;
+
+  const raw: FieldChange[] = withSelection.fieldChangesJson
+    ? (JSON.parse(withSelection.fieldChangesJson) as FieldChange[])
+    : [];
   const armed = raw.filter((f) => f.field === ARM_FIELD);
-  if (!armed.length) return payload;
+  if (!armed.length) return withSelection;
 
   const plain = raw.filter((f) => f.field !== ARM_FIELD);
   const arms = armed
@@ -186,7 +205,7 @@ export function armPayload(payload: ModificationPayload): ModificationPayload {
      exactly when the plan selects one facility, like every other arm on this
      tool, and sending it anyway would be a second way of saying the same thing.
      Where the plan selects more than one it is REQUIRED and always sent. */
-  const single = (payload.facilityIds ?? []).length === 1;
+  const single = (withSelection.facilityIds ?? []).length === 1;
   /* A LABEL IS ALWAYS SENT, whatever the selection. The "one facility needs no
      target" shortcut means "the single selected facility", and a facility this
      plan is CREATING is not that one: omitting the target there would land the
@@ -203,7 +222,7 @@ export function armPayload(payload: ModificationPayload): ModificationPayload {
     .map((a) => a.facility)
     .filter((f): f is NewFacilitySpec => Boolean(f));
 
-  const next: ModificationPayload = { ...payload };
+  const next: ModificationPayload = { ...withSelection };
   // The key exists on the wire only where it carries something. An emptied
   // `fieldChangesJson` is REMOVED rather than sent as "[]": the org counts the
   // lists that arrive, and an empty one is a change nobody asked for.
@@ -407,7 +426,13 @@ export function armConfirmSentence(delta: WorkroomDelta, reply: string): string 
      the engine's "staged on the clone" back into a removal's confirm. */
   const rest = reply.split(/(?<=[^.]\.)\s+/).slice(1).join(" ");
   const lede =
-    arm.kind === "covenantAttach"
+    /* A NET-NEW FACILITY IS AN ADD, and the exclusion sentence read as its
+       opposite: "$3MM Equipment will not carry onto the new version" is the
+       exact inverse of what the card stages. The purpose handoff rides the
+       confirm as well, because the confirm is where the banker decides. */
+    arm.kind === "newFacility"
+      ? `${delta.title} is filed on the new package version beside the clones, at Qualification with the borrower on its own borrowing structure. It is a new loan rather than a version of one, so it carries no chain row and nothing on the booked side of this relationship moves because of it.`
+      : arm.kind === "covenantAttach"
       ? `${delta.title} is associated to the ${delta.target} on the new version. The covenant record itself is not touched: the threshold, the frequency and the schedule stay exactly as the borrower holds them, and what this authors is the junction alone.`
       : arm.kind === "pledgeExclusion"
         ? `${delta.title} will not carry onto the new version of ${delta.target}. The booked facility keeps the pledge exactly as it holds it today, the asset and the borrower's ownership of it are not touched, and nothing is deleted anywhere.`

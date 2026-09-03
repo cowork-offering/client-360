@@ -33,8 +33,10 @@
 
 import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
 import { ARM_FIELD, encodeArm, type ArmEntry, type NewFacilitySpec } from "./orgArms";
-import type { ElicitMember } from "./elicit";
+import type { Draft, ElicitContext, ElicitMember } from "./elicit";
+import { clipTitle } from "./elicit";
 import { PRICING_WHY, firstOfMonth, monthLabel, readDate } from "./pricingGate";
+import type { FeeOpen } from "./fee";
 
 /* ------------------------------------------------------------- the catalog */
 
@@ -170,9 +172,31 @@ export function readPurpose(line: string): string | null {
 const CREATE_VERB = /\b(add|adding|structure|structuring|originate|originating|set\s+up|write|put\s+on|include)\b/i;
 const NEW_LOAN = /\b(?:a\s+)?(?:new|another|additional|second|extra)\s+(?:[a-z$0-9,.\s]{0,28}?)\b(loan|facility|line|note|term\s+loan)\b/i;
 
+/* THE WORD "NEW" POINTS TWO WAYS, and the difference is the whole reading.
+
+   "add a new 3M equipment loan" ASKS for a facility. "add Elena Hartwell as
+   limited guarantor ON THE NEW EQUIPMENT LOAN" names one that is already on the
+   manifest and asks for something else entirely. Both carry a create verb and
+   both carry "new ... loan", so the verb and the noun cannot settle it.
+
+   TWO THINGS SETTLE IT, and both are about what the line is FOR:
+     a preposition in front of "the new ..." makes it a TARGET, never the object
+     of the create; and a create noun anywhere in the line means the object of
+     the create is that noun, on whatever facility the line goes on to name. */
+
+/** A preposition and an article in front of "new": the facility is the target. */
+const AS_TARGET = /\b(?:on|onto|to|against|for|under|with)\s+(?:the|this|that|our)\s+new\b/i;
+
+/** The object of a create that is not a facility. */
+const CREATE_OBJECT =
+  /\b(covenants?|tests?|guarantors?|borrowers?|co[- ]borrowers?|part(?:y|ies)|pledges?|collateral|security|assets?|fees?|exceptions?|involvements?|entit(?:y|ies))\b/i;
+
 /** Does this line ask for a new facility on the version being approved? */
 export function namesANewFacility(line: string): boolean {
-  return CREATE_VERB.test(line) && NEW_LOAN.test(line);
+  if (!CREATE_VERB.test(line) || !NEW_LOAN.test(line)) return false;
+  if (AS_TARGET.test(line)) return false;
+  if (CREATE_OBJECT.test(line)) return false;
+  return true;
 }
 
 /* ---------------------------------------------------------------- the delta */
@@ -180,6 +204,17 @@ export function namesANewFacility(line: string): boolean {
 /** How the room says a commitment. Matches the manifest's own money voice. */
 const money = (n: number): string =>
   n >= 1e6 ? `$${(n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1)}MM` : `$${n.toLocaleString("en-US")}`;
+
+/**
+ * An asset description runs to a paragraph in this org. The first sentence names
+ * it; the exclusions inside it are the credit agreement's business. Same rule as
+ * `orgArms.ts`'s own, and the truncation mark is ONE character rather than three
+ * dots, which are a sentence end to anything that splits on one.
+ */
+function assetPhrase(label: string): string {
+  const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
+  return clipTitle(first, 64);
+}
 
 /** The phrase the manifest, the confirm and every later line know it by. */
 export const newFacilityTitle = (spec: NewFacilitySpec): string => `${money(spec.amount)} ${spec.product}`;
@@ -229,6 +264,7 @@ export function newFacilityDelta(spec: NewFacilitySpec, args: NewFacilityArgs): 
           ? `amortised over ${spec.amortizedTermMonths} months, first payment ${spec.firstPaymentDate}`
           : "not set. nCino will show no rate and no payment stream until it is",
       ],
+      ["Purpose handoff", PURPOSE_HANDOFF],
       [
         "Written as",
         "A NEW loan on the new package version, filed at Qualification with the borrower on its own borrowing structure. It carries no chain row and no modification flag: it is not a version of anything, and nothing on the booked side of this relationship changes because of it.",
@@ -246,7 +282,8 @@ export function newFacilityDelta(spec: NewFacilitySpec, args: NewFacilityArgs): 
     filed: {
       recordId: "assigned by the org on execution",
       verification:
-        "The facility is re-read after the write and reported under the name the org assigned it, with its package, product, commitment and term proved against what was staged.",
+        "The facility is re-read after the write and reported under the name the org assigned it, with its package, product, commitment and term proved against what was staged. " +
+        "The primary loan purpose is reported as a handoff rather than claimed: the Loan Detail it belongs on does not exist inside the filing transaction.",
     },
   };
 }
@@ -402,7 +439,8 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
     said:
       `${newFacilityTitle(spec)} goes onto the new version of this package, at Qualification with the borrower on its own structure, ` +
       `over ${termMonths} months for ${purpose}. It is a new loan rather than a version of one, so nothing on the booked side of this ` +
-      `relationship moves because of it, and booking it is nCino's own Submit for Approval like everything else on the version.`,
+      `relationship moves because of it, and booking it is nCino's own Submit for Approval like everything else on the version. ` +
+      PURPOSE_HANDOFF,
   };
 }
 
@@ -418,6 +456,21 @@ export interface StagedNewFacility {
   label: string;
   product: string;
   title: string;
+}
+
+/** The full spec of every net-new facility on the manifest, in staged order. */
+export function stagedNewFacilitySpecs(deltas: WorkroomDelta[]): NewFacilitySpec[] {
+  const out: NewFacilitySpec[] = [];
+  for (const d of deltas) {
+    if (d.fieldWire?.field !== ARM_FIELD) continue;
+    try {
+      const arm = JSON.parse(String(d.fieldWire.value)) as ArmEntry;
+      if (arm.kind === "newFacility" && arm.facility) out.push(arm.facility);
+    } catch {
+      /* a delta whose arm will not decode is not one this reader claims. */
+    }
+  }
+  return out;
 }
 
 /** Every net-new facility on the manifest, in the order they were staged. */
@@ -459,4 +512,296 @@ export function readNewFacilityTarget(
   if (byProduct.length > 1) return { ambiguous: byProduct };
   if (staged.length === 1) return { label: staged[0].label, title: staged[0].title };
   return { ambiguous: staged };
+}
+
+
+/* ========================================================== THE SCOPE MEMBER
+
+   A NET-NEW FACILITY IS A MEMBER OF THE PLAN BEFORE IT IS A MEMBER OF ANYTHING.
+
+   The founder's standard is "fully possible", and half of that is the LATER
+   lines: "add Elena Hartwell as limited guarantor on the new equipment loan",
+   "add a DSC covenant >= 1.30 on the new loan", "pledge the Fort Wayne inventory
+   to the new loan". Every one of those resolves a facility through `readScope`,
+   and until the staged facility appears there it can only be named by asking.
+
+   So it appears there, as a synthetic member whose ID IS ITS LABEL. That is the
+   whole trick and it is deliberate: the id the room resolves is the id the wire
+   carries and the id the org resolves, so no third identifier exists to get out
+   of step with the other two.
+
+   `orgName` and `shortName` are NULL, because the org has not named it yet: it
+   names a loan on save and nothing here may pretend to know what it will pick.
+   `committed` carries the amount, so "the 3M loan" settles on it through the
+   dollar qualifier exactly as it does for a booked member.                    */
+
+/** The staged facility, as every scope reader in the room needs to see it. */
+export function newFacilityMember(spec: NewFacilitySpec): ElicitMember {
+  return {
+    id: spec.label,
+    key: spec.product.toLowerCase(),
+    label: newFacilityTitle(spec),
+    orgName: null,
+    shortName: null,
+    committed: spec.amount,
+  };
+}
+
+/** Is this member id a facility the plan is creating rather than one it holds? */
+export const isNewFacilityMember = (id: string | null | undefined): boolean =>
+  typeof id === "string" && /^new:\d+$/i.test(id);
+
+/* ================================================= WHAT MAY NOT LAND ON ONE
+
+   THE APEX REFUSES A CARRY EXCLUSION AND A BORROWING-STRUCTURE REMOVE ON A
+   FACILITY THE PLAN IS CREATING, and the reason is the same one in both places:
+   an exclusion is the new version NOT carrying a junction the parent holds, and
+   a facility being created holds nothing. The room says it here rather than
+   sending a plan up to have it said, because a refusal at the confirm gate is a
+   refusal the banker reads after signing.                                     */
+
+/** Why a removal cannot name a facility this plan is creating. */
+export function newFacilityRemovalRefusal(title: string, noun: string): string {
+  return (
+    `${title} is a facility this plan is CREATING, so there is no ${noun} on it to take off. ` +
+    "A removal on a modification is a carry exclusion: the booked facility keeps its own row and the new version " +
+    "starts without it. A new facility starts with the borrower and nothing else, so everything on it is an ADD. " +
+    "Nothing has been staged and nothing has come off the manifest."
+  );
+}
+
+/* ================================================ THE CARDS THAT LAND ON ONE
+
+   THEY ARE BUILT HERE AND NEVER BY THE PARSER, for the same reason the associate
+   card is: there is no sentence worth composing. The fenced engine resolves a
+   facility against the PACKAGE, and a facility this plan is creating is not on
+   it, so a composed sentence would come back unresolved or, worse, resolved onto
+   a booked member with the same product word.
+
+   Everything these carry was already settled by the room's own create grammar.
+   The wire is the ordinary one for each surface, with `facilityId` set to the
+   LABEL: `wirePayload` copies it into each arm's `targetLoanId` untouched, and
+   the org resolves the label to the loan it has just created.                 */
+
+const WIRED_FREQUENCY = "Quarterly";
+
+/** The threshold as the banker wrote it, matching the create grammar's own voice. */
+const thresholdSaid = (threshold: number, unit?: "ratio" | "money"): string =>
+  unit === "money" ? money(threshold) : unit === "ratio" ? `${threshold}x` : String(threshold);
+
+/**
+ * WHAT THE CARD SAYS ABOUT THE PURPOSE, on every card that lands on a new
+ * facility as well as on the facility's own.
+ *
+ * The purpose does not land inside the filing transaction: it lives on the Loan
+ * Detail, which nCino creates in its own transaction afterwards. The room used
+ * to carry the purpose on the wire and say nothing about where it goes, which
+ * reads as a field that was filed. It says it now.
+ */
+export const PURPOSE_HANDOFF =
+  "Purpose goes on the Loan Detail after filing, handed off: nCino creates that record in its own transaction moments " +
+  "after the facility is written, so nothing in the filing transaction can set it. It is on the plan and it is the one " +
+  "thing on this facility a person still sets in nCino.";
+
+export interface NewFacilityEntryArgs {
+  draft: Draft;
+  ctx: ElicitContext;
+  /** The staged facility this create lands on. */
+  spec: NewFacilitySpec;
+  /** Position among the composed lines, so two creates on one facility differ. */
+  seq: number;
+}
+
+/**
+ * ONE CREATE, ON A FACILITY THIS PLAN IS CREATING.
+ *
+ * Covenant, borrowing structure and collateral, which are the three surfaces the
+ * create grammar gathers and the three arms whose org-side `targetLoanId` takes
+ * a label. Returns null for an ASSOCIATE, which is a junction to an existing
+ * covenant and rides its own arm.
+ */
+export function newFacilityCreateEntry(args: NewFacilityEntryArgs): WorkroomDelta | null {
+  const { draft, ctx, spec, seq } = args;
+  const s = draft.slots;
+  const title = newFacilityTitle(spec);
+  const onIt = `on the ${title}, the facility this plan is creating`;
+
+  if (draft.surface === "covenant") {
+    // An associate is a junction to a covenant that already exists; it rides
+    // `covenantAttachesJson` and is composed by `readCovenantAttach`, not here.
+    if (s.associate || s.threshold === undefined || !s.test) return null;
+    const frequency = s.frequency ?? WIRED_FREQUENCY;
+    return {
+      id: `covenant.add:${spec.label}:${seq}`,
+      group: "covenants",
+      op: "add",
+      kind: "New covenant",
+      badge: `${s.test} on ${title}`,
+      title: s.test,
+      target: title,
+      before: "not on the facility, which does not exist yet",
+      after: `${thresholdSaid(s.threshold, s.unit)}, tested ${frequency.toLowerCase()}`,
+      member: spec.label,
+      map: [
+        ["Object", "LLC_BI__Covenant2__c"],
+        ["Attached to", `${title}, which this same plan files on the new package version`],
+        [
+          "Written as",
+          "The covenant is created Pending and Active on the borrower and junctioned to the facility this plan creates. " +
+            "The org resolves the label to the loan it has just written, so the junction lands on the new facility and on nothing else.",
+        ],
+      ],
+      fields: ["LLC_BI__Covenant_Type__c", "LLC_BI__Financial_Indicator_Value__c"],
+      fileable: true,
+      covenantWire: {
+        typeName: s.test,
+        threshold: s.threshold,
+        operator: ">=",
+        frequency,
+        facilityId: spec.label,
+      },
+      filed: {
+        recordId: "assigned by the org on execution",
+        verification: `The covenant and its junction are re-read on ${title} after the write.`,
+      },
+    };
+  }
+
+  if (draft.surface === "involvement") {
+    if (!s.party || !s.role) return null;
+    return {
+      id: `party.add:${spec.label}:${seq}`,
+      group: "structure",
+      op: "add",
+      kind: "New involvement",
+      badge: `${s.party} on ${title}`,
+      title: s.party,
+      target: title,
+      before: "not on the facility, which does not exist yet",
+      after: `${s.role} ${onIt}`,
+      member: spec.label,
+      map: [
+        ["Object", "LLC_BI__Legal_Entities__c"],
+        ["Role", s.role],
+        [
+          "Written as",
+          "A borrowing-structure row authored on the facility this plan creates, beside the borrower row the facility is filed with.",
+        ],
+      ],
+      fields: ["LLC_BI__Account__c", "LLC_BI__Borrower_Type__c"],
+      fileable: true,
+      involvementWire: { op: "add", role: s.role, accountName: s.party, facilityId: spec.label },
+      filed: {
+        recordId: "assigned by the org on execution",
+        verification: `The involvement is re-read on ${title} after the write.`,
+      },
+    };
+  }
+
+  // Collateral. Both shapes: an asset the borrower already owns, and one this
+  // plan authors first. The BOOK's own label wins where the asset is on it:
+  // `Name` on a collateral is an autonumber, so the description is the only
+  // readable identity the asset carries.
+  const onBook = s.assetId ? ctx.book.assets.find((a) => a.id === s.assetId) : undefined;
+  const label = onBook?.label ?? s.assetLabel ?? s.assetDescription ?? "the asset";
+  const said = assetPhrase(label);
+  if (!s.assetId && !s.isNew) return null;
+  if (s.isNew && (!s.assetDescription || !s.assetKind || s.assetValue === undefined || s.advanceRate === undefined)) {
+    return null;
+  }
+  return {
+    id: `collateral.pledge:${spec.label}:${seq}`,
+    group: "security",
+    op: "add",
+    kind: "New pledge",
+    kindTone: "collateral",
+    badge: `${said} to ${title}`,
+    title: said,
+    target: title,
+    before: "not pledged to the facility, which does not exist yet",
+    after: `pledged ${onIt}${s.lien ? `, ${s.lien} position` : ""}`,
+    member: spec.label,
+    map: [
+      ["Object", "LLC_BI__Loan_Collateral2__c"],
+      ["Asset", s.isNew ? `${s.assetDescription} (authored by this plan)` : said],
+      [
+        "Written as",
+        s.isNew
+          ? "The asset, then the borrower's ownership junction, then the pledge onto the facility this plan creates. The asset is a permanent relationship record and survives whatever the bank decides about this version."
+          : "A pledge onto the facility this plan creates. The asset and the borrower's ownership of it are relationship records and are not touched.",
+      ],
+    ],
+    fields: ["LLC_BI__Collateral__c", "LLC_BI__Loan__c"],
+    fileable: true,
+    pledgeWire: {
+      ...(s.assetId ? { collateralId: s.assetId } : {}),
+      ...(s.isNew
+        ? { newCollateral: { description: s.assetDescription!, collateralType: s.assetKind!, value: s.assetValue! } }
+        : {}),
+      ...(s.advanceRate !== undefined ? { advanceRate: s.advanceRate } : {}),
+      facilityId: spec.label,
+    },
+    filed: {
+      recordId: "assigned by the org on execution",
+      verification: `The pledge is re-read on ${title} after the write, with the advance rate the org resolved.`,
+    },
+  };
+}
+
+/** The org's own fee-type value for each kind the fee lane settles, mirrored
+ *  from `parseModify.ts`'s FEE_TYPE_MAP. This org's picklist is residential, so
+ *  the C&I fees it cannot express file as "Other" with the banker's own words in
+ *  the description, where `Name` on a fee is an autonumber. */
+const FEE_TYPE: Record<string, { typeName: string; recordType: "Fees" | "Costs" }> = {
+  "Origination fee": { typeName: "Loan Origination", recordType: "Fees" },
+  "Attorney fee": { typeName: "Attorney", recordType: "Fees" },
+  "Appraisal fee": { typeName: "Appraisal", recordType: "Costs" },
+  "Commitment fee": { typeName: "Other", recordType: "Fees" },
+  "Amendment fee": { typeName: "Other", recordType: "Fees" },
+  "Agency fee": { typeName: "Other", recordType: "Fees" },
+};
+
+/** ONE NET-NEW FEE, on a facility this plan is creating. */
+export function newFacilityFeeEntry(open: FeeOpen, spec: NewFacilitySpec, seq: number): WorkroomDelta | null {
+  if (open.percentage === undefined && open.amount === undefined) return null;
+  const kind = open.kind ?? "Origination fee";
+  const mapped = FEE_TYPE[kind] ?? { typeName: "Other", recordType: "Fees" as const };
+  const title = newFacilityTitle(spec);
+  const figure = open.percentage !== undefined ? `${open.percentage.toFixed(2)}% of the committed amount` : money(open.amount!);
+  return {
+    id: `fee.add:${spec.label}:${seq}`,
+    group: "terms",
+    op: "add",
+    kind: "New fee",
+    badge: `${kind} on ${title}`,
+    title: kind,
+    target: title,
+    before: "not charged on the facility, which does not exist yet",
+    after: figure,
+    member: spec.label,
+    map: [
+      ["Object", "LLC_BI__Fee__c"],
+      ["Fee type", mapped.typeName],
+      [
+        "Written as",
+        open.percentage !== undefined
+          ? "A percentage fee carrying its rate and no money figure: nCino's own FeeTrigger derives the amount from the facility's commitment, and a hand-set figure would be a number nobody derived."
+          : "A flat fee on the facility this plan creates.",
+      ],
+    ],
+    fields: ["LLC_BI__Fee_Type__c", "LLC_BI__Calculation_Type__c"],
+    fileable: true,
+    feeWire: {
+      feeType: mapped.typeName,
+      description: `${kind} - ${figure}`,
+      calculationType: open.percentage !== undefined ? "Percentage" : "Flat Amount",
+      ...(open.percentage !== undefined ? { percentage: open.percentage } : { amount: open.amount }),
+      recordType: mapped.recordType,
+      facilityId: spec.label,
+    },
+    filed: {
+      recordId: "assigned by the org on execution",
+      verification: `The fee is re-read on ${title} after the write, with whatever the org computed for a percentage.`,
+    },
+  };
 }

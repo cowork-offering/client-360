@@ -616,6 +616,36 @@ export function readScope(line: string, members: ElicitMember[], claimed: number
     return { ids: [], word: true, ambiguous: true, said: null };
   }
 
+  /* ================ A FACILITY THIS PLAN IS CREATING (founder, 2026-09-03)
+
+     A modification versions the whole package, so a net-new facility staged on
+     the manifest is a member of the plan before it is a member of anything in
+     the org. It reaches this reader as a synthetic member whose id IS its label
+     ("new:1"), and "the new equipment loan" has to settle on it rather than
+     fanning out over the booked equipment loans that share its product word.
+
+     SO IT IS READ FIRST, and only on a line that says NEW. Without that word
+     "the equipment loan" means what it always meant, and the product-group
+     reading below decides it exactly as before. Where the word is there and two
+     new facilities answer to it, the room asks: an arm aimed at the wrong new
+     facility is a covenant on the wrong loan, and nothing downstream catches it. */
+  const creating = members.filter((m) => /^new:\d+$/i.test(m.id));
+  if (creating.length && /\bthe\s+new\b|\bnew\s+(?:loan|facility|line|note)\b/i.test(lower)) {
+    const byProduct = creating.filter((m) =>
+      new RegExp(`\\b${m.key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}s?\\b`, "i").test(lower),
+    );
+    const settled = byProduct.length === 1 ? byProduct : creating.length === 1 && !byProduct.length ? creating : [];
+    if (settled.length === 1) {
+      return {
+        ids: [settled[0].id],
+        word: true,
+        ambiguous: false,
+        said: `Reading that as the ${settled[0].label}, the facility this plan is creating.`,
+      };
+    }
+    return { ids: [], word: true, ambiguous: true, said: null };
+  }
+
   const all = ALL_WORD.test(lower);
   const generic = GENERIC_NOUN.test(lower);
   const count = statedCount(lower);
@@ -1025,6 +1055,19 @@ function matchAsset(line: string, assets: BookAsset[]): BookAsset[] {
 }
 
 const NEW_ASSET = /\b(new|newly|another|additional|just\s+(?:bought|financed)|not\s+on\s+the\s+deal)\b/i;
+
+/* "THE NEW LOAN" IS A FACILITY, AND THE WORD "NEW" THERE SAYS NOTHING ABOUT THE
+   ASSET (founder, 2026-09-03).
+
+   `pledge COL-000763 to the new loan` set `isNew` on the COLLATERAL, because
+   NEW_ASSET matched the word qualifying the FACILITY. The room then asked what
+   kind of asset it was and what it was worth, about an asset the borrower has
+   held all along. Since a net-new facility became a scope member, that phrase
+   appears in ordinary lines, so it comes off before either asset reader runs. */
+const NEW_FACILITY_PHRASE = /\b(?:the|this|that|our)\s+new\s+(?:[a-z]+\s+){0,2}?(?:loans?|facilit(?:y|ies)|lines?|notes?)\b/gi;
+
+/** The line with the facility phrase taken off, for the asset readers alone. */
+const assetText = (text: string): string => text.replace(NEW_FACILITY_PHRASE, " ");
 
 /** Fragments that name the KIND and nothing else. A line saying "real estate"
  *  has answered "what kind", not "what is it". */
@@ -1562,10 +1605,11 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
     /* THE BANKER CAME BACK TO WHAT THE DEAL ALREADY HOLDS. A net-new asset is
        the one shape this room cannot compose on its own, so the way back out of
        it has to exist and has to be explicit. */
-    if (/\bexisting\b|\balready carries\b|\bon the deal\b/i.test(text)) delete next.slots.isNew;
-    else if (NEW_ASSET.test(text) && !next.slots.second) next.slots.isNew = true;
+    const said = assetText(text);
+    if (/\bexisting\b|\balready carries\b|\bon the deal\b/i.test(said)) delete next.slots.isNew;
+    else if (NEW_ASSET.test(said) && !next.slots.second) next.slots.isNew = true;
     if (!next.slots.isNew) {
-      const hits = matchAsset(text, ctx.book.assets);
+      const hits = matchAsset(said, ctx.book.assets);
       if (hits.length === 1) {
         next.slots.assetId = hits[0].id;
         next.slots.assetLabel = hits[0].label;

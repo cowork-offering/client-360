@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isNewFacilityMember,
   namesANewFacility,
   newFacilityDelta,
   readAmortisation,
@@ -10,8 +11,14 @@ import {
   readProduct,
   readPurpose,
   readTermMonths,
+  newFacilityCreateEntry,
+  newFacilityFeeEntry,
+  newFacilityMember,
+  newFacilityRemovalRefusal,
   stagedNewFacilities,
+  PURPOSE_HANDOFF,
 } from "./newFacilityArm";
+import { readScope, type Draft, type ElicitContext } from "./elicit";
 import { armOf, armPayload, armSummary, armStepPairs, isArmStep, type NewFacilitySpec } from "./orgArms";
 import type { StagePayloads } from "../../channel/writeTools";
 import type { ElicitMember } from "./elicit";
@@ -302,5 +309,171 @@ describe("naming it on a later line", () => {
     const staged = stagedNewFacilities([card()]);
     expect(readNewFacilityTarget("add a DSC covenant on the 15M line of credit", staged)).toBeNull();
     expect(readNewFacilityTarget("add a DSC covenant on the new loan", [])).toBeNull();
+  });
+});
+
+
+/* ================================================== THE SCOPE MEMBER AND ITS LANES */
+
+const SPEC = {
+  label: "new:1",
+  product: "Equipment",
+  amount: 3_000_000,
+  termMonths: 60,
+  purpose: "CNC line expansion",
+  amortizedTermMonths: 60,
+  firstPaymentDate: "2026-10-01",
+};
+
+const BOOK = { covenants: [], assets: [], liens: ["1st"], parties: [] };
+const CTX = {
+  members: [...MEMBERS, newFacilityMember(SPEC)],
+  focused: null,
+  book: BOOK,
+  plan: [],
+  relationship: "Hartwell",
+  catalog: null,
+} as unknown as ElicitContext;
+
+const draft = (over: Partial<Draft>): Draft =>
+  ({ surface: "covenant", slots: {}, scope: ["new:1"], scopeWord: true, unused: null, ...over }) as Draft;
+
+describe("the facility this plan is creating, as a scope member", () => {
+  const scoped = [...MEMBERS, newFacilityMember(SPEC)];
+
+  it("is a member whose ID IS ITS LABEL, so no third identifier exists", () => {
+    const m = newFacilityMember(SPEC);
+    expect(m.id).toBe("new:1");
+    expect(m.label).toBe("$3MM Equipment");
+    expect(m.key).toBe("equipment");
+    expect(m.committed).toBe(3_000_000);
+    // The org has not named it: nothing here pretends to know what it will pick.
+    expect(m.orgName).toBeNull();
+    expect(m.shortName).toBeNull();
+    expect(isNewFacilityMember(m.id)).toBe(true);
+    expect(isNewFacilityMember(LOC)).toBe(false);
+  });
+
+  it("settles \"the new loan\" on it, and says which facility it read", () => {
+    const read = readScope("add a DSC covenant of 1.30 on the new loan", scoped);
+    expect(read.ids).toEqual(["new:1"]);
+    expect(read.said).toContain("the facility this plan is creating");
+  });
+
+  it("settles \"the new equipment loan\" on it rather than fanning out over the booked ones", () => {
+    const read = readScope("add Elena Hartwell as limited guarantor on the new equipment loan", scoped);
+    expect(read.ids).toEqual(["new:1"]);
+  });
+
+  it("leaves a line that does NOT say new exactly where it was", () => {
+    const read = readScope("add a DSC covenant of 1.30 on the 15M line of credit", scoped);
+    expect(read.ids).toEqual([LOC]);
+  });
+
+  it("settles it on the dollar qualifier too, because it carries its own commitment", () => {
+    const read = readScope("add a covenant on the 3M loan", scoped);
+    expect(read.ids).toEqual(["new:1"]);
+  });
+
+  it("ASKS where two of them answer to the same words", () => {
+    const two = [
+      ...MEMBERS,
+      newFacilityMember(SPEC),
+      newFacilityMember({ ...SPEC, label: "new:2", amount: 1_000_000 }),
+    ];
+    const read = readScope("add a covenant on the new loan", two);
+    expect(read.ids).toEqual([]);
+    expect(read.ambiguous).toBe(true);
+  });
+});
+
+describe("the cards that land on a facility this plan is creating", () => {
+  it("builds a covenant keyed to the label, never to a booked member", () => {
+    const d = newFacilityCreateEntry({
+      draft: draft({ surface: "covenant", slots: { test: "Debt Service Coverage of Borrower", threshold: 1.3 } }),
+      ctx: CTX,
+      spec: SPEC,
+      seq: 0,
+    })!;
+    expect(d.member).toBe("new:1");
+    expect(d.target).toBe("$3MM Equipment");
+    expect(d.covenantWire).toMatchObject({ typeName: "Debt Service Coverage of Borrower", threshold: 1.3, facilityId: "new:1" });
+    expect(d.before).toContain("does not exist yet");
+  });
+
+  it("builds a borrowing-structure add keyed to the label", () => {
+    const d = newFacilityCreateEntry({
+      draft: draft({ surface: "involvement", slots: { party: "Elena Hartwell", role: "Limited Guarantor" } }),
+      ctx: CTX,
+      spec: SPEC,
+      seq: 1,
+    })!;
+    expect(d.involvementWire).toEqual({
+      op: "add",
+      role: "Limited Guarantor",
+      accountName: "Elena Hartwell",
+      facilityId: "new:1",
+    });
+  });
+
+  it("builds a pledge for an asset the borrower already owns, keyed to the label", () => {
+    const d = newFacilityCreateEntry({
+      draft: draft({ surface: "collateral", slots: { assetId: "a3Xbb000000AAAA", assetLabel: "Fort Wayne inventory", lien: "1st" } }),
+      ctx: CTX,
+      spec: SPEC,
+      seq: 2,
+    })!;
+    expect(d.pledgeWire).toMatchObject({ collateralId: "a3Xbb000000AAAA", facilityId: "new:1" });
+    expect(d.pledgeWire?.newCollateral).toBeUndefined();
+  });
+
+  it("builds a percentage fee that sends no money figure", () => {
+    const d = newFacilityFeeEntry({ kind: "Origination fee", percentage: 1, memberId: "new:1" }, SPEC, 3)!;
+    expect(d.feeWire).toMatchObject({
+      feeType: "Loan Origination",
+      calculationType: "Percentage",
+      percentage: 1,
+      facilityId: "new:1",
+    });
+    expect(d.feeWire?.amount).toBeUndefined();
+  });
+
+  it("returns null rather than a half-built card", () => {
+    expect(newFacilityCreateEntry({ draft: draft({ surface: "covenant", slots: {} }), ctx: CTX, spec: SPEC, seq: 0 })).toBeNull();
+    expect(
+      newFacilityCreateEntry({ draft: draft({ surface: "involvement", slots: { party: "X" } }), ctx: CTX, spec: SPEC, seq: 0 }),
+    ).toBeNull();
+    expect(newFacilityFeeEntry({ kind: "Origination fee", memberId: "new:1" }, SPEC, 0)).toBeNull();
+  });
+
+  it("hands an ASSOCIATE back: that is a junction to a covenant that exists, on its own arm", () => {
+    const d = newFacilityCreateEntry({
+      draft: draft({ surface: "covenant", slots: { associate: true, test: "X", threshold: 1 } }),
+      ctx: CTX,
+      spec: SPEC,
+      seq: 0,
+    });
+    expect(d).toBeNull();
+  });
+});
+
+describe("what may NOT land on a facility this plan is creating", () => {
+  it("refuses a removal by name, matching what the Apex refuses", () => {
+    const why = newFacilityRemovalRefusal("$3MM Equipment", "covenant");
+    expect(why).toContain("$3MM Equipment is a facility this plan is CREATING");
+    expect(why).toContain("no covenant on it to take off");
+    expect(why).toContain("everything on it is an ADD");
+    expect(why).toContain("nothing has come off the manifest");
+  });
+});
+
+describe("the purpose is said rather than silently carried", () => {
+  it("names where it goes, on the card and in the room's own sentence", () => {
+    expect(PURPOSE_HANDOFF).toContain("Purpose goes on the Loan Detail after filing, handed off");
+    const read = readNewFacility(ctx());
+    if (read?.kind !== "card") throw new Error("expected a card");
+    expect(read.said).toContain("Purpose goes on the Loan Detail after filing, handed off");
+    const d = newFacilityDelta(read.spec, { anchorId: LOC, anchorLabel: "Line of Credit ($15M)" });
+    expect(d.map.find(([k]) => k === "Purpose handoff")?.[1]).toBe(PURPOSE_HANDOFF);
   });
 });
