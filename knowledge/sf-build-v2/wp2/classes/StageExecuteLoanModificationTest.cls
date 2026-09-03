@@ -2347,7 +2347,8 @@ private class StageExecuteLoanModificationTest {
             'The org\'s Advance_Rate_Override rule refuses the row without a reason');
         System.assertEquals(1600000, pledge.LLC_BI__Amount_Pledged__c,
             '$2M at the stated 80%, not at the type\'s own 50%');
-        System.assertEquals(false, pledge.LLC_BI__Authorize__c, 'Never set by this tool');
+        System.assertEquals(false, pledge.LLC_BI__Authorize__c,
+            'The share is within the lendable value, so there is nothing to authorise and the checkbox stays down');
         System.assertEquals(null, pledge.LLC_BI__Lien_Position__c, 'Nobody stated a priority, so none is claimed');
         System.assertNotEquals(null, pledge.LLC_BI__Loan_Collateral_Aggregate__c,
             'The parent carried no pledges, so the AUTHORED pledge is what asked for the clone\'s shell');
@@ -2428,8 +2429,9 @@ private class StageExecuteLoanModificationTest {
             '"collateralType":"ZZ-MOD-TEST Equipment","value":1},"advanceRate":50}]';
         StageLoanModification.Request neither = stageReq(key('pledge-neither'));
         neither.pledgeAddsJson = '[{"advanceRate":50}]';
-        // More pledged than the asset can lend against. The escape is LLC_BI__Authorize__c, which
-        // is a banker's checkbox and never a tool's.
+        // More pledged than the asset can lend against, and nobody authorised it. The escape is
+        // LLC_BI__Authorize__c, and the refusal has to NAME it: a dead end that does not say how to
+        // get through is the failure this refusal was rewritten to stop being (2026-09-03).
         StageLoanModification.Request over = stageReq(key('pledge-over'));
         over.pledgeAddsJson = '[{"collateralId":"' + owned.Id + '","amountPledged":900000}]';
 
@@ -2453,12 +2455,186 @@ private class StageExecuteLoanModificationTest {
         System.assert(r4.error.message.contains('never both'), r4.error.message);
         System.assertEquals(false, r5.ok, 'An entry with neither shape names no asset at all');
         System.assert(r5.error.message.contains('Each pledge names its asset'), r5.error.message);
-        System.assertEquals(false, r6.ok, 'An over-pledge is refused rather than authorised');
+        System.assertEquals(false, r6.ok, 'An unauthorised over-pledge is refused rather than filed');
         System.assert(r6.error.message.contains('Pledge_More_Than_Lendable_Value'), r6.error.message);
-        System.assert(r6.error.message.contains('never sets it'), r6.error.message);
+        System.assert(r6.error.message.contains('authoriseOverPledge'),
+            'And the refusal names the one way through it: ' + r6.error.message);
+        System.assert(r6.error.message.contains('500000'),
+            'And the lendable value the caller was measured against: ' + r6.error.message);
 
         System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Collateral2__c],
             'None of the six wrote anything');
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // THE THREE RULES A BANKER FOUND BY HITTING THEM (2026-09-03).
+    //
+    // Every one of these came out of a live room rather than a spec: three round trips to discover
+    // what the pledge arm wanted. A rule a caller can only learn by being refused is a rule the tool
+    // failed to state, so each of them is now in the tool description AND proven here.
+    // ---------------------------------------------------------------------------------------------
+
+    /** 255 on LLC_BI__Description__c. The refusal carries the length, so the caller can cut to fit
+     *  rather than guess, and nothing is truncated on their behalf. */
+    @IsTest
+    static void aCollateralDescriptionOverTheOrgsLimitIsRefusedWithItsOwnLength() {
+        C360TestFixture.armCalloutMock();
+        collateralType('ZZ-MOD-TEST Equipment', 50);
+        String tooLong = 'x'.repeat(256);
+
+        StageLoanModification.Request r = stageReq(key('pledge-longdesc'));
+        r.pledgeAddsJson = '[{"newCollateral":{"description":"' + tooLong +
+            '","collateralType":"ZZ-MOD-TEST Equipment","value":100000},"advanceRate":50}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A description the field cannot hold is refused, not trimmed');
+        System.assert(res.error.message.contains('255'),
+            'The refusal states the limit: ' + res.error.message);
+        System.assert(res.error.message.contains('256'),
+            'And what the caller actually sent, which is what makes it actionable: ' + res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Collateral__c WHERE LLC_BI__Description__c LIKE 'xxx%'],
+            'Nothing was written');
+    }
+
+    /** Collateral-type NAMES are not unique in this org: Real Estate-Construction exists twice, at
+     *  80% and at 90%. Resolving to whichever row was read first would pick a lendable value nobody
+     *  chose, so the name is refused with the ids AND the rates that make the choice matter. */
+    @IsTest
+    static void anAmbiguousCollateralTypeNameIsRefusedWithTheCandidateIdsAndTheirRates() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Collateral_Type__c lower = collateralType('ZZ-MOD-TEST Real Estate-Construction', 80);
+        LLC_BI__Collateral_Type__c higher = collateralType('ZZ-MOD-TEST Real Estate-Construction', 90);
+
+        StageLoanModification.Request r = stageReq(key('pledge-ambiguous'));
+        r.pledgeAddsJson = '[{"newCollateral":{"description":"Half-built distribution centre",' +
+            '"collateralType":"ZZ-MOD-TEST Real Estate-Construction","value":1000000},"advanceRate":75}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A name matching two types names neither of them');
+        System.assert(res.error.message.contains('matches 2 collateral types'), res.error.message);
+        System.assert(res.error.message.contains(String.valueOf(lower.Id)) &&
+                      res.error.message.contains(String.valueOf(higher.Id)),
+            'Both candidate ids are in the refusal, because the id is what settles it: ' + res.error.message);
+        System.assert(res.error.message.contains('80') && res.error.message.contains('90'),
+            'And both advance rates, because that is the difference the banker is choosing between: ' + res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Collateral__c], 'Nothing was written');
+    }
+
+    /** The id form, which is what Customer360Catalog publishes. It settles the same ambiguity the
+     *  name could not, and the asset lands on the type the caller actually named. */
+    @IsTest
+    static void aCollateralTypeIdIsAcceptedWhereTheNameWouldBeAmbiguous() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('pledge-typeid');
+        collateralType('ZZ-MOD-TEST Real Estate-Construction', 80);
+        LLC_BI__Collateral_Type__c higher = collateralType('ZZ-MOD-TEST Real Estate-Construction', 90);
+
+        StageLoanModification.Request r = stageReq(k);
+        r.pledgeAddsJson = '[{"newCollateral":{"description":"Half-built distribution centre",' +
+            '"collateralType":"' + higher.Id + '","value":1000000},"advanceRate":75}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(1, done.result.pledges.size());
+
+        LLC_BI__Collateral__c asset = [
+            SELECT LLC_BI__Collateral_Type__c, LLC_BI__Value__c
+            FROM LLC_BI__Collateral__c WHERE Id = :done.result.pledges[0].collateralId
+        ];
+        System.assertEquals(higher.Id, asset.LLC_BI__Collateral_Type__c,
+            'The id named ONE of the two same-named rows, and that is the one the asset carries');
+    }
+
+    /** An unstated share is not a zero. It defaults to the asset's lendable value at the rate the
+     *  pledge resolves to, which here is the stated override rather than the type's own rate. */
+    @IsTest
+    static void anOmittedAmountPledgedDefaultsToTheAssetsLendableValue() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('pledge-default-amount');
+        collateralType('ZZ-MOD-TEST Equipment', 50);
+
+        StageLoanModification.Request r = stageReq(k);
+        r.pledgeAddsJson = '[{"newCollateral":{"description":"Packing line","collateralType":"ZZ-MOD-TEST Equipment",' +
+            '"value":1000000},"advanceRate":40}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+
+        Boolean planStatesTheFigure = false;
+        for (StageLoanModification.PlanStep ps : staged.result.steps) {
+            if (ps.id == 'pledge_add_0' && ps.label.contains('400000')) {
+                planStatesTheFigure = true;
+            }
+        }
+        System.assertEquals(true, planStatesTheFigure,
+            'The banker confirms the defaulted figure rather than discovering it afterwards: ' +
+            JSON.serialize(staged.result.steps));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        LLC_BI__Loan_Collateral2__c pledge = [
+            SELECT LLC_BI__Amount_Pledged__c, LLC_BI__Authorize__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE Id = :done.result.pledges[0].pledgeId
+        ];
+        System.assertEquals(400000, pledge.LLC_BI__Amount_Pledged__c,
+            '$1M at the STATED 40%, not at the type\'s own 50% and not at zero');
+        System.assertEquals(false, pledge.LLC_BI__Authorize__c,
+            'The default can never be an over-pledge, so it never authorises one');
+    }
+
+    /** The way through the refusal, and the only one: an explicit authorisation on the entry sets
+     *  the org's own Authorize Pledge Amount checkbox, which is what Pledge_More_Than_Lendable_Value
+     *  reads. The decision stays the caller's; what the tool stopped doing is pretending it could
+     *  not be expressed. */
+    @IsTest
+    static void anOverPledgeIsFiledOnlyWhereTheCallerAuthorisedIt() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        String k = key('pledge-authorised');
+        LLC_BI__Collateral_Type__c ct = collateralType('ZZ-MOD-TEST Equipment', 50);
+        LLC_BI__Collateral__c owned = ownedAsset(ct, 'Duluth packing line', 1000000);
+
+        StageLoanModification.Request r = stageReq(k);
+        r.pledgeAddsJson = '[{"collateralId":"' + owned.Id + '","amountPledged":900000,"authoriseOverPledge":true}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        Boolean warned = false;
+        for (String w : staged.result.warnings) {
+            if (w.contains('MORE than the lendable value')) {
+                warned = true;
+            }
+        }
+        System.assertEquals(true, warned,
+            'An authorised over-pledge is confirmed in words, never quietly: ' + JSON.serialize(staged.result.warnings));
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        LLC_BI__Loan_Collateral2__c pledge = [
+            SELECT LLC_BI__Amount_Pledged__c, LLC_BI__Authorize__c
+            FROM LLC_BI__Loan_Collateral2__c WHERE Id = :done.result.pledges[0].pledgeId
+        ];
+        System.assertEquals(900000, pledge.LLC_BI__Amount_Pledged__c,
+            'The figure the caller asked for, above the 500000 the asset lends against');
+        System.assertEquals(true, pledge.LLC_BI__Authorize__c,
+            'And the org\'s own escape from Pledge_More_Than_Lendable_Value is set, which is why the row exists at all');
     }
 
     @IsTest
