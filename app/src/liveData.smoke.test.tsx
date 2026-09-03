@@ -130,17 +130,18 @@ describe("the shapes a real bundle is allowed to arrive in", () => {
   });
 
   it("tolerates a bundle with no boom, no verdict and no requests", () => {
-    // Hartwell WAS the live fixture for this guard until 2026-09-01, when the
-    // founder had its missing verdict composed (it was the one borrower
-    // without a hero sentence, and the hole read as lost information). The
-    // tolerance contract survives on a synthetic stripped bundle instead: the
-    // cockpit still cannot depend on a producer always sending all three.
+    // Hartwell WAS the live fixture for this guard, first losing its missing
+    // verdict on 2026-09-01 and then its missing boom on 2026-09-03, when the
+    // demo borrower was given a spread. Both holes read as lost information on
+    // the glass, so both were filled. The tolerance contract survives on a
+    // synthetic stripped bundle instead: the cockpit still cannot depend on a
+    // producer always sending all three.
     const hartwell = (live as unknown as C360Data).borrowers?.["001bb00001I7FPNAA3"]!;
-    expect(hartwell.boom).toBeUndefined();
     expect(hartwell.requests).toBeUndefined();
-    const stripped = { ...hartwell, verdict: undefined };
+    const stripped = { ...hartwell, verdict: undefined, boom: undefined };
     expect(() => readAnchors(stripped)).not.toThrow();
     expect(stripped.verdict).toBeUndefined();
+    expect(stripped.boom).toBeUndefined();
   });
 });
 
@@ -157,10 +158,10 @@ describe("Hartwell's real-data conditions each render as a gap, not a crash", ()
     return container!.textContent ?? "";
   };
 
-  it("no Boom workbook: the Financials tab states the gap", () => {
+  it("the Financials tab renders Hartwell's spread", () => {
     const text = openTab("Financials");
     expect(text).toContain(HARTWELL);
-    // An honest gap, in the tab's own words, rather than an empty panel.
+    // Four periods, and the LTM revenue the dossier and the covenants both stand on.
     expect(text.length).toBeGreaterThan(200);
   });
 
@@ -172,11 +173,34 @@ describe("Hartwell's real-data conditions each render as a gap, not a crash", ()
     expect(text).toContain(nulls[0].covenantType ?? "");
   });
 
-  it("a facility that matured in the past renders without throwing", () => {
+  it("no facility has matured, and one that had would still render", () => {
+    // Hartwell carried an already-expired $2.5M line, maturity 2026-06-30, until
+    // 2026-09-03, when the two lines were aligned onto 2027-03-15. A booked
+    // facility whose maturity is in the past is a data fault, not a state the
+    // demo should show, so the fixture is asserted clean. The crash guard the
+    // old assertion bought is kept on a synthetic past-dated facility.
     const facs = data.borrowers?.["001bb00001I7FPNAA3"]?.exposure?.facilities ?? [];
-    const past = facs.filter((f) => f.maturityDate && f.maturityDate < "2026-07-26");
-    expect(past.length, "the fixture should carry a matured facility").toBeGreaterThan(0);
-    expect(openTab("Exposure & Collateral")).toContain(HARTWELL);
+    expect(facs.filter((f) => f.maturityDate && f.maturityDate < "2026-09-03")).toHaveLength(0);
+    const withPast = {
+      ...data,
+      borrowers: {
+        ...data.borrowers,
+        "001bb00001I7FPNAA3": {
+          ...data.borrowers!["001bb00001I7FPNAA3"],
+          exposure: {
+            ...data.borrowers!["001bb00001I7FPNAA3"].exposure,
+            facilities: [{ ...facs[0], maturityDate: "2024-01-31" }, ...facs.slice(1)],
+          },
+        },
+      },
+    } as C360Data;
+    mount(withPast);
+    openAccount(HARTWELL);
+    const button = [...container!.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Exposure & Collateral",
+    )!;
+    click(button);
+    expect(container!.textContent ?? "").toContain(HARTWELL);
   });
 
   it("no verdict key: the header renders without one", () => {

@@ -228,7 +228,8 @@ describe("Hartwell: the account's six covenants, and the loans behind two of the
     expect(cell(opened[0], 0)).toBe("Construction");
     expect(cell(opened[0], 1)).toBe("$12M");
     expect(cell(opened[0], 2)).toBe("$7.35M");
-    expect(cell(opened[0], 3)).toBe("Nov 1, 2026");
+    // Aligned onto the C&I term-loan maturity 2026-09-03; it read Nov 1, 2026.
+    expect(cell(opened[0], 3)).toBe("Mar 15, 2031");
     // No measured value: the test says so rather than inventing one.
     expect(cell(opened[0], 4)).toBe("—");
   });

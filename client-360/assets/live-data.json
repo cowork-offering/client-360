@@ -17,7 +17,7 @@
         "name": "Hartwell Precision Manufacturing LLC",
         "industry": "Manufacturing",
         "naicsCode": "332710",
-        "annualRevenue": 85000000,
+        "annualRevenue": 64200000,
         "riskRating": "4",
         "stage": "Booked",
         "packageCount": 1,
@@ -2019,10 +2019,81 @@
           "nextRevaluationDue": "2027-02-28"
         }
       ],
+      "boom": {
+        "ratios": {
+          "revenue": 64200000,
+          "ebitda": 5200000,
+          "ebitdaMargin": 8.1,
+          "totalLeverage": 2.42,
+          "interestCoverage": 2.95
+        },
+        "spread": {
+          "sourceFile": "Hartwell_Precision_FY2025_LTM.xlsx",
+          "periods": [
+            {
+              "period": "FY2023",
+              "revenue": 52400000,
+              "ebitda": 4120000,
+              "margin": 7.86
+            },
+            {
+              "period": "FY2024",
+              "revenue": 58900000,
+              "ebitda": 4610000,
+              "margin": 7.83
+            },
+            {
+              "period": "FY2025",
+              "revenue": 63800000,
+              "ebitda": 5040000,
+              "margin": 7.9
+            },
+            {
+              "period": "LTM",
+              "revenue": 64200000,
+              "ebitda": 5200000,
+              "margin": 8.1
+            }
+          ],
+          "lineItems": [
+            {
+              "line": "Revenue",
+              "ltm": 64200000,
+              "priorFy": 63800000
+            },
+            {
+              "line": "Gross Profit",
+              "ltm": 15600000,
+              "priorFy": 15310000
+            },
+            {
+              "line": "EBITDA",
+              "ltm": 5200000,
+              "priorFy": 5040000
+            },
+            {
+              "line": "Net Income",
+              "ltm": 912000,
+              "priorFy": 950000
+            },
+            {
+              "line": "Interest Expense",
+              "ltm": 1760000,
+              "priorFy": 1610000
+            },
+            {
+              "line": "Free Cash Flow",
+              "ltm": 2110000,
+              "priorFy": 2240000
+            }
+          ]
+        },
+        "note": "Source: Boom spreading — Hartwell_Precision_FY2025_LTM.xlsx"
+      },
       "snapshot": {
         "accountId": "001bb00001I7FPNAA3",
         "productPackageId": "a5Fbb000000IHFJEA4",
-        "annualRevenue": 85000000,
+        "annualRevenue": 64200000,
         "industry": "Manufacturing",
         "naicsCode": "332710",
         "name": "Hartwell Precision Manufacturing LLC",
@@ -2053,7 +2124,7 @@
             "name": "Hartwell Precision Manufacturing LLC - Line of Credit - $15,000,000.00",
             "maturityDate": "2027-03-15",
             "loanId": "a4Zbb0000027MaYEAU",
-            "interestRate": null,
+            "interestRate": 6.58,
             "coverageShortfall": false,
             "coverageRatio": 1.3,
             "coverageNote": null,
@@ -2102,9 +2173,9 @@
             "productPackageId": "a5Fbb000000IHFJEA4",
             "outstanding": 7350000,
             "name": "Hartwell Precision Manufacturing LLC - Construction - $12,000,000.00",
-            "maturityDate": "2026-11-01",
+            "maturityDate": "2031-03-15",
             "loanId": "a4Zbb0000027Mp3EAE",
-            "interestRate": null,
+            "interestRate": 7.08,
             "coverageShortfall": true,
             "coverageRatio": 0.75,
             "coverageNote": null,
@@ -2138,9 +2209,9 @@
             "productPackageId": "a5Fbb000000IHFJEA4",
             "outstanding": 5900000,
             "name": "Hartwell Precision Manufacturing LLC - Equipment - $8,000,000.00",
-            "maturityDate": "2030-09-20",
+            "maturityDate": "2031-03-15",
             "loanId": "a4Zbb0000027MnREAU",
-            "interestRate": null,
+            "interestRate": 6.45,
             "coverageShortfall": false,
             "coverageRatio": 1,
             "coverageNote": null,
@@ -2174,9 +2245,9 @@
             "productPackageId": "a5Fbb000000IHFJEA4",
             "outstanding": 4420000,
             "name": "Hartwell Precision Manufacturing LLC - Purchase - $5,000,000.00",
-            "maturityDate": "2028-05-10",
+            "maturityDate": "2031-03-15",
             "loanId": "a4Zbb0000027MqfEAE",
-            "interestRate": null,
+            "interestRate": 6.2,
             "coverageShortfall": false,
             "coverageRatio": 1.13,
             "coverageNote": null,
@@ -2210,9 +2281,9 @@
             "productPackageId": "a5Fbb000000IHFJEA4",
             "outstanding": 3010000,
             "name": "Hartwell Precision Manufacturing LLC - Equipment - $3,500,000.00",
-            "maturityDate": "2030-02-18",
+            "maturityDate": "2031-03-15",
             "loanId": "a4Zbb0000027MsHEAU",
-            "interestRate": null,
+            "interestRate": 6.75,
             "coverageShortfall": true,
             "coverageRatio": 0.53,
             "coverageNote": null,
@@ -2246,9 +2317,9 @@
             "productPackageId": "a5Fbb000000IHFJEA4",
             "outstanding": 1150000,
             "name": "Hartwell Precision Manufacturing LLC - Line of Credit - $2,500,000.00",
-            "maturityDate": "2026-06-30",
+            "maturityDate": "2027-03-15",
             "loanId": "a4Zbb0000027MttEAE",
-            "interestRate": null,
+            "interestRate": 6.83,
             "coverageShortfall": false,
             "coverageRatio": 1.39,
             "coverageNote": null,
