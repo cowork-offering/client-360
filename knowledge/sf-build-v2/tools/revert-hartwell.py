@@ -52,5 +52,17 @@ for pass_n in range(1, 8):
         print(f'aggregate sweep pass {pass_n}: clean'); break
     print(f'aggregate sweep pass {pass_n}: {len(orphans)} orphans')
     delete(orphans, 'aggregates')
+# 3b. NET-NEW COVENANTS, opt-in. The junction sweep above takes the covenant OFF the clone; the
+# LLC_BI__Covenant2__c record itself lives on the ACCOUNT and survives every step here, which is
+# correct for a covenant the relationship already held and wrong for one a drive minted. Pass the
+# ids the run reported and they go, with their LLC_BI__Account_Covenant__c rows. Default is
+# unchanged: with the variable unset nothing on the account is touched.
+new_covs = [c.strip() for c in os.environ.get('NEW_COVENANTS', '').split(',') if c.strip()]
+if new_covs:
+    inCov = "('" + "','".join(new_covs) + "')"
+    delete(ids(f"SELECT Id FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Covenant2__c IN {inCov}"), 'net-new covenant junctions')
+    delete(ids(f"SELECT Id FROM LLC_BI__Account_Covenant__c WHERE LLC_BI__Covenant2__c IN {inCov}"), 'net-new account covenants')
+    delete(new_covs, 'net-new covenants')
+
 # 4-7: run revert-finish.py next (chain rows, clones, package, verify) - SOQL refuses OR beside a semi-join, finish splits it
 print('graph cleared - now run revert-finish.py with the same NEW_PKG')
