@@ -3,21 +3,56 @@
 Branch `glass-refract`, cut from `main` at b116cf9. Built, gated, shot and filmed; NOT merged, NOT
 released, NOT published as an artifact. The compare page is the decision.
 
-Three modes, after three rounds of founder feedback on 2026-09-03:
+**LIQUID SHIPS AS THE DEFAULT** (founder, 2026-09-03). A pinned artifact opened with no query
+string is the refractive cockpit. The frost is now the thing you ask for.
 
-- `?refract=1` (or `#refract`): **ON**. The bend on every glass surface, the workroom pane
-  included, plus the pane's depth pass and the ground band.
-- `?refract=2` (or `#refract2`) is kept as an alias of 1, so every link already written still lands.
-- `?refract=3` (or `#refract3`): **LIQUID**. Clearer glass, an edge lens, chromatic fringe at the
-  rim, a ground that drifts, a specular sweep.
+| how you ask | mode |
+|---|---|
+| nothing at all | **liquid** |
+| `?refract=0`, `#frost` | frost, the cockpit as it shipped before the bend |
+| `?refract=1`, `#refract` | subtle, the uniform bend at the old frost |
+| `?refract=2`, `#refract2` | alias of subtle, so every old link still lands |
+| `?refract=3`, `#refract3` | liquid, stated explicitly |
 
-`window.c360Refract(on, liquid)` flips the same classes live for an A/B in one tab.
+Precedence is **query, then localStorage, then liquid**, in that order on purpose: a preview link
+has to pin a mode for whoever opens it regardless of what that person last chose in their own
+browser. It all lives in `app/src/glassMode.ts`; `main.tsx` calls `bootGlass()` before React mounts
+so the first paint is already in the right material and nothing flashes frost on its way to glass.
+
+### The switch the founder can reach mid-demo
+
+Two rows in the command palette, kind **View**, exactly:
+
+```
+Glass: liquid
+Glass: frost
+```
+
+Typing `glass` shows both, `frost` or `liquid` narrows to one, and `bend`, `lens` and `refraction`
+find liquid through its hidden match text. **It applies without a reload**: the stylesheet branches
+on two classes on `<html>`, so switching is two `classList` calls and the next paint, nothing
+re-renders and nothing remounts. The choice is written to `localStorage` under `c360.glass`, read
+back on the next open, and every access to storage is wrapped in try/catch in both directions:
+a browser that refuses storage boots liquid and still switches for that view.
+
+**Two rows and not one toggle.** A toggle row has to say what it will do, which means its label
+changes under the reader between one keystroke and the next, and a palette whose rows rename
+themselves is a palette you cannot aim at.
+
+**There is no settings or view menu in this app to put a second copy in.** The top bar is a mark,
+a nav capsule, a live dot, the command chip and an avatar; the avatar is a `span` with a title, not
+a menu. The palette is the surface, and adding a menu to hold one item would be inventing chrome
+the cockpit has never had.
+
+`window.c360Glass("liquid" | "subtle" | "frost")` flips it from the console, and
+`window.c360Refract(on, liquid)` is kept as a shim over it because it is written into the earlier
+compare-page notes.
 
 ## The two links
 
 - Compare page, OFF vs ON vs LIQUID, motion first: <https://bot.connectry.io/s/a78773385799/>
-- Live build: <https://bot.connectry.io/s/2127d57e4bbb/?refract=1> (also `=2`, `=3`).
-  Without the query the page is today's cockpit plus the ground band, and nothing else.
+- Live build: <https://bot.connectry.io/s/2127d57e4bbb/>, which is now liquid with no query string.
+  `?refract=0` for the frost, `?refract=1` for the subtle bend.
 
 ## Round 1's finding, which drove everything after it
 
@@ -251,8 +286,15 @@ pass bought, and it is priced on the page.
 
 ## Speed
 
-rAF counter, medians of three runs, headless Chromium on a 4 core box with no GPU. The absolute
-numbers are pessimistic on that hardware; the ratios are the signal.
+rAF counter, medians of three runs, headless Chromium on a 4 core box.
+
+**THE BOX HAS NO GPU.** Every backdrop-filter and every displacement pass in the table below is
+being run on the CPU by a software rasteriser, which is the worst case there is for exactly this
+kind of work: displacement maps and Gaussian blurs are the two things a GPU does almost for free
+and a CPU does pixel by pixel. Nothing here should be read as a frame rate anyone will experience.
+**The real judgment is on the founder's Mac**, where all of it is hardware-composited. These
+numbers are good for one thing, which is comparing the rows against each other, and that is the
+only claim made for them.
 
 | ms / frame | landing idle | landing scrolling | client idle | client scrolling |
 |---|---:|---:|---:|---:|
@@ -412,7 +454,7 @@ only that property and would reject the `url()` too. Firefox supports reference 
 ## Gate
 
 `npx tsc --noEmit` clean. `npx vitest run`: 108 files, 3165 tests, all passing. `npm run build`
-green, 1,379,047 bytes, inside the 1.5 MiB budget. Release chain NOT run, artifact NOT published, NOT
+green, 1,380,046 bytes, inside the 1.5 MiB budget. Release chain NOT run, artifact NOT published, NOT
 merged to main.
 
 ## Open, for the founder
@@ -425,10 +467,11 @@ merged to main.
 2. **ON is flat on the main pages, 0.03 across the whole client page**, and cannot be rescued from
    the ground: its frost averages away anything quiet enough to leave the canvas alone. If liquid is
    the direction, ON is a step on the way rather than a mode anyone would choose.
-3. **Liquid still costs about 2.7x frost per frame** on the client page (149 against 55 ms,
-   headless, no GPU) after a 55 percent cut. The remaining lever is the life pass, which is worth
-   another 44 ms and would make the middle of a pane a window rather than glass. It has not been
-   taken.
+3. **Liquid still costs about 2.7x frost per frame** on the client page (149 against 55 ms) after a
+   55 percent cut, on a box with no GPU. That ratio should compress sharply on hardware and the
+   call is yours to make on the Mac. The remaining lever, if it does not, is the life pass: worth
+   another 44 ms, at the cost of making the middle of a pane a window rather than glass. It has not
+   been taken.
 4. **Liquid's ground blooms carry a violet radial at .05**, which is rule 21's subject. It is
    quieter than the round-two version by half and inside the canvas's own ambient budget, but it is
    still purple on the ground and it is still a call.
