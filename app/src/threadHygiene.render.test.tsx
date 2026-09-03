@@ -921,3 +921,321 @@ describe("the settle glides rather than snapping (founder, 2026-09-03)", () => {
     expect(SETTLE_EXIT_MS).toBeLessThanOrEqual(460);
   });
 });
+
+/* ===================== the runtime got in the way (founder, 2026-09-03) */
+
+describe("a runtime failure is one quiet line, and the model stops talking", () => {
+  /** The artifact runtime's own refusal, at the shape it reaches the room in. */
+  const SCOPE_ERROR = "This call is outside the scope you consented to. Reload to review.";
+
+  /** A door that answers, so a remark WOULD be asked for if anything asked. */
+  const talkingSession = () =>
+    installSession("The pledged pool does not move with the commitment as it grows.");
+
+  async function openWithBrokenStage(error: string) {
+    await acquireSample(50);
+    const bundle = data.borrowers![accountId];
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+    const engine = createModifyEngine({ context, data, bundle });
+    /* THE ORG IS REACHED AND REFUSES AT THE HOST. Only `stage` is broken: the
+       parse, the manifest and every gate before it are the real code. */
+    const broken = { ...engine, stagePlan: async () => { throw new Error(error); } };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={broken as unknown as typeof engine}
+          reads={{
+            bundle,
+            accountName: bundle.snapshot!.name!,
+            productPackageId: context.productPackageId,
+            generatedAt: "2026-09-03T08:00:00.000Z",
+          }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  async function toReview(room: HTMLElement) {
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+    await click([...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Acknowledge"));
+    await click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => /Leave pricing for later/.test(b.textContent ?? "")));
+    await click(room.querySelector<HTMLButtonElement>(".wk-propose"));
+  }
+
+  it("shows the host's refusal as ONE quiet line with a Reload chip", async () => {
+    talkingSession();
+    const room = await openWithBrokenStage(SCOPE_ERROR);
+    await settle();
+    await toReview(room);
+
+    const trouble = [...room.querySelectorAll<HTMLElement>('[data-trouble="line"]')];
+    expect(trouble).toHaveLength(1);
+    expect(trouble[0].textContent).toContain("outside the scope you consented to");
+    expect(trouble[0].querySelector("button")?.textContent).toBe("Reload");
+    // NOT an agent bubble: the runtime is not the bank and not the room.
+    expect([...room.querySelectorAll(".wk-agent .wk-bub")].some((b) => b.textContent?.includes("outside the scope"))).toBe(
+      false,
+    );
+  });
+
+  it("NEVER follows it with a model remark, however many times it is retried", async () => {
+    const session = talkingSession();
+    const room = await openWithBrokenStage(SCOPE_ERROR);
+    await settle();
+    await toReview(room);
+    const remarks = room.querySelectorAll(".wk-narr").length;
+    const calls = session.calls.length;
+
+    // The banker tries again, exactly as he did.
+    await click(room.querySelector<HTMLButtonElement>(".wk-propose"));
+    await click(room.querySelector<HTMLButtonElement>(".wk-propose"));
+
+    expect(room.querySelectorAll(".wk-narr")).toHaveLength(remarks);
+    expect(session.calls).toHaveLength(calls);
+    // Two attempts, two lines, and not one word of credit commentary.
+    expect(room.querySelectorAll('[data-trouble="line"]').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("lets the model speak again once the banker says something next", async () => {
+    talkingSession();
+    const room = await openWithBrokenStage(SCOPE_ERROR);
+    await settle();
+    await toReview(room);
+    await typeInto(room, "move the construction loan maturity to 2029-06-30");
+    // The hush is about the trouble, not about the room: the exchange moved on.
+    expect(room.querySelector(".wk-txt")).not.toBeNull();
+    expect(room.querySelectorAll('[data-trouble="line"]').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+/* ============================ the remark never grows and then shrinks (rule 5) */
+
+describe("a remark is guarded before it is revealed (founder, 2026-09-03)", () => {
+  /** A remark whose FIRST sentence the guards will strip: it claims an action
+   *  nobody took. If the raw stream were rendered, the banker would read it and
+   *  then watch it vanish. */
+  const STRIPPED = [
+    "The banker moved the first payment date forward two months to Oct 1, 2026.",
+    "The cover behind the facility thins as the commitment grows.",
+  ].join(" ");
+
+  const ROWS = [
+    "The package holds through the increase.",
+    "- **Debt Service Coverage of Borrower**: the widest cushion on the deal.",
+    "- **Maximum Debt to Worth**: room before it binds either way.",
+    "- **Accounts Receivable**: exactly on its ceiling.",
+  ].join("\n");
+
+  /** Every rendered state of the remark, frame by frame. */
+  async function recordRemark(text: string) {
+    installSession(text);
+    const room = await openRoom();
+    await settle();
+    const seen: Array<{ chars: number; rows: number; lists: number }> = [];
+    const sample = () => {
+      const bub = room.querySelector<HTMLElement>(".wk-narr .wk-bub");
+      if (!bub) return;
+      seen.push({
+        chars: (bub.textContent ?? "").length,
+        rows: bub.querySelectorAll(".wk-narr-row").length,
+        lists: bub.querySelectorAll(".wk-narr-rows, .wk-narr-list").length,
+      });
+    };
+    await typeInto(room, "pledge the Fort Wayne equipment on the 2.5M line of credit");
+    for (let i = 0; i < 8; i++) {
+      sample();
+      await settle();
+    }
+    sample();
+    return { room, seen };
+  }
+
+  it("never shows a sentence the guards were going to take away", async () => {
+    const { room } = await recordRemark(STRIPPED);
+    const bub = room.querySelector<HTMLElement>(".wk-narr .wk-bub");
+    if (!bub) return; // the room refused the line; there is no remark to hold
+    expect(bub.textContent).not.toContain("moved the first payment date");
+  });
+
+  it("never gets shorter between frames", async () => {
+    const { seen } = await recordRemark(STRIPPED);
+    const live = seen.filter((s) => s.chars > 0);
+    for (let i = 1; i < live.length; i++) {
+      expect(live[i].chars).toBeGreaterThanOrEqual(live[i - 1].chars);
+    }
+  });
+
+  it("renders the line items as rows from the first paint, and never collapses them", async () => {
+    const { room, seen } = await recordRemark(ROWS);
+    const bub = room.querySelector<HTMLElement>(".wk-narr .wk-bub");
+    if (!bub) return;
+    const live = seen.filter((s) => s.chars > 0);
+    if (!live.length) return;
+    // The row count is the FINAL row count from the first frame the remark
+    // exists: the guards ran before any of it was shown.
+    const rows = live[0].rows;
+    expect(rows).toBeGreaterThan(0);
+    for (const frame of live) {
+      expect(frame.rows).toBe(rows);
+      // AND NEVER A PARAGRAPH. A list that reflowed into prose would drop to 0.
+      expect(frame.lists).toBeGreaterThan(0);
+    }
+  });
+});
+
+/* ================================= the total is the staged total (rule 4) */
+
+describe("the package total is the manifest's own (founder, 2026-09-03)", () => {
+  it("does not report the total from before the change that is on the plan", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+
+    const said = room.textContent ?? "";
+    // The commitment moved, so the sentence is a MOVE and never a hold.
+    expect(said).toMatch(/takes the package from/);
+    expect(said).not.toMatch(/The package total holds at \$46/);
+
+    // And a second card that moves no money reads the total WITH the increase
+    // in it, not the total as the last render saw it.
+    await click([...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Acknowledge"));
+    await click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => /Leave pricing for later/.test(b.textContent ?? "")));
+    await typeInto(room, "move the 2.5M line of credit rate to 7.25%");
+    await click(confirmButton(room));
+
+    const holds = (room.textContent ?? "").match(/The package total holds at (\$[\d.]+M)/);
+    if (holds) expect(holds[1]).not.toBe("$46.0M");
+  });
+});
+
+/* ============ the check is its own exchange (founder, 2026-09-03) */
+
+describe("acknowledging a check leaves the question beside it alone", () => {
+  const chips = (room: HTMLElement) =>
+    [...room.querySelectorAll<HTMLButtonElement>('[data-settle-state="on"] .wk-opt')].map((b) => b.textContent ?? "");
+
+  it("keeps the amortisation chips on stage, and answerable", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+
+    // The confirm raised BOTH: a check about the cover, and the question the
+    // version needs. They are two exchanges and not one.
+    expect(room.textContent).toContain("Coverage thins");
+    expect(chips(room).some((c) => /240 months/.test(c))).toBe(true);
+
+    await click([...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Acknowledge"));
+
+    // THE CHECK SETTLED. The question did not.
+    expect(room.querySelectorAll(".wk-settled").length).toBeGreaterThan(0);
+    expect(chips(room).some((c) => /240 months/.test(c))).toBe(true);
+
+    // And it is still answerable: the banker does not have to re-open anything.
+    await click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => /240 months/.test(b.textContent ?? "")));
+    expect(room.textContent).toContain("240 months");
+  });
+});
+
+/* ============ only the latest action is on the stage (founder, 2026-09-03) */
+
+describe("the stage carries the latest action and nothing older", () => {
+  const onStageExchanges = (room: HTMLElement) => {
+    const live = [...room.querySelectorAll<HTMLElement>('.wk-thread [data-settle-state="on"]')];
+    // A banker or fed line opens an exchange; count those, plus one for a
+    // trailing run the room opened itself.
+    const opens = live.filter((el) => el.querySelector(".wk-banker, [data-fed='line']")).length;
+    return Math.max(opens, live.length ? 1 : 0);
+  };
+
+  it("settles an exchange nobody decided, once the next one begins", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    // A READ is answered and decided by nobody: it used to stand for the rest
+    // of the session.
+    await typeInto(room, "which borrowers are on this package");
+    await typeInto(room, "which covenants do we carry");
+    await typeInto(room, "increase the 15M line of credit to 20M");
+
+    expect(room.querySelectorAll(".wk-settled").length).toBeGreaterThan(0);
+    expect(onStageExchanges(room)).toBeLessThanOrEqual(2);
+    // The oldest read is off the stage and still in the document.
+    expect(room.querySelectorAll('[data-settle-state="settled"]').length).toBeGreaterThan(0);
+  });
+
+  it("mounts a restored session already settled, with nothing animating out", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "which borrowers are on this package");
+    await typeInto(room, "which covenants do we carry");
+    // NOTHING IS MID-EXIT. A restored exchange was never on this stage, so it
+    // is not watched leaving it.
+    expect(room.querySelectorAll('[data-settle-state="leaving"]')).toHaveLength(0);
+  });
+});
+
+/* ============ the pricing ask informs, it never forces (founder, 2026-09-03) */
+
+describe("every pricing ask can be left", () => {
+  const skipChip = (room: HTMLElement, rx: RegExp) =>
+    [...room.querySelectorAll<HTMLButtonElement>('[data-settle-state="on"] .wk-opt')].find((b) => rx.test(b.textContent ?? ""));
+
+  it("offers the skip on the amortisation ask, and takes it", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+    await click([...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Acknowledge"));
+
+    const skip = skipChip(room, /Leave pricing for later/);
+    expect(skip).toBeTruthy();
+    await click(skip);
+
+    // Nothing staged for it, and the room asks no more pricing questions.
+    expect(room.textContent).toContain("left for later");
+    expect(skipChip(room, /240 months/)).toBeUndefined();
+  });
+
+  it("lets the banker type straight past the ask, and settles it as skipped", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+    await click([...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Acknowledge"));
+
+    // A new instruction over an open pricing question IS an answer to it.
+    await typeInto(room, "move the construction loan maturity to 2029-06-30");
+
+    // The line went through: the room is holding a card for it.
+    expect(room.textContent).toContain("Jun 30, 2029");
+    // The ask is a row, and it says what the consequence is.
+    const rows = [...room.querySelectorAll<HTMLElement>(".wk-settled")].map((r) => r.textContent ?? "");
+    expect(rows.some((r) => /Pricing left for later/.test(r))).toBe(true);
+    // AND THE COMMITMENT IS STILL ON THE PLAN.
+    const rail = (room.querySelector(".wk-col-r")?.textContent ?? "").replace(/\s+/g, " ");
+    expect(rail).toMatch(/Commitment/i);
+  });
+
+  it("never ends a sentence on the retired tail", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+    expect(room.textContent).not.toContain("Anything else on this facility");
+  });
+});

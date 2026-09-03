@@ -74,6 +74,17 @@ export const PRICING_CATALOG_ID: Record<PricingSlot, string> = {
 export const PRICING_WHY =
   "nCino needs the amount, the term, the amortised term and the first payment date before it will price this loan.";
 
+/**
+ * WHAT A SKIPPED PRICING ASK BECOMES, in one quiet row.
+ *
+ * FOUNDER, 2026-09-03: "I also get forced to fill this out." Every pricing ask
+ * is INFORMATION - the version cannot be priced until these are set - and none
+ * of them is a gate. Leaving them is a real answer, it stages nothing, and the
+ * row says what the consequence is without asking again.
+ */
+export const PRICING_SKIPPED =
+  "Pricing left for later: nCino will ask for the amortised term and first payment date before the rate and payment stream can be set";
+
 /** What the banker reads when they leave it. */
 export const PRICING_LATER =
   "Left for later. Nothing is staged for it, and until it is set the new version will not show a rate or a payment stream in nCino.";

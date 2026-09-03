@@ -1065,6 +1065,48 @@ const CONTRADICTIONS: Contradiction[] = [
   },
 ];
 
+/* ============ THE ROUTE IS THE ROUTE (founder, 2026-09-03)
+
+   On a MODIFICATION the remark said the line reprices "effective with the
+   staged renewal". There was no renewal: the banker was three clicks into a
+   modification, and the sentence named a credit action nobody had opened.
+
+   THE ROOM ALREADY TELLS THE MODEL WHICH ROUTE IS BOUND, in `routeLine`, and
+   the model wrote past it. So the guard reads the envelope's own route and
+   strips any sentence naming a DIFFERENT one. It is a claim about what the
+   banker is doing, and a banker cannot check it against the card, which is
+   exactly the kind of claim this file exists to remove.
+
+   THE ROUTE'S OWN WORDS ARE NOT BANNED. "modification" under a modification is
+   the sentence orienting itself, and it stays. */
+
+const ROUTE_WORDS: Record<string, RegExp> = {
+  modify: /\b(modifications?|amendments?)\b/i,
+  renew: /\b(renewals?|renewing|re-?new)\b/i,
+  create: /\b(new facilit(?:y|ies)|new loans?|origination)\b/i,
+};
+
+/** The route words that do NOT belong to the bound route. */
+function foreignRouteWords(envelope: BrainEnvelope): RegExp[] {
+  /* WHILE THE ROUTE IS OPEN NO WORD IS FOREIGN. The greeting's whole job is to
+     offer the three routes, and the client's mail asking for a renewal is the
+     most useful thing it can say. The rule is about a BOUND room writing past
+     the route the banker chose. */
+  if (envelope.routeOpen) return [];
+  const bound = typeof envelope.route === "string" ? envelope.route : "";
+  if (!ROUTE_WORDS[bound]) return [];
+  return Object.entries(ROUTE_WORDS)
+    .filter(([route]) => route !== bound)
+    .map(([, rx]) => rx);
+}
+
+/** Does this run of spans name a credit action nobody opened? */
+const namesAnotherRoute = (spans: NarrationSpan[], foreign: readonly RegExp[]): boolean => {
+  if (!foreign.length) return false;
+  const text = spans.map((s) => s.text).join("");
+  return foreign.some((rx) => rx.test(text));
+};
+
 /** The contradictions this card is capable of, given what it staged. */
 function contradictionsFor(subject: NarrateSubject): RegExp[] {
   if (!subject.card) return [];
@@ -1085,6 +1127,56 @@ const echoesCard = (spans: NarrationSpan[], figures: readonly string[]): boolean
   const text = spans.map((s) => s.text).join("");
   return figures.some((f) => text.includes(f));
 };
+
+/* ============ AND THE ROWS' OWN RAILS COUNT TOO (founder, 2026-09-03)
+
+   "all four financial covenants remain compliant as of the June 30 test, with
+   DSCR at 1.38x and leverage at 2.42x" - printed as prose, above rows whose
+   rails the ROOM had already filled with 1.38x and 2.42x out of the book.
+
+   THE CARD IS NOT THE ONLY THING ON THE GLASS. A row's rail is the room's own
+   figure, eight pixels to the right of the sentence repeating it, and the
+   greeting-v2 grammar exists precisely so the model does NOT have to write
+   those numbers. A figure a row is already printing is a figure the prose may
+   not print. */
+/**
+ * ONE RAIL FIGURE IS A REFERENCE. TWO IS THE RAIL READ ALOUD.
+ *
+ * "James asked to renew the $8.0MM equipment loan; open the renewal?" names the
+ * facility the way a colleague would, and the commitment in it is how the
+ * banker knows WHICH facility. Dropping that sentence to save one repeated
+ * figure would cost the close line the greeting exists to write.
+ *
+ * "all four covenants remain compliant, with DSCR at 1.38x and leverage at
+ * 2.42x" is the rows recited. Two figures the rails already print, in one
+ * sentence, is the failure the founder read.
+ */
+const RAIL_ECHO_MIN = 2;
+
+const recitesRails = (spans: NarrationSpan[], rails: readonly string[]): boolean => {
+  if (rails.length < RAIL_ECHO_MIN) return false;
+  const text = spans.map((s) => s.text).join("");
+  const hit = new Set(rails.filter((f) => text.includes(f)));
+  return hit.size >= RAIL_ECHO_MIN;
+};
+
+function railFigures(blocks: NarrationBlock[]): string[] {
+  const out: string[] = [];
+  for (const block of blocks) {
+    if (block.kind !== "entity") continue;
+    for (const row of block.rows) {
+      const value = (row.value ?? "").trim();
+      if (value.length < 2 || !/\d/.test(value)) continue;
+      // A rail is often a pair ("1.38x vs >= 1.25x"); each half is a figure the
+      // prose may not repeat.
+      for (const part of value.split(/\s+(?:vs\.?|against)\s+/i)) {
+        const f = part.trim();
+        if (f.length >= 2 && /\d/.test(f) && !out.includes(f)) out.push(f);
+      }
+    }
+  }
+  return out;
+}
 
 /* ============================= THE PLAN IS NOT A REMARK (founder, 2026-09-03)
 
@@ -1128,6 +1220,37 @@ export function cutPlanRestatement(
   });
 }
 
+/** The two rules that hold with no card in front of them, applied on their own. */
+function stripLoose(blocks: NarrationBlock[], foreign: readonly RegExp[], rails: readonly string[]): NarrationBlock[] {
+  const keep = (spans: NarrationSpan[]) => !namesAnotherRoute(spans, foreign) && !recitesRails(spans, rails);
+  const out: NarrationBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === "line") {
+      const spans: NarrationSpan[] = [];
+      sentencesOf(block.spans)
+        .filter(keep)
+        .forEach((sentence, i) => {
+          if (i) spans.push({ text: " " });
+          spans.push(...sentence);
+        });
+      if (spans.length) out.push({ kind: "line", spans });
+      continue;
+    }
+    if (block.kind === "bullets") {
+      const items = block.items.filter(keep);
+      if (items.length) out.push({ kind: "bullets", items });
+      continue;
+    }
+    if (block.kind === "entity") {
+      const rows = block.rows.filter((r) => keep(r.spans));
+      if (rows.length) out.push({ kind: "entity", rows });
+      continue;
+    }
+    out.push(block);
+  }
+  return out;
+}
+
 export function guardClaims(
   blocks: NarrationBlock[],
   envelope: BrainEnvelope,
@@ -1138,10 +1261,21 @@ export function guardClaims(
      the late-mail note) is not held to it: the greeting is a remark about the
      whole book by design, and policing it against a card that does not exist
      would delete the sentences it exists to write. The figure guard still runs. */
-  if (!subject.card) return { ...guardFigures(blocks, envelope, subject), claimed: [] };
+  /* THE ROUTE RULE AND THE RAIL RULE DO NOT NEED A CARD. The greeting has no
+     card and is exactly where a stray "renewal" and a repeated 1.38x do most
+     harm, so the no-card arm runs them before it hands over to the figure
+     guard. Only the CLAIM rule needs a card to be a claim about. */
+  if (!subject.card) {
+    const foreignOnly = foreignRouteWords(envelope);
+    const rails = railFigures(blocks);
+    const kept = foreignOnly.length || rails.length ? stripLoose(blocks, foreignOnly, rails) : blocks;
+    return { ...guardFigures(kept, envelope, subject), claimed: [] };
+  }
   const allowed = allowedTerms(envelope, subject);
   const figures = cardFigures(subject);
+  const rails = railFigures(blocks);
   const contradictions = contradictionsFor(subject);
+  const foreign = foreignRouteWords(envelope);
   const claimed: string[] = [];
   const note = (term: string) => {
     if (!claimed.includes(term)) claimed.push(term);
@@ -1155,10 +1289,16 @@ export function guardClaims(
          a repetition, and marking it would put a second thing on the glass to
          solve there being too much on the glass. */
       if (echoesCard(sentence, figures)) return false;
+      // AND A SENTENCE THAT RECITES THE ROWS BESIDE IT.
+      if (recitesRails(sentence, rails)) return false;
       /* AND A SENTENCE THAT DENIES THE CARD GOES WITH IT. It is not marked
          "not on the card": it IS on the card, backwards, and a mark under it
          would leave the banker two readings to reconcile. */
       if (contradictsCard(sentence, contradictions)) return false;
+      /* AND A SENTENCE NAMING ANOTHER CREDIT ACTION. "Effective with the staged
+         renewal" on a modification is a claim the banker cannot check against
+         anything on the glass. */
+      if (namesAnotherRoute(sentence, foreign)) return false;
       const term = claimedTerm(sentence.map((s) => s.text).join(""), allowed);
       if (term) note(term);
       return !term;
@@ -1182,7 +1322,9 @@ export function guardClaims(
     if (block.kind === "bullets") {
       const items = block.items.filter((item) => {
         if (echoesCard(item, figures)) return false;
+        if (recitesRails(item, rails)) return false;
         if (contradictsCard(item, contradictions)) return false;
+        if (namesAnotherRoute(item, foreign)) return false;
         const term = claimedTerm(item.map((s) => s.text).join(""), allowed);
         if (term) note(term);
         return !term;
@@ -1196,6 +1338,7 @@ export function guardClaims(
         // model's clause beside it is.
         if (echoesCard(row.spans, figures)) return false;
         if (contradictsCard(row.spans, contradictions)) return false;
+        if (namesAnotherRoute(row.spans, foreign)) return false;
         const term = claimedTerm(`${spanText(row.label)} ${row.spans.map((s) => s.text).join("")}`, allowed);
         if (term) note(term);
         return !term;

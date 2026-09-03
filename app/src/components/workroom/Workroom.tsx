@@ -48,6 +48,7 @@ import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
 import { feeAsk, feePercentageNote, feeSay, readFeeOpen } from "./fee";
 import {
   PRICING_FIELD,
+  PRICING_SKIPPED,
   PRICING_WHY,
   movesPricing,
   pricingAsk,
@@ -171,6 +172,7 @@ import {
   expandLabel,
   rowForChallenge,
   rowForDelta,
+  rowForRead,
   settleAttrs,
   useSettleChoreography,
   type SettledRow,
@@ -351,6 +353,9 @@ type ThreadItem = { id: string; step: number } & (
   /** A LINE THE ROOM WAS FED (the intent handoff). Not a banker bubble and not
    *  a parse: one marker line saying where the instruction came from. */
   | { kind: "fed"; text: string; from: string }
+  /** THE RUNTIME GOT IN THE WAY. Not the org and not the room: the page's own
+   *  host refused the call. One quiet line, a way out of it, and NO remark. */
+  | { kind: "trouble"; text: string; reload: boolean }
 );
 
 /**
@@ -523,6 +528,36 @@ function ineligibleReason(m: PackageMember): string {
  * a decision, and pinned that step open while the thread grew underneath it.
  * That is the accumulation the founder saw.
  */
+/* ============ THE RUNTIME IS NOT THE BANK (founder, 2026-09-03)
+
+   He clicked Review and execute and read: an error line from the artifact
+   runtime saying the call was outside the scope he had consented to, and then
+   TWO model remarks underneath it, each explaining the repricing as if nothing
+   had gone wrong.
+
+   THE ROOM HAD NO WAY TO TELL THE THREE VOICES APART. An org refusal, a runtime
+   failure and the room's own sentence were all `agent` bubbles, so the runtime's
+   failure was narratable like any other line and a retry produced a second one.
+
+   A RUNTIME FAILURE IS NOT A SENTENCE A COLLEAGUE COMMENTS ON. It is the host
+   saying it will not carry the call, and the only useful thing beside it is the
+   way out. It gets its own kind, it is never narrated, and it HUSHES the model
+   for the rest of the exchange: the banker has one thing to do and a paragraph
+   about credit is in the way of it.
+
+   AN ORG REFUSAL IS THE BANK TALKING and stays exactly where it was. The test
+   is the message, because the codes reach this room already rendered into it. */
+const RUNTIME_TROUBLE =
+  /outside the scope|consented to|reload the cockpit|reload to review|paused ai chat|not authorised to call|needs? per-call approval|reconnect .* in claude\.ai|add .* in claude\.ai|running without connector access|too many connector calls|rate.?limit/i;
+
+/** Does this error come from the page's own host rather than from the org? */
+export function isRuntimeTrouble(said: string): boolean {
+  return RUNTIME_TROUBLE.test(said ?? "");
+}
+
+/** Does the way out of it involve reloading the view? */
+const RELOADABLE = /reload|consented to|outside the scope|paused ai chat/i;
+
 function isLive(item: ThreadItem): boolean {
   if (item.kind === "chips") return item.chips.some((c) => c.state === "open" && !!c.delta);
   if (item.kind === "challenge") return !item.acked;
@@ -1099,15 +1134,35 @@ export function Workroom({
    * motion that wait is zero.
    */
   const settleExchange = useCallback(
-    (row: SettledRow, land?: () => void): void => {
+    (row: SettledRow, opts: { upTo?: string; land?: () => void; instant?: boolean } = {}): void => {
+      const { upTo, land } = opts;
       const prev = itemsRef.current;
       if (!prev.length) {
         land?.();
         return;
       }
-      const mine = prev[prev.length - 1].step;
+      /* ============ THE ANCHOR IS WHAT SETTLED (founder, 2026-09-03)
+
+         "The coverage thins warning is bundled to the amortisation terms card:
+         when I click it, it closes that action and I need to open it up again."
+
+         THE WALK USED TO START AT THE END OF THE THREAD, so acknowledging a
+         check swept up everything that had landed AFTER it - the pricing
+         question the same confirm had raised - and the banker lost a live
+         question to a gesture about something else.
+
+         IT STARTS AT THE THING THAT SETTLED NOW. `upTo` is the item the
+         decision was about; the exchange is that item and the run of items
+         leading up to it, and anything the room put on the glass afterwards is
+         a different exchange and stays exactly where it is. */
+      const at = upTo ? prev.findIndex((i) => i.id === upTo) : prev.length - 1;
+      if (at < 0) {
+        land?.();
+        return;
+      }
+      const mine = prev[at].step;
       const covers: string[] = [];
-      for (let i = prev.length - 1; i >= 0; i--) {
+      for (let i = at; i >= 0; i--) {
         const it = prev[i];
         if (it.step !== mine || it.kind === "settled" || tierOf(it)) break;
         covers.unshift(it.id);
@@ -1117,8 +1172,16 @@ export function Workroom({
         return;
       }
       const rowId = nextId("settled");
-      settleItems(covers, rowId, land);
-      setItems((p) => [...p, { kind: "settled", id: rowId, step: mine, row, covers }]);
+      settleItems(covers, rowId, land, opts.instant === true);
+      /* THE ROW STANDS WHERE THE EXCHANGE STOOD. Appending it at the end would
+         put a receipt for the check UNDER the question the check interrupted,
+         which reads as the question having been answered. */
+      setItems((p) => {
+        const to = p.findIndex((i) => i.id === covers[covers.length - 1]);
+        const rowItem: ThreadItem = { kind: "settled", id: rowId, step: mine, row, covers };
+        if (to < 0) return [...p, rowItem];
+        return [...p.slice(0, to + 1), rowItem, ...p.slice(to + 1)];
+      });
     },
     [settleItems],
   );
@@ -1131,9 +1194,18 @@ export function Workroom({
      question it is about to answer itself, one beat later, out loud. The ref is
      written from the feed's own state, below, so this callback is stable. */
   const queuedRef = useRef(false);
-  const tailNow = useCallback((nextMove: string) => (queuedRef.current ? "" : nextMove), []);
+  /* THE TAIL IS RETIRED (founder, 2026-09-03: "no tails"). "Anything else on
+     this facility, or shall I stage it?" was the room keeping the conversation
+     open, and the composer under it has been doing that on its own since the
+     room had one. It survives as a parameter only so the fenced engines' own
+     sentences can still be cut out of. */
+  const tailNow = useCallback((_nextMove: string) => "", []);
   /** Where the line currently in flight came from, or null for a typed one. */
   const fedRef = useRef<string | null>(null);
+  /** THE HUSH, held through a ref because the error relay is built before the
+   *  narration hook is. A room with the channel off has none and needs none. */
+  const hushRef = useRef<(() => void) | null>(null);
+  const unhushRef = useRef<(() => void) | null>(null);
 
   /**
    * THE ROOM'S OWN PARAGRAPH, UNDER A CARD (rules d, e and f).
@@ -1150,7 +1222,7 @@ export function Workroom({
    */
   const roomSentence = useCallback(
     (text: string, staged: readonly WorkroomDelta[]): string => {
-      const withoutTail = cutTail(text, vocabulary.nextMove, queuedRef.current);
+      const withoutTail = cutTail(text, vocabulary.nextMove, true);
       const withoutCount = cutCloneCount(withoutTail, staged.length);
       return capSentences(cutFigureEcho(withoutCount, cardFigures(staged)));
     },
@@ -1363,6 +1435,32 @@ export function Workroom({
     (text: string, options?: Array<{ label: string; say: string }>) =>
       push({ kind: "agent", id: nextId("agent"), text, options }),
     [push],
+  );
+
+  /**
+   * THE ROOM RELAYS AN ERROR.
+   *
+   * A RUNTIME failure - the page's own host refusing the call - becomes one
+   * quiet line with the way out of it, and the model is HUSHED for the rest of
+   * the exchange: a paragraph about credit under "reload to continue" is in the
+   * way of the one thing the banker has to do, and on the founder's drive there
+   * were two of them.
+   *
+   * AN ORG REFUSAL IS THE BANK TALKING and stays an ordinary sentence, because
+   * it is one, and because the model's comment on a precondition the bank named
+   * is often the most useful thing on the glass.
+   */
+  const relayError = useCallback(
+    (said: string) => {
+      if (!isRuntimeTrouble(said)) {
+        agent(said);
+        return false;
+      }
+      hushRef.current?.();
+      push({ kind: "trouble", id: nextId("trouble"), text: said, reload: RELOADABLE.test(said) });
+      return true;
+    },
+    [agent, push],
   );
 
   /** Hold the composed beat, then let the answer settle in. Zero under reduced
@@ -1917,6 +2015,8 @@ export function Workroom({
     enabled: Boolean(brain),
     envelopeFor: (line) => envelopeFor(line, ask !== null),
   });
+  hushRef.current = narration.hush;
+  unhushRef.current = narration.unhush;
   const narrated = useRef(new Set<string>());
 
   /* THE ONE CONSENT MOMENT (founder, 2026-09-02). The platform asks the viewer
@@ -1991,9 +2091,20 @@ export function Workroom({
     const said = prior && prior.kind === "agent" ? prior.text : undefined;
     const subject = subjectFor(last as unknown as Parameters<typeof subjectFor>[0], said);
     if (!subject) return;
+    /* ============ THE REVIEW MOMENT IS A STAGED MOMENT (founder, 2026-09-03)
+
+       Under the review card the room narrated at the ANSWERED budget - seventy
+       five words, the budget for a read the banker asked a question to get -
+       and put two paragraphs of credit commentary in front of a man who had
+       clicked Review and execute. From the moment a plan is on the table the
+       facts are on the cards and the rail, so the remark is held to the STAGED
+       budget: two short sentences of consequence, and nothing that repeats a
+       figure already on the glass. */
+    const tightened =
+      flow !== null && subject.act === "answered" ? { ...subject, act: "staged" as const } : subject;
     const asked = [...items].reverse().find((i) => i.kind === "banker");
-    narration.narrate(last.id, subject, asked && asked.kind === "banker" ? asked.text : "");
-  }, [items, narration]);
+    narration.narrate(last.id, tightened, asked && asked.kind === "banker" ? asked.text : "");
+  }, [flow, items, narration]);
 
   /**
    * WHAT THE DESK SAID, DRAWN.
@@ -2729,6 +2840,10 @@ export function Workroom({
          carrier: threading a marker through six composers would put an intent's
          vocabulary into every one of them. */
       fedRef.current = opts?.fed ?? null;
+      /* THE EXCHANGE MOVED ON. A hush lasts as long as the trouble it was
+         about: the banker saying something next is the room's signal that they
+         have dealt with it, whether by reloading or by carrying on. */
+      unhushRef.current?.();
 
       /* FREE TEXT ALWAYS WINS (founder, 2026-08-31). While the route is open the
          line does not go to the engine — it decides WHICH engine hears it. A
@@ -3287,6 +3402,19 @@ export function Workroom({
          never a new instruction: that reading is what staged a $1 commitment on
          a $15M line and then had a model claim the date had moved. */
       const gate = pricingPending ?? pricingOutstanding(entries);
+      /* ============ THE PRICING ASK NEVER BLOCKS A LINE (founder, 2026-09-03)
+
+         A banker who types a new instruction over an open pricing question has
+         answered it: they are not setting the amortised term today. The ask
+         settles as SKIPPED, the room says the consequence once in the row, and
+         the line goes through to the parser exactly as it would have if the
+         question had never been asked. */
+      if (gate && !answersPricing) {
+        setPricingDeclined((prev) => new Set([...prev, gate.memberId]));
+        setPricingPending(null);
+        const asked = [...itemsRef.current].reverse().find((i) => i.kind === "agent" && !!i.options?.length);
+        if (asked) settleExchange({ what: PRICING_SKIPPED, how: "skipped" }, { upTo: asked.id });
+      }
       /* ============ THE RATE GATE'S OWN ANSWERS (founder, 2026-09-03)
 
          Read BEFORE the field slots, because the rate's forms are the loosest
@@ -3778,6 +3906,76 @@ export function Workroom({
     if (carded) retireTiers();
   }, [carded, retireTiers]);
 
+  /* ============ ONLY THE LATEST ACTION IS ON THE STAGE (founder, 2026-09-03)
+
+     "It should only show the latest action; as I was testing right now it
+     showed basically the full end."
+
+     THE SETTLE ONLY EVER FIRED ON A DECISION. A confirm, a discard, an
+     acknowledge, an answered step - each of those retires its own exchange, and
+     every other kind of exchange stayed on the glass: a read the room answered,
+     a line it refused, a fed line that staged nothing, and every exchange a
+     restored session mounts at once. Four paths, one omission.
+
+     THE RULE IS ABOUT THE STAGE AND NOT ABOUT THE GESTURE. At any moment the
+     stage carries the current exchange and AT MOST ONE earlier one, and that
+     earlier one only while it is still holding a gate open. Everything older is
+     a settled row. It is swept here rather than at each of the four call sites,
+     because the omission was that there is no fifth site to add.
+
+     A RESTORED SESSION MOUNTS ALREADY SETTLED. Those exchanges were never on
+     this stage and animating them out would be the room performing a history
+     the banker did not watch happen. */
+  const sweptRef = useRef(false);
+  useEffect(() => {
+    const list = itemsRef.current;
+    if (!list.length) return;
+    /* THE EXCHANGES, NEWEST LAST. A boundary is a line somebody said or a row
+       that already settled; tiers have their own choreography and are skipped. */
+    const groups: Array<{ ids: string[]; live: boolean; row: SettledRow | null }> = [];
+    for (const item of list) {
+      if (tierOf(item)) continue;
+      if (item.kind === "settled") {
+        groups.length = 0;
+        continue;
+      }
+      const opens = item.kind === "banker" || item.kind === "fed";
+      if (opens || !groups.length) groups.push({ ids: [], live: false, row: null });
+      const at = groups[groups.length - 1];
+      if (settle.stateOf(item.id) !== "on") continue;
+      at.ids.push(item.id);
+      if (isLive(item)) at.live = true;
+      if (item.kind === "chips") {
+        const held = item.chips.find((c) => c.delta);
+        if (held?.delta) at.row = rowForDelta(held.delta, held.state === "discarded" ? "discarded" : "confirmed");
+      } else if (item.kind === "challenge") {
+        at.row = rowForChallenge(item.challenge);
+      } else if (item.kind === "read" && !at.row) {
+        at.row = rowForRead(item.card.lede, "answered");
+      } else if ((item.kind === "banker" || item.kind === "fed") && !at.row) {
+        at.row = rowForRead(item.text, "read");
+      }
+    }
+    const alive = groups.filter((g) => g.ids.length);
+    /* THE CURRENT EXCHANGE STAYS, and so does ONE earlier one while it is still
+       waiting on the banker: that is the cap, and it is the same two the stage
+       cap counts. Everything before them is history. */
+    const keep = new Set<number>();
+    if (alive.length) keep.add(alive.length - 1);
+    for (let i = alive.length - 2; i >= 0; i--) {
+      if (alive[i].live && keep.size < 2) keep.add(i);
+    }
+    const stale = alive.map((g, i) => ({ g, i })).filter(({ g, i }) => !keep.has(i) && !g.live);
+    if (!stale.length) return;
+    /* THE FIRST SWEEP OF A ROOM IS THE RESTORED SESSION. Nothing on that stage
+       was watched arriving, so nothing on it is watched leaving. */
+    const instant = !sweptRef.current;
+    sweptRef.current = true;
+    for (const { g } of stale) {
+      settleExchange(g.row ?? rowForRead("Earlier", "read"), { upTo: g.ids[g.ids.length - 1], instant });
+    }
+  }, [items, settle, settleExchange]);
+
   /* ---- and the member the signal named is the one the lane opens on. */
   useEffect(() => {
     const id = router?.preselectMemberId;
@@ -3878,14 +4076,29 @@ export function Workroom({
          of an add and says nothing at all about a removal. A banker signing a
          carry exclusion is entitled to read on the confirm itself that the
          booked loan is untouched and that the clone is what starts without it. */
+      /* ============ THE TOTAL IS THE STAGED TOTAL (founder, 2026-09-03)
+
+         "The package total holds at $54M" under a rate card, on a plan that had
+         already taken the $15M line to $20M. $54M was the total as the LAST
+         RENDER saw it, not as the manifest stands: `figures` is memoised on the
+         `entries` state, and a confirm that lands from the same render as the
+         one before it reads the total from before either of them. Same closed-
+         over read as the commitment drop, one line further on.
+
+         It is computed here from the manifest as it stands RIGHT NOW - the
+         baseline plus every committed move on it - so a rate card confirmed
+         after a commitment card says what the package actually reads at. */
+      const stagedTotal =
+        (baseline.committedMM + staged.reduce((n, e) => n + (e.committedDeltaMM ?? 0), 0) - (delta.committedDeltaMM ?? 0)) *
+        1e6;
       const said = cutTail(
         committedSentence({
           reply: armConfirmSentence(delta, reply),
           delta,
-          before: figures.committedMM * 1e6,
+          before: stagedTotal,
         }),
         vocabulary.nextMove,
-        queuedRef.current,
+        true,
       );
       /* ============ THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02)
 
@@ -3966,7 +4179,7 @@ export function Workroom({
           );
         }
       };
-      settleExchange(rowForDelta(delta, "confirmed"), landAfterExit);
+      settleExchange(rowForDelta(delta, "confirmed"), { upTo: blockId, land: landAfterExit });
       setSuggestion(engine.suggest());
     },
     [
@@ -3974,7 +4187,7 @@ export function Workroom({
       engine,
       enqueue,
       entries,
-      figures.committedMM,
+      baseline.committedMM,
       pricingOutstanding,
       vocabulary.nextMove,
       reads?.generatedAt,
@@ -3998,11 +4211,11 @@ export function Workroom({
       if (chip.delta) {
         settleChip(blockId, chip.key, "discarded");
         const line = `Dropped. ${chip.delta.title} on ${chip.delta.target} is not staged and the package has not moved. ${tailNow(vocabulary.nextMove)}`.trim();
-        settleExchange(rowForDelta(chip.delta, "discarded"), () => agent(line));
+        settleExchange(rowForDelta(chip.delta, "discarded"), { upTo: blockId, land: () => agent(line) });
       } else {
         settleChip(blockId, chip.key, "confirmed");
         const line = `That one stays off the manifest, for the reason above. ${tailNow(vocabulary.nextMove)}`.trim();
-        settleExchange({ what: chip.refusal?.title ?? "Refused", how: "understood" }, () => agent(line));
+        settleExchange({ what: chip.refusal?.title ?? "Refused", how: "understood" }, { upTo: blockId, land: () => agent(line) });
       }
       setSuggestion(engine.suggest());
     },
@@ -4049,7 +4262,11 @@ export function Workroom({
       /* AN ACKNOWLEDGED CHECK IS A SETTLED EXCHANGE. The verdict becomes the
          row; the arithmetic behind it stays mounted under it and one click
          away, which is the whole reason the check was worth reading. */
-      if (check?.kind === "challenge") settleExchange(rowForChallenge(check.challenge));
+      /* THE CHECK IS ITS OWN EXCHANGE. Acknowledging it settles the check and
+         the sentence that raised it, and NOTHING the room put up afterwards:
+         the pricing question the same confirm raised is a live question the
+         banker still has to answer, and it stays on the stage. */
+      if (check?.kind === "challenge") settleExchange(rowForChallenge(check.challenge), { upTo: id });
     },
     [settleExchange],
   );
@@ -4155,9 +4372,16 @@ export function Workroom({
         );
         return;
       }
+      /* THE RUNTIME'S OWN FAILURE IS NOT AN ARM REFUSAL. `armStageRefusal`
+         dresses an ORG precondition with the entry it is about; a host that
+         would not carry the call has no entry and no arm. */
+      if (isRuntimeTrouble(said)) {
+        relayError(said);
+        return;
+      }
       agent(armStageRefusal(said, entries));
     }
-  }, [agent, context, engine, entries, lostPricingCause, push]);
+  }, [agent, context, engine, entries, lostPricingCause, push, relayError]);
 
   const execute = useCallback(async () => {
     const staging = flow?.staging;
@@ -4287,7 +4511,7 @@ export function Workroom({
       // a manifest that files nothing — each comes back as a sentence with the
       // approval still where the banker left it, rather than as a dead button.
       setFlow((f) => (f ? { ...f, running: false } : f));
-      agent(readableError(e));
+      relayError(readableError(e));
       // AND ONLY WHERE A RETRY IS HONEST. Once the call has reached the org the
       // token may be spent and the write may have landed, so the room stops
       // offering the gesture rather than arming a retry that would bounce on a
@@ -4735,7 +4959,14 @@ export function Workroom({
                          replaces the exchange, not part of it. */
                       if (!tier)
                         return (
-                          <div key={item.id} {...settleAttrs(item.kind === "settled" ? "on" : settle.stateOf(item.id))}>
+                          <div
+                            key={item.id}
+                            data-ex-id={item.id}
+                            {...settleAttrs(
+                              item.kind === "settled" ? "on" : settle.stateOf(item.id),
+                              settle.heightOf(item.id),
+                            )}
+                          >
                             {/* THE INNER ROW IS WHAT COLLAPSES. A grid track can
                                 only squeeze a child that will let it, so the row
                                 owns the overflow and the min-height and the
@@ -5406,6 +5637,21 @@ function ThreadBlock({
     return (
       <div className="wk-fed" data-fed="line">
         <span className="wk-fed-src">{item.from}:</span> <span className="wk-fed-line">{item.text}</span>
+      </div>
+    );
+  }
+
+  /* THE RUNTIME GOT IN THE WAY. One quiet line and the way out of it. No red,
+     no card, and never a remark under it: the banker has one thing to do. */
+  if (item.kind === "trouble") {
+    return (
+      <div className="wk-trouble" data-trouble="line" role="status">
+        <span>{item.text}</span>
+        {item.reload && (
+          <button type="button" className="wk-trouble-x" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        )}
       </div>
     );
   }

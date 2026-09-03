@@ -14,6 +14,7 @@ import {
   shouldNarrate,
   type NarrateSubject,
   type NarrationBlock,
+  type NarrationSpan,
 } from "./narrate";
 import {
   askSession,
@@ -22,7 +23,7 @@ import {
   takeDeclineNotice,
   type AskSessionOptions,
 } from "./sampleDoor";
-import { startPacer, type Pacer } from "./streamPacer";
+import { startPacer, unitsOf, type Pacer } from "./streamPacer";
 import { prefersReducedMotion } from "../data/motion";
 
 /* =============================================================================
@@ -43,7 +44,27 @@ import { prefersReducedMotion } from "../data/motion";
 export const BLOCK_BEAT_MS = 300;
 
 export interface NarrationView {
+  /**
+   * THE GUARDED BLOCKS, FINAL FROM THE FIRST FRAME.
+   *
+   * FOUNDER, 2026-09-03: "the text in the workroom flickers: some chat bubbles
+   * grow and then shrink, and it kicks out the nice bullet listing." They did.
+   * The remark was rendered from the RAW stream and the guards ran on the
+   * finished text, so a sentence the figure guard was going to strip was shown
+   * first and taken away after, and a line item whose head had not landed yet
+   * was rendered as a paragraph and became a row a frame later.
+   *
+   * NOTHING IS EVER REPLACED NOW. The room waits for the completed text, runs
+   * every guard once, and only then reveals - so what the banker sees is only
+   * ever appended to, and the row count is the final row count from the first
+   * paint.
+   */
   blocks: NarrationBlock[];
+  /** HOW MUCH OF THE PROSE HAS BEEN REVEALED, in words. The blocks do not
+   *  change; this is the only thing that moves. Rows and bullets are structure
+   *  and are shown whole, so a list never assembles itself in front of the
+   *  reader. */
+  reveal?: number;
   /** THE PACER IS STILL RELEASING. The block reserves its height while this is
    *  true, so the pane below it does not walk up and down the page. */
   streaming?: boolean;
@@ -77,6 +98,17 @@ export interface NarrationDeps {
 
 export interface NarrationHook {
   /**
+   * STOP TALKING.
+   *
+   * The runtime got in the way and the banker has one thing to do. Every remark
+   * still in flight is cancelled and no new one is asked for until the room
+   * says the exchange has moved on. The founder read two model paragraphs under
+   * a host error that had nothing to do with either of them.
+   */
+  hush(): void;
+  /** The exchange moved on: the model may speak again. */
+  unhush(): void;
+  /**
    * THE OPENING, AND THE ONE CONSENT MOMENT.
    *
    * Called once when the room opens, on the greeting the banker just asked for
@@ -98,6 +130,8 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
    *  the remark streams, so a caller's effect will re-fire on its own updates:
    *  without this latch that is an infinite loop rather than a second remark. */
   const asked = useRef(new Set<string>());
+  /** The runtime got in the way: no remark until the exchange moves on. */
+  const hushed = useRef(false);
   const { enabled, envelopeFor } = deps;
   const ask = deps.ask ?? askSession;
   const prime = deps.prime ?? primeConsent;
@@ -129,6 +163,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
   const run = useCallback(
     (id: string, subject: NarrateSubject, line: string, greeting: boolean) => {
       if (!enabled || !sampleAvailable()) return;
+      if (hushed.current) return;
       if (!greeting && !shouldNarrate(subject)) return;
       if (asked.current.has(id)) return;
       asked.current.add(id);
@@ -155,13 +190,19 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
          at the end would be a paragraph the banker watched arrive and then
          watched shrink. The cut is at whole sentences and whole rows. */
       const budget = ACT_WORDS[subject.act];
-      const read = (text: string, settled = false) => {
+      /**
+       * GUARD BEFORE REVEAL (founder, 2026-09-03).
+       *
+       * ONE pass, on the COMPLETED text, in the order the rules depend on each
+       * other: parse to the grammar, resolve each row's rail out of the book,
+       * drop a run that only restates the plan, run the claim and figure guards,
+       * then spend the act's word budget on what survived. What comes back is
+       * what the banker will read, and it is the only thing ever rendered.
+       */
+      const guarded = (text: string): NarrationBlock[] => {
         const blocks = resolveEntities(parseNarration(text, cap), envelope);
-        /* AND THE PLAN IS NOT A REMARK. A run of rows that only names what is
-           already on the manifest rail is dropped before the budget is spent on
-           it, so what survives is the words the rail cannot say. */
         const held = cutPlanRestatement(blocks, envelope, subject);
-        return clipBudget(settled ? guardClaims(held, envelope, subject).blocks : held, budget);
+        return clipBudget(guardClaims(held, envelope, subject).blocks, budget);
       };
       const prompt = composeNarratePrompt(envelope, subject);
 
@@ -176,54 +217,90 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
          raw delta - the pacer cannot change what a remark SAYS, only when the
          reader gets to see it - and the last emit is the door's own text, byte
          for byte. Under reduced motion there is no pacer at all. */
-      const pacer = startPacer({
-        instant: prefersReducedMotion(),
-        emit: (visible, done) =>
-          setViews((prev) => ({
-            ...prev,
-            [id]: { blocks: read(visible, done), pending: false, spoke: true, streaming: !done },
-          })),
-      });
-      pacers.current.set(id, pacer);
-
+      /* THE RAW STREAM IS NOT RENDERED. `onText` is deliberately absent: a
+         partial is a sentence the guards have not seen, and showing one is how
+         the bubble grew and then shrank. The thinking mark stands until the
+         guarded text exists, which is the honest picture of what the room is
+         doing anyway. */
       const options: AskSessionOptions = {
         kind: greeting ? "greeting" : "narrate",
         tier: "quick",
         rung: 2,
         signal: controller.signal,
-        onText: ({ text }) => pacer.push(text),
       };
 
       const call = greeting ? prime(prompt, options) : ask(prompt, options);
       void Promise.resolve(call)
         .then((text) => {
-          const settled = typeof text === "string" ? text : "";
-          /* THE FINAL TEXT DRAINS THROUGH THE SAME PACER, so a remark that
-             arrived in one burst still reads as writing rather than as a wall.
-             An EMPTY remark has nothing to pace and settles at once. */
-          if (read(settled, true).length) pacer.finish(settled);
-          else {
-            pacer.cancel();
+          if (hushed.current) {
             settle(id);
+            return;
           }
+          const blocks = guarded(typeof text === "string" ? text : "");
+          if (!blocks.length) {
+            settle(id);
+            return;
+          }
+          /* AND THE GUARDED TEXT IS WHAT IS PACED. The rows are structure and
+             land whole; the prose writes itself at a readable rate over them.
+             `reveal` only ever grows, so the glass only ever gains words. */
+          const prose = proseOf(blocks);
+          const total = unitsOf(prose).length;
+          setViews((prev) => ({
+            ...prev,
+            [id]: { blocks, reveal: 0, pending: false, spoke: true, streaming: total > 0 },
+          }));
+          if (!total || prefersReducedMotion()) {
+            setViews((prev) => ({ ...prev, [id]: { blocks, reveal: total, pending: false, spoke: true } }));
+            return;
+          }
+          const pacer = startPacer({
+            emit: (visible, done) =>
+              setViews((prev) => ({
+                ...prev,
+                [id]: { blocks, reveal: unitsOf(visible).length, pending: false, spoke: true, streaming: !done },
+              })),
+          });
+          pacers.current.set(id, pacer);
+          pacer.finish(prose);
         })
-        .catch(() => {
-          pacer.cancel();
-          settle(id);
-        })
+        .catch(() => settle(id))
         .finally(() => running.current.delete(id));
     },
     [ask, enabled, envelopeFor, prime, settle],
   );
+
+  const hush = useCallback(() => {
+    hushed.current = true;
+    for (const c of running.current.values()) c.abort();
+    running.current.clear();
+    for (const p of pacers.current.values()) p.cancel();
+    pacers.current.clear();
+  }, []);
+  const unhush = useCallback(() => {
+    hushed.current = false;
+  }, []);
 
   return useMemo(
     () => ({
       open: (id, subject) => run(id, subject, "", true),
       narrate: (id, subject, line = "") => run(id, subject, line, false),
       viewFor: (id) => views[id],
+      hush,
+      unhush,
     }),
-    [run, views],
+    [hush, run, unhush, views],
   );
+}
+
+/** The PROSE a remark carries, which is the only part that is paced. Rows and
+ *  bullets are structure and are never assembled in front of the reader. */
+function proseOf(blocks: NarrationBlock[]): string {
+  return blocks
+    .filter((b) => b.kind === "line")
+    .map((b) => (b.kind === "line" ? b.spans.map((sp) => sp.text).join("") : ""))
+    .join(" ")
+    .trim();
 }
 
 /**
@@ -251,6 +328,32 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
      The block reserves three lines of height while the pacer is releasing and
      lets go the moment it finishes, so the pane settles once instead of on
      every frame. */
+  /* THE PROSE IS REVEALED, THE STRUCTURE IS NOT (founder, 2026-09-03). Rows and
+     bullets are the remark's shape and they render whole from the first paint,
+     so a three-item list is three items in every frame it exists. Only the
+     sentences write themselves, and they only ever gain words. */
+  let left = view.reveal ?? Number.POSITIVE_INFINITY;
+  const revealed = (spans: NarrationSpan[]): NarrationSpan[] => {
+    if (left === Number.POSITIVE_INFINITY) return spans;
+    if (left <= 0) return [];
+    const out: NarrationSpan[] = [];
+    for (const span of spans) {
+      const words = span.text.match(/\S+\s*/g) ?? [];
+      if (!words.length) {
+        out.push(span);
+        continue;
+      }
+      if (words.length <= left) {
+        left -= words.length;
+        out.push(span);
+        continue;
+      }
+      out.push({ ...span, text: words.slice(0, left).join("") });
+      left = 0;
+      break;
+    }
+    return out;
+  };
   return (
     <div className="wk-msg wk-agent wk-narr" data-who="Agent" data-streaming={view.streaming ? "true" : undefined}>
       <div className={`wk-bub${view.streaming ? " wk-narr-live" : ""}`}>
@@ -262,14 +365,17 @@ export function Narration({ view }: { view?: NarrationView }): React.JSX.Element
              While the PACER is running the words are already arriving one at a
              time and a second stagger on top of it would fight it. */
           const beat = view.streaming ? undefined : { animationDelay: `${i * BLOCK_BEAT_MS}ms` };
-          if (block.kind === "line")
+          if (block.kind === "line") {
+            const shown = revealed(block.spans);
+            // A line the pacer has not reached yet keeps its place in the
+            // block list and renders nothing: the shape never changes, only
+            // what is written into it.
             return (
               <p className="wk-narr-line wk-narr-block" style={beat} key={i}>
-                {block.spans.map((span, j) =>
-                  span.bold ? <b key={j}>{span.text}</b> : <span key={j}>{span.text}</span>,
-                )}
+                {shown.map((span, j) => (span.bold ? <b key={j}>{span.text}</b> : <span key={j}>{span.text}</span>))}
               </p>
             );
+          }
           if (block.kind === "bullets")
             return (
               <ul className="wk-narr-list wk-narr-block" style={beat} key={i}>

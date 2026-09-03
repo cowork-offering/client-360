@@ -2074,7 +2074,14 @@ export function RelationshipRoom({
                          ROW is never wrapped: it is what replaces the step. */
                       if (!tier)
                         return (
-                          <div key={item.id} {...settleAttrs(item.kind === "settled" ? "on" : settle.stateOf(item.id))}>
+                          <div
+                            key={item.id}
+                            data-ex-id={item.id}
+                            {...settleAttrs(
+                              item.kind === "settled" ? "on" : settle.stateOf(item.id),
+                              settle.heightOf(item.id),
+                            )}
+                          >
                             {/* THE INNER ROW IS WHAT COLLAPSES. See workroom.css:
                                 the wrapper animates the track, this holds the
                                 overflow that lets the track squeeze it. */}

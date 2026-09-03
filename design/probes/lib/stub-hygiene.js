@@ -145,6 +145,19 @@
       });
       return [lead].concat(rows).concat(["Modify, renew, or structure something new?"]).join("\n");
     }
+    /* WITH ROWS, when the drive asks for them: the founder's own complaint was
+       that the "nice bullet listing" got kicked out, so the clip needs a remark
+       that has one. The first sentence is one the CLAIM GUARD will strip, which
+       is what made the bubble grow and then shrink. */
+    if (CFG.rows) {
+      return [
+        "The banker moved the first payment date forward two months to Oct 1, 2026.",
+        "The pledged pool does not move with the commitment as it grows.",
+        "- **Debt Service Coverage of Borrower**: the widest cushion on the deal.",
+        "- **Maximum Debt to Worth**: room before it binds either way.",
+        "- **Accounts Receivable**: exactly on its ceiling, and tested monthly.",
+      ].join("\n");
+    }
     return "The pledged pool does not move with the commitment, so the cover behind this facility thins as it grows.";
   }
 

@@ -161,8 +161,12 @@ export interface RateAsk {
  * @param indexSaid  has the "no index name" aside already been said here?
  */
 export function rateAsk(member: ElicitMember, onFile: RateOnFile | null, indexSaid: boolean): RateAsk {
+  /* THE ASK INFORMS, IT NEVER FORCES (founder, 2026-09-03: "I also get forced
+     to fill this out"). The first chip is always the way OUT of the question:
+     the figure on file where the read carries one, and the plain "keep it as
+     booked" where it does not. Both stage nothing. */
   const options = [
-    ...(onFile ? [{ label: `Hold ${rateLabel(onFile)}`, say: rateHoldSay(member) }] : []),
+    { label: onFile ? `Hold ${rateLabel(onFile)}` : "Keep the rate as booked", say: rateHoldSay(member) },
     { label: "New all-in rate", say: rateNewSay(member) },
     { label: "Index + spread", say: rateIndexSay(member) },
   ];

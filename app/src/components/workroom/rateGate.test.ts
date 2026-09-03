@@ -109,9 +109,12 @@ describe("the question carries the figures (founder, 2026-09-03)", () => {
     expect(rateAsk(member, on, true).text).not.toContain(RATE_NO_INDEX);
   });
 
-  it("offers no hold chip where the read carries no rate, and says so", () => {
+  /* THE WAY OUT IS ALWAYS THE FIRST CHIP (founder, 2026-09-03: "I also get
+     forced to fill this out"). With a rate on file it names the figure; with
+     none it says plainly what it does. Either way it stages nothing. */
+  it("offers the plain keep where the read carries no rate, and says so", () => {
     const ask = rateAsk(member, null, false);
-    expect(ask.options.map((o) => o.label)).toEqual(["New all-in rate", "Index + spread"]);
+    expect(ask.options.map((o) => o.label)).toEqual(["Keep the rate as booked", "New all-in rate", "Index + spread"]);
     expect(ask.text).toContain("no rate on it");
   });
 

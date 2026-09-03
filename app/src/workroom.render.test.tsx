@@ -431,8 +431,12 @@ describe("no move the banker makes is answered with silence", () => {
     expect(room.querySelectorAll(".wk-msg").length).toBeGreaterThan(before);
     const bubbles = [...room.querySelectorAll(".wk-agent .wk-bub")].map((n) => n.textContent ?? "");
     expect(bubbles.some((t) => /in the manifest/.test(t))).toBe(true);
-    // And it ends on the next move rather than trailing off.
-    expect(bubbles.some((t) => /Anything else on this facility, or shall I stage it\?/.test(t))).toBe(true);
+    /* AND IT ENDS ON THE FACT, NOT ON A TAIL (founder, 2026-09-03: "no
+       tails"). "Anything else on this facility, or shall I stage it?" was the
+       room keeping the conversation open; the composer under it has been doing
+       that on its own since the room had one, and the question was one more
+       thing to read on a glass the founder was already asking to quieten. */
+    expect(bubbles.some((t) => /Anything else on this facility/.test(t))).toBe(false);
   });
 
   it("advances the stepper visibly on the same confirm", async () => {
