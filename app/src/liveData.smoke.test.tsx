@@ -395,28 +395,69 @@ for (const [fileName, data] of FILES) {
 
 
 describe("a connection with no ownership percent still renders (founder rule)", () => {
-  it("shows Hartwell Logistics on the roster, not nowhere", () => {
+  it("draws Hartwell Logistics onto the borrower, not into a side card", () => {
     mount(live as unknown as C360Data);
     openAccount("Hartwell Precision Manufacturing LLC");
     const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Relationship Graph")!;
     click(button);
     const text = container!.textContent ?? "";
-    // One roster now, because the guarantor card and the legal-entity card were
-    // the SAME parties described from two reads: on the 22-row book that put
-    // one guarantor on the tab three times.
-    expect(text).toContain("Parties & roles");
-    expect(text).toContain("Hartwell Logistics LLC");
+    // One node per party, all of them on the borrower. The side card is gone:
+    // a party with no equity edge is still a party on this credit, and exiling
+    // it to a text list left it with no line at all (founder, 2026-09-03).
+    expect(container!.querySelector(".rr")).toBeNull();
+    const names = [...container!.querySelectorAll(".onode b")].map((n) => n.textContent);
+    expect(names).toContain("Hartwell Logistics LLC");
     expect(text).toContain("Affiliated Company");
-    // The involvement the connection knows nothing about rides the same row.
+    // The involvement the connection knows nothing about rides the same node.
     expect(text).toContain("Related Entity");
-    // The percent-bearing ones stay in the ownership tree where they belong,
-    // now carrying the guaranty the involvement read gives them.
-    expect(text).toContain("Hartwell Industrial Holdings LLC");
-    expect(text).toContain("Parent");
+    // The percent-bearing ones carry the guaranty the involvement read gives
+    // them on the same node, not on a second row somewhere else.
+    expect(names).toContain("Hartwell Industrial Holdings LLC");
     expect(text).toMatch(/Parent · Guarantor/);
   });
 });
 
+
+describe("the graph edges reach the borrower (founder, 2026-09-03)", () => {
+  const openGraph = () => {
+    mount(live as unknown as C360Data);
+    openAccount("Hartwell Precision Manufacturing LLC");
+    const button = [...container!.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Relationship Graph")!;
+    click(button);
+  };
+
+  it("draws one node per party, and the borrower they all point at", () => {
+    openGraph();
+    const names = [...container!.querySelectorAll(".onode b")].map((n) => n.textContent);
+    expect(names).toEqual([
+      "Hartwell Industrial Holdings LLC",
+      "Hartwell Logistics LLC",
+      "James Hartwell",
+      "Elena Hartwell",
+    ]);
+    const borrower = container!.querySelector("#oBorrower")!;
+    expect(borrower).not.toBeNull();
+    expect(borrower.querySelector("b")?.textContent).toBe("Hartwell Precision Manufacturing LLC");
+    expect(borrower.textContent).toContain("Borrower · 7 facilities");
+  });
+
+  it("paints the stroke over MEASURED space, so a straight edge still renders", () => {
+    // THE BUG, exactly. James Hartwell sits directly above the borrower, so his
+    // route is a vertical line whose bounding box is zero pixels wide, and SVG
+    // 1.1 §13.2.4 says an objectBoundingBox gradient does not paint a shape with
+    // no width. His was the one edge on the pane that rendered as nothing.
+    openGraph();
+    const grad = container!.querySelector("#ogr")!;
+    expect(grad).not.toBeNull();
+    expect(grad.getAttribute("gradientUnits")).toBe("userSpaceOnUse");
+  });
+
+  it("hangs an arrowhead on the borrower end of every ownership edge", () => {
+    openGraph();
+    expect(container!.querySelector("#oarrIn")).not.toBeNull();
+    expect(container!.querySelector("#oarrOut")).not.toBeNull();
+  });
+});
 
 describe("a client email proposes its action (founder: when is the action coming out of there?)", () => {
   const envelope = (outputValues: unknown) => ({

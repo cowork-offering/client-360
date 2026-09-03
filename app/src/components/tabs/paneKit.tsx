@@ -239,8 +239,11 @@ export function Callout({
 
 export interface TreeNode {
   name: string;
-  detail: string;
+  /** The equity line, where the connections read carries one. */
+  detail?: string;
   role?: string;
+  /** Which end of the edge wears the arrowhead. Defaults to the borrower. */
+  direction?: "toBorrower" | "fromBorrower";
 }
 
 const CORNER = 4;
@@ -268,17 +271,32 @@ function metroPath(sx: number, sy: number, tx: number, ty: number): string {
   );
 }
 
+/* THE STROKE GRADIENT IS MEASURED, NOT DERIVED FROM THE SHAPE.
+
+   An objectBoundingBox gradient does not paint a shape whose box has no width
+   (SVG 1.1 §13.2.4), and a party sitting directly above the borrower draws
+   exactly that: a straight vertical route. It was why James Hartwell's edge was
+   missing from the glass on 2026-09-03, and why Piedmont's only edge was too.
+   Measured user space makes the paint independent of the route's shape, and one
+   ramp runs the whole drop instead of each route restarting it.
+
+   The pair is [top of the routes, the borrower's edge], filled in on layout. */
+const UNMEASURED_SPAN: [number, number] = [0, 1];
+
 export function OwnershipTree({
   nodes,
   borrowerName,
   borrowerSub,
+  borrowerRole,
 }: {
   nodes: TreeNode[];
   borrowerName: string;
   borrowerSub: string;
+  borrowerRole?: string;
 }) {
   const treeRef = useRef<HTMLDivElement>(null);
   const [routes, setRoutes] = useState<string[]>([]);
+  const [span, setSpan] = useState<[number, number]>(UNMEASURED_SPAN);
   const still = prefersReducedMotion();
 
   useLayoutEffect(() => {
@@ -293,16 +311,16 @@ export function OwnershipTree({
       const r = target.getBoundingClientRect();
       const tx = r.left + r.width / 2 - tb.left;
       const ty = r.top - tb.top - 2; /* stop ABOVE the card, never inside */
+      const starts: number[] = [];
       const next = [...tree.querySelectorAll<HTMLElement>(".onode")].map((n) => {
         const nr = n.getBoundingClientRect();
-        return metroPath(
-          nr.left + nr.width / 2 - tb.left,
-          nr.bottom - tb.top + 2 /* start BELOW the node, never inside */,
-          tx,
-          ty,
-        );
+        const sy = nr.bottom - tb.top + 2; /* start BELOW the node, never inside */
+        starts.push(sy);
+        return metroPath(nr.left + nr.width / 2 - tb.left, sy, tx, ty);
       });
       setRoutes((prev) => (prev.length === next.length && prev.every((d, i) => d === next[i]) ? prev : next));
+      const top = starts.length ? Math.min(...starts) : 0;
+      setSpan((prev) => (prev[0] === top && prev[1] === ty ? prev : [top, ty]));
     };
 
     draw();
@@ -317,7 +335,7 @@ export function OwnershipTree({
         {nodes.map((n, i) => (
           <div className="onode" key={i}>
             <b>{n.name}</b>
-            <span className="p">{n.detail}</span>
+            {n.detail && <span className="p">{n.detail}</span>}
             {n.role && <span className="role">{n.role}</span>}
           </div>
         ))}
@@ -325,14 +343,39 @@ export function OwnershipTree({
       <div className="ogap" />
       <svg className="oflowlayer" id="oflowSvg" aria-hidden="true">
         <defs>
-          <linearGradient id="ogr" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="ogr" gradientUnits="userSpaceOnUse" x1="0" y1={span[0]} x2="0" y2={span[1]}>
             <stop offset="0" stopColor="#c2a3ff" />
             <stop offset="1" stopColor="#a100ff" />
           </linearGradient>
+          {/* The arrowhead says which way the equity runs. An owner's edge
+              lands ON the borrower; a subsidiary's points back at the party. */}
+          <marker id="oarrIn" markerUnits="userSpaceOnUse" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path className="flarrow" d="M0,0 L6,3.5 L0,7 Z" />
+          </marker>
+          <marker
+            id="oarrOut"
+            markerUnits="userSpaceOnUse"
+            markerWidth="7"
+            markerHeight="7"
+            refX="6"
+            refY="3.5"
+            orient="auto-start-reverse"
+          >
+            <path className="flarrow" d="M0,0 L6,3.5 L0,7 Z" />
+          </marker>
         </defs>
-        {routes.map((d, i) => (
-          <path className="fl" d={d} key={`fl${i}`} />
-        ))}
+        {routes.map((d, i) => {
+          const back = nodes[i]?.direction === "fromBorrower";
+          return (
+            <path
+              className="fl"
+              d={d}
+              key={`fl${i}`}
+              markerStart={back ? "url(#oarrOut)" : undefined}
+              markerEnd={back ? undefined : "url(#oarrIn)"}
+            />
+          );
+        })}
         {!still &&
           routes.map((d, i) => (
             <circle className="flp" r="1.8" key={`flp${i}`}>
@@ -349,6 +392,7 @@ export function OwnershipTree({
         <div className="k">Borrower</div>
         <b>{borrowerName}</b>
         <span className="p">{borrowerSub}</span>
+        {borrowerRole && <span className="role">{borrowerRole}</span>}
       </div>
     </div>
   );

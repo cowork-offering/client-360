@@ -713,6 +713,10 @@
   stroke-linecap: round;
   opacity: 0.6;
 }
+.pane .oflowlayer .flarrow {
+  fill: var(--brand);
+  opacity: 0.6;
+}
 .pane .oflowlayer .flp {
   fill: var(--brand);
   opacity: 0.45;
@@ -752,6 +756,19 @@
   font-size: 11px;
   color: var(--ink-muted);
   margin-top: 2px;
+}
+/* The borrower's own involvement, in the same chip the parties wear. */
+.pane .oborrower .role {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-tint);
+  border-radius: 6px;
+  padding: 2px 8px;
 }
 
 /* ----------------------------------------------------------- opportunities */

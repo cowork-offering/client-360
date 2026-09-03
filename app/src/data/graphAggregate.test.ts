@@ -5,6 +5,8 @@ import {
   aggregateInvolvements,
   collapseConnections,
   connectionOwnership,
+  edgeDirection,
+  partyGraph,
   relationshipRoster,
 } from "./graphAggregate";
 import live from "../../../artifact/live-data.json";
@@ -280,5 +282,142 @@ describe("Hartwell — a guarantor signal repeated once per facility", () => {
 
   it("survives absent signals", () => {
     expect(aggregateGuarantorSignals(undefined)).toEqual([]);
+  });
+});
+
+
+/* =============================================================================
+   THE STAR: EVERY PARTY EDGE TERMINATES ON THE BORROWER ACCOUNT.
+
+   Founder, 2026-09-03, anchored on the graph pane: "line from James Hartwell is
+   not going to the borrower." He had two edges to no borrower — one from a
+   guarantor the tree never drew, one from a path an objectBoundingBox gradient
+   would not paint. These are the data half of that answer.
+   ============================================================================= */
+
+const HARTWELL_BORROWER = "Hartwell Precision Manufacturing LLC";
+
+describe("Hartwell — one edge per party, every one of them onto the borrower", () => {
+  const g = partyGraph(HARTWELL.graph?.connections, HARTWELL.graph?.legalEntities, HARTWELL_BORROWER);
+
+  it("targets the borrower account, and never itself", () => {
+    expect(g.borrowerName).toBe(HARTWELL_BORROWER);
+    expect(g.edges.map((e) => e.name)).not.toContain(HARTWELL_BORROWER);
+    // The borrower's own seven-facility involvement is the node's label, not an
+    // eighth edge looping back on itself.
+    expect(g.borrowerLabel).toBe("Borrower · 7 facilities");
+  });
+
+  it("draws James Hartwell onto the borrower as an unlimited guarantor", () => {
+    const james = g.edges.find((e) => e.name === "James Hartwell")!;
+    expect(james).toBeDefined();
+    expect(james.roles).toEqual(["Owner", "Guarantor"]);
+    expect(james.label).toBe("Owner · Guarantor · Unlimited · 6 facilities");
+    expect(james.ownershipPercent).toBe(60);
+    expect(james.direction).toBe("toBorrower");
+  });
+
+  it("gives EVERY legal entity on the bundle an edge to the borrower", () => {
+    const named = new Set(
+      (HARTWELL.graph?.legalEntities ?? []).map((e) => (e.accountName ?? "").trim()).filter(Boolean),
+    );
+    // Five names on 22 rows: the borrower is the target node, the other four
+    // are edges. Not one of them may end up drawn nowhere.
+    expect(named.size).toBe(5);
+    for (const n of named) {
+      if (n === HARTWELL_BORROWER) continue;
+      expect(g.edges.filter((e) => e.name === n)).toHaveLength(1);
+    }
+  });
+
+  it("keeps the guarantor with no equity, which the tree used to drop", () => {
+    // Hartwell Logistics carries no ownership percent on either mirror half.
+    const logistics = g.edges.find((e) => e.name === "Hartwell Logistics LLC")!;
+    expect(logistics.ownershipPercent).toBeNull();
+    expect(logistics.label).toBe("Affiliated Company · Related Entity");
+  });
+
+  it("carries the guaranty type, the coverage and the equity on the label", () => {
+    expect(g.edges.map((e) => [e.name, e.label, e.ownershipPercent])).toEqual([
+      ["Hartwell Industrial Holdings LLC", "Parent · Guarantor · Unlimited · 6 facilities", 100],
+      ["Hartwell Logistics LLC", "Affiliated Company · Related Entity", null],
+      ["James Hartwell", "Owner · Guarantor · Unlimited · 6 facilities", 60],
+      ["Elena Hartwell", "Co-Owner · Limited Guarantor · Limited · 2 facilities", 40],
+    ]);
+  });
+
+  it("never draws the same party, or the same role, twice", () => {
+    expect(new Set(g.edges.map((e) => e.name)).size).toBe(g.edges.length);
+    for (const e of g.edges) {
+      const lower = e.roles.map((r) => r.toLowerCase());
+      expect(new Set(lower).size, `${e.name}: ${e.roles.join("/")}`).toBe(e.roles.length);
+    }
+    // And the pair the founder would see on the glass is unique too.
+    const pairs = g.edges.flatMap((e) => e.roles.map((r) => `${e.name}|${r}`));
+    expect(new Set(pairs).size).toBe(pairs.length);
+  });
+});
+
+describe("the arrow runs the way the equity does", () => {
+  it("points at the borrower when the counterparty holds the stake", () => {
+    for (const r of ["Parent", "Owner", "Co-Owner", "Shareholder", "Managing Member", "Key Principal"]) {
+      expect(edgeDirection([r]), r).toBe("toBorrower");
+    }
+  });
+
+  it("points back at the party when the borrower holds the stake", () => {
+    expect(edgeDirection(["Child"])).toBe("fromBorrower");
+    expect(edgeDirection(["Subsidiary"])).toBe("fromBorrower");
+  });
+
+  it("reads the ownership side of a mirrored pair, not the generic half", () => {
+    // A subsidiary described from both ends: "Parent" is what the far side
+    // calls this account, and it is the half that carries the percent.
+    const sub = partyGraph(
+      [
+        { counterpartyId: "S", counterpartyName: "Hartwell Tooling LLC", role: "Child", direction: "outbound", totalOwnershipPercent: 0 },
+        { counterpartyId: "S", counterpartyName: "Hartwell Tooling LLC", role: "Subsidiary", direction: "inbound", ownershipPercent: 80 },
+      ],
+      undefined,
+      HARTWELL_BORROWER,
+    );
+    expect(sub.edges).toHaveLength(1);
+    expect(sub.edges[0]).toMatchObject({ ownershipPercent: 80, direction: "fromBorrower" });
+  });
+
+  it("lands a party with no equity word on the borrower all the same", () => {
+    expect(edgeDirection(["Affiliated Company", "Related Entity"])).toBe("toBorrower");
+    expect(edgeDirection([])).toBe("toBorrower");
+  });
+});
+
+describe("the rest of the book gets the same star", () => {
+  it("gives Piedmont's one party an edge carrying both its roles", () => {
+    const g = partyGraph(PIEDMONT.graph?.connections, PIEDMONT.graph?.legalEntities, "Piedmont Precision Components, Inc.");
+    expect(g.edges).toHaveLength(1);
+    expect(g.edges[0]).toMatchObject({
+      name: "Margaret Holloway",
+      label: "Owner · Personal Guaranty · Unlimited",
+      ownershipPercent: 100,
+      direction: "toBorrower",
+    });
+    expect(g.borrowerLabel).toBe("Primary Borrower");
+  });
+
+  it("draws a guarantor no connection row names, with the cap on the label", () => {
+    const BW = DATA.borrowers?.["001SAMPLE0000BRWT"]!;
+    const g = partyGraph(BW.graph?.connections, BW.graph?.legalEntities, "Brightwater Foods Group");
+    const ferris = g.edges.find((e) => e.name === "Daniel Ferris")!;
+    // No ownership edge anywhere in the read, so before the star he had no line.
+    expect(ferris.ownershipPercent).toBeNull();
+    expect(ferris.label).toBe("Personal Guaranty · Limited · $10M");
+  });
+
+  it("survives absent graph data", () => {
+    expect(partyGraph(undefined, undefined, "Anyone")).toEqual({
+      borrowerName: "Anyone",
+      borrowerLabel: "",
+      edges: [],
+    });
   });
 });
