@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion, staggerDelay } from "../../data/motion";
@@ -182,6 +182,7 @@ import {
   type SettledRow,
 } from "./settle";
 import { useStageGate } from "./stage";
+import { FINALE_SWEEP_MS, finaleAttrs, railFiledLine, useFinale, withFinale } from "./finale";
 import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
@@ -401,6 +402,16 @@ const DOSSIER_FOOT_MS = 200;
 const DOSSIER_CHECK_MS = 180;
 /** ~5s after the card lands, the light breathes out over 1.4s. */
 const HALO_LIFE_MS = 5600;
+
+/* ---- the finale's two sentences (founder, 2026-09-03).
+
+   The line under the card is the room saying it is FINISHED rather than merely
+   stopped, and it is the only prose the finale adds. The composer's prompt is
+   the other half of the same claim: the change set is closed and the room is
+   still here, which is what makes the two doors beside it an offer rather than
+   an exit sign. */
+const AFTERGLOW_LINE = "The change set is closed. Nothing else is waiting on you.";
+const FILED_PROMPT = "Anything else on this relationship?";
 /** The word stagger of the agent's speech (rule 65). */
 const WORD_STAGGER_MS = 26;
 
@@ -1154,6 +1165,20 @@ export function Workroom({
      on every commit as it is, and a settle that re-created `confirmChip` on
      every item would be the whole thread re-rendered per word of speech. */
   const settle = useSettleChoreography(reduced);
+  /* ================================================== THE FILED FINALE (rule 69)
+
+     The filing is the END of the change set, and until 2026-09-03 the room read
+     like the middle of one: the card was appended and the settled rows, the
+     greeting remnants, the staged cards in the rail and the composer all held
+     their place. The room exhales now, the card ascends alone, and one quiet
+     line with two doors sits under it. See ./finale.ts for the beats.
+
+     IT IS DRIVEN OFF THE PHASE AND NOTHING ELSE. Execute is untouched: the
+     effect below reads the thread the commit that set `filed` produced, which
+     is also what makes a line arriving LATER - the purpose footnote - land
+     under the card instead of inside the drain. */
+  const finale = useFinale(reduced);
+  const { begin: beginFinale, exitOf: finaleExit, state: finaleState } = finale;
   const itemsRef = useRef<ThreadItem[]>([]);
   itemsRef.current = items;
   entriesRef.current = entries;
@@ -1449,6 +1474,14 @@ export function Workroom({
    * change they came in for must be able to file it.
    */
   const approvalOpen = phase === "work" && !thinking && openGates === 0 && entries.length > 0;
+  /* THE FINALE'S DOOR IS THE CARD'S OWN. Read off the dossier in the thread
+     rather than recomputed, so "View in nCino" and the card's header can never
+     point at two different records - and where the card has no link, because the
+     view carries no org address, neither does this (A29). */
+  const filedHref = useMemo(() => {
+    const card = items.find((i) => i.kind === "dossier");
+    return card?.kind === "dossier" ? card.dossier.packageHref : null;
+  }, [items]);
 
   const baseline = useMemo(
     () => ({
@@ -4099,6 +4132,22 @@ export function Workroom({
     }
   }, [items, settle, settleExchange]);
 
+  /* ============ THE ROOM EXHALES WHEN THE CARD LANDS (founder, 2026-09-03)
+
+     "Can we gently and elegantly clean up the room, a cinematic kind of
+     creation success with that card."
+
+     THE EXIT SET IS EVERYTHING ABOVE THE DOSSIER, fixed at this instant. The
+     dossier and the reply beside it are the filing's own output and stay; the
+     purpose footnote has not arrived yet and, because the set is fixed here,
+     never joins the drain when it does. */
+  useEffect(() => {
+    if (phase !== "filed") return;
+    const list = itemsRef.current;
+    const at = list.findIndex((i) => i.kind === "dossier");
+    beginFinale((at < 0 ? list : list.slice(0, at)).map((i) => i.id));
+  }, [beginFinale, phase]);
+
   /* ---- and the member the signal named is the one the lane opens on. */
   useEffect(() => {
     const id = router?.preselectMemberId;
@@ -5130,6 +5179,11 @@ export function Workroom({
             <div className="wk-col-l">
               <section
                 className={`wk-thread ${hidden.length ? "wk-hashist" : ""} ${histOpen ? "wk-masked" : ""}`}
+                /* THE PANE CENTRES WHAT IS LEFT. Once the drain is over the card
+                   is the only thing in the thread, and a lone card pinned to the
+                   top edge of an empty column is the "nothing happened" the
+                   finale exists to answer. */
+                data-finale={finaleState === "still" ? "still" : undefined}
                 ref={threadRef}
               >
                 {/* THE PAST COLLAPSES, IT DOES NOT UNMOUNT. A step behind the
@@ -5176,6 +5230,7 @@ export function Workroom({
                           roster={roster}
                           anchored={anchoredPackage}
                           lit={lit}
+                          hold={item.kind === "dossier" ? finale.hold : 0}
                           onAnchor={onAnchor}
                           onOpenPeek={openPeek}
                           onConfirm={confirmChip}
@@ -5190,6 +5245,21 @@ export function Workroom({
                         />
                       );
                       const tier = tierOf(item);
+                      /* WHERE THIS ITEM STANDS IN THE FINALE. Null on every item
+                         the finale does not cover: everything before a filing,
+                         and the card and its own lines after one. */
+                      const inWave = finaleExit(item.id);
+                      const leaves = inWave === null ? null : finaleAttrs(inWave, finaleState);
+                      /* THE CARD IS THE ONE THING THAT ASCENDS, and it does it on
+                         the wrapper it already had rather than in a new node: a
+                         second wrapper would remount the card and restart the
+                         paced reveal it is in the middle of. The two clocks it
+                         needs ride down as custom properties, so the stylesheet
+                         and finale.ts hold one number each. */
+                      const star =
+                        item.kind === "dossier"
+                          ? ({ "--wk-fin-hold": `${finale.hold}ms`, "--wk-fin-sweep": `${FINALE_SWEEP_MS}ms` } as CSSProperties)
+                          : null;
                       /* AN EXCHANGE THAT SETTLED LEAVES THE STAGE AND STAYS
                          MOUNTED (rule 1). The wrapper is the same shape at every
                          moment, so React never remounts the bubble and its word
@@ -5201,9 +5271,14 @@ export function Workroom({
                           <div
                             key={item.id}
                             data-ex-id={item.id}
-                            {...settleAttrs(
-                              item.kind === "settled" ? "on" : settle.stateOf(item.id),
-                              settle.heightOf(item.id),
+                            data-finale-card={star ? "" : undefined}
+                            {...withFinale(
+                              settleAttrs(
+                                item.kind === "settled" ? "on" : settle.stateOf(item.id),
+                                settle.heightOf(item.id),
+                              ),
+                              leaves,
+                              star,
                             )}
                           >
                             {/* THE INNER ROW IS WHAT COLLAPSES. A grid track can
@@ -5222,7 +5297,7 @@ export function Workroom({
                          different readings and an absence contract can tell
                          them apart. */
                       return (
-                        <div key={item.id} {...tierAttrs(tier, choreo.stateOf(tier), tiersShown)}>
+                        <div key={item.id} {...withFinale(tierAttrs(tier, choreo.stateOf(tier), tiersShown), leaves)}>
                           {block}
                           <Narration view={narration.viewFor(item.id)} />
                           {/* THE LATE MAIL, under the greeting it missed. Every
@@ -5298,6 +5373,38 @@ export function Workroom({
                     <span>Composing…</span>
                   </div>
                 )}
+                {/* ============ THE QUIET AFTERGLOW (founder, 2026-09-03)
+
+                    One line and two doors, under the card. The line is the room
+                    saying it is finished rather than merely stopped; the doors
+                    are the two places a banker actually goes next, and both are
+                    the room's quietest control because a finale is not the place
+                    for a second button weight.
+
+                    THE LINK IS THE DOSSIER'S OWN `packageHref`. Nothing new is
+                    computed and no host is guessed: where the view carries no
+                    org address the card has no link and neither does this. */}
+                {finaleState === "still" && (
+                  <div className="wk-afterglow" data-finale="afterglow">
+                    <span>{AFTERGLOW_LINE}</span>
+                    <div className="wk-ag-acts">
+                      {filedHref && (
+                        <a
+                          className="wk-dt"
+                          href={filedHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-deeplink="workroom-finale"
+                        >
+                          View in nCino
+                        </a>
+                      )}
+                      <button type="button" className="wk-dt" onClick={onClose}>
+                        Close the room
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* THE TWO QUIET TIERS (founder, 2026-09-01), under the
@@ -5365,7 +5472,10 @@ export function Workroom({
                   disabled={!awake || phase === "filed"}
                   placeholder={
                     phase === "filed"
-                      ? `${vocabulary.filedWord}. The workroom holds.`
+                      ? // THE ROOM IS STILL ALIVE (founder, 2026-09-03). "Filed.
+                        // The workroom holds." was the room announcing its own
+                        // end twice: the card already says the filing landed.
+                        FILED_PROMPT
                       : !awake
                         ? // THE ROOM HAS FINISHED READING; IT IS WAITING ON THE
                           // BANKER, and it should say which of the two it is.
@@ -5482,10 +5592,33 @@ export function Workroom({
                   </button>
                 }
               >
-                {entries.map((delta) => {
+                {/* ============ THE RAIL DRAINS WITH THE THREAD (founder, 2026-09-03)
+
+                    The staged cards are the ledger of what is ABOUT to be
+                    written, and after the filing nothing is: they sink on the
+                    same wave the exchanges do and one quiet line takes their
+                    place.
+
+                    THEY STAY MOUNTED, exactly as a settled exchange does. Each
+                    card carries the org record id that PROVES its write, and
+                    that proof does not stop being true because the room is
+                    finished with it: it goes off stage, aria-hidden, one class
+                    from coming back, and an absence contract can still tell
+                    "drained" from "never filed". */}
+                {finaleState === "still" && (
+                  <div className="wk-railfiled" data-rail="filed">
+                    <TypeIcon kind="commit" />
+                    <span>{railFiledLine(figures.count, vocabulary.filedWord, vocabulary.changeWord)}</span>
+                  </div>
+                )}
+                {entries.map((delta, i) => {
                   const filed = filedById.get(delta.id);
+                  const drains = finaleState === "off" ? null : finaleAttrs(i, finaleState);
                   return (
-                    <div className={`wk-ent ${filed ? "wk-filed" : ""}`} key={delta.id}>
+                    <div
+                      {...withFinale({ className: `wk-ent ${filed ? "wk-filed" : ""}`.trim() }, drains)}
+                      key={delta.id}
+                    >
                       <TypeIcon kind={iconForDelta(delta)} />
                       <button
                         type="button"
@@ -5720,6 +5853,7 @@ function ThreadBlock({
   roster,
   anchored,
   lit,
+  hold,
   onAnchor,
   onOpenPeek,
   onConfirm,
@@ -5744,6 +5878,10 @@ function ThreadBlock({
   /** The package the room is already standing in, for the single-package card. */
   anchored: { id: string; label: string; figure: string };
   lit: boolean;
+  /** THE FINALE'S DRAIN, in ms. The dossier's paced reveal waits it out so the
+   *  card constructs itself into a room that has already cleared, rather than
+   *  over the top of one that is still leaving. Zero everywhere else. */
+  hold: number;
   onAnchor?: (choice: PackageChoice) => void;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
   onConfirm: (blockId: string, chipKey: string, delta: WorkroomDelta) => void;
@@ -6062,7 +6200,7 @@ function ThreadBlock({
     const d = item.dossier;
     return (
       <>
-        <Dossier dossier={d} lit={lit} />
+        <Dossier dossier={d} lit={lit} hold={hold} />
         <div className="wk-tokline">
           <span className="wk-tick">✓</span>
           <span>{d.tokenNote}</span>
@@ -6138,8 +6276,12 @@ function ThreadBlock({
    hairline draws across, each real change row materialises ~300ms apart, a
    second hairline, then the check pops last. The halo behind it is execute's
    only light and it breathes out on its own. */
-function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
-  let t = DOSSIER_HEADER_MS;
+function Dossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: boolean; hold?: number }) {
+  /* THE CARD CONSTRUCTS ITSELF AFTER THE ROOM HAS CLEARED (founder, 2026-09-03).
+     `hold` is the finale's drain: every delay below is offset by it, so the
+     header lands as the last settled row finishes sinking rather than during it.
+     Zero outside a finale, which is every other caller and every jsdom test. */
+  let t = hold + DOSSIER_HEADER_MS;
   const header = t;
   t += DOSSIER_LINE_MS;
   const firstLine = t;
