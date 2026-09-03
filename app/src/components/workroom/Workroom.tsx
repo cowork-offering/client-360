@@ -1085,7 +1085,7 @@ export function Workroom({
           id: nextId("locked"),
           step: mine,
           text: IN_FLIGHT_REFUSAL,
-          link: lockedHref ? { href: lockedHref, label: "Open the version in nCino" } : undefined,
+          link: lockedHref ? { href: lockedHref, label: "Open the version in Salesforce" } : undefined,
         },
       ]);
       return true;
@@ -5486,7 +5486,7 @@ export function Workroom({
                           rel="noopener noreferrer"
                           data-deeplink="workroom-finale"
                         >
-                          View in nCino
+                          View in Salesforce
                         </a>
                       )}
                       <button type="button" className="wk-dt" onClick={onClose}>

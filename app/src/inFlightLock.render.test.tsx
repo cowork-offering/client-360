@@ -322,7 +322,7 @@ describe("the room refuses a second modification", () => {
     expect(source.querySelector(".wk-go")).toBeTruthy();
   });
 
-  it("refuses Modify on the locked source, in one sentence, with the version's nCino link", async () => {
+  it("refuses Modify on the locked source, in one sentence, with the version's Salesforce link", async () => {
     const { room, bound } = openRoom({ data: forked, productPackageId: SOURCE, history: [modRow()] });
     await settle();
 
@@ -337,7 +337,7 @@ describe("the room refuses a second modification", () => {
     expect(door.getAttribute("href")).toBe(
       `https://bankinggpt-at.my.salesforce.com/lightning/r/LLC_BI__Product_Package__c/${VERSION}/view`,
     );
-    expect(text(door)).toBe("Open the version in nCino");
+    expect(text(door)).toBe("Open the version in Salesforce");
 
     // The question stays: a lock closes two routes, not the room.
     expect(room.querySelector(".wk-routes")).toBeTruthy();

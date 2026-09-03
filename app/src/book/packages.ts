@@ -241,7 +241,7 @@ export function lockedSourcePackage(
 
 /** THE ONE SENTENCE THE ROOM REFUSES WITH (founder, 2026-09-03). */
 export const IN_FLIGHT_REFUSAL =
-  "A modification of this package is already in flight and unbooked. Book or discard it in nCino first; a second one would fork the version chain.";
+  "A modification of this package is already in flight and unbooked. Book or discard it in Salesforce first; a second one would fork the version chain.";
 
 /** The facilities of ONE package, or all of them where nothing is anchored. */
 export function facilitiesInPackage(facilities: Facility[], productPackageId: string | null): Facility[] {
