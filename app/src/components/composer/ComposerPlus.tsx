@@ -71,6 +71,10 @@ export interface ComposerPlusProps {
   facilities: Facility[];
   /** What the relationship already carries. The record lists come off this. */
   book: Book;
+  /** TOPICS THIS PACKAGE CANNOT TAKE (rule 2). Filtered at `topicsFor`, which
+   *  is the one place both the level walk and the search read, so a hidden
+   *  topic cannot come back through the search field. */
+  hideTopics?: readonly TopicId[];
   /** The composer sleeps until the brief lands; so does the plus. */
   disabled?: boolean;
   /** The composer input the picked line lands in. */
@@ -133,7 +137,7 @@ function facilitySub(f: FacilityEntry): string {
   return parts.join(" · ");
 }
 
-export function ComposerPlus({ room, members, facilities, book, disabled, input, onDraft }: ComposerPlusProps) {
+export function ComposerPlus({ room, members, facilities, book, hideTopics, disabled, input, onDraft }: ComposerPlusProps) {
   const [open, setOpen] = useState(false);
   const [facility, setFacility] = useState<FacilityEntry | null>(null);
   const [topic, setTopic] = useState<CatalogTopic | null>(null);
@@ -156,8 +160,10 @@ export function ComposerPlus({ room, members, facilities, book, disabled, input,
   const roots: FacilityEntry[] = room === "facility" ? entries : [RELATIONSHIP];
   const topicsFor = useCallback(
     (f: FacilityEntry): CatalogTopic[] =>
-      (f === RELATIONSHIP ? relTopics : FACILITY_TOPICS).filter((t) => topicCount(t, f, book) > 0),
-    [book, relTopics],
+      (f === RELATIONSHIP ? relTopics : FACILITY_TOPICS).filter(
+        (t) => !hideTopics?.includes(t.id) && topicCount(t, f, book) > 0,
+      ),
+    [book, hideTopics, relTopics],
   );
 
   const close = useCallback(() => {

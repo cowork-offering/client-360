@@ -1,5 +1,5 @@
 import { assetValuation, valuationLine, valuationsOf } from "../../data/collateralValuation";
-import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
+import type { ActionHistoryRow, BorrowerBundle, Covenant, Facility } from "../../data/contract";
 import { facilityProduct, shortFacilityName } from "../../data/facilityStage";
 import { fmtDate, fmtMoney, fmtPct } from "../../data/format";
 import { aggregateInvolvements, involvementRole, isGuarantyRole, type AggregatedInvolvement } from "../../data/graphAggregate";
@@ -85,6 +85,13 @@ export interface ReadSource {
    *  the caller has no data behind it, and every time-based tier then yields
    *  nothing rather than reaching `Date.now()`. */
   generatedAt?: string;
+  /** THE DURABLE ACTION TRAIL for this relationship, where the host holds one.
+   *  Read for exactly one thing (rule 2): a filed loan-modification row names
+   *  the SOURCE package in `productPackageId` and a loan of the version it
+   *  created in `resultRecordId`, which is what links an unbooked version back
+   *  to the package it forked from. Absent leaves the version named and the
+   *  source unlocked, never the other way round. */
+  history?: readonly ActionHistoryRow[];
 }
 
 /* ------------------------------------------------------------------ helpers */

@@ -1,5 +1,5 @@
 import type { SettleDeps } from "../workroom/settleExecution";
-import type { BorrowerBundle, C360Data, Collateral, Covenant } from "../../data/contract";
+import type { ActionHistoryRow, BorrowerBundle, C360Data, Collateral, Covenant } from "../../data/contract";
 import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
 import { packageRoster, type PackageEntry } from "../../book/packages";
@@ -117,6 +117,8 @@ export function relContextFor(args: {
   catalog?: OrgCatalog | null;
   /** The package the banker chose, where the relationship stages several. */
   productPackageId?: string | null;
+  /** The durable action trail, for the in-flight version reading (rule 2). */
+  history?: readonly ActionHistoryRow[];
 }): RelContext {
   /* THE BANKER'S OWN CHOICE FIRST, then the snapshot's anchor exactly as before.
      The snapshot-only read is NOT widened here: `DeepLink.tsx:95`,
@@ -124,7 +126,7 @@ export function relContextFor(args: {
      one ticket, not four half-fixes (package-anchor addendum, section 8). What
      this adds is the case that split cannot express: several packages, where
      the room now ASKS instead of refusing. */
-  const packages = packageRoster(args.bundle);
+  const packages = packageRoster(args.bundle, args.history);
   const chosen = args.productPackageId && packages.some((p) => p.id === args.productPackageId)
     ? args.productPackageId
     : null;

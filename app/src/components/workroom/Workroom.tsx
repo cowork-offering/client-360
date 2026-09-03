@@ -44,7 +44,14 @@ import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLa
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { Narration, useNarration, type NarrationView } from "../../channel/Narration";
 import type { Facility } from "../../data/contract";
-import { facilitiesInPackage, mustChoosePackage, packageRoster, type PackageEntry } from "../../book/packages";
+import {
+  facilitiesInPackage,
+  IN_FLIGHT_REFUSAL,
+  lockedSourcePackage,
+  mustChoosePackage,
+  packageRoster,
+  type PackageEntry,
+} from "../../book/packages";
 import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
 import { feeAsk, feePercentageNote, feeSay, readFeeOpen } from "./fee";
 import {
@@ -327,6 +334,11 @@ type ThreadItem = { id: string; step: number } & (
        *  already with it finally did. It exists because the alternative offer —
        *  approve again — is the one gesture that must never be made twice. */
       statusChip?: boolean;
+      /** THE RECORD THE SENTENCE IS ABOUT, in nCino. A refusal that names a
+       *  version the banker has to go and deal with hands them the door to it.
+       *  Null-safe by construction: the caller resolves the href and omits the
+       *  field where the view carries no org address (A29). */
+      link?: { href: string; label: string };
     }
   /** The opening read: the greeting, the position, the ask it arrived on, and
    *  what the room read to say it. One bubble, because it is one sentence. */
@@ -387,6 +399,10 @@ const LOOKUP_MS = 1500;
    the header line. Several is a choice, and this is it, asked before the route
    and before a single figure is quoted at package altitude. */
 const PACKAGE_QUESTION = "Which package does this run in?";
+/** THE MENU TOPICS A LOCKED PACKAGE DROPS (rule 2). Facility Terms is every
+ *  line that reshapes a booked facility, which is exactly what an unbooked
+ *  version already in flight has claimed. */
+const LOCKED_TOPICS = ["terms"] as const;
 const PACKAGE_QUESTION_NOTE = "One package is one plan under one approval.";
 /** The header's own word for the anchor, in each of the three states. */
 const PACKAGE_ONLY = "the relationship's only package";
@@ -945,8 +961,23 @@ export function Workroom({
           ONE PACKAGE BINDS SILENTLY, exactly as it does today. `mustChoosePackage`
           is false for the whole shipped book, so the room the founder demos is
           byte-identical through this beat. */
-  const roster = useMemo(() => packageRoster(reads?.bundle ?? null), [reads?.bundle]);
+  const roster = useMemo(() => packageRoster(reads?.bundle ?? null, reads?.history), [reads?.bundle, reads?.history]);
   const packagePending = mustChoosePackage(reads?.bundle ?? null, context.productPackageId);
+  /* ONE MODIFICATION IN FLIGHT PER PACKAGE (rule 2, founder 2026-09-03). The
+     package this room stands in already has an unbooked modification version
+     with the org, so a second one would fork the version chain. Null wherever
+     the room is free to run, which is every relationship in the shipped book. */
+  const locked = useMemo(() => lockedSourcePackage(roster, context.productPackageId), [roster, context.productPackageId]);
+  /** The version's own nCino record, for the chip on the refusal. Null with no
+   *  org address on the view — a guessed host is worse than no link (A29). */
+  const lockedHref = locked?.inFlightVersionId ? packageDeepLink(instanceUrl, locked.inFlightVersionId) : null;
+  /** THE TWO ROUTES A LOCK REFUSES. A new facility of its own forks nothing —
+   *  it joins a package rather than versioning it — and the relationship room's
+   *  reviews write no package version at all. */
+  const lockedRoute = useCallback(
+    (route: WorkroomMode) => !!locked && (route === "modify" || route === "renew"),
+    [locked],
+  );
   /** The facility read, narrowed to the anchor. Everything that scopes to
    *  facilities reads this rather than the relationship's whole exposure. */
   const scopedFacilities = useMemo(
@@ -1019,6 +1050,38 @@ export function Workroom({
 
   const [items, setItems] = useState<ThreadItem[]>([]);
   const [step, setStep] = useState(0);
+
+  /**
+   * THE ROUTE IS REFUSED, OUT LOUD, WITH THE VERSION NAMED (rule 2).
+   *
+   * ONE SENTENCE AND ONE DOOR. The room does not offer a way to proceed,
+   * because there is no honest one: the fork has to be resolved in nCino, by
+   * booking the version or discarding it. The question STAYS on the glass, so
+   * the banker can still take the routes a lock does not close — a new facility
+   * of its own, or a relationship review.
+   *
+   * Returns true when it refused, so every caller reads as a guard.
+   */
+  const refuseLockedRoute = useCallback(
+    (route: WorkroomMode): boolean => {
+      if (!lockedRoute(route)) return false;
+      const mine = step + 1;
+      setStep(mine);
+      setItems((prev) => [
+        ...prev,
+        {
+          kind: "agent",
+          id: nextId("locked"),
+          step: mine,
+          text: IN_FLIGHT_REFUSAL,
+          link: lockedHref ? { href: lockedHref, label: "Open the version in nCino" } : undefined,
+        },
+      ]);
+      return true;
+    },
+    [lockedHref, lockedRoute, step],
+  );
+
   const [histOpen, setHistOpen] = useState(false);
   const [entries, setEntries] = useState<WorkroomDelta[]>([]);
   const [execution, setExecution] = useState<WorkroomExecution | null>(null);
@@ -2225,6 +2288,9 @@ export function Workroom({
       if (opts.routeOpen && router) {
         const named = reply.route ?? (reply.type === "delta-proposal" ? "modify" : undefined);
         if (named && ROUTE_WORDS.has(named)) {
+          // A LOCK IS NOT A LANE CONCERN (rule 2). The desk may name the route
+          // the banker meant; it cannot name one the org has already forked.
+          if (refuseLockedRoute(named as WorkroomMode)) return;
           setAsk(null);
           router.onBind(named as WorkroomMode, { say: instruction });
           return;
@@ -2294,7 +2360,7 @@ export function Workroom({
         options: lines.map((l) => ({ label: l.label, say: l.say })),
       });
     },
-    [brief.members, focused, renderParse, router, runParser],
+    [brief.members, focused, refuseLockedRoute, renderParse, router, runParser],
   );
 
   /**
@@ -2984,6 +3050,15 @@ export function Workroom({
         if (!preCard) {
           const route = readRouteIntent(trimmed);
           if (route) {
+            /* A TYPED LINE IS REFUSED THE SAME WAY A CHIP IS (rule 2). The
+               banker's own bubble lands first, because a refusal answering
+               nothing visible reads as the room talking to itself; the refusal
+               owns the step, so both land in the same exchange. */
+            if (lockedRoute(route)) {
+              setItems((prev) => [...prev, bankerLine(step + 1, (said ?? heard).trim(), opts?.fed)]);
+              refuseLockedRoute(route);
+              return;
+            }
             setAsk(null);
             router.onBind(route, { say: trimmed });
             return;
@@ -3899,10 +3974,12 @@ export function Workroom({
       items,
       landPricing,
       openGates,
+      lockedRoute,
       pricingDeclined,
       pricingOutstanding,
       pricingPending,
       reads,
+      refuseLockedRoute,
       router,
       runBrain,
       runLine,
@@ -3923,10 +4000,11 @@ export function Workroom({
         setAsk(NEUTRAL_ASK);
         return;
       }
+      if (refuseLockedRoute(option.route)) return;
       setAsk(null);
       router.onBind(option.route, { memberId: option.memberId ?? null });
     },
-    [router],
+    [refuseLockedRoute, router],
   );
 
   /** The banker took the discard and asked for the other route. The hold is what
@@ -5391,7 +5469,21 @@ export function Workroom({
                     over their ids); the FACILITY read behind the rows was not,
                     so on a two-package relationship the plus listed the other
                     package's facilities beside this one's. */}
-                <ComposerPlus room="facility" members={elicitMembers} facilities={scopedFacilities} book={book} disabled={!awake || phase === "filed"} input={composerRef} onDraft={setDraft} />
+                {/* THE MENU NEVER OFFERS WHAT THE ROOM REFUSES (rule 2). A
+                    package with a modification already in flight cannot take
+                    another change of terms, so the Facility Terms topic is not
+                    listed — at any level, and in the search, because
+                    `hideTopics` is filtered at the one place both read. */}
+                <ComposerPlus
+                  room="facility"
+                  members={elicitMembers}
+                  facilities={scopedFacilities}
+                  book={book}
+                  hideTopics={locked ? LOCKED_TOPICS : undefined}
+                  disabled={!awake || phase === "filed"}
+                  input={composerRef}
+                  onDraft={setDraft}
+                />
                 <button
                   type="button"
                   className="wk-send"
@@ -5788,6 +5880,12 @@ function ThreadBlock({
       <div className="wk-pkgs wk-pkgask" role="radiogroup" aria-label={PACKAGE_QUESTION}>
         <div className="wk-pkgask-h">{PACKAGE_QUESTION_NOTE}</div>
         {roster.map((entry) => (
+          /* AN IN-FLIGHT VERSION IS LISTED AND DISABLED (rule 2 + rule 30, the
+             same treatment the ineligible package already gets). It is a real
+             package on this relationship, so hiding it would leave the banker
+             wondering where the version they just filed went; it is also not a
+             room anyone can work in, so it carries its reason instead of its
+             figures and nothing about it is clickable. */
           <button
             type="button"
             role="radio"
@@ -5795,15 +5893,23 @@ function ThreadBlock({
             key={entry.id}
             className="wk-pkg"
             data-pkg={entry.id}
-            onClick={() => onAnchor?.({ id: entry.id, label: entry.name, figure: entry.line, eligible: true })}
+            disabled={entry.inFlightVersion}
+            data-inflight={entry.inFlightVersion ? "1" : undefined}
+            title={entry.reason ?? entry.line}
+            onClick={() =>
+              !entry.inFlightVersion &&
+              onAnchor?.({ id: entry.id, label: entry.name, figure: entry.line, eligible: true })
+            }
           >
             <span>
               <b>{entry.name}</b>
-              <span>{entry.line}</span>
+              <span>{entry.reason ?? entry.line}</span>
             </span>
-            <span className="wk-go" aria-hidden="true">
-              →
-            </span>
+            {!entry.inFlightVersion && (
+              <span className="wk-go" aria-hidden="true">
+                →
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -5943,6 +6049,15 @@ function ThreadBlock({
               <button type="button" className="wk-opt" onClick={onStatus}>
                 Check the filing
               </button>
+            </div>
+          )}
+          {/* THE DOOR TO THE RECORD THE REFUSAL NAMED. An anchor, not a button:
+              it goes somewhere, and it says nothing to the parser. */}
+          {item.kind === "agent" && item.link && (
+            <div className="wk-opts">
+              <a className="wk-opt" href={item.link.href} target="_blank" rel="noreferrer">
+                {item.link.label}
+              </a>
             </div>
           )}
           {/* THE EXPLICIT RESTART. It is a chip and not an ink button on

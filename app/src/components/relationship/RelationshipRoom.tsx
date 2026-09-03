@@ -2482,6 +2482,10 @@ function RelBlock({
       <div className="wk-pkgs wk-pkgask" role="radiogroup" aria-label={REL_PACKAGE_QUESTION}>
         <div className="wk-pkgask-h">{REL_PACKAGE_QUESTION}</div>
         {packages.map((entry) => (
+          /* AN IN-FLIGHT VERSION IS LISTED AND DISABLED, exactly as the facility
+             room lists it (rule 2). A review cannot run in a package version
+             nobody has booked, and a banker who has learned one room's answer to
+             that has learned both. */
           <button
             type="button"
             role="radio"
@@ -2489,15 +2493,20 @@ function RelBlock({
             key={entry.id}
             className="wk-pkg"
             data-pkg={entry.id}
-            onClick={() => onAnchorPackage(entry.id)}
+            disabled={entry.inFlightVersion}
+            data-inflight={entry.inFlightVersion ? "1" : undefined}
+            title={entry.reason ?? entry.line}
+            onClick={() => !entry.inFlightVersion && onAnchorPackage(entry.id)}
           >
             <span>
               <b>{entry.name}</b>
-              <span>{entry.line}</span>
+              <span>{entry.reason ?? entry.line}</span>
             </span>
-            <span className="wk-go" aria-hidden="true">
-              →
-            </span>
+            {!entry.inFlightVersion && (
+              <span className="wk-go" aria-hidden="true">
+                →
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -2855,8 +2864,20 @@ export function RelationshipRoomHost() {
   const sessionPackageId = session?.productPackageId ?? null;
   const ctx = useMemo<RelContext | null>(() => {
     if (!accountId || !accountName) return null;
-    return relContextFor({ data, bundle, accountId, accountName, catalog, productPackageId: sessionPackageId });
-  }, [accountId, accountName, bundle, catalog, data, sessionPackageId]);
+    return relContextFor({
+      data,
+      bundle,
+      accountId,
+      accountName,
+      catalog,
+      productPackageId: sessionPackageId,
+      /* THE TRAIL, FOR THE IN-FLIGHT VERSION READING (rule 2). This room runs
+         no modification, so a lock never refuses it a route; what it needs the
+         trail for is the ASK, which must not offer an unbooked version as a
+         package a review can run in. */
+      history: state.actionHistory[accountId],
+    });
+  }, [accountId, accountName, bundle, catalog, data, sessionPackageId, state.actionHistory]);
 
   /* ONE MAIL READ PER ROOM OPEN, MADE HERE (SAMPLE-CHANNEL spec, and the same
      hook the facility room uses). The founder's "when there is an email

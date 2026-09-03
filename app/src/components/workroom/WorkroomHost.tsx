@@ -125,8 +125,22 @@ export function WorkroomHost() {
       // The artifact's own snapshot instant. Every time-based tier in the room
       // layer reads this and nothing reaches a clock.
       generatedAt: data.meta?.generatedAt,
+      /* THE TRAIL, FOR THE IN-FLIGHT LOCK (rule 2). It is the only read that
+         can tie an unbooked package version to the package it was forked from,
+         and it is already in the store: the sync sweep loads it. Undefined
+         where no sweep has run, which leaves a version named as in flight and
+         no source package locked. */
+      history: accountId ? state.actionHistory[accountId] : undefined,
     }),
-    [bundle, context?.accountName, context?.productPackageId, data.meta?.generatedAt, sessionAccountName],
+    [
+      accountId,
+      bundle,
+      context?.accountName,
+      context?.productPackageId,
+      data.meta?.generatedAt,
+      sessionAccountName,
+      state.actionHistory,
+    ],
   );
 
   /* THE MAIL TIER HANDS OFF TO THE DESK. The workroom does not read a thread;

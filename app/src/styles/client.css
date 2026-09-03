@@ -416,6 +416,52 @@ body.on-client .topnav .itab:nth-child(7) {
 .view.show .anchor:nth-child(5) {
   animation-delay: 180ms;
 }
+/* A CHIP THAT IS A DOOR (rule 2's refusal names a version the banker has to go
+   and deal with). It wears the workroom's own option-pill material; the only
+   thing an anchor needs on top is to stop being underlined prose. It lives in
+   the shell's sheet rather than the room's because it is the ONE anchor in the
+   room's chip band, and the pill itself is not redefined here. */
+a.wk-opt,
+a.wk-opt:hover {
+  text-decoration: none;
+}
+
+/* ================================================== THE FILED DELTA (rule 1)
+   BOOKED IS THE ONLY COMMITTED (founder, 2026-09-03). An execute files an
+   UNBOOKED package version, so no booked figure in this cockpit moves for it.
+   This chip is what an execute earns instead: the delta, named, sitting beside
+   the figure it does NOT change, on every surface that used to sum it in — the
+   hero anchor, the worklist row, the exposure pane's committed.
+
+   QUIET ON PURPOSE. It is a caption weight, not a badge: the booked figure has
+   to stay the loudest thing in the cell, because it is the only one the org
+   would agree with. The violet is the pending mark and the only colour here. */
+.filedchip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--brand);
+  animation: filedin 0.42s var(--ease-out) both;
+}
+.filedchip-w {
+  font-weight: 500;
+  color: var(--ink-faint);
+}
+@keyframes filedin {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* THE WRITE-BACK'S WASH (rule 62, INTENT OVERRIDE #1 — Fabian, 2026-08-31).
    A workroom execute walked this figure forward while the room was open; when
    the glass LIFTS, the anchor it moved washes violet ONCE and clears.
