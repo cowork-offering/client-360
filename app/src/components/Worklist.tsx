@@ -164,31 +164,43 @@ export function Worklist() {
                   </span>
                 </span>
                 <span className="sts">
-                  {r.riskRating != null && (
-                    <span className="wl-grade" title={`nCino risk rating · Grade ${r.riskRating}`}>
-                      <svg viewBox="0 0 20 20" aria-hidden="true">
-                        <circle cx="10" cy="10" r="8" fill="none" stroke="var(--row-divider)" strokeWidth="2.4" />
-                        <circle
-                          cx="10"
-                          cy="10"
-                          r="8"
-                          fill="none"
-                          stroke={gradeColor(String(r.riskRating)) ?? "var(--ink-faint)"}
-                          strokeWidth="2.4"
-                          strokeLinecap="round"
-                          strokeDasharray={2 * Math.PI * 8}
-                          strokeDashoffset={(2 * Math.PI * 8 * (8 - Math.min(8, Number(r.riskRating) || 0))) / 8}
-                          transform="rotate(-90 10 10)"
-                        />
-                      </svg>
-                      <i>{r.riskRating}</i>
-                    </span>
-                  )}
-                  {statusesFor(r).map((s) => (
-                    <span key={s.text} className={`st ${s.tone}`}>
-                      {s.text}
-                    </span>
-                  ))}
+                  {/* THE ROW STAYS CLEAN (founder, 2026-09-03: the grades,
+                      requests and maturities floating in the card read as
+                      clutter). One quiet info dot summarises what needs
+                      attention; the detail lives in its hover card. The single
+                      most urgent reason keeps one word on the row so triage
+                      still works at a glance. */}
+                  {(() => {
+                    const sts = statusesFor(r);
+                    const lead = sts.find((s) => s.tone === "bad") ?? sts.find((s) => s.tone === "warn");
+                    return (
+                      <>
+                        {lead && <span className={`st ${lead.tone}`}>{lead.text}</span>}
+                        {(sts.length > (lead ? 1 : 0) || r.riskRating != null) && (
+                          <span className="wl-info" tabIndex={0} aria-label="Details for this relationship">
+                            <svg viewBox="0 0 16 16" aria-hidden="true">
+                              <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                              <path d="M8 7.2v3.4M8 5.05v.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                            </svg>
+                            <span className="wl-pop" role="tooltip">
+                              {r.riskRating != null && (
+                                <span className="wl-pop-row">
+                                  <span>Risk rating</span>
+                                  <b style={{ color: gradeColor(String(r.riskRating)) ?? undefined }}>Grade {r.riskRating}</b>
+                                </span>
+                              )}
+                              {sts.map((s) => (
+                                <span key={s.text} className="wl-pop-row">
+                                  <span>{s.text.split(" · ")[0]}</span>
+                                  <b>{s.text.includes(" · ") ? s.text.split(" · ").slice(1).join(" · ") : ""}</b>
+                                </span>
+                              ))}
+                            </span>
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </span>
                 <span className="amt num">
                   {/* The book's own figure, walked forward by a workroom

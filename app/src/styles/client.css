@@ -496,24 +496,62 @@ body.on-client .topnav .itab:nth-child(7) {
   }
 }
 
-/* The worklist row's grade, as an instrument rather than a word (founder,
-   2026-09-03). A 20px ring with the figure beside it, quiet; the pill row it
-   left keeps its rhythm. */
-.wl-grade {
+/* The worklist row's detail, behind one quiet info dot (founder, 2026-09-03:
+   pull the grades, requests and maturities behind an info button with a nice
+   hover pop-up). The dot is the whole affordance; its card floats above on
+   hover or keyboard focus, glass, aligned rows. */
+.wl-info {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-right: 2px;
+  color: var(--ink-faint);
+  cursor: default;
+  outline: none;
 }
-.wl-grade svg {
-  width: 18px;
-  height: 18px;
+.wl-info:hover,
+.wl-info:focus-visible {
+  color: var(--ink-muted);
+}
+.wl-info svg {
+  width: 15px;
+  height: 15px;
   flex: none;
 }
-.wl-grade i {
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 700;
+.wl-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -6px;
+  z-index: 40;
+  min-width: 210px;
+  display: none;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim), 0 12px 32px -12px rgba(0, 0, 0, 0.25);
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+}
+.wl-info:hover .wl-pop,
+.wl-info:focus-visible .wl-pop {
+  display: flex;
+}
+.wl-pop-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 3px 0;
+  font-size: 12px;
   color: var(--ink-muted);
+  white-space: nowrap;
+}
+.wl-pop-row b {
+  font-weight: 600;
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+.wl-pop-row + .wl-pop-row {
+  border-top: 1px solid var(--row-divider);
 }
