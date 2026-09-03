@@ -119,7 +119,12 @@ body.wk-open #root {
   border-radius: inherit;
   pointer-events: none;
   transform: translateZ(0);
-  z-index: 0;
+  /* NEGATIVE on purpose: the pane is its own stacking context (fixed, z 100),
+     so -1 paints the sheet under every child, positioned or not, and no
+     sibling needs its position touched. The rule that forced every child to
+     position:relative broke the absolutely placed chip and rail (founder,
+     2026-09-03: the chip stretched, the cards wrapped under the chat). */
+  z-index: -1;
   /* The two blooms ride ON TOP of the glass tint the material class sets, so
      the recipe stays in one place and this only adds the room's own light. */
   background:
@@ -128,20 +133,6 @@ body.wk-open #root {
     var(--eg-tint);
 }
 
-/* EVERYTHING THE BANKER READS SITS ABOVE THE SHEET. The header, the earlier-
-   steps chip and the body are the pane's only real children besides the sheet
-   (the toast is a fourth, and Peek portals out rather than nesting here); none
-   of them types its own z-index, so this is the one place that promise is
-   kept.
-
-   `:has(> .wk-glass-sheet)` keeps this off RelationshipRoom.tsx's own
-   `.wk-room.eg-glass-workroom` (a separate pane, no sheet child, out of scope
-   here): without it every child of THAT room would also be pinned to
-   position:relative/z-index:1 for no reason. */
-.wk-room.eg-glass-workroom:has(> .wk-glass-sheet) > :not(.wk-glass-sheet) {
-  position: relative;
-  z-index: 1;
-}
 
 /* Button reset, at ZERO specificity. `.wk-room button` (0,1,1) outranks every
    single-class button rule in this file (0,1,0), so `color: inherit` would win

@@ -164,6 +164,9 @@
    different element. The mode blocks below layer the bend on top of this the
    same way they used to layer it on the pane. */
 .wk-glass-sheet {
+  /* The tint lives here now too: the pane's own background is reset, so a
+     sheet without one left frost fully transparent (founder, 2026-09-03). */
+  background: var(--eg-tint);
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
   backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
