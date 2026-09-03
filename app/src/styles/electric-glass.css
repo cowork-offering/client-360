@@ -124,6 +124,53 @@
   --eg-tint: rgba(250, 251, 255, 0.56);
   --eg-drop: 0 30px 90px rgba(16, 4, 30, 0.35);
 }
+
+/* THE PANE NEVER PAINTS ITS OWN GLASS (GLASS-LEAN, founder, 2026-09-03: input
+   latency on liquid, worst in the workroom). `.wk-glass-sheet` (workroom.css)
+   is a childless layer that now carries the tint, the blur and the rim; every
+   custom property above (`--eg-blur`, `--eg-sat`, `--eg-tint`, `--eg-drop`,
+   and the mode blocks below that still target `.eg-glass-workroom` to set
+   `--eg-rblur` / `--glass-rim` / `--eg-drop`) keeps being set HERE, on the
+   pane, because a custom property inherits down to the sheet and would not
+   inherit back up if it moved there instead.
+
+   `!important` IS THE POINT, not a shortcut around one. `.eg-glass` and every
+   per-mode block below it (`html.eg-refract .eg-glass`, `html.eg-liquid
+   .eg-glass`, …) still match this element, because it still needs to be one
+   of them for its custom properties to resolve, and several of those blocks
+   carry more classes in their selector than a plain override of
+   `.wk-room.eg-glass-workroom` does. This is the one property set on this
+   element that must never lose that fight, in this mode or the next one
+   anybody adds.
+
+   `:has(> .wk-glass-sheet)` IS THE SCOPE, NOT DECORATION. RelationshipRoom.tsx
+   renders its own, separate `.wk-room.eg-glass.eg-glass-workroom` pane (a
+   second flow, out of scope for this pass) with no sheet child of its own;
+   without this guard the reset below would strip ITS backdrop-filter too and
+   leave it with nothing painting at all. */
+.wk-room.eg-glass-workroom:has(> .wk-glass-sheet) {
+  background: none !important;
+  border: none !important;
+  box-shadow: var(--eg-drop) !important;
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* THE SHEET'S OWN RECIPE, FROST DEFAULT. Same shape as `.eg-glass` above,
+   read off the same custom properties by inheritance, because `.wk-glass-sheet`
+   deliberately carries no material class of its own: it is not a second
+   place the recipe is written down, it is the first one's values landing on a
+   different element. The mode blocks below layer the bend on top of this the
+   same way they used to layer it on the pane. */
+.wk-glass-sheet {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
+  border: 1px solid var(--glass-hairline);
+  box-shadow: var(--glass-rim);
+}
+
 .eg-glass-bar {
   --eg-blur: var(--blur-bar);
   --eg-sat: 1.85;
@@ -431,8 +478,14 @@ html.eg-refract .eg-glass-micro {
    made the bend expensive. The founder judges it on his own machine.
 
    `eg-refract-pane` is kept as the selector and is now set by every refract
-   mode, so every ?refract=2 link ever written still lands exactly here. */
-html.eg-refract-pane .eg-glass-workroom {
+   mode, so every ?refract=2 link ever written still lands exactly here.
+
+   GLASS-LEAN: this used to land on `.eg-glass-workroom` (the pane) directly;
+   it now lands on its `.wk-glass-sheet`, which is the only element left that
+   is allowed to carry a backdrop-filter. `--eg-rblur` / `--eg-rsat` are still
+   set on the pane by the generic `html.eg-refract .eg-glass` block above, and
+   the sheet reads them the same way it reads every other custom property. */
+html.eg-refract-pane .eg-glass-workroom .wk-glass-sheet {
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
   backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
@@ -521,17 +574,27 @@ html.eg-refract body.wk-open #root {
    percent white tint puts most of what is left behind a wall. Liquid spends
    the two things ON was saving.
 
-     1  CLEARER GLASS.  tint .22-.35, frost 6-10px. What is behind the panel is
+     1  CLEARER GLASS.  tint .30-.35, frost 7-10px. What is behind the panel is
                         MEANT to be legible; that is what makes it glass rather
                         than paper. The pane keeps a top-to-bottom gradient so
                         the room's own body copy still has a floor to sit on.
+                        EVERY liquid surface gets this.
      2  EDGE LENS.      #eg-liquid, GlassFilters.tsx: near-nothing in the
-                        middle, 48-64 at the rim.
-     3  ABERRATION.     three channels, three throws, rim only.
-     4  A GROUND THAT MOVES. blooms at .10-.14 on a 78s drift, so the bend is
-                        visible while nothing is being scrolled at all.
-     5  SPECULAR SWEEP. one 900ms streak on mount and on hover. Never loops:
+                        middle, a big throw at the rim. FOUR SURFACES ONLY,
+                        the ones where a bend is actually seen.
+     3  A STILL GROUND. two blooms at .06 and .05, and they do not move.
+     4  SPECULAR SWEEP. one 900ms streak on mount and on hover. Never loops:
                         a looping highlight is a screensaver, not a material.
+
+   THE LEAN PASS (founder, 2026-09-03, on his Mac: liquid had input latency
+   where the frost is glassy smooth). Chromium rasterises a url() reference
+   filter in backdrop-filter on the CPU, per backdrop pixel, every time the
+   backdrop changes. Three things followed from that and they are the difference
+   between this block and the one before it: the lens is on four surfaces
+   instead of twelve, the chromatic split is gone (one displacement, not two or
+   three), and NOTHING ANIMATES FOREVER BEHIND A LENSED SURFACE, because a
+   moving backdrop is a re-rasterisation of every lens over it, on the main
+   thread, which is where the pointer lives.
 
    THE RIM AND THE HAIRLINE ARE UNTOUCHED. Nothing below writes a box-shadow or
    a border, so the census stays at three insets and the dark outer hairline
@@ -579,10 +642,16 @@ html.eg-liquid .wk-propose {
    pane dense enough for the narration to sit on and lets the foot of it go to
    water, which is also where the client page underneath is most worth seeing.
    Measured: the room's body copy holds AA against the busiest backdrop the
-   cockpit can put behind it (the numbers are in the addendum). */
+   cockpit can put behind it (the numbers are in the addendum).
+
+   `--eg-rblur` / `--eg-tint` stay set HERE, on the pane, because the sheet
+   reads them by inheritance; the background they feed moved to the sheet
+   itself, below, since the pane no longer paints one. */
 html.eg-liquid .eg-glass-workroom {
   --eg-rblur: 10px;
   --eg-tint: rgba(250, 251, 255, 0.34);
+}
+html.eg-liquid .eg-glass-workroom .wk-glass-sheet {
   background:
     linear-gradient(to bottom, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0) 100%),
     var(--eg-tint);
@@ -602,9 +671,34 @@ html.eg-liquid .wk-body {
   );
 }
 
-/* 2 and 3. THE LENS AND THE FRINGE. Same shape as the eg-refract block above and
-   for the same reasons: the plain declaration first so WebKit keeps a frost,
-   the url() second so Chromium takes the lens, big surfaces before small ones
+/* 2. THE LENS, AND THE FOUR SURFACES THAT GET ONE.
+
+   Chromium rasterises a url() reference filter in backdrop-filter ON THE CPU,
+   per backdrop pixel, every time the backdrop changes. That is the whole
+   performance story of this mode and it is why the founder felt input latency
+   on a machine where the frost is glassy smooth: twelve lensed surfaces meant
+   twelve CPU rasterisations of a full backdrop on every frame that touched any
+   of them.
+
+   SO THE LENS GOES WHERE IT IS SEEN, AND NOWHERE ELSE (founder, 2026-09-03):
+
+     the workroom pane   the biggest piece of glass in the app, with the client
+                         page moving behind it. This is the one he approved.
+     the top bar         the book slides under it; the only everyday surface
+                         with real content passing behind.
+     the rail chips      small glass over the pane, where the bend reads as
+                         thickness rather than as texture.
+     the arc satellites  same, over the open page.
+
+   EVERY OTHER LIQUID SURFACE KEEPS THE LOOK AND DROPS THE LENS: the clear
+   tint, the light frost, the rim, the sweep. The chat panel, the hero, the cmdk
+   lens, the whisper, the toasts, the notices, the rescards, the history chip
+   and the propose card are all glass you look AT rather than glass you look
+   THROUGH while something moves, and a displacement none of them can show is
+   pure cost. This is the single biggest lever in the lean pass.
+
+   The plain declaration still comes first so WebKit keeps a frost, the url()
+   second so Chromium takes the lens, and the small surfaces after the big ones
    so source order settles the tie. */
 html.eg-liquid .eg-glass,
 html.eg-liquid .topbar,
@@ -612,71 +706,98 @@ html.eg-liquid .whisper,
 html.eg-liquid .wk-notice,
 html.eg-liquid .wk-ent,
 html.eg-liquid .wk-rescard,
-html.eg-liquid .wk-toast {
+html.eg-liquid .wk-toast,
+html.eg-liquid .eg-glass-chip,
+html.eg-liquid .eg-glass-satellite,
+html.eg-liquid .wk-hist,
+html.eg-liquid .wk-propose {
+  /* THE FLOOR FOR EVERY LIQUID SURFACE: the tint and the light frost, no
+     reference filter. Four selectors below opt back in. */
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+
+/* THE BIG LENS: the pane and the bar. The pane's half of this used to read
+   `html.eg-liquid.eg-refract-pane .eg-glass-workroom`; it now reads its
+   `.wk-glass-sheet`, for the same reason every other mode block above does. */
+html.eg-liquid.eg-refract-pane .eg-glass-workroom .wk-glass-sheet,
+html.eg-liquid .topbar {
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
   backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
   backdrop-filter: url(#eg-liquid) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
 }
-html.eg-liquid .eg-glass-chip,
-html.eg-liquid .eg-glass-satellite,
-html.eg-liquid .wk-hist,
-html.eg-liquid .wk-propose {
+
+/* THE SMALL LENS: the rail chips and the arc satellites. The chips moved off
+   the big filter on the way here, which is also the right call on its own
+   terms: a 200px chip given a pane's throw melts rather than bends. */
+html.eg-liquid .wk-ent,
+html.eg-liquid .eg-glass-satellite {
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
   backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
   backdrop-filter: url(#eg-liquid-soft) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
 }
-html.eg-liquid.eg-refract-pane .eg-glass-workroom {
-  /* autoprefixer: ignore next */
-  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
-  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
-  backdrop-filter: url(#eg-liquid) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
-}
-/* The narrator sliver stays off the lens for the reason it is off the bend and
-   off the triple rim: at a 7px radius an 18px rim mask has nowhere to land. */
+
+/* The narrator sliver keeps the app's own frost, off the lens for the reason it
+   is off the bend and off the triple rim: at a 7px radius a rim mask has
+   nowhere to land. */
 html.eg-liquid .eg-glass-micro {
   /* autoprefixer: ignore next */
   -webkit-backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
   backdrop-filter: blur(var(--eg-blur)) saturate(var(--eg-sat));
 }
 
-/* 4. THE GROUND THAT MOVES. Two blooms on one element, drifting on a 78s
-   loop. TRANSFORM ONLY: a moving background-position repaints the layer every
-   frame, a transform does not. It is the answer to the honest complaint about
-   the ON pass, which is that the bend only announces itself while something is
-   being scrolled behind it. */
+/* NOTHING LOOPS UNDER A LENS (founder, 2026-09-03: input latency on liquid).
+
+   A url() filter in backdrop-filter is rasterised by Chromium on the CPU every
+   time the backdrop beneath it changes, so anything that animates forever under
+   a lensed surface is a standing order to re-rasterise it forever. Two loops on
+   the page qualified once the lens list was settled, and both are decoration:
+
+     .fab::after      a 7s halo pulse on the client page, which sits under the
+                      workroom pane the whole time the room is open;
+     .pane .empty .wm the 8s watermark breath in an empty pane, under the bar
+                      and under the pane.
+
+   They keep their resting appearance and stop moving. The weave does the same
+   thing from its own rAF loop (Weave.tsx); the blooms simply do not move at all
+   any more. The room's own goo, its skeletons and the aura are all ABOVE the
+   pane's backdrop rather than behind it, and they cost the lens nothing. */
+html.eg-liquid .fab::after,
+html.eg-liquid .pane .empty .wm {
+  animation: none;
+}
+
+/* 4. THE GROUND, AND WHY IT NO LONGER MOVES.
+
+   The blooms drifted on a 78s loop until the founder ran liquid on his Mac and
+   felt input latency. The drift was not expensive in itself, and headless it
+   measured as nothing at all, but that measurement was taken with the whole
+   page already at 3 fps, where a change every frame is lost in the noise. On
+   hardware the mechanism is plain: a transform under the glass changes the
+   BACKDROP of every lensed surface, and a changed backdrop is a fresh CPU
+   rasterisation of that surface's reference filter. A ground that drifts forever
+   is a promise to re-rasterise every lensed pane forever, at a cost that lands
+   on the main thread and therefore on the pointer.
+
+   So the blooms are STILL. They are structure, which is all the bend ever
+   needed from them; movement was a way of showing off the bend while nothing
+   was scrolling, and it is not worth the input latency it buys.
+
+   NOTHING ELSE MAY ANIMATE HERE EITHER. Anything that runs forever behind a
+   lensed surface has the same cost, whatever it is and however cheap it looks. */
 html.eg-liquid .ground-blooms {
   position: absolute;
   inset: -22%;
   /* THE ALPHAS ARE THE WHOLE ARGUMENT. They were .13 and .11 for one round and
      that reads as a tinted page, which is not what the ground is for. At .06
      and .05 they sit within half a step of the canvas's own sanctioned teal
-     (.04) and the page still reads as the Apple canvas: measured, the blooms
-     add a mean 1.18 of 255 over the bare ground against 2.43 at .13/.11, while
-     the glass keeps most of what it had (satellites 5.08 against 5.99, hero
-     0.73 against 1.30).
-
-     LARGE AND SOFT, not small and tight. Tighter blooms give more gradient per
-     unit of colour, which is the efficient trade on paper, but a 300px blob
-     reads as a graphic on the page and a 620px wash reads as light in the
-     room. The canvas already has two large soft radials; these are two more. */
+     (.04) and the page still reads as the Apple canvas. */
   background:
     radial-gradient(620px 420px at 22% 30%, rgba(5, 242, 219, 0.06) 0%, transparent 60%),
     radial-gradient(700px 460px at 78% 68%, rgba(161, 0, 255, 0.05) 0%, transparent 62%);
-  animation: eg-drift 78s ease-in-out infinite;
-  will-change: transform;
-}
-@keyframes eg-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(4%, -3%, 0) scale(1.06);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
 }
 
 /* 5. THE SPECULAR SWEEP. A soft diagonal streak crossing each surface ONCE on
@@ -730,30 +851,12 @@ html.eg-liquid .whisper:hover::before {
   }
 }
 
-/* THE IDLE PARK (founder, 2026-09-03: "the mock reacts slowly"). Thirty seconds
-   with no pointer, key, wheel, scroll or touch, or a hidden tab, and both the
-   drift and the sweep stop. GroundSheet.tsx owns the class and carries the
-   honest note about what it is worth: the frame cost in liquid is the lens, not
-   the animation, so this is a battery argument, not a frame-rate one. */
-html.eg-idle .ground-blooms,
-html.eg-idle .wk-room::before,
-html.eg-idle .hero::before,
-html.eg-idle .topbar::before,
-html.eg-idle .arcbtn::before,
-html.eg-idle .wk-ent::before,
-html.eg-idle .whisper::before {
-  animation-play-state: paused;
-}
-
-/* The drift and the sweep are decoration, and decoration stops when the reader
-   has asked for it to. The block at the top of this file already kills every
-   animation and transition under the query; this is the belt for the two that
-   would otherwise be the most noticeable if it ever stopped matching. */
+/* The sweep is decoration, and decoration stops when the reader has asked for
+   it to. The block at the top of this file already kills every animation and
+   transition under the query; this is the belt for the one that would otherwise
+   be the most noticeable if it ever stopped matching. The blooms need no entry
+   here any more: they do not move in any mode. */
 @media (prefers-reduced-motion: reduce) {
-  html.eg-liquid .ground-blooms {
-    animation: none !important;
-    transform: none !important;
-  }
   html.eg-liquid .wk-room::before,
   html.eg-liquid .hero::before,
   html.eg-liquid .topbar::before,
