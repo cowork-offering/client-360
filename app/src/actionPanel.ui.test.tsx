@@ -185,7 +185,9 @@ describe("A33.1.1 — one modal, three entry points", () => {
     expect(panel("Collateral Valuation")).toBeTruthy();
   });
 
-  it("opens from a chat suggestion chip", () => {
+  it("a chat chip for a room-covered action opens the ROOM, not the retired panel", () => {
+    // Founder, 2026-09-03: the rooms took over the panel's work; a chip whose
+    // action they carry opens them exactly as the FAB does.
     mount();
     click(openRow("Sterling Fabrication"));
     openAssist();
@@ -194,7 +196,9 @@ describe("A33.1.1 — one modal, three entry points", () => {
       .find((b) => b.hasAttribute("title") && /Collateral Valuation/.test(b.textContent ?? ""));
     if (!chip) return; // suggestion ordering is data-driven; covered by engine tests
     click(chip);
-    expect(panel("Collateral Valuation")).toBeTruthy();
+    expect(panel("Collateral Valuation")).toBeNull();
+    expect(document.querySelector(".wk-room")).toBeTruthy();
+    press("Escape"); // close the room so the next test starts on a clean stage
   });
 
   it("renders the SAME schema whichever entry point opened it", () => {
@@ -1022,10 +1026,11 @@ describe("wave 2 — the five new tickets", () => {
     expect(shell).toContain("Modification ZZ-WS05-PROBE Borrower - Equipment - $1,500,000.00 filed against");
   });
 
-  it("executes the same modification from the CHAT surface, not just the actions row", async () => {
-    // A33.1.2 — the chip opens the SAME ticket. This proves the unhold reached
-    // both entry points rather than only the one the row happens to use.
-    const callTool = installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
+  it("the CHAT surface hands a modification to the ROOM, not the retired ticket", async () => {
+    // Founder, 2026-09-03: the rooms took over the panel's work. The chip that
+    // used to open the Loan Modification ticket now opens the facility room;
+    // the ticket's own execute stays proven through its direct entry points.
+    installWriteMcp({ stage: MOD_STAGE_PLAN, execute: MOD_EXECUTE });
     mount({ userId: APPROVER_ID }, true);
     click(openRow("Sterling Fabrication"));
     openAssist();
@@ -1033,12 +1038,10 @@ describe("wave 2 — the five new tickets", () => {
       .flatMap((d) => [...d.querySelectorAll("button")])
       .find((b) => b.hasAttribute("title") && b.textContent?.trim() === "Loan Modification")!;
     click(chip);
-    click(byText(/Review the plan/)!);
     await flush();
-    click(byText(/Confirm and file/)!);
-    await flush();
-    expect(callTool.mock.calls.filter((c) => String(c[1]) === "execute_loan_modification")).toHaveLength(1);
-    expect(panel("Loan Modification")!.textContent).toContain("Filed, per facility");
+    expect(panel("Loan Modification")).toBeNull();
+    expect(document.querySelector(".wk-room")).toBeTruthy();
+    press("Escape");
   });
 
   it("says nothing was written twice when the org replays the key", async () => {
