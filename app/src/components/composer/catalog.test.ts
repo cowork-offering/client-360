@@ -244,7 +244,9 @@ describe("every template, on every member of the package", () => {
 
   it("covers the whole catalogue against the live package", () => {
     // Six members; the catalogue expands per member against the book behind it.
-    expect(cases.length).toBeGreaterThan(200);
+    // Six booked members against the live book: 309 leaves today, and the
+    // catalogue is free to grow. The floor is what makes the coverage claim.
+    expect(cases.length).toBeGreaterThan(300);
   });
 
   it("never composes a line with a reading word inside a placeholder", () => {

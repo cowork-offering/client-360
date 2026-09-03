@@ -54,8 +54,9 @@ import "./composer.css";
    ANCHORED TO THE BUTTON, PORTALLED TO THE BODY. The composer sits inside the
    room's scroll column and the room's own glass creates a stacking context, so
    a panel rendered in place would be clipped by both. It portals like every
-   other overlay (see Portal.tsx) and reads --z-palette, the scale the command
-   palette already sits on.
+   other overlay (see Portal.tsx) and reads --z-sheet, the scale for a surface
+   stacked on the panel that owns it: the workroom is itself an overlay at
+   --z-modal, so anything lower paints behind it and vanishes into its glass.
    ============================================================================= */
 
 type Room = "facility" | "relationship";
@@ -120,12 +121,15 @@ interface Row {
   trail?: string;
 }
 
-/** The figures on a level-one row: commitment, drawn, maturity, one line. */
+/** The figures on a level-one row: commitment, drawn, maturity, one line. It
+ *  has to fit one line at the panel's width, so the words are the ones that
+ *  carry meaning and nothing else: the commitment needs no label beside a
+ *  drawn figure, and a date in a facility row is a maturity. */
 function facilitySub(f: FacilityEntry): string {
   const parts: string[] = [];
-  if (f.committed !== null) parts.push(`${fmtMoney(f.committed)} committed`);
+  if (f.committed !== null) parts.push(fmtMoney(f.committed));
   if (f.drawn !== null) parts.push(`${fmtMoney(f.drawn)} drawn`);
-  if (f.maturity) parts.push(`matures ${f.maturity}`);
+  if (f.maturity) parts.push(f.maturity);
   return parts.join(" · ");
 }
 
@@ -142,7 +146,7 @@ export function ComposerPlus({ room, members, facilities, book, disabled, input,
   const button = useRef<HTMLButtonElement | null>(null);
   const panel = useRef<HTMLDivElement | null>(null);
   const field = useRef<HTMLInputElement | null>(null);
-  const [anchor, setAnchor] = useState<{ left: number; bottom: number; width: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ right: number; bottom: number } | null>(null);
 
   const entries = useMemo(() => facilityEntries(members, facilities), [members, facilities]);
   const relTopics = useMemo(() => relationshipTopics(), []);
@@ -300,10 +304,14 @@ export function ComposerPlus({ room, members, facilities, book, disabled, input,
 
   useLayoutEffect(() => {
     if (!open) return;
+    /* RIGHT-ALIGNED TO THE COMPOSER, not to the button. The panel reads as a
+       surface rising out of the bar it belongs to; hung off the button alone it
+       would sit a few pixels proud of the composer's own edge for no reason. */
     const place = () => {
       const rect = button.current?.getBoundingClientRect();
-      if (!rect) return;
-      setAnchor({ left: rect.left, bottom: window.innerHeight - rect.top + 10, width: rect.width });
+      const bar = button.current?.parentElement?.getBoundingClientRect() ?? rect;
+      if (!rect || !bar) return;
+      setAnchor({ right: window.innerWidth - bar.right, bottom: window.innerHeight - rect.top + 10 });
     };
     place();
     window.addEventListener("resize", place);
@@ -366,7 +374,10 @@ export function ComposerPlus({ room, members, facilities, book, disabled, input,
     topic?.label ?? null,
     action?.label ?? null,
   ].filter((c): c is string => Boolean(c));
-  const depth = crumbs.length;
+  /* THE BACK ARROW ONLY WHERE THERE IS SOMEWHERE TO GO. The relationship room
+     has one subject and opens past level one, so a back arrow on its topic list
+     would point at nothing. */
+  const canGoBack = Boolean(query || topic || action || (facility && roots.length > 1));
 
   return (
     <>
@@ -390,11 +401,11 @@ export function ComposerPlus({ room, members, facilities, book, disabled, input,
             className="cp-panel eg-glass eg-glass-panel"
             role="menu"
             aria-label="Actions"
-            style={{ left: anchor.left, bottom: anchor.bottom }}
+            style={{ right: anchor.right, bottom: anchor.bottom }}
             onKeyDown={onKeyDown}
           >
             <div className="cp-head">
-              {depth > 0 && (
+              {canGoBack && (
                 <button type="button" className="cp-back" aria-label="Back" onClick={back}>
                   <IconBack />
                 </button>
@@ -444,15 +455,13 @@ export function ComposerPlus({ room, members, facilities, book, disabled, input,
                     <span className="cp-label">{row.label}</span>
                     {row.sub && <span className="cp-sub">{row.sub}</span>}
                   </span>
-                  {row.count !== undefined ? (
-                    <span className="cp-count">{row.count}</span>
-                  ) : (
-                    <span className="cp-writes">writes</span>
-                  )}
                   {row.count !== undefined && (
-                    <span className="cp-chev" aria-hidden="true">
-                      <IconChevron />
-                    </span>
+                    <>
+                      <span className="cp-count">{row.count}</span>
+                      <span className="cp-chev" aria-hidden="true">
+                        <IconChevron />
+                      </span>
+                    </>
                   )}
                 </button>
               ))}

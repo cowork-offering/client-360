@@ -48,8 +48,12 @@
 /* ------------------------------------------------------------------ the panel */
 .cp-panel {
   position: fixed;
-  z-index: var(--z-palette);
-  width: 380px;
+  /* THE SHEET SCALE, NOT THE PALETTE SCALE. The workroom is itself a full-screen
+     overlay at --z-modal, so a panel at --z-palette paints BEHIND the room that
+     owns it and disappears into its glass. --z-sheet is the token for exactly
+     this: a surface stacked on the panel that owns it (tokens.css, A31.1). */
+  z-index: var(--z-sheet);
+  width: 400px;
   max-width: calc(100vw - 32px);
   border-radius: var(--radius);
   overflow: hidden;
@@ -224,20 +228,6 @@
   font-variant-numeric: tabular-nums;
   text-align: center;
   color: var(--ink-muted);
-}
-/* A LEAF SAYS WHAT IT DOES, quietly, and only under the cursor: every row that
-   is not a branch writes a line, and the menu says so once rather than in
-   twenty places. */
-.cp-writes {
-  flex: none;
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  color: var(--ink-faint);
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-.cp-row.on .cp-writes {
-  opacity: 1;
 }
 .cp-chev {
   flex: none;
