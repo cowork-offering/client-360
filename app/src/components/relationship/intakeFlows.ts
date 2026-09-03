@@ -4,6 +4,9 @@ import { stageRationale } from "../../actions/registry";
 import { observedOptions } from "../../actions/observedPicklists";
 import { orgAccepted, orgValues } from "../../channel/catalog";
 import type { StagePayloads } from "../../channel/writeTools";
+import { collateralAssets, shortAssetTitle, type CollateralAsset } from "../../domain/collateralAssets";
+import { clipTitle } from "../workroom/elicit";
+import { FACILITY_HANDOFF } from "./relRoute";
 import type { IconKind } from "../workroom/TypeIcon";
 import {
   answered,
@@ -982,8 +985,65 @@ function inFamily(value: string, root: string): boolean {
   return v.startsWith(r) && /[^a-z0-9]/.test(v.charAt(r.length));
 }
 
+/* ------------------------------------- the asset the book already holds
+
+   THE FOUNDER'S OWN QUESTION (2026-09-03, on the facility room's pledge
+   lane): "is it not offering the collaterals from my account to pledge
+   towards it?" This room's own half of the same fix. An asset filed here is
+   OWNED AND UNPLEDGED (`NO_PLEDGE_NO_LIEN`), so before a banker re-files one
+   the account already holds, the room asks which of the two he means, using
+   the same "Unpledged" set the collateral pane badges (`domain/collateralAssets`,
+   `pledges.length === 0`), because that is the account's own definition of an
+   asset with nothing yet claiming it.                                     */
+
+/** Every asset the account holds that no active pledge secures today. */
+function unpledgedBookAssets(ctx: RelContext): CollateralAsset[] {
+  return collateralAssets(ctx.bundle).filter((asset) => asset.pledges.length === 0);
+}
+
+/** The chip label for one of them: the org's own type and a compact
+ *  descriptor, never the full description and never the org's autonumber
+ *  (the same shortener the collateral pane itself uses). */
+function unpledgedAssetChipLabel(asset: CollateralAsset): string {
+  return clipTitle(shortAssetTitle(asset.collateralType, asset.description), 60);
+}
+
 function collateralIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
   const names = collateralTypeNames(ctx);
+
+  /* THE FIRST STEP, BEFORE THE TYPE QUESTION: FILE NEW, OR IS THIS ONE THE
+     BOOK ALREADY HOLDS? Asked once, only where the account carries an
+     unpledged asset, and never where the opening line already described one
+     in full, since free text has already answered it, the same rule the type
+     question below stands on. Picking an existing asset files NOTHING: an
+     asset already on the book does not get filed a second time, and pledging
+     it onto a facility is a facility action, said with the room's own
+     facility-handoff line rather than a paraphrase of it. */
+  const unpledged = unpledgedBookAssets(ctx);
+  if (unpledged.length && !seedLine(a) && !has(a, "colExisting", 0)) {
+    return {
+      key: "colExisting.0",
+      ask: "File a new asset, or is this one the book already holds?",
+      kind: "chips",
+      options: [
+        { label: "A new asset", value: "new" },
+        ...unpledged.map((asset) => ({ label: unpledgedAssetChipLabel(asset), value: `existing:${asset.key}` })),
+      ],
+      placeholder: "A new asset, or pick the one the book already holds.",
+    };
+  }
+  const existingPick = text(at(a, "colExisting", 0));
+  if (existingPick && existingPick !== "new") {
+    return {
+      key: "colExistingHandoff",
+      ask: `That asset is already on the book. ${FACILITY_HANDOFF} Nothing is filed here for it.`,
+      kind: "text",
+      optional: true,
+      options: [],
+      placeholder: "Say what you would like to file next, or close this out.",
+    };
+  }
+
   const drafts = collateralDrafts(ctx, a);
   const { index: i, draft } = cursorOf(drafts, a, "colMore");
   if (i >= INTAKE_CAP) return null;

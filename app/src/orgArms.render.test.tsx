@@ -548,7 +548,7 @@ describe("the create chips come from the org, not from a mirror", () => {
     const room = open();
     await settle();
     await typeInto(room, "pledge some collateral to the construction loan");
-    await click(byText(/^A new asset$/));
+    await typeInto(room, "a new asset");
 
     expect(said(room)).toContain("The catalog carries 19 types the bank will lend against");
     expect(said(room)).toContain("in 9 families");
@@ -592,7 +592,7 @@ describe("channel-none: the mirror stands", () => {
     const room = open();
     await settle();
     await typeInto(room, "pledge some collateral to the construction loan");
-    await click(byText(/^A new asset$/));
+    await typeInto(room, "a new asset");
 
     /* E6: the mirror carries the ORG's own family names now, so it has a count
        of its own to state. What it must never do is claim the count is the
@@ -602,5 +602,118 @@ describe("channel-none: the mirror stands", () => {
     expect(said(room)).not.toContain("types the bank will lend against");
     expect(byText(/^Real Estate$/)).toBeTruthy();
     expect(byText(/^Real Estate-Warehouse$/)).toBeUndefined();
+  });
+});
+
+/* =============================================================================
+   THE PLEDGE LANE OFFERS THE ACCOUNT'S OWN COLLATERAL (founder, 2026-09-03:
+   "is it not offering the collaterals from my account to pledge towards it?"),
+   AND THE FOUNDER'S TWO LIVE FINDINGS ON THE SAME LANE: the card and the
+   confirm sentence printed the org's full legal description as the asset's
+   name, and a pledge fanned out over several facilities dropped two of them
+   silently where the product word repeated.
+   ============================================================================= */
+
+describe("the pledge lane offers the account's own collateral", () => {
+  it("lists the account's collateral not already pledged to this facility, chip label short, value beside it", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "pledge collateral to the 15M line of credit");
+
+    const options = buttons().map((b) => b.textContent ?? "");
+    // The blanket AR and the blanket inventory pledge are BOTH on the $15M
+    // line's own read already (see the fixture note above this file), so they
+    // are absent; what the account carries elsewhere is offered.
+    expect(options.some((t) => /^Real Estate-Warehouse/.test(t))).toBe(true);
+    expect(options.some((t) => /^UCC-Equipment/.test(t))).toBe(true);
+    expect(options).toContain("None of these, a new asset");
+    // THE SHORT LABEL, NEVER THE FULL DESCRIPTION. And the value rides beside
+    // it: the chip names what the asset is and what it is worth, not its
+    // autonumber and not its whole legal paragraph.
+    const warehouse = options.find((t) => /^Real Estate-Warehouse/.test(t))!;
+    expect(warehouse.length).toBeLessThan(80);
+    expect(warehouse).toMatch(/\$\d/);
+  });
+
+  it("stages a card with the asset's own collateralId when a chip is picked", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "pledge collateral to the 15M line of credit");
+    const equipmentChip = byText(/^UCC-Equipment/);
+    expect(equipmentChip).toBeTruthy();
+    await click(equipmentChip);
+
+    expect(chips(room)).toHaveLength(1);
+    const chip = chips(room)[0].textContent ?? "";
+    // THE SHORT TITLE ON THE CARD, never the org's full description.
+    expect(chip).toContain("UCC-Equipment");
+    expect(chip).not.toContain("TEST SHOWCASE");
+    expect(chip).not.toContain("Blanket lien on all production machinery and equipment at th");
+  });
+
+  it("says the redirect and stages nothing when 'none of these, a new asset' is picked", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "pledge collateral to the 15M line of credit");
+    await click(byText(/^None of these, a new asset$/));
+
+    expect(said(room)).toContain("filed on the relationship first");
+    expect(said(room)).toContain("Relationship Actions");
+    expect(chips(room)).toHaveLength(0);
+  });
+
+  it("the pledge card's short title, never the full legal description, on a line typed straight through", async () => {
+    const room = open();
+    await settle();
+    // The blanket AR is not on the Construction loan's own read, so it is a
+    // clean, single-clause pledge the direct parser resolves on the first try,
+    // never reaching the guided lane's `restateEntry` at all, which is
+    // exactly the path the founder's own repro took.
+    await typeInto(room, "pledge the accounts receivable collateral to the construction loan");
+
+    expect(chips(room)).toHaveLength(1);
+    const chip = chips(room)[0].textContent ?? "";
+    expect(chip).toContain("UCC-Accounts");
+    expect(chip).not.toContain("All present and future accounts receivable. Excludes invoices over 90 days past due, uninsured foreign debtors");
+    expect(said(room)).not.toContain("Excludes invoices over 90 days past due, uninsured foreign debtors");
+    // THE FULL DESCRIPTION IS NOT IN THE CARD'S DEFAULT DOM. It stays behind
+    // the card's own info affordance (the "i" button opens a peek).
+    expect(chip).not.toMatch(/uninsured foreign debtors/);
+  });
+});
+
+describe("a pledge fanned out over several facilities, never re-parsed", () => {
+  it("stages a card per fresh facility and a settled row per facility already holding it, zero drops", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "pledge the accounts receivable collateral to all of them");
+
+    /* THE ACCOUNTS RECEIVABLE ASSET IS ON THE $15M AND $2.5M LINES OF CREDIT
+       already, per this book (both rows read Inactive, so `collateralAssets.ts`
+       badges the asset "Unpledged" on the pane, while `elicit.ts`'s book,
+       built off every row the org sent, active or not, still knows both
+       facilities). They settle as rows, not cards. Every OTHER facility on
+       this package, Construction, Purchase and BOTH Equipment facilities that
+       share the product word, stages a real card: this is the founder's own
+       repro, where a re-parsed sentence used to drop the second Equipment
+       facility. */
+    const pledgeChips = chips(room).filter((c) => !/already pledged/.test(c.textContent ?? ""));
+    const settledChips = chips(room).filter((c) => /already pledged/.test(c.textContent ?? ""));
+    expect(said(room)).not.toContain("did not come back as a change");
+    expect(said(room)).not.toContain("I could not put up");
+    expect(pledgeChips).toHaveLength(4);
+    expect(settledChips).toHaveLength(2);
+    expect(settledChips.map((c) => c.textContent ?? "").join(" ")).toContain("$15.0MM Line of Credit");
+    expect(settledChips.map((c) => c.textContent ?? "").join(" ")).toContain("$2.5MM Line of Credit");
+    const staged = pledgeChips.map((c) => c.textContent ?? "").join(" | ");
+    expect(staged).toContain("Construction");
+    expect(staged).toContain("Purchase");
+    // BOTH EQUIPMENT FACILITIES LAND.
+    expect(staged).toContain("$8.0MM Equipment");
+    expect(staged).toContain("$3.5MM Equipment");
+    for (const c of pledgeChips) {
+      expect(c.textContent ?? "").toContain("UCC-Accounts");
+      expect(c.textContent ?? "").toContain("not pledged to this facility");
+    }
   });
 });

@@ -46,6 +46,7 @@ import type { StagePayloads } from "../../channel/writeTools";
 import type { StagedOutput } from "../../actions/stagedPlan";
 import type { ToolOutcome } from "../../channel/writeTools";
 import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
+import { shortAssetTitle } from "../../domain/collateralAssets";
 import type { Book, BookAsset, BookCovenant, ElicitMember } from "./elicit";
 import { clipTitle, readScope } from "./elicit";
 
@@ -261,10 +262,14 @@ export function armStage(
  * confirm and the manifest both read "First mortgage on the owner-occupied Fort
  * Wayne manufacturing c… on Construction". `clipTitle` is the one rule now, and
  * every shortener in the room uses it.
+ *
+ * AND SINCE 2026-09-03 IT IS THE TYPE-AND-DESCRIPTOR SHORT TITLE, not a bare
+ * clipped sentence: `shortAssetTitle` (`domain/collateralAssets.ts`) is the
+ * one shortener every surface in the room reads an asset's name through, so
+ * this arm's cards read the same as the pledge lane's.
  */
-function assetPhrase(label: string): string {
-  const first = label.split(/(?<=\.)\s+/)[0].replace(/\.$/, "").trim() || label;
-  return clipTitle(first, 64);
+function assetPhrase(label: string, kind?: string | null): string {
+  return clipTitle(shortAssetTitle(kind ?? null, label), 64);
 }
 
 interface DeltaArgs {
@@ -322,7 +327,7 @@ export function covenantExclusionDelta(covenant: BookCovenant, args: DeltaArgs):
  *  (P4): the asset and the borrower's ownership of it are relationship records
  *  and are never touched, and what fails to travel is the per-facility pledge. */
 export function pledgeExclusionDelta(asset: BookAsset, args: DeltaArgs): WorkroomDelta {
-  const said = assetPhrase(asset.label);
+  const said = assetPhrase(asset.label, asset.kind);
   const arm: ArmEntry = { kind: "pledgeExclusion", recordId: asset.id, targetLoanId: args.facilityId };
   return {
     id: `collateral.exclude:${args.facilityId}:${asset.id}`,
@@ -356,6 +361,62 @@ export function pledgeExclusionDelta(asset: BookAsset, args: DeltaArgs): Workroo
     filed: {
       recordId: "no record is written",
       verification: "Proved on both sides: the clone reads no pledge for it and the booked facility still reads its own.",
+    },
+  };
+}
+
+/**
+ * AN EXISTING ASSET, PLEDGED ONTO A KNOWN FACILITY, WITHOUT RE-PARSING
+ * (founder finding, 2026-09-03).
+ *
+ * The single-facility pledge lane composes a sentence and sends it through
+ * the fenced parser to resolve the asset AND the facility together. A
+ * fan-out over several facilities already knows both: the asset was
+ * resolved once, against the book, before the create was ever composed, and
+ * the facility is `line.memberId` off the room's own scope, so re-sending a
+ * composed sentence per facility asks the parser to re-resolve a fact this
+ * room already holds. Where two facilities in the package share a product
+ * word, the parser's own dollar-qualifier reading cannot always tell them
+ * apart, and the sentence for one of them resolves to nothing: "pledge the
+ * blanket AR collateral to all 6" staged four cards and silently dropped the
+ * two Equipment lines rather than the two already-pledged ones the room meant
+ * to skip.
+ *
+ * SO THIS BUILDS THE SAME DELTA THE SINGLE-FACILITY PATH BUILDS, targeted
+ * explicitly. `pledgeWire.collateralId` is a NATIVE shape `pledgeAddsJson`
+ * already stages off any delta that carries it, parsed or not, so this is not
+ * an arm: it travels the ordinary pledge wire and needs no sentinel.
+ */
+export function pledgeExistingDelta(asset: BookAsset, args: DeltaArgs & { second?: boolean }): WorkroomDelta {
+  const title = shortAssetTitle(asset.kind, asset.label);
+  const shortTitle = clipTitle(title, 60);
+  return {
+    id: `collateral.pledge:${args.facilityId}:${asset.id}${args.second ? ":2" : ""}`,
+    group: "security",
+    op: "add",
+    kind: "Collateral pledge",
+    kindTone: "collateral",
+    badge: `${shortTitle} → pledged`,
+    title: shortTitle,
+    target: args.facilityLabel,
+    before: "not pledged to this facility",
+    after: "pledged, advance rate set by the org",
+    member: args.facilityId,
+    map: [
+      ["Object", "LLC_BI__Loan_Collateral2__c"],
+      ["Field", "the pledge junction, this asset to this facility"],
+      ["Description", asset.label],
+      [
+        "Written as",
+        "The org's own collateral record, pledged to the clone. The asset and its ownership are relationship records and are not touched.",
+      ],
+    ],
+    fields: ["LLC_BI__Loan_Collateral2__c"],
+    fileable: true,
+    pledgeWire: { collateralId: asset.id, facilityId: args.facilityId },
+    filed: {
+      recordId: "assigned by the org on execution",
+      verification: "The pledge junction is re-queried on the clone.",
     },
   };
 }

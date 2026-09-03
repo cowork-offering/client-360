@@ -1,7 +1,8 @@
 import type { BorrowerBundle, Covenant, Facility, LegalEntity } from "../../data/contract";
 import { isActiveFacility } from "../../data/worklist";
 import { chipSet, orgAccepted, orgRefused, orgValues, type OrgCatalog } from "../../channel/catalog";
-import type { WorkroomDelta, WorkroomMode } from "../../workroom/types";
+import { shortAssetTitle } from "../../domain/collateralAssets";
+import type { WorkroomDelta, WorkroomMode, WorkroomRefusal } from "../../workroom/types";
 
 /* =============================================================================
    THE CREATE GRAMMAR - WHAT THIS CREATE STILL NEEDS.
@@ -107,6 +108,13 @@ export interface Slots {
   second?: boolean;
   /** The asset is net-new: the whole chain has to be authored. */
   isNew?: boolean;
+  /** THE BANKER PICKED "NONE OF THESE, A NEW ASSET" ON THE PLEDGE CHIPS
+   *  (founder, 2026-09-03). Unlike a NEW asset composed inline (`isNew`), a
+   *  net-new asset is filed at the relationship level first and pledged onto
+   *  a facility only afterward, as a modification: this room says so and
+   *  stages nothing. Distinct from `isNew` so a line naming an asset the room
+   *  CAN compose here is never redirected by a stale pick. */
+  newAssetElsewhere?: boolean;
   assetKind?: string;
   assetValue?: number;
   /** The banker's own words for a net-new asset. What the org files as the
@@ -1606,6 +1614,13 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
        the one shape this room cannot compose on its own, so the way back out of
        it has to exist and has to be explicit. */
     const said = assetText(text);
+    /* "NONE OF THESE, A NEW ASSET" (founder, 2026-09-03). The chip's own
+       phrase, matched before the ordinary NEW_ASSET reading so it never falls
+       into `isNew` and gets composed here: a net-new asset is filed at the
+       relationship level first, and pledging it rides a modification once it
+       exists. Any later line naming an asset this room CAN resolve, or saying
+       it is one the deal already carries, takes the flag back off. */
+    if (/\bnone of these\b/i.test(said)) next.slots.newAssetElsewhere = true;
     if (/\bexisting\b|\balready carries\b|\bon the deal\b/i.test(said)) delete next.slots.isNew;
     else if (NEW_ASSET.test(said) && !next.slots.second) next.slots.isNew = true;
     if (!next.slots.isNew) {
@@ -1615,6 +1630,7 @@ export function readInto(draft: Draft, line: string, ctx: ElicitContext, opts: {
         next.slots.assetLabel = hits[0].label;
         next.slots.assetName = hits[0].name ?? undefined;
         if (hits[0].lien && next.slots.lien === undefined) next.slots.lien = hits[0].lien;
+        delete next.slots.newAssetElsewhere;
       }
     }
     /* FREE TEXT WINS ON THE TYPE (E3, the founder's own line: "Kokomo plant
@@ -1937,14 +1953,50 @@ function involvementAsk(draft: Draft, ctx: ElicitContext): Ask | null {
 function collateralAsk(draft: Draft, ctx: ElicitContext): Ask | null {
   const s = draft.slots;
 
+  /* "NONE OF THESE, A NEW ASSET" WAS PICKED (founder, 2026-09-03). One honest
+     line and nothing staged: a net-new asset is filed at the relationship
+     level first, through the intake route next door, and pledging it onto
+     this facility rides a modification once it exists. This room does not
+     compose a net-new asset from a chip pick the way a fully-typed line
+     still can (`isNew`, below); see the surrounding comment on
+     `newAssetElsewhere`. */
+  if (s.newAssetElsewhere) {
+    return {
+      slot: "asset",
+      text:
+        "A new asset is filed on the relationship first, not here: open Relationship Actions, file it there, and pledging it onto this facility " +
+        "then rides a modification once the org holds the record. Nothing is staged for it on this create.",
+      options: [],
+    };
+  }
+
   if (!s.assetId && !s.isNew) {
-    const assets = ctx.book.assets;
+    /* THE ACCOUNT'S COLLATERAL, NOT ALREADY PLEDGED TO THIS FACILITY (founder,
+       2026-09-03: "is it not offering the collaterals from my account to
+       pledge towards it?"). The same read the composer catalog's own
+       `collateral.pledge` action offers (`components/composer/catalog.ts`,
+       `pledgesOff`): every asset the book knows of, off whichever facility
+       this create is scoped to. A facility this plan is itself staging (a net-
+       new loan, "the new loan") carries no pledge yet on any asset, so every
+       asset on the book clears the filter for it without a special case. Where
+       the scope is not yet settled, every asset on the book is offered: there
+       is no facility to narrow against. */
+    const target = draft.scope[0];
+    const assets = target ? ctx.book.assets.filter((a) => !a.loanIds.includes(target)) : ctx.book.assets;
+    /* THE CHIP LABEL IS THE SHORT TITLE AND THE VALUE, never the collateral
+       pane's long generated name (`domain/collateralAssets.ts`, the same
+       shortener the pane uses) and never the org's autonumber. */
+    const chipLabel = (a: BookAsset) =>
+      typeof a.value === "number" ? `${shortLabel(a)} · ${exactMoney(a.value)}` : shortLabel(a);
     return {
       slot: "asset",
       text: assets.length
-        ? `Which asset? The deal already carries ${count(assets.length).toLowerCase()}, and a pledge sends the bank's own record rather than a name, so I will not choose between them.`
-        : "This read carries no collateral on the deal, so there is nothing here to pledge by name. Say it is a new asset and what it is.",
-      options: [...assets.map((a) => ({ label: shortLabel(a), say: `pledge ${a.name ?? a.id}` })), { label: "A new asset", say: "a new asset" }],
+        ? `Which asset? ${count(assets.length)} on the account ${assets.length === 1 ? "is" : "are"} not already pledged to this facility, and a pledge sends the bank's own record rather than a name, so I will not choose between them.`
+        : "This read carries no collateral on the account that is not already pledged to this facility, so there is nothing here to pledge by name. Say it is a new asset and what it is.",
+      options: [
+        ...assets.map((a) => ({ label: chipLabel(a), say: `pledge ${a.name ?? a.id}` })),
+        { label: "None of these, a new asset", say: "none of these, a new asset" },
+      ],
     };
   }
 
@@ -2099,12 +2151,40 @@ export function thresholdText(value: number, unit?: "ratio" | "money"): string {
   return value.toLocaleString("en-US");
 }
 
-const shortLabel = (a: BookAsset) => clipTitle(a.label, 44);
+/** THE SHORT TITLE, everywhere this room speaks or cards a pledged asset
+ *  (founder finding, 2026-09-03): the org's own type name and a compact
+ *  descriptor, never `a.label` whole (which is the full legal description
+ *  wherever the org wrote one), and never the org's autonumber. Capped at 60
+ *  characters as the last defence against a description with no sentence
+ *  break in it at all. */
+const shortLabel = (a: BookAsset) => clipTitle(shortAssetTitle(a.kind, a.label), 60);
 
 /** A figure written the way a credit agreement writes it. Never abbreviated:
  *  "$6.5M" and "$6,500,000" are the same money and only one of them is what the
  *  org files. */
 const exactMoney = (value: number) => `$${value.toLocaleString("en-US")}`;
+
+/**
+ * THE SHORT TITLE FOR A PLEDGE WIRE, wherever the collateral it names is
+ * known (founder finding, 2026-09-03). `restateEntry` below applies this on
+ * the guided lane; `dispatch.ts`'s `shortenPledgeTitles` applies the same
+ * correction on a line typed straight through the parser, which is where the
+ * founder actually saw the org's full description on the card: a composed
+ * sentence resolved cleanly on the first try and never reached `restateEntry`
+ * at all. Null where the wire names no collateral this room can identify, so
+ * the caller keeps whatever title it already had.
+ */
+export function pledgeAssetTitle(wire: WorkroomDelta["pledgeWire"], book: Book): string | null {
+  if (!wire) return null;
+  if (wire.collateralId) {
+    const asset = book.assets.find((a) => a.id === wire.collateralId);
+    return asset ? shortLabel(asset) : null;
+  }
+  if (wire.newCollateral) {
+    return clipTitle(shortAssetTitle(wire.newCollateral.collateralType, wire.newCollateral.description), 60);
+  }
+  return null;
+}
 
 function sentenceList(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
@@ -2133,6 +2213,15 @@ export interface Awareness {
    * is one (P1), so that state carries its own close.
    */
   close: string | null;
+  /**
+   * WHICH FACILITIES `onTheBook` IS ABOUT, where the caller needs the set and
+   * not only the sentence (founder finding, 2026-09-03, on a pledge fanned
+   * out over several facilities). A facility this create skips because the
+   * book already carries it is a SETTLED ROW, not a fact folded into one
+   * prose sentence naming several facilities at once. Set on the collateral
+   * surface only; every other surface still reads through `onTheBook`.
+   */
+  alreadyOn?: string[];
 }
 
 /**
@@ -2416,10 +2505,35 @@ export function awarenessFor(draft: Draft, ctx: ElicitContext): Awareness {
             ]
           : [],
       close: null,
+      alreadyOn: onBook,
     };
   }
 
   return none;
+}
+
+/**
+ * ONE SETTLED ROW for a facility a pledge fan-out skips because the book
+ * already carries it (founder finding, 2026-09-03: "the room staged cards for
+ * Construction and Purchase, correctly skipped the two lines already holding
+ * it", correctly SKIPPED, but as one prose sentence naming both facilities
+ * together, which reads as an afterthought beside four real cards. This is
+ * the structured row instead: nothing is staged and nothing is new, and the
+ * reason is on the card rather than folded into the reply above it.
+ */
+export function pledgeAlreadySettled(
+  asset: BookAsset,
+  args: { facilityId: string; facilityLabel: string },
+): WorkroomRefusal & { why: string } {
+  const title = shortLabel(asset);
+  return {
+    id: `collateral.pledge:${args.facilityId}:${asset.id}:settled`,
+    target: args.facilityLabel,
+    title,
+    why: `${title} is already pledged to the ${args.facilityLabel}, and a modification carries the pledge onto the clone. Nothing new is filed for it.`,
+    reason: "A second pledge of the same asset on the same facility is a duplicate, and the org refuses one by name.",
+    detail: "",
+  };
 }
 
 /* ================================================================= composing
@@ -2798,7 +2912,11 @@ export function restateEntry(draft: Draft, ctx: ElicitContext, delta: WorkroomDe
     const said = draft.slots.assetDescription;
     const type = draft.slots.assetKind;
     if (!said && !type) return delta;
-    const title = said ?? delta.title;
+    /* THE 60-CHARACTER CAP IS THE LAST DEFENCE (founder, 2026-09-03), not the
+       rule: the banker's own words are the title exactly as he wrote them,
+       and `clipTitle` only touches them where he wrote more than a title's
+       worth. */
+    const title = clipTitle(said ?? delta.title, 60);
     return {
       ...delta,
       title,
@@ -2812,6 +2930,21 @@ export function restateEntry(draft: Draft, ctx: ElicitContext, delta: WorkroomDe
         },
       },
     };
+  }
+  /* AN EXISTING ASSET'S PLEDGE CARRIES THE FENCED ENGINE'S OWN TITLE
+   * (founder finding, 2026-09-03): it resolves the asset off the deal's own
+   * pledges and titles the delta from the org's full legal description, which
+   * is exactly the record's `LLC_BI__Description__c`, not a name. The short
+   * title replaces it here, the way the isNew branch above replaces the
+   * engine's title with the banker's own words. Nothing else on the wire
+   * moves: the collateral id, the facility, the plan hash are the engine's.
+   */
+  if (draft.surface === "collateral" && !draft.slots.isNew && delta.pledgeWire?.collateralId) {
+    const short = pledgeAssetTitle(delta.pledgeWire, ctx.book);
+    if (short && short !== delta.title) {
+      return { ...delta, title: short, badge: `${short} → ${delta.after}` };
+    }
+    return delta;
   }
   if (draft.surface !== "involvement") return delta;
   const { party, role } = draft.slots;

@@ -97,6 +97,50 @@ export function firstSentence(text: string | undefined | null): string | null {
   return (m ? m[1] : raw).trim();
 }
 
+/* =============================================================================
+   THE SHORT ASSET TITLE (founder finding, 2026-09-03, on the pledge lane).
+
+   He pledged the blanket AR collateral and the cards and the confirm sentence
+   printed the record's full legal description as the asset's NAME, six times
+   over: "All present and future accounts receivable. Excludes invoices over
+   90 days past due, uninsured foreign debtors, intercompany and contra
+   accounts. 20% concentration cap per account debtor." is what the asset IS,
+   not what a banker reads it as in a sentence.
+
+   TYPE-AND-SUB-TYPE PLUS A COMPACT DESCRIPTOR, never the description field
+   whole and never the org's autonumber name (COL-000762): "UCC-Accounts ·
+   blanket receivables". Every surface that speaks or cards a pledged asset,
+   the pledge card, the confirm sentence, a chip, the plan read-back, the
+   manifest rail, reads through this rather than the org's own fields, so the
+   full description never reaches the glass by a second, uncorrected path. It
+   stays reachable behind the card's own info affordance and in the dossier,
+   because it is still what the record IS; it is only never the NAME.
+   ============================================================================= */
+
+/** Up to six words off the first sentence of the org's own description. The
+ *  fallback is a plain word, never the org's autonumber: an asset this read
+ *  carries no description for is still "the asset", not COL-000762. */
+export function shortDescriptor(description: string | undefined | null, fallback = "the asset"): string {
+  const sentence = firstSentence(description) ?? (description ?? "").trim();
+  const words = sentence.split(/\s+/).filter(Boolean).slice(0, 6);
+  return words.length ? words.join(" ") : fallback;
+}
+
+/** The org's own type name (unsplit: "UCC-Accounts", "Real Estate-Warehouse")
+ *  joined to the short descriptor, the way the collateral pane's own type and
+ *  sub-type read beside each other. Callers still clip the result to their own
+ *  cap (`clipTitle`, `components/workroom/elicit.ts`) as the last defence
+ *  against a description that carries no sentence break at all. */
+export function shortAssetTitle(
+  kind: string | undefined | null,
+  description: string | undefined | null,
+  fallback = "the asset",
+): string {
+  const type = (kind ?? "").trim();
+  const descriptor = shortDescriptor(description, fallback);
+  return type ? `${type} · ${descriptor}` : descriptor;
+}
+
 /**
  * One row per ASSET, with its active pledges underneath.
  *
