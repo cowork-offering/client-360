@@ -587,16 +587,18 @@ html.eg-liquid .eg-glass-workroom {
     linear-gradient(to bottom, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0) 100%),
     var(--eg-tint);
 }
-/* The message column carries its own floor, because a wall of body copy over
-   clear glass is the one place clarity and legibility actually trade. It is a
+/* The whole body carries the floor (not the message column alone: a floor that
+   starts at the column's left edge reads as a section beside the chat, which
+   the founder saw on 2026-09-03), because a wall of body copy over clear
+   glass is the one place clarity and legibility actually trade. It is a
    plain background on a plain element: no second backdrop-filter, so the census
    still sees the same surfaces it saw before. */
-html.eg-liquid .wk-col-l {
+html.eg-liquid .wk-body {
   background: linear-gradient(
     to right,
     rgba(255, 255, 255, 0.34) 0%,
-    rgba(255, 255, 255, 0.3) 74%,
-    rgba(255, 255, 255, 0.1) 100%
+    rgba(255, 255, 255, 0.3) 70%,
+    rgba(255, 255, 255, 0.12) 100%
   );
 }
 
