@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import type { OrgCatalog } from "../../channel/catalog";
 import type { StagedOutput } from "../../actions/stagedPlan";
@@ -389,7 +389,9 @@ describe("the covenant intake", () => {
     expect(step.key).toBe("covOperator.0");
   });
 
-  it("offers today, the 1st of next month and another date, computed from the read", () => {
+  it("offers today, the 1st of next month and another date, on the real clock", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-31T09:00:00Z"));
     const ctx = ctxFor();
     const a: Answers = { intakeKind: "covenant" };
     answer(a, "covTest.0", "Minimum Liquidity");
@@ -399,6 +401,7 @@ describe("the covenant intake", () => {
     expect(step.key).toBe("covEffective.0");
     expect(step.options?.map((o) => o.value)).toEqual(["2026-08-31", "2026-09-01", "__other_date__"]);
     expect(step.ask).toContain(EFFECTIVE_DATE_IS_FINAL);
+    vi.useRealTimers();
   });
 
   it("takes a date of the banker's own when neither offer fits", () => {

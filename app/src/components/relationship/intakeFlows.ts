@@ -912,12 +912,14 @@ function frequencyChips(ctx: RelContext): StepOption[] {
   ];
 }
 
-/** Today, the 1st of next month, another date. Computed from the artifact's own
- *  clock: `meta.generatedAt`, never `new Date()`. */
-function dateChips(ctx: RelContext): StepOption[] {
+/** Today, the 1st of next month, another date. RELATIVE labels are measured
+ *  against the real clock (the banker reads the screen on the real day), never
+ *  against the bundle's own instant; absolute dates elsewhere stay the org's. */
+function dateChips(_ctx: RelContext): StepOption[] {
   const out: StepOption[] = [];
-  const now = today(ctx.asOf);
-  const next = firstOfNextMonth(ctx.asOf);
+  const clock = new Date().toISOString();
+  const now = today(clock);
+  const next = firstOfNextMonth(clock);
   if (now) out.push({ label: `Today, ${now}`, value: now });
   if (next) out.push({ label: `The 1st of next month, ${next}`, value: next, detail: "the date most schedules on this book run from" });
   out.push({ label: "Another date", value: OTHER_DATE });
