@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credit 360 demo cheat sheet - Connectry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+/* ========================================
+   CSS RESET & BASE
+   ======================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --brand-accent: #4A6FA5;
+    --brand-accent-hover: #5a82bb;
+    --bg-primary: #fafafa;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f6f7f9;
+    --bg-hover: #f0f0f4;
+    --text-primary: #1a1a2e;
+    --text-secondary: #5a5a72;
+    --text-tertiary: #8a8a9a;
+    --border: #e8e8ec;
+    --border-light: #f0f0f4;
+    --success: #059669;
+    --warning: #d97706;
+    --error: #dc2626;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+    --font-headline: 'Urbanist', 'SF Pro Display', -apple-system, sans-serif;
+    /* Badge colors */
+    --badge-blue: #3b82f6;
+    --badge-purple: #8b5cf6;
+    --badge-green: #10b981;
+    --badge-amber: #f59e0b;
+    --badge-pink: #ec4899;
+    --badge-indigo: #6366f1;
+    --badge-sky: #0ea5e9;
+    --badge-gray: #64748b;
+    --badge-orange: #f97316;
+}
+
+/* ========================================
+   PRINT / PDF STYLES
+   ======================================== */
+@page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+}
+
+@media print {
+    body {
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .guide-wrapper { padding: 12px 16px; }
+    .no-print { display: none !important; }
+    /* Header/footer compact */
+    .header { margin-bottom: 16px; padding-bottom: 12px; }
+    .title-block { margin-bottom: 16px; }
+    .doc-footer { margin-top: 24px; page-break-before: avoid; }
+    /* Headings - reduce size and spacing */
+    h1 { font-size: 1.4rem; margin-bottom: 6px; }
+    h2 { font-size: 1.15rem; margin-top: 14px; margin-bottom: 8px; padding-bottom: 4px; }
+    h3 { font-size: 1rem; margin-top: 10px; margin-bottom: 6px; }
+    h4 { font-size: 0.9rem; margin-top: 8px; margin-bottom: 4px; }
+    h2, h3, h4 { page-break-after: avoid; }
+    /* TOC - don't force page break, keep compact */
+    .toc-container {
+        page-break-inside: avoid;
+        padding: 14px 18px;
+        margin-bottom: 20px;
+    }
+    .toc-list { columns: 1; }
+    .toc-list li { margin-bottom: 3px; font-size: 0.85rem; }
+    /* Sections - allow breaks inside large sections */
+    .section-container {
+        page-break-inside: auto;
+        margin-bottom: 10px;
+        padding: 0 0 10px 0;
+    }
+    /* Mock containers - compact, allow breaks */
+    .mock-container {
+        page-break-inside: auto;
+        margin: 8px 0;
+        font-size: 12px;
+    }
+    .mock-content { min-height: auto; padding: 10px; }
+    .mock-header { padding: 6px 12px; }
+    .mock-tabs { padding: 0 8px; }
+    .mock-tab { padding: 5px 10px; font-size: 0.7rem; }
+    .mock-editor { min-height: auto; padding: 8px 10px; }
+    .mock-field-table th, .mock-field-table td { padding: 4px 6px; font-size: 0.75rem; }
+    .mock-btn { padding: 3px 8px; font-size: 0.7rem; }
+    /* Tables - allow breaks, compact */
+    table { page-break-inside: auto; font-size: 0.85rem; margin-bottom: 8px; }
+    th, td { padding: 5px 8px; }
+    tr { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    /* Code blocks - keep together */
+    pre { page-break-inside: avoid; padding: 10px 12px; margin-bottom: 8px; font-size: 0.8em; line-height: 1.5; }
+    /* Callouts - compact */
+    .callout { padding: 8px 12px; margin-bottom: 8px; }
+    /* Badges - slightly smaller */
+    .badge { font-size: 0.65rem; padding: 1px 6px; }
+    /* kbd keys */
+    kbd { font-size: 0.72em; padding: 1px 4px; }
+    /* Links */
+    a { color: #4A6FA5 !important; text-decoration: underline; }
+    /* Two-column grids - stack in print */
+    .two-col { grid-template-columns: 1fr; }
+    /* Inline min-heights - override */
+    [style*="min-height"] { min-height: auto !important; }
+    /* Section separator */
+    .section-separator { margin: 16px 0; }
+    /* Orphan/widow control */
+    p { orphans: 3; widows: 3; }
+}
+
+/* ========================================
+   BODY & LAYOUT
+   ======================================== */
+html { scroll-behavior: smooth; }
+
+body {
+    font-family: var(--font-body);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.7;
+    font-size: 15px;
+    counter-reset: section;
+}
+
+.guide-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 40px;
+}
+
+/* ========================================
+   TYPOGRAPHY
+   ======================================== */
+h1 {
+    font-family: var(--font-headline);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    line-height: 1.2;
+}
+
+h2 {
+    font-family: var(--font-headline);
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: 28px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--brand-accent);
+    line-height: 1.3;
+}
+
+h3 {
+    font-family: var(--font-headline);
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: 18px;
+    margin-bottom: 8px;
+}
+
+h4 {
+    font-family: var(--font-headline);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 20px;
+    margin-bottom: 8px;
+}
+
+p { margin-bottom: 12px; color: var(--text-secondary); }
+p + p { margin-top: 0; }
+
+a {
+    color: var(--brand-accent);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+a:hover { color: var(--brand-accent-hover); text-decoration: underline; }
+
+strong { color: var(--text-primary); font-weight: 600; }
+
+ul, ol { margin-bottom: 12px; padding-left: 24px; color: var(--text-secondary); }
+li { margin-bottom: 6px; }
+li::marker { color: var(--brand-accent); }
+
+code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    color: var(--brand-accent);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+}
+
+pre {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+/* ========================================
+   HEADER / BRANDING (FP-style)
+   ======================================== */
+.header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 32px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header-logo { display: flex; align-items: center; gap: 12px; }
+.header-wordmark { font-family: var(--font-headline); font-size: 15px; font-weight: 800; letter-spacing: 2.5px; color: var(--text-primary); }
+.header-divider { width: 1px; height: 28px; background: var(--border); }
+.header-product { font-family: var(--font-headline); font-size: 11px; font-weight: 600; letter-spacing: 2px; color: var(--text-tertiary); text-transform: uppercase; }
+.header-right { text-align: right; font-size: 12px; color: var(--text-tertiary); line-height: 1.6; }
+.title-block { margin-bottom: 24px; }
+.title-block h1 { font-family: var(--font-headline); font-size: 26px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; letter-spacing: -0.3px; }
+.title-block p { font-size: 14px; color: var(--text-secondary); max-width: 640px; }
+.doc-footer { text-align: center; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-tertiary); }
+/* legacy - keep for any remaining refs */
+.guide-header {
+    display: none;
+}
+
+.guide-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.guide-logo svg { flex-shrink: 0; }
+
+.guide-brand-name {
+    font-family: var(--font-headline);
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: var(--text-primary);
+}
+
+.guide-product-name {
+    font-family: var(--font-headline);
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.guide-beta-badge {
+    display: inline-block;
+    background: var(--brand-accent);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+.guide-subtitle {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+
+/* ========================================
+   TABLE OF CONTENTS
+   ======================================== */
+.toc-container {
+    background: #f8f9fb;
+    border: 1px solid #eeeef2;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+}
+
+.toc-container h2 {
+    margin-top: 0;
+    border-bottom: none;
+    font-size: 15px;
+    margin-bottom: 12px;
+}
+
+.toc-list {
+    list-style: none;
+    padding: 0;
+    columns: 2;
+    column-gap: 32px;
+}
+
+.toc-list li {
+    break-inside: avoid;
+    padding: 4px 0;
+    font-size: 0.92rem;
+}
+
+.toc-list li a {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    color: var(--text-secondary);
+    transition: color 0.15s;
+}
+
+.toc-list li a:hover { color: var(--brand-accent); text-decoration: none; }
+
+.toc-num {
+    color: var(--brand-accent);
+    font-weight: 600;
+    min-width: 26px;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+/* ========================================
+   SECTIONS
+   ======================================== */
+.section-container {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 0 0 16px 0;
+    margin-bottom: 16px;
+}
+
+.section-container h2 {
+    margin-top: 0;
+}
+
+/* ========================================
+   TABLES
+   ======================================== */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+}
+
+th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+th {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+td { color: var(--text-secondary); }
+
+tr:hover td { background: var(--bg-hover); }
+
+/* ========================================
+   BADGES
+   ======================================== */
+.badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    color: #fff;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.badge-blue { background: var(--badge-blue); }
+.badge-purple { background: var(--badge-purple); }
+.badge-green { background: var(--badge-green); }
+.badge-amber { background: var(--badge-amber); color: #18181b; }
+.badge-pink { background: var(--badge-pink); }
+.badge-indigo { background: var(--badge-indigo); }
+.badge-sky { background: var(--badge-sky); }
+.badge-gray { background: var(--badge-gray); }
+.badge-orange { background: var(--badge-orange); }
+.badge-success { background: var(--success); color: #18181b; }
+.badge-warning { background: var(--warning); color: #18181b; }
+.badge-error { background: var(--error); }
+.badge-accent { background: var(--brand-accent); }
+
+/* ========================================
+   KEYBOARD SHORTCUTS
+   ======================================== */
+kbd {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--text-primary);
+    line-height: 1.4;
+    box-shadow: 0 1px 0 var(--border);
+}
+
+/* ========================================
+   CALLOUT BOXES
+   ======================================== */
+.callout {
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    border-left: 4px solid;
+}
+
+.callout-info {
+    background: rgba(74, 111, 165, 0.1);
+    border-color: var(--brand-accent);
+    color: var(--text-secondary);
+}
+
+.callout-warning {
+    background: rgba(217, 119, 6, 0.06);
+    border-color: var(--warning);
+    color: var(--text-secondary);
+}
+
+.callout-tip {
+    background: rgba(5, 150, 105, 0.06);
+    border-color: var(--success);
+    color: var(--text-secondary);
+}
+
+.callout-danger {
+    background: rgba(220, 38, 38, 0.06);
+    border-color: var(--error);
+    color: var(--text-secondary);
+}
+
+.callout strong { display: block; margin-bottom: 4px; }
+
+/* ========================================
+   MOCK LAYOUTS (CSS + HTML visual mocks)
+   ======================================== */
+.mock-container {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin: 20px 0 24px;
+    font-size: 13px;
+}
+
+.mock-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.mock-header-logo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mock-header-title {
+    font-family: var(--font-headline);
+    font-weight: 800;
+    font-size: 0.78rem;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+}
+
+.mock-header-sub {
+    font-size: 0.68rem;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    font-weight: 700;
+}
+
+.mock-header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.mock-header-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+/* Tab bar mock */
+.mock-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 0 12px;
+    overflow-x: auto;
+}
+
+.mock-tab {
+    padding: 8px 14px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    cursor: default;
+    transition: color 0.15s;
+}
+
+.mock-tab--active {
+    color: var(--brand-accent);
+    border-bottom-color: var(--brand-accent);
+    font-weight: 600;
+}
+
+.mock-content {
+    padding: 16px;
+    min-height: 200px;
+}
+
+/* Field table mock */
+.mock-field-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.mock-field-table th {
+    background: var(--bg-tertiary);
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6px 10px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+}
+
+.mock-field-table td {
+    padding: 7px 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.mock-field-table tr:hover td { background: var(--bg-hover); }
+
+.mock-type-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 99px;
+    color: #fff;
+}
+
+/* Code editor mock */
+.mock-editor {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    min-height: 80px;
+}
+
+.mock-kw { color: #7c3aed; font-weight: 600; }
+.mock-fn { color: #0550ae; }
+.mock-str { color: #953800; }
+.mock-rel { color: #7c3aed; }
+.mock-comment { color: var(--text-tertiary); font-style: italic; }
+
+/* Button mock */
+.mock-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: default;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.mock-btn--primary {
+    background: var(--brand-accent);
+    border-color: var(--brand-accent);
+    color: #fff;
+}
+
+.mock-btn--danger {
+    background: var(--error);
+    border-color: var(--error);
+    color: #fff;
+}
+
+/* Toolbar mock */
+.mock-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 0;
+    flex-wrap: wrap;
+}
+
+/* Status code display */
+.mock-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+}
+
+.mock-status--success { background: rgba(5, 150, 105, 0.1); color: var(--success); }
+.mock-status--error { background: rgba(220, 38, 38, 0.1); color: var(--error); }
+
+/* Method badge mock */
+.mock-method {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    min-width: 46px;
+    text-align: center;
+}
+
+.mock-method--get { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.mock-method--post { background: rgba(74, 111, 165, 0.2); color: var(--brand-accent); }
+.mock-method--patch { background: rgba(255, 214, 10, 0.15); color: var(--warning); }
+.mock-method--delete { background: rgba(255, 69, 58, 0.15); color: var(--error); }
+
+/* JSON response mock */
+.mock-json {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+.mock-json .json-key { color: #7dd3fc; }
+.mock-json .json-str { color: #fb923c; }
+.mock-json .json-num { color: #a78bfa; }
+.mock-json .json-bool { color: #fbbf24; }
+
+/* Settings panel mock */
+.mock-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+
+.mock-setting-label { color: var(--text-primary); font-weight: 500; }
+.mock-setting-value { color: var(--text-tertiary); }
+
+.mock-toggle {
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    background: var(--brand-accent);
+    border-radius: 99px;
+    position: relative;
+}
+.mock-toggle::after {
+    content: '';
+    position: absolute;
+    right: 3px;
+    top: 3px;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-radius: 50%;
+}
+
+.mock-radio-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.mock-radio {
+    padding: 4px 12px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: var(--bg-tertiary);
+    cursor: default;
+    border-right: 1px solid var(--border);
+}
+.mock-radio:last-child { border-right: none; }
+.mock-radio--active {
+    background: var(--brand-accent);
+    color: #fff;
+}
+
+/* Command palette mock */
+.mock-palette-overlay {
+    background: rgba(0,0,0,0.6);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin: 20px 0 24px;
+}
+
+.mock-palette {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 520px;
+    margin: 0 auto;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.mock-palette-input {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mock-palette-input-icon { color: var(--text-tertiary); font-size: 14px; }
+
+.mock-palette-input-text {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.mock-palette-list { padding: 6px 0; max-height: 260px; overflow-y: auto; }
+
+.mock-palette-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: default;
+}
+
+.mock-palette-item--active {
+    background: var(--brand-accent);
+    color: #fff;
+}
+
+.mock-palette-item-cat {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mock-palette-item--active .mock-palette-item-cat { color: rgba(255,255,255,0.6); }
+
+/* Progress bar mock */
+.mock-progress-track {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 99px;
+    overflow: hidden;
+    margin: 6px 0;
+}
+
+.mock-progress-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.3s;
+}
+
+.mock-progress-green { background: var(--success); }
+.mock-progress-amber { background: var(--warning); }
+.mock-progress-red { background: var(--error); }
+
+/* Filter pills mock */
+.mock-filter-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.mock-pill {
+    padding: 4px 12px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+    background: transparent;
+    cursor: default;
+}
+
+.mock-pill--active {
+    background: var(--brand-accent);
+    border-color: var(--brand-accent);
+    color: #fff;
+}
+
+/* Search input mock */
+.mock-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin-bottom: 12px;
+}
+
+/* Endpoint input mock */
+.mock-endpoint-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.mock-select {
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 70px;
+}
+
+.mock-input {
+    flex: 1;
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+/* Response panel mock */
+.mock-response-panel {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 12px;
+}
+
+.mock-response-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.mock-response-meta {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+}
+
+/* Separator */
+.section-separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 32px 0;
+}
+
+/* Responsive columns */
+.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+    .two-col { grid-template-columns: 1fr; }
+    .toc-list { columns: 1; }
+    .guide-wrapper { padding: 20px 12px 40px; }
+    .section-container { padding: 0 0 12px 0; }
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+<h1>Credit 360 · The 10-Minute Demo</h1>
+<p style="font-size:0.95rem; line-height:1.5;"><b>The point of view, in one breath:</b> a commercial banker today is the human middleware between five systems: the loan system, the spreading tool, servicing, the inbox, and the spreadsheet that glues them together. Credit 360 deletes that job. The systems meet in one living view, the banker talks to the whole book in plain English, nothing is retyped, nothing is invented, and nothing becomes real without a human approving it.</p>
+<h3>The three sentences that carry the demo (say them verbatim)</h3>
+<ol style="font-size:0.92rem; line-height:1.55;">
+<li><b>Aggregation:</b> &ldquo;Nobody assembled this page. It assembled itself, live, from the bank&rsquo;s own systems, the moment I clicked.&rdquo;</li>
+<li><b>The deal room:</b> &ldquo;I&rsquo;m not operating software. I told the bank what the client needs, and the bank&rsquo;s own paperwork happened in the bank&rsquo;s own system, with my approval in the middle.&rdquo;</li>
+<li><b>The full circle:</b> &ldquo;The request arrived by email, the work happened in the system of record, and the reply drafted itself. Nobody touched a form, and the audit trail wrote itself.&rdquo;</li>
+</ol>
+<h2>The clock (counts down from 10:00)</h2>
+<table style="font-size:0.82rem;">
+<tr><th style="width:52px;">Clock</th><th style="width:150px;">You do</th><th>You say (the selling point)</th></tr>
+<tr><td><b>10:00</b></td><td>Cowork, blank chat. Type: <i>&ldquo;Anything new from Hartwell in my inbox?&rdquo;</i></td><td>&ldquo;My day starts in the inbox, like everyone&rsquo;s. Watch the assistant read it.&rdquo; It summarises James&rsquo;s requests in two lines. <i>(No staged mail? Skip to 9:00 and open the cockpit directly.)</i></td></tr>
+<tr><td><b>9:00</b></td><td>&ldquo;Open Hartwell in Credit 360&rdquo; (or open the cockpit and land on the worklist)</td><td>&ldquo;These are not all our clients. This is my morning, ranked by what needs my attention, and any client in the bank I call up by name. And here is the point: this page is reading five systems right now, live. The loan system. The financial spreads. Servicing. My inbox. Nobody built this view; it builds itself.&rdquo;</td></tr>
+<tr><td><b>8:00</b></td><td>Open Hartwell &middot; Overview</td><td>&ldquo;One page, the whole relationship: who owns it, who guarantees it, 54 million dollars across two credit packages, risk grade four. Assembling this page is normally a morning&rsquo;s work.&rdquo;</td></tr>
+<tr><td><b>7:30</b></td><td>Exposure tab, click one collateral row</td><td>&ldquo;Every loan, and what secures it. Click the collateral: which loans it backs, at what value, valued when. Nothing here was typed by a person.&rdquo;</td></tr>
+<tr><td><b>7:00</b></td><td>Covenants tab, click one covenant</td><td>&ldquo;The promises the client made to the bank: tested, dated, and one click shows which loan each promise protects. This is what an auditor asks for, standing ready.&rdquo;</td></tr>
+<tr><td><b>6:30</b></td><td>Financials tab</td><td>&ldquo;The client&rsquo;s financials, spread by our spreading tool, flowing straight in. No analyst retyped a number.&rdquo;</td></tr>
+<tr><td><b>6:00</b></td><td>Signals + Activity tabs</td><td>&ldquo;The system watches the clocks for me: what matures, when the next review is due. And this activity trail writes itself; what we do next will appear on it.&rdquo;</td></tr>
+<tr><td><b>5:30</b></td><td>FAB &rarr; Facility Actions &rarr; pick the <b>C&amp;I package</b> &rarr; Modify (the email is baked into the greeting)</td><td>&ldquo;James asked for more room and new equipment. I do not fill forms; I tell the room.&rdquo;</td></tr>
+<tr><td><b>5:00</b></td><td>Type: <i>increase the 15M line of credit to 20M</i> &rarr; Confirm &rarr; acknowledge &rarr; <i>240</i> &rarr; <i>October 1, 2026</i> &rarr; <i>Yes, 7.25% all-in</i></td><td>&ldquo;Each sentence becomes a prepared change, in the bank&rsquo;s own terms. Nothing has been sent anywhere yet.&rdquo;</td></tr>
+<tr><td><b>4:00</b></td><td>Type: <i>add a new 3M equipment loan with a 60 month term for CNC line expansion</i> &rarr; chips &rarr; <i>add Elena Hartwell as limited guarantor on the new equipment loan</i> &rarr; <i>add a debt service coverage of borrower covenant of 1.30 on the new loan</i> &rarr; <i>add a 1% origination fee on the new equipment loan</i></td><td>&ldquo;A brand-new loan, its guarantor, its covenant and its fee, spoken in five sentences, onto a loan that does not even have a record number yet.&rdquo;</td></tr>
+<tr><td><b>2:45</b></td><td>Review &amp; execute &rarr; Approve &rarr; Execute. The room says <i>&ldquo;Filing in progress, nCino is still writing&rdquo;</i>, then the card lands.</td><td>&ldquo;A human just approved every line. Now the bank&rsquo;s system does the paperwork itself; we watch it finish.&rdquo;</td></tr>
+<tr><td><b>2:00</b></td><td>Click <b>View in nCino</b> on the card; show the new package version and the loans</td><td>&ldquo;This is not a mock-up. That is the bank&rsquo;s actual loan system, and every change we spoke is sitting in it, correctly, with an audit trail. What takes three weeks took four minutes.&rdquo;</td></tr>
+<tr><td><b>1:00</b></td><td>Back in Cowork: <i>&ldquo;Draft a reply to James confirming what we set up.&rdquo;</i> (or close on the card)</td><td>Close with the three sentences above, then one honest limit: &ldquo;It drafts and it files. The credit decision stays with people.&rdquo; Stop. Take questions.</td></tr>
+</table>
+</div>
+
+<div class="page" style="page-break-before:always;">
+<h2>Why this way: the aggregation story (the strong point, expanded)</h2>
+<p style="font-size:0.9rem; line-height:1.55;">Banks do not lack systems; they lack a place where the systems meet. The loan lives in nCino. The financials live in the spreading tool. The payment behaviour lives in servicing. The client lives in the inbox. Today a banker carries numbers between them by hand, and every carried number is an hour spent and an error waiting. Credit 360 is not another system: it is the meeting place. Every figure on the glass is a live read from the system that owns it, so the page cannot drift from the truth, and every change spoken in the room lands back in the system that owns it. One conversation, five systems, zero re-keying.</p>
+<h3>Tab-by-tab selling points (30 seconds each)</h3>
+<table style="font-size:0.85rem;">
+<tr><th>Tab</th><th>What it is</th><th>The line</th></tr>
+<tr><td>Overview</td><td>The whole relationship on one page</td><td>&ldquo;A morning&rsquo;s work, assembled in a click.&rdquo;</td></tr>
+<tr><td>Exposure</td><td>Loans + what secures them</td><td>&ldquo;Every dollar, and what the bank holds against it.&rdquo;</td></tr>
+<tr><td>Covenants</td><td>The client&rsquo;s promises, tested and dated</td><td>&ldquo;Audit-ready, permanently.&rdquo;</td></tr>
+<tr><td>Financials</td><td>Spreads from the spreading tool</td><td>&ldquo;No analyst retyped a number.&rdquo;</td></tr>
+<tr><td>Signals</td><td>The clocks: maturities, reviews</td><td>&ldquo;The system watches the calendar so people can think.&rdquo;</td></tr>
+<tr><td>Activity</td><td>The self-writing audit trail</td><td>&ldquo;Everything we do tonight lands here, attributed.&rdquo;</td></tr>
+</table>
+<h3>Plain-words glossary (first use on stage)</h3>
+<table style="font-size:0.85rem;">
+<tr><td><b>Collateral</b></td><td>what the bank can take if the loan goes bad</td></tr>
+<tr><td><b>Covenant</b></td><td>a promise the client made, like keeping enough cash; the bank tests it on a schedule</td></tr>
+<tr><td><b>Credit package</b></td><td>the bundle of loans the bank manages as one deal</td></tr>
+<tr><td><b>Modification</b></td><td>changing the loans; it becomes real only when the bank books it</td></tr>
+<tr><td><b>nCino</b></td><td>the bank&rsquo;s system of record, where the loans officially live</td></tr>
+</table>
+</div>
+
+<div class="page" style="page-break-before:always;">
+<h2>Q&amp;A (two sentences each, no jargon)</h2>
+<table style="font-size:0.85rem;">
+<tr><td><b>Does it make mistakes?</b></td><td>It only shows figures it read from the bank&rsquo;s systems, and it refuses to invent what it cannot read. Every change is shown to a person before anything is filed.</td></tr>
+<tr><td><b>What if it is wrong?</b></td><td>Nothing becomes real without human approval, and everything filed is traceable to who approved it and when. Wrong stops at the review step.</td></tr>
+<tr><td><b>Does it replace my people?</b></td><td>It replaces the retyping, not the judgment. The banker spends the saved hours with clients; the credit decision stays with the committee.</td></tr>
+<tr><td><b>Is our data safe?</b></td><td>It reads through the bank&rsquo;s own authenticated connections with the signed-in user&rsquo;s permissions. Nothing leaves the bank&rsquo;s systems; the view is assembled, not copied.</td></tr>
+<tr><td><b>Why not just ChatGPT?</b></td><td>A general chatbot can talk about banking; this is wired into the bank&rsquo;s systems of record with governance on every write. The difference is the last mile: filing, correctly, with approval.</td></tr>
+<tr><td><b>How long to set up?</b></td><td>It runs on connections the bank&rsquo;s systems already expose. An engagement scopes it to your landscape; the pattern you saw is the product.</td></tr>
+<tr><td><b>What does it cost?</b></td><td>Engagement-dependent; the honest frame is hours returned per banker per week, and you saw four minutes replace three weeks.</td></tr>
+<tr><td><b>Could this work for [other area]?</b></td><td>The pattern is general: systems meet in one view, people speak, the system of record files. Commercial credit is where we proved it first.</td></tr>
+</table>
+</div>
+
+<div class="page" style="page-break-before:always;">
+<h2>Fallbacks &amp; exact lines</h2>
+<table style="font-size:0.85rem;">
+<tr><td><b>Execute takes long</b></td><td>Expected on the big plan: the room says &ldquo;Filing in progress, nCino is still writing&rdquo; and lands the card itself. Say: &ldquo;the bank&rsquo;s system is doing the real work; we watch it finish.&rdquo; Never approve twice.</td></tr>
+<tr><td><b>A consent dialog appears</b></td><td>Accept it once; it is the bank-grade permission gate doing its job. Worth a sentence on stage.</td></tr>
+<tr><td><b>&ldquo;Briefly unreachable&rdquo; on Sync</b></td><td>One live read timed out; the page keeps the last good data and says so. Honest moment; sync again later.</td></tr>
+<tr><td><b>Anything stutters</b></td><td>Command palette &rarr; <i>Glass: frost</i>. Instant, remembered.</td></tr>
+<tr><td><b>Never do</b></td><td>No Boom refresh on Hartwell (Piedmont is the live-spread client). Pick the C&amp;I package at the greeting.</td></tr>
+<tr><td><b>The nCino link</b></td><td>The executed card&rsquo;s &ldquo;View in nCino&rdquo; opens the created version directly.</td></tr>
+<tr><td><b>After the demo</b></td><td>Tell Claude &ldquo;revert the demo version&rdquo; and the org returns to baseline.</td></tr>
+</table>
+</div>
+</body>
+</html>
