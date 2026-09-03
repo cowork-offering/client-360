@@ -38,6 +38,10 @@ export interface RelSession {
   /** The covenant the signal named, where it named one. The covenant route
    *  opens its brief on it rather than making the banker find it again. */
   covenantId: string | null;
+  /** The package the banker anchored a package-scoped review on, once a
+   *  relationship carrying more than one has been narrowed. Null until then,
+   *  and irrelevant to the three relationship-level reviews. */
+  productPackageId: string | null;
 }
 
 let session: RelSession | null = null;
@@ -67,7 +71,16 @@ export function openRelationshipRoom(context: {
     opening: context.opening,
     say: null,
     covenantId: null,
+    productPackageId: null,
   };
+  emit();
+}
+
+/** The banker chose which package a package-anchored review runs in. The
+ *  context re-derives on it and the review's steps scope to its facilities. */
+export function anchorRelPackage(productPackageId: string): void {
+  if (!session) return;
+  session = { ...session, productPackageId };
   emit();
 }
 

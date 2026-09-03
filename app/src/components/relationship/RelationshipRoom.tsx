@@ -81,6 +81,7 @@ import {
   nextStep,
   readCreateAsk,
   relContextFor,
+  relPackagePending,
   relRouteBlock,
   reviewableCovenants,
   routeAvailability,
@@ -96,6 +97,7 @@ import {
   type StagedRelPlan,
 } from "./reviewFlows";
 import {
+  anchorRelPackage,
   bindRelRoute,
   closeRelationshipRoom,
   restartRelRoute,
@@ -104,7 +106,9 @@ import {
 import { newRequestId } from "../../channel/adapter";
 import { ComposerPlus } from "../composer/ComposerPlus";
 import { EMPTY_BOOK } from "../workroom/elicit";
+import type { PackageEntry } from "../../book/packages";
 import "../../styles/workroom.css";
+import "../../styles/package-anchor.css";
 import "../../styles/relationship.css";
 
 /* =============================================================================
@@ -139,6 +143,11 @@ import "../../styles/relationship.css";
    nothing simulated, and no token ever burnt. It gets a surface of its own.
    ============================================================================= */
 
+/** VERBATIM SHELL COPY. The review's own package question, and the word for a
+ *  relationship that stages none. */
+const REL_PACKAGE_QUESTION = "Which package does this review run in?";
+const REL_PACKAGE_NONE = "no product package on this relationship";
+
 /* ------------------------------------------------------------- thread model */
 
 interface DossierModel {
@@ -166,6 +175,10 @@ type RelItem = { id: string; step: number } & (
   | { kind: "lookup" }
   /** The route's structured brief: what it covers, what it produces. */
   | { kind: "brief" }
+  /** WHICH PACKAGE THIS REVIEW RUNS IN, where the review is anchored on one and
+   *  the relationship stages several. Lands with the brief and holds the first
+   *  step, because every step below it is scoped to the package. */
+  | { kind: "pkgask" }
   | { kind: "banker"; text: string }
   | {
       kind: "agent";
@@ -527,6 +540,7 @@ export function RelationshipRoom({
   route,
   router,
   onClose,
+  onAnchorPackage = () => {},
   brain,
   deps = defaultRelDeps,
   mail = null,
@@ -538,6 +552,10 @@ export function RelationshipRoom({
   route: RelRoute | null;
   router?: RelRouter;
   onClose: () => void;
+  /** THE BANKER CHOSE A PACKAGE. The host writes it into the session and the
+   *  context re-derives on it; this room never holds the anchor itself, for the
+   *  same reason the facility room does not. */
+  onAnchorPackage?: (productPackageId: string) => void;
   /**
    * THE SECOND LANE, IN THIS ROOM TOO.
    *
@@ -701,7 +719,14 @@ export function RelationshipRoom({
      first question. A blocked route never reaches `ready`: offering "Review &
      file" over a refusal would be the room contradicting itself. */
   const routeBlock = useMemo(() => (route ? relRouteBlock(route, ctx) : null), [route, ctx]);
-  const ready = !!route && !live && !routeBlock;
+  /* WHICH PACKAGE THIS REVIEW RUNS IN. The covenant batch and the valuation are
+     both anchored on one product package and both refuse a batch without one.
+     Where the relationship stages several and none is chosen, the room ASKS -
+     `NO_PACKAGE_ANCHOR` says the read stages none, which is false here. */
+  const packagePending = useMemo(() => relPackagePending(route, ctx), [route, ctx]);
+  const pendingRef = useRef(false);
+  pendingRef.current = packagePending;
+  const ready = !!route && !live && !routeBlock && !packagePending;
   const approvalOpen = phase === "work" && !thinking && ready;
   const laneRows = useMemo(
     () => (route ? laneRowsFor(route, ctx, answers, order) : []),
@@ -750,6 +775,12 @@ export function RelationshipRoom({
     setItems((prev) => {
       const mine = prev.length ? prev[prev.length - 1].step : 0;
       const landed: RelItem[] = [...prev, { kind: "brief", id: nextId("brief"), step: mine }];
+      /* AND THE PACKAGE QUESTION, WHERE THIS REVIEW IS ANCHORED ON ONE AND THE
+         RELATIONSHIP STAGES SEVERAL. It lands with the scope and before the
+         first step, because every step below it is scoped to the package. */
+      if (pendingRef.current) {
+        landed.push({ kind: "pkgask", id: nextId("pkgask"), step: mine });
+      }
       /* AND THE REFUSAL LANDS WITH IT, BEFORE THE FIRST QUESTION. The scope,
          then why this review cannot close anything today. Six questions and a
          tool call ahead of the same sentence is the worst moment in the room. */
@@ -775,6 +806,9 @@ export function RelationshipRoom({
   useEffect(() => () => window.clearTimeout(detailTimer.current), []);
   useEffect(() => {
     if (!route || !awake || !live || thinking || phase === "filed") return;
+    // NOTHING IS ASKED UNDER AN UNANSWERED PACKAGE QUESTION: every step is
+    // scoped to the package and none is chosen yet.
+    if (packagePending) return;
     if (askedRef.current === live.key) return;
     askedRef.current = live.key;
     const kicker = `Step ${order.length + 1} of ${planned}`;
@@ -819,7 +853,7 @@ export function RelationshipRoom({
       return;
     }
     detailTimer.current = window.setTimeout(land, TIER_STAGGER_MS);
-  }, [awake, live, order.length, phase, planned, reduced, route, thinking, tierArrived]);
+  }, [awake, live, order.length, packagePending, phase, planned, reduced, route, thinking, tierArrived]);
 
   /* ---- the review chip's own beat: once the last step is answered the room
           says so rather than leaving the banker to notice the chip. */
@@ -1729,6 +1763,70 @@ export function RelationshipRoom({
   const tiersLeft = choreo.left;
   const tiersShown = choreo.summoned || histOpen;
 
+  /* ---------------------------------------------------- THE PACKAGE LINE
+
+     The facility room's control, in this room's header. Both package-anchored
+     reviews scope to one package's facilities, so a banker has to be able to
+     read which one that is and to move between them. */
+  const anchoredEntry = ctx.packages.find((p) => p.id === ctx.productPackageId) ?? null;
+  const packageLineLabel = packagePending
+    ? `choose one of ${ctx.packages.length}`
+    : (anchoredEntry?.name ?? REL_PACKAGE_NONE);
+  const packageStance = packagePending
+    ? `${ctx.packages.length} packages on this relationship. None is chosen yet.`
+    : !ctx.productPackageId
+      ? REL_PACKAGE_NONE
+      : ctx.packages.length === 1
+        ? "The relationship stages one product package, so the room anchored on it. You were not asked."
+        : `Chosen from ${ctx.packages.length} on this relationship.`;
+
+  /** SWITCHING RESTARTS THE COLLECTION. A review's answers are scoped to the
+   *  package they were collected against, so they are dropped rather than
+   *  carried, and a review already collecting says so before it drops them. */
+  const switchPackage = (id: string) => {
+    if (id === ctx.productPackageId) return;
+    if (order.length) {
+      setToast("Finish or restart the review before switching packages");
+      return;
+    }
+    closePeek();
+    onAnchorPackage(id);
+  };
+
+  const openPackagePeek = (anchor: HTMLElement) =>
+    openPeek(anchor, {
+      kicker: "Which package this review runs in",
+      width: 460,
+      content: (
+        <>
+          <div className="wk-cav">{packageStance}</div>
+          {ctx.packages.map((entry) => {
+            const here = entry.id === ctx.productPackageId;
+            return (
+              <button
+                type="button"
+                key={entry.id}
+                className={`wk-pkg ${here ? "wk-sel" : ""}`}
+                data-pkgrow={entry.id}
+                disabled={here}
+                onClick={() => switchPackage(entry.id)}
+              >
+                <span>
+                  <b>{entry.name}</b>
+                  <span>{here ? `${entry.line} · you are here` : entry.line}</span>
+                </span>
+                {!here && (
+                  <span className="wk-go" aria-hidden="true">
+                    →
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </>
+      ),
+    });
+
   /* THE GREETING'S OWN REMARK RIDES THE OPENING BUBBLE. Every other item's
      remark is rendered by the thread loop under `Narration`; the opening is a
      tier and is rendered through `opening`, so its view is drawn here. */
@@ -1812,6 +1910,19 @@ export function RelationshipRoom({
           <header className="wk-head">
             <BrandGlyph />
             <span className="wk-title">{title}</span>
+            {/* THE PACKAGE LINE. The same control the facility room carries: the
+                anchor stated on the glass, and the way between the packages
+                where the relationship stages more than one. */}
+            <button
+              type="button"
+              className="wk-pkgline"
+              data-pkgline={ctx.productPackageId ?? (packagePending ? "pending" : "none")}
+              aria-label={`Package: ${packageLineLabel}`}
+              onClick={(e) => openPackagePeek(e.currentTarget)}
+            >
+              <span className="wk-pkgline-k">Package</span>
+              <span className="wk-pkgline-v">{packageLineLabel}</span>
+            </button>
             <span className="wk-spacer" />
             <span className="wk-stepper" aria-label="Stage">
               {["Read", "Collect", "Review", "Filed"].map((label, i) => (
@@ -1864,6 +1975,8 @@ export function RelationshipRoom({
                           item={item}
                           opening={openingItem}
                           spec={flowSpec}
+                          packages={ctx.packages}
+                          onAnchorPackage={onAnchorPackage}
                           lit={lit}
                           onOpenPeek={openPeek}
                           onOption={(sayText, label) => void say(sayText, label)}
@@ -2156,6 +2269,8 @@ function RelBlock({
   item,
   opening,
   spec,
+  packages,
+  onAnchorPackage,
   lit,
   onOpenPeek,
   onOption,
@@ -2166,6 +2281,9 @@ function RelBlock({
   item: RelItem;
   opening: ReactNode;
   spec: RelFlowSpec | null;
+  /** Every package the relationship stages, for the review's own package ask. */
+  packages: PackageEntry[];
+  onAnchorPackage: (productPackageId: string) => void;
   lit: boolean;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
   onOption: (say: string, label: string) => void;
@@ -2256,6 +2374,37 @@ function RelBlock({
           <span className="rl-brief-k">Produces</span>
           <span className="rl-brief-t">{spec.produces}</span>
         </div>
+      </div>
+    );
+  }
+
+  /* WHICH PACKAGE THIS REVIEW RUNS IN. The same block the facility room asks,
+     in the same material, because a banker who has learned one room has learned
+     both. Route-neutral eligibility does not apply here: the review is already
+     chosen, and both package-anchored reviews run against any package. */
+  if (item.kind === "pkgask") {
+    return (
+      <div className="wk-pkgs wk-pkgask" role="radiogroup" aria-label={REL_PACKAGE_QUESTION}>
+        <div className="wk-pkgask-h">{REL_PACKAGE_QUESTION}</div>
+        {packages.map((entry) => (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={false}
+            key={entry.id}
+            className="wk-pkg"
+            data-pkg={entry.id}
+            onClick={() => onAnchorPackage(entry.id)}
+          >
+            <span>
+              <b>{entry.name}</b>
+              <span>{entry.line}</span>
+            </span>
+            <span className="wk-go" aria-hidden="true">
+              →
+            </span>
+          </button>
+        ))}
       </div>
     );
   }
@@ -2577,10 +2726,11 @@ export function RelationshipRoomHost() {
   }, [data, state.livePatches, accountId]);
 
   const accountName = session?.accountName ?? null;
+  const sessionPackageId = session?.productPackageId ?? null;
   const ctx = useMemo<RelContext | null>(() => {
     if (!accountId || !accountName) return null;
-    return relContextFor({ data, bundle, accountId, accountName });
-  }, [accountId, accountName, bundle, data]);
+    return relContextFor({ data, bundle, accountId, accountName, productPackageId: sessionPackageId });
+  }, [accountId, accountName, bundle, data, sessionPackageId]);
 
   /* ONE MAIL READ PER ROOM OPEN, MADE HERE (SAMPLE-CHANNEL spec, and the same
      hook the facility room uses). The founder's "when there is an email
@@ -2659,6 +2809,7 @@ export function RelationshipRoomHost() {
       mail={mail}
       mailGate={mailGate}
       onFiled={onFiled}
+      onAnchorPackage={anchorRelPackage}
       onClose={close}
     />
   );

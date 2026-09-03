@@ -9,8 +9,15 @@ import { workroomContextFor } from "./workroom/openWorkroom";
 import { smartOpeningFor } from "./components/workroom/route";
 import { mustChoosePackage, packageRoster } from "./book/packages";
 import { readIntentDoc } from "./intent/contract";
+import { UNREADABLE_CLARIFY } from "./channel/brainLane";
 import { acquireSample, resetSessionDoor } from "./channel/sampleDoor";
 import { resetCatalog } from "./channel/catalog";
+import { RelationshipRoom, neutralRelAsk } from "./components/relationship/RelationshipRoom";
+import { closeRelationshipRoom } from "./components/relationship/relSession";
+import { relContextFor, relRouteNeedsPackage, type RelFlowDeps } from "./components/relationship/reviewFlows";
+import type { RelRoute } from "./components/relationship/relRoute";
+import type { StagedOutput } from "./actions/stagedPlan";
+import type { ExecuteResult, ToolOutcome } from "./channel/writeTools";
 import type { C360Data } from "./data/contract";
 import live from "../../artifact/live-data.json";
 import { ACCOUNT_ID, FACILITY_TWO, PACKAGE_ONE, PACKAGE_TWO, withSecondPackage } from "../../scripts/two-package-fixture.mjs";
@@ -138,7 +145,7 @@ function open(
         engine={createModifyEngine({ context, data: args.data, bundle })}
         router={router}
         reads={{ bundle, accountName, productPackageId: context.productPackageId, generatedAt: args.data.meta?.generatedAt }}
-        brain={args.brain ? async () => ({ kind: "remark", text: "" }) : undefined}
+        brain={args.brain ? async () => UNREADABLE_CLARIFY : undefined}
         onAnchor={(choice) => anchored.push(choice)}
         onClose={() => {}}
       />,
@@ -406,5 +413,105 @@ describe("an intent that names a package", () => {
     expect(readIntentDoc("i1", { ...base, productPackageId: PACKAGE_TWO })!.productPackageId).toBe(PACKAGE_TWO);
     expect(readIntentDoc("i2", base)!.productPackageId).toBeUndefined();
     expect(readIntentDoc("i3", { ...base, productPackageId: "nope" })!.productPackageId).toBeUndefined();
+  });
+});
+
+/* ============================================================ the second room
+
+   THE RELATIONSHIP ROOM ASKS THE SAME QUESTION where a review is anchored on a
+   package. The covenant batch and the collateral valuation both carry
+   `productPackageId` on their stage payloads and both refuse without one; the
+   annual review, the risk-rating review and the service request are
+   relationship level and never ask.
+
+   THE REFUSAL WAS WRONG FOR THIS CASE, not merely unhelpful: `NO_PACKAGE_ANCHOR`
+   reads "the read stages none for this relationship", which is false for a
+   relationship staging two, and the banker has an answer the room never asked
+   for. */
+
+const REL_DEPS: RelFlowDeps = {
+  available: () => true,
+  newKey: () => "key-1",
+  stage: async () => ({ ok: true, result: {} as StagedOutput }) as ToolOutcome<StagedOutput>,
+  execute: async () => ({ ok: true, result: {} as ExecuteResult }) as ToolOutcome<ExecuteResult>,
+};
+
+function openRel(args: { route: RelRoute | null; productPackageId?: string }) {
+  const bundle = two.borrowers![ACCOUNT_ID];
+  const ctx = relContextFor({
+    data: two,
+    bundle,
+    accountId: ACCOUNT_ID,
+    accountName: "Sterling Fabrication Co.",
+    productPackageId: args.productPackageId ?? null,
+  });
+  const anchored: string[] = [];
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root!.render(
+      <RelationshipRoom
+        ctx={ctx}
+        route={args.route}
+        router={{ question: null, say: null, neutral: () => neutralRelAsk(), onBind: () => {}, onRestart: () => {} }}
+        deps={REL_DEPS}
+        onAnchorPackage={(id) => anchored.push(id)}
+        onClose={() => {}}
+      />,
+    );
+  });
+  return { room: document.querySelector<HTMLElement>(".wk-room")!, ctx, anchored };
+}
+
+describe("the relationship room", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    act(() => closeRelationshipRoom());
+    vi.useRealTimers();
+  });
+
+  it("knows which routes run against a package and which do not", () => {
+    expect(relRouteNeedsPackage("covenant")).toBe(true);
+    expect(relRouteNeedsPackage("valuation")).toBe(true);
+    expect(relRouteNeedsPackage("annual")).toBe(false);
+    expect(relRouteNeedsPackage("rating")).toBe(false);
+    expect(relRouteNeedsPackage("service")).toBe(false);
+  });
+
+  it("asks which package the covenant review runs in, instead of refusing", async () => {
+    const { room, ctx } = openRel({ route: "covenant" });
+    await settle();
+
+    expect(ctx.packages).toHaveLength(2);
+    expect(ctx.productPackageId).toBeNull();
+    // The refusal is gone and the question is in its place.
+    expect(text(room)).not.toContain("the read stages none for this relationship");
+    const cards = [...room.querySelectorAll<HTMLElement>(".wk-pkgask .wk-pkg")];
+    expect(cards.map((c) => c.dataset.pkg)).toEqual([PACKAGE_ONE, PACKAGE_TWO]);
+    // And no step is asked under an unanswered package question.
+    expect(text(room)).not.toContain("Step 1 of");
+  });
+
+  it("the pick anchors the review", async () => {
+    const { room, anchored } = openRel({ route: "covenant" });
+    await settle();
+    act(() => room.querySelectorAll<HTMLElement>(".wk-pkgask .wk-pkg")[0].click());
+    expect(anchored).toEqual([PACKAGE_ONE]);
+  });
+
+  it("a relationship-level review never asks", async () => {
+    const { room } = openRel({ route: "annual" });
+    await settle();
+    expect(room.querySelector(".wk-pkgask")).toBeNull();
+    expect(room.querySelector<HTMLElement>(".wk-pkgline")!.dataset.pkgline).toBe("none");
+  });
+
+  it("once anchored, the header names the package and the steps run", async () => {
+    const { room } = openRel({ route: "covenant", productPackageId: PACKAGE_ONE });
+    await settle();
+    expect(room.querySelector(".wk-pkgask")).toBeNull();
+    expect(room.querySelector<HTMLElement>(".wk-pkgline")!.dataset.pkgline).toBe(PACKAGE_ONE);
+    expect(text(room.querySelector(".wk-pkgline"))).toContain("Sterling");
   });
 });
