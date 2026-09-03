@@ -12,6 +12,7 @@ import { __resetFeedForTests, stageFeed } from "./intent/feed";
 import { consumeIntent, __resetIntentsForTests } from "./intent/store";
 import type { IntentDoc } from "./intent/contract";
 import { ACT_WORDS } from "./channel/narrate";
+import { SETTLE_EXIT_MS } from "./components/workroom/settle";
 import { RelationshipRoom, neutralRelAsk } from "./components/relationship/RelationshipRoom";
 import { relContextFor, type RelFlowDeps } from "./components/relationship/reviewFlows";
 import type { RelRoute } from "./components/relationship/relRoute";
@@ -728,5 +729,195 @@ describe("the compile card resolves in place, never into a second card", () => {
     // it is simply no longer working.
     expect(cards[0].querySelector('[data-orbit="still"]')).not.toBeNull();
     expect(cards[0].textContent).toContain("decision token");
+  });
+});
+
+/* ============================================ the founder's own pricing drive */
+
+describe("the pricing ask is not a dead end (founder, 2026-09-03)", () => {
+  /** The live-verified rate on the $15M line, as the org holds it. The snapshot
+   *  carries none, so the drive seeds it exactly as a live read would. */
+  const withRate = () => {
+    const bundle = JSON.parse(JSON.stringify(data.borrowers![accountId]));
+    bundle.exposure.facilities[0].interestRate = 7.6;
+    return bundle;
+  };
+
+  async function openWithRate() {
+    await acquireSample(50);
+    const bundle = withRate();
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot.name });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={{
+            bundle,
+            accountName: bundle.snapshot.name,
+            productPackageId: context.productPackageId,
+            generatedAt: "2026-09-03T08:00:00.000Z",
+          }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  const liveBubble = (room: HTMLElement) => {
+    const bubbles = [...room.querySelectorAll<HTMLElement>('[data-settle-state="on"] .wk-agent .wk-bub')];
+    return bubbles[bubbles.length - 1];
+  };
+  /** The chips under the LIVE question, which is the one being answered. Every
+   *  earlier question is still on the stage until it settles, and its chips are
+   *  still real: this reads the last bubble's own. */
+  const chipLabels = (room: HTMLElement) => {
+    const bub = liveBubble(room);
+    return [...(bub?.querySelectorAll<HTMLButtonElement>('.wk-opt') ?? [])].map((b) => b.textContent);
+  };
+
+  /** The founder's sequence, up to the rate question. */
+  async function driveToRate(room: HTMLElement) {
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+    await click([...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Acknowledge"));
+    await click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => /240 months/.test(b.textContent ?? "")));
+    await click(confirmButton(room));
+    await click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => /^1 /.test(b.textContent ?? "")));
+    await click(confirmButton(room));
+  }
+
+  it("asks the rate with the figure on file as a chip, and an example", async () => {
+    installSession("");
+    const room = await openWithRate();
+    await settle();
+    await driveToRate(room);
+
+    const ask = liveBubble(room);
+    expect(ask.textContent).toContain("What rate should the");
+    // THE FIGURE IS ON THE QUESTION, not a bare "supply a rate".
+    expect(ask.textContent).toContain("7.60%");
+    expect(ask.textContent).toContain("e.g. 7.25% fixed, paid monthly");
+    expect(chipLabels(room)).toEqual(["Hold 7.60%", "New all-in rate", "Index + spread"]);
+  });
+
+  it("does NOT stage on 'New all-in rate': it asks for the figure", async () => {
+    installSession("");
+    const room = await openWithRate();
+    await settle();
+    await driveToRate(room);
+    const staged = room.querySelectorAll(".wk-ent").length;
+
+    await click([...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => b.textContent === "New all-in rate"));
+
+    // Nothing on the manifest, and no sentence claiming a rate was supplied.
+    expect(room.querySelectorAll(".wk-ent")).toHaveLength(staged);
+    expect(room.textContent).not.toContain("has supplied an all-in rate");
+    expect(liveBubble(room).textContent).toContain("What is the new all-in rate");
+    expect(liveBubble(room).textContent).toContain("e.g. 7.25%");
+  });
+
+  it("answers 'what index and rate options do I have' with the OPTIONS", async () => {
+    installSession("");
+    const room = await openWithRate();
+    await settle();
+    await driveToRate(room);
+
+    await typeInto(room, "what index and rate options do I have");
+
+    expect(chipLabels(room)).toEqual(["Hold 7.60%", "New all-in rate", "Index + spread"]);
+    // The aside was said once, on the first ask, and is not repeated as an answer.
+    const answers = room.querySelectorAll('[data-settle-state="on"] .wk-agent .wk-bub');
+    const repeated = [...answers].filter((b) => (b.textContent ?? "").includes("no index name"));
+    expect(repeated.length).toBeLessThanOrEqual(1);
+  });
+
+  it("takes 'Yes, 7.25% all-in' as the answer and never re-asks", async () => {
+    installSession("");
+    const room = await openWithRate();
+    await settle();
+    await driveToRate(room);
+
+    await typeInto(room, "Yes, 7.25% all-in");
+
+    // THE FIGURE IS ON THE SENTENCE AND ON THE CARD.
+    expect(liveBubble(room).textContent).toContain("7.25%");
+    expect(liveBubble(room).textContent).not.toContain("What rate should the");
+    const card = room.querySelector('[data-settle-state="on"] .wk-chip');
+    expect(card?.textContent).toContain("7.25%");
+  });
+
+  /* ============ THE WHOLE SEQUENCE, AND WHAT THE PLAN HOLDS AT THE END
+
+     Focus, increase, confirm, acknowledge, 240, a first payment date, "what
+     options do I have", "Yes, 7.25% all-in". The commitment is the change he
+     came in for and it is the one that went missing. */
+  it("keeps the commitment on the plan through every pricing turn", async () => {
+    installSession("");
+    const room = await openWithRate();
+    await settle();
+    await driveToRate(room);
+    await typeInto(room, "what index and rate options do I have");
+    await typeInto(room, "Yes, 7.25% all-in");
+    await click(confirmButton(room));
+
+    const rail = room.querySelector(".wk-col-r")!;
+    const entries = [...rail.querySelectorAll(".wk-ent")].map((e) => (e.textContent ?? "").replace(/\s+/g, " "));
+    const all = entries.join(" | ");
+    expect(all).toMatch(/Commitment/i);
+    expect(all).toMatch(/20/);
+    expect(all).toMatch(/Amortisation|Amortised/i);
+    expect(all).toMatch(/240/);
+    expect(all).toMatch(/payment date/i);
+    expect(all).toMatch(/[Rr]ate/);
+    expect(all).toMatch(/7\.25/);
+  });
+
+  it("reads the plan back with the commitment first", async () => {
+    installSession("");
+    const room = await openWithRate();
+    await settle();
+    await driveToRate(room);
+    await typeInto(room, "Yes, 7.25% all-in");
+    await click(confirmButton(room));
+
+    await typeInto(room, "what is on the plan");
+    const rows = [...room.querySelectorAll<HTMLElement>(".wk-rc-row, .wk-rrow, .wk-read-row")];
+    const labels = rows.map((r) => (r.textContent ?? "").trim()).filter(Boolean);
+    const first = labels.findIndex((l) => /commitment/i.test(l));
+    const rate = labels.findIndex((l) => /rate/i.test(l));
+    if (first >= 0 && rate >= 0) expect(first).toBeLessThan(rate);
+  });
+});
+
+/* ================================================== the settle glide (rule 2) */
+
+describe("the settle glides rather than snapping (founder, 2026-09-03)", () => {
+  it("collapses the exchange's own height instead of taking it away in one frame", async () => {
+    installSession("");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "take the 15M line of credit to 20000000");
+    await click(confirmButton(room));
+
+    const away = [...room.querySelectorAll<HTMLElement>('[data-settle-state="settled"]')];
+    expect(away.length).toBeGreaterThan(0);
+    for (const node of away) {
+      // The wrapper is a one-row grid whose track carries the collapse, and the
+      // inner row is what the track is allowed to squeeze.
+      expect(node.className).toContain("wk-ex");
+      expect(node.querySelector(".wk-ex-in")).not.toBeNull();
+      // ONE CLOCK. The stylesheet reads the duration off the constant.
+      expect(node.style.getPropertyValue("--wk-settle-ms")).toBe(`${SETTLE_EXIT_MS}ms`);
+    }
+  });
+
+  it("names a glide inside the founder's own range", () => {
+    expect(SETTLE_EXIT_MS).toBeGreaterThanOrEqual(380);
+    expect(SETTLE_EXIT_MS).toBeLessThanOrEqual(460);
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { WorkroomChallenge, WorkroomDelta } from "../../workroom/types";
 
@@ -33,10 +33,20 @@ import type { WorkroomChallenge, WorkroomDelta } from "../../workroom/types";
    that this exchange is over, which is a different thing and lives in the thread.
    ============================================================================= */
 
-/** How long the exit takes. Must match `wk-ex-out`'s duration in workroom.css,
- *  or an exchange would collapse while it is still visible. Deliberately the
- *  same 520ms as the tier fade: one exit vocabulary, not two. */
-export const SETTLE_EXIT_MS = 520;
+/**
+ * HOW LONG THE EXIT TAKES, fade and collapse together.
+ *
+ * The founder's own range for the glide is 380 to 460ms; this is the middle of
+ * it, and it is shorter than the tier fade's 520ms on purpose: a tier leaving is
+ * the room changing subject, an exchange leaving is one decision closing, and
+ * the second should feel quicker than the first.
+ *
+ * THE STYLESHEET READS IT FROM HERE. `settleAttrs` writes it onto the wrapper as
+ * `--wk-settle-ms`, so the height transition and the timer that flips the state
+ * cannot drift apart: an exchange that collapsed before it finished fading, or
+ * kept its height after, is the snap this exists to remove.
+ */
+export const SETTLE_EXIT_MS = 420;
 
 /**
  * WHERE AN EXCHANGE STANDS.
@@ -220,17 +230,24 @@ export function useSettleChoreography(reduced: boolean): SettleChoreography {
  * the wrapper is one shape at every moment and React never remounts the bubble
  * (which would restart its word speech in the middle of a conversation).
  */
-export function settleAttrs(state: SettleState): {
+export interface SettleAttrs {
   className: string;
   "data-settle-state": SettleState;
+  /** The glide's own clock, so the stylesheet and {@link SETTLE_EXIT_MS} are
+   *  one number rather than two that have to be kept equal by hand. */
+  style: CSSProperties;
   "aria-hidden"?: "true";
-} {
-  if (state === "shown") return { className: "wk-ex wk-ex-back", "data-settle-state": "shown" };
+}
+
+const CLOCK = { "--wk-settle-ms": `${SETTLE_EXIT_MS}ms` } as CSSProperties;
+
+export function settleAttrs(state: SettleState): SettleAttrs {
+  if (state === "shown") return { className: "wk-ex wk-ex-back", "data-settle-state": "shown", style: CLOCK };
   if (state === "leaving")
-    return { className: "wk-ex wk-ex-out", "data-settle-state": "leaving", "aria-hidden": "true" };
+    return { className: "wk-ex wk-ex-out", "data-settle-state": "leaving", style: CLOCK, "aria-hidden": "true" };
   if (state === "settled")
-    return { className: "wk-ex wk-ex-gone", "data-settle-state": "settled", "aria-hidden": "true" };
-  return { className: "wk-ex", "data-settle-state": "on" };
+    return { className: "wk-ex wk-ex-gone", "data-settle-state": "settled", style: CLOCK, "aria-hidden": "true" };
+  return { className: "wk-ex", "data-settle-state": "on", style: CLOCK };
 }
 
 /**

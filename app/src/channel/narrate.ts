@@ -1016,6 +1016,69 @@ function cardFigures(subject: NarrateSubject): string[] {
   return out;
 }
 
+/* ============= A REMARK MAY NOT CONTRADICT ITS OWN CARD (founder, 2026-09-03)
+
+   His transcript: the card staged a rate move to 7.25% and a commitment move to
+   $20M, and the remark under it said the line "moves to 7.25% all-in, HOLDING
+   THE EXISTING PRICING through the commitment increase". Both halves cannot be
+   true, and the half the banker can act on is the card.
+
+   THIS IS NOT THE CLAIM GUARD. That one drops a sentence naming a field NOBODY
+   staged. This one drops a sentence naming a field the card DID stage and then
+   saying it did not move. The two failures look nothing alike from inside the
+   sentence, and both of them reached the glass.
+
+   IT READS THE CARD'S OWN ROWS, so it cannot drift from what is staged: a row
+   whose label names the rate means the rate moved, and from that moment "the
+   existing pricing" is a false sentence about this card whatever else is in
+   it. */
+
+interface Contradiction {
+  /** The row label that means this field is moving. */
+  moved: RegExp;
+  /** The phrase that says it is not. */
+  says: RegExp;
+}
+
+/** The ways a sentence says "this did not move". */
+const HOLDS = "hold|holds|holding|keep|keeps|keeping|unchanged|untouched";
+
+const CONTRADICTIONS: Contradiction[] = [
+  {
+    // A staged rate change against any claim that the pricing stands.
+    moved: /\b(rate|pricing|coupon)\b/i,
+    says: new RegExp(
+      "\\b(?:" + HOLDS + "|stays? the same|as it (?:is|stands))\\b[^.?!]*\\b(?:rate|pricing|coupon)\\b" +
+        "|\\b(?:rate|pricing|coupon)\\b[^.?!]*\\b(?:" + HOLDS + "|stays? the same)\\b",
+      "i",
+    ),
+  },
+  {
+    // A staged commitment change against any claim that the amount holds.
+    moved: /\b(commitment|amount)\b/i,
+    says: new RegExp(
+      "\\b(?:commitment|amount|exposure|line)\\b[^.?!]*\\b(?:" + HOLDS +
+        "|holds? at|stays? (?:at|the same)|is not moving|does not move)\\b" +
+        "|\\b(?:" + HOLDS + "|holds? at)\\b[^.?!]*\\b(?:commitment|amount|exposure)\\b",
+      "i",
+    ),
+  },
+];
+
+/** The contradictions this card is capable of, given what it staged. */
+function contradictionsFor(subject: NarrateSubject): RegExp[] {
+  if (!subject.card) return [];
+  const labels = subject.card.rows.map((r) => `${r.label} ${r.sub ?? ""}`).join(" | ");
+  return CONTRADICTIONS.filter((c) => c.moved.test(labels)).map((c) => c.says);
+}
+
+/** Does this run of spans say the card did not do what the card did? */
+const contradictsCard = (spans: NarrationSpan[], says: readonly RegExp[]): boolean => {
+  if (!says.length) return false;
+  const text = spans.map((s) => s.text).join("");
+  return says.some((rx) => rx.test(text));
+};
+
 /** Does this run of spans print a figure the card already carries? */
 const echoesCard = (spans: NarrationSpan[], figures: readonly string[]): boolean => {
   if (!figures.length) return false;
@@ -1078,6 +1141,7 @@ export function guardClaims(
   if (!subject.card) return { ...guardFigures(blocks, envelope, subject), claimed: [] };
   const allowed = allowedTerms(envelope, subject);
   const figures = cardFigures(subject);
+  const contradictions = contradictionsFor(subject);
   const claimed: string[] = [];
   const note = (term: string) => {
     if (!claimed.includes(term)) claimed.push(term);
@@ -1091,6 +1155,10 @@ export function guardClaims(
          a repetition, and marking it would put a second thing on the glass to
          solve there being too much on the glass. */
       if (echoesCard(sentence, figures)) return false;
+      /* AND A SENTENCE THAT DENIES THE CARD GOES WITH IT. It is not marked
+         "not on the card": it IS on the card, backwards, and a mark under it
+         would leave the banker two readings to reconcile. */
+      if (contradictsCard(sentence, contradictions)) return false;
       const term = claimedTerm(sentence.map((s) => s.text).join(""), allowed);
       if (term) note(term);
       return !term;
@@ -1114,6 +1182,7 @@ export function guardClaims(
     if (block.kind === "bullets") {
       const items = block.items.filter((item) => {
         if (echoesCard(item, figures)) return false;
+        if (contradictsCard(item, contradictions)) return false;
         const term = claimedTerm(item.map((s) => s.text).join(""), allowed);
         if (term) note(term);
         return !term;
@@ -1126,6 +1195,7 @@ export function guardClaims(
         // The row's own rail is the ROOM's figure and is never checked; the
         // model's clause beside it is.
         if (echoesCard(row.spans, figures)) return false;
+        if (contradictsCard(row.spans, contradictions)) return false;
         const term = claimedTerm(`${spanText(row.label)} ${row.spans.map((s) => s.text).join("")}`, allowed);
         if (term) note(term);
         return !term;
