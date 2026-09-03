@@ -1,6 +1,7 @@
 import type { Facility } from "../../data/contract";
 import type { WorkroomDelta } from "../../workroom/types";
 import type { ElicitMember } from "./elicit";
+import { carriesRate } from "./rateGate";
 
 /* =============================================================================
    THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02).
@@ -43,18 +44,29 @@ import type { ElicitMember } from "./elicit";
    this room is allowed to read.
    ============================================================================= */
 
-export type PricingSlot = "amortisedTerm" | "firstPaymentDate";
+/* THE RATE JOINS THE GATE (founder, 2026-09-03). nCino prices on four fields
+   and the room asked for two of them; the RATE is the figure the banker
+   actually argues about, and the live room was asking for it through the brain
+   lane with no figures on the question and no figure on the answer. It is a
+   slot here now, asked last, with `rateGate.ts` owning its own sentences. */
+export type PricingSlot = "amortisedTerm" | "firstPaymentDate" | "rate";
 
 /** The org's own API names, which is what the field wave travels under. */
 export const PRICING_FIELD: Record<PricingSlot, string> = {
   amortisedTerm: "LLC_BI__Amortized_Term_Months__c",
   firstPaymentDate: "LLC_BI__First_Payment_Date__c",
+  /* THE RATE IS NOT A FIELD-WAVE FIELD. `LLC_BI__InterestRate__c` is one of the
+     four SCALARS the modification already files (`requestedRate`), so it rides
+     the wire it has always ridden and this entry exists only so the record is
+     total. Nothing looks it up through `carriesPricing`. */
+  rate: "LLC_BI__InterestRate__c",
 };
 
 /** The room's own field-catalog ids for the same two fields. */
 export const PRICING_CATALOG_ID: Record<PricingSlot, string> = {
   amortisedTerm: "loan.amortisedTerm",
   firstPaymentDate: "loan.firstPaymentDate",
+  rate: "loan.rate",
 };
 
 /** Why the room is asking, in the banker's own vocabulary. Said on the card and
@@ -97,6 +109,11 @@ export function carriesPricing(entries: WorkroomDelta[], memberId: string, slot:
 /** Does the BOOK already carry it? Absent is UNKNOWN, and unknown is asked. */
 export function bookCarriesPricing(facility: Facility | null | undefined, slot: PricingSlot): boolean {
   if (!facility) return false;
+  /* THE RATE IS ALWAYS ASKED, and that is not an oversight. A rate the org
+     already holds is not an answer to "what should this carry now": the banker
+     may keep it, and KEEPING IT IS A DECISION they make in one click. The other
+     two are blanks; this one is a choice. */
+  if (slot === "rate") return false;
   return slot === "amortisedTerm"
     ? typeof facility.amortizedTermMonths === "number"
     : typeof facility.firstPaymentDate === "string" && facility.firstPaymentDate.trim().length > 0;
@@ -114,6 +131,10 @@ export interface PricingSource {
   facilities: Map<string, Facility>;
   /** The facilities the banker has left for later, by member id. */
   declined: ReadonlySet<string>;
+  /** The facilities whose rate the banker chose to HOLD. Holding is an answer
+   *  and it stages nothing, so nothing on the plan can record it: the room has
+   *  to remember that it asked and was answered. */
+  held: ReadonlySet<string>;
 }
 
 /**
@@ -132,8 +153,19 @@ export function pricingNeed(src: PricingSource): PricingNeed | null {
   for (const memberId of moved) {
     if (src.declined.has(memberId)) continue;
     const facility = src.facilities.get(memberId);
-    for (const slot of ["amortisedTerm", "firstPaymentDate"] as PricingSlot[]) {
+    for (const slot of ["amortisedTerm", "firstPaymentDate", "rate"] as PricingSlot[]) {
       if (bookCarriesPricing(facility, slot)) continue;
+      if (slot === "rate") {
+        /* THE RATE IS ONLY ASKED ABOUT A FACILITY THE BOOK HOLDS. A create
+           composes a loan the org has not booked and cannot carry the pricing
+           fields anyway; the room says so on the plan rather than asking for a
+           rate to hold on a record that does not exist yet. The two FIELD slots
+           keep the behaviour they have always had. */
+        if (!facility) continue;
+        if (carriesRate(src.entries, memberId)) continue;
+        if (src.held.has(memberId)) continue;
+        return { memberId, slot };
+      }
       if (carriesPricing(src.entries, memberId, slot)) continue;
       return { memberId, slot };
     }

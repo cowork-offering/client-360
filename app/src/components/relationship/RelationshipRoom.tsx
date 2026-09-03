@@ -1885,8 +1885,13 @@ export function RelationshipRoom({
                       if (!tier)
                         return (
                           <div key={item.id} {...settleAttrs(item.kind === "settled" ? "on" : settle.stateOf(item.id))}>
-                            {block}
-                            <Narration view={narration.viewFor(item.id)} />
+                            {/* THE INNER ROW IS WHAT COLLAPSES. See workroom.css:
+                                the wrapper animates the track, this holds the
+                                overflow that lets the track squeeze it. */}
+                            <div className="wk-ex-in">
+                              {block}
+                              <Narration view={narration.viewFor(item.id)} />
+                            </div>
                           </div>
                         );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED, so an absence

@@ -423,10 +423,25 @@ export function planReadCard(
       detail: `${e.before} \u2192 ${e.after}`,
     });
   }
+  /* THE COMMITMENT IS READ FIRST (founder, 2026-09-03). A plan read-back is how
+     a banker checks that the change they came in for is still on it, and the
+     amount is that change on almost every modification. It was arriving in
+     staging order, so on a facility with four pricing rows it could be fourth.
+     Only the AMOUNT is promoted, and only inside its own facility: the rest of
+     the group keeps the order the banker built it in. */
+  const amountFirst = (rows: ReadRow[]): ReadRow[] => {
+    const at = rows.findIndex((r) => COMMITMENT_ROW.test(r.label));
+    if (at <= 0) return rows;
+    return [rows[at], ...rows.slice(0, at), ...rows.slice(at + 1)];
+  };
   return {
     topic: "plan",
     lede: countLine,
-    groups: order.map((heading) => ({ heading, rows: byFacility.get(heading)! })),
+    groups: order.map((heading) => ({ heading, rows: amountFirst(byFacility.get(heading)!) })),
     followUp,
   };
 }
+
+/** The entry title the engines give a commitment move. Matched on the words
+ *  rather than on a wire key, because the read-back is built from titles. */
+const COMMITMENT_ROW = /\bcommitment\b/i;

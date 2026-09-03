@@ -709,3 +709,70 @@ describe("a figure the room cannot point at is not endorsed", () => {
     expect(out.blocks.some((b) => b.kind === "mark")).toBe(false);
   });
 });
+
+/* ============ A REMARK MAY NOT CONTRADICT ITS OWN CARD (founder, 2026-09-03)
+
+   His transcript: the card staged a rate move to 7.25% and a commitment move to
+   $20M, and the remark said the line "moves to 7.25% all-in, holding the
+   existing pricing through the commitment increase to $20M". Both halves cannot
+   be true. The half the banker can act on is the card. */
+
+describe("a remark may not contradict its own card", () => {
+  const rateCard: NarrateSubject = {
+    act: "staged",
+    sentence: "The rate goes on the plan.",
+    card: { title: "On the plan", rows: [{ label: "Interest rate", value: "7.25%", sub: "Line of Credit" }] },
+  };
+  const amountCard: NarrateSubject = {
+    act: "staged",
+    sentence: "The commitment goes on the plan.",
+    card: { title: "On the plan", rows: [{ label: "Commitment amount", value: "$20.0MM", sub: "Line of Credit" }] },
+  };
+
+  it("drops the founder's own sentence: a staged rate that 'holds the existing pricing'", () => {
+    const kept = "The cover behind the facility thins as it grows.";
+    const guarded = guardClaims(
+      parseNarration(`The line moves all-in, holding the existing pricing. ${kept}`),
+      envelope,
+      rateCard,
+    );
+    expect(narrationText(guarded.blocks)).not.toContain("holding the existing pricing");
+    expect(narrationText(guarded.blocks)).toContain(kept);
+  });
+
+  it("drops every way of saying a staged rate did not move", () => {
+    for (const said of [
+      "The rate is unchanged.",
+      "Pricing stays the same.",
+      "The room keeps the rate as it stands.",
+      "The coupon is untouched.",
+    ]) {
+      const guarded = guardClaims(parseNarration(said), envelope, rateCard);
+      expect(narrationText(guarded.blocks)).not.toContain(said.replace(/\.$/, ""));
+    }
+  });
+
+  it("drops a claim that the amount holds under a staged commitment change", () => {
+    const guarded = guardClaims(parseNarration("The commitment holds at its current level."), envelope, amountCard);
+    expect(narrationText(guarded.blocks)).not.toContain("holds at");
+  });
+
+  /* THE GUARD IS KEYED ON WHAT THE CARD STAGED, so a card that did NOT move the
+     rate leaves a sentence about the rate holding exactly where it was: that is
+     a true sentence and it is often the most useful one on the glass. */
+  it("leaves the same sentence alone where the card did not move that field", () => {
+    const maturityCard: NarrateSubject = {
+      act: "staged",
+      sentence: "The maturity goes on the plan.",
+      card: { title: "On the plan", rows: [{ label: "Maturity date", value: "Jun 30, 2029", sub: "Construction" }] },
+    };
+    const said = "The rate is unchanged through the extension.";
+    expect(narrationText(guardClaims(parseNarration(said), envelope, maturityCard).blocks)).toContain("unchanged");
+  });
+
+  it("is not the claim guard: nothing is marked, because it is not a claim about a missing field", () => {
+    const guarded = guardClaims(parseNarration("Pricing stays the same."), envelope, rateCard);
+    expect(guarded.claimed).toHaveLength(0);
+    expect(narrationText(guarded.blocks)).not.toContain(CLAIM_MARK);
+  });
+});

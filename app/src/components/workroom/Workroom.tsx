@@ -48,6 +48,7 @@ import { feeAsk, feePercentageNote, feeSay, readFeeOpen } from "./fee";
 import {
   PRICING_FIELD,
   PRICING_WHY,
+  movesPricing,
   pricingAsk,
   pricingDeclinedLine,
   pricingLanded,
@@ -125,6 +126,22 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "./entryChoreography";
+import {
+  asksRateOptions,
+  rateAsk,
+  rateFigureAsk,
+  rateHeldLine,
+  rateIndexAsk,
+  rateIndexNote,
+  rateOnFile,
+  rateSay,
+  readRateFreeText,
+  readRateHold,
+  readRateIndexOpen,
+  readRateIndexPick,
+  readRateNew,
+  type RateIndex,
+} from "./rateGate";
 import {
   capSentences,
   cardFigures,
@@ -910,6 +927,33 @@ export function Workroom({
      that choice is recorded on the plan rather than asked again every turn. */
   const [pricingPending, setPricingPending] = useState<PricingNeed | null>(null);
   const [pricingDeclined, setPricingDeclined] = useState<ReadonlySet<string>>(() => new Set<string>());
+  /* THE RATE GATE'S OWN STATE (founder, 2026-09-03). `rateHeld` is the
+     facilities whose rate the banker chose to KEEP - an answer that stages
+     nothing, so nothing on the plan can record it and the room has to remember
+     that it asked and was answered. `rateIndex` is the index a banker said they
+     price off, held until the all-in figure lands so the card can note it. */
+  const [rateHeld, setRateHeld] = useState<ReadonlySet<string>>(() => new Set<string>());
+  /* ============ THE MANIFEST, READ SYNCHRONOUSLY (founder, 2026-09-03)
+
+     "It kind of forgets to add the commitment to the modification sometimes."
+     THE CAUSE: `confirmChip` built the next manifest from the `entries` it had
+     CLOSED OVER and set the whole array, so two confirms landing from the same
+     render - the commitment card and the pricing card the same gesture raised,
+     which the settle choreography now lands a beat apart - both started from
+     the manifest as it stood BEFORE either of them, and the second one's array
+     replaced the first one's entry with nothing.
+
+     Every path that adds to the manifest reads and writes THIS ref, which is
+     updated in the same statement as the state, so a second confirm in the same
+     tick composes with the first instead of overwriting it. */
+  const entriesRef = useRef<WorkroomDelta[]>([]);
+  /** WHY THE PRICING GATE RAN, by facility: the entry that made it necessary.
+   *  Checked again at approve time, because a plan that lost the change the
+   *  pricing was FOR is a version nobody meant to file. */
+  const pricingCause = useRef(new Map<string, { id: string; title: string; target: string }>());
+  const rateIndexOf = useRef(new Map<string, RateIndex>());
+  /** Which facilities have already heard the "no index name" aside. Once each. */
+  const rateIndexSaid = useRef(new Set<string>());
   /** The room is composing an answer. It drives the beat, and it holds the
    *  review chip closed: a chip that appeared for one frame between a confirm
    *  landing and the check it trips is an approval offered too early. */
@@ -963,6 +1007,7 @@ export function Workroom({
   const settle = useSettleChoreography(reduced);
   const itemsRef = useRef<ThreadItem[]>([]);
   itemsRef.current = items;
+  entriesRef.current = entries;
   /* THE STAGE CAP (founder, 2026-09-03). At most two things waiting on the
      banker; what does not fit waits its turn and lands as the stage clears. An
      item that has SETTLED is off the stage and does not count, which is what
@@ -1375,8 +1420,8 @@ export function Workroom({
    *  manifest and the read, exactly like every other figure in this room. */
   const pricingOutstanding = useCallback(
     (staged: WorkroomDelta[]) =>
-      pricingNeed({ entries: staged, facilities: facilityRead, declined: pricingDeclined }),
-    [facilityRead, pricingDeclined],
+      pricingNeed({ entries: staged, facilities: facilityRead, declined: pricingDeclined, held: rateHeld }),
+    [facilityRead, pricingDeclined, rateHeld],
   );
 
   /** THE PLAN: what this session already put up, open on a chip or staged on
@@ -2289,11 +2334,36 @@ export function Workroom({
    * carries a `requestedTermMonths` delta beside the field change, and staging
    * it would move a term nobody asked to move.
    */
+  /**
+   * THE GATE'S QUESTION, WHICHEVER SLOT IT IS ON.
+   *
+   * The two field slots are the pricing gate's own; the rate is `rateGate`'s,
+   * because a rate question is not a blank to fill in - it offers the figure the
+   * book already holds, the two ways of changing it, and an example of the
+   * answer. ONE builder so the confirm site, the re-ask and the "what are my
+   * options" answer cannot drift apart.
+   */
+  const gateAsk = useCallback(
+    (need: PricingNeed, staged: WorkroomDelta[]): { text: string; options: Array<{ label: string; say: string }> } | null => {
+      const member = elicitMembers.find((m) => m.id === need.memberId);
+      if (!member) return null;
+      if (need.slot !== "rate") {
+        const ask = pricingAsk(need, member, { entries: staged, generatedAt: reads?.generatedAt });
+        return { text: ask.text, options: ask.options };
+      }
+      const said = rateIndexSaid.current.has(need.memberId);
+      rateIndexSaid.current.add(need.memberId);
+      const ask = rateAsk(member, rateOnFile(facilityRead.get(need.memberId)), said);
+      return { text: ask.text, options: ask.options };
+    },
+    [elicitMembers, facilityRead, reads?.generatedAt],
+  );
+
   const landPricing = useCallback(
     async (need: PricingNeed, value: string, mine: number) => {
       const member = elicitMembers.find((m) => m.id === need.memberId);
       if (!member) return;
-      const composed = pricingSay(member, need.slot, value);
+      const composed = need.slot === "rate" ? rateSay(member, value) : pricingSay(member, need.slot, value);
       const started = Date.now();
       setThinking(true);
       let taken: WorkroomDelta | null = null;
@@ -2305,9 +2375,15 @@ export function Workroom({
           result = null;
         }
         if (result?.kind === "deltas") {
+          /* THE RATE IS A SCALAR, NOT A FIELD-WAVE FIELD. `requestedRate` is one
+             of the four the modification has always filed, so the filter reads
+             the WIRE for it and the field name for the other two. */
           taken =
-            result.deltas.find(
-              (d) => d.member === need.memberId && d.fieldWire?.field === PRICING_FIELD[need.slot],
+            result.deltas.find((d) =>
+              d.member === need.memberId &&
+              (need.slot === "rate"
+                ? d.wire?.key === "requestedRate"
+                : d.fieldWire?.field === PRICING_FIELD[need.slot]),
             ) ?? null;
         }
         await beat(started);
@@ -2332,10 +2408,28 @@ export function Workroom({
       /* THE REASON RIDES THE ENTRY. A field change on a plan with no sentence
          beside it reads as a field somebody touched; this one is the reason the
          version can be priced at all, and that travels onto the plan with it. */
-      const carded: WorkroomDelta = { ...taken, caveat: [taken.caveat, PRICING_WHY].filter(Boolean).join(" ") };
+      /* THE REASON, OR THE INDEX. A field change gets the pricing reason; a RATE
+         gets the composition the banker said it off, because the org stores the
+         all-in figure and the index is the only part of their thinking that
+         would otherwise be lost. */
+      const index = need.slot === "rate" ? (rateIndexOf.current.get(need.memberId) ?? null) : null;
+      if (index) rateIndexOf.current.delete(need.memberId);
+      const rider = need.slot === "rate" ? (index ? rateIndexNote(index) : "") : PRICING_WHY;
+      const carded: WorkroomDelta = { ...taken, caveat: [taken.caveat, rider].filter(Boolean).join(" ") };
       setItems((prev) => [
         ...prev,
-        { kind: "agent", id: nextId("agent"), step: mine, text: pricingLanded(need.slot, member, carded.after) },
+        {
+          kind: "agent",
+          id: nextId("agent"),
+          step: mine,
+          /* THE FIGURE IS ON THE SENTENCE AND ON THE CARD. "The banker has
+             supplied an all-in rate" with no number in it was the dead end this
+             gate replaced; a rate that landed says what it landed at. */
+          text:
+            need.slot === "rate"
+              ? `The ${member.label} moves to ${carded.after}${index ? `, priced off ${index}` : ""}. Confirm it and it goes on the plan.`
+              : pricingLanded(need.slot, member, carded.after),
+        },
         {
           kind: "chips",
           id: nextId("chips"),
@@ -2568,11 +2662,26 @@ export function Workroom({
          that is how "actually change it to Oct 1, 2026" fell through to the
          general parser and staged a $1 commitment. */
       const openGate = pricingPending ?? pricingOutstanding(entries);
+      /* AND THE RATE GATE'S ANSWERS ARE ANSWERS TOO (founder, 2026-09-03). A
+         line the open rate question can take is the SAME decision continued, so
+         it must not meet "one decision at a time" over the card that raised it.
+         Every form the gate reads is listed here, the courtesy in front of a
+         figure included, which is the one that was re-asked on the drive. */
+      const answersRate =
+        openGate?.slot === "rate" &&
+        (readRateFreeText(trimmed, { onFile: rateOnFile(facilityRead.get(openGate.memberId))?.pct ?? null }) !== null ||
+          readRateHold(trimmed, elicitMembers) !== null ||
+          readRateNew(trimmed, elicitMembers) !== null ||
+          readRateIndexOpen(trimmed, elicitMembers) !== null ||
+          readRateIndexPick(trimmed, elicitMembers) !== null ||
+          asksRateOptions(trimmed));
       const answersPricing =
+        answersRate ||
         readPricingLine(trimmed, elicitMembers) !== null ||
         readPricingDecline(trimmed, elicitMembers) !== null ||
         readPricingOther(trimmed, elicitMembers) !== null ||
         (openGate !== null &&
+          openGate.slot !== "rate" &&
           (readPricingFreeText(trimmed, openGate.slot) !== null || readPricingAnother(trimmed, openGate.slot)));
       if (openGates > 0 && !opts?.settled && !answersPricing) {
         const ack = readAcknowledgment(trimmed);
@@ -2887,6 +2996,79 @@ export function Workroom({
          never a new instruction: that reading is what staged a $1 commitment on
          a $15M line and then had a model claim the date had moved. */
       const gate = pricingPending ?? pricingOutstanding(entries);
+      /* ============ THE RATE GATE'S OWN ANSWERS (founder, 2026-09-03)
+
+         Read BEFORE the field slots, because the rate's forms are the loosest
+         and its failure was the worst: "Yes, 7.25% all-in" was re-asked, and
+         "I have a new all-in rate" was reported as a supplied rate with no
+         figure anywhere. Every branch below either stages a FIGURE or asks for
+         one; none of them reports success without a number. */
+      if (gate?.slot === "rate") {
+        const on = elicitMembers.find((m) => m.id === gate.memberId);
+        /* THE FIGURE, IN ANY FORM A BANKER WRITES IT (founder, 2026-09-03).
+           "Yes, 7.25% all-in", "7.25", "7.25 percent", "up 25 bps", "prime plus
+           1": an affirmation in front of a rate is still the rate, and a line
+           that CARRIES the figure is never answered with the question again. */
+        const figure = readRateFreeText(instruction, {
+          onFile: rateOnFile(facilityRead.get(gate.memberId))?.pct ?? null,
+        });
+        if (figure) {
+          if (figure.index) rateIndexOf.current.set(gate.memberId, figure.index);
+          if (figure.pct) {
+            setPricingPending(null);
+            await landPricing(gate, figure.pct, mine);
+            return;
+          }
+          /* AN INDEX WITH NO FIGURE IS HALF AN ANSWER. The room takes the half
+             it was given and asks for the other one, naming the index back so
+             the banker can see it was heard. */
+          setPricingPending(gate);
+          answer({ kind: "agent", id: nextId("agent"), text: rateFigureAsk(on ?? elicitMembers[0], figure.index) });
+          return;
+        }
+        const held = readRateHold(instruction, elicitMembers);
+        if (held) {
+          setRateHeld((prev) => new Set([...prev, held]));
+          setPricingPending(null);
+          answer({
+            kind: "agent",
+            id: nextId("agent"),
+            text: rateHeldLine(on ?? elicitMembers[0], rateOnFile(facilityRead.get(held))),
+          });
+          return;
+        }
+        if (readRateNew(instruction, elicitMembers)) {
+          /* SAYING "I HAVE A NEW RATE" IS NOT A RATE. The gate stays open and
+             the room asks for the figure, with the example on it. */
+          setPricingPending(gate);
+          answer({ kind: "agent", id: nextId("agent"), text: rateFigureAsk(on ?? elicitMembers[0], null) });
+          return;
+        }
+        if (readRateIndexOpen(instruction, elicitMembers)) {
+          setPricingPending(gate);
+          const ask = rateIndexAsk(on ?? elicitMembers[0]);
+          answer({ kind: "agent", id: nextId("agent"), text: ask.text, options: ask.options });
+          return;
+        }
+        const picked = readRateIndexPick(instruction, elicitMembers);
+        if (picked) {
+          rateIndexOf.current.set(picked.memberId, picked.index);
+          setPricingPending(gate);
+          answer({ kind: "agent", id: nextId("agent"), text: rateFigureAsk(on ?? elicitMembers[0], picked.index) });
+          return;
+        }
+        /* "WHAT INDEX AND RATE OPTIONS DO I HAVE?" IS ANSWERED BY THE OPTIONS.
+           It was answered with the no-index aside a second time, which is prose
+           where a list was asked for. */
+        if (asksRateOptions(instruction)) {
+          setPricingPending(gate);
+          const ask = gateAsk(gate, entries);
+          if (ask) {
+            answer({ kind: "agent", id: nextId("agent"), text: ask.text, options: ask.options });
+            return;
+          }
+        }
+      }
       if (gate) {
         const said = readPricingFreeText(instruction, gate.slot);
         if (said) {
@@ -3385,7 +3567,10 @@ export function Workroom({
    */
   const confirmChip = useCallback(
     (blockId: string, chipKey: string, delta: WorkroomDelta) => {
-      const staged = addEntry(entries, delta);
+      /* THE MANIFEST AS IT STANDS RIGHT NOW, not as it stood when this handler
+         was built. See `entriesRef`: this is the commitment drop. */
+      const staged = addEntry(entriesRef.current, delta);
+      entriesRef.current = staged;
       const { reply, challenge, options } = engine.acknowledge(delta, staged);
       /* ------------------------------- THE COMMITTED TOTAL IS THIS ENTRY'S (E4c)
 
@@ -3420,11 +3605,16 @@ export function Workroom({
          confirm, so the banker reads the consequence of what they just did
          beside it rather than a turn later. */
       const gateNeed = pricingOutstanding(staged);
-      const gateOn = gateNeed ? elicitMembers.find((m) => m.id === gateNeed.memberId) : null;
-      const gate =
-        gateNeed && gateOn
-          ? pricingAsk(gateNeed, gateOn, { entries: staged, generatedAt: reads?.generatedAt })
-          : null;
+      const gate = gateNeed ? gateAsk(gateNeed, staged) : null;
+      /* AND WHY IT RAN IS REMEMBERED. The gate exists because an amount or a
+         term moved on this facility; if that entry is not on the plan at
+         approve time, the plan is not the one the banker built. */
+      if (gateNeed && !pricingCause.current.has(gateNeed.memberId)) {
+        const cause = staged.find((e) => e.member === gateNeed.memberId && movesPricing(e));
+        if (cause) {
+          pricingCause.current.set(gateNeed.memberId, { id: cause.id, title: cause.title, target: cause.target });
+        }
+      }
       setEntries(staged);
       settleChip(blockId, chipKey, "confirmed");
       setToast(delta.badge);
@@ -3439,8 +3629,8 @@ export function Workroom({
       /* THE PRICING REASON IS SAID ONCE PER FACILITY. Both of a facility's two
          questions carry it from the fenced composer; the second one has already
          been told. */
-      const whySaid = gate ? pricingWhySaid.current.has(gate.need.memberId) : false;
-      if (gate) pricingWhySaid.current.add(gate.need.memberId);
+      const whySaid = gateNeed ? pricingWhySaid.current.has(gateNeed.memberId) : false;
+      if (gateNeed && gateNeed.slot !== "rate") pricingWhySaid.current.add(gateNeed.memberId);
       /* WHAT COMES NEXT, LANDING IN THE SAME TASK AS THE EXIT COMPLETING. Two
          timers at the same delay are two tasks with a render between them, and
          in that render the room holds no gate and no exit - which is the window
@@ -3476,7 +3666,7 @@ export function Workroom({
                   kind: "agent",
                   id: nextId("agent"),
                   step: mine,
-                  text: cutPricingWhy(gate.text, PRICING_WHY, whySaid),
+                  text: gateNeed?.slot === "rate" ? gate.text : cutPricingWhy(gate.text, PRICING_WHY, whySaid),
                   options: gate.options,
                 },
               ];
@@ -3580,7 +3770,40 @@ export function Workroom({
      real decision token rather than a decoration shaped like one. Execute
      redeems that token; Cancel drops the card and the review chip comes back. */
 
+  /**
+   * THE PLAN STILL CARRIES WHAT THE PRICING WAS FOR.
+   *
+   * FOUNDER, 2026-09-03: "it kind of forgets to add the commitment to the
+   * modification sometimes." The stale-manifest read that caused it is fixed at
+   * `entriesRef`; this is the INVARIANT that says so out loud if it ever comes
+   * back by another road - a settle that retired the wrong card, a feed line
+   * that re-staged the facility, an amendment that replaced the entry.
+   *
+   * THE RULE: the pricing gate only ever runs because an amount or a term moved
+   * on a facility. If that entry is not on the plan when the banker asks to
+   * approve, the plan is not the one they built, and the room says WHICH
+   * facility lost its change rather than filing a version nobody meant.
+   */
+  const lostPricingCause = useCallback((): { title: string; target: string } | null => {
+    for (const [, cause] of pricingCause.current) {
+      if (!entriesRef.current.some((e) => e.id === cause.id)) return { title: cause.title, target: cause.target };
+    }
+    return null;
+  }, []);
+
   const openFlow = useCallback(async () => {
+    /* THE INVARIANT, BEFORE ANYTHING IS STAGED. A plan that lost the change its
+       pricing questions were about is refused here, by name, rather than filed
+       as a version of the package nobody asked for. */
+    const lost = lostPricingCause();
+    if (lost) {
+      agent(
+        `${lost.title} on ${lost.target} is not on the plan any more, and the pricing I asked about was for it. ` +
+          `I will not put this up until that change is back on the manifest: say it again and confirm it, or discard the pricing rows that belong to it.`,
+      );
+      setFlow(null);
+      return;
+    }
     setFlow({ staging: null, running: false, status: 0, held: [] });
     try {
       const staged = await engine.stagePlan(entries, context);
@@ -3643,7 +3866,7 @@ export function Workroom({
       }
       agent(armStageRefusal(said, entries));
     }
-  }, [agent, context, engine, entries, push]);
+  }, [agent, context, engine, entries, lostPricingCause, push]);
 
   const execute = useCallback(async () => {
     const staging = flow?.staging;
@@ -4097,9 +4320,15 @@ export function Workroom({
                       if (!tier)
                         return (
                           <div key={item.id} {...settleAttrs(item.kind === "settled" ? "on" : settle.stateOf(item.id))}>
-                            {block}
-                            <Narration view={narration.viewFor(item.id)} />
-                            <Narration view={narration.viewFor(`${item.id}::mail`)} />
+                            {/* THE INNER ROW IS WHAT COLLAPSES. A grid track can
+                                only squeeze a child that will let it, so the row
+                                owns the overflow and the min-height and the
+                                wrapper owns the height transition. */}
+                            <div className="wk-ex-in">
+                              {block}
+                              <Narration view={narration.viewFor(item.id)} />
+                              <Narration view={narration.viewFor(`${item.id}::mail`)} />
+                            </div>
                           </div>
                         );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED. The wrapper

@@ -322,17 +322,138 @@ body.wk-open #root {
   flex-direction: column;
   gap: 32px;
 }
+/* ============================ NO SNAP ANYWHERE ON THE STAGE (founder, 2026-09-03)
+
+   "When a settled exchange disappears, the remaining content snaps from the
+   bottom to the top abruptly." It did: the exit faded the node over 520ms and
+   then `display: none` took its HEIGHT away in one frame, so everything under
+   it teleported up the length of the exchange.
+
+   THE HEIGHT IS PART OF THE EXIT NOW. Every exchange is a one-row grid whose
+   `grid-template-rows` goes 1fr to 0fr, which is the only way to animate "as
+   tall as its content" down to nothing without measuring it in JavaScript. The
+   fade runs on the inner row, the collapse on the wrapper, and they finish
+   together: what is under the exchange GLIDES up into the space instead of
+   arriving in it.
+
+   THE INNER ROW IS WHY THIS WORKS. A grid row can be 0fr and still hold a child
+   with its own intrinsic height, so the child needs `min-height: 0` and
+   `overflow: hidden` for the track to actually squeeze it. Without them the row
+   collapses on paper and the content stays exactly where it was. */
+/* THE COLLAPSE IS AN ANIMATION, NOT A TRANSITION, and the reason is measurable:
+   the ARRIVAL is an animation with `fill: both`, so the wrapper's used value for
+   `grid-template-rows` is an animation value rather than the base one, and a
+   transition on the same property then has nothing to start from. The clip
+   caught it collapsing in a single frame. Two keyframe animations, one each
+   way, on one clock, cannot get into that argument with each other. */
+.wk-ex {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+.wk-ex > .wk-ex-in {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-height: 0;
+  overflow: hidden;
+}
 .wk-ex-out {
-  animation: wk-tier-out 520ms var(--ease-out) both;
+  grid-template-rows: 0fr;
   pointer-events: none;
+  animation: wk-ex-close var(--wk-settle-ms, 420ms) var(--ease-out) both;
 }
-/* Off stage. Collapsed, NOT unmounted, and one click away from coming back. */
+@keyframes wk-ex-close {
+  from {
+    grid-template-rows: 1fr;
+  }
+  to {
+    grid-template-rows: 0fr;
+  }
+}
+.wk-ex-out > .wk-ex-in {
+  animation: wk-ex-fade var(--wk-settle-ms, 420ms) var(--ease-out) both;
+}
+@keyframes wk-ex-fade {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0) scale(0.985);
+    filter: blur(4px);
+  }
+}
+/* Off stage. The row is already at 0fr, so this takes nothing away that the
+   transition has not already taken: it stops the node laying out at all once
+   the glide has finished, and it is STILL MOUNTED. */
 .wk-ex-gone {
-  display: none;
+  grid-template-rows: 0fr;
 }
-/* Brought back from its settled row. Quieter than the first arrival. */
+.wk-ex-gone > .wk-ex-in {
+  opacity: 0;
+  visibility: hidden;
+}
+/* Brought back from its settled row. The row opens with the same transition and
+   the content rises into it, so a summon is the exit run backwards. */
 .wk-ex-back {
-  animation: wk-tier-in 340ms var(--ease-settle) both;
+  grid-template-rows: 1fr;
+  animation: wk-ex-open var(--wk-settle-ms, 420ms) var(--ease-settle) both;
+}
+.wk-ex-back > .wk-ex-in {
+  animation: wk-ex-rise 340ms var(--ease-settle) both;
+}
+@keyframes wk-ex-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 7px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* AND WHAT ARRIVES NEXT OPENS INTO PLACE rather than appearing in it.
+
+   THE HEIGHT IS PART OF THE ARRIVAL TOO. A settle that collapsed continuously
+   and then dropped the next question in at full height in one frame has moved
+   the snap rather than removed it: the page still jumps, it just jumps a beat
+   later. The arriving exchange runs the exit backwards - its track opens from
+   0fr on the same clock - and its content rises seven pixels into the space as
+   the space appears.
+
+   IT RUNS ONCE, ON MOUNT. `data-settle-state="on"` is what an exchange is born
+   with and what it stays until it settles, so the animation fires when the node
+   enters and never again. */
+.wk-ex[data-settle-state="on"] {
+  animation: wk-ex-open var(--wk-settle-ms, 420ms) var(--ease-settle) both;
+}
+@keyframes wk-ex-open {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+.wk-ex[data-settle-state="on"] > .wk-ex-in > * {
+  animation: wk-ex-rise 300ms var(--ease-settle) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-ex-out,
+  .wk-ex-back,
+  .wk-ex-out > .wk-ex-in,
+  .wk-ex-back > .wk-ex-in,
+  .wk-ex[data-settle-state="on"],
+  .wk-ex[data-settle-state="on"] > .wk-ex-in > * {
+    animation: none;
+  }
+  .wk-ex-out > .wk-ex-in {
+    opacity: 0;
+  }
 }
 
 /* THE SETTLED ROW. What settled, how, and the way back to the whole exchange.
@@ -340,6 +461,7 @@ body.wk-open #root {
    the accumulation this pass exists to remove. */
 .wk-settled {
   align-self: flex-start;
+  justify-self: flex-start;
   display: inline-flex;
   align-items: baseline;
   gap: 7px;

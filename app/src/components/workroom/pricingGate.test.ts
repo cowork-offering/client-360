@@ -152,8 +152,12 @@ describe("what makes the pricing fields matter", () => {
 });
 
 describe("the one field the plan still needs", () => {
-  const need = (entries: WorkroomDelta[], declined = NONE, book = facilities()) =>
-    pricingNeed({ entries, facilities: book, declined });
+  /* THE RATE IS A THIRD SLOT NOW (founder, 2026-09-03), asked last and settled
+     by an answer rather than by a blank: `held` is the facilities whose rate the
+     banker chose to keep. These cases are about the two FIELDS, so they hold the
+     rate throughout and the rate's own cases live in rateGate.test.ts. */
+  const need = (entries: WorkroomDelta[], declined = NONE, book = facilities(), held = new Set([LOC15])) =>
+    pricingNeed({ entries, facilities: book, declined, held });
 
   it("asks the amortised term first, then the first payment date", () => {
     expect(need([amountMove])).toEqual({ memberId: LOC15, slot: "amortisedTerm" });
