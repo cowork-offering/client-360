@@ -3,7 +3,7 @@
 Branch `glass-refract`, cut from `main` at b116cf9. Built, gated, shot and filmed; NOT merged, NOT
 released, NOT published as an artifact. The compare page is the decision.
 
-Three modes now, after two rounds of founder feedback on 2026-09-03:
+Three modes, after three rounds of founder feedback on 2026-09-03:
 
 - `?refract=1` (or `#refract`): **ON**. The bend on every glass surface, the workroom pane
   included, plus the pane's depth pass and the ground band.
@@ -31,40 +31,49 @@ reasons, and only one of them was a tuning problem:
 2. **The cockpit ground is flat by design,** so on four of six surfaces there was nothing behind the
    glass to bend. Fixed by the ground band below.
 
-## The ground band (shipped)
+## The ground, and the lines that are not on it
 
-`buildBand()` in `app/src/data/weave.ts`, rendered by `components/GroundBand.tsx`, mounted once in
-`AppShell` as a fixed sheet behind both views.
+The round-two build put four coarse violet strands behind both views. The founder killed them on
+sight:
 
-| | |
-|---|---|
-| strands | 4 |
-| stroke | 6 to 10px (`6 + rnd()*4`) |
-| alpha | 0.03 to 0.05 |
-| colour | `CORE` `#A100FF` |
-| motion | none, on purpose |
-| seed | 20260903, its **own** LCG |
+> "I love the overlay of the workrooms, but I do not like the background we have for the main
+> pages. I hate those thick lines. I like the lines in the header as we have right now, but not
+> everywhere."
 
-**It is a separate function, not a branch inside `buildThreads`, and that is not a style
-preference.** `buildThreads` is a transcription of the dummy's generator whose draw ORDER is the
-picture; one extra `rnd()` inside it moves all twelve filaments and the port would render a
-different landing while passing every count-shaped probe. The band runs its own generator and cannot
-perturb the mint.
+**They are gone. Not thinned, not faded: removed.** `buildBand()` is deleted from
+`app/src/data/weave.ts`, the strands are out of the component, and the rule that replaces them is
+worth writing where the next person will find it: **the header weave is the one sanctioned place
+for ambient linework, and the page ground gets none, at any alpha.** `buildThreads` and the landing
+weave are byte-for-byte what they were before any of this started.
 
-**It is a GROUND, not a band inside the landing weave, and that is the correction the proposal
-needed.** The proposal in round 1 said "add a coarse band to `buildThreads`", on the assumption that
-the weave is what sits behind the hero and the chips. It is not. The landing weave exists only on
-the landing, and the hero's copy of it (`.hero-weave`) is drawn *inside* the hero's glass at z -1,
-so the hero has never had a backdrop worth bending. A band added to `buildThreads` alone would have
-changed nothing on the client page, where three of the four flat surfaces live.
+What is left is `components/GroundSheet.tsx`: a fixed, inert mount point that in liquid mode holds
+two drifting blooms, and in every other mode holds nothing.
 
-**How visible is it on the open canvas?** Same page, band shown vs band hidden, refraction off:
-**0.10 of 255 on the landing, 0.07 on the client page.** Below the threshold at arm's length, which
-was the brief.
+### The blooms, tuned
 
-**It is present in every mode, not gated on `eg-refract`.** Both sides of every comparison on the
-page therefore carry the same canvas and the only variable is the filter. Gating it would have
-inflated every ON and LIQUID number with a canvas change.
+| | round 2 | now |
+|---|---|---|
+| teal | 620x420 at 22% / 30%, alpha **.13** | same geometry, alpha **.06** |
+| violet | 700x460 at 78% / 68%, alpha **.11** | same geometry, alpha **.05** |
+| drift | 78s, transform only | unchanged, plus a 30s idle park |
+
+**How much colour they put on the page.** Same frame, blooms shown against blooms hidden: **0.63 of
+255 across the whole client viewport**, and **1.18 over the bare left margin** where no content
+covers them. The same strip measured 2.43 at .13/.11. They now sit within half a step of the
+canvas's own sanctioned teal at .04.
+
+**Large and soft, not small and tight.** Four tighter arrangements were measured. Tighter blooms
+give more bend per unit of colour on paper (a 6-bloom set at .05 returned 2.27 on the satellites for
+0.39 of canvas colour, against 5.08 for 1.18), but a 300px blob reads as a graphic on the page and a
+620px wash reads as light in the room. The canvas already carries two large soft radials; these are
+two more.
+
+**The hero did not make it, and no lines went back in to fix it.** The brief set the bar at roughly
+1.5 of 255. The satellites clear it at 4.78 and the rail chips at 4.18. **The client hero comes in
+at 0.56.** Three other bloom placements were measured against exactly that problem, including
+lifting a bloom to sit behind the hero and adding a third one there: they returned 0.28, 0.53 and
+0.40, all worse. The hero is a 1128px pane and a 620px soft bloom has a shallow gradient across it;
+its crop is also mostly its own opaque content. That is the number, and it stands.
 
 ## ON, as it now ships
 
@@ -140,27 +149,38 @@ rim. A uniform turbulence field is the opposite of that, which is why ON reads a
 than as a thickness. The rim mask is built INSIDE the filter, so it stretches to whatever element
 takes it and nothing has to know its own shape.
 
+**It was an `feMorphology` erode until round three and that cost half the frame.** A naive erode
+samples radius-squared pixels each, so radius 18 is about 1300 samples per pixel over a filter
+region 120 percent of a full-viewport pane. Measured on the client page: **315 ms/frame with the
+erode, 190 with a Gaussian blur of the source alpha in its place, and the two rings are not tellable
+apart.** Blur the alpha, subtract the blurred copy from the sharp one, and what is left is the same
+soft ring, zero in the interior, about a half at the border, zero outside.
+
 ```
                                                   #eg-liquid      #eg-liquid-soft
 life pass    feTurbulence bf / blur / scale        0.006 / 3 / 10  0.010 / 2 / 6
 rim field    feTurbulence bf / blur                0.004 / 4       0.008 / 2.5
-rim mask     feMorphology erode radius             18              6
-             feGaussianBlur stdDeviation            9              3
-             feComposite SourceAlpha OUT eroded  -> a soft ring the erode radius wide
+rim mask     feGaussianBlur SourceAlpha sd         10              3.5
+             feComposite SourceAlpha OUT blurred  -> the soft ring
 ```
 
 The heavy throw is composited THROUGH that ring and dropped over the lightly bent centre, which is
-how the scale gets to be 56 at the edge and 10 in the middle without `feDisplacementMap` ever having
+how the scale gets to be 66 at the edge and 10 in the middle without `feDisplacementMap` ever having
 to take a per-pixel scale, which it cannot.
 
-**3. Chromatic aberration.** `feColorMatrix` isolates R, G and B; each is displaced at its own
-scale against the same rim field; `feBlend screen` recombines them. Where the three land on top of
-each other the colour reconstructs exactly; where the throw is large they separate. The throw is
-only large at the rim, so the fringe is only at the rim. That is the physics and it is also the
-cheap way.
+**3. Chromatic aberration.** `feColorMatrix` isolates channels, each set is displaced at its own
+scale against the same rim field, `feBlend screen` recombines them. Where they land on top of each
+other the colour reconstructs exactly; where the throw is large they separate, so the fringe appears
+only at the rim.
+
+**The big filter splits two ways, not three.** The third channel is one more full-region
+displacement pass and it measured **190 ms/frame against 141** on the same page, for a fringe
+nobody reported being able to tell apart. `#eg-liquid-soft` still splits three ways, because its
+region is a 34px pill and the pass it adds is free.
 
 ```
-scales R / G / B                                   64 / 56 / 48    26 / 22 / 18
+scales R / GB                                      66 / 52
+scales R / G / B, chips                            26 / 22 / 18
 close        feComposite heavy IN rim -> OVER life -> OVER SourceGraphic
 ```
 
@@ -168,10 +188,9 @@ close        feComposite heavy IN rim -> OVER life -> OVER SourceGraphic
 before the ring is ever applied, so the result goes over the lightly bent image AND then over the
 untouched source.
 
-**4. A ground that moves.** The band above, plus `.ground-blooms`: teal at .13 and violet at .11,
-on a 78s `eg-drift` loop. Transform only, because a moving background-position repaints the layer
-every frame and a transform does not. It is the answer to the honest complaint about ON, which is
-that the bend only announces itself while something is being scrolled.
+**4. A ground that moves, and nothing else.** Two blooms, teal .06 and violet .05, on a 78s
+`eg-drift` loop. Transform only, because a moving background-position repaints the layer every frame
+and a transform does not. No linework, at any alpha; see the ground section above.
 
 **5. The specular sweep.** A 104 degree white streak, 16 percent at its peak, 900ms ease, once on
 mount and once per hover. Never loops: a looping highlight is a screensaver, not a material. It
@@ -181,41 +200,111 @@ lives on `::before` of six named surfaces (`.wk-room`, `.hero`, `.topbar`, `.arc
 replays it as a transition rather than a second animation, because an animation cannot be restarted
 from CSS without taking the element out of the flow.
 
-Both the drift and the sweep are killed under `prefers-reduced-motion`.
+Both the drift and the sweep are killed under `prefers-reduced-motion`, and both park under
+`html.eg-idle`: thirty seconds with no pointer, key, wheel, scroll or touch, or a hidden tab, and
+`GroundSheet.tsx` sets the class. **Be honest about what that buys:** liquid measured 141 ms/frame
+with the drift running and 139 with it stopped dead. The frame cost is the lens, not the animation.
+The park stops a real GPU recompositing twelve backdrop-filtered surfaces forever while nobody is
+looking, which is a battery argument rather than a frame-rate one, and it is still right.
 
 ## The numbers
 
-Mean absolute pixel difference against the OFF frame, over R, G and B, out of 255. Same method as
-round 1, so the columns are comparable to it.
+Mean absolute pixel difference against the OFF frame, over R, G and B, out of 255. The "with lines"
+column is the build the founder rejected, kept so the cost of removing the strands is visible rather
+than asserted.
 
-| surface | ON, round 1 | ON now | LIQUID |
+| surface | ON | LIQUID, with lines | LIQUID now |
 |---|---:|---:|---:|
-| top bar, book scrolled under it | 0.55 | 0.44 | **3.87** |
-| workroom pane over the client page | 0.53 (only at `?refract=2`) | **5.51** | **5.05** |
-| manifest rail chips | 0.07 | **4.00** | **4.19** |
-| arc satellites | 0.03 | 0.05 | **8.08** |
-| client hero | 0.06 | 0.12 | **1.37** |
-| greeting card (solid, rule 23) | 0.00 | **3.44** | **5.06** |
-| pane corner, 2x crop | n/a | **4.64** | **4.92** |
+| whole client page | 0.03 | n/a | **0.74** |
+| whole landing | 0.02 | n/a | **0.66** |
+| arc satellites | 0.05 | 8.08 | **4.78** |
+| manifest rail chips | 4.00 | 4.19 | **4.18** |
+| client hero | 0.05 | 1.37 | **0.56** |
+| top bar, book scrolled under it | 0.44 | 3.87 | **2.70** |
+| workroom pane | 5.52 | 5.05 | **4.84** |
+| pane corner, 2x crop | 4.64 | 4.92 | **4.65** |
+| greeting card (solid, rule 23) | 3.44 | 5.06 | **5.18** |
 
-**And the honest split.** Most of the ON column is the recipe around the lens (the pane promotion,
-the halved frost, the two drop shadows, the lighter scrim), not the lens. Each mode measured against
-*itself with the `url()` stripped out of every `backdrop-filter`* isolates what the displacement
-alone contributes:
+**The lens alone**, each mode measured against itself with the `url()` stripped out of every
+`backdrop-filter`:
 
-| surface | lens alone, ON | lens alone, LIQUID | factor |
-|---|---:|---:|---:|
-| top bar | 0.27 | 0.63 | 2.3x |
-| workroom pane | 0.20 | 0.23 | 1.1x |
-| manifest rail chips | 0.04 | 0.09 | 2.4x |
-| arc satellites | 0.05 | 0.68 | 13.8x |
-| client hero | 0.05 | 0.24 | 5.1x |
-| pane corner | 0.31 | 0.71 | 2.3x |
+| surface | lens alone, ON | lens alone, LIQUID |
+|---|---:|---:|
+| top bar | 0.27 | 0.29 |
+| workroom pane | 0.20 | 0.13 |
+| manifest rail chips | 0.04 | 0.09 |
+| arc satellites | 0.05 | 0.22 |
+| client hero | 0.03 | 0.06 |
+| pane corner | 0.31 | 0.36 |
 
-**The finding that survives all of it:** the arc satellites and the hero still read as nothing at
-ON. The ground band did not rescue them there, and the reason is the frost, not the throw. At ON's
-15px the band is averaged away before the displacement runs; at LIQUID's 7px the same band is the
-loudest thing in the crop. Small glass needs a thin frost, not a bigger displacement.
+The liquid lens is gentler than it was in round two (the bar read 0.63 there) because it now splits
+two channels instead of three and rings with a blur instead of an erode. That is the trade the speed
+pass bought, and it is priced on the page.
+
+**Two findings that survive all of it.**
+
+1. **ON is flat on the main pages and cannot be fixed from the ground.** 0.03 across the whole
+   client page. Its 15 to 19px frost averages a 6-percent bloom away before the displacement runs.
+   Nothing that is quiet enough to leave the canvas alone is loud enough to survive that frost.
+   Small glass needs a thin frost, not a bigger displacement.
+2. **The client hero is at 0.56, under the 1.5 bar**, and no linework went back in to close it.
+
+## Speed
+
+rAF counter, medians of three runs, headless Chromium on a 4 core box with no GPU. The absolute
+numbers are pessimistic on that hardware; the ratios are the signal.
+
+| ms / frame | landing idle | landing scrolling | client idle | client scrolling |
+|---|---:|---:|---:|---:|
+| OFF, frost | 16.6 | 18.1 | 55.4 | 48.2 |
+| ON, bend | 19.2 | 76.4 | 60.9 | 49.1 |
+| LIQUID, round two | 82.4 | 96.3 | 326.4 | 339.0 |
+| **LIQUID now** | **56.9** | **75.0** | **149.4** | **146.8** |
+
+### It was never the doors
+
+The founder read the slowness as the runtime doors waiting on `claude.use()`. Measured before
+anything was changed: the share build with no `window.claude` at all boots and answers in tens of
+milliseconds. 313 ms to the load event over the wire, 97 ms to the worklist, 50 ms to the client
+page, 9 ms to the arc, 90 ms to the workroom greeting. There was no ten second wait to remove,
+because all three acquisitions already return the moment `window.claude` is missing:
+`if (!root) return`.
+
+**The boot change that was made, and what it is worth.** `main.tsx` now mounts FIRST when
+`window.claude` is undefined and runs the three acquisitions behind the paint, instead of awaiting
+three promises that cannot resolve to anything. It removes a microtask hop and a scheduler turn
+before the first pixel; it is a few milliseconds, not a second. The watch is re-armed once the doors
+settle, for the one case the branch cannot rule out, a runtime that injects itself after the
+document has parsed, and `startIntentWatch` returns its existing unsubscribe when it holds one, so
+the second call is free.
+
+**When `window.claude` exists nothing changed.** The awaited path is character for character the one
+it always was, deliberately: a runtime that IS there must settle before first render or
+`mcpAvailable()` lies for a frame. The three `acquire*` functions were not touched at all.
+
+### It was never the drift either
+
+Stopping the bloom drift dead changed the frame cost by nothing: **141 ms/frame with it running, 139
+with it stopped.** Stepping it (2/s, 1/s) made no difference either.
+
+### It was the lens, and it was two primitives
+
+On the client page, liquid measured **395 ms/frame with its own lens, 52 ms with the ON lens in its
+place, and 36 ms with no `url()` at all.** The blur level barely mattered (338 ms at 15px against
+395 at 9px). Inside the lens, one variant per row, same page, same counter:
+
+| lens chain | ms / frame |
+|---|---:|
+| as it was: morphology erode 18, three channels | 315 |
+| blur rim, three channels | 190 |
+| morphology erode 18, one channel | 308 |
+| **blur rim, two channels (shipped)** | **141** |
+| blur rim, one channel | 105 |
+| blur rim, one channel, no life pass | 61 |
+
+A cheap fringe built from `feOffset` instead of a second displacement was measured too and came out
+at 191: on a software rasteriser every extra full-region primitive costs 25 to 40 ms whether it
+resamples or not, so there was nothing to win there.
 
 ## Legibility on liquid glass
 
@@ -227,13 +316,13 @@ the client page, which is the busiest backdrop the cockpit can produce.
 | text | OFF | ON | LIQUID | AA needs |
 |---|---:|---:|---:|---:|
 | room body copy, 13px / 400, on the pane | 9.67 | 9.67 | **7.78** | 4.5 |
-| room title | 15.26 | 15.89 | **15.79** | 4.5 |
-| earlier-steps chip, 11px / 600 | 5.24 | 5.48 | **4.86** | 4.5 |
+| room title | 15.26 | 15.89 | **15.82** | 4.5 |
+| earlier-steps chip, 11px / 600 | 5.24 | 5.48 | **5.02** | 4.5 |
 | field label inside a proposal card | 17.40 | 17.40 | **17.40** | 4.5 |
 
-Everything clears AA. The narrowest margin is the earlier-steps chip at 4.86:1, the smallest type in
+Everything clears AA. The narrowest margin is the earlier-steps chip at 5.02:1, the smallest type in
 the room on the thinnest glass in the room; it clears AA and does not clear AAA, which was already
-true before liquid (5.24:1). The pane's gradient and the message column's gradient exist precisely so
+true before liquid (5.24:1). It came up from 4.86 when the blooms came down to .06/.05. The pane's gradient and the message column's gradient exist precisely so
 the body copy never has to live on 34 percent white alone.
 
 ## The rim, and the census
@@ -262,26 +351,29 @@ the displaced result back OVER the undisplaced source fills exactly those pixels
 backdrop. It is geometry-independent, so a 999px pill and a 22px pane both get it without either one
 knowing its own shape.
 
-Liquid throws 48 to 64px at the rim, which is where a filter goes wrong, and it closes with **two**
-composites for that reason. The pane's top left corner was shot at 2x in all three modes and is on
+Liquid throws 52 to 66px at the rim, which is where a filter goes wrong, and it closes with **two**
+composites for that reason. The rim mask changed from an erode to a blur in round three, so the
+corner crop is also the proof that the ring is still a ring. The pane's top left corner was shot at 2x in all three modes and is on
 the compare page: no fringe, no smear, radius intact, bevel and both shadows reading.
 
 `.eg-glass-micro`, the 7px-radius narrator sliver, stays off the bend and off the lens in both modes.
-At that radius an 18px rim mask has nowhere to land, which is the same geometry that already exempts
+At that radius a 10px rim mask has nowhere to land, which is the same geometry that already exempts
 it from the triple rim.
 
 ## The motion clips
 
-Nine, three scenes across three modes, four seconds each, Playwright `recordVideo` at 1360x900 and
+Twelve, four scenes across three modes, four seconds each, Playwright `recordVideo` at 1360x900 and
 25 fps, converted to h264 mp4 with ffmpeg. **`deviceScaleFactor` does not raise the recording
 resolution**, because Playwright captures at viewport size, so the clips are 1x while the stills are 2x.
 
 - **a** the landing headline scrolling under the top bar
-- **b** the workroom pane with the client page scrolling behind it. The room locks the page scroller
+- **b** the client page itself, hero and bar and satellites in one scroll, which is the scene the
+  ground question is actually about
+- **c** the workroom pane with the client page scrolling behind it. The room locks the page scroller
   while it is open, so the probe unlocks it for the length of the clip; the clip is about what the
   glass does to moving content, not about what the room does to the scrollbar, and the compare page
   says so.
-- **c** the rail, two committed cards deep, riding over the pane, the hero and the ground band
+- **d** the rail, two committed cards deep, riding over the pane and the hero
 
 The weave is pinned in all three modes for every shot and clip (a CSS rule beats an SVG presentation
 attribute, so the rAF loop goes on writing into a void). Without that pin, two runs of the same mode
@@ -319,18 +411,25 @@ only that property and would reject the `url()` too. Firefox supports reference 
 
 ## Gate
 
-`npx tsc --noEmit` clean. `npx vitest run`: 3165 tests, all passing. `npm run build` green,
-1,379,347 bytes, inside the 1.5 MiB budget. Release chain NOT run, artifact NOT published, NOT
+`npx tsc --noEmit` clean. `npx vitest run`: 108 files, 3165 tests, all passing. `npm run build`
+green, 1,379,047 bytes, inside the 1.5 MiB budget. Release chain NOT run, artifact NOT published, NOT
 merged to main.
 
 ## Open, for the founder
 
-1. **The ground band puts violet linework on the page ground.** Rule 21 keeps purple blooms off the
-   ground and rule 66 sanctions ambient violet linework for the landing band specifically. The band
-   is at 3 to 5 percent and measures 0.10 of 255 on the open canvas, so it is arguably below the
-   rule's reach, but extending violet linework app-wide is a call, not a filter setting. Liquid's
-   ground blooms carry a violet radial at .11 as well, which is squarely inside rule 21's subject.
-2. **Pane parallax (e)** is not built. See the depth table.
-3. **Whether ON is worth keeping** now that liquid exists. ON's lens contributes 0.04 to 0.31 of 255
-   on its own; liquid's contributes 0.09 to 0.71 and its recipe carries the rest. If liquid is the
-   direction, ON is a step on the way to it rather than a mode anyone would choose.
+1. **The client hero sits at 0.56 of 255**, under the 1.5 bar, and the instruction was not to add
+   lines back to close it. It is the one surface the blooms cannot reach: a 620px soft bloom has a
+   shallow gradient across a 1128px pane, and the crop is mostly the hero's own opaque content. If
+   it matters, the levers left are the hero's frost (10px would do it) or the hero's tint, not the
+   ground.
+2. **ON is flat on the main pages, 0.03 across the whole client page**, and cannot be rescued from
+   the ground: its frost averages away anything quiet enough to leave the canvas alone. If liquid is
+   the direction, ON is a step on the way rather than a mode anyone would choose.
+3. **Liquid still costs about 2.7x frost per frame** on the client page (149 against 55 ms,
+   headless, no GPU) after a 55 percent cut. The remaining lever is the life pass, which is worth
+   another 44 ms and would make the middle of a pane a window rather than glass. It has not been
+   taken.
+4. **Liquid's ground blooms carry a violet radial at .05**, which is rule 21's subject. It is
+   quieter than the round-two version by half and inside the canvas's own ambient budget, but it is
+   still purple on the ground and it is still a call.
+5. **Pane parallax** (depth item e) is still not built.

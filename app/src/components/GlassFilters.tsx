@@ -98,23 +98,33 @@ export function GlassFilters() {
             thickness.
 
             The rim mask is built INSIDE the filter, so it stretches to whatever
-            element takes it and nothing has to know its own shape: erode the
-            source alpha (a backdrop-filter's source is opaque across the
-            element box, so eroding it inwards leaves the core), soften it, and
-            subtract it from the alpha again. What is left is a soft ring the
-            width of the erode radius.
+            element takes it and nothing has to know its own shape: blur the
+            source alpha, then subtract the blurred copy from the sharp one.
+            What is left is a soft ring, zero in the interior, about a half at
+            the border, zero outside.
 
-            The heavy throw is then composited THROUGH that ring and dropped
-            over the lightly-bent centre, which is how the scale gets to be 56
-            at the edge and 10 in the middle without feDisplacementMap ever
-            having to take a per-pixel scale, which it cannot.
+            IT WAS AN feMorphology ERODE AND THAT COST HALF THE FRAME. A naive
+            erode samples r squared pixels each, so radius 18 is roughly 1300
+            samples per pixel over a filter region that is 120 percent of a
+            full-viewport pane. Measured on the client page, headless: 315
+            ms/frame with the erode, 190 with this blur in its place, and the
+            two rings are not tellable apart. Cheap primitives, same picture.
 
-            CHROMATIC ABERRATION is the same displacement run three times at
-            three scales on three isolated channels, screen-blended back
-            together. Where the three land on top of each other the colour
-            reconstructs exactly; where the throw is large they separate, so the
-            fringe appears only where the bend is strong, which is only at the
-            rim. That is the physics and it is also the cheap way.
+            The heavy throw is composited THROUGH that ring and dropped over the
+            lightly-bent centre, which is how the scale gets to be 66 at the
+            edge and 10 in the middle without feDisplacementMap ever having to
+            take a per-pixel scale, which it cannot.
+
+            CHROMATIC ABERRATION is the same displacement run twice at two
+            scales on two isolated channel sets, screen-blended back together.
+            Where the two land on top of each other the colour reconstructs
+            exactly; where the throw is large they separate, so the fringe
+            appears only where the bend is strong, which is only at the rim.
+            THREE channels would be one truer and one displacement pass dearer:
+            190 ms/frame against 141 on the same page, for a fringe nobody
+            reported seeing the difference in. The small filter below still
+            splits three ways, because its region is a 34px pill and the pass
+            it adds is free.
 
             TWO COMPOSITES CLOSE IT, not one. The centre pass can smear its own
             10px of transparent edge before the ring is ever applied, so the
@@ -137,19 +147,15 @@ export function GlassFilters() {
           <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves={2} seed={11} result="lqE" />
           <feGaussianBlur in="lqE" stdDeviation="4" result="lqEs" />
 
-          {/* split, throw each channel a different distance, screen back together */}
+          {/* split red against the rest, throw each a different distance */}
           <feColorMatrix in="lqBase" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="lqR" />
-          <feColorMatrix in="lqBase" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="lqG" />
-          <feColorMatrix in="lqBase" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="lqB" />
-          <feDisplacementMap in="lqR" in2="lqEs" scale={64} xChannelSelector="R" yChannelSelector="G" result="lqRd" />
-          <feDisplacementMap in="lqG" in2="lqEs" scale={56} xChannelSelector="R" yChannelSelector="G" result="lqGd" />
-          <feDisplacementMap in="lqB" in2="lqEs" scale={48} xChannelSelector="R" yChannelSelector="G" result="lqBd" />
-          <feBlend in="lqRd" in2="lqGd" mode="screen" result="lqRG" />
-          <feBlend in="lqRG" in2="lqBd" mode="screen" result="lqHeavy" />
+          <feColorMatrix in="lqBase" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="lqGB" />
+          <feDisplacementMap in="lqR" in2="lqEs" scale={66} xChannelSelector="R" yChannelSelector="G" result="lqRd" />
+          <feDisplacementMap in="lqGB" in2="lqEs" scale={52} xChannelSelector="R" yChannelSelector="G" result="lqGBd" />
+          <feBlend in="lqRd" in2="lqGBd" mode="screen" result="lqHeavy" />
 
           {/* the ring, built from the element's own alpha */}
-          <feMorphology in="SourceAlpha" operator="erode" radius={18} result="lqCore" />
-          <feGaussianBlur in="lqCore" stdDeviation="9" result="lqCoreSoft" />
+          <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="lqCoreSoft" />
           <feComposite in="SourceAlpha" in2="lqCoreSoft" operator="out" result="lqRim" />
 
           <feComposite in="lqHeavy" in2="lqRim" operator="in" result="lqRimBent" />
@@ -157,9 +163,10 @@ export function GlassFilters() {
           <feComposite in="lqJoined" in2="SourceGraphic" operator="over" />
         </filter>
 
-        {/* THE SAME LENS AT CHIP SCALE. A 34px pill has no room for an 18px
-            ring or a 56px throw: both are scaled to the geometry, the erode to
-            6 and the rim throw to a third, or the pill stops being a pill. */}
+        {/* THE SAME LENS AT CHIP SCALE. A 34px pill has no room for a 10px ring
+            or a 56px throw: both are scaled to the geometry, or the pill stops
+            being a pill. Its filter region is a few thousand pixels rather than
+            a few million, so this one keeps the full three-way split. */}
         <filter
           id="eg-liquid-soft"
           x="-10%"
@@ -184,8 +191,7 @@ export function GlassFilters() {
           <feBlend in="lsRd" in2="lsGd" mode="screen" result="lsRG" />
           <feBlend in="lsRG" in2="lsBd" mode="screen" result="lsHeavy" />
 
-          <feMorphology in="SourceAlpha" operator="erode" radius={6} result="lsCore" />
-          <feGaussianBlur in="lsCore" stdDeviation="3" result="lsCoreSoft" />
+          <feGaussianBlur in="SourceAlpha" stdDeviation="3.5" result="lsCoreSoft" />
           <feComposite in="SourceAlpha" in2="lsCoreSoft" operator="out" result="lsRim" />
 
           <feComposite in="lsHeavy" in2="lsRim" operator="in" result="lsRimBent" />
