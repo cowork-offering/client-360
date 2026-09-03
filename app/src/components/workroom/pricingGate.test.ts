@@ -28,7 +28,7 @@ import type { WorkroomDelta } from "../../workroom/types";
 /* =============================================================================
    THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02).
 
-   nCino hides the rate and the payment stream until the amount, the term, the
+   Salesforce hides the rate and the payment stream until the amount, the term, the
    amortised term and the first payment date are all set. On Hartwell the last
    two are blank, so a modification that moves the $15M line to $20M leaves a
    version nobody can price.
@@ -200,7 +200,7 @@ describe("the question, and the chips under it", () => {
       "Another figure",
       "Leave pricing for later",
     ]);
-    expect(ask.text).toContain("nCino needs the amount, the term, the amortised term and the first payment date");
+    expect(ask.text).toContain("Salesforce needs the amount, the term, the amortised term and the first payment date");
   });
 
   it("says so where the plan sets no term to match", () => {

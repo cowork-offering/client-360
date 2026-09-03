@@ -155,7 +155,7 @@ describe("the durable trail from the org", () => {
     const org = rows.find((r) => /CV-0000000001/.test(r.closest("button")?.textContent ?? ""));
     expect(org, "the org's own trail must render without any session echo").toBeTruthy();
     expect(org!.getAttribute("data-origin-detail")).toBe("org");
-    expect(org!.textContent).toContain("On record in nCino");
+    expect(org!.textContent).toContain("On record in Salesforce");
   });
 
   it("renders a Staged-only row as history in its own right", async () => {

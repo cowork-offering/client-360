@@ -47,7 +47,7 @@ import { resolveBundle } from "../actions/registry";
    ============================================================================= */
 
 /** The fixed closing line. Not a variant, not a template. */
-export const CLOSING_LINE = "Real approval happens in nCino's credit-risk process.";
+export const CLOSING_LINE = "Real approval happens in Salesforce's credit-risk process.";
 
 /** Vocabulary the summary may never contain (A33.3.1). */
 export const FORBIDDEN_GATE_WORDS = ["approve", "approval of", "submit for credit approval", "authorise credit", "credit decision"];
@@ -388,7 +388,7 @@ export function ConfirmGate({
                   )}
                   {c.generatesNextRow === true && (
                     <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: "var(--warning-prose)" }}>
-                      This covenant is Active with a Frequency Template and an Effective Date, the combination nCino
+                      This covenant is Active with a Frequency Template and an Effective Date, the combination Salesforce
                       uses to mint the next compliance record on a complete status. Execution measures whether it did.
                     </div>
                   )}

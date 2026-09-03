@@ -337,7 +337,7 @@ export function simulateStagedOutput(args: {
       },
     );
     warnings.push(
-      "The roll-up onto the collateral record is bound to nCino's Add Valuation button and may not fire here. If it does not, the terminal state reads valuation filed, collateral value unchanged, and no coverage improvement is claimed.",
+      "The roll-up onto the collateral record is bound to Salesforce's Add Valuation button and may not fire here. If it does not, the terminal state reads valuation filed, collateral value unchanged, and no coverage improvement is claimed.",
     );
   } else if (actionId === "create-service-request") {
     summary = `Logs a service request against ${accountName} at status New.`;

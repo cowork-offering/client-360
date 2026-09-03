@@ -7,7 +7,7 @@
    It was not. `readSteer` matched "add a new loan" as an ORIGINATION and the
    room RESTARTED in the create route, which throws away the manifest the banker
    has been building. That is the wrong answer twice over: it loses work, and it
-   is wrong about nCino. A modification is anchored on the PRODUCT PACKAGE and
+   is wrong about Salesforce. A modification is anchored on the PRODUCT PACKAGE and
    produces the next VERSION of it; new money goes on the version being approved,
    not on a package nobody is looking at.
 
@@ -23,7 +23,7 @@
    rule `pricingGate.ts` already runs on, and it is why an elicitation can never
    drift out of step with what the banker actually typed.
 
-   THE PRICING GATE IS PART OF THE GRAMMAR, not an afterthought. nCino hides the
+   THE PRICING GATE IS PART OF THE GRAMMAR, not an afterthought. Salesforce hides the
    rate and the payment stream until the amount, the term, the AMORTISED term and
    the FIRST PAYMENT DATE are all set. A modification that moves a commitment is
    asked for the last two; a facility this room CREATES is asked for them on the
@@ -315,7 +315,7 @@ export function newFacilityDelta(spec: NewFacilitySpec, args: NewFacilityArgs): 
         "Pricing",
         priced
           ? `amortised over ${spec.amortizedTermMonths} months, first payment ${spec.firstPaymentDate}`
-          : "not set. nCino will show no rate and no payment stream until it is",
+          : "not set. Salesforce will show no rate and no payment stream until it is",
       ],
       ["Purpose handoff", PURPOSE_HANDOFF],
       [
@@ -380,7 +380,7 @@ export type NewFacilityRead = NewFacilityAsk | NewFacilityCard | NewFacilityHand
 export const RENEWAL_HANDOFF =
   "A renewal versions the whole package too, so a new facility belongs on its new version and stage_renewal plans one. " +
   "What it does not do is FILE it: execution of a renewal is held, because a credit action needs a Booked facility and " +
-  "Booked is reachable only through nCino's own Submit for Approval. Run this as a modification and I will stage the " +
+  "Booked is reachable only through Salesforce's own Submit for Approval. Run this as a modification and I will stage the " +
   "facility and file it on the new version. Nothing has been staged and nothing has come off the manifest.";
 
 export interface NewFacilityContext {
@@ -429,7 +429,7 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
   if (termMonths === null) {
     return {
       kind: "ask",
-      text: `What term does the ${money(amount)} ${product.toLowerCase()} run for? nCino prices on the amount and the term, and a facility with neither cannot be priced at all.`,
+      text: `What term does the ${money(amount)} ${product.toLowerCase()} run for? Salesforce prices on the amount and the term, and a facility with neither cannot be priced at all.`,
       options: [36, 60, 84, 120].map((m) => ({ label: `${m} months`, say: withAnswer(line, `with a ${m} month term`) })),
     };
   }
@@ -439,7 +439,7 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
     return {
       kind: "ask",
       text:
-        "What is the primary loan purpose? It goes on the Loan Detail nCino creates for the facility, and the org leaves it null, " +
+        "What is the primary loan purpose? It goes on the Loan Detail Salesforce creates for the facility, and the org leaves it null, " +
         "so nobody sets it unless this plan carries it. The org holds a fixed list, so say it in your own words and I will " +
         "tell you which of its values that lands on.",
       options: PURPOSE_OPTIONS.slice(0, 6).map((o) => ({ label: o.label, say: withAnswer(line, `for ${o.label.toLowerCase()}`) })),
@@ -461,7 +461,7 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
 
   /* THE PRICING GATE, on the same terms a commitment change gets it. Two more
      questions, one at a time, and neither is optional-by-silence: a facility
-     filed without them opens in nCino with no rate and no payment stream. */
+     filed without them opens in Salesforce with no rate and no payment stream. */
   const amortizedTermMonths = readAmortisation(line);
   if (amortizedTermMonths === null) {
     const same = { label: `Same as the term (${termMonths} months)`, say: withAnswer(line, `amortised over ${termMonths} months`) };
@@ -508,7 +508,7 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
       `${newFacilityTitle(spec)} goes onto the new version of this package, at Qualification with the borrower on its own structure, ` +
       `over ${termMonths} months. The org holds a fixed list of loan purposes and "${said}" reads onto ${purposeLabel(purpose)} ` +
       `(${purpose}), which is what the plan carries. It is a new loan rather than a version of one, so nothing on the booked side of this ` +
-      `relationship moves because of it, and booking it is nCino's own Submit for Approval like everything else on the version. ` +
+      `relationship moves because of it, and booking it is Salesforce's own Submit for Approval like everything else on the version. ` +
       PURPOSE_HANDOFF,
   };
 }
@@ -668,9 +668,9 @@ const thresholdSaid = (threshold: number, unit?: "ratio" | "money"): string =>
  * reads as a field that was filed. It says it now.
  */
 export const PURPOSE_HANDOFF =
-  "Purpose goes on the Loan Detail after filing, handed off: nCino creates that record in its own transaction moments " +
+  "Purpose goes on the Loan Detail after filing, handed off: Salesforce creates that record in its own transaction moments " +
   "after the facility is written, so nothing in the filing transaction can set it. It is on the plan and it is the one " +
-  "thing on this facility a person still sets in nCino.";
+  "thing on this facility a person still sets in Salesforce.";
 
 export interface NewFacilityEntryArgs {
   draft: Draft;
@@ -854,7 +854,7 @@ export function newFacilityFeeEntry(open: FeeOpen, spec: NewFacilitySpec, seq: n
       [
         "Written as",
         open.percentage !== undefined
-          ? "A percentage fee carrying its rate and no money figure: nCino's own FeeTrigger derives the amount from the facility's commitment, and a hand-set figure would be a number nobody derived."
+          ? "A percentage fee carrying its rate and no money figure: Salesforce's own FeeTrigger derives the amount from the facility's commitment, and a hand-set figure would be a number nobody derived."
           : "A flat fee on the facility this plan creates.",
       ],
     ],

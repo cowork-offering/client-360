@@ -322,7 +322,7 @@ describe("verdict bar (A27.4 / A28)", () => {
     expect(text).toContain("Committed");
     // Founder feedback: the tick scale is gone — uniform single-line cells.
     expect(container!.querySelector('[aria-label*="scale"]')).toBeNull();
-    const cell = container!.querySelector('[title="nCino risk rating"]')!;
+    const cell = container!.querySelector('[title="Salesforce risk rating"]')!;
     expect(cell).toBeTruthy();
     expect(cell.textContent).toContain("Grade 5");
     // The package STAGE CHIP is retired from the hero (founder, 2026-09-01):

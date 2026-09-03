@@ -102,7 +102,7 @@ export function deltaHeading(actionId: string): { title: string; caveat?: string
     return {
       title: "What this valuation implies",
       caveat:
-        "Filing here records the valuation. It does not move the collateral value: nCino updates that from its own Add Valuation button, so coverage is unchanged until it does.",
+        "Filing here records the valuation. It does not move the collateral value: Salesforce updates that from its own Add Valuation button, so coverage is unchanged until it does.",
     };
   }
   return { title: "What this changes" };
@@ -531,7 +531,7 @@ export function ratingFacts(bundle: BorrowerBundle | null, values: Record<string
   if (!bundle) return [];
   const facts: TicketFact[] = [];
   const grade = bundle.snapshot?.primaryRiskRating;
-  if (grade != null) facts.push({ label: "Current grade", value: `Grade ${grade}`, note: "on file in nCino" });
+  if (grade != null) facts.push({ label: "Current grade", value: `Grade ${grade}`, note: "on file in Salesforce" });
 
   const computed = bundle.snapshot?.computedRiskRating;
   if (computed != null) {

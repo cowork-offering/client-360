@@ -410,7 +410,7 @@ describe("WP7.1 — the panel opens on a briefing, not a form", () => {
     openActionPanel("Annual Review");
     expandAllFields();
     const p = panel("Annual Review")!;
-    for (const label of ["Review type", "Guarantor analysis", "Risk rating comments", "Review stage (nCino)"]) {
+    for (const label of ["Review type", "Guarantor analysis", "Risk rating comments", "Review stage (Salesforce)"]) {
       expect(p.textContent, label).toContain(label);
     }
   });
@@ -692,7 +692,7 @@ describe("wave 2 — the five new tickets", () => {
     openActionPanel("Loan Modification", "Kingsley Precision", { userId: APPROVER_ID }, true);
     const boxes = [...panel("Loan Modification")!.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
     // Tick the second booked facility. Both are in the same package, so this is
-    // one credit action over two facilities, which is how nCino frames it.
+    // one credit action over two facilities, which is how Salesforce frames it.
     click(boxes[1]);
     askForACommitment();
     click(byText(/Review the plan/)!);
@@ -959,7 +959,7 @@ describe("wave 2 — the five new tickets", () => {
     const text = panel("Loan Modification")!.textContent ?? "";
     expect(text).toContain("Before you confirm");
     // Every warning the org returned, as the org wrote it. The booking note is
-    // the one the banker acts on: nCino, not this page, books the clone.
+    // the one the banker acts on: Salesforce, not this page, books the clone.
     for (const w of (MOD_STAGE_PLAN as { result: { warnings: string[] } }).result.warnings) {
       expect(text).toContain(w);
     }
@@ -1008,7 +1008,7 @@ describe("wave 2 — the five new tickets", () => {
     expect(text).toContain("records revision 1");
     expect(text).toContain("Amount reads back at 1500000.00.");
     expect(text).toContain("The parent facility reads back unchanged.");
-    // Booking stays nCino's run, and the tracker says so from the handoff step.
+    // Booking stays Salesforce's run, and the tracker says so from the handoff step.
     expect(text).toContain("Submit for Approval with real approvers");
   });
 
@@ -1181,7 +1181,7 @@ describe("wave 2 — the five new tickets", () => {
   it("says the org names the loan, and never proposes one", () => {
     openActionPanel("New Facility Request");
     const p = panel("New Facility Request")!;
-    expect(p.textContent).toContain("nCino names the loan itself on creation");
+    expect(p.textContent).toContain("Salesforce names the loan itself on creation");
     expect(p.querySelector("#f-name")).toBeNull();
     expect(p.textContent).toContain("Loan Detail");
   });
@@ -1565,7 +1565,7 @@ describe("WP7.4 — the execution", () => {
     await flush();
   }
 
-  it("stamps the filed record and offers nCino as the next move", async () => {
+  it("stamps the filed record and offers Salesforce as the next move", async () => {
     installWriteMcp();
     await executeAndLand();
     const p = panel("Annual Review")!;
@@ -2100,7 +2100,7 @@ describe("F3 — the challenge quotes the read the ticket itself is using", () =
 
     openActionPanel("Collateral Valuation");
     const text = panel("Collateral Valuation")!.textContent ?? "";
-    expect(text).toContain("as it was read from nCino on Aug 25, 2026, 14:05 UTC");
+    expect(text).toContain("as it was read from Salesforce on Aug 25, 2026, 14:05 UTC");
     expect(text).not.toContain("Jul 2, 2026, 09:15 UTC");
     // And the FIGURES moved with the timestamp: the same read, one story.
     expect(text).toContain("0.82x");

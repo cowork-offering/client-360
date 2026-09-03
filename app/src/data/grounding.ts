@@ -104,7 +104,7 @@ function cushionPhrase(c: Covenant): string | null {
   const verdict = classifyCovenant(c);
   return verdict.financialBreach
     ? `breached by ${abs}`
-    : `${abs} past the threshold, recorded in nCino as ${verdict.label}`;
+    : `${abs} past the threshold, recorded in Salesforce as ${verdict.label}`;
 }
 
 /** One covenant as a full sentence clause, cushion included. */
@@ -119,9 +119,9 @@ function covenantClause(c: Covenant): string | null {
   // nCino's own verdict, when it is one the banker must not read as a breach.
   const verdict = classifyCovenant(c);
   if (verdict.kind === "exception") {
-    parts.push(`${verdict.label} recorded in nCino, administrative, not a measured breach`);
+    parts.push(`${verdict.label} recorded in Salesforce, administrative, not a measured breach`);
   } else if (verdict.kind === "waived" || verdict.kind === "pending") {
-    parts.push(`status ${verdict.label} in nCino`);
+    parts.push(`status ${verdict.label} in Salesforce`);
   }
   if (c.nextEvaluationDate) parts.push(`next test ${fmtDate(c.nextEvaluationDate)}`);
   return parts.join(", ");
@@ -189,7 +189,7 @@ function tabSentence(bundle: BorrowerBundle, tab: string | null): string | null 
     // is counted here, and named for what it is.
     const admin = administrativeExceptions(covs);
     const adminLine = admin.length
-      ? `${admin.length} ${admin.length === 1 ? "covenant sits" : "covenants sit"} at Exception in nCino with no measured breach against the threshold.`
+      ? `${admin.length} ${admin.length === 1 ? "covenant sits" : "covenants sit"} at Exception in Salesforce with no measured breach against the threshold.`
       : "";
     if (!clauses.length) return adminLine || null;
     // Capitalise each clause so joining with a full stop still reads as prose.

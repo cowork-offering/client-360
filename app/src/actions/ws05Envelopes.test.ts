@@ -599,7 +599,7 @@ describe("the batch is checked HERE, so the org never has to refuse the whole pl
 
   it("refuses a valuation with no date, in the org's own words", () => {
     const gap = batchStagingGap("collateral-valuation", { records: ["col-0"], valuationDate: "" }, valuationSchema);
-    expect(gap).toContain("nCino uses it to decide which valuation record is the latest");
+    expect(gap).toContain("Salesforce uses it to decide which valuation record is the latest");
   });
 
   it("tells an empty SELECTION apart from a relationship with nothing to value", () => {

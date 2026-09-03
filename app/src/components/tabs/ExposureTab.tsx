@@ -95,7 +95,7 @@ const STATUS_WORD: Record<Tone, StatusTone> = {
 const COLLATERAL = "collateral";
 
 const OVERRIDE_TITLE =
-  "The pledge's own advance rate. nCino takes the override first, then the auto-applied rate, then the collateral type's.";
+  "The pledge's own advance rate. Salesforce takes the override first, then the auto-applied rate, then the collateral type's.";
 
 function AccountCollateral({ assets }: { assets: CollateralAsset[] }) {
   const disclosure = useDisclosure();

@@ -9,14 +9,14 @@
       available — full stop.
 
    2. Unavailable actions stay VISIBLE and DISABLED with a concrete reason
-      (A27.3, the nCino lifecycle rule). We never hide an action (the banker
+      (A27.3, the Salesforce lifecycle rule). We never hide an action (the banker
       loses the map of what exists) and never enable one the data can't support
       (the banker gets a dead end). The `reason` is shown verbatim in the UI, so
       it must read like a banker wrote it: "No booked loans on this
       relationship", not "predicate failed".
 
    3. `apexAction` is a DECLARED, UNUSED SEAM. v2 will route these through
-      nCino/Salesforce Apex invocables on the MCP server as GATED WRITES
+      Salesforce/Salesforce Apex invocables on the MCP server as GATED WRITES
       (stage -> human approve -> commit). Nothing here writes today: every
       action routes through the channel adapter as a well-formed agent prompt.
       Do not wire apexAction without the approval gate.
@@ -202,7 +202,7 @@ export const ACTIONS: ClientAction[] = [
     label: "Covenant Review",
     category: "Risk",
     description:
-      "Review every active covenant: cushion, next test date, and any divergence between the nCino evaluation and the spread.",
+      "Review every active covenant: cushion, next test date, and any divergence between the Salesforce evaluation and the spread.",
     icon: "covenant",
     promptTemplate:
       "Run a covenant review for {account} ({accountId}): cushions, next test dates, and any divergence from the spread.",

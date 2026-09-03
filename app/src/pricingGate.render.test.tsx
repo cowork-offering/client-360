@@ -12,10 +12,10 @@ import live from "../../artifact/live-data.json";
 /* =============================================================================
    THE FOUR FIELDS nCINO PRICES ON, IN THE ROOM (founder, 2026-09-02).
 
-   nCino hides the rate and the payment stream on a loan until the amount, the
+   Salesforce hides the rate and the payment stream on a loan until the amount, the
    term, the amortised term and the first payment date are all set. On Hartwell
    the last two are blank, so a modification that moves the $15M line to $20M
-   leaves a version nobody can price in the nCino UI.
+   leaves a version nobody can price in the Salesforce UI.
 
    The whole gate is deterministic: no brain is attached to any test here, and
    the questions, the chips and the payload are the room's own.
@@ -96,7 +96,7 @@ async function moveTheLine(room: HTMLElement) {
   await click(byText(/^Confirm$/));
 }
 
-describe("a change to the amount asks for the two fields nCino prices on", () => {
+describe("a change to the amount asks for the two fields Salesforce prices on", () => {
   it("asks the amortisation term in the same breath as the confirm, and says why", async () => {
     const room = open();
     await settle();
@@ -104,7 +104,7 @@ describe("a change to the amount asks for the two fields nCino prices on", () =>
 
     expect(said(room)).toContain("What is the amortisation term on the");
     expect(said(room)).toContain(
-      "nCino needs the amount, the term, the amortised term and the first payment date before it will price this loan.",
+      "Salesforce needs the amount, the term, the amortised term and the first payment date before it will price this loan.",
     );
     // The read carries no amortisation and the org holds it blank, so the room
     // says both rather than offering a default.
@@ -260,7 +260,7 @@ describe("the banker can leave pricing for later", () => {
     await click(byText(/^Leave pricing for later$/));
 
     expect(said(room)).toContain("left for later");
-    expect(said(room)).toContain("will not show a rate or a payment stream in nCino");
+    expect(said(room)).toContain("will not show a rate or a payment stream in Salesforce");
     // NOTHING WAS STAGED FOR IT. One entry on the rail: the amount.
     expect(rail(room)).not.toContain("Amortisation term (months)");
     expect(rail(room)).not.toContain("First payment date");

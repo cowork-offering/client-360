@@ -310,7 +310,7 @@ export function draftRiskRatingComments(b: BorrowerBundle): Draft {
   }
   const stage = snap.primaryStage ? ` The package currently sits at ${snap.primaryStage}.` : "";
   return {
-    text: `The borrower is carried at grade ${snap.primaryRiskRating} on the nCino scale, and this review does not propose a change.${stage}`,
+    text: `The borrower is carried at grade ${snap.primaryRiskRating} on the Salesforce scale, and this review does not propose a change.${stage}`,
     figures: f,
   };
 }

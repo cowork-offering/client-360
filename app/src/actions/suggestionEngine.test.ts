@@ -546,7 +546,7 @@ describe("F3 — the check quotes the read it actually ran on", () => {
     expect(s.freshness.asOf).toBe("2026-08-25T10:30:00.000Z");
     expect(s.freshness.bakedSections).toEqual([]);
     expect(freshnessSentence(s.freshness)).toBe(
-      "Checked against the relationship as it was read from nCino on Aug 25, 2026, 10:30 UTC.",
+      "Checked against the relationship as it was read from Salesforce on Aug 25, 2026, 10:30 UTC.",
     );
   });
 

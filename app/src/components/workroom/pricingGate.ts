@@ -6,7 +6,7 @@ import { carriesRate } from "./rateGate";
 /* =============================================================================
    THE FOUR FIELDS nCINO PRICES ON (founder, 2026-09-02).
 
-   nCino hides the rate and the payment stream on a loan until FOUR fields are
+   Salesforce hides the rate and the payment stream on a loan until FOUR fields are
    defined on it:
 
      LLC_BI__Amount__c                  the loan amount
@@ -17,7 +17,7 @@ import { carriesRate } from "./rateGate";
    ON HARTWELL, TWO OF THE FOUR ARE BLANK. First Payment Date is blank on every
    loan, and Amortized Term is blank on both lines of credit and on Construction,
    booked AND on the new version. So a modification that moves the $15M line to
-   $20M produces a version nobody can price in the nCino UI: the banker signs a
+   $20M produces a version nobody can price in the Salesforce UI: the banker signs a
    change, the org files it, and the screen the next person opens shows no rate
    and no payment stream.
 
@@ -72,7 +72,7 @@ export const PRICING_CATALOG_ID: Record<PricingSlot, string> = {
 /** Why the room is asking, in the banker's own vocabulary. Said on the card and
  *  on the confirm, because a question with no reason behind it reads as a form. */
 export const PRICING_WHY =
-  "nCino needs the amount, the term, the amortised term and the first payment date before it will price this loan.";
+  "Salesforce needs the amount, the term, the amortised term and the first payment date before it will price this loan.";
 
 /**
  * WHAT A SKIPPED PRICING ASK BECOMES, in one quiet row.
@@ -83,11 +83,11 @@ export const PRICING_WHY =
  * row says what the consequence is without asking again.
  */
 export const PRICING_SKIPPED =
-  "Pricing left for later: nCino will ask for the amortised term and first payment date before the rate and payment stream can be set";
+  "Pricing left for later: Salesforce will ask for the amortised term and first payment date before the rate and payment stream can be set";
 
 /** What the banker reads when they leave it. */
 export const PRICING_LATER =
-  "Left for later. Nothing is staged for it, and until it is set the new version will not show a rate or a payment stream in nCino.";
+  "Left for later. Nothing is staged for it, and until it is set the new version will not show a rate or a payment stream in Salesforce.";
 
 /* --------------------------------------------------- what moves the pricing */
 
@@ -436,5 +436,5 @@ export function pricingLanded(slot: PricingSlot, member: ElicitMember, display: 
 
 /** What the plan says about a facility the banker left for later. */
 export function pricingDeclinedLine(member: ElicitMember): string {
-  return `Pricing fields on the ${member.label}: left for later. The amortisation term and the first payment date are not on this plan, so the new version will not show a rate or a payment stream in nCino until somebody sets them.`;
+  return `Pricing fields on the ${member.label}: left for later. The amortisation term and the first payment date are not on this plan, so the new version will not show a rate or a payment stream in Salesforce until somebody sets them.`;
 }

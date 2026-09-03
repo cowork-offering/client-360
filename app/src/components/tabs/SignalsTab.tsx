@@ -300,7 +300,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
             </div>
             <div className="note">
               {snapReview.nextReviewDate
-                ? `nCino Next Review Date on the relationship${snapReview.lastReviewDate ? `; last review ${fmtDate(snapReview.lastReviewDate)}` : ""}.`
+                ? `Salesforce Next Review Date on the relationship${snapReview.lastReviewDate ? `; last review ${fmtDate(snapReview.lastReviewDate)}` : ""}.`
                 : `On the annual cycle from the review completed ${fmtDate(lastReview?.slice(0, 10))}. Derived, not a field on the account.`}
             </div>
           </>

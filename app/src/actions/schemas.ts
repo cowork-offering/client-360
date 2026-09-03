@@ -389,7 +389,7 @@ function annualReviewSchema(ctx: SchemaContext): PanelSchema {
     }),
     field({
       key: "reviewStage",
-      label: "Review stage (nCino)",
+      label: "Review stage (Salesforce)",
       type: "readonly",
       value: null,
       prefill: { source: "NCINO_RECORD" },
@@ -455,8 +455,8 @@ function newFacilitySchema(ctx: SchemaContext): PanelSchema {
     // existing-package plan has never been observed with that step, and the
     // confirm gate renders whatever the org actually returns either way.
     intro: pkg
-      ? "Requests a new facility on this relationship's package. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later."
-      : "Requests a new facility for this relationship. No credit package exists yet, so one is created first and the facility filed under it, with the borrower added to its borrowing structure at 100 percent. nCino names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later.",
+      ? "Requests a new facility on this relationship's package. Salesforce names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later."
+      : "Requests a new facility for this relationship. No credit package exists yet, so one is created first and the facility filed under it, with the borrower added to its borrowing structure at 100 percent. Salesforce names the loan itself on creation and fills in the application method; the Loan Detail record follows about four seconds later.",
     fields: [
       field({
         key: "account",
@@ -478,7 +478,7 @@ function newFacilitySchema(ctx: SchemaContext): PanelSchema {
         value: pkg ? "This relationship's deal package" : "A new package will be created first",
         prefill: pkg
           ? { source: "NCINO_RECORD", citation: pkg }
-          : { source: "COMPUTED", citation: "created by the plan, named the way nCino's wizard names it" },
+          : { source: "COMPUTED", citation: "created by the plan, named the way Salesforce's wizard names it" },
         editable: false,
         editableReason: pkg ? "the facility hangs off the existing package" : "the plan creates it before the facility",
         required: false,
@@ -558,7 +558,7 @@ function newFacilitySchema(ctx: SchemaContext): PanelSchema {
         editableReason: "the org assigns this and overwrites what we send",
         required: false,
         target: { object: OBJ, field: "LLC_BI__Loan_Officer__c" },
-        help: "Set by nCino's own assignment routine, so the cockpit does not propose one.",
+        help: "Set by Salesforce's own assignment routine, so the cockpit does not propose one.",
       }),
     ],
   };
@@ -623,7 +623,7 @@ function riskRatingSchema(ctx: SchemaContext): PanelSchema {
         label: "Final grade",
         type: "readonly",
         value: grade != null ? `Grade ${grade}` : null,
-        prefill: { source: "NCINO_RECORD", citation: "Customer360Snapshot — nCino risk grade" },
+        prefill: { source: "NCINO_RECORD", citation: "Customer360Snapshot — Salesforce risk grade" },
         editable: false,
         editableReason: "the org's decision path sets the final grade",
         required: false,
@@ -761,7 +761,7 @@ export const COVENANT_WITHOUT_ASSESSMENT =
 /** `valuationDate` is refused by the tool rather than defaulted, and the panel
  *  says why rather than filling a blank in silently. */
 const VALUATION_DATE_REQUIRED =
-  "A valuation needs a date. nCino uses it to decide which valuation record is the latest, so a null-dated row cannot be ordered against the ones already on file.";
+  "A valuation needs a date. Salesforce uses it to decide which valuation record is the latest, so a null-dated row cannot be ordered against the ones already on file.";
 
 /**
  * What is wrong with a PACKAGE-SCOPED BULK batch, before any payload is built.
@@ -877,7 +877,7 @@ export const PACKAGE_ANCHOR_TECHNICAL =
 /** The tool's cap, and its reason, in the tool's own words. */
 const COVENANT_BATCH_CAP = 20;
 export const COVENANT_CAP_REASON =
-  `A covenant review carries at most ${COVENANT_BATCH_CAP} covenants per plan. Each status write enqueues a change-data queueable, and a complete status may make nCino insert the next compliance row, which enqueues a second one, against a platform ceiling of 50 queued jobs per transaction. Stage the rest as a second plan.`;
+  `A covenant review carries at most ${COVENANT_BATCH_CAP} covenants per plan. Each status write enqueues a change-data queueable, and a complete status may make Salesforce insert the next compliance row, which enqueues a second one, against a platform ceiling of 50 queued jobs per transaction. Stage the rest as a second plan.`;
 
 const VALUATION_BATCH_CAP = 20;
 export const VALUATION_CAP_REASON =
@@ -885,7 +885,7 @@ export const VALUATION_CAP_REASON =
 
 /** The org's own account of what `allowNonPending` does, and does not do. */
 export const ALLOW_NON_PENDING_WARNING =
-  "An assessment recorded on a row that is not Pending is stored, and the covenant schedule does NOT advance: nCino pushes the next evaluation date only on a Pending to complete transition.";
+  "An assessment recorded on a row that is not Pending is stored, and the covenant schedule does NOT advance: Salesforce pushes the next evaluation date only on a Pending to complete transition.";
 
 export interface PackageRecord {
   id: string;
@@ -1409,7 +1409,7 @@ function facilityChangeSchema(ctx: SchemaContext, kind: "modification" | "renewa
     writeObject: OBJ,
     writeObjectLabel: "modification",
     intro:
-      "Builds one modification plan on this deal, covering the facilities you select within it. Every requested change below applies to each selected facility, and the whole batch travels under a single confirmation and a single decision token. The plan is staged and preserved; booking the clones it creates is nCino's own approval path.",
+      "Builds one modification plan on this deal, covering the facilities you select within it. Every requested change below applies to each selected facility, and the whole batch travels under a single confirmation and a single decision token. The plan is staged and preserved; booking the clones it creates is Salesforce's own approval path.",
     fields: [
       packageField(
         ctx,

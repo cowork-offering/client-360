@@ -116,7 +116,7 @@ function AnchorCell({ a, deltaMM, washed }: { a: Anchor; deltaMM: number; washed
 function GradeCell({ anchor, grade }: { anchor: Anchor | undefined; grade: string | null }) {
   if (!anchor) return null;
   return (
-    <div className="anchor grade-cell" title="nCino risk rating">
+    <div className="anchor grade-cell" title="Salesforce risk rating">
       <svg className="gr" viewBox="0 0 46 46" aria-hidden="true">
         <circle className="bg" cx="23" cy="23" r="19" fill="none" strokeWidth="4" />
         <circle

@@ -79,9 +79,9 @@ export function freshnessSentence(f: DataFreshness): string {
     return `Checked against the relationship as it was prepared on ${when}. Sync this relationship to recheck it on today's figures.`;
   }
   if (f.bakedSections.length) {
-    return `Checked against the relationship as it was read from nCino on ${when}, except the ${sectionWords(f.bakedSections)} figures, which that sync did not refresh and are still the prepared bundle's.`;
+    return `Checked against the relationship as it was read from Salesforce on ${when}, except the ${sectionWords(f.bakedSections)} figures, which that sync did not refresh and are still the prepared bundle's.`;
   }
-  return `Checked against the relationship as it was read from nCino on ${when}.`;
+  return `Checked against the relationship as it was read from Salesforce on ${when}.`;
 }
 
 export interface SuggestionTrigger {

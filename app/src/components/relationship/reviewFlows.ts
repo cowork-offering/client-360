@@ -193,7 +193,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The annual review covers the whole relationship: exposure, performance against the package, covenant compliance and the standing risk grade.",
     produces:
-      "It files a credit review record at In Progress carrying the narratives, then hands control to the bank's own Submit for Approval process. The review's own decision picklists are on no tool wire and stay for nCino, and the rating on file is untouched by this: changing it is the risk-rating review.",
+      "It files a credit review record at In Progress carrying the narratives, then hands control to the bank's own Submit for Approval process. The review's own decision picklists are on no tool wire and stay for Salesforce, and the rating on file is untouched by this: changing it is the risk-rating review.",
     writeObjectLabel: "credit review",
     approveLabel: "File the review",
     filedWord: "Filed",
@@ -221,7 +221,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The valuation covers the collateral pledged against this package: the asset, the basis the figure is struck on and where the number came from.",
     produces:
-      "It files one valuation record per asset. Whether the value rolls up onto the collateral record is nCino's own automation and is reported, never claimed.",
+      "It files one valuation record per asset. Whether the value rolls up onto the collateral record is Salesforce's own automation and is reported, never claimed.",
     writeObjectLabel: "collateral valuation",
     approveLabel: "File the valuation",
     filedWord: "Filed",
@@ -235,7 +235,7 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
     covers:
       "The risk-rating review covers the four factors the grade is built from: cash-flow coverage, revenue growth, management experience and credit score.",
     produces:
-      "It files a risk-rating review at In Review carrying the factor actuals, the proposed grade and any override with its written reason. The FINAL grade is nCino's own formula over what is filed, Approved and Declined belong to the org's decisioning path, and the facility-level rating stays in the facility room.",
+      "It files a risk-rating review at In Review carrying the factor actuals, the proposed grade and any override with its written reason. The FINAL grade is Salesforce's own formula over what is filed, Approved and Declined belong to the org's decisioning path, and the facility-level rating stays in the facility room.",
     writeObjectLabel: "risk-rating review",
     approveLabel: "File the rating review",
     filedWord: "Filed",
@@ -633,7 +633,7 @@ export const ANNUAL_CREATES_A_SECOND =
 
 /** The review's own decision picklists, on no tool wire. Stated, never guessed. */
 export const DECISIONS_NOT_ON_THE_WIRE =
-  "The review's own decision fields are not on this tool: the current and recommended relationship ratings, whether a grade change is requested, whether the covenants were tested and passed, a new policy exception, sending it to credit committee, and the next review type and date. I write the affirmation in the rating comments in prose, and those picklists stay for nCino.";
+  "The review's own decision fields are not on this tool: the current and recommended relationship ratings, whether a grade change is requested, whether the covenants were tested and passed, a new policy exception, sending it to credit committee, and the next review type and date. I write the affirmation in the rating comments in prose, and those picklists stay for Salesforce.";
 
 /** Filed is not approved, and the two fields that would say so are fenced. */
 export const COMPLETE_IS_NOT_OURS =
@@ -1505,7 +1505,7 @@ export function dossierHandoff(route: RelRoute, result: ExecuteResult): string |
     return "The review is filed, not approved. Submitting it for approval runs through the bank's own process.";
   }
   if (route === "valuation" && result.collateralValueMoved === false) {
-    return "The valuation is filed and the collateral value did not move. The roll-up is bound to nCino's own Add Valuation button, so no coverage improvement is claimed.";
+    return "The valuation is filed and the collateral value did not move. The roll-up is bound to Salesforce's own Add Valuation button, so no coverage improvement is claimed.";
   }
   return undefined;
 }

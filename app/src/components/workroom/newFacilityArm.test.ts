@@ -137,7 +137,7 @@ describe("the elicitation, which holds no state between turns", () => {
     expect(amort?.kind).toBe("ask");
     if (amort?.kind !== "ask") return;
     expect(amort.text).toContain("amortisation term");
-    expect(amort.text).toContain("nCino needs the amount, the term, the amortised term and the first payment date");
+    expect(amort.text).toContain("Salesforce needs the amount, the term, the amortised term and the first payment date");
     expect(amort.options?.[0].label).toBe("Same as the term (60 months)");
 
     const next = readNewFacility(ctx({ line: amort.options![0].say }));

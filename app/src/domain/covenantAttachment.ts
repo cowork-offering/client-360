@@ -1,7 +1,7 @@
 /* =============================================================================
    WHERE A COVENANT IS ATTACHED, AND WHAT THE FACILITY BEHIND IT LOOKS LIKE.
 
-   nCino holds a covenant on the ACCOUNT (`LLC_BI__Account_Covenant__c`) and
+   Salesforce holds a covenant on the ACCOUNT (`LLC_BI__Account_Covenant__c`) and
    associates it to loans through `LLC_BI__Loan_Covenant__c`. A covenant is
    never only on a loan, so "which loans does this one bind" is a question the
    surface has to answer per covenant rather than a grouping it can do once.
@@ -45,7 +45,7 @@ export interface CovenantAttachment {
 }
 
 const ACCOUNT_LINE =
-  "Not associated to any facility. This covenant sits on the account, which is where nCino adds one by default.";
+  "Not associated to any facility. This covenant sits on the account, which is where Salesforce adds one by default.";
 const UNREAD_LINE =
   "This read does not carry the loan junction for this covenant, so which facilities it binds is unknown rather than none.";
 

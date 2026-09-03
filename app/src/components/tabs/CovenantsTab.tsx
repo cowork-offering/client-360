@@ -8,7 +8,7 @@
    with information, keep it elegant, all in one row, all aligned."
 
    So the pane is ONE list, not three tables. A covenant appears exactly once —
-   the account is where nCino puts it — and the loans it is associated to are
+   the account is where Salesforce puts it — and the loans it is associated to are
    the covenant's own detail, opened in place. The old shape repeated a covenant
    under every facility it bound, which read as duplicates of the same test and
    is what "pretty untidy" was pointing at.
@@ -75,10 +75,10 @@ const STATUS_WORD: Record<Tone, StatusTone> = {
 };
 
 const TYPE_TITLE =
-  "The kind of test, from the unit its threshold is stated in. nCino's own covenant category is not carried by this read.";
+  "The kind of test, from the unit its threshold is stated in. Salesforce's own covenant category is not carried by this read.";
 
 const PER_COVENANT_TITLE =
-  "Compliance is held on the covenant in nCino, not on the loan junction, so this is the covenant's own latest test.";
+  "Compliance is held on the covenant in Salesforce, not on the loan junction, so this is the covenant's own latest test.";
 
 function challengeView(ch: CovenantChallenge, type?: string): { tone: Tone; label: string } {
   const bi = ch.boomImplied ?? null;
@@ -90,7 +90,7 @@ function challengeView(ch: CovenantChallenge, type?: string): { tone: Tone; labe
     return { tone: "red", label: `Boom-implied ${val} crosses threshold ${fmtCovVal(ch.threshold, type)}` };
   }
   if (ch.status === "diverges") {
-    return { tone: "amber", label: `Boom-implied ${val} · diverges from nCino ${fmtCovVal(ch.nCinoActual, type)}` };
+    return { tone: "amber", label: `Boom-implied ${val} · diverges from Salesforce ${fmtCovVal(ch.nCinoActual, type)}` };
   }
   return { tone: "green", label: `Boom-implied ${val} · corroborates` };
 }
@@ -261,7 +261,7 @@ function CovenantItem({
                 <p className="xlatest num" data-cov-latest>
                   <span className="kicker">Latest test</span>
                   {latestTest(cov)}
-                  {cov.lastEvaluationDate ? `, as nCino evaluated on ${fmtDate(cov.lastEvaluationDate)}` : ""}
+                  {cov.lastEvaluationDate ? `, as Salesforce evaluated on ${fmtDate(cov.lastEvaluationDate)}` : ""}
                 </p>
               )}
             </>
@@ -311,7 +311,7 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
         <SecHead kicker="Compliance" sub="Covenant tests" explain={EXPLAIN} />
 
         <Figures>
-          <Figure label="Risk rating" value={grade != null ? `Grade ${grade}` : "—"} sub="nCino primary" />
+          <Figure label="Risk rating" value={grade != null ? `Grade ${grade}` : "—"} sub="Salesforce primary" />
         </Figures>
 
         {covs.length ? (

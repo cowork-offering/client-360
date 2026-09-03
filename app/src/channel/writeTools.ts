@@ -80,7 +80,7 @@ export const WRITE_TOOLS = {
     stage: "stage_renewal",
     execute: null,
     heldReason:
-      "Staging works; execution awaits an approved facility path: nCino requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.",
+      "Staging works; execution awaits an approved facility path: Salesforce requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.",
   },
 } as const;
 
@@ -98,7 +98,7 @@ export function executionHeldReason(actionId: string): string | null {
 /** The banker-facing explanation of the held state. One sentence of cause, one
  *  of consequence, and the reassurance that the work is not lost. */
 export const EXECUTION_HELD_COPY =
-  "Staging works; execution awaits an approved facility path: nCino requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.";
+  "Staging works; execution awaits an approved facility path: Salesforce requires facilities to be Booked via its own Submit for Approval before a credit action can run (org rule LV06). The staged plan is preserved.";
 
 export type WriteActionId = keyof typeof WRITE_TOOLS;
 

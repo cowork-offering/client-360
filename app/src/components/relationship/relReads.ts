@@ -102,7 +102,7 @@ function ratingCard(ctx: RelContext): ReadCardModel | null {
       icon: "commit",
       label: "Computed",
       value: String(computed),
-      detail: "The grade the read carries. A rating review files a proposal; nCino's formula decides the final.",
+      detail: "The grade the read carries. A rating review files a proposal; Salesforce's formula decides the final.",
     });
   }
 

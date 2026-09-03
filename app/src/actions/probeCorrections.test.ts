@@ -97,7 +97,7 @@ describe("Probe 5 — the new facility insert", () => {
   it("proposes no loan name: the org rewrites whatever it is sent", () => {
     const s = schemaFor("new-facility-request");
     expect(s.fields.some((f) => f.key === "name")).toBe(false);
-    expect(s.intro).toContain("nCino names the loan itself");
+    expect(s.intro).toContain("Salesforce names the loan itself");
   });
 
   it("reports the loan officer as org-assigned", () => {
@@ -147,7 +147,7 @@ describe("wave 2.1 — a package-less relationship is not a dead end", () => {
 
   it("keeps the probe-backed naming fact in BOTH cases", () => {
     for (const b of [withPackage, withoutPackage]) {
-      expect(schemaFor(b).intro).toContain("nCino names the loan itself on creation");
+      expect(schemaFor(b).intro).toContain("Salesforce names the loan itself on creation");
     }
   });
 

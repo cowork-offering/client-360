@@ -175,8 +175,8 @@ function newFacility(b: BorrowerBundle | null, name: string): Briefing {
     subject: {
       title: `New facility for ${name}`,
       context: hasPackage
-        ? `Filing under this relationship's credit package, joining ${memberCount} existing ${memberCount === 1 ? "facility" : "facilities"}${committed ? ` and ${committed} committed` : ""}. nCino names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
-        : `No credit package exists yet for this relationship. One will be created first, the way nCino's own wizard does, and the facility filed under it. ${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership, which a facility insert does not do on its own. The org names both records itself.`,
+        ? `Filing under this relationship's credit package, joining ${memberCount} existing ${memberCount === 1 ? "facility" : "facilities"}${committed ? ` and ${committed} committed` : ""}. Salesforce names the loan itself on creation, so no name is proposed here, and the Loan Detail record follows about four seconds later.`
+        : `No credit package exists yet for this relationship. One will be created first, the way Salesforce's own wizard does, and the facility filed under it. ${name} is added to the facility's borrowing structure as Borrower at 100 percent ownership, which a facility insert does not do on its own. The org names both records itself.`,
     },
     lead: [
       t("This requests a "),
@@ -255,7 +255,7 @@ function covenantReview(b: BorrowerBundle | null): Briefing {
 function facilityChange(b: BorrowerBundle | null, name: string, kind: "modification" | "renewal"): Briefing {
   const figures: DraftFigure[] = [];
   const drawn = money(b?.exposure?.totalOutstanding, "borrower.exposure.totalOutstanding", figures);
-  const held = "The plan is staged and preserved; filing it awaits nCino's own approval path.";
+  const held = "The plan is staged and preserved; filing it awaits Salesforce's own approval path.";
   // The facility is a CHOICE only when more than one is booked. With exactly
   // one there is nothing to choose, so the ticket names it instead of asking.
   const booked = bookedFacilities(b);

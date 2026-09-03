@@ -159,9 +159,9 @@ export function relBookFor(ctx: RelContext): RelBook {
       frequency: c.frequency ?? null,
       assessable: hasRow && !inactive,
       reason: !hasRow
-        ? "nCino holds no compliance row on this covenant, so there is no open test period to close."
+        ? "Salesforce holds no compliance row on this covenant, so there is no open test period to close."
         : inactive
-          ? "The covenant is not active, so nCino will not accept an assessment on it."
+          ? "The covenant is not active, so Salesforce will not accept an assessment on it."
           : null,
       needsNonPendingOptIn: hasRow && NOT_PENDING(complianceStatus),
     };
@@ -203,7 +203,7 @@ export function relBookFor(ctx: RelContext): RelBook {
  * then does the org refuse all six. That is the single worst moment in the room.
  */
 export const NO_COMPLIANCE_ROW = (count: number): string =>
-  `nCino holds no open test period on any of the ${count} ${count === 1 ? "covenant" : "covenants"} on this relationship, so there is nothing for a covenant review to close. The tests and their thresholds are on the book and I can read them out; recording an assessment needs a compliance row that nCino has not raised.`;
+  `Salesforce holds no open test period on any of the ${count} ${count === 1 ? "covenant" : "covenants"} on this relationship, so there is nothing for a covenant review to close. The tests and their thresholds are on the book and I can read them out; recording an assessment needs a compliance row that Salesforce has not raised.`;
 
 /** The chip's own sub-line, where the covenant route cannot run at all. */
 export const NO_COMPLIANCE_ROW_CHIP =

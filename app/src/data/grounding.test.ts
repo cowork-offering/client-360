@@ -237,7 +237,7 @@ describe("Exception semantics survive into the grounded prompt", () => {
 
   it("counts an unmeasured Exception instead of dropping it, and never calls it a breach", () => {
     const q = withCovs([{ covenantType: "Term Covenants", lastEvaluationStatus: "Exception" }]);
-    expect(q).toContain("1 covenant sits at Exception in nCino with no measured breach");
+    expect(q).toContain("1 covenant sits at Exception in Salesforce with no measured breach");
     expect(q).not.toMatch(/breached by/);
   });
 
@@ -248,14 +248,14 @@ describe("Exception semantics survive into the grounded prompt", () => {
       { covenantType: "Reporting", covenantStatus: "overdue" },
     ]);
     expect(q).toMatch(/cushion \d+\.\d+x or about \d+ percent/);
-    expect(q).toContain("2 covenants sit at Exception in nCino with no measured breach");
+    expect(q).toContain("2 covenants sit at Exception in Salesforce with no measured breach");
   });
 
   it("says a waived covenant is past its threshold WITHOUT calling it breached", () => {
     const q = withCovs([
       { covenantType: "Debt Service Coverage Ratio", actualValue: 1.1, thresholdValue: 1.25, lastEvaluationStatus: "Waived" },
     ]);
-    expect(q).toMatch(/past the threshold, recorded in nCino as Waived/);
+    expect(q).toMatch(/past the threshold, recorded in Salesforce as Waived/);
     expect(q).not.toMatch(/breached by/);
   });
 });

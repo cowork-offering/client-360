@@ -281,8 +281,8 @@ describe("A33.3.1 — the transition allowlist", () => {
     // carry_junctions write steps, and a mirror that does not know their objects refuses the whole
     // plan at the confirm gate.
     const staged = [
-      { id: "roll_package", type: "write", objectName: "LLC_BI__Product_Package__c", fields: ["new package version created by nCino"] },
-      { id: "credit_action_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["clone created by nCino on the new package version"] },
+      { id: "roll_package", type: "write", objectName: "LLC_BI__Product_Package__c", fields: ["new package version created by Salesforce"] },
+      { id: "credit_action_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["clone created by Salesforce on the new package version"] },
       { id: "verify_clone_0", type: "verification", objectName: "LLC_BI__LoanRenewal__c" },
       { id: "apply_changes_0", type: "write", objectName: "LLC_BI__Loan__c", fields: ["LLC_BI__Amount__c", "LLC_BI__Maturity_Date__c", "LLC_BI__InterestRate__c", "LLC_BI__Term_Months__c"] },
       { id: "verify_package", type: "verification", objectName: "LLC_BI__Product_Package__c" },
@@ -451,7 +451,7 @@ describe("A33.5.4 — the decision token", () => {
 
 describe("A33.3.1 — confirm gate vocabulary", () => {
   it("closes with the fixed line", () => {
-    expect(CLOSING_LINE).toBe("Real approval happens in nCino's credit-risk process.");
+    expect(CLOSING_LINE).toBe("Real approval happens in Salesforce's credit-risk process.");
   });
 
   it("no simulated summary or warning uses approval vocabulary", () => {

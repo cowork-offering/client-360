@@ -160,7 +160,7 @@ function TrailEntry({
             record holds it". */}
         {entry.orgConfirmed ? (
           <span data-origin-detail="org" className="tag rec">
-            On record in nCino
+            On record in Salesforce
           </span>
         ) : (
           entry.sessionLocal &&

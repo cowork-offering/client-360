@@ -21,7 +21,7 @@ import sample from "../../artifact/sample-data.json";
    covenant's own detail behind a click. The old shape repeated a covenant under
    every facility group, which is what these tests used to lock in.
 
-   What survives unchanged: every covenant states nCino's own verdict, no figure
+   What survives unchanged: every covenant states Salesforce's own verdict, no figure
    is rendered without its unit, and an administrative Exception is never a
    breach. Display correctness is a contract for ALL relationships, so the
    per-borrower assertions run over both data files.
@@ -102,7 +102,7 @@ describe("one list, one row per covenant, in every relationship", () => {
       }
     });
 
-    it(`${name} (${file}): every covenant states nCino's own verdict`, () => {
+    it(`${name} (${file}): every covenant states Salesforce's own verdict`, () => {
       const el = render(data, bundle);
       // One status chip per row, never a silent row: a covenant whose status the
       // cockpit cannot read still has to say so on screen.
@@ -246,7 +246,7 @@ describe("Hartwell: the account's six covenants, and the loans behind two of the
     const text = el.textContent ?? "";
     expect(text).toContain("Not associated to any facility");
     expect(text).toContain("2.42× vs ≤ 3.00×");
-    expect(text).toContain("as nCino evaluated on Jul 15, 2026");
+    expect(text).toContain("as Salesforce evaluated on Jul 15, 2026");
   });
 
   it("toggles: a second click closes what the first opened", () => {
@@ -332,7 +332,7 @@ describe("a read that does not carry the loan junction says exactly that", () =>
 /* =============================================================================
    EXCEPTION IS NOT A BREACH.
 
-   In nCino the exception batch forces `Exception` onto a compliance row the
+   In Salesforce the exception batch forces `Exception` onto a compliance row the
    moment its Due Date passes, measured or not: 101 of 140 rows in this org sit
    there with no value at all. Rendering that as "breached" overstates credit
    deterioration on most of the book, so the surface has to keep the two apart

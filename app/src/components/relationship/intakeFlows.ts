@@ -26,7 +26,7 @@ import type { PayloadResult, RelContext } from "./reviewFlows";
    THE SIXTH ROUTE, AND THE ONLY ONE THAT CREATES. The other five act on records
    the org already holds: they assess a covenant, they value an asset, they file
    a review, they raise a case. This one AUTHORS. A covenant the credit agreement
-   struck and nCino has never seen, and an asset the borrower owns that no
+   struck and Salesforce has never seen, and an asset the borrower owns that no
    facility is secured by yet, both anchored on the RELATIONSHIP and neither one
    touching a facility.
 
@@ -86,7 +86,7 @@ export const EFFECTIVE_DATE_IS_FINAL =
 
 /** What the org works out, so the room does not ask and does not claim. */
 export const ORG_DERIVES =
-  "The compliance schedule, the advance rate, the lendable value and every record name are the org's own arithmetic. I file what the credit agreement decided; nCino works out the rest.";
+  "The compliance schedule, the advance rate, the lendable value and every record name are the org's own arithmetic. I file what the credit agreement decided; Salesforce works out the rest.";
 
 /* --------------------------------------------------------------- the wire */
 
@@ -671,7 +671,7 @@ export function intakeStep(ctx: RelContext, a: Answers): RelStep | null {
       ask: "Are we putting a covenant on this relationship, or an asset?",
       kind: "text",
       options: [
-        { label: "A covenant", value: "covenant", detail: "A test the credit agreement struck and nCino has not seen." },
+        { label: "A covenant", value: "covenant", detail: "A test the credit agreement struck and Salesforce has not seen." },
         { label: "An asset", value: "collateral", detail: "Something the borrower owns. Filed unpledged: no facility is secured by it." },
       ],
       placeholder: "Name it, or say the whole thing and I will read it back.",

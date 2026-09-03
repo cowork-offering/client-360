@@ -227,7 +227,7 @@ export function StepTracker({
       )}
 
       {/* A PACKAGE-ANCHORED CREDIT ACTION reports per facility. Each row names
-          the clone nCino created, the chain row that records the revision, and
+          the clone Salesforce created, the chain row that records the revision, and
           what the apply step read back — the org's own sentence, not a
           restatement. A replay returns no facilities at all, so this block
           simply does not render for one: nothing was written to report. */}
@@ -299,7 +299,7 @@ export function StepTracker({
           )}
           {outcome?.approvalChainStarted === true && (
             <p className="mt-2 text-[11px]" style={{ color: "var(--warning)" }}>
-              nCino created the next compliance record in this transaction, which is what raises the bank's covenant
+              Salesforce created the next compliance record in this transaction, which is what raises the bank's covenant
               approval at a named person.
             </p>
           )}
@@ -362,7 +362,7 @@ export function StepTracker({
             Filed, name not confirmed
           </div>
           <div className="mt-1 text-[11.5px] leading-relaxed text-ink-body">
-            The {filed.label} was written, but the read-back that confirms it did not come back. Open it in nCino to
+            The {filed.label} was written, but the read-back that confirms it did not come back. Open it in Salesforce to
             verify it landed as intended.
           </div>
           <div className="mt-1 font-mono text-[11px] text-ink-faint">{filed.id}</div>

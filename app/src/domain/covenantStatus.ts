@@ -1,7 +1,7 @@
 /* =============================================================================
    COVENANT STATUS — ONE CLASSIFIER, EVERY SURFACE.
 
-   WHY THIS EXISTS. nCino's `Exception` is mostly an ADMINISTRATIVE flag, not a
+   WHY THIS EXISTS. Salesforce's `Exception` is mostly an ADMINISTRATIVE flag, not a
    financial one. The Servicing engine's exception batch forces `Exception` onto
    a compliance row the moment its Due Date passes, whether or not anything was
    measured — so in `bankinggpt` 101 of 140 compliance rows sit at `Exception`
@@ -59,7 +59,7 @@ export interface CovenantVerdict {
 
 /** The sentence an administrative Exception carries, verbatim, everywhere. */
 export const ADMINISTRATIVE_EXCEPTION_NOTE =
-  "Administrative exception recorded in nCino; not a measured breach";
+  "Administrative exception recorded in Salesforce; not a measured breach";
 
 const norm = (s: unknown): string => (typeof s === "string" ? s.trim() : "");
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -100,7 +100,7 @@ function measurementSentence(cov: Covenant): string {
 
 function administrativeNote(raw: string): string {
   return /overdue|past due/i.test(raw)
-    ? "Test overdue in nCino; not a measured breach"
+    ? "Test overdue in Salesforce; not a measured breach"
     : ADMINISTRATIVE_EXCEPTION_NOTE;
 }
 
@@ -138,7 +138,7 @@ export function classifyCovenant(cov: Covenant): CovenantVerdict {
       "waived",
       raw,
       "neutral",
-      `Waived in nCino; the test is not being enforced for this period.${violates ? ` ${measurementSentence(cov)}` : ""}`,
+      `Waived in Salesforce; the test is not being enforced for this period.${violates ? ` ${measurementSentence(cov)}` : ""}`,
       false,
     );
   }
@@ -148,15 +148,15 @@ export function classifyCovenant(cov: Covenant): CovenantVerdict {
   if (reason === "breached") {
     return breach(
       raw || "Breached",
-      "The compliance row records Reason for Exception as Breached, which is nCino's own answer that the test failed.",
+      "The compliance row records Reason for Exception as Breached, which is Salesforce's own answer that the test failed.",
     );
   }
-  if (cov.breached === true) return breach(raw || "Breached", "nCino's Breached flag is set on this covenant.");
-  if (raw && has(s, BREACH_WORDS)) return breach(raw, `nCino records this covenant as ${raw}.`);
+  if (cov.breached === true) return breach(raw || "Breached", "Salesforce's Breached flag is set on this covenant.");
+  if (raw && has(s, BREACH_WORDS)) return breach(raw, `Salesforce records this covenant as ${raw}.`);
 
   /* Exception and its administrative siblings. THE POINT OF THIS MODULE. */
   if (raw && has(s, EXCEPTION_WORDS)) {
-    if (violates) return breach(`${raw}, threshold not met`, `${raw} recorded in nCino, and the measured value misses the test.`);
+    if (violates) return breach(`${raw}, threshold not met`, `${raw} recorded in Salesforce, and the measured value misses the test.`);
     // `Overdue` is the org saying outright that this is a paperwork miss.
     if (reason === "overdue") {
       return build(
@@ -171,29 +171,29 @@ export function classifyCovenant(cov: Covenant): CovenantVerdict {
   }
 
   if (raw && has(s, COMPLIANT_WORDS)) {
-    if (violates) return breach(`${raw}, threshold not met`, `nCino records ${raw}, but the measured value misses the test.`);
-    return build("compliant", raw, "clear", `nCino records this covenant as ${raw}.`, false);
+    if (violates) return breach(`${raw}, threshold not met`, `Salesforce records ${raw}, but the measured value misses the test.`);
+    return build("compliant", raw, "clear", `Salesforce records this covenant as ${raw}.`, false);
   }
 
   if (raw && has(s, PENDING_WORDS)) {
-    if (violates) return breach(`${raw}, threshold not met`, `The test is outstanding in nCino, and the measured value misses the test.`);
-    return build("pending", raw, "watch", `The test is outstanding in nCino, recorded as ${raw}.`, false);
+    if (violates) return breach(`${raw}, threshold not met`, `The test is outstanding in Salesforce, and the measured value misses the test.`);
+    return build("pending", raw, "watch", `The test is outstanding in Salesforce, recorded as ${raw}.`, false);
   }
 
   /* No status recorded. The numbers are all there is. */
   if (!raw) {
-    if (violates) return breach("Threshold not met", "nCino records no evaluation status for this covenant.");
-    return build("unknown", "No status", "neutral", "nCino records no evaluation status for this covenant.", false);
+    if (violates) return breach("Threshold not met", "Salesforce records no evaluation status for this covenant.");
+    return build("unknown", "No status", "neutral", "Salesforce records no evaluation status for this covenant.", false);
   }
 
   /* A string outside everything above. It renders as the org wrote it. The only
      thing that can still make it a breach is a measured value that misses. */
-  if (violates) return breach(`${raw}, threshold not met`, `nCino records the status "${raw}", and the measured value misses the test.`);
+  if (violates) return breach(`${raw}, threshold not met`, `Salesforce records the status "${raw}", and the measured value misses the test.`);
   return build(
     "unknown",
     raw,
     has(s, WATCH_WORDS) ? "watch" : "neutral",
-    `nCino records the status "${raw}", which this cockpit does not map to a compliance outcome.`,
+    `Salesforce records the status "${raw}", which this cockpit does not map to a compliance outcome.`,
     false,
   );
 }

@@ -4683,7 +4683,7 @@ export function Workroom({
       });
       /* ============ THE SECOND HOP, FOR A PLAN THAT FILED A NEW FACILITY
 
-         The primary loan purpose lives on `LLC_BI__Loan_Detail__c`, which nCino
+         The primary loan purpose lives on `LLC_BI__Loan_Detail__c`, which Salesforce
          creates from an AFTER-COMMIT flow of its own. Nothing inside the
          transaction that filed the facility could see it, so the org reported
          the purpose as pending and `complete_new_facility_detail` finishes it.
@@ -4718,13 +4718,13 @@ export function Workroom({
           } else {
             quiet(
               `The facility is filed and its purpose is not: ${finished.error.message} ` +
-                "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
+                "Nothing else is affected, and the purpose can be set in Salesforce or by running the same step again.",
             );
           }
         } catch (e) {
           quiet(
             `The facility is filed and its purpose is not: ${readableError(e)} ` +
-              "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
+              "Nothing else is affected, and the purpose can be set in Salesforce or by running the same step again.",
           );
         }
       }
@@ -6158,7 +6158,7 @@ function Dossier({ dossier, lit }: { dossier: DossierModel; lit: boolean }) {
       <span className="aura" aria-hidden="true" />
       {/* THE PACKAGE REFERENCE IS THE LINK (founder, 2026-09-01). The card used
           to name the package at the top and then offer an "Open the package in
-          nCino" affordance on its last line — two mentions of one record, and
+          Salesforce" affordance on its last line — two mentions of one record, and
           the affordance was the louder of them. The NAME carries the href now:
           the banker reads what was filed against and opens it in the same
           gesture, and the last line goes back to being the org's own
