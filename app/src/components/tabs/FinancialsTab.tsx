@@ -156,6 +156,10 @@ export function FinancialsTab({ bundle }: { bundle: BorrowerBundle }) {
             covenant it is measured against, which is the whole reason a banker
             reads it, and the status word says which side of it the figure sits
             on. */}
+        {/* One full-width row shared half and half, so the pair always spans
+            exactly the trend card above (founder, 2026-09-03: same length as
+            the card above; auto-fit had left spare columns at wide widths). */}
+        <div style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
         <PaneCard>
           <div className="kicker" style={{ marginBottom: 12 }}>
             Key ratios
@@ -255,6 +259,7 @@ export function FinancialsTab({ bundle }: { bundle: BorrowerBundle }) {
             </table>
           </PaneCard>
         )}
+        </div>
       </div>
 
       <Note note={boom.note ?? (spread.sourceFile ? `Source: Boom spreading · ${spread.sourceFile}` : "Source: Boom spreading")} />
