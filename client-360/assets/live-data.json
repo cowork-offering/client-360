@@ -3109,713 +3109,769 @@
         "note": "Covenant / financial / behavioral / risk-migration signals are not in this tool — pull deal_covenant_grade, Boom, AFS, and Snowflake separately and compose at the agent layer.",
         "renewals": []
       },
-      "activity": {
-        "accountId": "001bb00001I7FPNAA3",
-        "count": 50,
-        "entries": [
-          {
-            "status": "Partial",
-            "stagingId": "a8abb00001O2gwGAAR",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002ICPoEAO",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-09-03 05:16:05",
-            "createdDate": "2026-09-03 05:14:53",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
+      "activity": [
+        {
+          "id": "exec-a8abb00001O2gwGAAR",
+          "ts": "2026-09-03 05:16:05",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001O2gwGAAR. Record a4Zbb000002ICPoEAO. Confirmed by 005bb00000ftouDAAQ. The org records this as Partial."
           },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001O1v9TAAR",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002IBn6EAG",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-09-03 04:32:58",
-            "createdDate": "2026-09-03 04:32:27",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Partial"
+        },
+        {
+          "id": "exec-a8abb00001O1v9TAAR",
+          "ts": "2026-09-03 04:32:58",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001O1v9TAAR. Record a4Zbb000002IBn6EAG. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
           },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001O1ywiAAB",
-            "resultRecordName": null,
-            "resultRecordId": "a3Bbb000000TTufEAG",
-            "productPackageId": null,
-            "planHashPresent": true,
-            "executedAt": "2026-09-03 04:02:36",
-            "createdDate": "2026-09-03 04:02:01",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "relationship-intake",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001O1aPvAAJ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002IAr2EAG",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-09-03 03:14:10",
-            "createdDate": "2026-09-03 03:11:13",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001O1NPXAA3",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-09-03 01:40:12",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001O1CKQAA3",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-09-03 01:20:45",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NxYgIAAV",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002I0QGEA0",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-09-02 08:52:36",
-            "createdDate": "2026-09-02 08:52:03",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001Nxu5OAAR",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-09-02 07:24:09",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NxT3ZAAV",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002HvqOEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-09-02 05:59:02",
-            "createdDate": "2026-09-02 05:55:56",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001NwlyfAAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-09-02 03:23:32",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001NtRYSAA3",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-09-01 09:16:12",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NrLmzAAF",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002H804EAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-31 18:41:13",
-            "createdDate": "2026-08-31 18:40:03",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001Nr4xeAAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-08-31 18:33:56",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001NqFPKAA3",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-08-31 14:35:07",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NpmssAAB",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002H1mZEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-31 09:04:29",
-            "createdDate": "2026-08-31 09:03:45",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NpE9qAAF",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002H1TDEA0",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-31 08:22:28",
-            "createdDate": "2026-08-31 08:21:44",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001Np8Z5AAJ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002H10CEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-31 07:17:47",
-            "createdDate": "2026-08-31 07:16:59",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001Np0QOAAZ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GzjAEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-31 05:45:53",
-            "createdDate": "2026-08-31 05:45:32",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001Np5G3AAJ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GyyOEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-31 04:51:56",
-            "createdDate": "2026-08-31 04:51:35",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NnqJOAAZ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GvVsEAK",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 23:57:46",
-            "createdDate": "2026-08-30 23:57:00",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NmXKYAA3",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GshgEAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 14:21:21",
-            "createdDate": "2026-08-30 14:21:11",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NmROqAAN",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 14:18:16",
-            "createdDate": "2026-08-30 14:18:05",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NmOSPAA3",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GsMiEAK",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 13:51:19",
-            "createdDate": "2026-08-30 13:51:07",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NmQHbAAN",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GsL6EAK",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 13:47:58",
-            "createdDate": "2026-08-30 13:47:20",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NmAuTAAV",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GsEeEAK",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 13:14:57",
-            "createdDate": "2026-08-30 13:14:42",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NmJeNAAV",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GrwtEAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 12:03:00",
-            "createdDate": "2026-08-30 12:02:30",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001Nm6sVAAR",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GrglEAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 11:38:40",
-            "createdDate": "2026-08-30 11:38:15",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NlrbZAAR",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GrDhEAK",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 10:37:44",
-            "createdDate": "2026-08-30 10:37:36",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001Nlo1GAAR",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002Gqr7EAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:53:18",
-            "createdDate": "2026-08-30 08:52:59",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NluW0AAJ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GqmHEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:48:21",
-            "createdDate": "2026-08-30 08:48:17",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001Nm2A1AAJ",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-08-30 08:47:45",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NltCKAAZ",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GqkfEAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:47:31",
-            "createdDate": "2026-08-30 08:47:27",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NlgpiAAB",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002Gqj3EAC",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:47:16",
-            "createdDate": "2026-08-30 08:47:12",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001Nm1h2AAB",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GqeDEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:39:38",
-            "createdDate": "2026-08-30 08:39:16",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NlhsgAAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:16:46",
-            "createdDate": "2026-08-30 08:16:32",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001NlsXVAAZ",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-08-30 08:15:32",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001NlO9cAAF",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-08-30 08:13:38",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NloduAAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 08:12:05",
-            "createdDate": "2026-08-30 08:11:49",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NlvCBAAZ",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:50:44",
-            "createdDate": "2026-08-30 07:50:34",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001Nm146AAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:49:22",
-            "createdDate": "2026-08-30 07:49:10",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001Nlh1nAAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:45:45",
-            "createdDate": "2026-08-30 07:45:41",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001Nl8heAAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:42:26",
-            "createdDate": "2026-08-30 07:42:24",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Completed",
-            "stagingId": "a8abb00001NllhfAAB",
-            "resultRecordName": null,
-            "resultRecordId": "a4Zbb000002GpdJEAS",
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:41:19",
-            "createdDate": "2026-08-30 07:41:14",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NlpJuAAJ",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:40:10",
-            "createdDate": "2026-08-30 07:39:44",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001Nlwu7AAB",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:40:10",
-            "createdDate": "2026-08-30 07:39:44",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NlluVAAR",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:37:30",
-            "createdDate": "2026-08-30 07:37:27",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NltN4AAJ",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:25:03",
-            "createdDate": "2026-08-30 07:24:59",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NluhCAAR",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-30 07:18:34",
-            "createdDate": "2026-08-30 07:18:30",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Failed",
-            "stagingId": "a8abb00001NQI3dAAH",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": "2026-08-26 00:40:26",
-            "createdDate": "2026-08-26 00:40:10",
-            "approverUserId": "005bb00000ftouDAAQ",
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
-          },
-          {
-            "status": "Staged",
-            "stagingId": "a8abb00001NPew8AAD",
-            "resultRecordName": null,
-            "resultRecordId": null,
-            "productPackageId": "a5Fbb000000IHFJEA4",
-            "planHashPresent": true,
-            "executedAt": null,
-            "createdDate": "2026-08-26 00:02:26",
-            "approverUserId": null,
-            "actorUserId": "005bb00000ftouDAAQ",
-            "actionId": "loan-modification",
-            "accountId": "001bb00001I7FPNAA3"
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002IBn6EAG",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002IBn6EAG/view"
           }
-        ],
-        "note": "Newest first. Plan hashes are reported as present or absent, never returned. Decision-token material is never read by this tool."
-      },
+        },
+        {
+          "id": "exec-a8abb00001O1ywiAAB",
+          "ts": "2026-09-03 04:02:36",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001O1ywiAAB. Record a3Bbb000000TTufEAG. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Action filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a3Bbb000000TTufEAG",
+            "label": "LLC_BI__Covenant2__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Covenant2__c/a3Bbb000000TTufEAG/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001O1aPvAAJ",
+          "ts": "2026-09-03 03:14:10",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001O1aPvAAJ. Record a4Zbb000002IAr2EAG. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002IAr2EAG",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002IAr2EAG/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001O1NPXAA3",
+          "ts": "2026-09-03 01:40:12",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001O1NPXAA3. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001O1CKQAA3",
+          "ts": "2026-09-03 01:20:45",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001O1CKQAA3. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NxYgIAAV",
+          "ts": "2026-09-02 08:52:36",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NxYgIAAV. Record a4Zbb000002I0QGEA0. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002I0QGEA0",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002I0QGEA0/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Nxu5OAAR",
+          "ts": "2026-09-02 07:24:09",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nxu5OAAR. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NxT3ZAAV",
+          "ts": "2026-09-02 05:59:02",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NxT3ZAAV. Record a4Zbb000002HvqOEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002HvqOEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002HvqOEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NwlyfAAB",
+          "ts": "2026-09-02 03:23:32",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NwlyfAAB. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NtRYSAA3",
+          "ts": "2026-09-01 09:16:12",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NtRYSAA3. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NrLmzAAF",
+          "ts": "2026-08-31 18:41:13",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NrLmzAAF. Record a4Zbb000002H804EAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002H804EAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002H804EAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Nr4xeAAB",
+          "ts": "2026-08-31 18:33:56",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nr4xeAAB. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NqFPKAA3",
+          "ts": "2026-08-31 14:35:07",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NqFPKAA3. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NpmssAAB",
+          "ts": "2026-08-31 09:04:29",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NpmssAAB. Record a4Zbb000002H1mZEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002H1mZEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002H1mZEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NpE9qAAF",
+          "ts": "2026-08-31 08:22:28",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NpE9qAAF. Record a4Zbb000002H1TDEA0. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002H1TDEA0",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002H1TDEA0/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Np8Z5AAJ",
+          "ts": "2026-08-31 07:17:47",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Np8Z5AAJ. Record a4Zbb000002H10CEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002H10CEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002H10CEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Np0QOAAZ",
+          "ts": "2026-08-31 05:45:53",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Np0QOAAZ. Record a4Zbb000002GzjAEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GzjAEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GzjAEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Np5G3AAJ",
+          "ts": "2026-08-31 04:51:56",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Np5G3AAJ. Record a4Zbb000002GyyOEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GyyOEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GyyOEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NnqJOAAZ",
+          "ts": "2026-08-30 23:57:46",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NnqJOAAZ. Record a4Zbb000002GvVsEAK. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GvVsEAK",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GvVsEAK/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NmXKYAA3",
+          "ts": "2026-08-30 14:21:21",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NmXKYAA3. Record a4Zbb000002GshgEAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GshgEAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GshgEAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NmROqAAN",
+          "ts": "2026-08-30 14:18:16",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NmROqAAN. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NmOSPAA3",
+          "ts": "2026-08-30 13:51:19",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NmOSPAA3. Record a4Zbb000002GsMiEAK. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GsMiEAK",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GsMiEAK/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NmQHbAAN",
+          "ts": "2026-08-30 13:47:58",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NmQHbAAN. Record a4Zbb000002GsL6EAK. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GsL6EAK",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GsL6EAK/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NmAuTAAV",
+          "ts": "2026-08-30 13:14:57",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NmAuTAAV. Record a4Zbb000002GsEeEAK. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GsEeEAK",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GsEeEAK/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NmJeNAAV",
+          "ts": "2026-08-30 12:03:00",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NmJeNAAV. Record a4Zbb000002GrwtEAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GrwtEAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GrwtEAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Nm6sVAAR",
+          "ts": "2026-08-30 11:38:40",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nm6sVAAR. Record a4Zbb000002GrglEAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GrglEAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GrglEAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NlrbZAAR",
+          "ts": "2026-08-30 10:37:44",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlrbZAAR. Record a4Zbb000002GrDhEAK. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GrDhEAK",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GrDhEAK/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Nlo1GAAR",
+          "ts": "2026-08-30 08:53:18",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nlo1GAAR. Record a4Zbb000002Gqr7EAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002Gqr7EAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002Gqr7EAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NluW0AAJ",
+          "ts": "2026-08-30 08:48:21",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NluW0AAJ. Record a4Zbb000002GqmHEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GqmHEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GqmHEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Nm2A1AAJ",
+          "ts": "2026-08-30 08:47:45",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nm2A1AAJ. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NltCKAAZ",
+          "ts": "2026-08-30 08:47:31",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NltCKAAZ. Record a4Zbb000002GqkfEAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GqkfEAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GqkfEAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NlgpiAAB",
+          "ts": "2026-08-30 08:47:16",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlgpiAAB. Record a4Zbb000002Gqj3EAC. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002Gqj3EAC",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002Gqj3EAC/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001Nm1h2AAB",
+          "ts": "2026-08-30 08:39:38",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nm1h2AAB. Record a4Zbb000002GqeDEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GqeDEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GqeDEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NlhsgAAB",
+          "ts": "2026-08-30 08:16:46",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlhsgAAB. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NlsXVAAZ",
+          "ts": "2026-08-30 08:15:32",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlsXVAAZ. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NlO9cAAF",
+          "ts": "2026-08-30 08:13:38",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlO9cAAF. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        },
+        {
+          "id": "exec-a8abb00001NloduAAB",
+          "ts": "2026-08-30 08:12:05",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NloduAAB. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NlvCBAAZ",
+          "ts": "2026-08-30 07:50:44",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlvCBAAZ. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001Nm146AAB",
+          "ts": "2026-08-30 07:49:22",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nm146AAB. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001Nlh1nAAB",
+          "ts": "2026-08-30 07:45:45",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nlh1nAAB. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001Nl8heAAB",
+          "ts": "2026-08-30 07:42:26",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nl8heAAB. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NllhfAAB",
+          "ts": "2026-08-30 07:41:19",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NllhfAAB. Record a4Zbb000002GpdJEAS. Confirmed by 005bb00000ftouDAAQ. The org records this as Completed."
+          },
+          "kind": "ACTION_EXECUTED",
+          "title": "Modification filed, name not confirmed",
+          "summary": "The org completed this but did not return the record name, so it is filed but unverified.",
+          "reference": {
+            "kind": "ncino-record",
+            "id": "a4Zbb000002GpdJEAS",
+            "label": "LLC_BI__Loan__c",
+            "source": "Customer 360",
+            "webLink": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com/lightning/r/LLC_BI__Loan__c/a4Zbb000002GpdJEAS/view"
+          }
+        },
+        {
+          "id": "exec-a8abb00001NlpJuAAJ",
+          "ts": "2026-08-30 07:40:10",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlpJuAAJ. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001Nlwu7AAB",
+          "ts": "2026-08-30 07:40:10",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001Nlwu7AAB. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NlluVAAR",
+          "ts": "2026-08-30 07:37:30",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NlluVAAR. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NltN4AAJ",
+          "ts": "2026-08-30 07:25:03",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NltN4AAJ. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NluhCAAR",
+          "ts": "2026-08-30 07:18:34",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NluhCAAR. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NQI3dAAH",
+          "ts": "2026-08-26 00:40:26",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NQI3dAAH. Confirmed by 005bb00000ftouDAAQ. The org records this as Failed."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification recorded as Failed"
+        },
+        {
+          "id": "exec-a8abb00001NPew8AAD",
+          "ts": "2026-08-26 00:02:26",
+          "actor": "005bb00000ftouDAAQ",
+          "orgConfirmed": true,
+          "detail": {
+            "body": "Staged as a8abb00001NPew8AAD. The org records this as Staged."
+          },
+          "kind": "ACTION_STAGED",
+          "title": "Modification staged, never filed",
+          "summary": "A plan was built and confirmed by nobody. Nothing was written."
+        }
+      ],
       "anchors": [
         {
           "label": "Rating",
