@@ -576,11 +576,20 @@ private class C360WriteGuardTest {
             System.assertEquals(true, refused, 'The org assigns it or derives it. Tried: LLC_BI__Collateral__c.' + f);
         }
 
-        // AUTHORIZE IS THE BANKER'S CHECKBOX. It is the only escape from the org's
-        // Pledge_More_Than_Lendable_Value rule, so a tool that could set it could authorise an
-        // over-pledge without anybody deciding to.
+        // AUTHORIZE IS THE BANKER'S CHECKBOX AND IT IS WRITABLE (2026-09-03). It is the only escape
+        // from the org's Pledge_More_Than_Lendable_Value rule, and the fence that refused it left a
+        // banker who wanted to lend past an asset's lendable value with no way to say so. It passes
+        // the guard now; what keeps it honest is stage_loan_modification, which sets it only on an
+        // explicit authoriseOverPledge and only where the amount genuinely exceeds the lendable
+        // value. The guard's job here is to prove the field is no longer walled off.
+        C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CREATE,
+            new Map<String, Object>{
+                'LLC_BI__Pledged_Status__c' => 'Active', 'LLC_BI__Active__c' => true,
+                'LLC_BI__Amount_Pledged__c' => 900000, 'LLC_BI__Authorize__c' => true
+            });
+
         for (String f : new List<String>{
-            'LLC_BI__Authorize__c', 'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Unique_Id__c'
+            'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Unique_Id__c'
         }) {
             Boolean refused = false;
             try {

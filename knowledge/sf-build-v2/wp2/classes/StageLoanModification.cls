@@ -90,7 +90,7 @@ global with sharing class StageLoanModification {
         global String fieldChangesJson;
         @InvocableVariable(label='Fee Adds JSON' description='Optional. NET-NEW FEES authored on the CLONE: [{"feeType" (an active LLC_BI__Fee_Type__c value), "description" (the human label; Name on a fee is an autonumber), "calculationType" (Percentage|Flat Amount), "percentage"? , "amount"?, "basisSource"?, "recordType"? (Fees|Costs|Adjustments), "paidBy"?, "targetLoanId"?}]. A PERCENTAGE fee carries a percentage and a basis and NO amount: the org\'s own FeeTrigger derives the basis amount and the money from the clone\'s commitment, and a supplied amount is refused rather than overwritten. A FLAT AMOUNT fee carries an amount and no percentage. RecordTypeId is never written (no Fee record type is assigned to the integration user\'s profile); recordType is the independent LLC_BI__Record_Type__c picklist. targetLoanId may be omitted when exactly one facility is selected.')
         global String feeAddsJson;
-        @InvocableVariable(label='Pledge Adds JSON' description='Optional. COLLATERAL PLEDGES authored on the CLONE: [{"collateralId"? (an existing LLC_BI__Collateral__c the BORROWER owns), "newCollateral"? {"description", "collateralType", "value"}, "advanceRate"?, "advanceRateReason"?, "amountPledged"?, "lienPosition"?, "targetLoanId"?}]. EXACTLY ONE of collateralId and newCollateral per entry. An existing collateral must be owned by the borrower through LLC_BI__Account_Collateral__c (LLC_BI__Collateral__c carries no account lookup at all) and must not already be pledged to that facility. A newCollateral is authored as asset, then ownership junction, then pledge; collateralType is resolved against the org\'s live LLC_BI__Collateral_Type__c catalog and a type whose own advance rate is null is refused before the org\'s Advance_Rate_should_not_be_null rule fires on the insert. advanceRate is REQUIRED on a create and rides LLC_BI__Advance_Rate_Override__c (the plain advance rate is a formula), which makes the org\'s Advance_Rate_Override rule demand a reason beside it. targetLoanId may be omitted when exactly one facility is selected.')
+        @InvocableVariable(label='Pledge Adds JSON' description='Optional. COLLATERAL PLEDGES authored on the CLONE: [{"collateralId"? (an existing LLC_BI__Collateral__c the BORROWER owns), "newCollateral"? {"description", "collateralType", "value"}, "advanceRate"?, "advanceRateReason"?, "amountPledged"?, "authoriseOverPledge"?, "lienPosition"?, "targetLoanId"?}]. EXACTLY ONE of collateralId and newCollateral per entry. An existing collateral must be owned by the borrower through LLC_BI__Account_Collateral__c (LLC_BI__Collateral__c carries no account lookup at all) and must not already be pledged to that facility. A newCollateral is authored as asset, then ownership junction, then pledge. Its DESCRIPTION is at most 255 characters, which is the length of LLC_BI__Description__c on this org, and a longer one is refused with its own length rather than truncated or left to fail on the insert. Its COLLATERALTYPE takes EITHER an LLC_BI__Collateral_Type__c record id (the a33 prefix, which is what Customer360Catalog returns as acceptedValues) OR the type\'s exact name: names are NOT unique in this catalog, so a name matching more than one row is refused with the candidate ids and their advance rates and the id settles it. A type whose own advance rate is null is refused before the org\'s Advance_Rate_should_not_be_null rule fires on the insert. advanceRate is REQUIRED on a create and rides LLC_BI__Advance_Rate_Override__c (the plain advance rate is a formula), which makes the org\'s Advance_Rate_Override rule demand a reason beside it. amountPledged is OPTIONAL and DEFAULTS to the asset\'s lendable value, which is its value times the rate this pledge resolves to: the override where one is stated, the type\'s own rate otherwise. A figure ABOVE the lendable value is refused with that value and the rate behind it, because the org\'s Pledge_More_Than_Lendable_Value rule refuses the row unless LLC_BI__Authorize__c (Authorize Pledge Amount) is set; send "authoriseOverPledge": true on the same entry to set it, which records the banker authorising the over-pledge on the row rather than the tool doing it silently. The flag is written only where it does work: sent on a pledge within the lendable value it is ignored, because there is nothing to authorise. targetLoanId may be omitted when exactly one facility is selected.')
         global String pledgeAddsJson;
         @InvocableVariable(label='Covenant Exclusions JSON' description='Optional. COVENANT CARRY EXCLUSIONS: [{"covenantId" or "junctionId", "targetLoanId"?}]. On a modification nothing is deleted on the booked loan: the new VERSION simply does not carry that LLC_BI__Loan_Covenant__c junction onto the clone. The parent keeps its junction and the covenant record itself is untouched, so the delete fence and the covenant-detach fence both stay intact. The exact junction row is resolved at stage time against the target parent, so the banker confirms a named covenant rather than a description. targetLoanId may be omitted when exactly one facility is selected.')
         global String covenantExclusionsJson;
@@ -235,8 +235,13 @@ global with sharing class StageLoanModification {
         public Decimal advanceRate;
         /** Demanded by the org's `Advance_Rate_Override` rule whenever the override is set. */
         public String advanceRateReason;
-        /** This facility's share of the asset. Never above the lendable value. */
+        /** This facility's share of the asset. Above the lendable value only where the caller
+         *  authorised it, which is what `authoriseOverPledge` below records. */
         public Decimal amountPledged;
+        /** Set ONLY where the share exceeds the lendable value AND the caller sent
+         *  `authoriseOverPledge: true`. It rides `LLC_BI__Authorize__c`, the org's own escape from
+         *  `Pledge_More_Than_Lendable_Value`, so the checkbox states a decision somebody took. */
+        public Boolean authoriseOverPledge;
         public String lienPosition;
         public String pledgedStatus;
         /** What the asset is worth, whether authored here or read off the org. */
@@ -904,6 +909,7 @@ global with sharing class StageLoanModification {
             resolved.put('pledgeAdd' + s6 + '.advanceRate', pa.advanceRate);
             resolved.put('pledgeAdd' + s6 + '.advanceRateReason', pa.advanceRateReason);
             resolved.put('pledgeAdd' + s6 + '.amountPledged', pa.amountPledged);
+            resolved.put('pledgeAdd' + s6 + '.authoriseOverPledge', pa.authoriseOverPledge);
             resolved.put('pledgeAdd' + s6 + '.lienPosition', pa.lienPosition);
             resolved.put('pledgeAdd' + s6 + '.pledgedStatus', pa.pledgedStatus);
             resolved.put('pledgeAdd' + s6 + '.assetLabel', pa.assetLabel);
@@ -1111,9 +1117,13 @@ global with sharing class StageLoanModification {
         warnings.addAll(C360NewFacilities.warnings(newFacilities, 'the new package version'));
         if (!pledgeAdds.isEmpty()) {
             Integer noLien = 0;
+            Integer authorised = 0;
             for (PledgeAdd pa : pledgeAdds) {
                 if (String.isBlank(pa.lienPosition)) {
                     noLien++;
+                }
+                if (pa.authoriseOverPledge == true) {
+                    authorised++;
                 }
             }
             warnings.add(
@@ -1128,7 +1138,13 @@ global with sharing class StageLoanModification {
                     'bank decides about this version.') +
                 (noLien == 0 ? '' :
                     ' ' + String.valueOf(noLien) + ' ' + (noLien == 1 ? 'pledge states' : 'pledges state') +
-                    ' NO lien position: nobody said one, and priority is a perfection question this tool does not settle.')
+                    ' NO lien position: nobody said one, and priority is a perfection question this tool does not settle.') +
+                (authorised == 0 ? '' :
+                    ' ' + String.valueOf(authorised) + ' ' + (authorised == 1 ? 'pledge takes' : 'pledges take') +
+                    ' MORE than the lendable value of the asset behind ' + (authorised == 1 ? 'it' : 'them') +
+                    ', and ' + (authorised == 1 ? 'carries' : 'carry') + ' the Authorize Pledge Amount checkbox because ' +
+                    'the request asked for it. That is the org\'s own escape from Pledge_More_Than_Lendable_Value and ' +
+                    'it records a decision, so read the figure before confirming.')
             );
         }
         if (!policyExceptionAdds.isEmpty()) {
@@ -1626,19 +1642,30 @@ global with sharing class StageLoanModification {
      *     mistake in this arm that a bank cannot unwind by deleting a record.
      *   - A collateral already pledged to the target facility carries onto the clone by itself. A
      *     second pledge there is a duplicate rather than a second lien, and is refused by name.
-     *   - `LLC_BI__Collateral_Type__c` is a 43-record config catalog and the caller sends a WORD.
-     *     It resolves by exact name, then by containment, and an ambiguous or absent word comes back
-     *     with the org's own candidates. A type whose own `LLC_BI__Advance_Rate__c` is null is
-     *     refused HERE, because the org's `Advance_Rate_should_not_be_null` rule fires on the
-     *     COLLATERAL insert rather than on the type, and a refusal at write time reads as a mystery.
+     *   - `LLC_BI__Collateral_Type__c` is a 43-record config catalog, and the caller may send EITHER
+     *     a record id or a WORD. THE ID IS THE HONEST FORM and the catalog tool publishes ids for
+     *     exactly that reason: this org holds DUPLICATE type names (Real Estate-Construction exists
+     *     twice, at 80% and at 90%), so a name is not an identifier. A word resolves by exact name,
+     *     then by containment, and a word matching more than one row is refused with the candidate
+     *     ids AND their advance rates - the rate is what the lendable value is computed from, so
+     *     picking the wrong twin is a credit error rather than a cosmetic one. A type whose own
+     *     `LLC_BI__Advance_Rate__c` is null is refused HERE, because the org's
+     *     `Advance_Rate_should_not_be_null` rule fires on the COLLATERAL insert rather than on the
+     *     type, and a refusal at write time reads as a mystery.
      *   - `LLC_BI__Advance_Rate__c` on a pledge is a FORMULA resolving override -> auto-applied ->
      *     the type's default (LESSONS 29). A stated rate is therefore an OVERRIDE, and the org's
      *     `Advance_Rate_Override` rule refuses the row unless `LLC_BI__Override_Reason__c` carries
      *     something. The caller may send that reason; where it does not, one is composed as
      *     PROVENANCE - where the number came from - never as a credit justification nobody gave.
      *   - `Pledge_More_Than_Lendable_Value` fires when `LLC_BI__Amount_Pledged__c` exceeds the
-     *     lendable value and `LLC_BI__Authorize__c` is false. Authorize is a banker's checkbox and
-     *     this tool never sets it, so an over-pledge is refused rather than authorised.
+     *     lendable value and `LLC_BI__Authorize__c` is false. An UNSTATED amount is not a zero and
+     *     not a guess: it defaults to the lendable value itself, the asset's value at the rate this
+     *     pledge resolves to. A STATED amount above that value is refused with the value and the
+     *     rate behind it, and the refusal names the one way through: `authoriseOverPledge: true` on
+     *     the entry, which sets Authorize. The checkbox is still a banker's decision - what changed
+     *     on 2026-09-03 is that the banker can now express it here instead of being told the tool
+     *     will never do it. It is written ONLY where the amount actually exceeds the lendable value,
+     *     so the flag on a record always corresponds to an over-pledge somebody authorised.
      *
      * Nothing is created here. The arm hop of the execute pair writes the rows.
      */
@@ -1856,17 +1883,25 @@ global with sharing class StageLoanModification {
                 ? null
                 : (pa.collateralValue * effectiveRate / 100).setScale(2);
             pa.amountPledged = C360Plan.asDecimal(m.get('amountPledged'));
+            pa.authoriseOverPledge = false;
             if (pa.amountPledged == null) {
                 pa.amountPledged = lendable;
             } else if (pa.amountPledged <= 0) {
                 throw new ToolException('An amount pledged is greater than zero, or it is left out and the lendable value is used.');
             } else if (lendable != null && pa.amountPledged > lendable) {
-                throw new ToolException(
-                    'A pledged amount of ' + pa.amountPledged + ' exceeds the asset\'s lendable value of ' + lendable +
-                    ' at ' + effectiveRate + '%. The org\'s Pledge_More_Than_Lendable_Value rule refuses that unless ' +
-                    'LLC_BI__Authorize__c is set, and this tool never sets it: authorising an over-pledge is a banker\'s ' +
-                    'decision, not a tool\'s.'
-                );
+                // THE ONE WAY THROUGH, and it is the caller's to take. Sending the flag is the
+                // banker saying the bank will lend past the asset's lendable value on this pledge;
+                // withholding it leaves the org's own rule standing.
+                if (!C360Plan.asBool(m.get('authoriseOverPledge'))) {
+                    throw new ToolException(
+                        'A pledged amount of ' + pa.amountPledged + ' exceeds the asset\'s lendable value of ' + lendable +
+                        ' at ' + effectiveRate + '%. The org\'s Pledge_More_Than_Lendable_Value rule refuses that row ' +
+                        'unless LLC_BI__Authorize__c (Authorize Pledge Amount) is set. Send "authoriseOverPledge": true ' +
+                        'on this pledge to set it, and the plan will say in words that the over-pledge was authorised; ' +
+                        'or leave amountPledged out and the lendable value of ' + lendable + ' is used.'
+                    );
+                }
+                pa.authoriseOverPledge = true;
             }
             out.add(pa);
         }
@@ -1874,41 +1909,67 @@ global with sharing class StageLoanModification {
     }
 
     /**
-     * Resolves the caller's word for the kind of asset against the org's OWN collateral-type
-     * catalog: exact name first, then containment, and an ambiguous or unmatched word comes back
-     * with the candidates. The type must carry an advance rate of its own, because the org's
+     * Resolves the caller's answer for the kind of asset against the org's OWN collateral-type
+     * catalog. TWO FORMS, and the first one is the one to prefer: an LLC_BI__Collateral_Type__c
+     * record id, which is what Customer360Catalog publishes as acceptedValues, or the type's exact
+     * name. Names are NOT unique in this catalog - the org carries Real Estate-Construction twice,
+     * at 80% and at 90% - so a name that matches more than one row comes back with the candidate
+     * ids AND their advance rates rather than resolving to whichever row was read first. Failing to
+     * refuse that would pick a lendable value nobody chose.
+     *
+     * The type must carry an advance rate of its own, because the org's
      * `Advance_Rate_should_not_be_null` rule surfaces on the COLLATERAL insert rather than on the
      * type record, where nobody would think to look for it.
      */
     private static void resolveCollateralType(PledgeAdd pa, Object supplied, List<LLC_BI__Collateral_Type__c> types) {
         if (supplied == null || String.isBlank(String.valueOf(supplied))) {
-            throw new ToolException('A new collateral names its collateralType: the org resolves the word against its own catalog.');
+            throw new ToolException(
+                'A new collateral names its collateralType, as the LLC_BI__Collateral_Type__c record id or as the ' +
+                'type\'s exact name: the org resolves it against its own catalog.'
+            );
         }
         String word = String.valueOf(supplied).trim();
         List<LLC_BI__Collateral_Type__c> hits = new List<LLC_BI__Collateral_Type__c>();
-        for (LLC_BI__Collateral_Type__c t : types) {
-            if (t.Name != null && t.Name.equalsIgnoreCase(word)) {
-                hits = new List<LLC_BI__Collateral_Type__c>{ t };
-                break;
-            }
-        }
-        if (hits.isEmpty()) {
+
+        Id suppliedId = asCollateralTypeId(word);
+        if (suppliedId != null) {
             for (LLC_BI__Collateral_Type__c t : types) {
-                if (t.Name != null && t.Name.toLowerCase().contains(word.toLowerCase())) {
+                if (t.Id == suppliedId) {
                     hits.add(t);
                 }
             }
-        }
-        if (hits.isEmpty()) {
-            throw new ToolException(
-                '"' + word + '" is not a collateral type this org holds. The org offers: ' + typeNames(types) + '.'
-            );
-        }
-        if (hits.size() > 1) {
-            throw new ToolException(
-                '"' + word + '" matches ' + hits.size() + ' collateral types on this org: ' + typeNames(hits) +
-                '. Name one of them exactly.'
-            );
+            if (hits.isEmpty()) {
+                throw new ToolException(
+                    'No collateral type exists with id ' + word + ' in this org\'s catalog. The org offers: ' +
+                    typeNames(types) + '.'
+                );
+            }
+        } else {
+            // EVERY exact match, not the first one: the duplicates are exact matches of each other.
+            for (LLC_BI__Collateral_Type__c t : types) {
+                if (t.Name != null && t.Name.equalsIgnoreCase(word)) {
+                    hits.add(t);
+                }
+            }
+            if (hits.isEmpty()) {
+                for (LLC_BI__Collateral_Type__c t : types) {
+                    if (t.Name != null && t.Name.toLowerCase().contains(word.toLowerCase())) {
+                        hits.add(t);
+                    }
+                }
+            }
+            if (hits.isEmpty()) {
+                throw new ToolException(
+                    '"' + word + '" is not a collateral type this org holds. The org offers: ' + typeNames(types) + '.'
+                );
+            }
+            if (hits.size() > 1) {
+                throw new ToolException(
+                    '"' + word + '" matches ' + hits.size() + ' collateral types on this org, and the name does not ' +
+                    'tell them apart: ' + typeCandidates(hits) + '. Send the id of the one you mean as collateralType. ' +
+                    'The advance rates differ, and the advance rate is what the lendable value is computed from.'
+                );
+            }
         }
         if (hits[0].LLC_BI__Advance_Rate__c == null) {
             throw new ToolException(
@@ -1920,6 +1981,38 @@ global with sharing class StageLoanModification {
         pa.collateralTypeId = hits[0].Id;
         pa.collateralTypeName = hits[0].Name;
         pa.typeAdvanceRate = hits[0].LLC_BI__Advance_Rate__c;
+    }
+
+    /**
+     * The supplied word AS AN ID, or null where it is a name. Deliberately not `C360Plan.asId`,
+     * which throws on anything that is not an id: here a non-id is the ordinary other case.
+     */
+    private static Id asCollateralTypeId(String word) {
+        String prefix = LLC_BI__Collateral_Type__c.SObjectType.getDescribe().getKeyPrefix();
+        if (String.isBlank(prefix) || !word.startsWith(prefix)) {
+            return null;
+        }
+        if (word.length() != 15 && word.length() != 18) {
+            return null;
+        }
+        try {
+            return Id.valueOf(word);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Candidates a caller can actually choose between: the id that settles it, and the rate that
+     *  makes the choice matter. */
+    private static String typeCandidates(List<LLC_BI__Collateral_Type__c> types) {
+        List<String> out = new List<String>();
+        for (LLC_BI__Collateral_Type__c t : types) {
+            out.add(
+                t.Name + ' (' + t.Id + ', advance rate ' +
+                (t.LLC_BI__Advance_Rate__c == null ? 'not set' : String.valueOf(t.LLC_BI__Advance_Rate__c) + '%') + ')'
+            );
+        }
+        return String.join(out, ', ');
     }
 
     /** The org's own candidate list, for a refusal that can be acted on. */
@@ -1953,7 +2046,11 @@ global with sharing class StageLoanModification {
             (pa.advanceRate == null
                 ? ', at the ' + pa.collateralTypeName + ' type\'s own advance rate'
                 : ', at a ' + String.valueOf(pa.advanceRate) + '% advance-rate override with its reason recorded') +
-            (String.isBlank(pa.lienPosition) ? ', lien position not stated' : ', ' + pa.lienPosition + ' lien');
+            (String.isBlank(pa.lienPosition) ? ', lien position not stated' : ', ' + pa.lienPosition + ' lien') +
+            (pa.authoriseOverPledge == true
+                ? ', OVER the asset\'s lendable value with Authorize Pledge Amount set, which is the authorisation the ' +
+                  'caller gave and the org\'s Pledge_More_Than_Lendable_Value rule reads'
+                : '');
     }
 
     /** How many of the staged pledges have to author their asset first. */

@@ -2855,6 +2855,10 @@ global with sharing class ExecuteLoanModification {
             Decimal rateOverride = C360Plan.asDecimal(v.get('pledgeAdd' + ps + '.advanceRate'));
             String overrideReason = C360Plan.asString(v.get('pledgeAdd' + ps + '.advanceRateReason'));
             String lien = C360Plan.asString(v.get('pledgeAdd' + ps + '.lienPosition'));
+            // The plan's OWN answer, settled at stage time and confirmed by the banker with the
+            // rest of it. Where the share is within the lendable value this is false and the org's
+            // Pledge_More_Than_Lendable_Value rule is left standing, which is the ordinary case.
+            Boolean authorise = C360Plan.asBool(v.get('pledgeAdd' + ps + '.authoriseOverPledge'));
             Id collId = C360Plan.asId(pr.collateralId);
             Map<String, Object> pledgeFields = new Map<String, Object>{
                 'LLC_BI__Loan__c' => cloneOf[i],
@@ -2864,7 +2868,8 @@ global with sharing class ExecuteLoanModification {
                 'LLC_BI__Amount_Pledged__c' => pr.amountPledged,
                 'LLC_BI__Lien_Position__c' => lien,
                 'LLC_BI__Advance_Rate_Override__c' => rateOverride,
-                'LLC_BI__Override_Reason__c' => overrideReason
+                'LLC_BI__Override_Reason__c' => overrideReason,
+                'LLC_BI__Authorize__c' => authorise
             };
             C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_PLEDGE, C360WriteGuard.OP_CREATE, pledgeFields);
             pledgeRows.add(new LLC_BI__Loan_Collateral2__c(
@@ -2875,7 +2880,8 @@ global with sharing class ExecuteLoanModification {
                 LLC_BI__Amount_Pledged__c = pr.amountPledged,
                 LLC_BI__Lien_Position__c = lien,
                 LLC_BI__Advance_Rate_Override__c = rateOverride,
-                LLC_BI__Override_Reason__c = overrideReason
+                LLC_BI__Override_Reason__c = overrideReason,
+                LLC_BI__Authorize__c = authorise
             ));
             indexOfRow.add(i);
         }

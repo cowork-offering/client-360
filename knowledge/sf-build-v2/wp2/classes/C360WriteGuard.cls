@@ -333,15 +333,23 @@ public with sharing class C360WriteGuard {
             'Name', 'RecordTypeId', 'LLC_BI__Lendable_Value__c', 'LLC_BI__Advance_Rate__c'
         },
         OBJ_ACCOUNT_COLLATERAL => new Set<String>(),
-        // The same derived fields the carry may not copy, plus two the CREATE side has its own
-        // reasons for. LLC_BI__Authorize__c is the escape from the org's Pledge_More_Than_Lendable_
-        // Value rule and it is a BANKER's checkbox: a tool that could set it could authorise an
-        // over-pledge silently, so an over-pledge is refused at stage time instead. Unique_Id is
-        // nCino's own `<aggregateId> - <collateralId>` key and belongs to the package.
+        // The same derived fields the carry may not copy, plus Unique_Id, which is nCino's own
+        // `<aggregateId> - <collateralId>` key and belongs to the package.
+        //
+        // LLC_BI__Authorize__c LEFT THIS LIST ON 2026-09-03, and the reason is worth stating. It is
+        // the org's escape from Pledge_More_Than_Lendable_Value and it is a BANKER's checkbox, so
+        // the first cut refused it outright and refused every over-pledge with it. That left a
+        // banker who genuinely wanted to lend past an asset's lendable value with no way to say so
+        // and no way to find out there was one. What the fence was protecting against was a tool
+        // setting it SILENTLY; what it actually produced was a dead end. The flag is now writable
+        // and stage_loan_modification sets it ONLY on an explicit `authoriseOverPledge: true` in
+        // the request, ONLY where the amount genuinely exceeds the lendable value, and says so in
+        // the plan the banker confirms. The decision stays the banker's; the tool stopped
+        // pretending the decision could not be expressed.
         OBJ_PLEDGE => new Set<String>{
             'LLC_BI__Advance_Rate__c', 'LLC_BI__Current_Lendable_Value__c', 'LLC_BI__Collateral_Value__c',
             'LLC_BI__Total_Pledged_Rollup_Value__c', 'LLC_BI__Total_Pledged_Rollup_Lendable_Value__c',
-            'LLC_BI__Authorize__c', 'LLC_BI__Unique_Id__c'
+            'LLC_BI__Unique_Id__c'
         },
         // Automatically_Added is the org's own provenance flag: 76 of this org's 81 exceptions are
         // auto-generated exposure rows, and a tool-authored exception claiming to be one of them
