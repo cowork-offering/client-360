@@ -81,6 +81,23 @@ export function shouldNarrate(subject: NarrateSubject): boolean {
      chip already carries the field, the facility and the two figures, and a
      remark under it is the room saying the same thing twice. */
   if (subject.routine) return false;
+  /* ============ A QUESTION ON STAGE MEANS THE MODEL IS SILENT (founder, 2026-09-03)
+
+     Clicking a facility chip put the engine's focus prompt AND a model remark
+     narrating the whole plan on the glass in the same frame. The founder read
+     it as two chats.
+
+     THE RULE IS GENERAL, not a patch on the focus prompt: the model never
+     speaks at the same moment as a deterministic prompt that ASKS SOMETHING.
+     A question is an invitation to the banker, and a paragraph underneath it is
+     the room answering itself before they have had a turn. The model speaks
+     under cards, reads, refusals and the greeting - all of which are statements
+     - and nowhere else.
+
+     A CARD IS NOT A QUESTION. `subject.card` is present exactly where the room
+     has put a fact on the glass, and the card's own follow-up ("shall I stage
+     it?") is a tail on a statement rather than the moment itself. */
+  if (!subject.card && /\?\s*$/.test(sentence)) return false;
   if (CHROME.some((rx) => rx.test(sentence))) return false;
   if (!subject.card && sentence.length < CHROME_CHARS) return false;
   return true;
@@ -118,10 +135,11 @@ const HOW_TO_WRITE = [
 const ACT_BUDGET: Record<NarrateAct, string> = {
   greeting:
     "ABOUT NINETY WORDS in all. Three line items is the default here, not the exception: this is the banker's first look at the whole book.",
-  answered: "ABOUT SEVENTY-FIVE WORDS in all. Up to three line items where the read compares entities.",
+  answered:
+    "ABOUT SEVENTY-FIVE WORDS in all: a lead line, the line items, and at most one closing line. No paragraphs.",
   staged:
-    "ABOUT FIFTY-FIVE WORDS in all. The card already carries the delta; your job is the consequence. One or two line items.",
-  refused: "ABOUT FORTY-FIVE WORDS in all. The card already carries the reason by name. One line item, then stop.",
+    "ABOUT THIRTY-FIVE WORDS in all, and two short sentences at most. The card beside you already carries the field, the facility and both figures: say only what it does NOT show. Never restate a figure, an entry, or the plan.",
+  refused: "ONE SENTENCE, about twenty-five words. The card already carries the reason by name. Then stop.",
   mail: "ABOUT FIFTY-FIVE WORDS in all. One line item at most. Say what the message asks and offer the move.",
   filed: "ABOUT FORTY-FIVE WORDS in all. The dossier already lists what landed. One line item at most, then stop.",
 };
@@ -284,6 +302,114 @@ export const NARRATION_MAX_SENTENCES = 2;
  * the cap that quiets a card's remark does not cut the room's opening.
  */
 export const GREETING_MAX_SENTENCES = 3;
+
+/* ============================================== THE WORD BUDGET (founder, 2026-09-03)
+
+   "Even a single bubble is too much text to read." The sentence cap held the
+   PROSE to two sentences and said nothing at all about how long a sentence, or
+   how many rows hang under it. A two-sentence remark with three rows and a
+   trailing clause on each of them is still a paragraph.
+
+   SO THE BUDGET IS WORDS, PER ACT, AND IT IS ENFORCED TWICE: it is printed in
+   the prompt under {@link ACT_LINE}, and it is CLIPPED on the finished remark by
+   {@link clipBudget}. The prompt is how the model is asked; the clip is how the
+   glass is guaranteed. A model that ignores the ask costs the banker nothing.
+
+   THE CUT IS ALWAYS AT A WHOLE UNIT: a sentence, a bullet, a row. Nothing on
+   this glass is ever truncated mid-clause. */
+export const ACT_WORDS: Record<NarrateAct, number> = {
+  /* The banker's first look at the whole book: a lead, three rows, one ask. */
+  greeting: 90,
+  /* A read answer: the lead line, the entity rows, one close. */
+  answered: 75,
+  /* THE CARD ALREADY SAYS THE CHANGE. Two short sentences of consequence. */
+  staged: 35,
+  /* The card already carries the reason by name. One sentence. */
+  refused: 25,
+  mail: 55,
+  filed: 45,
+};
+
+/** The words in a run of spans. Whitespace-only spans are separators. */
+const wordsIn = (spans: NarrationSpan[]): number =>
+  spans
+    .map((s) => s.text)
+    .join("")
+    .split(/\s+/)
+    .filter(Boolean).length;
+
+const blockWords = (block: NarrationBlock): number => {
+  if (block.kind === "line") return wordsIn(block.spans);
+  if (block.kind === "bullets") return block.items.reduce((n, item) => n + wordsIn(item), 0);
+  if (block.kind === "entity") return block.rows.reduce((n, r) => n + wordsIn(r.label) + wordsIn(r.spans), 0);
+  return 0;
+};
+
+/**
+ * THE REMARK, HELD TO ITS ACT'S WORD BUDGET.
+ *
+ * Blocks are spent in order, so the lead line is never the thing that goes. A
+ * line that would overrun keeps the sentences that fit; a bullet list or an
+ * entity list keeps the rows that fit. The room's own mark (`kind: "mark"`)
+ * costs nothing: it is not the model's words.
+ */
+export function clipBudget(blocks: NarrationBlock[], budget: number): NarrationBlock[] {
+  let left = budget;
+  const out: NarrationBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === "mark") {
+      out.push(block);
+      continue;
+    }
+    if (left <= 0) continue;
+    const cost = blockWords(block);
+    if (cost <= left) {
+      left -= cost;
+      out.push(block);
+      continue;
+    }
+    if (block.kind === "line") {
+      const kept: NarrationSpan[][] = [];
+      for (const sentence of sentencesOf(block.spans)) {
+        const n = wordsIn(sentence);
+        if (n > left) break;
+        kept.push(sentence);
+        left -= n;
+      }
+      if (!kept.length) {
+        left = 0;
+        continue;
+      }
+      const spans: NarrationSpan[] = [];
+      kept.forEach((sentence, i) => {
+        if (i) spans.push({ text: " " });
+        spans.push(...sentence);
+      });
+      out.push({ kind: "line", spans });
+      continue;
+    }
+    if (block.kind === "bullets") {
+      const items: NarrationSpan[][] = [];
+      for (const item of block.items) {
+        const n = wordsIn(item);
+        if (n > left) break;
+        items.push(item);
+        left -= n;
+      }
+      if (items.length) out.push({ kind: "bullets", items });
+      continue;
+    }
+    const rows: NarrationRow[] = [];
+    for (const row of block.rows) {
+      const n = wordsIn(row.label) + wordsIn(row.spans);
+      if (n > left) break;
+      rows.push(row);
+      left -= n;
+    }
+    if (rows.length) out.push({ kind: "entity", rows });
+  }
+  return out;
+}
 
 const BULLET = /^\s*[-*•]\s+(.*)$/;
 /**
@@ -855,6 +981,90 @@ export interface GuardedClaims extends GuardedNarration {
  * still has its ungrounded figures stripped of emphasis and marked. Pure, and
  * returns what it dropped so the suite can assert on it.
  */
+/* ================================== THE CARD SAYS IT ONCE (founder, 2026-09-03)
+
+   "No sentence may repeat a figure that is visible on the card or on the
+   manifest rail directly above it."
+
+   The card carries the field, the facility, the before and the after, in the
+   room's own typography, eight pixels above the remark. A sentence that prints
+   one of those figures again is the model reading the card out loud to somebody
+   who is looking at it.
+
+   THE FIGURE IS THE TEST, NOT THE WORD. Only a card VALUE (and the `sub` a row
+   prints beside it) counts: a row's LABEL is the field's name, and a remark is
+   allowed - encouraged - to say which field it is talking about.
+
+   THE ENTITY ROW'S OWN RAIL IS EXEMPT BY CONSTRUCTION. `resolveEntities` writes
+   `value` from the envelope, not from the model, so it is the ROOM printing the
+   figure and is exactly the grammar the greeting addendum signed off. Only the
+   model's own spans are checked. */
+
+/** Every figure printed on the card. A value that is not a figure (a status
+ *  word, a facility name) is not one of these: repeating "confirmed" is not the
+ *  failure this rule is about. */
+function cardFigures(subject: NarrateSubject): string[] {
+  if (!subject.card) return [];
+  const out: string[] = [];
+  for (const row of subject.card.rows) {
+    for (const raw of [row.value, row.sub]) {
+      const value = (raw ?? "").trim();
+      if (value.length < 2 || !/\d/.test(value)) continue;
+      if (!out.includes(value)) out.push(value);
+    }
+  }
+  return out;
+}
+
+/** Does this run of spans print a figure the card already carries? */
+const echoesCard = (spans: NarrationSpan[], figures: readonly string[]): boolean => {
+  if (!figures.length) return false;
+  const text = spans.map((s) => s.text).join("");
+  return figures.some((f) => text.includes(f));
+};
+
+/* ============================= THE PLAN IS NOT A REMARK (founder, 2026-09-03)
+
+   Under the focus prompt the model listed the whole staged plan back: the
+   commitment, the two pledges coming off, the fee, the maturity. Every one of
+   those rows is already a row on the manifest rail, two hundred pixels to the
+   right, and the banker put them there.
+
+   A LIST OF WHAT IS STAGED IS THE RAIL'S JOB. The model may write it only when
+   the banker ASKED for the plan, which is the one card whose whole content is
+   the plan itself. */
+
+/** The card the banker gets when they ask what is on the plan. Matched on the
+ *  lede the room composes for it, which is the only card whose subject IS the
+ *  manifest. */
+const PLAN_READ = /^The manifest holds \d+/;
+
+const namesPlanEntry = (spans: NarrationSpan[], staged: BrainEnvelope["staged"]): boolean => {
+  const text = spans.map((s) => s.text).join("").toLowerCase();
+  return staged.some((e) => e.title && text.includes(e.title.toLowerCase()));
+};
+
+/**
+ * DROP A REMARK THAT RESTATES THE PLAN.
+ *
+ * A bullet or entity run whose rows all name staged entries is the rail said
+ * again in prose. Kept only under the plan read-back card.
+ */
+export function cutPlanRestatement(
+  blocks: NarrationBlock[],
+  envelope: BrainEnvelope,
+  subject: NarrateSubject,
+): NarrationBlock[] {
+  const staged = envelope.staged ?? [];
+  if (staged.length < 2) return blocks;
+  if (subject.card && PLAN_READ.test(subject.card.title)) return blocks;
+  return blocks.filter((block) => {
+    if (block.kind === "bullets") return !block.items.every((item) => namesPlanEntry(item, staged));
+    if (block.kind === "entity") return !block.rows.every((r) => namesPlanEntry(r.label, staged));
+    return true;
+  });
+}
+
 export function guardClaims(
   blocks: NarrationBlock[],
   envelope: BrainEnvelope,
@@ -867,6 +1077,7 @@ export function guardClaims(
      would delete the sentences it exists to write. The figure guard still runs. */
   if (!subject.card) return { ...guardFigures(blocks, envelope, subject), claimed: [] };
   const allowed = allowedTerms(envelope, subject);
+  const figures = cardFigures(subject);
   const claimed: string[] = [];
   const note = (term: string) => {
     if (!claimed.includes(term)) claimed.push(term);
@@ -875,6 +1086,11 @@ export function guardClaims(
   const keptSpans = (spans: NarrationSpan[]): NarrationSpan[] => {
     const sentences = sentencesOf(spans);
     const kept = sentences.filter((sentence) => {
+      /* THE CARD SAYS IT ONCE. A sentence that reprints a figure already on the
+         card goes silently: it is not a CLAIM the room has to warn about, it is
+         a repetition, and marking it would put a second thing on the glass to
+         solve there being too much on the glass. */
+      if (echoesCard(sentence, figures)) return false;
       const term = claimedTerm(sentence.map((s) => s.text).join(""), allowed);
       if (term) note(term);
       return !term;
@@ -897,6 +1113,7 @@ export function guardClaims(
     }
     if (block.kind === "bullets") {
       const items = block.items.filter((item) => {
+        if (echoesCard(item, figures)) return false;
         const term = claimedTerm(item.map((s) => s.text).join(""), allowed);
         if (term) note(term);
         return !term;
@@ -906,6 +1123,9 @@ export function guardClaims(
     }
     if (block.kind === "entity") {
       const rows = block.rows.filter((row) => {
+        // The row's own rail is the ROOM's figure and is never checked; the
+        // model's clause beside it is.
+        if (echoesCard(row.spans, figures)) return false;
         const term = claimedTerm(`${spanText(row.label)} ${row.spans.map((s) => s.text).join("")}`, allowed);
         if (term) note(term);
         return !term;
@@ -968,6 +1188,10 @@ export interface NarratableItem {
   /** THE CHECK UNDER THE CARD. A card carrying one is never routine: the
    *  advisory is the thing a colleague would talk about. */
   advisories?: unknown[];
+  /** THE ROOM SAYS THIS MOMENT IS CHROME. Stamped by the room on a line that
+   *  answers a SELECTION - focusing a facility, picking a member off the strip
+   *  - which is the banker pointing rather than the room acting. */
+  routine?: boolean;
   /* ---- the relationship room's own shapes. Structural, like everything above:
          neither room's item union is imported here. */
   /**
@@ -1043,7 +1267,12 @@ export function subjectFor(item: NarratableItem, said?: string): NarrateSubject 
   // An agent line with chips attached is a question, and a question the room
   // already asked well. Everything else is a sentence a colleague might add to.
   if (item.kind === "agent" && item.text && !item.options?.length) {
-    return { act: "answered", sentence: item.text };
+    /* A SELECTION IS ROUTINE (founder, 2026-09-03). Focusing a facility is the
+       banker pointing at something, not the room doing something: the prompt
+       that answers it is a question, and the model has nothing to add to a
+       question. The room STAMPS it rather than this reading it off the prose,
+       so the rule is a fact about the moment and not a guess about the words. */
+    return { act: "answered", sentence: item.text, routine: item.routine };
   }
 
   /* ------------------------------------------- THE RELATIONSHIP ROOM'S KINDS

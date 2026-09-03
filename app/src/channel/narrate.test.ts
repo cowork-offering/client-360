@@ -80,12 +80,17 @@ describe("the prompt hands over the act, the card and the book", () => {
     expect(prompt).not.toMatch(/Bold only for a figure/);
   });
 
+  /* THE STAGED BUDGET WAS CUT TO THIRTY-FIVE WORDS (founder, 2026-09-03: "even
+     a single bubble is too much text to read"). A refused remark is one
+     sentence and names no word count, so the loop below asks each act for its
+     own budget line rather than for one shape of words. */
   it("carries the budget for THIS act and no other", () => {
-    expect(prompt).toMatch(/ABOUT FIFTY-FIVE WORDS/);
+    expect(prompt).toMatch(/ABOUT THIRTY-FIVE WORDS/);
     expect(prompt).not.toMatch(/ABOUT NINETY WORDS/);
-    for (const act of ["greeting", "answered", "staged", "refused", "mail"] as const) {
+    for (const act of ["greeting", "answered", "staged", "mail"] as const) {
       expect(composeNarratePrompt(envelope, { ...staged, act })).toMatch(/ABOUT [A-Z-]+ WORDS in all/);
     }
+    expect(composeNarratePrompt(envelope, { ...staged, act: "refused" })).toMatch(/ONE SENTENCE, about twenty-five words/);
   });
 
   it("says where the route stands, bound or not, on every remark", () => {
@@ -579,11 +584,17 @@ describe("the remark describes the card on the glass and nothing else", () => {
      sentence was in the envelope, so a figure guard could never catch it. */
   const HIS_CLAIM = "The banker moved the first payment date forward two months to Oct 1, 2026.";
 
+  /* THE CONTROL SENTENCE NO LONGER CARRIES THE CARD'S OWN FIGURE (founder,
+     2026-09-03). "$20.0MM" is printed on the card this remark sits under, so
+     the card-echo rule drops it before the claim guard ever runs and the test
+     could no longer tell the two rules apart. The control says something the
+     card does NOT show, which is what a remark is for. */
   it("drops the sentence that claims an action nobody took", () => {
-    const guarded = guardClaims(parseNarration(`The line moves to $20.0MM. ${HIS_CLAIM}`), envelope, staged);
+    const kept = "The revolver carries the whole increase on its own.";
+    const guarded = guardClaims(parseNarration(`${kept} ${HIS_CLAIM}`), envelope, staged);
     expect(narrationText(guarded.blocks)).not.toContain("moved the first payment date");
     expect(guarded.claimed).toContain("first payment date");
-    expect(narrationText(guarded.blocks)).toContain("The line moves to $20.0MM.");
+    expect(narrationText(guarded.blocks)).toContain(kept);
   });
 
   it("marks what it dropped rather than editing the remark in silence", () => {

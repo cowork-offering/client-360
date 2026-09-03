@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrainEnvelope } from "./brainLane";
 import { LiquidMark } from "../components/workroom/Liquid";
 import {
+  ACT_WORDS,
+  clipBudget,
   composeNarratePrompt,
+  cutPlanRestatement,
   GREETING_MAX_SENTENCES,
   guardClaims,
   NARRATION_MAX_SENTENCES,
@@ -132,9 +135,19 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
       /* THE PROSE CAP IS PER ACT. Two sentences under a card, three on the
          greeting, whose shape is the addendum's own lead, rows and close. */
       const cap = greeting ? GREETING_MAX_SENTENCES : NARRATION_MAX_SENTENCES;
+      /* THE WORD BUDGET IS ENFORCED ON THE GLASS, NOT ONLY IN THE PROMPT
+         (founder, 2026-09-03). It runs on every read, streamed and settled
+         alike: a remark that grew past its budget mid-stream and was cut back
+         at the end would be a paragraph the banker watched arrive and then
+         watched shrink. The cut is at whole sentences and whole rows. */
+      const budget = ACT_WORDS[subject.act];
       const read = (text: string, settled = false) => {
         const blocks = resolveEntities(parseNarration(text, cap), envelope);
-        return settled ? guardClaims(blocks, envelope, subject).blocks : blocks;
+        /* AND THE PLAN IS NOT A REMARK. A run of rows that only names what is
+           already on the manifest rail is dropped before the budget is spent on
+           it, so what survives is the words the rail cannot say. */
+        const held = cutPlanRestatement(blocks, envelope, subject);
+        return clipBudget(settled ? guardClaims(held, envelope, subject).blocks : held, budget);
       };
       const prompt = composeNarratePrompt(envelope, subject);
       const options: AskSessionOptions = {

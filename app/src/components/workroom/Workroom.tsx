@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Portal } from "../Portal";
 import { isTopmost, pushModal } from "../modalStack";
 import { prefersReducedMotion, staggerDelay } from "../../data/motion";
@@ -125,6 +125,27 @@ import {
   useEntryChoreography,
   type EntryTier,
 } from "./entryChoreography";
+import {
+  capSentences,
+  cardFigures,
+  cutFigureEcho,
+  cutPricingWhy,
+  cutTail,
+  cutVersionParagraph,
+  carriesVersionParagraph,
+  focusPrompt,
+  preambleFor,
+  VERSION_LINE,
+} from "./hygiene";
+import {
+  expandLabel,
+  rowForChallenge,
+  rowForDelta,
+  SETTLE_EXIT_MS,
+  settleAttrs,
+  useSettleChoreography,
+  type SettledRow,
+} from "./settle";
 import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
@@ -132,6 +153,7 @@ import { mailTipFrom, overdueCovenantTip } from "./tips";
 import { useClientMail } from "./clientMail";
 import { useRoomFeed } from "../../intent/feed";
 import { intentFor, intentMailNote } from "../../intent/open";
+import { sourcePhrase } from "../../intent/contract";
 import "../../styles/workroom.css";
 import { ManifestRail } from "../rail/ManifestRail";
 
@@ -256,6 +278,11 @@ type ThreadItem = { id: string; step: number } & (
       /** The explicit restart offered when a cross-route line lands on a staged
        *  manifest. Never a silent engine swap. */
       restart?: { route: WorkroomMode; label: string; say: string };
+      /** THIS MOMENT IS CHROME (founder, 2026-09-03). A line that answers a
+       *  SELECTION rather than an instruction: the banker pointed at a facility
+       *  and the room said what it holds. `subjectFor` reads it and the model is
+       *  never asked, so a focus click puts ONE bubble on the glass. */
+      routine?: boolean;
     }
   /** The opening read: the greeting, the position, the ask it arrived on, and
    *  what the room read to say it. One bubble, because it is one sentence. */
@@ -279,6 +306,13 @@ type ThreadItem = { id: string; step: number } & (
   /** THE ROOM REACHED NO ORG. Loud, in glass, with the way out of it. */
   | { kind: "notice"; title: string; body: string }
   | { kind: "dossier"; dossier: DossierModel }
+  /** AN EXCHANGE THAT IS OVER (the settle choreography). What settled and how,
+   *  in one row, over the exchange it replaced. The exchange is still mounted
+   *  under it and the row brings it back. */
+  | { kind: "settled"; row: SettledRow; covers: string[] }
+  /** A LINE THE ROOM WAS FED (the intent handoff). Not a banker bubble and not
+   *  a parse: one marker line saying where the instruction came from. */
+  | { kind: "fed"; text: string; from: string }
 );
 
 /**
@@ -351,6 +385,20 @@ type NewItem = DistOmit<ThreadItem, "step">;
 
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
+
+/**
+ * THE LINE, AS THE THREAD SHOWS IT.
+ *
+ * A line the BANKER typed is a banker bubble, as it has always been. A line the
+ * room was FED by an intent is not: nobody in this room said it, and drawing it
+ * as if they had, then parsing it back at them, was one instruction rendered
+ * three times. It becomes one marker line naming where it came from, and the
+ * card under it is the room's answer to it.
+ */
+const bankerLine = (step: number, text: string, from?: string): ThreadItem =>
+  from
+    ? { kind: "fed", id: nextId("fed"), step, text, from }
+    : { kind: "banker", id: nextId("banker"), step, text };
 
 /** The three routes, as words a reply may NAME while the question is open. The
  *  room is the authority on which words are legal, never the validator. */
@@ -876,8 +924,106 @@ export function Workroom({
   const [lookedUp, setLookedUp] = useState(false);
   /** The tiers under the question have been claimed for this ritual. */
   const tieredRef = useRef(false);
+  /** THE CAPABILITY LIST IS SAID ONCE PER ROOM OPEN (founder, 2026-09-03). What
+   *  this room can file is orientation, and orientation is a thing you need the
+   *  first time. It rides the first focus prompt and never appears again. */
+  const capabilitiesSaid = useRef(false);
+  /** WHICH FACILITIES HAVE ALREADY HEARD WHY nCINO WANTS THE PRICING FIELDS.
+   *  The reason is the same reason on both of a facility's two questions. */
+  const pricingWhySaid = useRef(new Set<string>());
+  /** HAS THE VERSION PARAGRAPH BEEN SAID ON THIS PLAN? Once, under the first
+   *  card, in one sentence. */
+  const versionSaid = useRef(false);
   const choreo = useEntryChoreography(reduced);
-  const { arrive: tierArrived, reset: resetTiers } = choreo;
+  const { arrive: tierArrived, retire: retireTiers, reset: resetTiers } = choreo;
+  /* ================================================ THE SETTLE CHOREOGRAPHY
+
+     An exchange that has been decided leaves the stage in the room's own exit
+     and one compact row takes its place (founder, 2026-09-03). The room keeps a
+     ref of the thread so the settle can name the items it covers WITHOUT the
+     callbacks that settle depending on the thread's identity: they are rebuilt
+     on every commit as it is, and a settle that re-created `confirmChip` on
+     every item would be the whole thread re-rendered per word of speech. */
+  const settle = useSettleChoreography(reduced);
+  const itemsRef = useRef<ThreadItem[]>([]);
+  itemsRef.current = items;
+  const { settle: settleItems } = settle;
+
+  /**
+   * THE EXCHANGE THAT JUST ENDED, OFF THE STAGE, UNDER ONE ROW.
+   *
+   * The exchange is everything in the live step back to the last settled row
+   * (or to the top of the step): the banker's line, the room's parse, the card,
+   * the sentence, the remark and the chips. Tiers are never part of it - they
+   * have their own choreography and their own summon.
+   *
+   * RETURNS how long the caller must wait before landing what comes next. The
+   * next step arrives AFTER the exit, never on top of it, and under reduced
+   * motion that wait is zero.
+   */
+  const settleExchange = useCallback(
+    (row: SettledRow): number => {
+      const prev = itemsRef.current;
+      if (!prev.length) return 0;
+      const mine = prev[prev.length - 1].step;
+      const covers: string[] = [];
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const it = prev[i];
+        if (it.step !== mine || it.kind === "settled" || tierOf(it)) break;
+        covers.unshift(it.id);
+      }
+      if (!covers.length) return 0;
+      const rowId = nextId("settled");
+      settleItems(covers, rowId);
+      setItems((p) => [...p, { kind: "settled", id: rowId, step: mine, row, covers }]);
+      return reduced ? 0 : SETTLE_EXIT_MS;
+    },
+    [reduced, settleItems],
+  );
+
+  /** LAND THIS AFTER THE EXIT. Immediate under reduced motion, which is also
+   *  what every jsdom test sees, so the suite never chases a timer it did not
+   *  ask for. */
+  const afterSettle = useCallback((wait: number, land: () => void) => {
+    if (wait <= 0) {
+      land();
+      return;
+    }
+    window.setTimeout(land, wait);
+  }, []);
+
+  /* ------------------------------------------ THE "ANYTHING ELSE" TAIL (rule d)
+
+     "Anything else on this facility, or shall I stage it?" keeps the
+     conversation open, which is worth saying to a banker who now has the room's
+     attention. With a fed line already queued behind it the room is asking a
+     question it is about to answer itself, one beat later, out loud. The ref is
+     written from the feed's own state, below, so this callback is stable. */
+  const queuedRef = useRef(false);
+  const tailNow = useCallback((nextMove: string) => (queuedRef.current ? "" : nextMove), []);
+  /** Where the line currently in flight came from, or null for a typed one. */
+  const fedRef = useRef<string | null>(null);
+
+  /**
+   * THE ROOM'S OWN PARAGRAPH, UNDER A CARD (rules d, e and f).
+   *
+   * Where the model speaks, `speaksFor` replaces this with the one-line address
+   * and the remark is the prose. Where it does not - a decline, a rate limit,
+   * the channel off - this IS the room's answer, and it is allowed to be a
+   * paragraph of exactly two sentences.
+   *
+   * d  the "anything else" tail goes while a fed line is queued;
+   * f  a sentence that reprints the card's own before and after is the room
+   *    reading its own card out loud, and goes whatever else is true;
+   * e  what is left is capped at two sentences.
+   */
+  const roomSentence = useCallback(
+    (text: string, staged: readonly WorkroomDelta[]): string => {
+      const withoutTail = cutTail(text, vocabulary.nextMove, queuedRef.current);
+      return capSentences(cutFigureEcho(withoutTail, cardFigures(staged)));
+    },
+    [vocabulary.nextMove],
+  );
   const { peek, openPeek, closePeek } = usePeek();
 
   /* ---- the page behind the room does not scroll while it is open. */
@@ -1409,6 +1555,33 @@ export function Workroom({
       const engineOptions = result.kind === "unparsed" || result.kind === "deltas" ? result.options : undefined;
       const statusChips = reconcileChips(engineOptions, catalog, "exceptionStatus", (label) => label);
 
+      /* ================================ THE ROOM SAYS IT ONCE (founder, 2026-09-03)
+
+         Three cuts, all of them on sentences the FENCED engines composed and the
+         shell renders. `app/src/workroom/` is not opened by any of them.
+
+         a. THE PARSER PREAMBLE ("Read that as the $15M Line of Credit. The other
+            facility that line could have named is left alone.") is worth its
+            words only where the room actually NARROWED between two members. It
+            is dropped everywhere else.
+         b. THE VERSION PARAGRAPH ("Confirming stages the next VERSION of the
+            package: every eligible member rolls into it ...") is the fact that
+            makes a confirm safe to press, and a banker needs it once. It is
+            shortened to one sentence and said under the FIRST card of a plan.
+         d. THE "ANYTHING ELSE" TAIL is dropped while a fed line is queued. */
+      const preamble = preambleFor(qualifier);
+      const engineAccount = preamble
+        ? `${preamble} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
+        : result.reply;
+      /* THE VERSION LINE IS NOT SUBJECT TO THE TWO-SENTENCE CAP, and that is
+         deliberate: the cap is on what the room says ABOUT this parse, and this
+         is the one fact that makes the Confirm under it safe to press. It is
+         taken out before the cap runs and put back after it, once per plan. */
+      const versionFirst = carriesVersionParagraph(engineAccount) && !versionSaid.current;
+      if (carriesVersionParagraph(engineAccount)) versionSaid.current = true;
+      const account = cutVersionParagraph(engineAccount, false);
+      const withVersion = (said: string) => (versionFirst ? `${said} ${VERSION_LINE}`.trim() : said);
+
       // The reply and the chips it puts on the table land TOGETHER, in one
       // commit, so there is no frame in between where the room looks finished
       // and the chips have not arrived.
@@ -1438,17 +1611,20 @@ export function Workroom({
                 ? misread.refusals.map((r) => r.why).join(" ")
                 : !staged.length && roleRead.said.length
                   ? roleRead.said.join(" ")
-                  : [
-                    misread.refusals.map((r) => r.why).join(" "),
-                    roleRead.said.join(" "),
-                    note,
-                    qualifier.said
-                      ? `${qualifier.said} ${reconcileNarrative(result.reply, qualifier.keep, qualifier.dropped)}`
-                      : result.reply,
-                    statusChips.said ?? "",
-                  ]
-                    .filter(Boolean)
-                    .join(" "),
+                  : withVersion(
+                      roomSentence(
+                        [
+                          misread.refusals.map((r) => r.why).join(" "),
+                          roleRead.said.join(" "),
+                          note,
+                          account,
+                          statusChips.said ?? "",
+                        ]
+                          .filter(Boolean)
+                          .join(" "),
+                        staged,
+                      ),
+                    ),
           // CLICKABLE ANSWERS ride BOTH reply kinds: an "unparsed" clarify and
           // a "deltas" reply that still ends on a closed-set question.
           options: allDropped
@@ -1477,7 +1653,7 @@ export function Workroom({
       setItems((prev) => [...prev, ...landed]);
       setSuggestion(engine.suggest());
     },
-    [book, catalog, committedTotal, context.accountName, engine, memberLabel, qualifierMembers],
+    [book, catalog, committedTotal, context.accountName, engine, memberLabel, qualifierMembers, roomSentence],
   );
 
   /**
@@ -2275,9 +2451,15 @@ export function Workroom({
    * instruction has to be precise enough to resolve one member out of six.
    */
   const say = useCallback(
-    async (heard: string, said?: string, opts?: { settled?: boolean }) => {
+    async (heard: string, said?: string, opts?: { settled?: boolean; fed?: string }) => {
       const trimmed = heard.trim();
       if (!trimmed || !awake) return;
+      /* WHERE THIS LINE CAME FROM, for the one commit that renders it. The feed
+         is serial by construction (`useRoomFeed` holds a busy latch and awaits
+         `say`), so there is exactly one line in flight and a ref is the honest
+         carrier: threading a marker through six composers would put an intent's
+         vocabulary into every one of them. */
+      fedRef.current = opts?.fed ?? null;
 
       /* FREE TEXT ALWAYS WINS (founder, 2026-08-31). While the route is open the
          line does not go to the engine — it decides WHICH engine hears it. A
@@ -2302,7 +2484,7 @@ export function Workroom({
         }
         const mine = step + 1;
         setStep(mine);
-        setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+        setItems((prev) => [...prev, bankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
         if (preCard) {
           setItems((prev) => [...prev, { kind: "read", id: nextId("read"), step: mine, card: preCard }]);
           return;
@@ -2376,7 +2558,7 @@ export function Workroom({
         const checks = items.filter((i) => i.kind === "challenge" && !i.acked);
         if (!ack || !checks.length || checks.length !== openGates) {
           const here = items.length ? items[items.length - 1].step : 0;
-          setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: here, text: (said ?? heard).trim() }]);
+          setItems((prev) => [...prev, bankerLine(here, (said ?? heard).trim(), opts?.fed)]);
           /* THE OPEN CARD IS AMENDABLE, AND THAT IS NOT A SECOND DECISION.
              "actually make it 1.30x" is the SAME decision, corrected, so it
              lands on the card that is already open instead of being refused
@@ -2403,7 +2585,7 @@ export function Workroom({
       setStep(mine);
       setHistOpen(false);
       setFlow(null);
-      setItems((prev) => [...prev, { kind: "banker", id: nextId("banker"), step: mine, text: (said ?? heard).trim() }]);
+      setItems((prev) => [...prev, bankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
       const answer = (item: NewItem) => setItems((prev) => [...prev, { ...item, step: mine } as ThreadItem]);
 
       /* A COURTESY IN FRONT OF AN IMPERATIVE IS A COMMAND (2026-09-01). Read
@@ -3057,7 +3239,39 @@ export function Workroom({
     pricingPending === null &&
     !steerPending &&
     !awaitingChoice;
-  useRoomFeed({ room: "facility", accountId: context.accountId, ready: feedReady, say });
+  /* ============================ A FED LINE IS NOT A BANKER BUBBLE (founder, 2026-09-03)
+
+     An intent's instruction went in through `say` as if somebody had typed it,
+     so the thread showed a banker bubble carrying the line, then the room's
+     parse of it, then the card - three renderings of one instruction, for a
+     line nobody in this room actually said.
+
+     IT RENDERS AS ONE MARKER. "From the meeting of 3 Sep: increase the 15M line
+     of credit to 20M", above its card, in the room's quietest type. The line
+     still travels through the SAME `say`, the same parser, the same gates: only
+     the way it is drawn changes. */
+  const feedFrom = useMemo(() => {
+    const intent = intentFor(context.accountId);
+    return intent ? `From ${sourcePhrase(intent.context.source)}` : null;
+  }, [context.accountId]);
+  const sayFed = useCallback((line: string) => say(line, undefined, { fed: feedFrom ?? undefined }), [feedFrom, say]);
+  const feed = useRoomFeed({ room: "facility", accountId: context.accountId, ready: feedReady, say: sayFed });
+  /* THE TAIL DROPS WHILE THE QUEUE HOLDS A LINE (rule d). Read through a ref by
+     `tailNow`, which every sentence composer calls. */
+  queuedRef.current = feed.active;
+
+  /* ============ THE STRIP LEAVES WHEN THE FIRST CARD LANDS (founder, 2026-09-03)
+
+     The entry choreography retires each tier as the NEXT one arrives, so the
+     last of them - the facility strip - had nothing above it to push it off and
+     stood under every card the banker went on to stage. The first card is what
+     earns its exit: from that moment the banker is deciding on the card. The
+     greeting, the package and the facilities are all one summon away, in the
+     control that is already there and already says so. */
+  const carded = items.some((i) => i.kind === "chips");
+  useEffect(() => {
+    if (carded) retireTiers();
+  }, [carded, retireTiers]);
 
   /* ---- and the member the signal named is the one the lane opens on. */
   useEffect(() => {
@@ -3092,7 +3306,21 @@ export function Workroom({
       setThinking(true);
       try {
         await beat(started);
-        setItems((prev) => [...prev, { kind: "agent", id: nextId("agent"), step: mine, text: result.reply }]);
+        /* ============ ONE LINE, AND ONE VOICE (founder paste, 2026-09-03)
+
+           Clicking a facility chip put TWO bubbles up at once: this prompt, and
+           the model narrating the whole staged plan under it. The model's half
+           is silenced by `routine` below (a selection is chrome, and a question
+           gets no remark either way). This half is shortened: the commitment
+           becomes the facility's NAME rather than a third figure in a list, and
+           the capability list rides the FIRST focus of a room open and no other.
+           The engine composes both; the cut is made here, on the way to glass. */
+        const prompt = focusPrompt(result.reply, capabilitiesSaid.current);
+        if (prompt.saidCapabilities) capabilitiesSaid.current = true;
+        setItems((prev) => [
+          ...prev,
+          { kind: "agent", id: nextId("agent"), step: mine, text: prompt.text, routine: true },
+        ]);
         setSuggestion(engine.suggest());
       } finally {
         setThinking(false);
@@ -3164,22 +3392,56 @@ export function Workroom({
       setEntries(staged);
       settleChip(blockId, chipKey, "confirmed");
       setToast(delta.badge);
-      setItems((prev) => {
-        const mine = prev.length ? prev[prev.length - 1].step : 0;
-        return [
-          ...prev,
-          { kind: "agent", id: nextId("agent"), step: mine, text: said, options },
-          // CHECKS COME TO YOU. The check a confirm trips arrives back in the
-          // conversation the moment it becomes true, never in a separate tab.
-          ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), step: mine, challenge, acked: false }] : []),
-          ...(gate
-            ? [{ kind: "agent" as const, id: nextId("agent"), step: mine, text: gate.text, options: gate.options }]
-            : []),
-        ];
+      /* ============ THE EXCHANGE RESOLVES ITSELF (founder, 2026-09-03)
+
+         The confirm is the moment this exchange is over. Everything that
+         belonged to it - the line, the parse, the card, the sentence, the
+         remark, the chips - shimmers out together and one row takes its place:
+         what settled and how. WHAT COMES NEXT WAITS FOR THAT EXIT. A check or a
+         pricing question landing over an exchange that is still fading is
+         exactly the pile-up this pass exists to remove. */
+      const wait = settleExchange(rowForDelta(delta, "confirmed"));
+      /* THE PRICING REASON IS SAID ONCE PER FACILITY. Both of a facility's two
+         questions carry it from the fenced composer; the second one has already
+         been told. */
+      const whySaid = gate ? pricingWhySaid.current.has(gate.need.memberId) : false;
+      if (gate) pricingWhySaid.current.add(gate.need.memberId);
+      afterSettle(wait, () => {
+        setItems((prev) => {
+          const mine = prev.length ? prev[prev.length - 1].step : 0;
+          return [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: said, options },
+            // CHECKS COME TO YOU. The check a confirm trips arrives back in the
+            // conversation the moment it becomes true, never in a separate tab.
+            ...(challenge ? [{ kind: "challenge" as const, id: nextId("check"), step: mine, challenge, acked: false }] : []),
+            ...(gate
+              ? [
+                  {
+                    kind: "agent" as const,
+                    id: nextId("agent"),
+                    step: mine,
+                    text: cutPricingWhy(gate.text, PRICING_WHY, whySaid),
+                    options: gate.options,
+                  },
+                ]
+              : []),
+          ];
+        });
       });
       setSuggestion(engine.suggest());
     },
-    [elicitMembers, engine, entries, figures.committedMM, pricingOutstanding, reads?.generatedAt, settleChip],
+    [
+      afterSettle,
+      elicitMembers,
+      engine,
+      entries,
+      figures.committedMM,
+      pricingOutstanding,
+      reads?.generatedAt,
+      settleChip,
+      settleExchange,
+    ],
   );
 
   /**
@@ -3191,18 +3453,23 @@ export function Workroom({
    */
   const settleOpenChip = useCallback(
     (blockId: string, chip: ChipModel) => {
+      /* THE DISCARD SETTLES TOO. "Dropped" is a decision, and an exchange that
+         ended in one has exactly as little left to read on it as one that ended
+         in a confirm. The row says which it was. */
       if (chip.delta) {
         settleChip(blockId, chip.key, "discarded");
-        agent(
-          `Dropped. ${chip.delta.title} on ${chip.delta.target} is not staged and the package has not moved. ${vocabulary.nextMove}`,
-        );
+        const wait = settleExchange(rowForDelta(chip.delta, "discarded"));
+        const line = `Dropped. ${chip.delta.title} on ${chip.delta.target} is not staged and the package has not moved. ${tailNow(vocabulary.nextMove)}`.trim();
+        afterSettle(wait, () => agent(line));
       } else {
         settleChip(blockId, chip.key, "confirmed");
-        agent(`That one stays off the manifest, for the reason above. ${vocabulary.nextMove}`);
+        const wait = settleExchange({ what: chip.refusal?.title ?? "Refused", how: "understood" });
+        const line = `That one stays off the manifest, for the reason above. ${tailNow(vocabulary.nextMove)}`.trim();
+        afterSettle(wait, () => agent(line));
       }
       setSuggestion(engine.suggest());
     },
-    [agent, engine, settleChip, vocabulary.nextMove],
+    [afterSettle, agent, engine, settleChip, settleExchange, tailNow, vocabulary.nextMove],
   );
 
   /**
@@ -3238,9 +3505,17 @@ export function Workroom({
     [agent],
   );
 
-  const acknowledge = useCallback((id: string) => {
-    setItems((prev) => prev.map((i) => (i.kind === "challenge" && i.id === id ? { ...i, acked: true } : i)));
-  }, []);
+  const acknowledge = useCallback(
+    (id: string) => {
+      const check = itemsRef.current.find((i) => i.kind === "challenge" && i.id === id);
+      setItems((prev) => prev.map((i) => (i.kind === "challenge" && i.id === id ? { ...i, acked: true } : i)));
+      /* AN ACKNOWLEDGED CHECK IS A SETTLED EXCHANGE. The verdict becomes the
+         row; the arithmetic behind it stays mounted under it and one click
+         away, which is the whole reason the check was worth reading. */
+      if (check?.kind === "challenge") settleExchange(rowForChallenge(check.challenge));
+    },
+    [settleExchange],
+  );
 
   /* --------------------------------------------------------- the commit path
 
@@ -3752,16 +4027,24 @@ export function Workroom({
                           onTakeAdvice={takeAdvice}
                           onOption={(sayText, label) => void say(sayText, label)}
                           onRestartRoute={restartRoute}
+                          expanded={item.kind === "settled" ? settle.isOpen(item.id) : false}
+                          onExpand={settle.toggle}
                         />
                       );
                       const tier = tierOf(item);
+                      /* AN EXCHANGE THAT SETTLED LEAVES THE STAGE AND STAYS
+                         MOUNTED (rule 1). The wrapper is the same shape at every
+                         moment, so React never remounts the bubble and its word
+                         speech is never restarted mid-conversation. The settled
+                         ROW itself is never wrapped: it is the thing that
+                         replaces the exchange, not part of it. */
                       if (!tier)
                         return (
-                          <Fragment key={item.id}>
+                          <div key={item.id} {...settleAttrs(item.kind === "settled" ? "on" : settle.stateOf(item.id))}>
                             {block}
                             <Narration view={narration.viewFor(item.id)} />
                             <Narration view={narration.viewFor(`${item.id}::mail`)} />
-                          </Fragment>
+                          </div>
                         );
                       /* A TIER THAT LEFT THE STAGE STAYS MOUNTED. The wrapper
                          carries its state, so "faded out" and "gone" are two
@@ -3941,6 +4224,18 @@ export function Workroom({
 
           {/* ============================= THE RIGHT LANE: detail, then manifest */}
           <aside className="wk-col-r" aria-label={manifestHeading}>
+            {/* THE FEED'S OWN PROGRESS (rule 3). How far through an intent's
+                instructions the room is belongs in the lane's head beside the
+                ledger, not in the thread: the thread is what was SAID, and a
+                queue position is not something anybody said. */}
+            {feed.total > 0 && (
+              <div className="wk-feedhead" data-feed="progress">
+                <span>From the intent</span>
+                <b>
+                  {feed.index} of {feed.total} settled
+                </b>
+              </div>
+            )}
             {/* THE LANE OPENS EMPTY (founder call, 2026-09-01 morning, matching the
                 dummy): no at-rest figures strip, no placeholder furniture. The lane
                 earns its content - the detail card on focus, the ledger as changes
@@ -4214,6 +4509,8 @@ function ThreadBlock({
   onTakeAdvice,
   onOption,
   onRestartRoute,
+  expanded,
+  onExpand,
 }: {
   item: ThreadItem;
   entries: WorkroomDelta[];
@@ -4232,6 +4529,10 @@ function ThreadBlock({
   onTakeAdvice: (blockId: string, advisory: WorkroomAdvisory) => void;
   onOption: (say: string, label: string) => void;
   onRestartRoute: (restart: { route: WorkroomMode; say: string }) => void;
+  /** Is this settled row's exchange currently back on the stage? */
+  expanded: boolean;
+  /** The banker asked for a settled exchange back, or to put it away. */
+  onExpand: (rowId: string) => void;
 }) {
   if (item.kind === "opening") return <>{opening}</>;
 
@@ -4298,6 +4599,44 @@ function ThreadBlock({
   }
 
   if (item.kind === "read") return <ReadCard card={item.card} />;
+
+  /* ------------------------------------------------ THE SETTLED ROW (rule 1)
+
+     What an exchange becomes once it is decided. Two facts and a control: what
+     settled, how, and the way back to the whole thing. It is a BUTTON rather
+     than a row with a button in it, because the whole row is the affordance and
+     a keyboard reaches it in one tab either way. */
+  if (item.kind === "settled") {
+    return (
+      <button
+        type="button"
+        className="wk-settled"
+        data-settled-row={item.id}
+        aria-expanded={expanded}
+        onClick={() => onExpand(item.id)}
+      >
+        <span className="wk-settled-w">{item.row.what}</span>
+        <span className="wk-settled-dot" aria-hidden="true">
+          ·
+        </span>
+        <span className="wk-settled-h">{item.row.how}</span>
+        <span className="wk-settled-x">{expandLabel(expanded)}</span>
+      </button>
+    );
+  }
+
+  /* -------------------------------------------- THE FED LINE MARKER (rule 3)
+
+     An intent's instruction, said once, in the quietest type the room has.
+     Nobody in this room typed it, so it is not a banker bubble; the room's
+     answer to it is the card under it and not a second rendering of the line. */
+  if (item.kind === "fed") {
+    return (
+      <div className="wk-fed" data-fed="line">
+        <span className="wk-fed-src">{item.from}:</span> <span className="wk-fed-line">{item.text}</span>
+      </div>
+    );
+  }
 
   if (item.kind === "banker" || item.kind === "agent") {
     const who = item.kind === "banker" ? "You" : "Agent";
