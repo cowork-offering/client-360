@@ -169,6 +169,12 @@ export function WorkroomHost() {
     (filed: {
       execution: WorkroomExecution;
       changeCount: number;
+      /** Of `changeCount`, what the banker typed vs what the pricing gate
+       *  added on its own (Cowork feedback, 2026-09-03). Both optional, and
+       *  the trail entry reads exactly as it always has when either is
+       *  absent; see `derivedDelta.ts`. */
+      requestedCount?: number;
+      derivedCount?: number;
       packageHref: string | null;
       arms: string | null;
       pricing: string | null;
@@ -177,6 +183,8 @@ export function WorkroomHost() {
       const entry = workroomActivityEntry({
         execution: filed.execution,
         changeCount: filed.changeCount,
+        requestedCount: filed.requestedCount,
+        derivedCount: filed.derivedCount,
         packageName: context.packageName,
         approver: data.meta?.user ?? context.approver,
         packageHref: filed.packageHref,

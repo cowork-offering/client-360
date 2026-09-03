@@ -303,3 +303,91 @@ describe("a change that does not move the amount or the term asks nothing", () =
     expect(said(room)).not.toContain("What is the first payment date");
   });
 });
+
+/* =============================================================================
+   THE COUNT SAYS WHAT THE PARSER DID NOT INVENT (Cowork feedback, 2026-09-03).
+
+   A whisper naming an amount and one more line landed FOUR cards, and the
+   rail said "4 changes" with no word for the two the pricing gate added on
+   its own. These reach that same four-card state through the room's real
+   flow (an amount move, both pricing fields it triggers, then a second
+   banker-named change, the rate) and prove the rail head, the review chip
+   and the manifest read-back all say which two were requested and which two
+   were derived, while an ordinary two-change plan still reads plain.
+   ============================================================================= */
+describe("the manifest says which changes were requested and which were derived", () => {
+  /** Settle a coverage challenge if the last move tripped one, exactly the way
+   *  a banker would before typing the next line. A no-op where none is open. */
+  async function ackIfOpen() {
+    const btn = byText(/^Acknowledge$/);
+    if (btn) await click(btn);
+  }
+
+  async function twoRequestedTwoDerived(room: HTMLElement) {
+    await moveTheLine(room); // requested: the amount
+    await click(byText(/^240 months$/)); // derived: amortisation term
+    await click(byText(/^Confirm$/));
+    await click(byText(/^1 August 2026$/)); // derived: first payment date
+    await click(byText(/^Confirm$/));
+    // The commitment move tripped a coverage advisory; settle it before the
+    // composer takes a second instruction, exactly as the read-back test above
+    // does.
+    await ackIfOpen();
+    await typeInto(room, "reprice the 15M line of credit to 7.25%"); // requested: the rate
+    await click(byText(/^Confirm$/));
+    await ackIfOpen();
+  }
+
+  it("reads '4 changes · 2 requested · 2 derived' on the rail head", async () => {
+    const room = open();
+    await settle();
+    await twoRequestedTwoDerived(room);
+
+    const count = room.querySelector(".wk-c")?.textContent ?? "";
+    expect(count.startsWith("4 changes · 2 requested · 2 derived")).toBe(true);
+  });
+
+  it("carries the same split into the plan read-back", async () => {
+    const room = open();
+    await settle();
+    await twoRequestedTwoDerived(room);
+    await typeInto(room, "what is on the plan");
+
+    expect(room.textContent).toContain("The manifest holds 4 changes · 2 requested · 2 derived");
+  });
+
+  it("badges the two pricing entries as derived, and neither the amount nor the rate", async () => {
+    const room = open();
+    await settle();
+    await twoRequestedTwoDerived(room);
+
+    const rows = [...room.querySelectorAll(".wk-ent")];
+    expect(rows).toHaveLength(4);
+    const badged = rows.filter((r) => r.querySelector(".wk-derived"));
+    const plain = rows.filter((r) => !r.querySelector(".wk-derived"));
+    // Exactly the two pricing-prerequisite rows carry the badge...
+    expect(badged).toHaveLength(2);
+    const badgedTitles = badged.map((r) => r.querySelector("b")?.textContent).join(" | ");
+    expect(badgedTitles).toContain("Amortisation term");
+    expect(badgedTitles).toContain("First payment date");
+    // ...and the two the banker actually typed (the amount and the rate)
+    // carry neither the badge nor either pricing title.
+    expect(plain).toHaveLength(2);
+    const plainTitles = plain.map((r) => r.querySelector("b")?.textContent).join(" | ");
+    expect(plainTitles).not.toContain("Amortisation term");
+    expect(plainTitles).not.toContain("First payment date");
+  });
+
+  it("reads a plain count with no clause where nothing on the plan is derived", async () => {
+    const room = open();
+    await settle();
+    await typeInto(room, "reprice the 15M line of credit to 7.25%");
+    await click(byText(/^Confirm$/));
+
+    const count = room.querySelector(".wk-c")?.textContent ?? "";
+    expect(count.startsWith("1 change")).toBe(true);
+    expect(count).not.toContain("requested");
+    expect(count).not.toContain("derived");
+    expect(room.querySelector(".wk-ent .wk-derived")).toBeFalsy();
+  });
+});

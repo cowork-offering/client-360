@@ -184,6 +184,18 @@ export interface WorkroomFiledInput {
   execution: WorkroomExecution;
   /** How many changes actually filed, as the dossier counted them. */
   changeCount: number;
+  /**
+   * OF `changeCount`, HOW MANY THE BANKER TYPED (Cowork feedback, 2026-09-03).
+   *
+   * The pricing gate adds the amortised term and the first payment date once
+   * an amount or a term moves, and those two file with everything else, so
+   * "4 changes filed" read as the parser inventing a pair the banker never
+   * asked for. Both absent or `derivedCount` at 0 renders the count exactly
+   * as it always has; the room passes both together, from
+   * `derivedDelta.ts`'s `countSplit` over the filed entries.
+   */
+  requestedCount?: number;
+  derivedCount?: number;
   /** The package the plan ran on, in banker language. */
   packageName: string;
   /** The identity that took the single approval. */
@@ -235,6 +247,13 @@ export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry 
   // not carry it separately. Keying on the clone the plan created is the next
   // most durable thing it holds, and it is stable across a replay.
   const anchor = filed[0]?.recordId || packageName;
+  const derivedCount = input.derivedCount ?? 0;
+  const requestedCount = input.requestedCount ?? changeCount - derivedCount;
+  // A PARENTHETICAL, NOT A NEW SENTENCE. Same doctrine as the rail head and
+  // the flow card: an ordinary plan reads exactly as it always has, and a
+  // plan the pricing gate touched says so beside the count rather than in a
+  // line of its own.
+  const splitNote = derivedCount > 0 ? ` (${requestedCount} requested, ${derivedCount} derived)` : "";
 
   return {
     id: `exec-${anchor}`,
@@ -243,7 +262,7 @@ export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry 
     sessionLocal: true,
     kind: "ACTION_EXECUTED",
     title: `Modification executed on ${packageName}`,
-    summary: `${changeCount} ${changeCount === 1 ? "change" : "changes"} filed${approver ? `, approved by ${approver}` : ""}.`,
+    summary: `${changeCount} ${changeCount === 1 ? "change" : "changes"}${splitNote} filed${approver ? `, approved by ${approver}` : ""}.`,
     reference: productPackageId
       ? {
           kind: "ncino-record",
@@ -257,7 +276,7 @@ export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry 
       : undefined,
     detail: {
       body: [
-        `${changeCount} ${changeCount === 1 ? "change" : "changes"} filed against ${packageName}.`,
+        `${changeCount} ${changeCount === 1 ? "change" : "changes"}${splitNote} filed against ${packageName}.`,
         approver ? `Confirmed by ${approver}.` : null,
         arms ?? null,
         pricing ?? null,

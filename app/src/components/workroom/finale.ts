@@ -240,7 +240,19 @@ export function withFinale<T extends Wrapper>(attrs: T, exit: FinaleAttrs | null
  * filing there is nothing about to be written. One line in the room's own
  * vocabulary takes their place; the detail is on the card and in nCino, which is
  * where a filed change belongs.
+ *
+ * `split` carries the same requested/derived count the rail head shows while
+ * the plan is still open (`derivedDelta.ts`'s `countSplit`), so the one line
+ * that survives the drain does not go back to saying a bare number the moment
+ * the pricing gate's own cards are the reason it is not two. Absent where
+ * nothing on the filed set was derived, which reads exactly as it always has.
  */
-export function railFiledLine(count: number, filedWord: string, changeWord: readonly [string, string]): string {
-  return `${filedWord} · ${count} ${count === 1 ? changeWord[0] : changeWord[1]}`;
+export function railFiledLine(
+  count: number,
+  filedWord: string,
+  changeWord: readonly [string, string],
+  split?: { requested: number; derived: number },
+): string {
+  const base = `${filedWord} · ${count} ${count === 1 ? changeWord[0] : changeWord[1]}`;
+  return split && split.derived > 0 ? `${base} · ${split.requested} requested · ${split.derived} derived` : base;
 }

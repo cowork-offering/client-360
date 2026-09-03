@@ -193,4 +193,14 @@ describe("the line the rail says instead", () => {
     expect(railFiledLine(1, "Filed", ["change", "changes"])).toBe("Filed · 1 change");
     expect(railFiledLine(4, "Submitted", ["term", "terms"])).toBe("Submitted · 4 terms");
   });
+
+  it("carries the requested/derived split when the filed set has one", () => {
+    expect(railFiledLine(4, "Filed", ["change", "changes"], { requested: 2, derived: 2 })).toBe(
+      "Filed · 4 changes · 2 requested · 2 derived",
+    );
+  });
+
+  it("stays plain when nothing filed was derived", () => {
+    expect(railFiledLine(2, "Filed", ["change", "changes"], { requested: 2, derived: 0 })).toBe("Filed · 2 changes");
+  });
 });

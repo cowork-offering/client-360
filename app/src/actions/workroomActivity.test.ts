@@ -115,6 +115,33 @@ describe("it dedupes against itself the way every other executed entry does", ()
    from its own manifest and the trail carries it verbatim; a plan carrying no
    arm reads exactly as it read before the arms existed. */
 
+/* =========================================== the requested/derived split
+
+   Cowork feedback, 2026-09-03: a whisper with two lines landed four cards,
+   and the trail (like the rail) said "4 changes" with no further word. The
+   pricing gate adds the amortised term and the first payment date once an
+   amount or a term moves; the split says so beside the count rather than
+   leaving the banker to wonder what the parser invented. */
+
+describe("the trail carries the requested/derived split", () => {
+  it("reads the split as a parenthetical beside the count", () => {
+    const e = workroomActivityEntry({ execution: execution(), ...base, changeCount: 4, requestedCount: 2, derivedCount: 2 })!;
+    expect(e.summary).toBe("4 changes (2 requested, 2 derived) filed, approved by Fabian Goetzens.");
+    expect(e.detail!.body).toMatch(/4 changes \(2 requested, 2 derived\) filed against Hartwell/);
+  });
+
+  it("reads plain when nothing filed was derived", () => {
+    const e = workroomActivityEntry({ execution: execution(), ...base })!;
+    expect(e.summary).toBe("2 changes filed, approved by Fabian Goetzens.");
+  });
+
+  it("reads plain when the split is simply absent, exactly as it always has", () => {
+    const withSplit = workroomActivityEntry({ execution: execution(), ...base, requestedCount: 2, derivedCount: 0 })!;
+    const without = workroomActivityEntry({ execution: execution(), ...base })!;
+    expect(withSplit.summary).toBe(without.summary);
+  });
+});
+
 describe("what the org arms did reaches the trail", () => {
   it("carries the room's own arm sentence into the detail", () => {
     const e = workroomActivityEntry({
