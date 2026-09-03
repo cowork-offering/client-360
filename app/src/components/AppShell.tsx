@@ -48,7 +48,25 @@ export function AppShell() {
   // Live refreshes are merged OVER the staged snapshot at read time, so a
   // partial refresh never blanks a slice the org failed to return.
   const patch = state.accountId ? state.livePatches[state.accountId] : undefined;
-  const bundle = staged && patch ? { ...staged, ...patch } : staged;
+  /* SHALLOW MERGE, WITH ONE KEYHOLE. A live snapshot REPLACES the staged one,
+     but a patch stored before the read carried the review dates would blank
+     the review card forever (founder, 2026-09-03, three rounds of "why is
+     there no review"). The two review fields fall back to the staged snapshot
+     when the synced one does not carry them. */
+  const bundle = useMemo(() => {
+    if (!staged || !patch) return staged;
+    const merged = { ...staged, ...patch };
+    const ps = patch.snapshot as (typeof staged)["snapshot"] & { nextReviewDate?: string; lastReviewDate?: string };
+    const ss = staged.snapshot as typeof ps;
+    if (ps && ss) {
+      merged.snapshot = {
+        ...ps,
+        nextReviewDate: ps.nextReviewDate ?? ss.nextReviewDate,
+        lastReviewDate: ps.lastReviewDate ?? ss.lastReviewDate,
+      } as typeof ps;
+    }
+    return merged;
+  }, [staged, patch]);
   const home = state.view === "home";
 
   // The header capsule appears only on a client (rule 11). The flag is a body
