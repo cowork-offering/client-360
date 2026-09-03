@@ -479,6 +479,12 @@ body.on-client .topnav {
   gap: 16px;
   flex-wrap: wrap;
   flex: 1;
+  /* ONE COLUMN, STRAIGHT DOWN (founder, 2026-09-03): the info dot sits at the
+     end of the flexible span, so it lines up under itself on every row and
+     stands just before the exposure figure whatever the name's length. */
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 6px;
 }
 #view-home .wlrow .amt {
   text-align: right;

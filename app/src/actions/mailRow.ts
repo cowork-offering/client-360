@@ -7,7 +7,8 @@ import { clipMail, MAIL_GIST_CHARS, MAIL_SUBJECT_CHARS } from "../components/wor
 import { openFacilityRoom } from "../components/workroom/roomSession";
 import { readRouteIntent, ROUTE_WORD, type SmartOpening } from "../components/workroom/route";
 import { flyName } from "../components/nameFlight";
-import { flightSourceFor } from "../intent/open";
+import { flightSourceFor, openIntent } from "../intent/open";
+import { offerFor } from "../intent/store";
 import type { WorkroomMode } from "../workroom/types";
 import { carryMail } from "./mailCarry";
 import { readMailRequest, type MailRequest, type RequestIntent } from "./mailIntake";
@@ -212,6 +213,17 @@ export function openMailRoom(args: {
 }): void {
   const row = readMailRow(args.entry, args.bundle);
   if (!row) return;
+
+  /* THE SAME DOOR THE WHISPER OPENS (founder, 2026-09-03: "the same experience
+     when clicking Open in workroom from the activity"). Where an intent is
+     already waiting on this relationship, the mail row hands to it: the room
+     binds the route and feeds the lines exactly as the whisper's Open does,
+     rather than opening a bare greeting the banker must retype into. */
+  const waiting = offerFor("account", args.accountId);
+  if (waiting) {
+    openIntent({ intent: waiting, navigate: args.navigate });
+    return;
+  }
 
   const note = mailNoteFromEntry(args.entry, args.bundle, args.generatedAt);
   if (note) carryMail(args.accountId, note);
