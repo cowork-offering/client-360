@@ -278,36 +278,20 @@ global with sharing class ExecuteNewFacility {
             }
         }
 
-        Map<String, Object> writeFields = new Map<String, Object>{
-            'LLC_BI__Account__c' => accountId,
-            'LLC_BI__Product_Package__c' => packageId,
-            'LLC_BI__Stage__c' => C360Plan.asString(v.get('LLC_BI__Stage__c')),
-            'LLC_BI__Status__c' => C360Plan.asString(v.get('LLC_BI__Status__c')),
-            'LLC_BI__isRenewal__c' => false,
-            'LLC_BI__Is_Modification__c' => false,
-            'LLC_BI__Product__c' => C360Plan.asString(v.get('LLC_BI__Product__c')),
-            'LLC_BI__Amount__c' => C360Plan.asDecimal(v.get('LLC_BI__Amount__c'))
-        };
+        // THE FIELD SET IS SHARED (2026-09-03). C360NewFacilities owns the shape a facility is
+        // written with, because the modification's own new-facility arm writes the same one and two
+        // copies of it would drift. The plan values are read here and the record is built there.
+        C360NewFacilities.NewFacility nf = new C360NewFacilities.NewFacility();
+        nf.product = C360Plan.asString(v.get('LLC_BI__Product__c'));
+        nf.amount = C360Plan.asDecimal(v.get('LLC_BI__Amount__c'));
+        nf.termMonths = C360Plan.asDecimal(v.get('LLC_BI__Term_Months__c'));
+        nf.purpose = C360Plan.asString(v.get('primaryLoanPurpose'));
+
+        Map<String, Object> writeFields = C360NewFacilities.loanFields(accountId, packageId, nf.product, nf.amount);
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_LOAN, C360WriteGuard.OP_CREATE, writeFields);
 
-        LLC_BI__Loan__c record = new LLC_BI__Loan__c(
-            LLC_BI__Account__c = (Id) writeFields.get('LLC_BI__Account__c'),
-            LLC_BI__Product_Package__c = packageId,
-            LLC_BI__Stage__c = (String) writeFields.get('LLC_BI__Stage__c'),
-            LLC_BI__Status__c = (String) writeFields.get('LLC_BI__Status__c'),
-            LLC_BI__isRenewal__c = false,
-            LLC_BI__Is_Modification__c = false,
-            LLC_BI__Product__c = (String) writeFields.get('LLC_BI__Product__c'),
-            LLC_BI__Amount__c = (Decimal) writeFields.get('LLC_BI__Amount__c')
-        );
-        Decimal termMonths = C360Plan.asDecimal(v.get('LLC_BI__Term_Months__c'));
-        if (termMonths != null) {
-            record.LLC_BI__Term_Months__c = termMonths;
-        }
-
         LLC_BI__Loan__c clean = (LLC_BI__Loan__c) C360WriteGuard.stripAndVerify(
-            record,
-            new Set<String>{ 'LLC_BI__Account__c', 'LLC_BI__Stage__c', 'LLC_BI__Status__c', 'LLC_BI__isRenewal__c', 'LLC_BI__Is_Modification__c', 'LLC_BI__Product__c' }
+            C360NewFacilities.newLoan(accountId, packageId, nf), C360NewFacilities.LOAN_MUST_SURVIVE
         );
         insert as user clean;
         C360Plan.setState(steps, 'write_loan', C360Plan.STATE_VERIFIED, 'Facility ' + clean.Id + ' created at Qualification.');
@@ -315,24 +299,12 @@ global with sharing class ExecuteNewFacility {
         // Borrowing structure. Ownership only: pairing it with a contingent amount on one row
         // trips Contingent_Amount_and_Contingent_Percent, whose only escape tests for a Household
         // role value that does not exist in this org.
-        Map<String, Object> involvementFields = new Map<String, Object>{
-            'LLC_BI__Account__c' => accountId,
-            'LLC_BI__Loan__c' => clean.Id,
-            'LLC_BI__Product_Package__c' => packageId,
-            'LLC_BI__Borrower_Type__c' => 'Borrower',
-            'LLC_BI__Ownership__c' => 100
-        };
+        Map<String, Object> involvementFields = C360NewFacilities.involvementFields(accountId, clean.Id, packageId);
         C360WriteGuard.assertAllowed(C360WriteGuard.OBJ_INVOLVEMENT, C360WriteGuard.OP_CREATE, involvementFields);
 
-        LLC_BI__Legal_Entities__c involvement = new LLC_BI__Legal_Entities__c(
-            LLC_BI__Account__c = accountId,
-            LLC_BI__Loan__c = clean.Id,
-            LLC_BI__Product_Package__c = packageId,
-            LLC_BI__Borrower_Type__c = 'Borrower',
-            LLC_BI__Ownership__c = 100
-        );
         LLC_BI__Legal_Entities__c cleanInvolvement = (LLC_BI__Legal_Entities__c) C360WriteGuard.stripAndVerify(
-            involvement, new Set<String>{ 'LLC_BI__Account__c', 'LLC_BI__Loan__c', 'LLC_BI__Borrower_Type__c' }
+            C360NewFacilities.newInvolvement(accountId, clean.Id, packageId),
+            C360NewFacilities.INVOLVEMENT_MUST_SURVIVE
         );
         insert as user cleanInvolvement;
 
@@ -445,7 +417,17 @@ global with sharing class ExecuteNewFacility {
         out.loanDetailId = loan.LLC_BI__Loan_Detail__c;
         C360Plan.setState(steps, 'wait_loan_detail', C360Plan.STATE_VERIFIED, 'nCino created Loan Detail ' + loan.LLC_BI__Loan_Detail__c + '.');
 
+        // THE SAME WRITE, THROUGH THE SAME FENCE (2026-09-03). The Loan Detail
+        // joined C360WriteGuard when complete_new_facility_detail was built, and
+        // this is the other place in the package that writes the purpose. Two
+        // writes to one field with only one of them fenced is how a fence stops
+        // being one.
         String purpose = C360Plan.asString(v.get('primaryLoanPurpose'));
+        C360WriteGuard.assertAllowed(
+            C360WriteGuard.OBJ_LOAN_DETAIL,
+            C360WriteGuard.OP_UPDATE,
+            new Map<String, Object>{ 'LLC_BI__Primary_Loan_Purpose__c' => purpose }
+        );
         update as user new LLC_BI__Loan_Detail__c(Id = loan.LLC_BI__Loan_Detail__c, LLC_BI__Primary_Loan_Purpose__c = purpose);
         C360Plan.setState(steps, 'write_loan_purpose', C360Plan.STATE_VERIFIED, 'Primary loan purpose set to ' + purpose + '.');
 

@@ -118,6 +118,17 @@ import {
   readArmRemoval,
   readCovenantAttach,
 } from "./orgArms";
+import {
+  newFacilityCreateEntry,
+  newFacilityDelta,
+  newFacilityFeeEntry,
+  newFacilityMember,
+  newFacilityRemovalRefusal,
+  readNewFacility,
+  stagedNewFacilities,
+  stagedNewFacilitySpecs,
+} from "./newFacilityArm";
+import { completeNewFacilityDetail } from "../../channel/writeTools";
 import { readCatalog, reconcileChips, type OrgCatalog } from "../../channel/catalog";
 import { bareMemberPick, readSteer } from "./steer";
 import {
@@ -438,6 +449,12 @@ const bankerLine = (step: number, text: string, from?: string): ThreadItem =>
   from
     ? { kind: "fed", id: nextId("fed"), step, text, from }
     : { kind: "banker", id: nextId("banker"), step, text };
+
+/** The verbs that make a line a REMOVAL, for the one check that has to run before
+ *  any removal lane: a removal aimed at a facility this plan is CREATING has no
+ *  referent at all, on the org and here. Mirrors `dispatch.ts`'s own list. */
+const REMOVAL_ON_CREATED =
+  /\b(remove|removing|drop|dropping|delete|detach|unpledge|strike|take\s+off|take\s+out|scrap|exclude|excluding)\b/i;
 
 /** The three routes, as words a reply may NAME while the question is open. The
  *  room is the authority on which words are legal, never the validator. */
@@ -1417,10 +1434,31 @@ export function Workroom({
       }));
   }, [brief.members, context.accountName, isEligible, qualifierMembers, reads?.bundle]);
 
-  /** A member's own display label, for every sentence the room says about one. */
+  /* ---- AND THE FACILITIES THIS PLAN IS CREATING (founder, 2026-09-03).
+
+          A net-new facility on the manifest is a member of the PLAN before it is
+          a member of anything in the org, and every later line that names it
+          ("on the new equipment loan") resolves a facility through `readScope`.
+          So it joins the scope as a synthetic member whose id IS its label, and
+          the covenant, borrowing-structure, collateral and fee lanes all reach
+          it through the reader they already use. Booked members come first, so
+          nothing about an existing facility's reading moves. */
+  const newFacilitySpecs = useMemo(() => stagedNewFacilitySpecs(entries), [entries]);
+  const scopeMembers = useMemo<ElicitMember[]>(
+    () => [...elicitMembers, ...newFacilitySpecs.map(newFacilityMember)],
+    [elicitMembers, newFacilitySpecs],
+  );
+  const specFor = useCallback(
+    (memberId: string) => newFacilitySpecs.find((spec) => spec.label === memberId) ?? null,
+    [newFacilitySpecs],
+  );
+
+  /** A member's own display label, for every sentence the room says about one.
+   *  Reads the plan's own members, so a facility this plan is creating is named
+   *  by its title rather than by "that facility". */
   const memberLabel = useCallback(
-    (id: string) => elicitMembers.find((m) => m.id === id)?.label ?? "that facility",
-    [elicitMembers],
+    (id: string) => scopeMembers.find((m) => m.id === id)?.label ?? "that facility",
+    [scopeMembers],
   );
 
   /**
@@ -1549,14 +1587,17 @@ export function Workroom({
 
   const elicitCtx = useMemo<ElicitContext>(
     () => ({
-      members: elicitMembers,
-      focused: focused ? (elicitMembers.find((m) => m.id === focused.id) ?? null) : null,
+      /* THE FACILITIES THIS PLAN IS CREATING ARE IN SCOPE. Every create the
+         grammar gathers resolves its members here, so "add a DSC covenant on the
+         new loan" settles on the staged facility rather than asking. */
+      members: scopeMembers,
+      focused: focused ? (scopeMembers.find((m) => m.id === focused.id) ?? null) : null,
       book,
       plan,
       relationship: context.accountName,
       catalog,
     }),
-    [book, catalog, context.accountName, elicitMembers, focused, plan],
+    [book, catalog, context.accountName, focused, plan, scopeMembers],
   );
 
   /** THE CONVERSATION SO FAR, for the envelope. The banker's words verbatim,
@@ -2310,6 +2351,28 @@ export function Workroom({
              because the covenant already exists and what this authors is the
              junction alone. The two refusals the org would give are given HERE,
              by name, rather than at the confirm gate after the banker signed. */
+          /* ========== A CREATE ON A FACILITY THIS PLAN IS CREATING (2026-09-03)
+
+             It never goes through the parser, for the reason the associate does
+             not: there is nothing worth composing. The fenced engine resolves a
+             facility against the PACKAGE and this one is not on it, so a composed
+             sentence would come back unresolved or, worse, resolved onto a booked
+             member that happens to share the product word. Everything the card
+             carries was already settled by the create grammar above; the wire
+             carries the LABEL and the org resolves it to the loan it just wrote. */
+          const creatingSpec = specFor(line.memberId);
+          if (creatingSpec && !scoped.slots.associate) {
+            const made = newFacilityCreateEntry({ draft: scoped, ctx: elicitCtx, spec: creatingSpec, seq: seq });
+            if (made) {
+              got.push(made);
+              continue;
+            }
+            refused.push(
+              `on the ${memberLabel(line.memberId)}, the create did not carry everything the org needs for a facility this plan has not filed yet`,
+            );
+            continue;
+          }
+
           const attach = attachFor(scoped, line.memberId);
           if (attach?.kind === "refusal") {
             refused.push(`on the ${memberLabel(line.memberId)}, ${attach.why}`);
@@ -2566,6 +2629,28 @@ export function Workroom({
       const got: WorkroomDelta[] = [];
       try {
         for (const [seq, composed] of composition.lines.entries()) {
+          /* ========== A CREATE ON A FACILITY THIS PLAN IS CREATING (2026-09-03)
+
+             It never goes through the parser, for the reason the associate does
+             not: there is nothing worth composing. The fenced engine resolves a
+             facility against the PACKAGE and this one is not on it, so a composed
+             sentence would come back unresolved or, worse, resolved onto a booked
+             member that happens to share the product word. Everything the card
+             carries was already settled by the create grammar above; the wire
+             carries the LABEL and the org resolves it to the loan it just wrote. */
+          const creatingSpec = specFor(composed.memberId);
+          if (creatingSpec && !scoped.slots.associate) {
+            const made = newFacilityCreateEntry({ draft: scoped, ctx: elicitCtx, spec: creatingSpec, seq: seq });
+            if (made) {
+              got.push(made);
+              continue;
+            }
+            // The amend lane has no refusal list: an amendment that does not
+            // resolve leaves the card exactly as it was, and the sentence below
+            // says so once for the whole block.
+            continue;
+          }
+
           const attach = attachFor(scoped, composed.memberId);
           if (attach?.kind === "attach") {
             got.push(attach.delta);
@@ -2806,6 +2891,36 @@ export function Workroom({
 
          THE REWRITE IS SILENT. Same party, same facility, same op; only the verb
          moves, and every layer below it still runs. */
+      /* A REMOVAL NEVER NAMES A FACILITY THIS PLAN IS CREATING, and the room
+         says so by name rather than sending a plan up to be refused. A removal
+         on a modification is a CARRY EXCLUSION: the booked facility keeps its own
+         row and the new version starts without it. A facility being created holds
+         nothing, so everything on it is an ADD. The Apex refuses this for the
+         same reason; saying it here means the banker reads it before signing. */
+      const removalLine = commanded ?? instruction;
+      const onCreated =
+        REMOVAL_ON_CREATED.test(removalLine)
+          ? (() => {
+              const ids = readScope(removalLine, scopeMembers).ids;
+              return ids.length === 1 ? specFor(ids[0]) : null;
+            })()
+          : null;
+      if (onCreated) {
+        answer({
+          kind: "agent",
+          id: nextId("agent"),
+          text: newFacilityRemovalRefusal(
+            memberLabel(onCreated.label),
+            /\bcovenants?\b/i.test(removalLine)
+              ? "covenant"
+              : /\b(pledges?|collateral|security)\b/i.test(removalLine)
+                ? "pledge"
+                : "row",
+          ),
+        });
+        return;
+      }
+
       const removalOf = readPartyRemoval({ line: commanded ?? instruction, book, members: elicitMembers });
       if (removalOf?.kind === "ask") {
         answer({ kind: "agent", id: nextId("agent"), text: removalOf.text, options: removalOf.options });
@@ -2899,6 +3014,113 @@ export function Workroom({
           });
         }
 
+        /* =========== A FEE ON A FACILITY THIS PLAN IS CREATING (2026-09-03)
+
+           IT RUNS BEFORE `openCreate`, and the reason is specific rather than
+           general: "add a 1% origination fee on the new equipment loan" carries
+           the word EQUIPMENT, which the collateral surface reads as an asset
+           KIND, and the 1% as an advance rate. On a booked line of credit that
+           collision never fired; a net-new EQUIPMENT facility makes it
+           reachable. Only the new-facility case is lifted, so every fee on a
+           booked member reads exactly where it always did.
+
+           The card never reaches the parser either. The fenced engine resolves a
+           facility against the PACKAGE and this one is not on it, so a composed
+           sentence would come back unresolved or resolved onto a booked member
+           sharing the product word. It is built from what the fee lane settled,
+           and its wire carries the label. */
+        const newFee = reading ? null : readFeeOpen(line, scopeMembers, turnCtx.focused);
+        const newFeeSpec = newFee?.memberId ? specFor(newFee.memberId) : null;
+        if (newFee && newFeeSpec) {
+          const needs = feeAsk(newFee, scopeMembers);
+          if (needs) {
+            setSteerPending(false);
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: needs.text,
+              options: needs.options.length ? needs.options : undefined,
+            });
+            return;
+          }
+          const feeDelta = newFacilityFeeEntry(newFee, newFeeSpec, entries.length);
+          if (feeDelta) {
+            setSteerPending(false);
+            setItems((prev) => [
+              ...prev,
+              {
+                kind: "agent",
+                id: nextId("agent"),
+                step: mine,
+                text:
+                  `${feeDelta.title} goes onto the ${feeDelta.target}, the facility this plan is creating. ` +
+                  "The org files it on that loan once the version exists.",
+              },
+              { kind: "chips", id: nextId("chips"), step: mine, chips: [{ key: nextId("chip"), delta: feeDelta, state: "open" }] },
+            ]);
+            return;
+          }
+        }
+
+        /* ========================= A NEW FACILITY ON THE VERSION BEING APPROVED
+
+           (Founder, 2026-09-03: "Do we allow new loans to be created as part of
+           the modification and renewal? This should be fully possible.")
+
+           This runs IN FRONT of the steer, because the steer's answer to "add a
+           new equipment loan" was to restart the room in the create route, and a
+           restart throws away the manifest the banker has been building. On a
+           modification the line is not navigation at all: the credit action
+           versions the whole PACKAGE, and a new loan on the version being
+           approved is where new money belongs.
+
+           The elicitation is stateless. Each question's chips type back the whole
+           sentence with one more answer in it, so the room re-reads the line and
+           reaches the same place rather than holding a half-built facility
+           between turns. The pricing gate is two of those questions, on the same
+           terms a commitment change gets them. */
+        const newFacility = reading ? null : readNewFacility({
+          line,
+          mode: context.mode,
+          members: elicitMembers,
+          staged: stagedNewFacilities(entries).length,
+          generatedAt: reads?.generatedAt,
+        });
+        if (newFacility) {
+          if (newFacility.kind === "ask") {
+            answer({ kind: "agent", id: nextId("agent"), text: newFacility.text, options: newFacility.options });
+            return;
+          }
+          if (newFacility.kind === "handoff") {
+            answer({ kind: "agent", id: nextId("agent"), text: newFacility.text });
+            return;
+          }
+          const anchor = focused ?? brief.members.find(isEligible) ?? brief.members[0] ?? null;
+          if (!anchor) {
+            answer({
+              kind: "agent",
+              id: nextId("agent"),
+              text: "This package carries no booked member to anchor the credit action on, so there is no version for a new facility to land on.",
+            });
+            return;
+          }
+          const delta = newFacilityDelta(newFacility.spec, {
+            anchorId: anchor.id,
+            anchorLabel: facilityLabel(anchor, brief.members),
+          });
+          setItems((prev) => [
+            ...prev,
+            { kind: "agent", id: nextId("agent"), step: mine, text: newFacility.said },
+            {
+              kind: "chips",
+              id: nextId("chips"),
+              step: mine,
+              chips: [{ key: nextId("chip"), delta, state: "open" }],
+            },
+          ]);
+          return;
+        }
+
         /* ==================================================== A CREATE OPENS
 
            An underspecified create does not become a chip. It becomes the room
@@ -2954,9 +3176,9 @@ export function Workroom({
            rounds of its own about a basis, a payment method and a paid-by, none
            of which is a field on the wire this room files. The room asks the
            wire's own questions instead: which facility, what kind, how much. */
-        const feeOpen = reading ? null : readFeeOpen(line, elicitMembers, turnCtx.focused);
+        const feeOpen = reading ? null : readFeeOpen(line, scopeMembers, turnCtx.focused);
         if (feeOpen) {
-          const feeNeeds = feeAsk(feeOpen, elicitMembers);
+          const feeNeeds = feeAsk(feeOpen, scopeMembers);
           if (feeNeeds) {
             setSteerPending(false);
             answer({
@@ -2967,7 +3189,7 @@ export function Workroom({
             });
             return;
           }
-          const onFee = elicitMembers.find((m) => m.id === feeOpen.memberId);
+          const onFee = scopeMembers.find((m) => m.id === feeOpen.memberId);
           if (onFee) {
             line = feeSay(feeOpen, onFee);
             /* AND A PERCENTAGE FEE IS NEVER ASKED FOR A FIGURE. The org derives
@@ -4022,6 +4244,41 @@ export function Workroom({
             .map((m) => pricingDeclinedLine(m))
             .join(" ") || null,
       });
+      /* ============ THE SECOND HOP, FOR A PLAN THAT FILED A NEW FACILITY
+
+         The primary loan purpose lives on `LLC_BI__Loan_Detail__c`, which nCino
+         creates from an AFTER-COMMIT flow of its own. Nothing inside the
+         transaction that filed the facility could see it, so the org reported
+         the purpose as pending and `complete_new_facility_detail` finishes it.
+
+         IT IS ITS OWN HOP, and it runs HERE rather than inside either execute
+         leg: the 2026-08-31 governor fix exists to keep writes out of the engine
+         leg, and a third write pass bolted onto it would put the same
+         transaction back under the pressure that fix removed.
+
+         IT NEVER FAILS THE FILING. The plan is executed and the money is on the
+         version whatever this returns; what it decides is only which sentence
+         the executed card carries about the purpose. A plan that filed no new
+         facility never calls it at all. */
+      if (stagedNewFacilities(entries).length) {
+        try {
+          const finished = await completeNewFacilityDetail(staging.stagingId, context.approver);
+          if (finished.ok) {
+            agent(finished.result.outcome);
+          } else {
+            agent(
+              `The facility is filed and its purpose is not: ${finished.error.message} ` +
+                "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
+            );
+          }
+        } catch (e) {
+          agent(
+            `The facility is filed and its purpose is not: ${readableError(e)} ` +
+              "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
+          );
+        }
+      }
+
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
       if (committedDeltaMM) onExecuted?.(committedDeltaMM);

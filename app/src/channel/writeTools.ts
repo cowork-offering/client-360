@@ -17,7 +17,7 @@
    and Result inner classes), never guessed.
    ============================================================================= */
 
-import { callTool, SERVERS, unwrapInvocableOne, type McpFailure } from "./mcp";
+import { callTool, SERVERS, TOOLS, unwrapInvocableOne, type McpFailure } from "./mcp";
 import type { PlanStep, StagedCovenant, StagedFacility, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
 
 /** The deployed write actions, and the tools each one runs on. */
@@ -803,6 +803,24 @@ export interface StagePayloads {
      *  holds them. The org refuses a duplicate junction and a covenant
      *  belonging to another relationship, each by name. */
     covenantAttachesJson?: string | null;
+    /** NET-NEW FACILITIES ON THE NEW VERSION (founder, 2026-09-03), JSON-encoded:
+     *  [{label?, product, amount, termMonths, purpose, amortizedTermMonths?,
+     *  firstPaymentDate?}]. `product` is an org-exact Commercial Loan record-type
+     *  value; the org would STORE anything else and render it wrong, so the tool
+     *  refuses it by name against the catalog it holds.
+     *
+     *  A modification versions the whole PACKAGE, so the new version is where
+     *  new money belongs: the facility is filed on it beside the clones, at
+     *  Qualification with the borrower on its own borrowing structure, carrying
+     *  no chain row and no modification flag because it is a new loan rather
+     *  than a version of one. Every other arm of the same request may target it
+     *  by its LABEL ("new:1") in place of `targetLoanId`, because the id does not
+     *  exist until execution.
+     *
+     *  The PURPOSE lands on the Loan Detail, which nCino creates in its own
+     *  transaction after the filing; the org writes it where that record is
+     *  already there and reports a handoff where it is not. */
+    newFacilitiesJson?: string | null;
   };
   /**
    * RELATIONSHIP INTAKE, built to the frozen contract (2026-09-03).
@@ -862,6 +880,74 @@ export interface StagePayloads {
 export type FacilityAnchor =
   | { loanId: string; facilityIds?: never }
   | { facilityIds: string[]; loanId?: never };
+
+/** What `complete_new_facility_detail` reports about one net-new facility. */
+export interface NewFacilityDetail {
+  label: string;
+  loanId: string | null;
+  recordName: string | null;
+  loanDetailId: string | null;
+  purpose: string | null;
+  /** written, already_set, pending_detail or not_found. */
+  state: string;
+  verification: string | null;
+}
+
+export interface NewFacilityDetailResult {
+  facilities: NewFacilityDetail[];
+  writtenCount: number;
+  pendingCount: number;
+  /** True while a Loan Detail has not appeared yet. Calling again finishes it. */
+  resumable: boolean;
+  outcome: string;
+}
+
+/**
+ * THE SECOND HOP FOR A NET-NEW FACILITY'S PURPOSE (2026-09-03).
+ *
+ * `LLC_BI__Primary_Loan_Purpose__c` lives on `LLC_BI__Loan_Detail__c`, which
+ * nCino creates from an AFTER-COMMIT flow of its own. Nothing inside the
+ * transaction that files the facility can see it, so execute reports the purpose
+ * as pending and this finishes it.
+ *
+ * IT IS ITS OWN HOP ON PURPOSE. The 2026-08-31 governor fix exists to keep
+ * writes out of the engine leg; bolting a third write pass onto either leg would
+ * put the same transaction back under the pressure that fix removed.
+ *
+ * IT IS SAFE TO CALL AND SAFE TO REPEAT: the org writes nothing when the purpose
+ * already reads back correct, nothing when the child has not appeared, and
+ * nothing at all when the plan carried no net-new facility.
+ */
+export async function completeNewFacilityDetail(
+  stagingId: string,
+  approverUserId: string,
+): Promise<ToolOutcome<NewFacilityDetailResult>> {
+  const res = await callTool(
+    SERVERS.customer360,
+    TOOLS.completeNewFacilityDetail,
+    { inputs: [{ stagingId, approverUserId }] },
+    // A write is never cached and never auto-retried: the tool is idempotent by
+    // construction, and a retry decision is the room's rather than the transport's.
+    { cache: false, read: false },
+  );
+  return unwrapToolOutcome<NewFacilityDetailResult>(res.payload, (r) => ({
+    facilities: Array.isArray(r.facilities)
+      ? (r.facilities as Array<Record<string, unknown>>).map((f) => ({
+          label: String(f.label ?? ""),
+          loanId: f.loanId ? String(f.loanId) : null,
+          recordName: f.recordName ? String(f.recordName) : null,
+          loanDetailId: f.loanDetailId ? String(f.loanDetailId) : null,
+          purpose: f.purpose ? String(f.purpose) : null,
+          state: String(f.state ?? "not_found"),
+          verification: f.verification ? String(f.verification) : null,
+        }))
+      : [],
+    writtenCount: Number(r.writtenCount ?? 0),
+    pendingCount: Number(r.pendingCount ?? 0),
+    resumable: r.resumable === true,
+    outcome: String(r.outcome ?? ""),
+  }));
+}
 
 /** Call `stage_*`. USER GESTURE ONLY — never on mount, never polled. */
 export async function stageAction<K extends WriteActionId>(

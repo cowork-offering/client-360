@@ -51,18 +51,47 @@ import { clipTitle, readScope } from "./elicit";
 
 /* --------------------------------------------------------------- the wire */
 
-/** The three arms, in the org's own words. */
-export type ArmKind = "covenantExclusion" | "pledgeExclusion" | "covenantAttach";
+/** The four arms, in the org's own words. */
+export type ArmKind = "covenantExclusion" | "pledgeExclusion" | "covenantAttach" | "newFacility";
+
+/**
+ * A NET-NEW FACILITY ON THE NEW VERSION, exactly as `newFacilitiesJson` takes it.
+ *
+ * The founder, 2026-09-03: "Do we allow new loans to be created as part of the
+ * modification and renewal? This should be fully possible." A modification
+ * versions the whole PACKAGE, so the new version is where new money belongs.
+ */
+export interface NewFacilitySpec {
+  /** `new:1`, `new:2`. What the OTHER arms name before this facility has an id. */
+  label: string;
+  /** An org-exact Commercial Loan record-type product. The org would store
+   *  anything else and render it wrong, so the tool refuses it by name. */
+  product: string;
+  amount: number;
+  termMonths: number;
+  /** The primary loan purpose, which lands on the Loan Detail nCino creates. */
+  purpose: string;
+  amortizedTermMonths?: number;
+  firstPaymentDate?: string;
+}
 
 /** One arm entry, as it rides the delta and as it reaches the org. */
 export interface ArmEntry {
   kind: ArmKind;
   /** The `LLC_BI__Covenant2__c` id, or the `LLC_BI__Collateral__c` id. Exactly
    *  one identifier per entry is the org's rule and this is it: the room always
-   *  holds the RECORD the read returned, never the junction row. */
+   *  holds the RECORD the read returned, never the junction row. On a
+   *  `newFacility` there is no record yet, so it carries the LABEL. */
   recordId: string;
+  /** The facility the arm lands on: a booked member's id, or the LABEL of a
+   *  facility this same plan creates. */
   targetLoanId: string;
+  /** Present exactly on a `newFacility` arm. */
+  facility?: NewFacilitySpec;
 }
+
+/** Is this target the label of a facility the same plan is creating? */
+export const isNewFacilityLabel = (target: string): boolean => /^new:\d+$/i.test(target);
 
 /**
  * The field name an arm delta travels under inside the fenced engine.
@@ -84,14 +113,19 @@ export function armOf(delta: WorkroomDelta): ArmEntry | null {
   return decodeArm(String(delta.fieldWire.value));
 }
 
-const encodeArm = (arm: ArmEntry): string => JSON.stringify(arm);
+export const encodeArm = (arm: ArmEntry): string => JSON.stringify(arm);
+
+const ARM_KINDS: ArmKind[] = ["covenantExclusion", "pledgeExclusion", "covenantAttach", "newFacility"];
 
 function decodeArm(value: string): ArmEntry | null {
   try {
     const raw = JSON.parse(value) as Partial<ArmEntry>;
     if (!raw || typeof raw.recordId !== "string" || typeof raw.targetLoanId !== "string") return null;
-    if (raw.kind !== "covenantExclusion" && raw.kind !== "pledgeExclusion" && raw.kind !== "covenantAttach") return null;
-    return { kind: raw.kind, recordId: raw.recordId, targetLoanId: raw.targetLoanId };
+    if (!raw.kind || !ARM_KINDS.includes(raw.kind)) return null;
+    // A new facility IS its payload: an entry carrying the kind and nothing to
+    // file with it would reach the org as an empty create.
+    if (raw.kind === "newFacility" && !raw.facility) return null;
+    return { kind: raw.kind, recordId: raw.recordId, targetLoanId: raw.targetLoanId, facility: raw.facility };
   } catch {
     return null;
   }
@@ -107,7 +141,12 @@ const ARM_NOUN: Record<ArmKind, string> = {
   covenantExclusion: "covenant carry exclusions",
   pledgeExclusion: "pledge carry exclusions",
   covenantAttach: "covenant associations",
+  newFacility: "net-new facilities",
 };
+
+/** The org's own cap on net-new facilities in one plan, mirrored so the eleventh
+ *  reads as a sentence rather than as a refused plan. */
+const NEW_FACILITY_CAP = 5;
 
 /** Thrown where the room has composed a plan the arm cannot carry. The room
  *  renders the message; nothing has been staged and nothing was written. */
@@ -122,9 +161,28 @@ export class ArmRefusal extends Error {}
  * exactly the wire it has been filing on since August.
  */
 export function armPayload(payload: ModificationPayload): ModificationPayload {
-  const raw: FieldChange[] = payload.fieldChangesJson ? (JSON.parse(payload.fieldChangesJson) as FieldChange[]) : [];
+  /* THE SELECTION IS BOOKED MEMBERS ONLY (2026-09-03).
+
+     `wirePayload` builds `facilityIds` from the union of every delta's target,
+     and since a covenant, a party, a pledge or a fee may now target a facility
+     this same plan is CREATING, that union can carry a label. `facilityIds` is
+     the credit action's member SELECTION and the org validates every entry as a
+     booked facility on the package, so a label there refuses the whole plan.
+
+     It comes out here, and only here, which keeps the fenced engine's own
+     accounting (the scalar-leak backstop reads the same union) unchanged. Each
+     arm keeps its `targetLoanId`: that is where the label belongs and the org
+     resolves it to the loan it just wrote. */
+  const selection = payload.facilityIds ?? null;
+  const booked = selection ? selection.filter((id) => !isNewFacilityLabel(id)) : null;
+  const withSelection: ModificationPayload =
+    booked && booked.length !== selection!.length ? ({ ...payload, facilityIds: booked } as ModificationPayload) : payload;
+
+  const raw: FieldChange[] = withSelection.fieldChangesJson
+    ? (JSON.parse(withSelection.fieldChangesJson) as FieldChange[])
+    : [];
   const armed = raw.filter((f) => f.field === ARM_FIELD);
-  if (!armed.length) return payload;
+  if (!armed.length) return withSelection;
 
   const plain = raw.filter((f) => f.field !== ARM_FIELD);
   const arms = armed
@@ -132,11 +190,12 @@ export function armPayload(payload: ModificationPayload): ModificationPayload {
     .filter((a): a is ArmEntry => a !== null);
 
   const of = (kind: ArmKind) => arms.filter((a) => a.kind === kind);
-  for (const kind of ["covenantExclusion", "pledgeExclusion", "covenantAttach"] as ArmKind[]) {
+  for (const kind of ARM_KINDS) {
+    const cap = kind === "newFacility" ? NEW_FACILITY_CAP : ARM_CAP;
     const count = of(kind).length;
-    if (count > ARM_CAP) {
+    if (count > cap) {
       throw new ArmRefusal(
-        `This plan carries ${count} ${ARM_NOUN[kind]} and one modification takes at most ${ARM_CAP}. ` +
+        `This plan carries ${count} ${ARM_NOUN[kind]} and one modification takes at most ${cap}. ` +
           "Take some off the manifest and file them as a second modification; nothing has been staged and nothing was written.",
       );
     }
@@ -146,15 +205,24 @@ export function armPayload(payload: ModificationPayload): ModificationPayload {
      exactly when the plan selects one facility, like every other arm on this
      tool, and sending it anyway would be a second way of saying the same thing.
      Where the plan selects more than one it is REQUIRED and always sent. */
-  const single = (payload.facilityIds ?? []).length === 1;
+  const single = (withSelection.facilityIds ?? []).length === 1;
+  /* A LABEL IS ALWAYS SENT, whatever the selection. The "one facility needs no
+     target" shortcut means "the single selected facility", and a facility this
+     plan is CREATING is not that one: omitting the target there would land the
+     arm on the clone instead of on the new loan. */
   const entry = (a: ArmEntry, key: "covenantId" | "pledgeId" | "collateralId") =>
-    single ? { [key]: a.recordId } : { [key]: a.recordId, targetLoanId: a.targetLoanId };
+    single && !isNewFacilityLabel(a.targetLoanId)
+      ? { [key]: a.recordId }
+      : { [key]: a.recordId, targetLoanId: a.targetLoanId };
 
   const exclusions = of("covenantExclusion").map((a) => entry(a, "covenantId"));
   const pledges = of("pledgeExclusion").map((a) => entry(a, "collateralId"));
   const attaches = of("covenantAttach").map((a) => entry(a, "covenantId"));
+  const newFacilities = of("newFacility")
+    .map((a) => a.facility)
+    .filter((f): f is NewFacilitySpec => Boolean(f));
 
-  const next: ModificationPayload = { ...payload };
+  const next: ModificationPayload = { ...withSelection };
   // The key exists on the wire only where it carries something. An emptied
   // `fieldChangesJson` is REMOVED rather than sent as "[]": the org counts the
   // lists that arrive, and an empty one is a change nobody asked for.
@@ -163,6 +231,7 @@ export function armPayload(payload: ModificationPayload): ModificationPayload {
   if (exclusions.length) next.covenantExclusionsJson = JSON.stringify(exclusions);
   if (pledges.length) next.pledgeExclusionsJson = JSON.stringify(pledges);
   if (attaches.length) next.covenantAttachesJson = JSON.stringify(attaches);
+  if (newFacilities.length) next.newFacilitiesJson = JSON.stringify(newFacilities);
   return next;
 }
 
@@ -357,7 +426,13 @@ export function armConfirmSentence(delta: WorkroomDelta, reply: string): string 
      the engine's "staged on the clone" back into a removal's confirm. */
   const rest = reply.split(/(?<=[^.]\.)\s+/).slice(1).join(" ");
   const lede =
-    arm.kind === "covenantAttach"
+    /* A NET-NEW FACILITY IS AN ADD, and the exclusion sentence read as its
+       opposite: "$3MM Equipment will not carry onto the new version" is the
+       exact inverse of what the card stages. The purpose handoff rides the
+       confirm as well, because the confirm is where the banker decides. */
+    arm.kind === "newFacility"
+      ? `${delta.title} is filed on the new package version beside the clones, at Qualification with the borrower on its own borrowing structure. It is a new loan rather than a version of one, so it carries no chain row and nothing on the booked side of this relationship moves because of it.`
+      : arm.kind === "covenantAttach"
       ? `${delta.title} is associated to the ${delta.target} on the new version. The covenant record itself is not touched: the threshold, the frequency and the schedule stay exactly as the borrower holds them, and what this authors is the junction alone.`
       : arm.kind === "pledgeExclusion"
         ? `${delta.title} will not carry onto the new version of ${delta.target}. The booked facility keeps the pledge exactly as it holds it today, the asset and the borrower's ownership of it are not touched, and nothing is deleted anywhere.`
@@ -574,6 +649,7 @@ const ARM_STEP: Record<ArmKind, string> = {
   covenantExclusion: "covenant_exclusion",
   pledgeExclusion: "pledge_exclusion",
   covenantAttach: "covenant_associate",
+  newFacility: "new_facility",
 };
 
 /** The banker's word for what an arm does, for a sentence about a set of them. */
@@ -581,6 +657,7 @@ const ARM_DID: Record<ArmKind, [string, string]> = {
   covenantExclusion: ["covenant left off the new version", "covenants left off the new version"],
   pledgeExclusion: ["pledge left off the new version", "pledges left off the new version"],
   covenantAttach: ["existing covenant associated by junction", "existing covenants associated by junction"],
+  newFacility: ["net-new facility on the new version", "net-new facilities on the new version"],
 };
 
 /** One staged arm and the two plan steps that report on it. */
@@ -602,7 +679,7 @@ export interface ArmStepPair {
  * exclusion writes no record, so there is no id to match on afterwards.
  */
 export function armStepPairs(deltas: WorkroomDelta[]): ArmStepPair[] {
-  const seen: Record<ArmKind, number> = { covenantExclusion: 0, pledgeExclusion: 0, covenantAttach: 0 };
+  const seen: Record<ArmKind, number> = { covenantExclusion: 0, pledgeExclusion: 0, covenantAttach: 0, newFacility: 0 };
   const out: ArmStepPair[] = [];
   for (const delta of deltas) {
     const arm = armOf(delta);
@@ -623,7 +700,7 @@ export function armStepPairs(deltas: WorkroomDelta[]): ArmStepPair[] {
 
 /** Is this plan step one of the arms', whatever the org labelled it? */
 export function isArmStep(stepId: string): boolean {
-  return /^(covenant_exclusion|pledge_exclusion|covenant_associate)(_verify)?_\d+$/.test(stepId);
+  return /^(covenant_exclusion|pledge_exclusion|covenant_associate|new_facility)(_verify)?_\d+$/.test(stepId);
 }
 
 /**
@@ -649,6 +726,11 @@ export function armStepSentence(step: { id: string; label?: string; state?: stri
       ? "Prove the pledge came off: the clone reads no pledge for it and the booked facility still reads its own."
       : "Carry the facility's collateral without the named pledge. The asset and the borrower's ownership of it are not touched.";
   }
+  if (step.id.startsWith("new_facility")) {
+    return verify
+      ? "Read the new facility back and report the name the org assigned it."
+      : "File the new facility on the new package version at Qualification, with the borrower on its borrowing structure.";
+  }
   return verify
     ? "Prove the association: the junction reads on the clone and the covenant record reads back unchanged."
     : "Author the loan-covenant junction for the covenant the borrower already holds. No covenant is inserted.";
@@ -670,11 +752,11 @@ export function armSummary(deltas: WorkroomDelta[]): string | null {
   const arms = deltas.map(armOf).filter((a): a is ArmEntry => a !== null);
   if (!arms.length) return null;
   const parts: string[] = [];
-  for (const kind of ["covenantExclusion", "pledgeExclusion", "covenantAttach"] as ArmKind[]) {
+  for (const kind of ARM_KINDS) {
     const n = arms.filter((a) => a.kind === kind).length;
     if (n) parts.push(counted(n, ARM_DID[kind]));
   }
-  const excluded = arms.some((a) => a.kind !== "covenantAttach");
+  const excluded = arms.some((a) => a.kind === "covenantExclusion" || a.kind === "pledgeExclusion");
   return `${parts.join(", ")}.${excluded ? " Nothing is deleted: the booked facilities keep everything they hold today." : ""}`;
 }
 

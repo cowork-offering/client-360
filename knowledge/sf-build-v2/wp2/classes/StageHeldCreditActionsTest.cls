@@ -684,4 +684,77 @@ private class StageHeldCreditActionsTest {
     // to colour in two lines, which is the padding lesson 16c warns about, and Loan-shaped fixture
     // DML is what killed the first live suite run on time (lesson 7). The zero-carryover answer IS
     // asserted above, and the non-zero path is exercised by the org's real relationships.
+
+    // -------------------------------------------------------------------------------------------
+    // NET-NEW FACILITIES ON THE RENEWAL (founder, 2026-09-03).
+    //
+    // The renewal takes the same arm the modification does and NARRATES it: execution of a renewal
+    // is held, so the facility is validated, planned, hashed and confirmed rather than filed. What
+    // these prove is that the plan says so plainly, and that the validation is the same validation:
+    // a product the record type does not offer is refused on both routes with the same sentence.
+    // -------------------------------------------------------------------------------------------
+
+    private static final String RENEWAL_NEW_FACILITY_JSON =
+        '[{"label":"new:1","product":"Equipment","amount":3000000,"termMonths":60,' +
+        '"purpose":"business_expansion","amortizedTermMonths":60,"firstPaymentDate":"2026-10-01"}]';
+
+    @IsTest
+    static void aRenewalPlansANetNewFacilityAndSaysItIsPlannedRatherThanFiled() {
+        C360TestFixture.armCalloutMock();
+        installBookedFacilities(1);
+
+        StageRenewal.Request r = renReq(C360Wave2Fixture.key('ren-newfac'));
+        r.newFacilitiesJson = RENEWAL_NEW_FACILITY_JSON;
+
+        Test.startTest();
+        StageRenewal.Response res = stageRen(r);
+        Test.stopTest();
+
+        System.assertEquals(true, res.ok, 'A booked facility stages a renewal that adds new money, got ' + whyRen(res));
+        System.assertEquals(1, res.result.newFacilityCount);
+        System.assertEquals('new:1', res.result.newFacilityLabels[0]);
+        System.assert(res.result.summary.contains('NET-NEW'),
+            'The banker reads the new facility on the summary, not only in the steps: ' + res.result.summary);
+
+        Boolean sawStep = false;
+        Boolean sawPurposeStep = false;
+        for (StageRenewal.PlanStep st : res.result.steps) {
+            if (st.id == 'new_facility_0') { sawStep = true; }
+            if (st.id == 'new_facility_purpose_0') { sawPurposeStep = true; }
+        }
+        System.assertEquals(true, sawStep && sawPurposeStep,
+            'The facility carries its own plan steps so a future execute wave inherits them: ' + JSON.serialize(res.result.steps));
+
+        Boolean saidPlannedNotFiled = false;
+        for (String w : res.result.warnings) {
+            if (w.contains('PLANNED and not filed')) { saidPlannedNotFiled = true; }
+        }
+        System.assertEquals(true, saidPlannedNotFiled,
+            'A renewal does not execute, and a plan that let the banker think this facility was filed would be lying: ' + res.result.warnings);
+        System.assertEquals(true, res.result.executionHeld);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan__c WHERE LLC_BI__Product__c = 'Equipment' AND LLC_BI__Amount__c = 3000000],
+            'Staging writes no domain row on either route, and least of all a loan');
+    }
+
+    @IsTest
+    static void bothRoutesRefuseTheSameOffCatalogProductWithTheSameSentence() {
+        C360TestFixture.armCalloutMock();
+        installBookedFacilities(1);
+        String bad = '[{"product":"Term","amount":3000000,"termMonths":60,"purpose":"business_expansion"}]';
+
+        StageRenewal.Request ren = renReq(C360Wave2Fixture.key('ren-badprod'));
+        ren.newFacilitiesJson = bad;
+        StageLoanModification.Request mod = modReq(C360Wave2Fixture.key('mod-badprod'));
+        mod.newFacilitiesJson = bad;
+
+        Test.startTest();
+        StageRenewal.Response rr = stageRen(ren);
+        StageLoanModification.Response mr = stageMod(mod);
+        Test.stopTest();
+
+        System.assertEquals(false, rr.ok, 'The renewal refuses it');
+        System.assertEquals(false, mr.ok, 'And so does the modification');
+        System.assertEquals(rr.error.message, mr.error.message,
+            'One catalog, one sentence. Two copies of this rule would drift and the org enforces neither.');
+    }
 }

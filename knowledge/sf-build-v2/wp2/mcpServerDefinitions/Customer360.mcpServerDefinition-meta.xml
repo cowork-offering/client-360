@@ -218,4 +218,12 @@
         </apiDefinition>
         <toolName>Customer360Catalog</toolName>
     </tools>
+    <tools>
+        <apiDefinition>
+            <apiIdentifier>aa:apex-CompleteNewFacilityDetail</apiIdentifier>
+            <apiSource>API_CATALOG</apiSource>
+            <operation>CompleteNewFacilityDetail</operation>
+        </apiDefinition>
+        <toolName>complete_new_facility_detail</toolName>
+    </tools>
 </McpServerDefinition>

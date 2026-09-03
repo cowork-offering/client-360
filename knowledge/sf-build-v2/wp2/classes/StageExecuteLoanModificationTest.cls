@@ -2699,4 +2699,169 @@ private class StageExecuteLoanModificationTest {
             System.assertEquals(0, cloneCount(), 'A refused run writes nothing');
         }
     }
+
+    // -------------------------------------------------------------------------------------------
+    // NET-NEW FACILITIES INSIDE THE MODIFICATION (founder, 2026-09-03).
+    //
+    // The whole point is that the new loan lands on the NEW package version, beside the clones, and
+    // that the arms which named it before it had an id land on the facility the run created rather
+    // than on nothing. So these assert the id, the anchor, the four scalars, the two pricing fields
+    // and both junctions, and they assert what is NOT there as well: no chain row, no modification
+    // flag, nothing on the booked parent.
+    // -------------------------------------------------------------------------------------------
+
+    private static final String NEW_FACILITY_JSON =
+        '[{"label":"new:1","product":"Equipment","amount":3000000,"termMonths":60,' +
+        '"purpose":"business_expansion","amortizedTermMonths":60,"firstPaymentDate":"2026-10-01"}]';
+
+    @IsTest
+    static void aNetNewFacilityIsFiledOnTheNewVersionAndTheLabelledArmsLandOnIt() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new ObservedCloneEngine();
+        LLC_BI__Loan__c before = parent();
+        String k = key('newfac');
+
+        insert new LLC_BI__Covenant_Type__c(Name = 'ZZ-MOD-TEST DSC');
+        Account guarantor = new Account(Name = 'ZZ-MOD-TEST Guarantor');
+        insert guarantor;
+
+        StageLoanModification.Request r = stageReq(k);
+        r.newFacilitiesJson = NEW_FACILITY_JSON;
+        r.covenantAddsJson =
+            '[{"typeName":"ZZ-MOD-TEST DSC","threshold":1.30,"operator":">=","frequency":"Quarterly","targetLoanId":"new:1"}]';
+        r.involvementChangesJson =
+            '[{"op":"add","role":"Limited Guarantor","accountId":"' + guarantor.Id + '","targetLoanId":"new:1"}]';
+
+        Test.startTest();
+        StageLoanModification.Response staged = stage(r);
+        Test.stopTest();
+        System.assertEquals(true, staged.ok, whyStage(staged));
+        System.assertEquals(1, staged.result.newFacilityCount, 'The plan carries exactly the one facility that was sent');
+        System.assertEquals('new:1', staged.result.newFacilityLabels[0],
+            'The label is what the other arms named, so the plan reports it back');
+        System.assert(staged.result.summary.contains('NET-NEW'),
+            'The banker confirms a plan that NAMES the new facility: ' + staged.result.summary);
+
+        ExecuteLoanModification.Response done = execute(execReq(k, staged.result));
+        System.assertEquals(true, done.ok, whyExec(done));
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, done.result.terminalState, JSON.serialize(done.result.steps));
+        System.assertEquals(1, done.result.newFacilities.size(), 'One facility staged, one facility reported');
+
+        ExecuteLoanModification.NewFacilityResult nr = done.result.newFacilities[0];
+        System.assertEquals('new:1', nr.label);
+        System.assertNotEquals(null, nr.loanId, 'The loan id is the receipt for the whole arm');
+        System.assertNotEquals(null, nr.recordName, 'The org names the facility and the result carries that name');
+
+        Id newPkgId = (Id) done.result.outputPackageId;
+        Id newLoanId = (Id) nr.loanId;
+        LLC_BI__Loan__c filed = [
+            SELECT Id, Name, LLC_BI__Stage__c, LLC_BI__Status__c, LLC_BI__Product__c, LLC_BI__Amount__c,
+                   LLC_BI__Term_Months__c, LLC_BI__Amortized_Term_Months__c, LLC_BI__First_Payment_Date__c,
+                   LLC_BI__Product_Package__c, LLC_BI__Is_Modification__c, LLC_BI__isRenewal__c
+            FROM LLC_BI__Loan__c WHERE Id = :newLoanId
+        ];
+        System.assertEquals(newPkgId, filed.LLC_BI__Product_Package__c,
+            'The whole point: the new facility sits on the NEW package version, not on the one being replaced');
+        System.assertEquals('Qualification', filed.LLC_BI__Stage__c, 'It is born where every facility this package files is born');
+        System.assertEquals('Open', filed.LLC_BI__Status__c);
+        System.assertEquals('Equipment', filed.LLC_BI__Product__c, 'The product is the org-exact value the caller sent');
+        System.assertEquals(3000000, filed.LLC_BI__Amount__c);
+        System.assertEquals(60, filed.LLC_BI__Term_Months__c);
+        System.assertEquals(60, filed.LLC_BI__Amortized_Term_Months__c,
+            'The pricing prerequisite rides the create: without it nCino shows no rate at all');
+        System.assertEquals(Date.newInstance(2026, 10, 1), filed.LLC_BI__First_Payment_Date__c);
+        System.assertEquals(false, filed.LLC_BI__Is_Modification__c,
+            'A new loan is not a version of anything, and flagging it would misreport it as somebody\'s clone');
+        System.assertEquals(false, filed.LLC_BI__isRenewal__c);
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__LoanRenewal__c WHERE LLC_BI__RenewalLoanId__c = :newLoanId],
+            'And it carries no chain row, because there is no parent it came from');
+
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Legal_Entities__c
+            WHERE LLC_BI__Loan__c = :newLoanId AND LLC_BI__Borrower_Type__c = 'Borrower'
+        ], 'A facility insert creates no borrowing structure on its own, so the arm writes the borrower row');
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Legal_Entities__c
+            WHERE LLC_BI__Loan__c = :newLoanId AND LLC_BI__Account__c = :guarantor.Id
+        ], 'The party staged as new:1 landed on the facility the run created');
+
+        System.assertEquals(1, done.result.covenants.size());
+        Id covId = (Id) done.result.covenants[0].covenantId;
+        System.assertEquals(1, [
+            SELECT COUNT() FROM LLC_BI__Loan_Covenant__c
+            WHERE LLC_BI__Loan__c = :newLoanId AND LLC_BI__Covenant2__c = :covId
+        ], 'The covenant staged as new:1 is junctioned to the facility the run created');
+        System.assertEquals(0, [SELECT COUNT() FROM LLC_BI__Loan_Covenant__c WHERE LLC_BI__Loan__c = :before.Id],
+            'And never on the booked parent');
+
+        Boolean wrote = false;
+        Boolean involved = false;
+        Boolean verified = false;
+        Boolean purpose = false;
+        for (ExecuteLoanModification.StepResult st : done.result.steps) {
+            if (st.id == 'new_facility_0') { wrote = st.state == C360Plan.STATE_VERIFIED; }
+            if (st.id == 'new_facility_involve_0') { involved = st.state == C360Plan.STATE_VERIFIED; }
+            if (st.id == 'new_facility_verify_0') { verified = st.state == C360Plan.STATE_VERIFIED; }
+            if (st.id == 'new_facility_purpose_0') { purpose = st.state == C360Plan.STATE_VERIFIED; }
+        }
+        System.assertEquals(true, wrote && involved && verified && purpose,
+            'The write, the structure, the read-back and the purpose handoff each settle on their own step: ' +
+            JSON.serialize(done.result.steps));
+        System.assertEquals(false, nr.purposeWritten,
+            'The Loan Detail is created after this transaction commits, so the purpose is reported as a handoff rather than claimed');
+    }
+
+    @IsTest
+    static void aNewFacilityWithAProductTheRecordTypeDoesNotOfferIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('badprod'));
+        r.newFacilitiesJson =
+            '[{"product":"Term","amount":3000000,"termMonths":60,"purpose":"business_expansion"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'The API would store Term on a Commercial-RT loan and it would render wrong in nCino');
+        System.assertEquals('VALIDATION_FAILED', res.error.code);
+        System.assert(res.error.message.contains('Commercial Loan record type'), res.error.message);
+        System.assert(res.error.message.contains('Equipment'), 'The refusal names what IS available: ' + res.error.message);
+        System.assertEquals(0, [SELECT COUNT() FROM cm_Action_Staging__c], 'A refused plan stages nothing');
+    }
+
+    @IsTest
+    static void anArmTargetingALabelThisPlanDoesNotCreateIsRefusedAtStageTime() {
+        C360TestFixture.armCalloutMock();
+        insert new LLC_BI__Covenant_Type__c(Name = 'ZZ-MOD-TEST DSC2');
+
+        StageLoanModification.Request r = stageReq(key('badlabel'));
+        r.newFacilitiesJson = NEW_FACILITY_JSON;
+        r.covenantAddsJson =
+            '[{"typeName":"ZZ-MOD-TEST DSC2","threshold":1.30,"operator":">=","targetLoanId":"new:2"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A label nobody staged is refused before the banker signs for it');
+        System.assertEquals('VALIDATION_FAILED', res.error.code);
+        System.assert(res.error.message.contains('new:2'), res.error.message);
+        System.assert(res.error.message.contains('new:1'), 'The refusal names the labels that DO exist: ' + res.error.message);
+    }
+
+    @IsTest
+    static void aBorrowingStructureRemoveAimedAtANewFacilityIsRefused() {
+        C360TestFixture.armCalloutMock();
+        StageLoanModification.Request r = stageReq(key('badremove'));
+        r.newFacilitiesJson = NEW_FACILITY_JSON;
+        r.involvementChangesJson =
+            '[{"op":"remove","role":"Guarantor","accountName":"ZZ-MOD-TEST Borrower","targetLoanId":"new:1"}]';
+
+        Test.startTest();
+        StageLoanModification.Response res = stage(r);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'A carry exclusion on a facility that carries nothing has no referent at all');
+        System.assert(res.error.message.contains('carries nothing'), res.error.message);
+    }
 }

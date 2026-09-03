@@ -839,11 +839,18 @@ describe("a navigational line is answered with the choice", () => {
     expect(said(room)).toContain("What should change on it?");
   });
 
-  it("opens the new-facility path for \"add a new loan\"", async () => {
+  /* THE FOUNDER'S CORRECTION, 2026-09-03. "add a new loan" used to RESTART the
+     room in the origination route, which threw away the manifest the banker had
+     been building, and it was wrong about nCino as well: a modification versions
+     the whole PACKAGE and a new loan belongs on the version being approved. The
+     room now stays where it is and asks the first thing it does not know. */
+  it("keeps \"add a new loan\" in the modification and asks for the product", async () => {
     const { room, bound } = open({ router: true });
     await settle();
     await typeInto(room, "add a new loan");
-    expect(bound.map((b) => b.route)).toEqual(["create"]);
+    expect(bound).toHaveLength(0);
+    expect(said(room)).toContain("What product is the new facility?");
+    expect(byText(/^Equipment$/)).toBeTruthy();
   });
 
   it("offers the route switch that already exists for \"renew instead\"", async () => {

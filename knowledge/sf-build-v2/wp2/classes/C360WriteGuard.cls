@@ -28,6 +28,16 @@ public with sharing class C360WriteGuard {
     public static final String OBJ_COVENANT_COMPLIANCE = 'LLC_BI__Covenant_Compliance2__c';
     public static final String OBJ_PRODUCT_PACKAGE = 'LLC_BI__Product_Package__c';
     public static final String OBJ_INVOLVEMENT = 'LLC_BI__Legal_Entities__c';
+    /**
+     * THE LOAN DETAIL, and the ONE field this package writes on it (2026-09-03).
+     *
+     * `LLC_BI__Primary_Loan_Purpose__c` lives here and nowhere else: the Loan
+     * itself carries no primary-purpose field at all. nCino CREATES this record
+     * from an after-commit flow, so creation is never ours; what is ours is a
+     * single-field update, and the forbidden list below is what makes that
+     * literal rather than a convention.
+     */
+    public static final String OBJ_LOAN_DETAIL = 'LLC_BI__Loan_Detail__c';
 
     public static final String OP_CREATE = 'create';
     public static final String OP_UPDATE = 'update';
@@ -243,6 +253,12 @@ public with sharing class C360WriteGuard {
             // version itself and was observed to produce a blank account prefix ("- 8/30/2026 - PP",
             // shape probe, rolled back). The one package update this wave performs is the Name repair
             // to the org's own "<Account> - <M/D/YYYY> - PP" convention (516 of 518 packages follow
+            // THE LOAN DETAIL takes ONE field and no state fence: the primary loan
+            // purpose is a RESTRICTED picklist in this org, so the ORG refuses an
+            // illegal value outright and pinning the list here would be a second,
+            // staler copy of the same rule. Everything else on the object is on
+            // the forbidden list below.
+            OBJ_LOAN_DETAIL => new Map<String, Set<String>>(),
             // it). RecordTypeId, Stage and Status remain forbidden below; Name is free text, so no
             // state fence applies.
             OBJ_PRODUCT_PACKAGE => new Map<String, Set<String>>()
@@ -295,6 +311,13 @@ public with sharing class C360WriteGuard {
         },
         OBJ_LOAN_COVENANT => new Set<String>(),
         OBJ_ACCOUNT_COVENANT => new Set<String>(),
+        // The child is nCino's: it creates the row and owns the loan lookup, the
+        // application method it pre-fills, and every stage-driven field on it.
+        // ONE field is this package's, and this list is the fence around that.
+        OBJ_LOAN_DETAIL => new Set<String>{
+            'LLC_BI__Loan__c', 'RecordTypeId', 'OwnerId', 'LLC_BI__Application_Method__c',
+            'LLC_BI__Additional_Loan_Purposes__c'
+        },
         // RecordTypeId is refused by the ORG, not merely by us: three Fee record types exist and
         // none is assigned to the integration user's profile, so an attempt returns
         // INVALID_CROSS_REFERENCE_KEY (recon Task 1, finding 1). The independent picklist
@@ -341,7 +364,10 @@ public with sharing class C360WriteGuard {
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
         OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT,
-        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE, OBJ_POLICY_EXCEPTION
+        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE, OBJ_POLICY_EXCEPTION,
+        // The Loan Detail is UPDATE-ONLY here: nCino creates the row from its own
+        // after-commit flow and this package writes exactly one field on it.
+        OBJ_LOAN_DETAIL
     };
 
     /**

@@ -326,12 +326,20 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     mayUpdate: true,
     createStates: [],
     transitions: [],
+    /* THE FIELD FENCE, WIDENED TO MATCH THE APEX GUARD (2026-09-03). The Apex
+       side learned this object the day `complete_new_facility_detail` shipped,
+       and the two lists must say the same thing: one field is this package's and
+       every other field on the row is nCino's. */
     refusedFields: [
       { field: "LLC_BI__Application_Method__c", reason: "the org defaults it on the record it creates" },
+      { field: "LLC_BI__Loan__c", reason: "set once by nCino when it creates the row" },
+      { field: "RecordTypeId", reason: "the org's own automation owns it" },
+      { field: "OwnerId", reason: "the org's own automation owns it" },
+      { field: "LLC_BI__Additional_Loan_Purposes__c", reason: "the primary purpose is the only one this tool writes" },
     ],
     refusedOperations: [
       "creation by us: the org's own after-commit flow owns it",
-      "any write other than the primary loan purpose the resume sets",
+      "any write other than the primary loan purpose the resume and complete_new_facility_detail set",
     ],
   },
 

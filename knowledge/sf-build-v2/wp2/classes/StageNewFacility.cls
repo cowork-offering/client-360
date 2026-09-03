@@ -54,17 +54,20 @@ global with sharing class StageNewFacility {
      * value its own record type does not offer, and it renders wrong in nCino. Nothing on the
      * platform catches this, so the tool must (LESSONS 15w).
      */
-    private static final Set<String> RT_PRODUCT_VALUES = new Set<String>{
-        'Construction', 'Equipment', 'Line of Credit', 'HELOC', 'Purchase', 'Deposit'
-    };
+    private static final Set<String> RT_PRODUCT_VALUES = C360NewFacilities.RT_PRODUCT_VALUES;
 
     /**
      * Confirmed RT-valid in the same read: the Commercial Loan record type offers Qualification
      * among its 10 stages and Open among its 7 statuses. It omits Complete from Stage and all four
      * Pre-* values from Status, none of which this tool writes.
+     *
+     * SHARED WITH THE MODIFICATION'S OWN new-facility arm since 2026-09-03. Three tools now author a
+     * facility and C360NewFacilities holds the one answer, for the reason C360Facilities holds the
+     * selection contract: two copies of a subtle rule drift, and record-type scoping is not enforced
+     * by the API at all.
      */
-    private static final String RT_CREATE_STAGE = 'Qualification';
-    private static final String RT_CREATE_STATUS = 'Open';
+    private static final String RT_CREATE_STAGE = C360NewFacilities.RT_CREATE_STAGE;
+    private static final String RT_CREATE_STATUS = C360NewFacilities.RT_CREATE_STATUS;
 
     private static final Integer LOAN_DETAIL_WAIT_MS = 30000;
 

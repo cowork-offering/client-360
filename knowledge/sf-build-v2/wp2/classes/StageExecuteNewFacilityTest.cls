@@ -650,4 +650,89 @@ private class StageExecuteNewFacilityTest {
         System.assertEquals(pkgBefore + 1, [SELECT COUNT() FROM LLC_BI__Product_Package__c], 'Never two packages');
         System.assertEquals(1, [SELECT COUNT() FROM LLC_BI__Loan__c WHERE LLC_BI__Product_Package__c = :first.result.productPackageId], 'Never two facilities');
     }
+
+    // -------------------------------------------------------------------------------------------
+    // THE SECOND HALF OF INVOCATION 2, which no test could reach before.
+    //
+    // The Loan Detail is created by an after-commit flow that does not run in a test transaction, so
+    // every resume this file drove stopped at "still waiting" and the purpose write, the hop to
+    // Proposal and its verification were never executed by a test at all. They are the half of the
+    // action a banker actually gets, and the field is writable, so the child is STOOD UP here and
+    // the resume is driven through to the end.
+    //
+    // It is a fixture, not a claim about the org: the org creates this record itself, moments after
+    // the filing, and what is proved here is what our code does once it exists.
+    // -------------------------------------------------------------------------------------------
+
+    @IsTest
+    static void invocationTwoWritesThePurposeAndHopsToProposalOnceTheChildExists() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
+        String key = C360Wave2Fixture.key('nf-inv2done');
+
+        StageNewFacility.Response staged =
+            StageNewFacility.stage(new List<StageNewFacility.Request>{ req(p.Id, key) })[0];
+        System.assertEquals(true, staged.ok, why(staged));
+        ExecuteNewFacility.Response first = executeStaged(key, staged.result);
+        System.assertEquals(true, first.ok, 'invocation 1 files the facility');
+        Id loanId = (Id) first.result.loanId;
+
+        // Stand the child up the way the org would have, then continue the same plan.
+        LLC_BI__Loan_Detail__c detail = new LLC_BI__Loan_Detail__c(LLC_BI__Loan__c = loanId);
+        insert detail;
+        update new LLC_BI__Loan__c(Id = loanId, LLC_BI__Loan_Detail__c = detail.Id);
+
+        ExecuteNewFacility.Response second = executeStaged(key, staged.result);
+
+        System.assertEquals(true, second.ok, second.error == null ? '' : second.error.message);
+        System.assertEquals(false, second.result.resumable, 'The plan is finished, so there is nothing left to resume');
+        System.assertEquals(null, second.result.resumeDescriptor, 'And nothing to tell the caller to do next');
+        System.assertEquals(detail.Id, (Id) second.result.loanDetailId, 'The result names the child it wrote against');
+        System.assertEquals('Proposal', second.result.stage, 'The single allowlisted hop ran');
+        System.assertEquals(C360Plan.TERMINAL_SUCCESS, second.result.terminalState,
+            'Every step settles once the child is there: ' + JSON.serialize(second.result.steps));
+        System.assertEquals('business_credit_line',
+            [SELECT LLC_BI__Primary_Loan_Purpose__c FROM LLC_BI__Loan_Detail__c WHERE Id = :detail.Id].LLC_BI__Primary_Loan_Purpose__c,
+            'The purpose the banker gave lands on the Loan Detail, which is the only object that holds it');
+        System.assertEquals('Proposal', [SELECT LLC_BI__Stage__c FROM LLC_BI__Loan__c WHERE Id = :loanId].LLC_BI__Stage__c,
+            'And the facility reads back one step on, never further: Booked needs a human');
+    }
+
+    @IsTest
+    static void aResumeWhoseFacilityIsGoneIsRefusedRatherThanGuessedAt() {
+        C360TestFixture.armCalloutMock();
+        LLC_BI__Product_Package__c p = C360Wave2Fixture.existingPackage();
+        String key = C360Wave2Fixture.key('nf-gone');
+
+        StageNewFacility.Response staged =
+            StageNewFacility.stage(new List<StageNewFacility.Request>{ req(p.Id, key) })[0];
+        ExecuteNewFacility.Response first = executeStaged(key, staged.result);
+        System.assertEquals(true, first.ok, 'invocation 1 files the facility');
+
+        delete new LLC_BI__Loan__c(Id = (Id) first.result.loanId);
+
+        ExecuteNewFacility.Response second = executeStaged(key, staged.result);
+        System.assertEquals(false, second.ok, 'A resume against a facility that is no longer there writes nothing and says so');
+        System.assertEquals('VALIDATION_FAILED', second.error.code);
+        System.assert(second.error.message.contains('re-read at resume time'), second.error.message);
+    }
+
+    @IsTest
+    static void executeAgainstAStagingIdThatDoesNotExistIsRefused() {
+        C360TestFixture.armCalloutMock();
+        ExecuteNewFacility.Request r = new ExecuteNewFacility.Request();
+        r.idempotencyKey = C360Wave2Fixture.key('nf-nostaging');
+        r.stagingId = C360Wave2Fixture.fakeId(cm_Action_Staging__c.SObjectType);
+        r.planHash = 'h';
+        r.decisionToken = 't';
+        r.approverUserId = UserInfo.getUserId();
+
+        Test.startTest();
+        ExecuteNewFacility.Response res = ExecuteNewFacility.run(new List<ExecuteNewFacility.Request>{ r })[0];
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok);
+        System.assertEquals('VALIDATION_FAILED', res.error.code);
+        System.assert(res.error.message.contains('No staging record found'), res.error.message);
+    }
 }
