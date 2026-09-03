@@ -2265,6 +2265,13 @@ function RelFlowCard({
 
   const plan: StagedOutput | null = flow.staging?.plan ?? null;
   const refused = (plan?.covenants ?? []).filter((c) => c.state && c.state !== "planned");
+  /* WHAT THE PLAN WOULD NOT TAKE, BY INDEX, IN THE ORG'S OWN WORDS.
+     A covenant the org already holds is refused by its id, which is what the
+     covenant review reports. A CREATE has no id yet, so the intake reports its
+     refusals against the position in the list the room sent, and the room reads
+     them out in the same block: an unknown type name, a value at or below zero,
+     a date the org cannot hold. Verbatim, and never summarised into a count. */
+  const byIndex = plan?.refusals ?? [];
   const held = plan?.executionHeld === true;
 
   return (
@@ -2280,7 +2287,7 @@ function RelFlowCard({
       {/* BEFORE YOU FILE. The org's own warnings and its own per-covenant
           refusals, verbatim. Advice, never a gate: the approval below is live
           whether it is read or not. */}
-      {(plan?.warnings?.length || refused.length > 0) && (
+      {(plan?.warnings?.length || refused.length > 0 || byIndex.length > 0) && (
         <div className="rl-warn">
           <div className="rl-warn-k">Before you file</div>
           {(plan?.warnings ?? []).map((w) => (
@@ -2291,6 +2298,12 @@ function RelFlowCard({
           {refused.map((c: StagedCovenant) => (
             <div className="rl-warn-t" key={c.covenantId}>
               {c.covenantName ?? c.covenantType ?? c.covenantId}: {c.reason ?? "not assessable in this plan"}
+            </div>
+          ))}
+          {byIndex.map((r) => (
+            <div className="rl-warn-t" key={`refusal-${r.index}-${r.reason}`}>
+              {r.index >= 0 ? `Number ${r.index + 1} on the list: ` : ""}
+              {r.reason}
             </div>
           ))}
         </div>

@@ -982,6 +982,40 @@ describe("a value the room itself offered is an answer, never a route switch", (
   });
 });
 
+describe("the plan's own refusals reach the glass, by index and verbatim", () => {
+  it("reads out what the org would not take, before the approval", async () => {
+    /* A CREATE HAS NO ID YET, so the intake reports its refusals against the
+       position in the list the room sent. Rendered in the same block as the
+       plan's warnings, in the org's own words, never summarised into a count. */
+    const planWithRefusals: StagedOutput = {
+      ...PLAN,
+      summary: "Two records are authored on the relationship.",
+      refusals: [
+        { index: 1, reason: "No covenant type named Fixed Charge Coverage exists in this org." },
+        { index: 2, reason: "A collateral value must be above zero." },
+      ],
+    };
+    const { room } = open({
+      route: "annual",
+      deps: depsFor({ stage: async () => ({ ok: true, result: planWithRefusals }) as ToolOutcome<StagedOutput> }),
+    });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Review & file/));
+    await settle();
+    await settle();
+    expect(room.textContent).toContain("Number 2 on the list: No covenant type named Fixed Charge Coverage");
+    expect(room.textContent).toContain("Number 3 on the list: A collateral value must be above zero.");
+  });
+});
+
 describe("a blocked route does not claim everything is collected", () => {
   it("repeats the refusal rather than pointing at a chip that is not there", async () => {
     const { room } = open({
