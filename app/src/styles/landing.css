@@ -486,6 +486,18 @@ body.on-client .topnav {
   align-items: center;
   padding-right: 6px;
 }
+/* THE HOVER CARD RIDES ABOVE THE ROWS BELOW (founder, 2026-09-03: the info
+   popup was hidden behind the next cards). Every row is its own stacking
+   context (the arrival animation transforms it), so later rows painted over an
+   earlier row's popover. The row holding an open popover lifts above its
+   siblings for as long as it is hovered or focused. */
+#view-home .wlrow {
+  position: relative;
+}
+#view-home .wlrow:hover,
+#view-home .wlrow:focus-within {
+  z-index: 60;
+}
 #view-home .wlrow .amt {
   text-align: right;
 }
