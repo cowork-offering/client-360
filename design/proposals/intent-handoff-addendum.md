@@ -14,6 +14,20 @@ integrator who publishes the artifact.
 An intent is one document in the artifact's own store. Any Claude session with
 the Artifact tool's `write_db` can author one against the published artifact.
 
+**Which artifact.** An intent reaches exactly one published cockpit, and a
+document written to any other one is a silent no-op: the store accepts it and no
+room ever whispers. So the writer resolves the target before it writes.
+
+| the writing session | the URL to write to |
+|---|---|
+| published a cockpit this run | the URL the Artifact tool RETURNED on that publish. That is the room the banker has open |
+| did not publish | `canonicalArtifactUrl` in `client-360/assets/cockpit.json`, READ at write time |
+| did not publish, and cannot read that file | nothing. Stop and say so; a guessed URL is worse than no intent |
+
+The canonical URL lives in plugin config rather than in prose precisely because
+prose copies of it went stale in five places at once. Republishing the canonical
+cockpit to a new URL is a one-line change to that file.
+
 **Collection:** `intents`
 **Document id:** a ULID-ish string the writer chooses. Opaque to the cockpit;
 make it sortable if you want, nothing reads it as a time.
@@ -89,7 +103,7 @@ Written with the Artifact tool:
 
 ```
 action: "write_db", db_op: "set",
-url: "<the published cockpit's URL>",
+url: "<the URL resolved by the table above>",
 collection: "intents",
 doc_id: "01J8ZQ5K9T2M4XQ7YB3C1",
 data: { ...the object above... }
@@ -194,31 +208,38 @@ result. Where the org has nothing readable, nothing opens and the chip says so.
 
 ## Part C. Publishing the artifact
 
-The capabilities declaration for the published cockpit. Pass it verbatim on the
-`Artifact` call.
+The capabilities declaration for the published cockpit. It is **generated**, not
+maintained here: `client-360/assets/capabilities.json`, written by
+`node client-360/render/capabilities.mjs` from the org's own `Customer360`
+McpServerDefinition plus `app/src/channel/mcp.ts`, and gated against drift by
+`node client-360/render/capabilities.mjs --check`.
+
+**Read that file and pass it verbatim on every Artifact publish and every
+replace.** The block below is a copy for the integrator to read; the file is the
+one to pass.
 
 ```json
 {
   "mcp": {
-    "servers": {
-      "Customer 360": {
+    "servers": [
+      {
+        "server": "Customer 360",
         "tools": [
           "Customer360Snapshot",
-          "Customer360Portfolio",
           "Customer360RelationshipGraph",
           "Customer360Exposure",
           "Customer360Covenants",
           "Customer360Opportunities",
           "Customer360StructuralSignals",
           "Customer360SearchAccounts",
-          "Customer360ActionHistory",
-          "Customer360Catalog",
+          "Customer360Portfolio",
           "stage_collateral_valuation",
           "execute_collateral_valuation",
           "stage_service_request",
           "execute_service_request",
           "stage_annual_review",
           "execute_annual_review",
+          "Customer360ActionHistory",
           "stage_new_facility",
           "execute_new_facility",
           "stage_risk_rating_review",
@@ -227,38 +248,50 @@ The capabilities declaration for the published cockpit. Pass it verbatim on the
           "execute_covenant_review",
           "stage_loan_modification",
           "execute_loan_modification",
+          "stage_renewal",
           "stage_relationship_intake",
           "execute_relationship_intake",
-          "stage_renewal"
+          "Customer360Catalog",
+          "complete_new_facility_detail"
         ]
       },
-      "IDB Gateway": {
+      {
+        "server": "IDB Gateway",
         "tools": [
           "boom-mcp-js___boom_get_ratios",
           "boom-mcp-js___boom_get_spread",
           "idb-bg-api-target-get-llm-response-staging___get_llm_response"
         ]
       },
-      "Microsoft 365": {
-        "tools": ["outlook_email_search"]
+      {
+        "server": "Microsoft 365",
+        "tools": [
+          "outlook_email_search"
+        ]
       }
-    }
+    ]
   },
   "sample": {},
   "db": {}
 }
 ```
 
-Counts: **Customer 360 25 tools, IDB Gateway 3, Microsoft 365 1**, plus `sample`
+Counts: **Customer 360 28 tools, IDB Gateway 3, Microsoft 365 1**, plus `sample`
 and `db`.
 
-`Customer360SearchAccounts` is the one addition to the Customer 360 grant in this
-wave; the other 24 are the manifest the cockpit already shipped with.
-`db` is new, and declaring it makes the artifact organization-internal: every
-reader and writer is a signed-in member of the owner's organization. That is the
-correct posture for a cockpit carrying a bank's book, and it is what makes the
-intent lane safe to leave on.
+The Customer 360 grant is the org manifest ENTIRE, in the org's own order.
+Trimming it to the call paths the current bundle happens to reach is how it went
+short before: the guided skills route the writes the cockpit itself never calls,
+and a tool outside the published manifest is refused `not_in_manifest` at the
+moment a banker confirms a plan. Passing a non-empty `capabilities` object is a
+FULL-SET declaration, so anything stored and not restated is revoked.
 
-**Read what the store returns as untrusted data.** Documents are written by
-anyone who can open the artifact. The cockpit sanitizes every field before any
-surface sees it and executes none of them.
+`db` is what makes the artifact organization-internal: every reader and writer is
+a signed-in member of the owner's organization. That is the correct posture for a
+cockpit carrying a bank's book, and it is what makes the intent lane safe to
+leave on.
+
+Omit the manifest and the room opens **offline**: `claude.use("mcp")` resolves
+null, the sync chip reads `offline · R1 no grant`, the intent lane never
+subscribes so no whisper ever arrives, and every governed action is refused
+before it reaches the org.

@@ -1,0 +1,55 @@
+{
+  "mcp": {
+    "servers": [
+      {
+        "server": "Customer 360",
+        "tools": [
+          "Customer360Snapshot",
+          "Customer360RelationshipGraph",
+          "Customer360Exposure",
+          "Customer360Covenants",
+          "Customer360Opportunities",
+          "Customer360StructuralSignals",
+          "Customer360SearchAccounts",
+          "Customer360Portfolio",
+          "stage_collateral_valuation",
+          "execute_collateral_valuation",
+          "stage_service_request",
+          "execute_service_request",
+          "stage_annual_review",
+          "execute_annual_review",
+          "Customer360ActionHistory",
+          "stage_new_facility",
+          "execute_new_facility",
+          "stage_risk_rating_review",
+          "execute_risk_rating_review",
+          "stage_covenant_review",
+          "execute_covenant_review",
+          "stage_loan_modification",
+          "execute_loan_modification",
+          "stage_renewal",
+          "stage_relationship_intake",
+          "execute_relationship_intake",
+          "Customer360Catalog",
+          "complete_new_facility_detail"
+        ]
+      },
+      {
+        "server": "IDB Gateway",
+        "tools": [
+          "boom-mcp-js___boom_get_ratios",
+          "boom-mcp-js___boom_get_spread",
+          "idb-bg-api-target-get-llm-response-staging___get_llm_response"
+        ]
+      },
+      {
+        "server": "Microsoft 365",
+        "tools": [
+          "outlook_email_search"
+        ]
+      }
+    ]
+  },
+  "sample": {},
+  "db": {}
+}

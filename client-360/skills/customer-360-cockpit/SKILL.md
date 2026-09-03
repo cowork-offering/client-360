@@ -1,6 +1,6 @@
 ---
 name: customer-360-cockpit
-description: Open the Customer 360 relationship cockpit, a worklist-first commercial-credit control center. Fetches the book and the needs-action accounts from Salesforce (nCino + FSC) via the 9 read tools of the 24-tool Customer360 MCP server plus Boom-spread financials, composes C360_DATA, and renders a prebuilt interactive Cowork artifact (needs-action queue, activity/audit trail, exposure, covenants, relationship graph, whitespace, structural signals) with a chat FAB and a Client Actions panel. This is the read and render skill; the 15 governed write tools run through the guided skills. Trigger on "customer 360", "open the cockpit", "pull up the relationship view", "what needs my attention", "relationship overview for <account>", or any account-level portfolio question.
+description: Open the Customer 360 relationship cockpit, a worklist-first commercial-credit control center. Fetches the book and the needs-action accounts from Salesforce (nCino + FSC) via the 10 read tools of the 28-tool Customer360 MCP server plus Boom-spread financials, composes C360_DATA, and renders a prebuilt interactive Cowork artifact (needs-action queue, activity/audit trail, exposure, covenants, relationship graph, whitespace, structural signals) with a chat FAB and a Client Actions panel. This is the read and render skill; the 18 governed write tools run through the guided skills. Trigger on "customer 360", "open the cockpit", "pull up the relationship view", "what needs my attention", "relationship overview for <account>", or any account-level portfolio question.
 ---
 
 # Customer 360 Cockpit (v3)
@@ -41,11 +41,11 @@ Customer360 tools.** A wrong committed-exposure figure in front of a banker is w
 
 ## The MCP surfaces
 
-**Customer360**: Salesforce-hosted, per-user OAuth, **24 tools: 9 reads plus 15 governed write
+**Customer360**: Salesforce-hosted, per-user OAuth, **28 tools: 10 reads plus 18 governed write
 tools**. Tool names derive from the Apex class (`aa:apex-{ClassName}`), so match by the **class-name
 suffix**, since the host may namespace it (`customer360__Customer360Snapshot`). Never hardcode a prefix.
 
-### Reads (9): everything this skill fetches
+### Reads (10): everything this skill fetches
 
 | Tool | Returns |
 |---|---|
@@ -58,16 +58,18 @@ suffix**, since the host may namespace it (`customer360__Customer360Snapshot`). 
 | `Customer360Opportunities` | `opportunities[]`, `note` |
 | `Customer360StructuralSignals` | `modifications[]`, `modificationClusterFlag`, `renewals[]`, `maturityWatch[]`, `guarantorSignals[]`, `note` |
 | `Customer360ActionHistory` | governed actions already run against the account (`accountId` required, `maxResults` default 50, max 200, newest first) |
+| `Customer360Catalog` | the org's own chip sets: every picklist and both lookup catalogs the create grammar draws from. No input |
 
-### Governed writes (15): never called by this skill
+### Governed writes (18): never called by this skill
 
-Seven `stage_*` / `execute_*` pairs plus one stage-only tool:
+Eight `stage_*` / `execute_*` pairs, one stage-only tool, and one second-hop completion tool:
 
 `stage_loan_modification` · `execute_loan_modification` · `stage_covenant_review` ·
 `execute_covenant_review` · `stage_collateral_valuation` · `execute_collateral_valuation` ·
 `stage_service_request` · `execute_service_request` · `stage_annual_review` ·
 `execute_annual_review` · `stage_risk_rating_review` · `execute_risk_rating_review` ·
-`stage_new_facility` · `execute_new_facility` · `stage_renewal`
+`stage_new_facility` · `execute_new_facility` · `complete_new_facility_detail` ·
+`stage_relationship_intake` · `execute_relationship_intake` · `stage_renewal`
 
 **This skill renders. It does not write.** Every write runs through a guided skill, under the write
 discipline in `agents/customer-360.md`: stage, present the org's plan and warnings verbatim, the
@@ -167,8 +169,9 @@ carries the provenance map.
 {
   "meta": {
     "anchorAccountId": "001…",        // REQUIRED
-    "generatedAt": "2026-07-25T14:03:00Z", // REQUIRED — current UTC ISO instant, must parse
-    "user": "Fabian Goetzens",
+    "generatedAt": "2026-07-25T14:03:00Z", // REQUIRED: current UTC ISO instant, must parse
+    "userId": "005bb00000ftouDAAQ",   // REQUIRED: the 005 Salesforce user id of the signed-in identity
+    "user": "Fabian Goetzens",        // DISPLAY name. Rendered, never sent to a tool
     "orgAlias": "bankinggpt"
   },
   "portfolio": {                      // VERBATIM from Customer360Portfolio response[0]
@@ -199,36 +202,72 @@ carries the provenance map.
 
 - **`meta.generatedAt` is REQUIRED** and must be a valid ISO-8601 instant. It is the deterministic
   clock for every time-based worklist reason. Use the **current** UTC instant at compose time.
+- **`meta.userId` is REQUIRED** and must be a 15 or 18 character Salesforce user id starting `005`.
+  It is the only value the `execute_*` tools accept as `approverUserId`: the Apex compares it to the
+  running identity before it will redeem a decision token, so a display name or an email is refused
+  and nothing is written. The assembler exits 1 on a missing or malformed one, exactly as it does on
+  `generatedAt`. See "Obtaining `meta.userId`" below.
 - **`borrowers` must be a plain object** with an own entry for `meta.anchorAccountId`, and each
   bundle's `snapshot.accountId` must equal its own map key.
 - **Do NOT hand-write top-level `borrower`.** The assembler derives it from
   `borrowers[meta.anchorAccountId]`; anything you supply is overwritten.
 - **Do NOT hand-write `covenantChallenge`, `dataQuality`, or `meta.validation`.** The assembler
   computes them deterministically (see Validation stage).
-- **`worklist.reasons` codes are restricted to:** `COVENANT_BREACH`, `COVENANT_DUE`, `MATURITY_NEAR`,
-  `MODIFICATION_CLUSTER`, `GUARANTOR_SIGNAL`, `RECENTLY_MODIFIED`. Any other value exits 1.
-  **If unsure of the reasons, omit `worklist` entirely** — the client derives them from the staged
+- **`worklist.reasons` codes are restricted** to the generated set below. Any other value exits 1.
+  **If unsure of the reasons, omit `worklist` entirely**: the client derives them from the staged
   bundles, which is the safer default.
 - **Client requests are derived, not declared.** Do not put a client-request code in
   `worklist.reasons`; stage `requests[]` / a `REQUEST_RECEIVED` activity entry and the client raises
   the chip itself, ranked above every risk signal.
 
+**Permitted `worklist.reasons` codes.** Generated from `render/contract-checks.mjs`. Do not edit by
+hand; run `node client-360/render/skill-blocks.mjs` and the release gate checks it.
+
+<!-- BEGIN GENERATED permitted-reason-codes (node client-360/render/skill-blocks.mjs) -->
+`COVENANT_BREACH` · `COVENANT_DUE` · `MATURITY_NEAR` · `MODIFICATION_CLUSTER` · `GUARANTOR_SIGNAL` · `RECENTLY_MODIFIED`
+<!-- END GENERATED permitted-reason-codes -->
+
+### Obtaining `meta.userId`
+
+The Customer 360 connector has **no whoami tool today**, so the id has to come from elsewhere:
+
+1. **The sObject / Salesforce connector's `getUserInfo`** returns the running user's `005` id
+   against the same org. This is the route. Take the id verbatim; never reshape it.
+2. **Already staged.** If you are re-assembling data that already carries `meta.userId`, carry it
+   forward unchanged rather than re-reading it.
+3. **Ask.** A banker can read their own id off their Salesforce user record (`/005…` in the URL).
+
+**If it is genuinely unavailable, say so and still render.** Assemble with `--no-approver`, tell the
+banker in your chat reply that the cockpit is publishing **read-only on the execute path**, and say
+why: every plan can be staged and read, and the confirm gesture will refuse to file because the view
+carries no Salesforce user id for the signed-in identity. Never invent an id, never pass the display
+name, and never claim a write is available when it is not.
+
 ### `activity[]` and `requests[]` — real sources only
 
 `activity[]` is the account's audit trail (first tab). Entry shape:
-`{ id, ts, kind, title, summary?, reference?, detail? }` with `kind` ∈ `REQUEST_RECEIVED`,
-`ANALYSIS_CONCLUDED`, `COVENANT_EVALUATED`, `FACILITY_MODIFIED`, `RENDER_AUDIT`.
+`{ id, ts, kind, title, summary?, reference?, detail? }`. Permitted `kind` values, generated from
+`render/contract-checks.mjs` (do not edit by hand). A kind outside this set exits 1:
+
+<!-- BEGIN GENERATED permitted-activity-kinds (node client-360/render/skill-blocks.mjs) -->
+`REQUEST_RECEIVED` · `ANALYSIS_CONCLUDED` · `COVENANT_EVALUATED` · `FACILITY_MODIFIED` · `ACTION_TRIGGERED`
+<!-- END GENERATED permitted-activity-kinds -->
 
 - Emit entries **only** where a real record backs them (a covenant evaluation date, a recorded
   modification, a genuine inbound request). **Never synthesise history** to fill the timeline — the
   empty state ("No recorded activity in this view") is the correct output for an account with none.
 - `detail.nextSteps[]` is `{ actionId, note? }` where `actionId` **must** match an id in
-  `app/src/actions/registry.ts` (`generate-spreading`, `draft-credit-memo`, `loan-modification`,
-  `renewal`, `covenant-review`, `collateral-valuation`, `annual-review`, `risk-rating-review`,
-  `new-facility-request`, `create-service-request`). Unknown ids are silently dropped.
+  `app/src/actions/registry.ts`, generated below. An id outside that set exits 1.
 - `reference.webLink` is **omitted unless a real link exists**. A real M365 message link from step (e)
   is exactly that case and belongs here; anything else stays absent and the UI renders the id as plain
   text. Never show a fabricated link.
+
+**Permitted `detail.nextSteps[].actionId` values.** Generated from `render/contract-checks.mjs`, which
+mirrors the registry. Do not edit by hand:
+
+<!-- BEGIN GENERATED permitted-action-ids (node client-360/render/skill-blocks.mjs) -->
+`generate-spreading` · `draft-credit-memo` · `loan-modification` · `renewal` · `covenant-review` · `collateral-valuation` · `annual-review` · `risk-rating-review` · `new-facility-request` · `create-service-request`
+<!-- END GENERATED permitted-action-ids -->
 
 ### Composition rules
 - Embed tool responses **verbatim** — field names unchanged, figures un-reshaped.
@@ -258,6 +297,10 @@ Resolve `<pluginRoot>` as the directory containing `.claude-plugin/` (also holds
   missing ids** — go back and fetch them. **Do not reach for `--allow-partial` in normal runs**; it
   exists only for a deliberate single-account render and produces a degraded artifact.
 - **`meta.generatedAt`** present and a valid ISO instant.
+- **`meta.userId`** present and shaped like a Salesforce user id (`005` plus 12 or 15 alphanumerics).
+  Missing or misshapen exits 1 and names the field. `--no-approver` downgrades it to a warning and
+  publishes a cockpit whose execute path is read-only: use it only when the id is genuinely
+  unreadable, and tell the banker in the same reply.
 - **Structural integrity** — `borrowers` shape, anchor entry, key/`snapshot.accountId` match, worklist
   ids a subset of `borrowers`, no duplicate/malformed ids.
 - **Validation stage runs automatically** and is mandatory (below).
@@ -331,6 +374,34 @@ Skip phase 1 only when the user asked for a single account you can stage in one 
 
 Publish the assembled file with the artifact tool **BY FILE PATH** (`create_artifact`) — never paste
 HTML inline. Do NOT open a Chrome tab or call any other widget/HTML builder.
+
+### CAPABILITIES: pass the manifest on EVERY publish
+
+The cockpit is a compiled page that calls the **banker's own** connectors. That only works if the
+artifact is published with a capabilities manifest, so every publish and every replace passes one:
+
+1. **Read `<pluginRoot>/assets/capabilities.json`.**
+2. **Pass its contents verbatim** as the Artifact tool's `capabilities` input. Do not retype it from
+   this page, do not trim it to the tools you think this run will reach, do not reorder it.
+
+That file is generated from the org's own `Customer360` McpServerDefinition plus
+`app/src/channel/mcp.ts`, and a release gate fails the build when it drifts
+(`node client-360/render/capabilities.mjs --check`). It declares three connectors by **display
+name** (`Customer 360` with 28 tools, `IDB Gateway` with 3, `Microsoft 365` with 1), plus `sample`
+(the room's Ask lane) and `db` (the intent store, which is also what makes the published page
+organization-internal).
+
+**Passing a non-empty `capabilities` object is a FULL-SET declaration:** anything previously stored
+and not restated is revoked. That is why it goes whole, every time, rather than assembled per run.
+Trimming the Customer 360 grant to the tools this skill calls is the specific way it has gone short
+before: the guided skills route the `stage_*` / `execute_*` writes, and a tool outside the published
+manifest is refused `not_in_manifest` at the moment a banker confirms a plan.
+
+**Symptom of omitting it.** The room opens **offline**. `claude.use("mcp")` resolves null, the
+account header's sync chip reads `offline · R1 no grant`, no whisper ever arrives because the intent
+lane never subscribes, and every governed action is refused before it reaches the org. Nothing on
+the page says "the publisher forgot the manifest", so a missing grant looks exactly like a broken
+cockpit. If a banker reports the cockpit is offline, check the publish call's `capabilities` first.
 
 **Updates are full-replace only:** rebuild the whole `C360_DATA`, re-run the assembler to a fresh
 `--out`, and `update_artifact` by file path. Never edit rendered HTML or inject JSON by hand.
@@ -477,14 +548,22 @@ a decision is the banker's).
    Never invent a figure the source did not state; leave it out and the room will ask.
 3. Pick the room and route. facility: modify | renew | create. relationship: annual | covenant |
    valuation | rating | service.
-4. Write the document with the Artifact tool: action write_db, db_op set,
-   url https://claude.ai/code/artifact/91b5e835-5536-4f23-950e-4cde7941cf7f, collection `intents`,
+4. **Resolve the target artifact FIRST.** An intent is written to one specific published cockpit,
+   and writing it to the wrong one is a silent no-op: the banker's room never whispers.
+   - **If this session published a cockpit**, the target is the URL **the Artifact tool returned on
+     that publish**. Always. That is the room the banker is looking at.
+   - **If this session did not publish one**, read `canonicalArtifactUrl` from
+     `<pluginRoot>/assets/cockpit.json` and use that. Read the file; never type a URL from memory
+     and never carry one forward from an older transcript.
+   - If the file is unreadable and you did not publish, **stop and say so**. Do not guess a URL.
+5. Write the document with the Artifact tool: action write_db, db_op set,
+   url = the URL resolved in step 4, collection `intents`,
    doc_id `int-<yyyymmdd>-<slug>-<nn>`, data:
    {"accountId","accountName","room","route","lines":[...],
     "context":{"summary":"who asked for what, in one or two sentences",
                "source":{"kind":"email"|"chat"|"meeting","id"?,"subject"?,"from"?,"received"?}},
     "createdAt":"<ISO instant>","status":"pending"}
    The source is named as the source names it (never inferred from the relationship).
-5. Tell the banker in one line what was written and that the cockpit will whisper it. The cockpit
+6. Tell the banker in one line what was written and that the cockpit will whisper it. The cockpit
    moves status to opened, then done after Execute; read it back with read_db when asked.
 Contract and worked example: design/proposals/intent-handoff-addendum.md.

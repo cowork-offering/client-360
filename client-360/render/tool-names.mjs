@@ -26,14 +26,19 @@ export const MANIFEST_PATH = join(
 export class ToolNameError extends Error {}
 
 /**
- * The Customer 360 tool-name shape, and only that shape. Two families:
+ * The Customer 360 tool-name shape, and only that shape. Three families:
  *   - a read tool, `Customer360` immediately followed by more of the class name;
- *   - a write tool, `stage_` or `execute_` followed by lowercase snake_case.
+ *   - a write tool, `stage_` or `execute_` followed by lowercase snake_case;
+ *   - a second-hop completion tool, `complete_` followed by lowercase snake_case. Today that is
+ *     `complete_new_facility_detail` alone: nCino creates the Loan Detail from an after-commit flow
+ *     of its own, so the field it carries cannot be set in the transaction that files the facility.
+ *     Without this alternative the name is invisible to the scanner, and a tool the org ships reads
+ *     as "declared but never mentioned" however carefully the prose names it.
  * Deliberately narrow. Plan step ids (`held_execution`, `write_assessment_0`), org field names
  * (`LLC_BI__Status__c`) and host tools (`create_artifact`) do not match, and must not: this gate
  * checks names that MUST be manifest tools, not every identifier in the prose.
  */
-const TOOL_TOKEN = /\b(?:Customer360[A-Za-z0-9]+|(?:stage|execute)_[a-z0-9]+(?:_[a-z0-9]+)*)\b/g;
+const TOOL_TOKEN = /\b(?:Customer360[A-Za-z0-9]+|(?:stage|execute|complete)_[a-z0-9]+(?:_[a-z0-9]+)*)\b/g;
 
 /**
  * Names the prose deliberately mentions in order to say they do NOT exist. `stage_renewal` ships

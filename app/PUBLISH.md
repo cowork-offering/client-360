@@ -11,70 +11,26 @@ Written against runtime contract **0.1.15** (`window.claude.mcp` type definition
 
 ## 1. The capabilities manifest
 
-Pass this as the `capabilities` input to the Artifact tool. It is generated from source, never
-hand-typed: the Customer 360 names come from the org's own `Customer360.mcpServerDefinition`, the
-rest from `app/src/channel/mcp.ts`. The generated copy of record, with the derivation and the
-exclusions, is `knowledge/artifact-capabilities-manifest.json`.
+Pass this as the `capabilities` input to the Artifact tool, on **every** publish and every replace.
+It is GENERATED, never hand-typed:
 
-```json
-{
-  "mcp": {
-    "servers": [
-      {
-        "server": "Customer 360",
-        "tools": [
-          "Customer360Snapshot",
-          "Customer360RelationshipGraph",
-          "Customer360Exposure",
-          "Customer360Covenants",
-          "Customer360Opportunities",
-          "Customer360StructuralSignals",
-          "Customer360Portfolio",
-          "stage_collateral_valuation",
-          "execute_collateral_valuation",
-          "stage_service_request",
-          "execute_service_request",
-          "stage_annual_review",
-          "execute_annual_review",
-          "Customer360ActionHistory",
-          "stage_new_facility",
-          "execute_new_facility",
-          "stage_risk_rating_review",
-          "execute_risk_rating_review",
-          "stage_covenant_review",
-          "execute_covenant_review",
-          "stage_loan_modification",
-          "execute_loan_modification",
-          "stage_renewal"
-        ]
-      },
-      {
-        "server": "IDB Gateway",
-        "tools": [
-          "boom-mcp-js___boom_get_ratios",
-          "boom-mcp-js___boom_get_spread",
-          "idb-bg-api-target-get-llm-response-staging___get_llm_response"
-        ]
-      },
-      {
-        "server": "Microsoft 365",
-        "tools": [
-          "outlook_email_search"
-        ]
-      }
-    ]
-  }
-}
-```
+**`client-360/assets/capabilities.json`**, written by `node client-360/render/capabilities.mjs` from
+the org's own `Customer360.mcpServerDefinition` (the Customer 360 names, in the org's own order) plus
+`app/src/channel/mcp.ts` (the gateway and mail names). `node client-360/render/capabilities.mjs
+--check` fails the release when the committed file drifts from either source, and
+`client-360/render/capabilities.test.mjs` runs the same comparison as a test.
 
-The org manifest carries **24** tools; **23** are declared. One is left out on purpose:
-`Customer360SearchAccounts` (no call path in the bundle).
+Read that file and pass its contents verbatim. Do not retype it here, do not trim it, do not reorder
+it. Counts today: **Customer 360 28 tools, IDB Gateway 3, Microsoft 365 1**, plus `sample` and `db`.
 
-`execute_covenant_review` joined the manifest in WS0.5 (2026-08-22). No tool NAME changed in the org
-that wave — `stage_covenant_review` and `stage_collateral_valuation` changed SHAPE only, and the
-`McpServerDefinition` was not touched. What changed is the cockpit's call path: the founder gate that
-kept the tool out of this manifest stood on it never having been run live, and it was run live on
-both arms.
+The Customer 360 grant is the org manifest ENTIRE. An earlier revision of this file trimmed it to the
+call paths the bundle itself reaches and left `Customer360SearchAccounts` out; the guided skills route
+writes the cockpit never calls, and a tool outside the published manifest is refused
+`not_in_manifest` at the moment a banker confirms a plan. Minimality at that boundary buys nothing
+and costs a filed record.
+
+Omit the manifest and the page opens offline: `claude.use("mcp")` resolves null, the sync chip reads
+`offline · R1 no grant`, and no connector call in the page can run.
 
 ### Manifest rules that bite
 
@@ -84,10 +40,11 @@ both arms.
   `mcp__…__<tool>` segment.
 - **Colons are invalid in tool names** — a manifest containing one is rejected **422 at publish**.
   None of the names above contain a colon; keep it that way.
-- The manifest is a **viewer-consented grant**, so keep it minimal. `Customer360SearchAccounts` is
-  deliberately **not** declared: nothing in the page calls it, and the build confirms its name is
-  tree-shaken out of the bundle. Declare a tool only when a call path exists. A page declaring capabilities
-  **cannot be shared publicly** — this artifact is private-link only by construction.
+- The manifest is a **viewer-consented grant**. It stays scoped to the three connectors this product
+  uses, and within Customer 360 it is the org's own manifest whole: the guided skills call tools the
+  bundle does not, so "declare only what the bundle calls" was the wrong minimality and produced a
+  grant that failed at confirm time. A page declaring capabilities **cannot be shared publicly**, so
+  this artifact is private-link only by construction.
 - Omitting `capabilities` on a redeploy **carries the stored declaration forward** (and keeps the
   contract pin). Passing a non-empty object is a **full-set declaration**: anything stored but not
   restated is revoked. `{}` clears everything.

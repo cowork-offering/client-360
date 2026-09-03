@@ -7,6 +7,7 @@ import {
   ContractError,
   assertBorrowersStructure,
   assertGeneratedAt,
+  assertUserId,
   assertWorklistReasons,
   PERMITTED_REASON_CODES,
   assertActivity,
@@ -502,6 +503,36 @@ test("regression fixture: validateC360 populates covenantChallenge + dataQuality
   assert.ok(Array.isArray(data.dataQuality));
 });
 
+// ---------------------------------------------------------------- assertUserId
+test("assertUserId accepts the 15 and the 18 character form", () => {
+  assert.doesNotThrow(() => assertUserId({ meta: { userId: "005bb00000ftouD" } }));
+  assert.doesNotThrow(() => assertUserId({ meta: { userId: "005bb00000ftouDAAQ" } }));
+});
+
+test("assertUserId rejects a missing, empty or non-string id", () => {
+  for (const meta of [undefined, {}, { userId: "" }, { userId: "   " }, { userId: 5 }, { userId: null }]) {
+    assert.throws(() => assertUserId({ meta }), ContractError);
+  }
+  assert.throws(() => assertUserId({}), ContractError);
+});
+
+test("assertUserId rejects the display name, which is the defect it exists for", () => {
+  // meta.user is "Fabian Goetzens"; the Apex compares approverUserId to the running identity
+  // BEFORE redeeming the token, so a name dies at confirm time with a generic tool failure.
+  assert.throws(() => assertUserId({ meta: { userId: "Fabian Goetzens" } }), ContractError);
+  assert.throws(() => assertUserId({ meta: { userId: "fabian.goetzens@connectry.io" } }), ContractError);
+});
+
+test("assertUserId rejects an id of the wrong prefix or length", () => {
+  for (const userId of ["001bb00001DLtRMAA1", "005bb00000ftou", "005bb00000ftouDA", "005bb00000ftouDAAQXX"]) {
+    assert.throws(() => assertUserId({ meta: { userId } }), ContractError);
+  }
+});
+
+test("assertUserId names meta.userId, so the failure is actionable", () => {
+  assert.throws(() => assertUserId({ meta: {} }), (e) => e instanceof ContractError && /meta\.userId/.test(e.message));
+});
+
 // ---------------------------------------------------------------- fixture against the real sample data
 test("real sample-data.json satisfies the full contract end to end", () => {
   // The plugin's own copy, kept byte-identical to the repo's artifact/ publish staging by
@@ -510,6 +541,7 @@ test("real sample-data.json satisfies the full contract end to end", () => {
   const path = new URL("../assets/sample-data.json", import.meta.url);
   const data = JSON.parse(readFileSync(path, "utf8"));
   assert.doesNotThrow(() => assertGeneratedAt(data));
+  assert.doesNotThrow(() => assertUserId(data));
   assert.doesNotThrow(() => assertBorrowersStructure(data));
   assert.doesNotThrow(() => assertWorklistReasons(data));
   assert.doesNotThrow(() => assertActivity(data));

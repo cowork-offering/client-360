@@ -109,6 +109,34 @@ export function assertGeneratedAt(data) {
 }
 
 /**
+ * `meta.userId` is the SALESFORCE USER ID (005...) of the signed-in identity, and it is the only
+ * value the `execute_*` tools accept as `approverUserId`: the Apex compares it to the running
+ * identity BEFORE it will redeem a decision token, so a display name fails that check and nothing
+ * is written (live defect, 2026-07-26). The page therefore refuses the confirm gesture without it,
+ * and the assembler is the fail-closed gate on the same footing as assertGeneratedAt: reject the
+ * missing or misshapen value here rather than ship an artifact whose every governed action dies at
+ * the moment a banker confirms a plan.
+ *
+ * The pattern is copied VERBATIM from app/src/channel/writeTools.ts SF_USER_ID (read 2026-09-03).
+ * Keep the two in step by hand, the same A7 sync-note duty as everywhere else in this file.
+ *
+ * The ONE deliberate escape is the assembler's --no-approver, for a session that genuinely cannot
+ * read the id (the Customer 360 connector has no whoami tool). That publishes a cockpit whose
+ * execute path is read-only, and the skill has to say so out loud.
+ */
+const SF_USER_ID = /^005[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$/;
+
+export function assertUserId(data) {
+  const v = data && data.meta && data.meta.userId;
+  if (typeof v !== "string" || v.trim() === "") {
+    throw new ContractError("meta.userId is required and must be the 15 or 18 character Salesforce user id (005...) of the signed-in identity: it is the only accepted approverUserId on execute_*, so an artifact without it can stage but can never file");
+  }
+  if (!SF_USER_ID.test(v.trim())) {
+    throw new ContractError(`meta.userId ("${v}") is not a Salesforce user id (expected 005 followed by 12 or 15 alphanumerics, e.g. "005bb00000ftouDAAQ"). A display name or an email is refused by the org before the decision token is redeemed, so it is refused here instead`);
+  }
+}
+
+/**
  * Codex R2 finding 2 (structural well-formedness of `worklist.accountIds`, split out of
  * computeCoverage): malformed entries (non-string / empty) or duplicates are an authoring bug in
  * the id LIST ITSELF, unconditionally fatal — never a staging gap, so never downgradable by

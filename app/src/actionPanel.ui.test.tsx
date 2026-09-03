@@ -1826,7 +1826,9 @@ describe("the execute payload, pinned to the shape the org accepted (live defect
   });
 
   it("accepts the id from meta.user when the assembler stages it there", async () => {
-    const callTool = await confirmWith({ user: APPROVER_ID });
+    // `meta.userId` has to be cleared for this case to mean anything: the sample fixture stages one
+    // now (the assembler refuses to build without it), and `userId` is checked before `user`.
+    const callTool = await confirmWith({ user: APPROVER_ID, userId: undefined });
     const execute = inputsOf(callTool.mock.calls.find((c) => String(c[1]).startsWith("execute_")));
     expect(execute.approverUserId).toBe(APPROVER_ID);
   });

@@ -1,70 +1,7 @@
 {
-  "_comment": {
-    "purpose": "The `mcp` capability manifest to pass at the next republish of the Customer 360 cockpit artifact. Pass the `mcp` object ONLY; this `_comment` is documentation and is not part of the input.",
-    "generated": "2026-08-22 (branch ws05-app-adapt, after the cockpit was adapted to the package-scoped bulk covenant review and the hardened valuation)",
-    "derivation": {
-      "Customer 360": "Every name copied from knowledge/sf-build-v2/wp2/mcpServerDefinitions/Customer360.mcpServerDefinition-meta.xml (<toolName> elements, org order). The org manifest carries 24 tools; 23 are declared here.",
-      "IDB Gateway": "app/src/channel/mcp.ts TOOLS.boomRatios / TOOLS.boomSpread / TOOLS.llm \u2014 the three gateway tools the cockpit calls (cockpitTools.refreshBoom and cockpitTools.askCopilot).",
-      "Microsoft 365": "app/src/channel/mcp.ts TOOLS.mailSearch \u2014 the mail intake sweep."
-    },
-    "orgManifestToolCount": 24,
-    "declaredToolCount": 23,
-    "excludedFromThisManifest": {
-      "Customer360SearchAccounts": "No call path. TOOLS.searchAccounts is defined in app/src/channel/mcp.ts but referenced nowhere, and the build tree-shakes the name out of the bundle. app/PUBLISH.md section 1 records this as a deliberate minimality choice. Add the name back if the artifact should mirror the org's 24 exactly."
-    },
-    "newThisWave": "execute_covenant_review. NO TOOL NAME CHANGED in the org this wave \u2014 stage_covenant_review and stage_collateral_valuation changed SHAPE only, and the McpServerDefinition was not touched (still 24 tools). What changed here is the cockpit call path: the founder gate that kept execute_covenant_review out of this manifest stood on the tool never having been run live, and it was run live on both arms on 2026-08-22 (knowledge/sf-build-v2/wp2/observed-envelopes-covenant-bulk.json). The cockpit now calls it behind the confirm gate, so the grant is required. execute_loan_modification was added the same way one wave earlier.",
-    "stillStageOnly": "stage_renewal is declared; there is no execute_renewal to declare. The renewal clone's collateral aggregate has never been re-probed.",
-    "rules": [
-      "`server` is the connector DISPLAY NAME, never a connector id.",
-      "Tool names are the UPSTREAM names listTools() returns, not the normalized mcp__\u2026__ segment.",
-      "A colon in a tool name is rejected 422 at publish. None of these carry one.",
-      "Passing a non-empty capabilities object is a FULL-SET declaration: anything stored but not restated is revoked."
-    ]
-  },
-  "mcp": {
-    "servers": [
-      {
-        "server": "Customer 360",
-        "tools": [
-          "Customer360Snapshot",
-          "Customer360RelationshipGraph",
-          "Customer360Exposure",
-          "Customer360Covenants",
-          "Customer360Opportunities",
-          "Customer360StructuralSignals",
-          "Customer360Portfolio",
-          "stage_collateral_valuation",
-          "execute_collateral_valuation",
-          "stage_service_request",
-          "execute_service_request",
-          "stage_annual_review",
-          "execute_annual_review",
-          "Customer360ActionHistory",
-          "stage_new_facility",
-          "execute_new_facility",
-          "stage_risk_rating_review",
-          "execute_risk_rating_review",
-          "stage_covenant_review",
-          "execute_covenant_review",
-          "stage_loan_modification",
-          "execute_loan_modification",
-          "stage_renewal"
-        ]
-      },
-      {
-        "server": "IDB Gateway",
-        "tools": [
-          "boom-mcp-js___boom_get_ratios",
-          "boom-mcp-js___boom_get_spread",
-          "idb-bg-api-target-get-llm-response-staging___get_llm_response"
-        ]
-      },
-      {
-        "server": "Microsoft 365",
-        "tools": [
-          "outlook_email_search"
-        ]
-      }
-    ]
-  }
+  "_superseded": "2026-09-03. This file used to be the copy of record for the artifact `mcp` capability manifest, and it carried a hand-maintained 23-tool Customer 360 grant against a 28-tool org manifest. A short grant is refused `not_in_manifest` at the moment a banker confirms a plan, so the declaration is generated now and this copy is retired rather than kept in step by hand.",
+  "_replacedBy": "client-360/assets/capabilities.json",
+  "_generatedBy": "node client-360/render/capabilities.mjs (sources: knowledge/sf-build-v2/wp2/mcpServerDefinitions/Customer360.mcpServerDefinition-meta.xml and app/src/channel/mcp.ts)",
+  "_gate": "node client-360/render/capabilities.mjs --check, plus client-360/render/capabilities.test.mjs",
+  "_doNotPassThisFile": "It carries no `mcp` key on purpose. Read the replacement and pass that."
 }

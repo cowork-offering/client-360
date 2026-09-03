@@ -12,10 +12,15 @@ import {
   MANIFEST_PATH,
 } from "./tool-names.mjs";
 
-test("the org manifest parses and declares the 24 tools", () => {
+/** The org's Customer360 definition as of 2026-09-03: 10 reads, 8 stage/execute pairs, the
+ *  stage-only renewal and the second-hop `complete_new_facility_detail`. Pinned, not derived: a
+ *  count that moved is a deployment the prose, the grant and this runbook have to catch up with. */
+const MANIFEST_TOOL_COUNT = 28;
+
+test("the org manifest parses and declares the expected tools", () => {
   const tools = manifestToolNames();
-  assert.equal(tools.length, 24, `expected 24 tools in ${MANIFEST_PATH}, got ${tools.length}`);
-  assert.equal(new Set(tools).size, 24, "manifest tool names must be unique");
+  assert.equal(tools.length, MANIFEST_TOOL_COUNT, `expected ${MANIFEST_TOOL_COUNT} tools in ${MANIFEST_PATH}, got ${tools.length}`);
+  assert.equal(new Set(tools).size, MANIFEST_TOOL_COUNT, "manifest tool names must be unique");
 });
 
 test("a missing manifest fails loudly rather than passing vacuously", () => {

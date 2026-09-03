@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+// Release gate for the capabilities manifest. Run with: node --test render/capabilities.test.mjs
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  CAPABILITIES_PATH,
+  CapabilitiesError,
+  SERVERS,
+  buildCapabilities,
+  channelToolNames,
+  checkCapabilities,
+  serialize,
+} from "./capabilities.mjs";
+import { manifestToolNames } from "./tool-names.mjs";
+
+const committed = () => JSON.parse(readFileSync(CAPABILITIES_PATH, "utf8"));
+const serverEntry = (caps, name) => caps.mcp.servers.find((s) => s.server === name);
+
+test("the committed capabilities.json is byte-identical to what the sources generate", () => {
+  const { drifted, reason } = checkCapabilities();
+  assert.equal(drifted, false, `${reason}. Run: node client-360/render/capabilities.mjs`);
+});
+
+test("the Customer 360 grant is the org manifest ENTIRE, in the org's own order", () => {
+  // The one that matters: a tool the org ships but the grant omits is refused `not_in_manifest`
+  // at the moment a banker confirms a plan, which is the worst possible time to discover it.
+  assert.deepEqual(serverEntry(committed(), SERVERS.customer360).tools, manifestToolNames());
+});
+
+test("the gateway and mail grants are the tool names the page itself calls", () => {
+  const caps = committed();
+  assert.deepEqual(serverEntry(caps, SERVERS.gateway).tools, channelToolNames(["boomRatios", "boomSpread", "llm"]));
+  assert.deepEqual(serverEntry(caps, SERVERS.m365).tools, channelToolNames(["mailSearch"]));
+});
+
+test("sample and db are declared, and nothing else is", () => {
+  assert.deepEqual(Object.keys(committed()).sort(), ["db", "mcp", "sample"]);
+  assert.deepEqual(committed().sample, {});
+  assert.deepEqual(committed().db, {});
+});
+
+test("every server carries a display name and a non-empty tool list", () => {
+  // An empty `tools` array is refused at publish and never means "all tools".
+  for (const entry of committed().mcp.servers) {
+    assert.equal(typeof entry.server, "string");
+    assert.ok(entry.server.trim().length > 0, "server must be a display name, never an id");
+    assert.ok(Array.isArray(entry.tools) && entry.tools.length > 0, `${entry.server} has no tools`);
+    assert.equal(new Set(entry.tools).size, entry.tools.length, `${entry.server} repeats a tool name`);
+  }
+});
+
+test("no tool name carries a colon (rejected 422 at publish)", () => {
+  for (const entry of committed().mcp.servers) {
+    for (const tool of entry.tools) assert.ok(!tool.includes(":"), `${entry.server} / ${tool} carries a colon`);
+  }
+});
+
+test("a missing channel module fails loudly rather than generating a short grant", () => {
+  assert.throws(() => channelToolNames(["mailSearch"], "/nonexistent/mcp.ts"), CapabilitiesError);
+});
+
+test("a TOOLS key that stopped existing fails the build", () => {
+  assert.throws(() => channelToolNames(["neverDeclared"]), CapabilitiesError);
+});
+
+test("the serialized form round-trips and ends in a newline", () => {
+  const caps = buildCapabilities();
+  const text = serialize(caps);
+  assert.ok(text.endsWith("\n"));
+  assert.deepEqual(JSON.parse(text), caps);
+});

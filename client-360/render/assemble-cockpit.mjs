@@ -6,7 +6,7 @@
 // bundle's data slot and writes the finished HTML. The agent then publishes the HTML file BY PATH.
 //
 //   node assemble-cockpit.mjs --data <c360-data.json> --out <out.html> [--template <path>]
-//     [--legacy] [--allow-partial] [--UNSAFE-no-validate-for-tests]
+//     [--legacy] [--allow-partial] [--no-approver] [--UNSAFE-no-validate-for-tests]
 //
 // Codex round 2 finding 1 (BLOCK): the validation stage is mandatory for any real release (SPEC
 // A5) — there is no production flag to skip it. The only escape hatch is
@@ -64,6 +64,12 @@
 // A10 / Codex round 2 finding 3: meta.generatedAt is required and must be a valid ISO-8601
 // instant — checked before anything else touches the data (assertGeneratedAt).
 //
+// meta.userId is required on the same footing (assertUserId): the 005 Salesforce user id of the
+// signed-in identity is the only accepted approverUserId on execute_*, so an artifact without it
+// can stage a plan and never file it. --no-approver downgrades that gate to a warning for the one
+// case that earns it: a session that genuinely cannot read the id (the Customer 360 connector has
+// no whoami tool) publishing a cockpit whose execute path is knowingly read-only.
+//
 // Codex round 3 finding 1: the /tmp gate is symlink-safe — it resolves the REAL path of --out's
 // parent directory (after mkdir'ing it if needed, since realpath requires the target to exist)
 // and checks that against the REAL path of /tmp (itself possibly a symlink, e.g. macOS
@@ -83,6 +89,7 @@ import {
   ContractError,
   assertBorrowersStructure,
   assertGeneratedAt,
+  assertUserId,
   assertWorklistReasons,
   assertActivity,
   assertRequests,
@@ -103,9 +110,10 @@ const outPath = arg("--out");
 const templatePath = arg("--template") ?? join(here, "..", "assets", "customer-360-template.html");
 const legacyFlag = flag("--legacy");
 const allowPartial = flag("--allow-partial");
+const noApprover = flag("--no-approver");
 const unsafeNoValidate = flag("--UNSAFE-no-validate-for-tests");
-if (!dataPath) die("missing --data <path/to/c360-data.json>  (usage: node assemble-cockpit.mjs --data <data.json> --out <out.html> [--template <path>] [--legacy] [--allow-partial])");
-if (!outPath) die("missing --out <path/out.html>  (usage: node assemble-cockpit.mjs --data <data.json> --out <out.html> [--template <path>] [--legacy] [--allow-partial])");
+if (!dataPath) die("missing --data <path/to/c360-data.json>  (usage: node assemble-cockpit.mjs --data <data.json> --out <out.html> [--template <path>] [--legacy] [--allow-partial] [--no-approver])");
+if (!outPath) die("missing --out <path/out.html>  (usage: node assemble-cockpit.mjs --data <data.json> --out <out.html> [--template <path>] [--legacy] [--allow-partial] [--no-approver])");
 
 // Codex round 2 finding 1 + round 3 finding 1: --UNSAFE-no-validate-for-tests may ONLY write
 // under /tmp. This is the only thing standing between "test convenience" and "silently shippable
@@ -165,6 +173,16 @@ if (!data.portfolio || !Array.isArray(data.portfolio.accounts)) die("--data.port
 // downgrades the staging-coverage gap below, never a shape/integrity violation.
 try { assertGeneratedAt(data); }
 catch (e) { die(e instanceof ContractError ? e.message : `contract check failed: ${e.message}`); }
+
+// The approver identity. Fail-closed by default; --no-approver is the deliberate read-only publish.
+let approverHeld = false;
+try { assertUserId(data); }
+catch (e) {
+  const msg = e instanceof ContractError ? e.message : `contract check failed: ${e.message}`;
+  if (!noApprover) die(`${msg}. Read it from the sObject connector's getUserInfo, or pass --no-approver to publish a cockpit whose execute path is read-only and SAY SO to the banker.`);
+  approverHeld = true;
+  console.error(`WARN: ${msg} (--no-approver: the artifact will stage plans and refuse to file them; tell the banker the execute path is read-only this run)`);
+}
 
 try { assertBorrowersStructure(data); }
 catch (e) { die(e instanceof ContractError ? e.message : `contract check failed: ${e.message}`); }
@@ -332,5 +350,8 @@ catch (e) { dieCleanup(`cannot rename temp file into place at --out ${outPath}: 
 
 // ---------------------------------------------------------------- success
 const validateSummary = unsafeNoValidate ? " · validation SKIPPED (UNSAFE, /tmp-only)" : ` · challenge ${challengeN} covenants · DQ ${dqN} findings`;
-const partialFlag = missing.length ? ` · PARTIAL (${missing.length} unstaged)` : "";
+// Both states ride the same slot: they are what the reply to the banker has to say out loud.
+const partialFlag =
+  (missing.length ? ` · PARTIAL (${missing.length} unstaged)` : "") +
+  (approverHeld ? " · NO APPROVER (execute path read-only)" : "");
 console.log(`OK — wrote ${outPath} (${totalBytes.toLocaleString()} bytes: code ${codeBytes.toLocaleString()} + data ${dataBytes.toLocaleString()}) · mode=${mode} · anchor=${data.meta.anchorAccountId} · accounts staged ${stagedCount}/${requiredIds.length}${partialFlag}${validateSummary}`);
