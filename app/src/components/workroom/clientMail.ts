@@ -219,3 +219,7 @@ export function useClientMail(args: {
   // it is not going to lead with.
   return { note, hits: live.hits, gate: !!args.intentNote || opened || swept !== null };
 }
+
+/** The clip the greeting's mail block runs on, for the ACTIVITY TRAIL's row.
+ *  One rule, two consumers: a second clip would drift from this one. */
+export { clip as clipMail };

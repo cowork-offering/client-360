@@ -3,6 +3,7 @@ import type { ActivityEntry, ActivityKind, BorrowerBundle } from "../../data/con
 import { fmtDate, fmtRelative } from "../../data/format";
 import { accountKey, useApp } from "../../state/appState";
 import { historyActivityEntry, mergeTrail } from "../../actions/executedActivity";
+import { openMailRoom, readMailRow } from "../../actions/mailRow";
 import { staggerDelay } from "../../data/motion";
 import { ActivityDetailModal } from "../ActivityDetailModal";
 import { EmptyPane, Note, Pane, PaneCard, SecHead } from "./paneKit";
@@ -45,6 +46,75 @@ export function ReferenceCitation({ reference }: { reference?: ActivityEntry["re
       {(reference.source ?? reference.kind) && <b style={{ fontWeight: 600 }}>{reference.source ?? reference.kind}</b>}
       <span style={{ fontFamily: "var(--font-mono)" }}>{text}</span>
     </span>
+  );
+}
+
+/* =============================================================================
+   AN INBOUND MESSAGE ON THE TRAIL (founder, 2026-09-03: "it looks pretty bad,
+   it has this long winded text, and the pop up still opens up the old loan
+   modification tab, not our workroom. I need it sleek and elegant.")
+
+   ONE COMPACT ROW. The subject, who sent it, when, and the ask in one line.
+   THE BODY IS NOT IN THE DEFAULT DOM AT ALL — it arrives on one click and
+   leaves on the next, which is the difference between a trail and an inbox.
+
+   ONE QUIET ACTION, and it opens OUR facility workroom on this message (rule
+   41: a plain ink pill, never a violet one). The old detail modal is not on
+   this row: it ended in a registry action that opened the pre-workroom panel,
+   which is exactly the defect. Every other kind of entry keeps it.
+   ============================================================================= */
+function MailEntry({
+  entry,
+  row,
+  index,
+  generatedAt,
+  onOpen,
+}: {
+  entry: ActivityEntry;
+  row: NonNullable<ReturnType<typeof readMailRow>>;
+  index: number;
+  generatedAt: string;
+  onOpen: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div
+      data-origin="system"
+      data-mail-row={entry.id}
+      className={`tli mail${index === 0 ? " hot" : ""}`}
+      style={{ animationDelay: staggerDelay(index, 70, 420) }}
+    >
+      <div className="mhead">
+        <span className="mwho">
+          <b>{row.subject}</b>
+          <span className="m" title={fmtDate(entry.ts)}>
+            {row.from ? `${row.from} · ` : ""}
+            {fmtRelative(entry.ts, generatedAt)}
+          </span>
+        </span>
+        <button type="button" className="eg-btn-ink mopen" data-mail-open={entry.id} onClick={onOpen}>
+          Open in workroom
+        </button>
+      </div>
+      {row.ask && <span className="mask">{row.ask}</span>}
+      {row.body && (
+        <button
+          type="button"
+          className="mmore"
+          aria-expanded={shown}
+          data-mail-expand={entry.id}
+          onClick={() => setShown((v) => !v)}
+        >
+          {shown ? "Hide message" : "Show message"}
+        </button>
+      )}
+      {shown && row.body && (
+        <div className="mbody" data-mail-body={entry.id}>
+          <p>{row.body}</p>
+          <ReferenceCitation reference={entry.reference} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -112,10 +182,12 @@ function TrailEntry({
 }
 
 export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
-  const { data, state } = useApp();
+  const { data, state, dispatch } = useApp();
   const [openId, setOpenId] = useState<string | null>(null);
   const generatedAt = data.meta?.generatedAt ?? "";
   const accountId = accountKey(state.accountId, bundle.snapshot?.accountId);
+  const accountName =
+    data.portfolio.accounts.find((a) => a.accountId === accountId)?.name ?? bundle.snapshot?.name ?? accountId;
 
   // The org's durable trail + this session's own entries + the baked events,
   // newest first. The org row wins over the session echo of the same execution,
@@ -140,15 +212,40 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
           />
         ) : (
           <div className="tl">
-            {entries.map((e, i) => (
-              <TrailEntry
-                key={e.id}
-                entry={e}
-                index={i}
-                generatedAt={generatedAt}
-                onOpen={() => setOpenId(e.id)}
-              />
-            ))}
+            {entries.map((e, i) => {
+              /* An inbound message is read as a row rather than rendered as
+                 prose. A message the reader refuses (a REQUEST_RECEIVED entry
+                 that is not a mailbox message) falls through to the trail's
+                 ordinary entry, which is what it always was. */
+              const row = readMailRow(e, bundle);
+              return row ? (
+                <MailEntry
+                  key={e.id}
+                  entry={e}
+                  row={row}
+                  index={i}
+                  generatedAt={generatedAt}
+                  onOpen={() =>
+                    openMailRoom({
+                      entry: e,
+                      bundle,
+                      accountId,
+                      accountName,
+                      generatedAt,
+                      navigate: (id) => dispatch({ type: "OPEN_ACCOUNT", accountId: id }),
+                    })
+                  }
+                />
+              ) : (
+                <TrailEntry
+                  key={e.id}
+                  entry={e}
+                  index={i}
+                  generatedAt={generatedAt}
+                  onOpen={() => setOpenId(e.id)}
+                />
+              );
+            })}
           </div>
         )}
       </PaneCard>
@@ -156,7 +253,7 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
       <Note
         note={
           entries.length
-            ? "Timestamps are shown relative to this render. Source references cite the originating record; links appear once the mail intake is wired."
+            ? "Timestamps are shown relative to this render. Source references cite the originating record."
             : undefined
         }
       />

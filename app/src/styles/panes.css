@@ -571,6 +571,72 @@
   color: var(--accent);
 }
 
+/* ------------------------------------------------- an inbound client message
+   FOUNDER, 2026-09-03: the arriving email "looks pretty bad, it has this long
+   winded text". A message is now ONE ROW on the same spine as everything else:
+   the subject, who and when, the ask on one line, and a single ink pill. The
+   body is not rendered until it is asked for, so the default trail carries no
+   paragraph at all. No box, no second card, no tint - the dot is still the
+   only marker the trail has. */
+.pane .tli.mail .mhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.pane .tli.mail .mwho {
+  min-width: 0;
+}
+.pane .tli.mail .mask {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-body);
+  max-width: 60ch;
+}
+/* The pill is the row's one action and it sits on the baseline of the subject,
+   quiet enough that a trail of six messages does not read as six buttons. */
+.pane .tli.mail .mopen {
+  flex: none;
+  padding: 5px 13px;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+.pane .tli.mail .mmore {
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.pane .tli.mail .mmore:hover {
+  color: var(--ink-body);
+}
+.pane .tli.mail .mbody {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-overlay);
+  max-width: 60ch;
+  animation: fadeup 0.28s var(--ease-settle) both;
+}
+.pane .tli.mail .mbody p {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-body);
+  white-space: pre-wrap;
+}
+.pane .tli.mail .mbody .cite {
+  word-break: break-all;
+}
+
 /* ----------------------------------------------- ownership tree, orthogonal
    Rules 9 + 15 + 18 + 19. Nodes are solid content; the connectors are EDGED
    metro routes on a gradient stroke, measured from the real node positions by

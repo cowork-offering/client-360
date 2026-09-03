@@ -217,9 +217,9 @@ export function toClientRequest(
   };
 }
 
-/** The action a request proposes, or null when the text does not say. */
-export function suggestedActionFor(req: MailRequest): string {
-  if (req.intent === "renew") return "renewal";
-  if (req.intent === "new_facility") return "new-facility-request";
-  return "loan-modification";
-}
+/* NO MAIL PATH MAPS TO A REGISTRY ACTION ANY MORE (founder, 2026-09-03).
+   `suggestedActionFor` lived here and answered "loan-modification" for almost
+   every message, which is how an inbound email opened the PRE-WORKROOM action
+   panel. An inbound message now opens the facility workroom on itself; the
+   registry action stays exactly where it is, for the surfaces that offer it as
+   an action rather than as a reading of someone's mail. */

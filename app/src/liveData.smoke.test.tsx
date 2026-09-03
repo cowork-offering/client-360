@@ -454,13 +454,15 @@ describe("a client email proposes its action (founder: when is the action coming
     delete (window as unknown as { claude?: unknown }).claude;
   });
 
-  it("renders the matched email with the action it proposes", async () => {
+  it("renders the matched email as ONE compact row with the workroom on it", async () => {
     vi.useFakeTimers();
     await syncWithMail(mail);
     const text = container!.textContent ?? "";
     expect(text).toContain("Test for Hartwell");
-    // The next-step mechanism already renders and opens the ticket.
-    expect(text).toContain("suggested next step");
+    // FOUNDER, 2026-09-03. The row's one action is OUR room; the registry's
+    // next-step suggestion, which opened the pre-workroom panel, is gone.
+    expect(text).toContain("Open in workroom");
+    expect(text).not.toContain("suggested next step");
   });
 
   it("prefills the modification ticket from the client's own ask", async () => {

@@ -16,7 +16,7 @@
    ============================================================================= */
 
 import type { ActionHistoryRow, ActivityEntry, BorrowerBundle, ClientRequest, Id } from "../data/contract";
-import { describeRequest, readMailRequest, suggestedActionFor, toClientRequest } from "../actions/mailIntake";
+import { readMailRequest, toClientRequest } from "../actions/mailIntake";
 import { callTool, DETAIL_TOOLS, SERVERS, TOOLS, unwrapInvocable, type McpFailure, type McpOk } from "./mcp";
 import { fetchActionHistory, matchesAccount, searchMailbox, type MailHit } from "./cockpitTools";
 
@@ -317,13 +317,13 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
   await step("mail", mail, ({ hits }: { hits: MailHit[] }) => {
     const matched = hits.filter((h) => matchesAccount(h, accountName));
     requests = matched.map((m) => {
-      // Read the message as a request, and hang the proposed action off the
-      // entry as a NEXT STEP. That mechanism already renders in the timeline and
-      // opens the ticket, so the suggestion needs no second surface.
-      const read = readMailRequest(m, opts.bundle ?? null);
-      const nextSteps = read
-        ? [{ actionId: suggestedActionFor(read), note: describeRequest(read) }]
-        : undefined;
+      // NO NEXT STEP IS HUNG OFF AN INBOUND MESSAGE (founder, 2026-09-03). It
+      // used to carry one, pointing at the registry's `loan-modification`
+      // action, which is the PRE-WORKROOM action panel — so an arriving mail
+      // opened the old tab from three surfaces at once (the popup, the chat
+      // chips and the actions panel all read `detail.nextSteps`). The trail row
+      // opens the facility workroom on the message instead; see
+      // `actions/mailRow.ts`. The registry action itself is untouched.
       return {
       id: `mail-${m.id ?? m.subject ?? Math.random().toString(36).slice(2)}`,
       // Clamp a skewed timestamp to the render clock rather than showing a
@@ -335,7 +335,6 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
       actor: m.from,
       sessionLocal: true,
       reference: { kind: "m365-message", id: m.id, webLink: m.webLink },
-      detail: nextSteps ? { nextSteps } : undefined,
       };
     });
     // Read each matched message as a request. Nothing is invented: an

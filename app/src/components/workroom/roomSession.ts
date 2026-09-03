@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { clearCarriedMail } from "../../actions/mailCarry";
 import type { WorkroomMode } from "../../workroom/types";
 import type { SmartOpening } from "./route";
 
@@ -109,6 +110,10 @@ export function bindFacilityRoute(
 export function closeFacilityRoom(): void {
   if (!session) return;
   session = null;
+  /* THE MESSAGE THE ROOM WAS OPENED ON DIES WITH THE ROOM. A carried mail that
+     outlived its session would lead the NEXT room's greeting with a message
+     nobody clicked, and would outrank a newer one a sweep had since landed. */
+  clearCarriedMail();
   emit();
 }
 
