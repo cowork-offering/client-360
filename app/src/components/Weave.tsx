@@ -28,11 +28,32 @@ export function Weave({ className = "weave" }: { className?: string }) {
     let raf = 0;
     let t0: number | null = null;
     let clk = 0;
+    let parked = false;
     const frame = (ts: number) => {
       if (t0 == null) t0 = ts || 0;
       const dt = Math.min(64, (ts || 0) - t0);
       t0 = ts || 0;
       clk += dt * 0.001;
+      /* THE WEAVE HOLDS STILL UNDER THE LENS (founder, 2026-09-03: input
+         latency on liquid). The landing band sits directly beneath the top bar,
+         which in liquid carries a url() reference filter, and Chromium
+         rasterises those on the CPU every time the backdrop under them changes.
+         Twelve threads breathing on rAF is a promise to re-rasterise the bar on
+         every single frame, forever, on the thread the pointer lives on.
+
+         The loop is not stopped, it stops WRITING: one classList read per frame
+         costs nothing, the transforms are put back to identity once, and the
+         moment the palette switches back to frost the breath resumes without
+         anything having to be remounted. */
+      if (document.documentElement.classList.contains("eg-liquid")) {
+        if (!parked) {
+          for (const g of groups.current) g?.setAttribute("transform", "translate(0 0)");
+          parked = true;
+        }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      parked = false;
       for (let j = 0; j < threads.length; j++) {
         const g = groups.current[j];
         if (!g) continue;

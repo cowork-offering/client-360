@@ -94,8 +94,8 @@ export function GlassFilters() {
             pane and everything at the rim, where the surface curves away and
             the light has the furthest to travel through it. A uniform
             turbulence field is the opposite of that: the same wobble edge to
-            edge, which is why the ON pass reads as a texture rather than as a
-            thickness.
+            edge, which is why the subtle pass reads as a texture rather than as
+            a thickness.
 
             The rim mask is built INSIDE the filter, so it stretches to whatever
             element takes it and nothing has to know its own shape: blur the
@@ -103,28 +103,30 @@ export function GlassFilters() {
             What is left is a soft ring, zero in the interior, about a half at
             the border, zero outside.
 
-            IT WAS AN feMorphology ERODE AND THAT COST HALF THE FRAME. A naive
-            erode samples r squared pixels each, so radius 18 is roughly 1300
-            samples per pixel over a filter region that is 120 percent of a
-            full-viewport pane. Measured on the client page, headless: 315
-            ms/frame with the erode, 190 with this blur in its place, and the
-            two rings are not tellable apart. Cheap primitives, same picture.
+            THE LEAN PASS, AND WHAT IT COST. Chromium rasterises this filter on
+            the CPU, per backdrop pixel, on every change to the backdrop, so
+            every primitive here is paid for over the whole filter region on
+            every frame that touches the surface. Three things came out:
 
-            The heavy throw is composited THROUGH that ring and dropped over the
-            lightly-bent centre, which is how the scale gets to be 66 at the
-            edge and 10 in the middle without feDisplacementMap ever having to
-            take a per-pixel scale, which it cannot.
+              THE CHROMATIC SPLIT IS GONE. It was three isolated channels at
+              three throws, then two, and it is now one displacement of the
+              whole image. Each channel was a full-region resampling pass for a
+              fringe that only ever appeared in the outer few pixels of a rim.
+              It is the single most expensive thing that was ever in here per
+              unit of anything anyone could see.
 
-            CHROMATIC ABERRATION is the same displacement run twice at two
-            scales on two isolated channel sets, screen-blended back together.
-            Where the two land on top of each other the colour reconstructs
-            exactly; where the throw is large they separate, so the fringe
-            appears only where the bend is strong, which is only at the rim.
-            THREE channels would be one truer and one displacement pass dearer:
-            190 ms/frame against 141 on the same page, for a fringe nobody
-            reported seeing the difference in. The small filter below still
-            splits three ways, because its region is a 34px pill and the pass
-            it adds is free.
+              numOctaves 1, NOT 2. A second octave doubles the turbulence work
+              for detail at half the wavelength, and the field is smoothed by a
+              blur immediately afterwards anyway. The blur came down with it,
+              because there is less high-frequency noise left to remove.
+
+              THE REGION IS AS TIGHT AS THE CORNERS ALLOW. It was -10% / 120%,
+              which on a full-viewport pane is a third more pixels than the pane
+              has. The throw is 56 and the mask is 10, so 4 percent of a 1330px
+              pane (about 53px) is the margin the displaced edge can actually
+              reach; the small filter keeps 8 percent because 8 percent of a
+              40px satellite is only 3px. Both were checked at 2x on all four
+              corners of the pane and on the arc.
 
             TWO COMPOSITES CLOSE IT, not one. The centre pass can smear its own
             10px of transparent edge before the ring is ever applied, so the
@@ -132,27 +134,21 @@ export function GlassFilters() {
             source. Corners stay corners. */}
         <filter
           id="eg-liquid"
-          x="-10%"
-          y="-10%"
-          width="120%"
-          height="120%"
+          x="-4%"
+          y="-4%"
+          width="108%"
+          height="108%"
           colorInterpolationFilters="sRGB"
         >
           {/* life: a small bend everywhere, so the middle is glass and not a window */}
-          <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves={2} seed={7} result="lqN" />
-          <feGaussianBlur in="lqN" stdDeviation="3" result="lqNs" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves={1} seed={7} result="lqN" />
+          <feGaussianBlur in="lqN" stdDeviation="2" result="lqNs" />
           <feDisplacementMap in="SourceGraphic" in2="lqNs" scale={10} xChannelSelector="R" yChannelSelector="G" result="lqBase" />
 
-          {/* the rim field: longer wavelength, far bigger throw */}
-          <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves={2} seed={11} result="lqE" />
-          <feGaussianBlur in="lqE" stdDeviation="4" result="lqEs" />
-
-          {/* split red against the rest, throw each a different distance */}
-          <feColorMatrix in="lqBase" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="lqR" />
-          <feColorMatrix in="lqBase" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0" result="lqGB" />
-          <feDisplacementMap in="lqR" in2="lqEs" scale={66} xChannelSelector="R" yChannelSelector="G" result="lqRd" />
-          <feDisplacementMap in="lqGB" in2="lqEs" scale={52} xChannelSelector="R" yChannelSelector="G" result="lqGBd" />
-          <feBlend in="lqRd" in2="lqGBd" mode="screen" result="lqHeavy" />
+          {/* the rim field: longer wavelength, far bigger throw, ONE pass */}
+          <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves={1} seed={11} result="lqE" />
+          <feGaussianBlur in="lqE" stdDeviation="2.5" result="lqEs" />
+          <feDisplacementMap in="lqBase" in2="lqEs" scale={56} xChannelSelector="R" yChannelSelector="G" result="lqHeavy" />
 
           {/* the ring, built from the element's own alpha */}
           <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="lqCoreSoft" />
@@ -163,33 +159,25 @@ export function GlassFilters() {
           <feComposite in="lqJoined" in2="SourceGraphic" operator="over" />
         </filter>
 
-        {/* THE SAME LENS AT CHIP SCALE. A 34px pill has no room for a 10px ring
-            or a 56px throw: both are scaled to the geometry, or the pill stops
-            being a pill. Its filter region is a few thousand pixels rather than
-            a few million, so this one keeps the full three-way split. */}
+        {/* THE SAME LENS AT CHIP SCALE. A 40px satellite has no room for a 10px
+            ring or a 56px throw: both are scaled to the geometry, or the pill
+            stops being a pill. Its region stays at 8 percent because 8 percent
+            of 40px is three pixels. */}
         <filter
           id="eg-liquid-soft"
-          x="-10%"
-          y="-10%"
-          width="120%"
-          height="120%"
+          x="-8%"
+          y="-8%"
+          width="116%"
+          height="116%"
           colorInterpolationFilters="sRGB"
         >
-          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves={2} seed={7} result="lsN" />
-          <feGaussianBlur in="lsN" stdDeviation="2" result="lsNs" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves={1} seed={7} result="lsN" />
+          <feGaussianBlur in="lsN" stdDeviation="1.5" result="lsNs" />
           <feDisplacementMap in="SourceGraphic" in2="lsNs" scale={6} xChannelSelector="R" yChannelSelector="G" result="lsBase" />
 
-          <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves={2} seed={11} result="lsE" />
-          <feGaussianBlur in="lsE" stdDeviation="2.5" result="lsEs" />
-
-          <feColorMatrix in="lsBase" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="lsR" />
-          <feColorMatrix in="lsBase" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="lsG" />
-          <feColorMatrix in="lsBase" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="lsB" />
-          <feDisplacementMap in="lsR" in2="lsEs" scale={26} xChannelSelector="R" yChannelSelector="G" result="lsRd" />
-          <feDisplacementMap in="lsG" in2="lsEs" scale={22} xChannelSelector="R" yChannelSelector="G" result="lsGd" />
-          <feDisplacementMap in="lsB" in2="lsEs" scale={18} xChannelSelector="R" yChannelSelector="G" result="lsBd" />
-          <feBlend in="lsRd" in2="lsGd" mode="screen" result="lsRG" />
-          <feBlend in="lsRG" in2="lsBd" mode="screen" result="lsHeavy" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves={1} seed={11} result="lsE" />
+          <feGaussianBlur in="lsE" stdDeviation="1.8" result="lsEs" />
+          <feDisplacementMap in="lsBase" in2="lsEs" scale={22} xChannelSelector="R" yChannelSelector="G" result="lsHeavy" />
 
           <feGaussianBlur in="SourceAlpha" stdDeviation="3.5" result="lsCoreSoft" />
           <feComposite in="SourceAlpha" in2="lsCoreSoft" operator="out" result="lsRim" />
