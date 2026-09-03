@@ -158,7 +158,7 @@ function collateralBlock(src: ReadSource): BrainReadBlocks["collateral"] {
         pledged: typeof c.amountPledged === "number" ? fmtMoney(c.amountPledged) : undefined,
         lendable: typeof c.currentLendableValue === "number" ? fmtMoney(c.currentLendableValue) : undefined,
         scope,
-        valuation: valuationLine(c, src.generatedAt, valuations),
+        valuation: valuationLine(c, valuations),
       });
     }
   }

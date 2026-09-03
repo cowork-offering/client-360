@@ -175,8 +175,8 @@ export function relBookFor(ctx: RelContext): RelBook {
     lendable: typeof c.currentLendableValue === "number" ? fmtMoney(c.currentLendableValue) : null,
     value: typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null,
     advanceRateSource: c.advanceRateSource ?? null,
-    lastValued: assetValuation(c, today, valuations).lastValued,
-    valuation: valuationLine(c, today, valuations),
+    lastValued: assetValuation(c, valuations).lastValued,
+    valuation: valuationLine(c, valuations),
   }));
 
   const grade = ctx.bundle?.snapshot?.primaryRiskRating;

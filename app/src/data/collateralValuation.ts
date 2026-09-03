@@ -31,8 +31,18 @@ import { dayDiff } from "./time";
    carry whether the bank wrote it or this room worked it out. Where neither is
    carried the line says so; it never guesses a cycle from an asset type.
 
-   NOTHING HERE REACHES A CLOCK. `asOf` is `meta.generatedAt` through the
-   caller, exactly as every other time-based read in this cockpit.
+   TWO CLOCKS, AND THE SPLIT IS THE WHOLE POINT. An ABSOLUTE date is the org's
+   and is printed exactly as the org gives it: "next due Jul 31, 2026" is true
+   whenever anyone reads it. A RELATIVE phrase is about the reader's own day and
+   is measured against the REAL clock, never against `meta.generatedAt`.
+
+   THIS IS THE ONE PLACE THE ROOM'S generatedAt RULE DOES NOT APPLY, and it is
+   deliberate. The snapshot was assembled 2026-07-25 and the banker demos on
+   whatever today is; measured against the snapshot instant, a date that has
+   long since passed rendered as "in 6 days", which is a false sentence on the
+   screen. Every other derivation in the room layer still reads the snapshot's
+   own instant: an as-of figure belongs to the as-of date, but "overdue" belongs
+   to now. `now` is injectable so a test pins a day rather than racing one.
 
    ORIGINAL_VALUE IS NOT ON THE READ AND IS NOT SIMULATED. Each Hartwell asset
    carries a ladder of valuations, the earliest flagged `Original_Value = true`
@@ -60,7 +70,8 @@ export interface AssetValuation {
   nextDue: string | null;
   /** TRUE where `nextDue` was worked out from the cycle rather than read. */
   nextDueDerived: boolean;
-  /** Whole days from the snapshot's clock to the next date. Negative is past. */
+  /** Whole days from TODAY to the next date. Negative is past, null where no
+   *  next date is carried or derivable. */
   daysToDue: number | null;
   /** TRUE only where a next date is carried or derived AND it has passed. */
   overdue: boolean;
@@ -126,14 +137,14 @@ export function valuationsOf(bundle: BorrowerBundle | null | undefined): Valuati
 /**
  * THE VALUATION CLOCK ON ONE ASSET, read and never derived into a new fact.
  *
- * `asOf` is the snapshot's own instant. Absent, every day count is null and the
- * line still prints the dates: a missing clock costs the staleness, not the read.
+ * `now` is the real clock, because the staleness of a date is a fact about the
+ * day it is being read on. Pass one to pin it; tests do, nothing else needs to.
  */
-export function assetValuation(c: Collateral, asOf: string | null | undefined, book: ValuationBook): AssetValuation {
+export function assetValuation(c: Collateral, book: ValuationBook, now: number = Date.now()): AssetValuation {
   const row = c.collateralId ? book.get(c.collateralId) : undefined;
   const last = row?.valuationDate?.trim() || null;
   const next = row ? nextDueISO(row) : null;
-  const days = next && asOf ? dayDiff(next.iso, asOf) : null;
+  const days = next ? dayDiff(next.iso, new Date(now).toISOString()) : null;
   return {
     name: row?.valuationName?.trim() || null,
     lastValued: last ? fmtDate(last) : null,
@@ -146,14 +157,25 @@ export function assetValuation(c: Collateral, asOf: string | null | undefined, b
   };
 }
 
+/**
+ * WHEN IT IS DUE, AND NEVER A FUTURE PHRASE FOR A DATE THAT HAS PASSED.
+ *
+ * A passed date reads "overdue since <date>" and stops there: it carries the
+ * org's own absolute date, which stays true, and drops the day count, which
+ * would only tell the banker how long the sentence has been embarrassing. A
+ * date still ahead keeps its countdown, measured on the reader's own day.
+ */
 function dueWord(v: AssetValuation): string {
   if (!v.nextDue) return NO_NEXT_DATE;
+  /* WHERE THE DATE WAS WORKED OUT RATHER THAN READ, IT SAYS SO. A derived date
+     is the room's arithmetic over the org's cycle, and calling an asset overdue
+     off one is a claim that has to name its own footing. */
   const cycle = v.nextDueDerived ? ", on the cycle" : "";
+  /* A DATE THE ARITHMETIC COULD NOT READ STILL PRINTS. `fmtDate` hands back an
+     unparseable string unchanged, so the org's own text reaches the banker and
+     only the countdown is given up. "in null days" must never reach the glass. */
   if (v.daysToDue === null) return `next due ${v.nextDue}${cycle}`;
-  if (v.daysToDue < 0) {
-    const past = -v.daysToDue;
-    return `next due ${v.nextDue}${cycle}, ${past === 1 ? "1 day past" : `${past} days past`}`;
-  }
+  if (v.overdue) return `overdue since ${v.nextDue}${cycle}`;
   if (v.daysToDue === 0) return `next due ${v.nextDue}${cycle}, today`;
   return `next due ${v.nextDue}${cycle}, ${v.daysToDue === 1 ? "in 1 day" : `in ${v.daysToDue} days`}`;
 }
@@ -166,8 +188,8 @@ function dueWord(v: AssetValuation): string {
  * asset the read stages no valuation for says so rather than going quiet, which
  * is the difference between "never valued here" and "the read did not look".
  */
-export function valuationLine(c: Collateral, asOf: string | null | undefined, book: ValuationBook): string {
-  const v = assetValuation(c, asOf, book);
+export function valuationLine(c: Collateral, book: ValuationBook, now?: number): string {
+  const v = assetValuation(c, book, now);
   if (!v.lastValued) return `${NO_VALUATION} · ${dueWord(v)}`;
   const struck = v.value ? `Last valued ${v.lastValued} at ${v.value}` : `Last valued ${v.lastValued}`;
   return [struck, v.method, dueWord(v)].filter(Boolean).join(" · ");

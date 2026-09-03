@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import { NO_COMPLIANCE_ROW, relBookFor, relEntities } from "./relBook";
 import { relContextFor, type RelContext } from "./reviewFlows";
@@ -15,6 +15,15 @@ import { relContextFor, type RelContext } from "./reviewFlows";
    ============================================================================= */
 
 const PACKAGE = "a5Fbb000000IHFJEA4";
+
+/* THE DAY THE BANKER READS ON. The context's own clock (2026-09-02) still
+   drives every covenant day count below; only the valuation's relative phrase
+   is measured against the real one, so the suite pins it. */
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-03T09:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 function ctxFor(covenants: unknown[], valuations?: unknown[]): RelContext {
   const bundle = {
@@ -102,8 +111,9 @@ describe("the book reads what the relationship carries", () => {
     );
     expect(read.assets[0].lastValued).toBe("Jun 30, 2026");
     expect(read.assets[0].valuation).toBe(
-      // The clock is the context's own (2026-09-02), never a wall clock.
-      "Last valued Jun 30, 2026 at $8M · Book Value, Inventory Report · next due Jul 31, 2026, 33 days past",
+      // The absolute dates are the org's. "Overdue" is measured on the day the
+      // banker reads, which the suite pins above, and never on the snapshot's.
+      "Last valued Jun 30, 2026 at $8M · Book Value, Inventory Report · overdue since Jul 31, 2026",
     );
   });
 
