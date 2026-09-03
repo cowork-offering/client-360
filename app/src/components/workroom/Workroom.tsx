@@ -43,6 +43,7 @@ import type { BrainEnvelope, BrainReply, BrainTurn } from "../../channel/brainLa
 import { UNREADABLE_CLARIFY, isDegrade, restateProposal } from "../../channel/brainLane";
 import { Narration, useNarration, type NarrationView } from "../../channel/Narration";
 import type { Facility } from "../../data/contract";
+import { facilitiesInPackage, mustChoosePackage, packageRoster, type PackageEntry } from "../../book/packages";
 import { exceptionAsk, exceptionSay, readExceptionOpen } from "./exception";
 import { feeAsk, feePercentageNote, feeSay, readFeeOpen } from "./fee";
 import {
@@ -175,6 +176,7 @@ import { carriedMailFor } from "../../actions/mailCarry";
 import { sourcePhrase } from "../../intent/contract";
 import { ComposerPlus } from "../composer/ComposerPlus";
 import "../../styles/workroom.css";
+import "../../styles/package-anchor.css";
 import { ManifestRail } from "../rail/ManifestRail";
 
 /* =============================================================================
@@ -312,6 +314,11 @@ type ThreadItem = { id: string; step: number } & (
   /** The packages to choose between, when the relationship carries more than
    *  one. Ineligible ones stay visible and disabled. */
   | { kind: "packages" }
+  /** WHICH PACKAGE DOES THIS RUN IN — asked BEFORE anything binds, when the
+   *  relationship stages more than one and none is anchored. Not a tier: it is
+   *  a question waiting on the banker, and a tier fades when the next one
+   *  lands. Nothing lands until it is answered. */
+  | { kind: "pkgask" }
   /** The lookup, running. */
   | { kind: "lookup" }
   /** A READ QUESTION, ANSWERED FROM THE PACKAGE. Not a proposal and not a
@@ -347,6 +354,18 @@ type ThreadItem = { id: string; step: number } & (
 const COMPOSE_FLOOR_MS = 460;
 /** How long the package lookup shimmers before the brief lands. */
 const LOOKUP_MS = 1500;
+
+/* ------------------------------------------------------ the package question
+
+   VERBATIM SHELL COPY, and the room's answer to the founder's question of
+   2026-09-02. One package is not a choice, so the room binds it and says so on
+   the header line. Several is a choice, and this is it, asked before the route
+   and before a single figure is quoted at package altitude. */
+const PACKAGE_QUESTION = "Which package does this run in?";
+const PACKAGE_QUESTION_NOTE = "One package is one plan under one approval.";
+/** The header's own word for the anchor, in each of the three states. */
+const PACKAGE_ONLY = "the relationship's only package";
+const PACKAGE_NONE = "no product package on this relationship yet";
 /** The status line rotation under the execute mark. */
 const STATUS_ROTATE_MS = 1500;
 /** The dossier's construction beats (rule 69). */
@@ -829,6 +848,29 @@ export function Workroom({
 }) {
   const brief = useMemo(() => engine.brief(context), [engine, context]);
   const packageChoiceCount = brief.packageChoices.length;
+  /* ---- WHICH PACKAGE DOES THIS RUN IN (founder, 2026-09-02: "why does it know
+          that we are talking about this package... what happens on multiple
+          ones?").
+
+          THE ROSTER IS ROUTE-NEUTRAL AND IT IS ASKED FIRST. The engines' own
+          `packageChoices` marks a package ineligible when no member of it is
+          booked, which is the right rule for a modification and the wrong one
+          for a question asked before the route is picked: a package no
+          modification can touch still takes a new facility. So the ask lists
+          every package the relationship stages, and eligibility stays on the
+          route's own card where it always was.
+
+          ONE PACKAGE BINDS SILENTLY, exactly as it does today. `mustChoosePackage`
+          is false for the whole shipped book, so the room the founder demos is
+          byte-identical through this beat. */
+  const roster = useMemo(() => packageRoster(reads?.bundle ?? null), [reads?.bundle]);
+  const packagePending = mustChoosePackage(reads?.bundle ?? null, context.productPackageId);
+  /** The facility read, narrowed to the anchor. Everything that scopes to
+   *  facilities reads this rather than the relationship's whole exposure. */
+  const scopedFacilities = useMemo(
+    () => facilitiesInPackage(reads?.bundle?.exposure?.facilities ?? [], context.productPackageId),
+    [context.productPackageId, reads?.bundle],
+  );
   const vocabulary = useMemo(() => vocabularyFor(context), [context]);
   const reduced = prefersReducedMotion();
   const isEligible = useCallback(
@@ -1122,6 +1164,7 @@ export function Workroom({
           instruction. Under reduced motion the whole ritual is simply there. */
   useEffect(() => {
     const choosing = packageChoiceCount > 0;
+    const pending = packagePending;
     const opening: ThreadItem[] = [
       { kind: "opening", id: nextId("open"), step: 0 },
       { kind: "lookup", id: nextId("lookup"), step: 0 },
@@ -1146,6 +1189,14 @@ export function Workroom({
       // that is still asking which room this is.
       setItems((prev) => prev.filter((i) => i.kind !== "lookup"));
       setLookedUp(true);
+      /* WHICH PACKAGE, BEFORE ANYTHING BINDS. On a relationship staging more
+         than one the room asks first and nothing else lands: no route chips, no
+         package card, no facilities, no greeting remark. One package is not a
+         choice and this branch is never taken for it. */
+      if (pending) {
+        setItems((prev) => [...prev, { kind: "pkgask", id: nextId("pkgask"), step: 0 }]);
+        return;
+      }
       // A room still waiting for a package to be chosen has nothing to take an
       // instruction about, so the composer stays asleep through that beat.
       if (choosing) return;
@@ -1180,7 +1231,7 @@ export function Workroom({
     }
     const t = window.setTimeout(land, LOOKUP_MS);
     return () => clearTimeout(t);
-  }, [context.mode, engine, packageChoiceCount, reduced, resetTiers, tierArrived, vocabulary.changeWord]);
+  }, [context.mode, engine, packageChoiceCount, packagePending, reduced, resetTiers, tierArrived, vocabulary.changeWord]);
 
   /* ---- THE TWO TIERS UNDER THE QUESTION (the entry choreography, founder
           2026-09-01).
@@ -1202,6 +1253,9 @@ export function Workroom({
   useEffect(() => () => window.clearTimeout(tierTimer.current), []);
   useEffect(() => {
     if (!lookedUp || ask) return;
+    // NOTHING UNDER AN UNANSWERED PACKAGE QUESTION. The package card and the
+    // facilities both belong to a package, and none is chosen yet.
+    if (packagePending) return;
     if (tieredRef.current) return;
     tieredRef.current = true;
     const choosing = packageChoiceCount > 0;
@@ -1226,7 +1280,7 @@ export function Workroom({
       return;
     }
     tierTimer.current = window.setTimeout(facilities, TIER_STAGGER_MS);
-  }, [ask, lookedUp, packageChoiceCount, reduced, tierArrived]);
+  }, [ask, lookedUp, packageChoiceCount, packagePending, reduced, tierArrived]);
 
   /* ---- and the room hands the manifest back. Every landing and every removal,
           so a close at any moment loses nothing. Not once it has FILED. */
@@ -1838,6 +1892,14 @@ export function Workroom({
   const greeted = useRef(false);
   useEffect(() => {
     if (!brain || !lookedUp || !openingIdRef.current) return;
+    /* AND NOT BEFORE THE PACKAGE IS CHOSEN (founder, 2026-09-02). The greeting
+       is the one call that carries the consent dialog and it is composed from
+       an envelope; an envelope built while several packages stand unanchored
+       names no package and carries relationship-wide figures, which is exactly
+       the "$46MM package across six facilities" the founder read. The pick
+       remounts this room, and the greeting is composed then, once, against the
+       package the banker chose. */
+    if (packagePending) return;
     /* ONCE. `narration.open` is latched per item id, so a second call was
        already inert; what was NOT inert is the ref below, which a later pass
        would overwrite with a mail that arrived after the greeting had gone. */
@@ -1853,7 +1915,7 @@ export function Workroom({
     greetedWithMail.current = Boolean(mailNote);
     greeted.current = true;
     narration.open(openingIdRef.current, { act: "greeting", sentence: said });
-  }, [ask, brain, brief.greeting, brief.position, lookedUp, mailGate, mailNote, narration]);
+  }, [ask, brain, brief.greeting, brief.position, lookedUp, mailGate, mailNote, narration, packagePending]);
 
   /* MAIL THAT MISSED THE GATE IS A SECOND REMARK, NEVER A REWRITTEN GREETING.
      The greeting is already on the glass and it is the one call that carried
@@ -4072,6 +4134,74 @@ export function Workroom({
     figure: `${brief.baselineMembers} members · $${brief.baselineCommittedMM.toFixed(1)}MM committed · ${brief.covenantFigure} covenants`,
   };
 
+  /* ---------------------------------------------------- THE PACKAGE LINE
+
+     WHAT THE ROOM IS ANCHORED ON, AND HOW IT GOT THERE. The founder's question
+     of 2026-09-02 was literally "why does it know that we are talking about
+     this package", and the cheapest honest answer is the room saying so on the
+     glass rather than the model being trusted to. It is on the header from the
+     first frame in every state, including the single-package room the demo
+     runs, where the stance is "the relationship's only package". */
+  const anchoredEntry = roster.find((p) => p.id === context.productPackageId) ?? null;
+  const packageLineLabel = packagePending
+    ? `choose one of ${roster.length}`
+    : (anchoredEntry?.name ?? (context.productPackageId ? brief.packageName : PACKAGE_NONE));
+  const packageStance = packagePending
+    ? `${roster.length} packages on this relationship. None is chosen yet, so nothing below is scoped to one.`
+    : !context.productPackageId
+      ? PACKAGE_NONE
+      : roster.length === 1
+        ? `${PACKAGE_ONLY}. The room anchored on it and you were not asked.`
+        : `Chosen from ${roster.length} on this relationship.`;
+
+  /** SWITCHING IS A REBUILD, NEVER A SWAP. One session is one package is one
+   *  plan is one approval, so a manifest composed against one package must be
+   *  confirmed or dropped before the room can stand in another. The anchor call
+   *  re-keys the host, which rebuilds the engine and replays the ritual. */
+  const switchPackage = (entry: PackageEntry) => {
+    if (entry.id === context.productPackageId) return;
+    if (entries.length) {
+      setToast("Confirm or drop the staged plan before switching packages");
+      return;
+    }
+    closePeek();
+    onAnchor?.({ id: entry.id, label: entry.name, figure: entry.line, eligible: true });
+  };
+
+  const openPackagePeek = (anchor: HTMLElement) =>
+    openPeek(anchor, {
+      kicker: "Which package this runs in",
+      width: 460,
+      content: (
+        <>
+          <div className="wk-cav">{packageStance}</div>
+          {roster.map((entry) => {
+            const here = entry.id === context.productPackageId;
+            return (
+              <button
+                type="button"
+                key={entry.id}
+                className={`wk-pkg ${here ? "wk-sel" : ""}`}
+                data-pkgrow={entry.id}
+                disabled={here}
+                onClick={() => switchPackage(entry)}
+              >
+                <span>
+                  <b>{entry.name}</b>
+                  <span>{here ? `${entry.line} · you are here` : entry.line}</span>
+                </span>
+                {!here && (
+                  <span className="wk-go" aria-hidden="true">
+                    →
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </>
+      ),
+    });
+
   /** WHY THE ROOM IS SAYING THIS. One quiet control, and it opens the same read
    *  whether the bubble is carrying the routing question or the position. */
   const openWhy = (anchor: HTMLElement) =>
@@ -4102,7 +4232,11 @@ export function Workroom({
         <button type="button" className="wk-whybtn" aria-label="Why this position" onClick={(e) => openWhy(e.currentTarget)}>
           ?
         </button>
-        {brief.askPin && <span className="wk-askpin tnum">{brief.askPin}</span>}
+        {/* THE PIN IS A PACKAGE FIGURE, so it waits for the package. "$10M →
+            $13M" over an unanswered package question is the founder's own
+            complaint in miniature: a figure at package altitude on a room that
+            has not been told which package. */}
+        {brief.askPin && !packagePending && <span className="wk-askpin tnum">{brief.askPin}</span>}
         {/* THE ROOM OPENS BY NAME. The greeting is a real read or it is absent;
             it is never a label, and it is never a record id. */}
         <div className="wk-headline">
@@ -4118,7 +4252,7 @@ export function Workroom({
               carries the question instead of the position — the position is
               what the room says once it knows which room it is. */}
           <Words
-            text={ask ? ask.line : brief.position}
+            text={packagePending ? PACKAGE_QUESTION : ask ? ask.line : brief.position}
             offset={brief.greeting ? brief.greeting.trim().split(/\s+/).length : 0}
           />
         </div>
@@ -4127,7 +4261,10 @@ export function Workroom({
         {/* ONE ROW, tighter (founder, 2026-09-01): the three routes are one
             decision, so they read as one line rather than a wrapping field of
             pills. Two or three one-word labels always fit. */}
-        {ask && (
+        {/* THE ROUTE WAITS ON THE PACKAGE. Three route chips over an unanswered
+            package question would be two decisions on one line, and the second
+            of them is the one the whole session is anchored on. */}
+        {ask && !packagePending && (
           <div className="wk-opts wk-routes">
             {ask.chips.map((chip) => (
               <button type="button" className="wk-opt" key={chip.label} onClick={() => chooseRoute(chip)}>
@@ -4227,6 +4364,20 @@ export function Workroom({
           <header className="wk-head">
             <BrandGlyph />
             <span className="wk-title">{roomWord}</span>
+            {/* THE PACKAGE LINE (founder, 2026-09-02). The room states its
+                anchor from the first frame, in every state including the
+                single-package one, and where the relationship stages more than
+                one this is also the way back out of the one that was chosen. */}
+            <button
+              type="button"
+              className="wk-pkgline"
+              data-pkgline={context.productPackageId ?? (packagePending ? "pending" : "none")}
+              aria-label={`Package: ${packageLineLabel}`}
+              onClick={(e) => openPackagePeek(e.currentTarget)}
+            >
+              <span className="wk-pkgline-k">Package</span>
+              <span className="wk-pkgline-v">{packageLineLabel}</span>
+            </button>
             <span className="wk-spacer" />
             {/* A SCRIPTED room says so: nothing in it reaches a tool, and no
                 plan it stages is the org's. A wired room shows no badge, which
@@ -4303,6 +4454,7 @@ export function Workroom({
                           opening={openingItem}
                           members={membersItem}
                           packages={brief.packageChoices}
+                          roster={roster}
                           anchored={anchoredPackage}
                           lit={lit}
                           onAnchor={onAnchor}
@@ -4475,7 +4627,11 @@ export function Workroom({
                     phase === "filed"
                       ? `${vocabulary.filedWord}. The workroom holds.`
                       : !awake
-                        ? "Reading the package…"
+                        ? // THE ROOM HAS FINISHED READING; IT IS WAITING ON THE
+                          // BANKER, and it should say which of the two it is.
+                          packagePending
+                          ? "Pick the package this runs in."
+                          : "Reading the package…"
                         : ask
                           ? "Say what we are doing, or pick one above."
                           : "Say what changes on this package."
@@ -4490,7 +4646,12 @@ export function Workroom({
                   }}
                   aria-label="Say what should change"
                 />
-                <ComposerPlus room="facility" members={elicitMembers} facilities={reads?.bundle?.exposure?.facilities ?? []} book={book} disabled={!awake || phase === "filed"} input={composerRef} onDraft={setDraft} />
+                {/* THE MENU FOLLOWS THE ANCHOR. `members` and `book` are already
+                    package scoped (the engine's own members, and `buildBook`
+                    over their ids); the FACILITY read behind the rows was not,
+                    so on a two-package relationship the plus listed the other
+                    package's facilities beside this one's. */}
+                <ComposerPlus room="facility" members={elicitMembers} facilities={scopedFacilities} book={book} disabled={!awake || phase === "filed"} input={composerRef} onDraft={setDraft} />
                 <button
                   type="button"
                   className="wk-send"
@@ -4816,6 +4977,7 @@ function ThreadBlock({
   opening,
   members,
   packages,
+  roster,
   anchored,
   lit,
   onAnchor,
@@ -4835,6 +4997,9 @@ function ThreadBlock({
   opening: ReactNode;
   members: ReactNode;
   packages: PackageChoice[];
+  /** EVERY package the relationship stages, for the ask that runs before the
+   *  route. Route-neutral: see the `pkgask` branch. */
+  roster: PackageEntry[];
   /** The package the room is already standing in, for the single-package card. */
   anchored: { id: string; label: string; figure: string };
   lit: boolean;
@@ -4866,6 +5031,38 @@ function ThreadBlock({
           <i />
           <i />
         </span>
+      </div>
+    );
+  }
+
+  /* THE PACKAGE ASK. Every package the relationship stages, as a line item the
+     banker reads before picking: the deal's name, its stage, how many
+     facilities it holds and what is committed across them. ROUTE-NEUTRAL, so
+     nothing is offered hollow here: a package no modification can run against
+     still takes a new facility, and the route has not been picked yet. */
+  if (item.kind === "pkgask") {
+    return (
+      <div className="wk-pkgs wk-pkgask" role="radiogroup" aria-label={PACKAGE_QUESTION}>
+        <div className="wk-pkgask-h">{PACKAGE_QUESTION_NOTE}</div>
+        {roster.map((entry) => (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={false}
+            key={entry.id}
+            className="wk-pkg"
+            data-pkg={entry.id}
+            onClick={() => onAnchor?.({ id: entry.id, label: entry.name, figure: entry.line, eligible: true })}
+          >
+            <span>
+              <b>{entry.name}</b>
+              <span>{entry.line}</span>
+            </span>
+            <span className="wk-go" aria-hidden="true">
+              →
+            </span>
+          </button>
+        ))}
       </div>
     );
   }

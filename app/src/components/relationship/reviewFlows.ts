@@ -1,6 +1,7 @@
 import type { BorrowerBundle, C360Data, Collateral, Covenant } from "../../data/contract";
 import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
+import { packageRoster, type PackageEntry } from "../../book/packages";
 import { classifyCovenant } from "../../domain/covenantStatus";
 import { ACTIONS_BY_ID, stageRationale } from "../../actions/registry";
 import { COVENANT_ASSESSMENT_STATUSES, observedOptions } from "../../actions/observedPicklists";
@@ -83,6 +84,11 @@ export interface RelContext {
   /** The relationship's product package. Both bulk tools are anchored on it and
    *  refuse a batch without one. */
   productPackageId: string | null;
+  /** EVERY package the relationship stages. Where it stages more than one and
+   *  none is chosen, a package-anchored review ASKS which rather than refusing:
+   *  "the read stages none" is false for a relationship that stages three, and
+   *  the banker has an answer the room never asked for. */
+  packages: PackageEntry[];
   /** `meta.generatedAt` — the artifact's own clock. Never `new Date()`. */
   asOf: string | null;
   /** The Salesforce user id `execute_*` will accept, or null. */
@@ -108,12 +114,25 @@ export function relContextFor(args: {
   accountId: string;
   accountName: string;
   catalog?: OrgCatalog | null;
+  /** The package the banker chose, where the relationship stages several. */
+  productPackageId?: string | null;
 }): RelContext {
+  /* THE BANKER'S OWN CHOICE FIRST, then the snapshot's anchor exactly as before.
+     The snapshot-only read is NOT widened here: `DeepLink.tsx:95`,
+     `ActionPanel.tsx:697` and `schemas.ts:448` carry the same split and it is
+     one ticket, not four half-fixes (package-anchor addendum, section 8). What
+     this adds is the case that split cannot express: several packages, where
+     the room now ASKS instead of refusing. */
+  const packages = packageRoster(args.bundle);
+  const chosen = args.productPackageId && packages.some((p) => p.id === args.productPackageId)
+    ? args.productPackageId
+    : null;
   return {
     accountId: args.accountId,
     accountName: args.accountName,
     bundle: args.bundle,
-    productPackageId: args.bundle?.snapshot?.productPackageId ?? null,
+    packages,
+    productPackageId: chosen ?? args.bundle?.snapshot?.productPackageId ?? null,
     asOf: args.data.meta?.generatedAt ?? null,
     approver: resolveApproverUserId(args.data.meta),
     catalog: args.catalog ?? null,
@@ -619,7 +638,29 @@ export const DECISIONS_NOT_ON_THE_WIRE =
 export const COMPLETE_IS_NOT_OURS =
   "The review is filed at In Progress, not approved. cm_Review_Stage__c and cm_Approved_Date__c are fenced from this cockpit, and submitting it for approval runs through the bank's own process.";
 
+/**
+ * DOES THIS REVIEW RUN AGAINST ONE PRODUCT PACKAGE?
+ *
+ * The covenant batch and the collateral valuation both carry `productPackageId`
+ * on their stage payloads and both refuse without one, so both scope to the
+ * package's facilities. The annual review, the risk-rating review and the
+ * service request are relationship level and never ask.
+ */
+export function relRouteNeedsPackage(route: RelRoute): boolean {
+  return route === "covenant" || route === "valuation";
+}
+
+/** The review is anchored on a package and the banker has not chosen which. */
+export function relPackagePending(route: RelRoute | null, ctx: RelContext): boolean {
+  if (!route || !relRouteNeedsPackage(route)) return false;
+  return !ctx.productPackageId && ctx.packages.length > 1;
+}
+
 export function relRouteBlock(route: RelRoute, ctx: RelContext): string | null {
+  /* SEVERAL PACKAGES IS A QUESTION, NOT A REFUSAL. `NO_PACKAGE_ANCHOR` says the
+     read stages none, which is true for a relationship with no package and
+     false for one staging three. The room asks instead; see `relPackagePending`. */
+  if (relPackagePending(route, ctx)) return null;
   if (route === "covenant") {
     if (!ctx.productPackageId) return NO_PACKAGE_ANCHOR;
     const book = relBookFor(ctx);
