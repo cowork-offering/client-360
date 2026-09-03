@@ -301,7 +301,7 @@ name, and never claim a write is available when it is not.
 `render/contract-checks.mjs` (do not edit by hand). A kind outside this set exits 1:
 
 <!-- BEGIN GENERATED permitted-activity-kinds (node client-360/render/skill-blocks.mjs) -->
-`REQUEST_RECEIVED` · `ANALYSIS_CONCLUDED` · `COVENANT_EVALUATED` · `FACILITY_MODIFIED` · `ACTION_TRIGGERED`
+`REQUEST_RECEIVED` · `ANALYSIS_CONCLUDED` · `COVENANT_EVALUATED` · `FACILITY_MODIFIED` · `ACTION_TRIGGERED` · `ACTION_EXECUTED` · `ACTION_EXECUTION_FAILED` · `ACTION_STAGED` · `RENDER_AUDIT`
 <!-- END GENERATED permitted-activity-kinds -->
 
 - Emit entries **only** where a real record backs them (a covenant evaluation date, a recorded

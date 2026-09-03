@@ -302,8 +302,13 @@ function activityFixture(overrides = {}) {
   };
 }
 
-test("assertActivity accepts a well-formed activity[] (valid fixture) and permits all five documented kinds", () => {
-  assert.equal(PERMITTED_ACTIVITY_KINDS.length, 5);
+test("assertActivity accepts a well-formed activity[] (valid fixture) and permits every kind the page renders", () => {
+  // The permitted list mirrors the app's ActivityKind union (2026-09-03): a kind the page can
+  // render is a kind the assembler accepts, executed and staged trail rows included.
+  for (const k of ["ACTION_TRIGGERED", "ACTION_EXECUTED", "ACTION_EXECUTION_FAILED", "ACTION_STAGED", "REQUEST_RECEIVED", "ANALYSIS_CONCLUDED", "COVENANT_EVALUATED", "FACILITY_MODIFIED", "RENDER_AUDIT"]) {
+    assert.ok(PERMITTED_ACTIVITY_KINDS.includes(k), k);
+  }
+  assert.equal(PERMITTED_ACTIVITY_KINDS.length, 9);
   assert.doesNotThrow(() => assertActivity(activityFixture()));
 });
 

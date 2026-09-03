@@ -373,12 +373,18 @@ export function assertValidationSurfaces(data) {
  *  yet, so they are not yet permitted here). ACTION_TRIGGERED (A31.3) is a user/banker-initiated
  *  action — session-local/user-generated today, persisted via the v2 audit path later. No sample
  *  data carries it yet; the assembler just needs to accept it once that path lands. */
+// GENERATED FROM THE APP'S ActivityKind UNION on 2026-09-03: every kind the page can render is a kind the
+// assembler accepts, so the two never disagree again (the executed trail rows were being refused here).
 export const PERMITTED_ACTIVITY_KINDS = Object.freeze([
   "REQUEST_RECEIVED",
   "ANALYSIS_CONCLUDED",
   "COVENANT_EVALUATED",
   "FACILITY_MODIFIED",
   "ACTION_TRIGGERED",
+  "ACTION_EXECUTED",
+  "ACTION_EXECUTION_FAILED",
+  "ACTION_STAGED",
+  "RENDER_AUDIT",
 ]);
 const PERMITTED_ACTIVITY_KINDS_SET = new Set(PERMITTED_ACTIVITY_KINDS);
 

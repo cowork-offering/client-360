@@ -44,12 +44,12 @@ test("the block bodies carry exactly the contract-check constants", () => {
   assert.deepEqual(values("permitted-action-ids"), [...PERMITTED_ACTION_IDS]);
 });
 
-test("RENDER_AUDIT is gone, and ACTION_TRIGGERED is the kind that replaced it", () => {
-  // The exact drift this gate exists for: the prose promised a kind the assembler rejects, and
-  // withheld the one it accepts.
-  const text = skill();
-  assert.ok(!text.includes("RENDER_AUDIT"), "the skill still names a kind the assembler rejects");
-  assert.ok(renderBlocks().get("permitted-activity-kinds").includes("ACTION_TRIGGERED"));
+test("the skill's kinds are exactly the assembler's, executed and staged rows included", () => {
+  // The exact drift this gate exists for: the prose once promised RENDER_AUDIT while the
+  // assembler rejected it. Both now read the same list, which mirrors the page's own union.
+  const block = renderBlocks().get("permitted-activity-kinds");
+  for (const k of ["ACTION_TRIGGERED", "ACTION_EXECUTED", "ACTION_STAGED", "RENDER_AUDIT"]) assert.ok(block.includes(k), k);
+  assert.ok(skill().includes("ACTION_EXECUTED"));
 });
 
 test("a missing marker fails loudly rather than generating nothing", () => {
