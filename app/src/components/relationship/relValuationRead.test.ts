@@ -71,8 +71,10 @@ describe("the plain collateral read carries the dates", () => {
   it("reads the receivables line the way a banker would say it, on the day they read it", () => {
     const details = collateralDetails(HARTWELL, PACKAGE);
     const ar = details.find((d) => d.startsWith("UCC-Accounts"))!;
+    // The org grew a second package (2026-09-03) and every pledge on the four
+    // original collateral records, this one included, now reads Inactive.
     expect(ar).toBe(
-      "UCC-Accounts · 80% advance · lien 1st · Active · Last valued Jun 30, 2026 at $12M · Balance Sheet, Receivables Aging · overdue since Jul 31, 2026",
+      "UCC-Accounts · 80% advance · lien 1st · Inactive · Last valued Jun 30, 2026 at $12M · Balance Sheet, Receivables Aging · overdue since Jul 31, 2026",
     );
   });
 
@@ -110,13 +112,20 @@ describe("the collateral valuation route opens on the clock", () => {
     const step = nextStep("valuation", ctxFor(HARTWELL), {})!;
     expect(step.key).toBe("records");
     expect(step.ask).toBe("Which collateral are we valuing?");
-    expect(options()).toHaveLength(4);
+    // The org grew a second package (2026-09-03): seven distinct assets now,
+    // not four, and this chooser is unscoped by package.
+    expect(options()).toHaveLength(7);
   });
 
   it("carries the date, the basis and the next date on every option the banker picks from", () => {
+    // Three of the seven assets are new with this refresh (the plant, the
+    // CNC-cell equipment behind the Proposal loan, the metrology fleet) and
+    // the org's valuation read carries no CV- row for any of them yet: the
+    // chooser says so rather than a date, which is still both halves of the
+    // clock (last valued half, next-due half), just the honest-gap phrasing.
     for (const o of options()) {
-      expect(o.detail, o.label).toMatch(/Last valued /);
-      expect(o.detail, o.label).toMatch(/next due |overdue since /);
+      expect(o.detail, o.label).toMatch(/Last valued |No valuation on file/);
+      expect(o.detail, o.label).toMatch(/next due |overdue since |no next date on file/);
     }
   });
 
