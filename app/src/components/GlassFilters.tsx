@@ -34,8 +34,13 @@ export function GlassFilters() {
       style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
     >
       <defs>
-        {/* PANES, BAR, RAIL, GREETING. The big surfaces, where there is enough
-            area for a slow bend to read as thickness. */}
+        {/* PANES, BAR, RAIL. The big surfaces, where there is enough area for a
+            slow bend to read as thickness. TUNED BY EYE against the top bar
+            with the landing headline sliding under it, which is the highest
+            contrast backdrop in the app: 0.009 at scale 30 wobbles the
+            individual letterforms, which reads as a texture; 0.006 at scale 36
+            slides the whole word, which reads as a slab. Longer wavelength,
+            larger throw, fewer visible events. */}
         <filter
           id="eg-refract"
           x="-10%"
@@ -44,12 +49,12 @@ export function GlassFilters() {
           height="120%"
           colorInterpolationFilters="sRGB"
         >
-          <feTurbulence type="fractalNoise" baseFrequency="0.009" numOctaves={2} seed={7} result="egNoise" />
-          <feGaussianBlur in="egNoise" stdDeviation="2.4" result="egNoiseSoft" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves={2} seed={7} result="egNoise" />
+          <feGaussianBlur in="egNoise" stdDeviation="3" result="egNoiseSoft" />
           <feDisplacementMap
             in="SourceGraphic"
             in2="egNoiseSoft"
-            scale={30}
+            scale={36}
             xChannelSelector="R"
             yChannelSelector="G"
             result="egBent"
@@ -58,8 +63,8 @@ export function GlassFilters() {
         </filter>
 
         {/* CHIPS AND SATELLITES. A small piece of glass is a thinner piece of
-            glass: the same noise at a shorter wavelength and a third of the
-            throw, so a 34px pill wobbles instead of melting. */}
+            glass: a shorter wavelength and 40% of the throw, so a 34px pill
+            bends instead of melting. */}
         <filter
           id="eg-refract-soft"
           x="-10%"
@@ -68,12 +73,12 @@ export function GlassFilters() {
           height="120%"
           colorInterpolationFilters="sRGB"
         >
-          <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves={2} seed={7} result="egNoiseS" />
-          <feGaussianBlur in="egNoiseS" stdDeviation="1.8" result="egNoiseSoftS" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves={2} seed={7} result="egNoiseS" />
+          <feGaussianBlur in="egNoiseS" stdDeviation="2" result="egNoiseSoftS" />
           <feDisplacementMap
             in="SourceGraphic"
             in2="egNoiseSoftS"
-            scale={12}
+            scale={14}
             xChannelSelector="R"
             yChannelSelector="G"
             result="egBentS"
