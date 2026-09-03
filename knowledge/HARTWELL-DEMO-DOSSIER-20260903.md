@@ -8,6 +8,13 @@ and the other place is stale.
 Account `001bb00001I7FPNAA3`, org `bankinggpt-at`
 (`accenture-d8--bankinggpt.sandbox.my.salesforce.com`).
 
+**Status, 2026-09-03.** Everything below is LIVE in the org and in the bundle
+unless a section carries a **NOT BUILT** banner. Four do: the second package
+(2.2), the pricing stream components (2.4), two of the three opportunities (6)
+and the whole audit trail (7). Nothing in a
+NOT BUILT section may be said on stage: it does not exist and the screen will
+not show it.
+
 ---
 
 ## 1. Who Hartwell is
@@ -28,7 +35,7 @@ from labour and steel, partly recovered in FY2025 as the medical mix grew.
 | Party | Role |
 |---|---|
 | James Hartwell | Owner, 100 percent member. Unlimited personal guarantor on six loans. |
-| Elena Hartwell | Spouse. Limited guarantor, capped, on the real estate package. |
+| Elena Hartwell | Spouse. A party on the relationship graph. No guaranty recorded against her. |
 | Hartwell Logistics LLC | Affiliate under common control. Runs the private fleet, leases dock space from the borrower. Not a borrower, not a guarantor. |
 
 Relationship manager: Fabian Goetzens. Primary risk rating 4. Annual review completed
@@ -69,9 +76,15 @@ screen. It now reads 2027-03-15 with the other line. The construction facility r
 2026-11-01 and the three other term loans read 2030-09-20, 2028-05-10 and 2030-02-18;
 all four now read 2031-03-15.
 
-### 2.2 Hartwell Real Estate Package - second package, created 2026-09-03
+### 2.2 Hartwell Real Estate Package - NOT BUILT
 
-Two booked facilities, $8.0M committed, $7.67M drawn.
+**This package does not exist in the org.** It was specified and not created,
+because a second package half-built is worse than no second package, and the
+session ran out of time after the facility enrichment. Hartwell carries ONE
+package tonight. Do not mention a real estate package on stage.
+
+The specification is kept below for whoever builds it next. Two booked
+facilities, $8.0M committed, $7.67M drawn.
 
 | Loan | Committed | Drawn | Product | Purpose | Rate | Term | Amortisation | First payment | Maturity |
 |---|---|---|---|---|---|---|---|---|---|
@@ -86,27 +99,30 @@ covenant is associated to both. James Hartwell guarantees both, unlimited.
 
 | | |
 |---|---|
-| Committed, both packages | **$54,000,000** |
-| Drawn | **$38,700,000** |
-| Available | $15,300,000 |
-| Utilisation | 71.7 percent |
+| Committed | **$46,000,000** |
+| Drawn | **$31,030,000** |
+| Available | $14,970,000 |
+| Utilisation | 67.5 percent |
 
-**This is a deliberate change from the $31.0M of $46.0M the client page read this
-morning.** The second package adds $8.0M committed and $7.67M drawn. Every headline on
-the page, and every figure in the talk track, must use $38.7M of $54.0M.
+**Unchanged from what the client page read this morning**, because the second
+package was not built. Say $31.0M drawn of $46.0M. The $54.0M figure that
+appears in section 2.2 belongs to a package that does not exist.
 
 ### 2.4 Pricing components
 
 Every booked facility carries a pricing stream with a rate component and a payment
 component, on the Flowers For Dreams pattern:
 
-- Rate component: `Interest_Rate_Type = Fixed`, `Term_Unit = Unit_Months`,
-  frequency `Frequency_Monthly`, rate as the table above.
-- Payment component: frequency `Frequency_Monthly`, payment includes
-  **Interest and Principal** for the term loans, **Interest** only for the two lines.
+**NOT BUILT this session.** Only the two C&I lines carry seeded rate and payment
+components, exactly as they did this morning. The four term loans carry their
+rate on the loan record itself (`LLC_BI__Current_Interest_Rate__c`), which is
+what the facility card reads, so no card shows a gap. The stream components are
+a second surface the demo does not open.
 
-Before this session only the two C&I lines carried seeded components. All eight booked
-facilities carry them now.
+The pattern for whoever adds them: rate component `Interest_Rate_Type = Fixed`,
+`Term_Unit = Unit_Months`, frequency `Frequency_Monthly`; payment component
+frequency `Frequency_Monthly`, includes Interest and Principal for the term
+loans, Interest only for the lines.
 
 ---
 
@@ -121,11 +137,12 @@ base test, one one-off construction condition.
 | COV-000647 | `a3Bbb000000S0WXEA0` | Maximum Debt to Worth | <= 3.00x | Quarterly | **2.42x** | Compliant | 2026-09-30 |
 | COV-000648 | `a3Bbb000000S0Y9EAK` | Minimum Liquidity | >= $5,000,000 | Quarterly | **$6,800,000** | Compliant | 2026-09-30 |
 | COV-000649 | `a3Bbb000000S0ZlEAK` | DSC with and without Distributions | >= 1.15x | Quarterly | **1.22x** | Compliant | 2026-09-30 |
-| COV-000650 | `a3Bbb000000S0bNEAS` | Accounts Receivable (eligibility) | >= 80% eligible | Monthly | **84%** | Compliant | 2026-09-08 |
+| COV-000650 | `a3Bbb000000S0bNEAS` | Accounts Receivable (eligibility) | <= 80% | Monthly | **80%** | Compliant | 2026-07-31 |
 | COV-000651 | `a3Bbb000000S0czEAC` | Term Covenants (construction completion) | Certificate of occupancy, Kokomo | One-off | not yet tested | In Progress | 2026-11-01 |
 
-COV-000650 is attached to the $15M line. COV-000651 is attached to the construction
-facility. COV-000646 is attached to both real estate package loans.
+COV-000650 is attached to the $15M line. COV-000651 is attached to the
+construction facility. The other four sit on the account only, and the covenant
+pane says so rather than inventing a facility for them.
 
 Compliance rows: **four Compliant rows for the quarter ended 2026-06-30** carrying the
 observed values above, and **six Pending rows** as the next test, due 2026-09-30 for the
@@ -146,9 +163,12 @@ performing borrower where the work is administrative, not a workout.
 | COL-000763 | `a35bb0000013y0fAAA` | UCC | Inventory | Inventory at Fort Wayne and Kokomo: raw bar and plate stock, work in process, finished goods. Excludes consigned material and stock over 12 months old. | $8,000,000 | 2026-08-31 | Borrowing base certificate | 1st | 50% | $15M line |
 | COL-000764 | `a35bb0000013y2HAAQ` | UCC | Equipment | Blanket lien on all production machinery: 14 multi-axis CNC centres incl. Mazak Integrex i-400 (2022) and DMG Mori NTX 2500 (2023), grinding and EDM cells. | $10,000,000 | 2026-05-22 | Orderly liquidation appraisal | 1st | 75% | $8M equipment, $3.5M equipment |
 | COL-000765 | `a35bb0000013y3tAAA` | Real Estate | Warehouse / Industrial | First mortgage, 4820 Adams Center Road, Fort Wayne IN 46806 (218,000 sq ft on 22.4 acres) and 2100 Home Avenue, Kokomo IN 46902 (140,000 sq ft, under expansion). | $14,000,000 | 2026-06-04 | MAI appraisal, as-is | 1st | 75% | $12M construction, $5M purchase, $6.5M CRE term |
-| Inspection equipment | new | UCC | Equipment | Zeiss CONTURA and Hexagon Global S coordinate measuring machines, optical comparators, calibration lab. | $2,100,000 | 2026-01-20 | Invoice cost less depreciation | 1st | 70% | $1.5M equipment term |
+Four pledges, all four already in the org with these descriptors, values,
+valuation dates, methods, lien positions and advance rates. Nothing here was
+invented this session.
 
-Pledged value across the relationship is $46.1M, lendable $34.7M against $38.7M drawn.
+Pledged value across the relationship is $44.0M against $31.03M drawn, a 1.02
+coverage ratio as the exposure read returns it.
 The construction facility remains the one thin spot: $5.5M allocated of a $12.0M
 commitment, a 0.75 coverage ratio, which the Kokomo completion in November cures. Say
 that out loud rather than hiding it. It is the only red pixel on the page and it has a
@@ -160,8 +180,8 @@ dated answer.
 
 | Guarantor | Type | Cap | Covers |
 |---|---|---|---|
-| James Hartwell | Unlimited personal guaranty | none | All six C&I facilities and both real estate facilities |
-| Elena Hartwell | Limited personal guaranty | $2,000,000 | Real estate package only |
+| James Hartwell | Unlimited personal guaranty | none | All six booked C&I facilities |
+| Elena Hartwell | Party on the relationship. No guaranty recorded in the org. | n/a | n/a |
 
 Hartwell Logistics LLC is an affiliate under common control and is **not** a guarantor.
 It appears on the relationship graph as a related party so the room can see it, and the
@@ -177,14 +197,22 @@ right answer when someone asks is that it is out of the credit box.
 | Hartwell Industrial - CNC Cell Equipment Expansion | Qualification | $3,000,000 | 2026-11-14 | Finance the fifth multi-axis cell at Kokomo; the Proposal-stage $3M equipment facility already sits on the C&I package. |
 | Hartwell Industrial - Interest Rate Swap | Qualification | $12,000,000 | 2026-12-12 | Fix the floating construction exposure for five years ahead of the 2031 maturity. |
 
-The first already exists in the org (`006bb00000tsmeNAAQ`). The other two are created
-in this session.
+**Only the first exists** (`006bb00000tsmeNAAQ`, Proposal, $185,000, closing
+2026-10-30). The CNC cell and the swap were specified and **NOT BUILT**. The
+opportunities pane shows one row tonight. The $3M Proposal-stage equipment
+facility on the C&I package IS real and is the thing to point at when the CNC
+cell comes up.
 
 ---
 
-## 7. Audit trail, last 90 days
+## 7. Audit trail, last 90 days - NOT BUILT
 
-Ten entries, oldest first. This is what the activity feed and the action history read.
+**The activity feed is empty and stays empty tonight.** The ten entries below
+were specified and not written. The bundle's `activity` array for Hartwell is
+`[]`, the feed renders its own gap state, and that gap is honest. Do not
+narrate a history the screen cannot show.
+
+Kept for whoever builds it, oldest first:
 
 | Date | Entry |
 |---|---|
@@ -223,6 +251,7 @@ LTM is the twelve months to 30 June 2026. All figures in US dollars.
 | Pre-tax income | 1,080,000 | 1,220,000 | 1,250,000 | 1,200,000 |
 | Tax | 259,000 | 293,000 | 300,000 | 288,000 |
 | **Net income** | **821,000** | **927,000** | **950,000** | **912,000** |
+| Free cash flow | 1,640,000 | 1,880,000 | 2,240,000 | **2,110,000** |
 
 ### Balance sheet, as at 30 June 2026
 
@@ -262,8 +291,8 @@ numbers are real.
 
 ## 9. What to say if a figure is challenged
 
-- **Committed and drawn**: $54.0M committed, $38.7M drawn, 71.7 percent utilised,
-  across two packages. Not $46.0M. The real estate package is the difference.
+- **Committed and drawn**: $46.0M committed, $31.03M drawn, 67.5 percent
+  utilised, one package. Unchanged from this morning.
 - **Revenue**: $64.2M LTM. The account record previously carried $85M in the annual
   revenue field, which was wrong against the spread. It has been corrected to $64.2M.
 - **Risk rating**: 4 on the relationship. Two facilities carry a 5 at facility level,
