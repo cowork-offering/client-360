@@ -263,13 +263,16 @@ describe("Exception semantics survive into the grounded prompt", () => {
 describe("no-inference instruction", () => {
   const p = buildGroundedPrompt({ data: DATA, bundle, accountName: "Piedmont", tab: "Covenants", question: "q" });
 
-  it("forbids inference and estimation outright", () => {
-    expect(p).toMatch(/Never infer or estimate/);
+  it("forbids invention outright", () => {
+    expect(p).toMatch(/Never invent a figure, a tab or a report/);
     expect(p).toMatch(/Use only these figures/);
   });
 
-  it("gives the model the safe alternative — name the tab that holds it", () => {
-    expect(p).toMatch(/not staged and name the tab that holds it/);
+  it("gives the model the safe alternative, and it is honesty rather than a tab name", () => {
+    // Founder, 2026-09-03: "name the tab" taught the desk to invent tabs that
+    // do not exist. The safe alternative is saying the view does not carry it.
+    expect(p).toMatch(/say this view does not carry it/);
+    expect(p).toMatch(/no headings, no markdown/);
   });
 });
 

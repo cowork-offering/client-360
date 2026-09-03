@@ -43,7 +43,7 @@ export const MAX_PROMPT = 600;
    model a SAFE ALTERNATIVE — naming the tab that holds the missing figure —
    which is more useful than a guess anyway. */
 const INSTRUCTION =
-  "Answer as a commercial-credit copilot, concise. Use only these figures; if one is not here, say it is not staged and name the tab that holds it. Never infer or estimate.";
+  "Answer as a commercial-credit copilot in plain sentences, no headings, no markdown, no lists of tabs. Use only these figures; if one is not here, say this view does not carry it. Never invent a figure, a tab or a report.";
 
 /** Final guarantee: strip the shapes the outbound guard reacts to. */
 export function sanitize(s: string): string {
@@ -300,28 +300,41 @@ function accountProse(bundle: BorrowerBundle | null, accountName: string, tab: s
   return sanitize(parts.join(" "));
 }
 
-/** Book-level prose for the home view. */
+/** Book-level prose for the home view.
+ *
+ *  PER RELATIONSHIP, NOT TOTALS ALONE (founder, 2026-09-03): totals-only prose
+ *  made the desk answer "which mature next" with invented tab names, because
+ *  the dates were never in its hands. Each relationship gets one compact line:
+ *  the nearest maturity and the nearest covenant test, with dates. */
 function bookProse(data: C360Data): string {
   const pf = data.portfolio ?? { accounts: [] };
   const bt = pf.bookTotals ?? {};
-  const sig = pf.signals ?? {};
 
   const count = bt.accountCount ?? pf.accounts.length;
-  const lead = [
-    `Book of ${count} ${count === 1 ? "relationship" : "relationships"}`,
+  const lead =
     bt.totalCommitted != null
-      ? `${fmtMoney(bt.totalCommitted)} committed${bt.totalOutstanding != null ? ` with ${fmtMoney(bt.totalOutstanding)} drawn` : ""}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+      ? `Book of ${count} relationships, ${fmtMoney(bt.totalCommitted)} committed${bt.totalOutstanding != null ? `, ${fmtMoney(bt.totalOutstanding)} drawn` : ""}.`
+      : `Book of ${count} relationships.`;
 
-  const flags: string[] = [];
-  if (sig.breachedCount) flags.push(`${sig.breachedCount} breached ${sig.breachedCount === 1 ? "covenant" : "covenants"}`);
-  if (sig.covenantsDueSoon?.length) flags.push(`${sig.covenantsDueSoon.length} tests due`);
-  if (sig.maturitiesSoon?.length) flags.push(`${sig.maturitiesSoon.length} maturities near`);
+  const lines: string[] = [];
+  for (const a of pf.accounts) {
+    const b = data.borrowers?.[a.accountId];
+    if (!b) continue;
+    const short = (a.name ?? "").split(" ").slice(0, 2).join(" ");
+    const facs = (b.exposure?.facilities ?? []).filter(isActiveFacility).filter((f) => f.maturityDate);
+    facs.sort((x, y) => String(x.maturityDate).localeCompare(String(y.maturityDate)));
+    const near = facs[0];
+    const covs = (b.covenants?.covenants ?? []).filter((c) => c.nextEvaluationDate);
+    covs.sort((x, y) => String(x.nextEvaluationDate).localeCompare(String(y.nextEvaluationDate)));
+    const test = covs[0];
+    const bits = [
+      near ? `nearest maturity ${near.productType ?? "facility"} ${fmtDate(near.maturityDate)}` : null,
+      test ? `next covenant test ${fmtDate(test.nextEvaluationDate)}` : null,
+    ].filter(Boolean);
+    if (bits.length) lines.push(`${short}: ${bits.join(", ")}`);
+  }
 
-  return sanitize([`${lead}.`, flags.length ? `${flags.join(", ")}.` : ""].filter(Boolean).join(" "));
+  return sanitize([lead, lines.join("; ") + (lines.length ? "." : "")].filter(Boolean).join(" "));
 }
 
 /**
