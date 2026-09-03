@@ -26,6 +26,9 @@ BOOKED = {
     'a4Zbb0000027Mp3EAE': ('Construction $12M',    7.08, 60,  240, '2026-03-01', '2031-03-15', True,  12000000),
     'a4Zbb0000027MqfEAE': ('Purchase $5M',         6.20, 60,  180, '2026-03-10', '2031-03-15', True,  5000000),
     'a4Zbb0000027MsHEAU': ('Equipment Term $3.5M', 6.75, 60,  84,  '2026-03-18', '2031-03-15', True,  3500000),
+    # The real estate package, built 2026-09-03.
+    'a4Zbb000002ICnxEAG': ('CRE Term $6.5M',       6.35, 120, 240, '2026-01-31', '2036-01-31', True,  6500000),
+    'a4Zbb000002ICnyEAG': ('Equipment Term $1.5M', 6.60, 84,  84,  '2026-01-31', '2033-01-31', True,  1500000),
 }
 
 def payment(principal, annual_rate, n_months):
