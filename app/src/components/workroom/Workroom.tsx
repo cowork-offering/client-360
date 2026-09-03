@@ -4619,11 +4619,19 @@ export function Workroom({
         // write it cannot see.
         footer: result.filed[0]?.verification ?? result.tokenNote,
         tokenNote: result.tokenNote,
-        // THE PACKAGE THE PLAN FILED AGAINST. Resolved at runtime from the
+        // THE VERSION THE FILING CREATED, when the org returned one; the source
+        // package only as the fallback (founder, 2026-09-03: the card linked
+        // the old package while the work sat on the new version). Host from the
         // bundle's own `meta.instanceUrl`; null where the view carries none,
         // and the card then states the filing without offering a link it would
         // have had to invent a host for.
-        packageHref: packageDeepLink(instanceUrl, context.productPackageId ?? undefined),
+        packageHref: packageDeepLink(
+          instanceUrl,
+          /* Carried by the shell adapter (writeTools) at runtime; the engine's
+             own type predates the field and is byte-fenced, hence the local
+             widening rather than a type edit. */
+          (result as typeof result & { outputPackageId?: string }).outputPackageId ?? context.productPackageId ?? undefined,
+        ),
         handoff: result.handoff,
         handoffs: result.handoffs,
       };
