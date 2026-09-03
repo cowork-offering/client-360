@@ -56,8 +56,7 @@ function open() {
     data,
     bundle,
     accountId,
-    accountName: bundle.snapshot!.name!,
-  });
+    accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
   const seen: Payload[] = [];
   /* THE DOOR, RECORDED. `armStage` is the real wrapper: the sentinel arms come
      out of `fieldChangesJson` here exactly as they do on the shipping path, so

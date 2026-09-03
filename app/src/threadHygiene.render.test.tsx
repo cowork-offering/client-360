@@ -106,7 +106,7 @@ function installSession(text: string): { calls: string[] } {
 async function openRoom() {
   await acquireSample(50);
   const bundle = data.borrowers![accountId];
-  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -750,7 +750,7 @@ describe("the pricing ask is not a dead end (founder, 2026-09-03)", () => {
   async function openWithRate() {
     await acquireSample(50);
     const bundle = withRate();
-    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot.name });
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot.name, productPackageId: "a5Fbb000000IHFJEA4" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -939,7 +939,7 @@ describe("a runtime failure is one quiet line, and the model stops talking", () 
   async function openWithBrokenStage(error: string) {
     await acquireSample(50);
     const bundle = data.borrowers![accountId];
-    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     const engine = createModifyEngine({ context, data, bundle });
     /* THE ORG IS REACHED AND REFUSES AT THE HOST. Only `stage` is broken: the
        parse, the manifest and every gate before it are the real code. */
@@ -1256,7 +1256,7 @@ describe("an answered pricing card cannot be silently absent from the plan", () 
   async function openRated() {
     await acquireSample(50);
     const bundle = withRate();
-    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot.name });
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot.name, productPackageId: "a5Fbb000000IHFJEA4" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);

@@ -225,8 +225,7 @@ describe("law 3 — the WIRED room, on the baked relationship", () => {
       data,
       bundle,
       accountId,
-      accountName: bundle.snapshot!.name!,
-    });
+      accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -799,7 +798,7 @@ describe("the WIRED room says why, at the beats that carry a decision", () => {
 
   function openWired() {
     const bundle = data.borrowers![accountId];
-    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -1521,8 +1520,7 @@ describe("the founder's live run — a question is never a delta", () => {
       data,
       bundle,
       accountId,
-      accountName: bundle.snapshot!.name!,
-    });
+      accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     shut();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -1656,8 +1654,7 @@ describe("thread compactness — every send collapses what came before", () => {
       data,
       bundle,
       accountId,
-      accountName: bundle.snapshot!.name!,
-    });
+      accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     shut();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -1771,8 +1768,7 @@ describe("the two quiet tiers under the conversation", () => {
       data,
       bundle,
       accountId,
-      accountName: bundle.snapshot!.name!,
-    });
+      accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     shut();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -1834,8 +1830,7 @@ describe("the two quiet tiers under the conversation", () => {
       data,
       bundle,
       accountId,
-      accountName: bundle.snapshot!.name!,
-    });
+      accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);

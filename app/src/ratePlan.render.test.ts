@@ -37,7 +37,7 @@ const STAGED = {
 function engineOn() {
   const bundle = JSON.parse(JSON.stringify(data.borrowers![accountId])) as BorrowerBundle;
   (bundle.exposure!.facilities as Array<Record<string, unknown>>)[0].interestRate = 7.6;
-  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: "Hartwell" });
+  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: "Hartwell", productPackageId: "a5Fbb000000IHFJEA4" });
   const stage = vi.fn().mockResolvedValue({ ok: true, result: STAGED });
   const engine = createModifyEngine({
     context,

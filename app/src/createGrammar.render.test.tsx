@@ -62,7 +62,7 @@ function open(
 ): Opened {
   const bundle = data.borrowers![accountId];
   const mode = args.mode ?? "modify";
-  const context = workroomContextFor({ mode, data, bundle, accountId, accountName: bundle.snapshot!.name! });
+  const context = workroomContextFor({ mode, data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
   const bound: Opened["bound"] = [];
   const router: WorkroomRouter | undefined = args.router
     ? {

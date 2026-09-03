@@ -77,7 +77,7 @@ async function openRoom(
 ) {
   await acquireSample(50);
   const bundle = data.borrowers![accountId];
-  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);

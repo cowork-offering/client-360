@@ -53,7 +53,7 @@ interface Opened {
 /** The room on the real baked read, with a brain and a router of the test's own. */
 function open(args: { brain?: (e: BrainEnvelope) => Promise<BrainReply>; routeOpen?: boolean } = {}): Opened {
   const bundle = data.borrowers![accountId];
-  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name! });
+  const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot!.name!, productPackageId: "a5Fbb000000IHFJEA4" });
   const bound: Opened["bound"] = [];
   const router: WorkroomRouter | undefined = args.routeOpen
     ? {
