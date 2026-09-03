@@ -33,9 +33,11 @@ import { ACCOUNT_ID, FACILITY_TWO, PACKAGE_ONE, PACKAGE_TWO, withSecondPackage }
    WHAT THESE HOLD:
 
      ONE BINDS      a relationship staging exactly one package is anchored on it
-                    without asking, and the room SAYS so on its header line. The
-                    whole shipped book is this case and it is byte-identical
-                    through the beat.
+                    without asking, and the room SAYS so on its header line.
+                    Proved on a single-package slice of Hartwell (see
+                    `hartwellOnePackage` below): the org grew a second package
+                    of its own on 2026-09-03, so the shipped book itself is no
+                    longer byte-identical to this case.
      SEVERAL ASK    a relationship staging more than one asks FIRST. No route
                     chips, no package card, no facilities, no greeting remark,
                     and a composer that says what it is waiting for.
@@ -48,9 +50,10 @@ import { ACCOUNT_ID, FACILITY_TWO, PACKAGE_ONE, PACKAGE_TWO, withSecondPackage }
      THE INTENT     an intent that names a package binds it without asking.
 
    The fixture is `scripts/two-package-fixture.mjs`: Sterling Fabrication with a
-   second package holding one facility still in credit approval. The shipped book
-   carries no such relationship, so this branch has never been rendered against
-   real data.
+   second package holding one facility still in credit approval. Hartwell's own
+   org now carries a real two-package relationship as well (2026-09-03), so
+   this branch is no longer purely a synthetic-fixture concern, though the
+   Sterling fixture stays the SEVERAL ASK proof below.
    ============================================================================= */
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -76,6 +79,18 @@ afterEach(() => {
 const shipped = live as unknown as C360Data;
 const two = withSecondPackage(live) as unknown as C360Data;
 const HARTWELL = "001bb00001I7FPNAA3";
+
+/** Hartwell's own org grew a second package (2026-09-03): the shipped book is
+ *  no longer the "exactly one package" case this file's ONE BINDS tests were
+ *  written to prove ("the room has opened on a $46MM package across six
+ *  facilities", Fabian's own words above). Proved instead on a single-package
+ *  slice of the same relationship: the six originally-booked C&I facilities,
+ *  with the new Real Estate package and the Proposal-stage loan removed. */
+const HARTWELL_CNI_PACKAGE = "a5Fbb000000IHFJEA4";
+const hartwellOnePackage = JSON.parse(JSON.stringify(shipped)) as C360Data;
+hartwellOnePackage.borrowers![HARTWELL].exposure!.facilities = (
+  shipped.borrowers![HARTWELL].exposure?.facilities ?? []
+).filter((f) => f.productPackageId === HARTWELL_CNI_PACKAGE && f.stage === "Booked");
 
 /** The session door at the runtime's own shape, recording every prompt. */
 function installSession(): { prompts: string[] } {
@@ -197,7 +212,7 @@ describe("the roster", () => {
   });
 
   it("one package is not a choice, and none is not either", () => {
-    expect(mustChoosePackage(shipped.borrowers![HARTWELL], null)).toBe(false);
+    expect(mustChoosePackage(hartwellOnePackage.borrowers![HARTWELL], null)).toBe(false);
     expect(mustChoosePackage(two.borrowers![ACCOUNT_ID], null)).toBe(true);
     // Anchored is answered, however many the relationship stages.
     expect(mustChoosePackage(two.borrowers![ACCOUNT_ID], PACKAGE_TWO)).toBe(false);
@@ -225,7 +240,7 @@ describe("the room opens", () => {
   afterEach(() => vi.useRealTimers());
 
   it("ONE package binds silently, and the header says why", async () => {
-    const { room } = open({ data: shipped, accountId: HARTWELL });
+    const { room } = open({ data: hartwellOnePackage, accountId: HARTWELL });
     await settle();
 
     expect(room.querySelector(".wk-pkgask")).toBeNull();
@@ -237,7 +252,7 @@ describe("the room opens", () => {
   });
 
   it("and its six facilities still land once the route is answered", async () => {
-    const { room } = open({ data: shipped, accountId: HARTWELL, ask: false });
+    const { room } = open({ data: hartwellOnePackage, accountId: HARTWELL, ask: false });
     await settle();
     expect(room.querySelectorAll(".wk-mchip").length).toBe(6);
   });
@@ -394,7 +409,7 @@ describe("switching", () => {
   });
 
   it("states the stance for a relationship that stages exactly one", async () => {
-    const { room } = open({ data: shipped, accountId: HARTWELL });
+    const { room } = open({ data: hartwellOnePackage, accountId: HARTWELL });
     await settle();
     act(() => room.querySelector<HTMLElement>(".wk-pkgline")!.click());
     expect(text(document.querySelector(".wk-cav"))).toContain("the relationship's only package");
