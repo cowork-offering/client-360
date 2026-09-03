@@ -196,7 +196,9 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
           aligned on the card's own margin. It is an instrument, not a banner,
           so it takes an instrument's width and lets the page breathe beside
           it. */}
-      <PaneCard style={{ maxWidth: 380 }}>
+      {/* The two instruments share one row (founder, 2026-09-03). */}
+      <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap" }}>
+      <PaneCard style={{ maxWidth: 380, flex: "1 1 300px" }}>
         <div className="kicker">Renewal clock</div>
         {days != null ? (
           <>
@@ -272,7 +274,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
       </PaneCard>
 
       {/* Next review of the relationship, on the trail's own footing. */}
-      <PaneCard style={{ maxWidth: 380 }}>
+      <PaneCard style={{ maxWidth: 380, flex: "1 1 300px" }}>
         <div className="kicker">Next review</div>
         {nextReview ? (
           <>
@@ -289,6 +291,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
           <EmptyPane title="No review on file" body="No completed annual review on the activity trail to derive a next date from." />
         )}
       </PaneCard>
+      </div>
 
       <Note note={sig.note} />
     </Pane>
