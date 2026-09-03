@@ -209,7 +209,9 @@ export function FinancialsTab({ bundle }: { bundle: BorrowerBundle }) {
         </PaneCard>
 
         {items.length > 0 && (
-          <PaneCard style={{ gridColumn: "1/-1" }}>
+          /* Beside Key ratios in one row (founder, 2026-09-03): a full-width
+             statement left a bare column to the right of the ratios card. */
+          <PaneCard>
             <div className="kicker" style={{ marginBottom: 12 }}>
               Income statement · LTM vs prior year
             </div>
