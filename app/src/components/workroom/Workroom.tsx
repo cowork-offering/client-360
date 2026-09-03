@@ -4232,7 +4232,11 @@ export function Workroom({
         <button type="button" className="wk-whybtn" aria-label="Why this position" onClick={(e) => openWhy(e.currentTarget)}>
           ?
         </button>
-        {brief.askPin && <span className="wk-askpin tnum">{brief.askPin}</span>}
+        {/* THE PIN IS A PACKAGE FIGURE, so it waits for the package. "$10M →
+            $13M" over an unanswered package question is the founder's own
+            complaint in miniature: a figure at package altitude on a room that
+            has not been told which package. */}
+        {brief.askPin && !packagePending && <span className="wk-askpin tnum">{brief.askPin}</span>}
         {/* THE ROOM OPENS BY NAME. The greeting is a real read or it is absent;
             it is never a label, and it is never a record id. */}
         <div className="wk-headline">
