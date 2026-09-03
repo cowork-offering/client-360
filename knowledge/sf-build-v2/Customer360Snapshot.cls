@@ -51,6 +51,10 @@ global with sharing class Customer360Snapshot {
         global String primaryStage;
         @InvocableVariable(label='Note')
         global String note;
+        @InvocableVariable(label='Next Review Date' description='LLC_BI__Next_Review_Date__c on the Account.')
+        global String nextReviewDate;
+        @InvocableVariable(label='Last Review Date' description='LLC_BI__Last_Review_Date__c on the Account.')
+        global String lastReviewDate;
     }
 
     @InvocableMethod(
@@ -65,7 +69,8 @@ global with sharing class Customer360Snapshot {
             res.accountId = req.accountId;
 
             List<Account> accts = [
-                SELECT Id, Name, Industry, AnnualRevenue, NAICS_Code__c
+                SELECT Id, Name, Industry, AnnualRevenue, NAICS_Code__c,
+                       LLC_BI__Next_Review_Date__c, LLC_BI__Last_Review_Date__c
                 FROM Account
                 WHERE Id = :req.accountId
                 WITH USER_MODE
@@ -81,6 +86,11 @@ global with sharing class Customer360Snapshot {
             res.industry = acct.Industry;
             res.annualRevenue = acct.AnnualRevenue;
             res.naicsCode = acct.NAICS_Code__c;
+            // The relationship's own review clock, so a Sync never wipes the
+            // review card (founder, 2026-09-03: the card emptied on Sync
+            // because the read did not carry these).
+            res.nextReviewDate = acct.LLC_BI__Next_Review_Date__c == null ? null : String.valueOf(acct.LLC_BI__Next_Review_Date__c);
+            res.lastReviewDate = acct.LLC_BI__Last_Review_Date__c == null ? null : String.valueOf(acct.LLC_BI__Last_Review_Date__c);
 
             List<LLC_BI__Product_Package__c> packages = [
                 SELECT Id, LLC_BI__TCE__c, LLC_BI__TBE__c, LLC_BI__TOE__c, LLC_BI__Outstanding__c,

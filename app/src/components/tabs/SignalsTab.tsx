@@ -154,7 +154,13 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
      the only honest footing is the trail: the latest completed annual review
      plus the annual cycle, said as derived. No trail entry, no date. */
   const lastReview = (bundle.activity ?? [])
-    .filter((e) => /annual[- ]review/i.test(String((e as { kind?: string; type?: string }).kind ?? (e as { type?: string }).type ?? "")) )
+    .filter((e) => {
+      const en = e as { kind?: string; type?: string; title?: string };
+      /* The trail's kinds are ACTION_STAGED/EXECUTED; the review names itself
+         in the title, so both are read (founder, 2026-09-03: after a Sync the
+         derivation found nothing and the card emptied). */
+      return /annual[- ]review/i.test(String(en.kind ?? en.type ?? "")) || /annual (credit )?review/i.test(String(en.title ?? ""));
+    })
     .map((e) => String((e as { date?: string; createdDate?: string }).date ?? (e as { createdDate?: string }).createdDate ?? ""))
     .filter(Boolean)
     .sort()
