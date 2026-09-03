@@ -1,4 +1,5 @@
 import type { BorrowerBundle } from "../../data/contract";
+import { packageRoster } from "../../book/packages";
 import { aggregateGuarantorSignals } from "../../data/graphAggregate";
 import { fmtDate } from "../../data/format";
 import { arc, fmtCovThreshold, fmtCovVal } from "../../data/finance";
@@ -121,6 +122,38 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
       nearest = m;
   }
 
+  /* ONE ROW PER PRODUCT PACKAGE (founder, 2026-09-03): a relationship's
+     maturities run per package, so the clock names each package's own nearest
+     maturity rather than showing one loan for the whole book. */
+  const roster = packageRoster(bundle);
+  const facilities = bundle.exposure?.facilities ?? [];
+  const pkgRows = roster
+    .map((p) => {
+      const loanIds = new Set(facilities.filter((f) => f.productPackageId === p.id).map((f) => f.loanId));
+      let near: { daysUntilMaturity?: number; maturityDate?: string } | null = null;
+      for (const m of mw) {
+        if (!loanIds.has((m as { loanId?: string }).loanId)) continue;
+        if (m.daysUntilMaturity != null && (near === null || m.daysUntilMaturity < (near.daysUntilMaturity ?? Infinity))) near = m;
+      }
+      return near ? { name: p.name, date: near.maturityDate, days: near.daysUntilMaturity } : null;
+    })
+    .filter((r): r is { name: string; date: string | undefined; days: number | undefined } => r !== null);
+
+  /* NEXT REVIEW OF THE RELATIONSHIP. The reads carry no review-date field, so
+     the only honest footing is the trail: the latest completed annual review
+     plus the annual cycle, said as derived. No trail entry, no date. */
+  const lastReview = (bundle.activity ?? [])
+    .filter((e) => /annual[- ]review/i.test(String((e as { kind?: string; type?: string }).kind ?? (e as { type?: string }).type ?? "")) )
+    .map((e) => String((e as { date?: string; createdDate?: string }).date ?? (e as { createdDate?: string }).createdDate ?? ""))
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const nextReview = lastReview
+    ? new Date(new Date(lastReview.slice(0, 10)).setFullYear(new Date(lastReview.slice(0, 10)).getFullYear() + 1))
+        .toISOString()
+        .slice(0, 10)
+    : null;
+
   const days = nearest?.daysUntilMaturity ?? null;
   const clockColor = days == null ? "var(--ink-faint)" : days < 45 ? "var(--critical)" : days < 120 ? "var(--warning)" : "var(--positive)";
   const clockArc = arc(days == null ? 0 : Math.max(0, Math.min(100, Math.round((1 - days / MATURITY_WINDOW_DAYS) * 100))), 52);
@@ -207,13 +240,46 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--ink)", textWrap: "pretty" }}>
               {nearest?.name ?? "Facility"} matures {fmtDate(nearest?.maturityDate)}.
             </p>
-            <div className="note">Against a {MATURITY_WINDOW_DAYS}-day watch window.</div>
+            {pkgRows.length > 1 && (
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--row-divider)" }}>
+                {pkgRows.map((r, i) => (
+                  <div
+                    key={i}
+                    className="num"
+                    style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--row-divider)", fontSize: 12.5 }}
+                  >
+                    <span style={{ color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span style={{ flex: "none", color: "var(--ink-muted)" }}>
+                      {fmtDate(r.date)} · {r.days} days
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="note">Against a {MATURITY_WINDOW_DAYS}-day watch window{pkgRows.length > 1 ? ", nearest per package" : ""}.</div>
           </>
         ) : (
           <EmptyPane
             title="No maturities in window"
             body={`No facilities maturing within the watch window (${MATURITY_WINDOW_DAYS} days).`}
           />
+        )}
+      </PaneCard>
+
+      {/* Next review of the relationship, on the trail's own footing. */}
+      <PaneCard style={{ maxWidth: 380 }}>
+        <div className="kicker">Next review</div>
+        {nextReview ? (
+          <>
+            <div className="bigfig num" style={{ marginTop: 10 }}>
+              <span className="n">{fmtDate(nextReview)}</span>
+            </div>
+            <div className="note">
+              On the annual cycle from the review completed {fmtDate(lastReview?.slice(0, 10))}. Derived, not a field on the account.
+            </div>
+          </>
+        ) : (
+          <EmptyPane title="No review on file" body="No completed annual review on the activity trail to derive a next date from." />
         )}
       </PaneCard>
 
