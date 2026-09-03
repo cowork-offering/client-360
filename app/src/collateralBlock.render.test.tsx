@@ -71,6 +71,10 @@ const rows = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('[data-x-
 const pledgeRows = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('[data-x-sub="collateral"]')];
 const cell = (row: HTMLElement, i: number) => (row.children[i].textContent ?? "").trim();
 const rowFor = (el: HTMLElement, sub: string) => rows(el).find((r) => cell(r, 1) === sub)!;
+/** Hartwell's org now carries two Real-Estate-Warehouse assets and three
+ *  UCC-Equipment ones, so sub-type text alone no longer picks one row: this
+ *  matches on the org's own record name instead, which is unique. */
+const rowForRecord = (el: HTMLElement, collateralName: string) => rows(el).find((r) => cell(r, 2).includes(collateralName))!;
 const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
 describe("the org's own two-level type name", () => {
@@ -122,26 +126,26 @@ describe("one row per asset, in every relationship", () => {
 });
 
 /* =========================================================================== */
-describe("Hartwell: four assets, and the pledges under each", () => {
+describe("Hartwell: seven assets, and the pledges under each", () => {
   const data = live as unknown as C360Data;
   const hartwell = data.borrowers!["001bb00001I7FPNAA3"] as BorrowerBundle;
 
-  it("lists four assets once each, though the read carries seven pledges", () => {
+  it("lists seven assets once each, though the read carries ten pledges", () => {
     const el = render(data, hartwell);
     const pledgeCount = (hartwell.exposure?.facilities ?? []).reduce((n, f) => n + (f.collateral?.length ?? 0), 0);
-    expect(pledgeCount).toBe(7);
-    expect(rows(el)).toHaveLength(4);
+    expect(pledgeCount).toBe(10);
+    expect(rows(el)).toHaveLength(7);
     expect(headers(el)).toHaveLength(1);
   });
 
   it("names each asset by its type and sub-type, not by its description", () => {
     const el = render(data, hartwell);
-    const warehouse = rowFor(el, "Warehouse");
+    const warehouse = rowForRecord(el, "COL-000765");
     expect(cell(warehouse, 0)).toBe("Real Estate");
     expect(cell(warehouse, 1)).toBe("Warehouse");
     expect(cell(rowFor(el, "Accounts"), 0)).toBe("UCC");
     expect(cell(rowFor(el, "Inventory"), 0)).toBe("UCC");
-    expect(cell(rowFor(el, "Equipment"), 0)).toBe("UCC");
+    expect(cell(rowForRecord(el, "COL-000764"), 0)).toBe("UCC");
   });
 
   it("shows one descriptor sentence with the org's own record name beside it", () => {
@@ -160,59 +164,100 @@ describe("Hartwell: four assets, and the pledges under each", () => {
     expect(cell(ar, 3)).toBe("$12M");
     expect(cell(ar, 4)).toBe("80%");
     expect(cell(ar, 5)).toBe("$9.60M");
-    const wh = rowFor(el, "Warehouse");
+    const wh = rowForRecord(el, "COL-000765");
     expect(cell(wh, 3)).toBe("$14M");
     expect(cell(wh, 4)).toBe("75%");
     expect(cell(wh, 5)).toBe("$10.50M");
   });
 
+  // The org's own pledgedStatus moved with the two-package refresh
+  // (2026-09-03): the four originally-booked collateral records now read
+  // Inactive on every pledge that was carrying them, and only the three new
+  // records (the plant, the CNC-cell equipment behind the Proposal facility,
+  // and the metrology fleet) carry an Active one. "Active means active" is
+  // the domain's own rule (src/domain/collateralAssets.ts) for exactly this:
+  // a pledge the org has released is not security, so the four now badge
+  // Unpledged rather than borrowing their old counts.
   it("badges each asset with how many active pledges it carries", () => {
     const el = render(data, hartwell);
     const badge = (sub: string) => rowFor(el, sub).querySelector("[data-col-badge]")!.textContent;
-    expect(badge("Accounts")).toBe("2 pledges");
-    expect(badge("Inventory")).toBe("1 pledge");
-    expect(badge("Warehouse")).toBe("2 pledges");
+    expect(badge("Accounts")).toBe("Unpledged");
+    expect(badge("Inventory")).toBe("Unpledged");
+    const badgeFor = (name: string) => rowForRecord(el, name).querySelector("[data-col-badge]")!.textContent;
+    expect(badgeFor("COL-000765")).toBe("Unpledged");
+    expect(badgeFor("COL-000764")).toBe("Unpledged");
+    expect(badgeFor("COL-000773")).toBe("1 pledge");
+    expect(badgeFor("COL-000769")).toBe("1 pledge");
+    expect(badgeFor("COL-000774")).toBe("1 pledge");
   });
 
-  it("opens the warehouse onto its two facilities, with each pledge's figures", () => {
+  it("opens the new plant onto its one facility, with the pledge's own figures", () => {
     const el = render(data, hartwell);
-    const wh = rowFor(el, "Warehouse");
+    const plant = rowForRecord(el, "COL-000773");
     expect(pledgeRows(el)).toHaveLength(0);
-    click(wh);
-    expect(wh.getAttribute("aria-expanded")).toBe("true");
+    click(plant);
+    expect(plant.getAttribute("aria-expanded")).toBe("true");
 
     const opened = pledgeRows(el);
-    expect(opened).toHaveLength(2);
-    expect(cell(opened[0], 0)).toBe("Construction");
-    expect(cell(opened[0], 1)).toBe("$12M");
-    expect(cell(opened[0], 2)).toBe("$5.50M");
+    expect(opened).toHaveLength(1);
+    expect(cell(opened[0], 0)).toBe("Purchase");
+    expect(cell(opened[0], 1)).toBe("$6.50M");
+    expect(cell(opened[0], 2)).toBe("$6.30M");
     expect(cell(opened[0], 3)).toBe("1st");
     expect(cell(opened[0], 4)).toBe("75%override");
-    expect(cell(opened[1], 0)).toBe("Purchase");
-    expect(cell(opened[1], 2)).toBe("$5M");
   });
 
-  it("marks a rate the org defaulted from the type, and one a pledge overrode", () => {
-    const el = render(data, hartwell);
+  it("marks a rate the org defaulted from the type, and one a pledge overrode (synthetic fixture)", () => {
+    // Live Hartwell no longer holds this contrast: every Active pledge in the
+    // two-package read carries a "Pledge override" rate, none a bare
+    // collateral-type default. Proved instead on a synthetic asset pair built
+    // the same shape the org's own read takes, so the domain function's two
+    // branches both stay covered.
+    const synthetic: BorrowerBundle = {
+      ...hartwell,
+      exposure: {
+        ...hartwell.exposure,
+        facilities: [
+          {
+            ...hartwell.exposure!.facilities!.find((f) => f.loanId === "a4Zbb0000027MaYEAU")!,
+            collateral: [
+              {
+                collateralId: "SYN-001",
+                collateralName: "SYN-000001",
+                collateralType: "UCC-Accounts",
+                collateralDescription: "Synthetic receivables pledge, defaulted rate.",
+                collateralValue: 1000000,
+                currentLendableValue: 800000,
+                amountPledged: 800000,
+                lienPosition: "1st",
+                advanceRate: 80,
+                advanceRateSource: "Collateral type default",
+                pledgedStatus: "Active",
+                loanId: "a4Zbb0000027MaYEAU",
+                isPrimary: true,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const el = render(data, synthetic);
     click(rowFor(el, "Accounts"));
     const opened = pledgeRows(el);
     expect(cell(opened[0], 4)).toBe("80%");
     expect(opened[0].children[4].getAttribute("title")).toContain("Collateral type default");
-    click(rowFor(el, "Inventory"));
-    const inv = pledgeRows(el).slice(2);
-    expect(cell(inv[0], 4)).toBe("50%override");
   });
 
   it("toggles, and opens two assets at once on one grid", () => {
     const el = render(data, hartwell);
-    const ar = rowFor(el, "Accounts");
-    click(ar);
-    expect(pledgeRows(el)).toHaveLength(2);
-    click(ar);
+    const plant = rowForRecord(el, "COL-000773");
+    click(plant);
+    expect(pledgeRows(el)).toHaveLength(1);
+    click(plant);
     expect(pledgeRows(el)).toHaveLength(0);
 
-    click(rowFor(el, "Warehouse"));
-    click(rowFor(el, "Equipment"));
+    click(rowForRecord(el, "COL-000769"));
+    click(rowForRecord(el, "COL-000774"));
     expect(el.querySelectorAll('[data-x-expansion="collateral"]')).toHaveLength(2);
     expect(new Set(pledgeRows(el).map((r) => r.children.length))).toEqual(new Set([5]));
   });
@@ -223,7 +268,10 @@ describe("Hartwell: four assets, and the pledges under each", () => {
     const pledged = (hartwell.exposure?.facilities ?? []).flatMap((f) =>
       (f.collateral ?? []).map((c) => c.amountPledged),
     );
-    expect(pledgeRows(el)).toHaveLength(7);
+    // Only the three Active pledges open a panel; the four Unpledged assets
+    // render the empty state instead (proved by "an asset with no active
+    // pledge says so", below).
+    expect(pledgeRows(el)).toHaveLength(3);
     for (const row of pledgeRows(el)) {
       const shown = cell(row, 2);
       expect(

@@ -5,7 +5,7 @@ Reload once after every publish and accept the scope dialog (28 Customer 360 too
 Glass: liquid by default. Command palette: `Glass: frost` if the machine stutters, `Glass: liquid` back.
 
 ## 1. Facility workroom, Hartwell, the $20M flow (3 min)
-1. Open Hartwell, FAB, Facility. The greeting is route-neutral: book, parties, covenants, plan, the three routes; James's email is baked in with its route chip.
+1. Open Hartwell, FAB, Facility. Hartwell now stages two packages, so the room asks first: pick the C&I package (six booked facilities, the $3M Proposal, "Non-Real Estate" first in the label). Then the greeting is route-neutral: book, parties, covenants, plan, the three routes; James's email is baked in with its route chip.
 2. Click the $15M Line of Credit chip. One line: what should change on it.
 3. `increase to 20M`. Card, confirm. The settled row collapses, the amortisation question glides up. Coverage-thins advisory is its own item: acknowledge it, the chips stay.
 4. `240`, then `October 1, 2026`, or the chips. `Leave pricing for later` is always there.

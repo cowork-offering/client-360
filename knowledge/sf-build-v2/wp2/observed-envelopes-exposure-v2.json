@@ -9,7 +9,7 @@
       "outcome": null,
       "outputValues": {
         "accountId": "001bb00001I7FPNAA3",
-        "coverageRatio": 1.02,
+        "coverageRatio": 1.09,
         "coverageShortfall": false,
         "facilities": [
           {
@@ -31,7 +31,7 @@
             "committed": 15000000,
             "collateral": [
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027MaYEAU",
                 "lienPosition": "1st",
                 "isPrimary": true,
@@ -46,7 +46,7 @@
                 "advanceRate": 80
               },
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027MaYEAU",
                 "lienPosition": "1st",
                 "isPrimary": false,
@@ -82,7 +82,7 @@
             "committed": 12000000,
             "collateral": [
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027Mp3EAE",
                 "lienPosition": "1st",
                 "isPrimary": true,
@@ -118,7 +118,7 @@
             "committed": 8000000,
             "collateral": [
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027MnREAU",
                 "lienPosition": "1st",
                 "isPrimary": true,
@@ -134,6 +134,42 @@
               }
             ],
             "available": 2100000
+          },
+          {
+            "totalPledgedValue": 6300000,
+            "totalLendableValue": 6300000,
+            "status": "Open",
+            "stage": "Booked",
+            "riskGrade": "4",
+            "productType": "Real Estate",
+            "productPackageId": "a5Fbb000000J6BNEA0",
+            "outstanding": 6340000,
+            "name": "Hartwell Precision Manufacturing LLC - Purchase - $6,500,000.00",
+            "maturityDate": "2036-01-31",
+            "loanId": "a4Zbb000002ICnxEAG",
+            "interestRate": 6.35,
+            "coverageShortfall": true,
+            "coverageRatio": 0.99,
+            "coverageNote": null,
+            "committed": 6500000,
+            "collateral": [
+              {
+                "pledgedStatus": "Active",
+                "loanId": "a4Zbb000002ICnxEAG",
+                "lienPosition": "1st",
+                "isPrimary": true,
+                "currentLendableValue": 6300000,
+                "collateralValue": 8400000,
+                "collateralType": "Real Estate-Warehouse",
+                "collateralName": "COL-000773",
+                "collateralId": "a35bb0000019cv7AAA",
+                "collateralDescription": "Owner-occupied manufacturing plant and office at 1400 Industrial Parkway, Fort Wayne, Indiana 46802. 164,000 sq ft on 14.8 acres.",
+                "amountPledged": 6300000,
+                "advanceRateSource": "Pledge override",
+                "advanceRate": 75
+              }
+            ],
+            "available": 160000
           },
           {
             "totalPledgedValue": 5000000,
@@ -154,7 +190,7 @@
             "committed": 5000000,
             "collateral": [
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027MqfEAE",
                 "lienPosition": "1st",
                 "isPrimary": true,
@@ -190,7 +226,7 @@
             "committed": 3500000,
             "collateral": [
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027MsHEAU",
                 "lienPosition": "1st",
                 "isPrimary": false,
@@ -206,6 +242,42 @@
               }
             ],
             "available": 490000
+          },
+          {
+            "totalPledgedValue": 3000000,
+            "totalLendableValue": 3000000,
+            "status": "Open",
+            "stage": "Proposal",
+            "riskGrade": null,
+            "productType": "Real Estate",
+            "productPackageId": "a5Fbb000000IHFJEA4",
+            "outstanding": 0,
+            "name": "Hartwell Precision Manufacturing LLC - Equipment - $3,000,000.00",
+            "maturityDate": null,
+            "loanId": "a4Zbb000002CECXEA4",
+            "interestRate": null,
+            "coverageShortfall": false,
+            "coverageRatio": null,
+            "coverageNote": "No coverage ratio: this facility carries no outstanding balance to cover.",
+            "committed": 3000000,
+            "collateral": [
+              {
+                "pledgedStatus": "Active",
+                "loanId": "a4Zbb000002CECXEA4",
+                "lienPosition": "1st",
+                "isPrimary": false,
+                "currentLendableValue": 3000000,
+                "collateralValue": 4000000,
+                "collateralType": "UCC-Equipment",
+                "collateralName": "COL-000769",
+                "collateralId": "a35bb0000018TAjAAM",
+                "collateralDescription": "TEST SHOWCASE: three Mazak INTEGREX tooling cells, Kokomo. Removable on request.",
+                "amountPledged": 3000000,
+                "advanceRateSource": "Pledge override",
+                "advanceRate": 75
+              }
+            ],
+            "available": 3000000
           },
           {
             "totalPledgedValue": 1600000,
@@ -226,7 +298,7 @@
             "committed": 2500000,
             "collateral": [
               {
-                "pledgedStatus": "Active",
+                "pledgedStatus": "Inactive",
                 "loanId": "a4Zbb0000027MttEAE",
                 "lienPosition": "1st",
                 "isPrimary": false,
@@ -242,17 +314,51 @@
               }
             ],
             "available": 1350000
+          },
+          {
+            "totalPledgedValue": 1470000,
+            "totalLendableValue": 1470000,
+            "status": "Open",
+            "stage": "Booked",
+            "riskGrade": "4",
+            "productType": "Non-Real Estate",
+            "productPackageId": "a5Fbb000000J6BNEA0",
+            "outstanding": 1330000,
+            "name": "Hartwell Precision Manufacturing LLC - Equipment - $1,500,000.00",
+            "maturityDate": "2033-01-31",
+            "loanId": "a4Zbb000002ICnyEAG",
+            "interestRate": 6.6,
+            "coverageShortfall": false,
+            "coverageRatio": 1.11,
+            "coverageNote": null,
+            "committed": 1500000,
+            "collateral": [
+              {
+                "pledgedStatus": "Active",
+                "loanId": "a4Zbb000002ICnyEAG",
+                "lienPosition": "1st",
+                "isPrimary": true,
+                "currentLendableValue": 1470000,
+                "collateralValue": 2100000,
+                "collateralType": "UCC-Equipment",
+                "collateralName": "COL-000774",
+                "collateralId": "a35bb0000019cv8AAA",
+                "collateralDescription": "Zeiss CONTURA and Hexagon Global S coordinate measuring machines, optical comparators, surface finish analysers and the calibration laboratory.",
+                "amountPledged": 1470000,
+                "advanceRateSource": "Pledge override",
+                "advanceRate": 70
+              }
+            ],
+            "available": 170000
           }
         ],
         "note": "Outstanding reads LLC_BI__Principal_Balance__c, the balance field this org populates (LLC_BI__AmountOutstanding__c is a fallback only). Available = committed - outstanding, floored at zero. Facility coverage divides the facility's PLEDGED SHARE (LLC_BI__Amount_Pledged__c), never the whole collateral's lendable value, which every pledge of a cross-pledged asset repeats. Relationship coverage divides the lendable value of the DISTINCT collateral, deduped by collateral id. Advance rate comes from one source, the pledge's LLC_BI__Advance_Rate__c (override, then auto-applied, then collateral type). Pledges flagged Excluded or Abundance-of-Caution are dropped from the math.",
-        "totalAvailable": 14970000,
-        "totalCommitted": 46000000,
-        "totalOutstanding": 31030000,
-        "totalUniqueCollateralLendableValue": 31600000,
-        "uniqueCollateralCount": 4
-      },
-      "sortOrder": 0,
-      "version": 1
+        "totalAvailable": 18300000,
+        "totalCommitted": 57000000,
+        "totalOutstanding": 38700000,
+        "totalUniqueCollateralLendableValue": 42370000,
+        "uniqueCollateralCount": 7
+      }
     }
   ],
   "exposure_read_piedmont_v2": [

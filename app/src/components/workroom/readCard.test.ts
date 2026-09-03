@@ -243,12 +243,49 @@ describe("a question about guarantors is answered with the guarantors", () => {
     expect(card.lede).toContain("5 parties are on this package today");
   });
 
-  it("carries the facility count and drops a loan the package does not hold", () => {
+  it("carries the facility count across the whole relationship, unscoped", () => {
+    // Hartwell's org grew a second package (2026-09-03): the borrower's graph
+    // rows now span nine loans across both, and with no package anchored the
+    // card stands on the whole relationship, not on "the" package.
     const card = buildReadCard("structure", src(HARTWELL))!;
+    const borrower = card.groups.flatMap((g) => g.rows).find((r) => r.value === "Borrower")!;
+    expect(new Set((HARTWELL.graph?.legalEntities ?? []).filter((e) => e.borrowerType === "Borrower").map((e) => e.loanId)).size).toBe(9);
+    expect(borrower.detail).toContain("on 9 facilities");
+  });
+
+  it("carries the facility count and drops a loan the package does not hold (single-package fixture)", () => {
+    // The graph-vs-exposure split this test proves no longer shows on live
+    // Hartwell: with two packages its exposure read now carries all nine
+    // facilities, proposal included, so nothing is dropped any more. Proved
+    // instead on a synthetic single-package slice of the same bundle: the six
+    // ORIGINALLY-booked C&I facilities in exposure, with the graph's Borrower
+    // rows still carrying the seventh, Proposal-stage loan the package holds
+    // but exposure does not book.
+    const CNI_PACKAGE = "a5Fbb000000IHFJEA4";
+    const cniLoanIds = new Set(
+      (HARTWELL.exposure?.facilities ?? []).filter((f) => f.productPackageId === CNI_PACKAGE).map((f) => f.loanId),
+    );
+    expect(cniLoanIds.size).toBe(7); // six booked + the Proposal-stage equipment loan
+    const singlePackage: BorrowerBundle = {
+      ...HARTWELL,
+      exposure: {
+        ...HARTWELL.exposure,
+        facilities: (HARTWELL.exposure?.facilities ?? []).filter(
+          (f) => f.productPackageId === CNI_PACKAGE && f.stage !== "Proposal",
+        ),
+      },
+      graph: {
+        ...HARTWELL.graph,
+        legalEntities: (HARTWELL.graph?.legalEntities ?? []).filter(
+          (e) => e.borrowerType !== "Borrower" || cniLoanIds.has(e.loanId ?? undefined),
+        ),
+      },
+    };
+    const card = buildReadCard("structure", src(singlePackage))!;
     const borrower = card.groups.flatMap((g) => g.rows).find((r) => r.value === "Borrower")!;
     // The graph read carries the borrower on SEVEN loans; the exposure read
     // carries six facilities. The card stands on the package it is scoped to.
-    expect(new Set((HARTWELL.graph?.legalEntities ?? []).filter((e) => e.borrowerType === "Borrower").map((e) => e.loanId)).size).toBe(7);
+    expect(new Set((singlePackage.graph?.legalEntities ?? []).filter((e) => e.borrowerType === "Borrower").map((e) => e.loanId)).size).toBe(7);
     expect(borrower.detail).toContain("on 6 facilities");
   });
 });

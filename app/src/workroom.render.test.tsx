@@ -215,7 +215,8 @@ describe("law 3 — the opening view is under sixty words", () => {
  */
 describe("law 3 — the WIRED room, on the baked relationship", () => {
   const data = live as unknown as C360Data;
-  /** Hartwell: six booked members on one package, no client request staged. */
+  /** Hartwell: the C&I package's six booked members plus its Proposal-stage
+   *  loan, anchored explicitly below; no client request staged. */
   const accountId = "001bb00001I7FPNAA3";
 
   function openWired() {
@@ -261,9 +262,17 @@ describe("law 3 — the WIRED room, on the baked relationship", () => {
   });
 
   it("offers every eligible member as something to click, not something to read", () => {
+    // The org grew a second package (2026-09-03) and its exposure read now
+    // carries the C&I package's Proposal-stage $3M equipment loan too, so the
+    // package's own member roster is seven now, not six.
     const chips = [...openWired().querySelectorAll<HTMLButtonElement>(".wk-mchip")];
-    expect(chips).toHaveLength(6);
-    expect(chips.every((c) => !c.disabled)).toBe(true);
+    expect(chips).toHaveLength(7);
+    // Six of the seven are eligible (booked) and click; the seventh, the
+    // Proposal-stage $3M equipment loan the package now also carries, renders
+    // disabled rather than dropped — it is a member of this package, just not
+    // one this room's actions can touch yet.
+    expect(chips.filter((c) => !c.disabled)).toHaveLength(6);
+    expect(chips.filter((c) => c.disabled)).toHaveLength(1);
     // The chip says the PRODUCT. A record id on the face of a member chip is
     // what the founder's UAT read as hardcoded.
     expect(chips.map((c) => c.querySelector("b")!.textContent)).toEqual([
@@ -271,6 +280,7 @@ describe("law 3 — the WIRED room, on the baked relationship", () => {
       "Construction",
       "Equipment",
       "Purchase",
+      "Equipment",
       "Equipment",
       "Line of Credit",
     ]);

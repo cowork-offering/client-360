@@ -8,22 +8,25 @@ and the other place is stale.
 Account `001bb00001I7FPNAA3`, org `bankinggpt-at`
 (`accenture-d8--bankinggpt.sandbox.my.salesforce.com`).
 
-**Status, 2026-09-03, after phase 2.** There are now TWO truths to keep apart,
-and this file marks which is which on every section.
+**Status, 2026-09-03, after phase 3.** The SCREEN now matches the ORG. There is
+one truth again, and every SCREEN SHOWS line below is stale, kept only as a
+record of the phase-2 gap.
 
-- **ORG** is `bankinggpt-at`. It holds two packages, eight booked facilities,
-  pricing components on all eight, five opportunities and fifty action-history
-  entries.
-- **SCREEN** is `artifact/live-data.json`, which is what the cockpit renders
-  tonight. It still holds ONE package and the pre-phase-2 reads.
+- **ORG** is `bankinggpt-at`. It holds two packages, nine facilities (eight
+  booked plus the $3M Proposal), pricing components on all eight booked, five
+  opportunities and fifty action-history entries.
+- **SCREEN** is `artifact/live-data.json`, refreshed and reconciled: two
+  packages, $54.0M committed, $38.7M drawn, nine facilities, the new
+  collateral (the plant and the metrology fleet) with the org's own
+  valuations where the read carries them, six covenants with their compliance
+  rows, five opportunities, fifty action-history entries. Two packages means
+  no single one is anchored, which is exactly the state the greeting's
+  package-ask question exists to handle: opening the Hartwell facility room
+  now asks which package first.
 
-**Say only what the SCREEN holds.** Where the two differ, the section says so
-under a **SCREEN SHOWS** line. The bundle was refreshed from the org and then
-rolled back inside this session because the refresh turns Hartwell into a
-two-package relationship, which fires the greeting's package ask and breaks 188
-data-pinned assertions across nineteen suites. That reconciliation is real work
-and it is not four hours before a demo work. The org is finished and waiting;
-the bundle catches up in phase 3.
+The reconciliation that used to gate this (188 assertions across nineteen
+suites) is done: the full app test suite is green (125 files, 3577 tests),
+`tsc --noEmit` is clean, and the production build succeeds.
 
 ---
 
@@ -97,9 +100,10 @@ Parkway plant, $8.4M, MAI as-is, 2026-01-15) and `a35bb0000019cv8AAA` (the
 inspection and metrology fleet, $2.1M, 2026-01-20), pledged at lendable value
 with first lien on each. COV-000646 is associated to the CRE loan.
 
-**SCREEN SHOWS: one package.** Tonight's bundle predates this. Do not mention a
-real estate package on stage, and do not read the $54.0M or $57.0M totals off
-this section.
+**SCREEN SHOWS: both packages now.** The bundle refresh landed (phase 3). Say
+the real estate package out loud, and read $54.0M committed / $38.7M drawn as
+the package-level rollup; the exposure read's own $57.0M / $38.7M counts the
+$3M Proposal facility the package rollups correctly exclude.
 
 Two booked
 facilities, $8.0M committed, $7.67M drawn.
@@ -227,22 +231,23 @@ $185,000) and a commercial card program (Needs Analysis, $95,000). Nothing had
 to be invented; the equipment expansion, the treasury cross-sell and the hedge
 all exist under their own names.
 
-**SCREEN SHOWS: one row**, the Treasury Services Expansion. The other four
-arrive with the phase 3 bundle refresh.
+**SCREEN SHOWS: all five now.** The phase 3 bundle refresh landed.
 
 ---
 
-## 7. Audit trail - REAL IN THE ORG, EMPTY ON THE SCREEN
+## 7. Audit trail - REAL IN THE ORG, AND ON THE SCREEN NOW
 
 The action history read works and returns **fifty entries** for Hartwell, built
 from the real `cm_Action_Staging__c` rows this project's own runs have left
 behind: staged and executed modifications, covenant work, valuations. Nothing
 had to be fabricated. Some of those rows point at facilities that later got
-reverted, so the feed needs a pass for debris before it is shown.
+reverted, so the feed carries some debris; say fifty entries, not a curated
+count.
 
-**SCREEN SHOWS: nothing.** The bundle's `activity` array for Hartwell is `[]`
-and the feed renders its own gap state. Do not narrate a history the screen
-cannot show tonight.
+**SCREEN SHOWS: fifty entries now.** The bundle's `activity` array for
+Hartwell was transformed through the app's own `historyActivityEntry`
+function (the same one `ActivityTab` applies to a live-fetched org trail) and
+renders on the Activity tab, newest first.
 
 The invented ten below are now redundant and are kept only as a record of what
 was specified before the real read was known to work:

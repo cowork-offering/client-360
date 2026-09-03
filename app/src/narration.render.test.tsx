@@ -669,7 +669,7 @@ describe("the greeting carries the client's mail, or says nothing about a mailbo
 
 /** (a) NO MAIL, ROUTE UNBOUND. Forty-eight prose words carrying six figures. */
 const GREETING_UNBOUND = [
-  "Hartwell's $46M package sits clean across six facilities, nothing staged yet.",
+  "Hartwell's $49M package sits clean across seven facilities, nothing staged yet.",
   "- **Debt Service Coverage of Borrower**: the widest ratio cushion on the deal.",
   "- **Maximum Debt to Worth**: room before the covenant binds, either way.",
   "- **Accounts Receivable**: exactly on its ceiling, and tested monthly.",
@@ -678,7 +678,7 @@ const GREETING_UNBOUND = [
 
 /** (d) THE MAIL ASKS A RENEWAL. The close names THAT route, and only it. */
 const GREETING_RENEWAL_MAIL = [
-  "Hartwell's $46M package is clean across six facilities, nothing staged yet.",
+  "Hartwell's $49M package is clean across seven facilities, nothing staged yet.",
   "- **Equipment ($8.0MM)**: the facility the note names, and the one a renewal re-cuts.",
   "- **Debt Service Coverage of Borrower**: the test a renewal is priced against.",
   "James asked to renew the $8.0MM equipment loan; open the renewal?",
@@ -686,7 +686,7 @@ const GREETING_RENEWAL_MAIL = [
 
 /** (e) A PLAIN QUESTION. Nothing to offer beyond the three routes. */
 const GREETING_PLAIN_QUESTION = [
-  "Hartwell's $46M package is clean; the message on it asks nothing of the credit.",
+  "Hartwell's $49M package is clean; the message on it asks nothing of the credit.",
   "- **Accounts Receivable**: tested monthly, and the one test with no room left.",
   "James asked on Aug 28 for a copy of the June covenant certificate. Modify, renew, or structure something new?",
 ].join("\n");

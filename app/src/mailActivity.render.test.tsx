@@ -32,9 +32,25 @@ import live from "../../artifact/live-data.json";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const DATA = live as unknown as C360Data;
+const LIVE = live as unknown as C360Data;
 const HARTWELL = "001bb00001I7FPNAA3";
-const BUNDLE = (DATA.borrowers ?? {})[HARTWELL] as BorrowerBundle;
+
+/** Hartwell's own org grew a second package (2026-09-03): opening the room off
+ *  a swept mail message does not (yet) infer the package from the facility the
+ *  message names, so on the shipped two-package book the room now stops on the
+ *  package-ask instead of reaching the greeting or the route question this
+ *  file's "Open in workroom" tests are about. Proved instead on a
+ *  single-package slice of the same relationship: the six originally-booked
+ *  C&I facilities, which is where the $15M line of credit these tests
+ *  reference actually lives. */
+const HARTWELL_CNI_PACKAGE = "a5Fbb000000IHFJEA4";
+const hartwellOnePackage: C360Data = JSON.parse(JSON.stringify(LIVE));
+hartwellOnePackage.borrowers![HARTWELL].exposure!.facilities = (
+  LIVE.borrowers![HARTWELL].exposure?.facilities ?? []
+).filter((f) => f.productPackageId === HARTWELL_CNI_PACKAGE && f.stage === "Booked");
+
+let DATA = LIVE;
+const BUNDLE = (LIVE.borrowers ?? {})[HARTWELL] as BorrowerBundle;
 
 /** The observed single-object mail shape: `sender` a plain address, the body
  *  preview under `summary`. Synthetic values, real shape. */
@@ -153,6 +169,7 @@ afterEach(() => {
   container?.remove();
   root = null;
   container = null;
+  DATA = LIVE;
   closeFacilityRoom();
   __resetMailArrivalForTests();
   delete (window as unknown as { claude?: unknown }).claude;
@@ -297,6 +314,7 @@ describe("the arrival", () => {
 
 describe("Open in workroom", () => {
   it("opens OUR facility room, with the message on the greeting envelope", async () => {
+    DATA = hartwellOnePackage;
     const session = await sweepIn();
     const before = session.calls.length;
     await click(document.querySelector("[data-mail-open]")!);
@@ -323,6 +341,7 @@ describe("Open in workroom", () => {
   });
 
   it("opens the room UNBOUND, offering the route rather than choosing it", async () => {
+    DATA = hartwellOnePackage;
     await sweepIn();
     await click(document.querySelector("[data-mail-open]")!);
     await settle(0);

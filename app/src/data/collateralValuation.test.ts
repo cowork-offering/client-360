@@ -51,9 +51,10 @@ describe("the read carries the dates for Hartwell's assets", () => {
   const book = () => valuationsOf(bundleOf(HARTWELL));
 
   it("carries one valuation per distinct asset, not one per pledge row", () => {
-    // Seven pledge rows, four assets. A cross-pledged asset is valued once.
+    // Ten pledge rows, seven assets, since the org grew a second package
+    // (2026-09-03). A cross-pledged asset is valued once.
     expect(book().size).toBe(4);
-    expect(hartwell()).toHaveLength(4);
+    expect(hartwell()).toHaveLength(7);
   });
 
   it("dates the receivables off the org's own row, with its basis and its source", () => {
@@ -79,21 +80,47 @@ describe("the read carries the dates for Hartwell's assets", () => {
     expect(v.overdue).toBe(false);
   });
 
-  it("gives all four assets a date and a next date, so no line goes quiet", () => {
+  // The org grew a second package (2026-09-03): three of the seven assets
+  // (the new plant, the new metrology fleet, and the equipment behind the
+  // Proposal-stage loan) are pledged in the exposure read but the org's
+  // valuation read carries no CV- row for any of them yet. That is an honest
+  // gap, not a missing test: the four ORIGINAL assets still carry both dates,
+  // and the three new ones say so rather than borrowing a neighbour's date.
+  const UNVALUED = new Set(["COL-000773", "COL-000774", "COL-000769"]);
+
+  it("gives the four originally-valued assets a date and a next date, so no line goes quiet", () => {
     for (const c of hartwell()) {
+      if (UNVALUED.has(c.collateralName ?? "")) continue;
       const v = assetValuation(c, book(), TODAY);
       expect(v.lastValued, c.collateralName).not.toBeNull();
       expect(v.nextDue, c.collateralName).not.toBeNull();
     }
   });
 
+  it("says so, rather than going quiet, for the three assets the valuation read does not carry", () => {
+    expect(hartwell().filter((c) => UNVALUED.has(c.collateralName ?? ""))).toHaveLength(3);
+    for (const c of hartwell()) {
+      if (!UNVALUED.has(c.collateralName ?? "")) continue;
+      const v = assetValuation(c, book(), TODAY);
+      expect(v.lastValued, c.collateralName).toBeNull();
+      expect(v.nextDue, c.collateralName).toBeNull();
+      expect(valuationLine(c, book(), TODAY), c.collateralName).toBe(`${NO_VALUATION} · ${NO_NEXT_DATE}`);
+    }
+  });
+
   /* THE FIGURE IS THE ONE THE BUNDLE ALREADY HELD. No read on this cockpit
      stages `LLC_BI__Value__c` off the valuation, so the only money on the line
-     is the asset's carried value, and a line may print no other. */
+     is the asset's carried value, and a line may print no other. An asset with
+     no valuation row carries no figure at all: the line says so in words, not
+     with a value it cannot source. */
   it("invents no figure: the only money on the line is the asset's own carried value", () => {
     for (const c of hartwell()) {
       const line = valuationLine(c, book(), TODAY);
       const figures = line.match(/\$[\d.,]+[KMB]?/g) ?? [];
+      if (UNVALUED.has(c.collateralName ?? "")) {
+        expect(figures, c.collateralName).toHaveLength(0);
+        continue;
+      }
       expect(figures, c.collateralName).toHaveLength(1);
       expect(figures[0], c.collateralName).toBe(
         "$" + String(c.collateralValue! / 1e6).replace(/(\.\d)0$/, "$1") + "M",

@@ -235,13 +235,18 @@ describe("Hartwell: the account's six covenants, and the loans behind two of the
   });
 
   it("says so when a covenant sits on the account only, and still shows its test", () => {
+    // The org grew a second package (2026-09-03) and attached Debt Service
+    // Coverage of Borrower to the new CRE loan, so it is no longer the
+    // account-only example; Maximum Debt to Worth still carries no
+    // attachedLoans. The same refresh re-dated every covenant's last test
+    // except Accounts Receivable's, from Jun 30 to Jul 15, 2026.
     const el = render(data, hartwell);
-    click(rowFor(el, "Debt Service Coverage of Borrower"));
+    click(rowFor(el, "Maximum Debt to Worth"));
     expect(loanRows(el)).toHaveLength(0);
     const text = el.textContent ?? "";
     expect(text).toContain("Not associated to any facility");
-    expect(text).toContain("1.38× vs ≥ 1.25×");
-    expect(text).toContain("as nCino evaluated on Jun 30, 2026");
+    expect(text).toContain("2.42× vs ≤ 3.00×");
+    expect(text).toContain("as nCino evaluated on Jul 15, 2026");
   });
 
   it("toggles: a second click closes what the first opened", () => {

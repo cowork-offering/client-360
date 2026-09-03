@@ -32,8 +32,8 @@ import {
    the one thing a plus menu may not be.
 
    THE DATA IS `artifact/live-data.json`, the Hartwell package as it was read
-   out of the org: six booked members, six covenants, four collateral records,
-   four distinct parties. Nothing here is a fixture written to pass.
+   out of the org: eight booked members, six covenants, seven collateral
+   records, four distinct counterparties. Nothing here is a fixture written to pass.
    ============================================================================= */
 
 const ACCOUNT = "001bb00001I7FPNAA3";
@@ -145,8 +145,8 @@ function run(gate: CatalogAction["gate"], line: string, facility: FacilityEntry)
 /* ------------------------------------------------------------------- the book */
 
 describe("the package the menu lists", () => {
-  it("lists every booked member of the Hartwell package, with its figures", () => {
-    expect(entries).toHaveLength(6);
+  it("lists every booked member of the Hartwell relationship, with its figures", () => {
+    expect(entries).toHaveLength(8);
     const loc = entries.find((e) => e.committed === 15_000_000);
     expect(loc).toBeTruthy();
     expect(loc?.shortName).toBe("Line of Credit - $15,000,000.00");
@@ -218,9 +218,14 @@ describe("the record lists come off the book", () => {
       "COL-000762",
       "COL-000763",
     ]);
+    // The org grew a second package (2026-09-03): COL-000773 (the new plant)
+    // and COL-000774 (the new metrology fleet) are now in the book too, and
+    // neither sits on the $15M line, so both are offered to pledge onto it.
     expect(leaves(action("collateral", "collateral.pledge"), loc15, book).map((c) => c.label).sort()).toEqual([
       "COL-000764",
       "COL-000765",
+      "COL-000773",
+      "COL-000774",
     ]);
     expect(leaves(action("collateral", "collateral.release"), equipment8, book).map((c) => c.label)).toEqual([
       "COL-000764",

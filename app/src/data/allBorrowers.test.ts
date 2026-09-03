@@ -169,11 +169,16 @@ describe("collateral records for every borrower", () => {
     });
   }
 
-  it("Hartwell shows its four records at the founder's figures", () => {
+  it("Hartwell shows its seven records at the founder's figures", () => {
+    // The org grew a second package (2026-09-03): four original records plus
+    // the new plant, the new metrology fleet, and the equipment behind the
+    // Proposal-stage loan.
     const hartwell = (live as unknown as C360Data).borrowers?.["001bb00001I7FPNAA3"]!;
     const rows = collateralRecords(hartwell);
-    expect(rows).toHaveLength(4);
-    expect(rows.map((r) => r.currentValue).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([8_000_000, 10_000_000, 12_000_000, 14_000_000]);
+    expect(rows).toHaveLength(7);
+    expect(rows.map((r) => r.currentValue).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([
+      2_100_000, 4_000_000, 8_000_000, 8_400_000, 10_000_000, 12_000_000, 14_000_000,
+    ]);
   });
 
   it("falls back through description, then name, then type", () => {
@@ -245,13 +250,17 @@ describe("covenant attachment is tolerant of a read that cannot say", () => {
 describe("the refreshed reads, per relationship", () => {
   const bundleOf = (id: string) => (live as unknown as C360Data).borrowers?.[id]!;
 
-  it("Hartwell carries 4 account-only covenants and 2 that name a loan", () => {
+  it("Hartwell carries 2 account-only covenants and 4 that name a loan", () => {
+    // The org grew a second package (2026-09-03) and attached DSC (to the new
+    // CRE loan) and the FCC covenant (to the Proposal-stage equipment loan),
+    // on top of the two that already named a loan (AR, the term covenant).
+    // Only Debt to Worth and Minimum Liquidity remain account-only.
     const b = bundleOf("001bb00001I7FPNAA3");
     const kinds = (b.covenants?.covenants ?? []).map(
       (c) => covenantAttachment(c, b.exposure?.facilities, b.snapshot?.name).kind,
     );
-    expect(kinds.filter((k) => k === "account")).toHaveLength(4);
-    expect(kinds.filter((k) => k === "loans")).toHaveLength(2);
+    expect(kinds.filter((k) => k === "account")).toHaveLength(2);
+    expect(kinds.filter((k) => k === "loans")).toHaveLength(4);
   });
 
   it("Piedmont is entirely account-level, and says so rather than guessing", () => {
