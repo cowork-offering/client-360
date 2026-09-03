@@ -190,6 +190,7 @@ import {
 } from "./settle";
 import { useStageGate } from "./stage";
 import { FINALE_SWEEP_MS, finaleAttrs, useFinale, withFinale } from "./finale";
+import { FILED_SECTION_MS, FiledList, filedLinesFor, type FiledLine } from "./FiledList";
 import { countPhrase, countSplit, derivedReasonOf, splitClause, withDerivedSplit } from "./derivedDelta";
 import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
@@ -1570,6 +1571,25 @@ export function Workroom({
     filed: phase === "filed",
   });
   const filedById = useMemo(() => new Map((execution?.filed ?? []).map((f) => [f.deltaId, f])), [execution]);
+  /* WHAT THE CARD CARRIES OUT OF THE DRAIN (founder, 2026-09-04). The rail is
+     the only surface that listed the writes with their org ids, and the finale
+     wipes it; this is that ledger, moved onto the card that survives. Built
+     from the SAME manifest the rail drew and the SAME verification execute
+     came back with, so the two can never disagree about what filed. */
+  const handoffById = useMemo(
+    () => new Map((execution?.handoffs ?? []).map((h) => [h.deltaId, h])),
+    [execution],
+  );
+  const filedLines = useMemo(
+    () => (execution ? filedLinesFor(entries, filedById, handoffById) : null),
+    [entries, execution, filedById, handoffById],
+  );
+  /* The rail head's own sentence, over the set the card is listing. The split
+     is `countSplit`'s, never a second count of the same thing. */
+  const filedHead = useMemo(
+    () => countPhrase(entries.length, entries.length === 1 ? vocabulary.changeWord[0] : vocabulary.changeWord[1], entries),
+    [entries, vocabulary.changeWord],
+  );
 
   /* ------------------------------------------------------------ the moves */
 
@@ -5316,6 +5336,12 @@ export function Workroom({
                           anchored={anchoredPackage}
                           lit={lit}
                           hold={item.kind === "dossier" ? finale.hold : 0}
+                          /* THE LEDGER RIDES THE CARD, AND ONLY IN THE FINALE.
+                             Before the room drains, the rail is still on the
+                             glass saying exactly this; the card repeats it only
+                             once the rail is gone. */
+                          filed={item.kind === "dossier" && finaleState !== "off" ? filedLines : null}
+                          filedHead={filedHead}
                           onAnchor={onAnchor}
                           onOpenPeek={openPeek}
                           onConfirm={confirmChip}
@@ -5960,6 +5986,8 @@ function ThreadBlock({
   item,
   entries,
   filedWord,
+  filed,
+  filedHead,
   opening,
   members,
   packages,
@@ -5982,6 +6010,11 @@ function ThreadBlock({
   item: ThreadItem;
   entries: WorkroomDelta[];
   filedWord: string;
+  /** WHAT WAS FILED, for the dossier's own section. Null outside the finale:
+   *  while the room is still open the rail is saying this, and the card saying
+   *  it too would be one fact on the glass twice. */
+  filed: FiledLine[] | null;
+  filedHead: string;
   opening: ReactNode;
   members: ReactNode;
   packages: PackageChoice[];
@@ -6336,7 +6369,7 @@ function ThreadBlock({
     const d = item.dossier;
     return (
       <>
-        <Dossier dossier={d} lit={lit} hold={hold} />
+        <Dossier dossier={d} lit={lit} hold={hold} filed={filed} filedHead={filedHead} />
         <div className="wk-tokline">
           <span className="wk-tick">✓</span>
           <span>{d.tokenNote}</span>
@@ -6412,7 +6445,19 @@ function ThreadBlock({
    hairline draws across, each real change row materialises ~300ms apart, a
    second hairline, then the check pops last. The halo behind it is execute's
    only light and it breathes out on its own. */
-function Dossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: boolean; hold?: number }) {
+function Dossier({
+  dossier,
+  lit,
+  hold = 0,
+  filed,
+  filedHead,
+}: {
+  dossier: DossierModel;
+  lit: boolean;
+  hold?: number;
+  filed?: FiledLine[] | null;
+  filedHead?: string;
+}) {
   /* THE CARD CONSTRUCTS ITSELF AFTER THE ROOM HAS CLEARED (founder, 2026-09-03).
      `hold` is the finale's drain: every delay below is offset by it, so the
      header lands as the last settled row finishes sinking rather than during it.
@@ -6430,6 +6475,11 @@ function Dossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: boole
   const secondLine = t;
   t += DOSSIER_FOOT_MS;
   const foot = t;
+  /* AND THE LEDGER IS THE NEXT BEAT OF THE SAME CLOCK (founder, 2026-09-04).
+     Not a second animation laid over the card: the section starts where the
+     card's own reveal ends, after the check has popped, so the whole thing
+     reads as one construction that simply has more to say. */
+  const ledger = foot + DOSSIER_CHECK_MS + FILED_SECTION_MS;
 
   return (
     <div className={`wk-rescard ${lit ? "wk-lit" : ""}`}>
@@ -6476,6 +6526,7 @@ function Dossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: boole
         </span>
         {dossier.footer}
       </div>
+      {filed && <FiledList head={filedHead ?? ""} lines={filed} at={ledger} />}
     </div>
   );
 }

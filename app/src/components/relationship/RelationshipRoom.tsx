@@ -34,6 +34,7 @@ import {
   type SettledRow,
 } from "../workroom/settle";
 import { FINALE_SWEEP_MS, finaleAttrs, useFinale, withFinale } from "../workroom/finale";
+import { FILED_SECTION_MS, FiledList, type FiledLine } from "../workroom/FiledList";
 import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { readCatalog, type OrgCatalog } from "../../channel/catalog";
@@ -511,6 +512,45 @@ function laneRowsFor(route: RelRoute, ctx: RelContext, answers: Answers, order: 
   return rows;
 }
 
+/**
+ * THE ORG'S OWN ID FOR EACH ANSWER, where the flow returns one per record.
+ *
+ * The finale wipes the lane, so the card that survives has to carry what the
+ * lane was carrying (founder, 2026-09-04), and for a review that files a
+ * record per covenant or per asset, the id is the half a banker pastes into a
+ * search. Only what the ORG reported: a route that files one record for the
+ * whole review names it on the dossier's own rows above and gets nothing here,
+ * rather than the same id repeated against every answer that fed it.
+ */
+function laneOrgIds(route: RelRoute, rows: readonly LaneRow[], result: ExecuteResult): Record<string, string> {
+  const items = result.items ?? [];
+  const out: Record<string, string> = {};
+  /* THE INTAKE FILES ONE RECORD PER LANE ROW, IN ORDER: `intakeDossierRows`
+     already reads `items[i]` against `intakeRows(...)[i]`, and this lane IS
+     that list, so position is the org's own correspondence and not a guess. */
+  if (route === "intake") {
+    rows.forEach((row, i) => {
+      const id = (items[i]?.recordId ?? "").trim();
+      if (id) out[row.key] = id;
+    });
+    return out;
+  }
+  /* THE OTHER BULK FLOWS NAME THEIR SOURCE RECORD PER ITEM, so a row is matched
+     on the covenant or collateral id its own key already carries. */
+  const byRecord = new Map<string, string>();
+  for (const item of items) {
+    const source = item.covenantId ?? item.collateralId;
+    const id = item.covenantComplianceId ?? item.valuationId ?? item.recordId;
+    if (source && id) byRecord.set(source, id);
+  }
+  for (const row of rows) {
+    const dot = row.key.indexOf(".");
+    const id = dot === -1 ? undefined : byRecord.get(row.key.slice(dot + 1));
+    if (id) out[row.key] = id;
+  }
+  return out;
+}
+
 /** The banker-facing word for each answer, in the ONE icon language's register. */
 const LANE_LABELS: Record<string, string> = {
   reviewType: "Review type",
@@ -763,6 +803,24 @@ export function RelationshipRoom({
     () => (route ? laneRowsFor(route, ctx, answers, order) : []),
     [route, ctx, answers, order],
   );
+  /* WHAT THE CARD CARRIES OUT OF THE DRAIN (founder, 2026-09-04). The lane is
+     the review's ledger and the finale wipes it, so the card that survives
+     lists the same answers, in the same order, with the org's own ids where
+     the flow returned them. Built from `laneRows` itself: the lane and the card
+     cannot describe different reviews. */
+  const [filedIds, setFiledIds] = useState<Record<string, string>>({});
+  const filedLines = useMemo<FiledLine[]>(
+    () =>
+      laneRows.map((row) => ({
+        key: row.key,
+        icon: row.icon,
+        title: row.label,
+        after: row.value,
+        recordId: filedIds[row.key],
+      })),
+    [laneRows, filedIds],
+  );
+  const filedHead = `${laneRows.length} ${laneRows.length === 1 ? "answer" : "answers"}`;
   const planned = useMemo(() => (route ? plannedStepCount(route, ctx, answers) : 1), [route, ctx, answers]);
   const steps = stepperState({
     conversationOpen: awake,
@@ -1808,6 +1866,7 @@ export function RelationshipRoom({
          own ids and its own sentence; nothing here is composed from what the
          room hoped would happen. */
       onFiled?.({ actionId: REL_FLOWS[route].actionId, result });
+      setFiledIds(laneOrgIds(route, laneRows, result));
       setPhase("filed");
       setFlow(null);
       setLit(true);
@@ -1826,7 +1885,7 @@ export function RelationshipRoom({
     } finally {
       setFiling(false);
     }
-  }, [answers, ctx, deps, filing, flow, onFiled, push, route, sealed]);
+  }, [answers, ctx, deps, filing, flow, laneRows, onFiled, push, route, sealed]);
 
   /* ---- the room exhales when the card lands. The exit set is everything above
           the dossier, fixed at this instant, so a line that arrives afterwards
@@ -2094,6 +2153,10 @@ export function RelationshipRoom({
                           onAnchorPackage={onAnchorPackage}
                           lit={lit}
                           hold={item.kind === "dossier" ? finale.hold : 0}
+                          /* Only in the finale: while the room is open the lane
+                             beside the card is already saying this. */
+                          filed={item.kind === "dossier" && finaleState !== "off" ? filedLines : null}
+                          filedHead={filedHead}
                           onOpenPeek={openPeek}
                           onOption={(sayText, label) => void say(sayText, label)}
                           expanded={item.kind === "settled" ? settle.isOpen(item.id) : false}
@@ -2443,6 +2506,8 @@ function RelBlock({
   onAnchorPackage,
   lit,
   hold,
+  filed,
+  filedHead,
   onOpenPeek,
   onOption,
   onRestart,
@@ -2458,6 +2523,10 @@ function RelBlock({
   lit: boolean;
   /** THE FINALE'S DRAIN, in ms, so the card's paced reveal waits it out. */
   hold: number;
+  /** The review's own ledger, for the dossier's section. Null outside the
+   *  finale, where the lane is still on the glass saying it. */
+  filed: FiledLine[] | null;
+  filedHead: string;
   onOpenPeek: ReturnType<typeof usePeek>["openPeek"];
   onOption: (say: string, label: string) => void;
   onRestart: (restart: { route: RelRoute; say: string }) => void;
@@ -2641,7 +2710,7 @@ function RelBlock({
     const d = item.dossier;
     return (
       <>
-        <RelDossier dossier={d} lit={lit} hold={hold} />
+        <RelDossier dossier={d} lit={lit} hold={hold} filed={filed} filedHead={filedHead} />
         <div className="wk-tokline">
           <span className="wk-tick">✓</span>
           <span>{d.tokenNote}</span>
@@ -2851,7 +2920,19 @@ function RelFlowCard({
    hairline draws across, each real row materialises ~300ms apart, a second
    hairline, then the check pops last. The halo behind it is the filing's only
    light and it breathes out on its own. */
-function RelDossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: boolean; hold?: number }) {
+function RelDossier({
+  dossier,
+  lit,
+  hold = 0,
+  filed,
+  filedHead,
+}: {
+  dossier: DossierModel;
+  lit: boolean;
+  hold?: number;
+  filed?: FiledLine[] | null;
+  filedHead?: string;
+}) {
   /* THE CARD CONSTRUCTS ITSELF AFTER THE ROOM HAS CLEARED. `hold` is the
      finale's drain; every delay below is offset by it. Zero outside a finale. */
   let t = hold + DOSSIER_HEADER_MS;
@@ -2867,6 +2948,9 @@ function RelDossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: bo
   const secondLine = t;
   t += DOSSIER_FOOT_MS;
   const foot = t;
+  /* The ledger is the next beat of the card's own clock, never a second
+     animation over it. Same handover as the facility room's. */
+  const ledger = foot + DOSSIER_CHECK_MS + FILED_SECTION_MS;
 
   return (
     <div className={`wk-rescard ${lit ? "wk-lit" : ""}`}>
@@ -2890,6 +2974,7 @@ function RelDossier({ dossier, lit, hold = 0 }: { dossier: DossierModel; lit: bo
         </span>
         {dossier.footer}
       </div>
+      {filed && <FiledList head={filedHead ?? ""} lines={filed} at={ledger} />}
     </div>
   );
 }

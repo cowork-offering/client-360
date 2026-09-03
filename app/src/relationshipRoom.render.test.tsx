@@ -1168,3 +1168,115 @@ describe("a service request subject carrying a route word stays on the service r
     expect(restarted.map((r) => r.route)).toEqual(["covenant"]);
   });
 });
+
+/* =============================================================================
+   WHAT WAS FILED, ON THE CARD (founder, 2026-09-04). THE SECOND ROOM.
+
+   One grammar with the facility room. The lane is this room's ledger and the
+   finale wipes it, so the card left standing carries the same answers, in the
+   same order, with the org's own record ids wherever the flow returned one.
+   ============================================================================= */
+
+const ledgerRows = (room: HTMLElement) => [...room.querySelectorAll(".wk-rescard .rc-fl-r")];
+const laneLabels = (room: HTMLElement) => [...room.querySelectorAll(".wk-ent .wk-ent-t b")].map((n) => n.textContent);
+
+/** The covenant review, driven to the point where the plan can be filed: one
+ *  covenant, its verdict, its observed figure and the basis. */
+async function driveCovenant(deps?: RelFlowDeps) {
+  const opened = open({ route: "covenant", deps });
+  await settle();
+  click(byText(/Debt Service Coverage/));
+  await settle();
+  click(byText(/^Compliant$/));
+  await settle();
+  click(byText(/Not assessed/));
+  await settle();
+  click(byText(/Not assessed/));
+  await settle();
+  return opened;
+}
+
+describe("the card carries what the lane collected", () => {
+  async function fileTheReview(opened: Opened, label: RegExp) {
+    click(opened.room.querySelector(".wk-propose")!);
+    await settle();
+    click(byText(label));
+    await settle();
+    return opened.room;
+  }
+
+  it("lists the lane's answers, in lane order, under a head that counts them", async () => {
+    const opened = open({ route: "annual" });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    const before = laneLabels(opened.room);
+    const room = await fileTheReview(opened, /File the review/);
+
+    const rows = ledgerRows(room);
+    // SAME ANSWERS, SAME ORDER, read against the lane the finale just drained
+    // rather than against a hard list.
+    expect(rows.map((r) => r.querySelector(".rc-fl-l b")!.textContent)).toEqual(before);
+    expect(rows.map((r) => r.querySelector(".rc-fl-now")!.textContent)).toEqual(
+      [...room.querySelectorAll(".wk-ent .wk-ent-t > span")].map((n) => n.textContent),
+    );
+    // The head says what the lane head said.
+    expect(room.querySelector(".wk-rescard .rc-fl-n")!.textContent).toBe("4 answers");
+  });
+
+  it("carries the org's own id on every answer the flow named a record for", async () => {
+    const deps = depsFor({
+      execute: async () =>
+        ({
+          ok: true,
+          result: {
+            ...RESULT,
+            recordName: null,
+            items: [{ covenantId: "cov1", covenantComplianceId: "a2Xbb0000COV0AAK" }],
+          },
+        }) as ToolOutcome<ExecuteResult>,
+    });
+    const opened = await driveCovenant(deps);
+    const room = await fileTheReview(opened, /File the assessments/);
+
+    const rows = ledgerRows(room);
+    expect(rows).toHaveLength(4);
+    /* THE TWO ROWS THAT ARE ABOUT THAT COVENANT carry the compliance row the
+       org created; the picking row and the free-text basis are not records and
+       claim no id rather than borrowing one. */
+    const ids = rows.map((r) => r.querySelector(".rc-fl-id")?.textContent ?? null);
+    expect(ids).toEqual([null, "a2Xbb0000COV0AAK", "a2Xbb0000COV0AAK", null]);
+  });
+
+  it("claims no id at all where the flow files one record for the whole review", async () => {
+    const opened = await driveCovenant();
+    const room = await fileTheReview(opened, /File the assessments/);
+    // The scripted result carries no `items`, so nothing is invented: the card
+    // lists the answers and the dossier's own rows name the record above them.
+    expect(room.querySelectorAll(".wk-rescard .rc-fl-id")).toHaveLength(0);
+    expect(ledgerRows(room)).toHaveLength(4);
+  });
+
+  it("is absent while the lane is still on the glass", async () => {
+    const opened = await driveCovenant();
+    click(opened.room.querySelector(".wk-propose")!);
+    await settle();
+    // The plan is staged, the lane is carrying the ledger, and there is no card
+    // and therefore no section.
+    expect(opened.room.querySelector(".rc-fl")).toBeNull();
+    expect(opened.room.querySelectorAll(".wk-ent").length).toBe(4);
+
+    click(byText(/File the assessments/));
+    await settle();
+    const { room } = opened;
+    const sections = [...room.querySelectorAll(".rc-fl")];
+    expect(sections).toHaveLength(1);
+    expect(sections[0].closest(".wk-rescard")).toBeTruthy();
+  });
+});
