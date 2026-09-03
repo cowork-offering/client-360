@@ -149,10 +149,12 @@ describe("tab-aware context (round 2)", () => {
   it("Exposure tab grounds on the ORG's coverage where the read carries it", () => {
     const hartwell = (LIVE.borrowers ?? {})["001bb00001I7FPNAA3"];
     const p = buildGroundedPrompt({ data: LIVE, bundle: hartwell, accountName: "Hartwell", tab: "Exposure & Collateral", question: "q" });
-    expect(p).toContain("Collateral: lendable $31.60M");
-    expect(p).toContain("coverage 1.02x");
+    // The org grew a second package (2026-09-03): nine facilities now, wider
+    // pledged collateral behind them, and a third under-covered facility.
+    expect(p).toContain("Collateral: lendable $42.37M");
+    expect(p).toContain("coverage 1.09x");
     // The facility-level truth the relationship ratio hides.
-    expect(p).toContain("2 facilities under-covered");
+    expect(p).toContain("3 facilities under-covered");
   });
 
   it("Financials tab carries EBITDA, leverage and interest coverage", () => {

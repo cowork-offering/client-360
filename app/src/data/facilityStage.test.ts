@@ -132,8 +132,11 @@ describe("live data — the org's real facilities are live facilities", () => {
     expect([...statuses]).toEqual(["Open"]);
   });
 
-  it("counts Hartwell's six Booked + Open facilities as bookable", () => {
-    expect(bookedFacilities(HARTWELL)).toHaveLength(6);
+  it("counts Hartwell's eight Booked + Open facilities as bookable", () => {
+    // The org grew a second package (2026-09-03): the original six C&I
+    // facilities plus the two new Real Estate ones. The ninth facility, the
+    // $3M equipment line, stays at Proposal and is not bookable.
+    expect(bookedFacilities(HARTWELL)).toHaveLength(8);
   });
 
   it("OFFERS modification and renewal on Hartwell", () => {
