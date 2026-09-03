@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useApp } from "../state/appState";
 import { readAnchors, type Anchor, type BorrowerBundle } from "../data/contract";
+import { FiledChip } from "./FiledChip";
 import { STATUS } from "../data/finance";
 import { gradeColor } from "./RiskGrade";
 import { TabContent } from "./tabs";
@@ -50,28 +51,16 @@ function isRatingAnchor(a: Anchor): boolean {
 }
 
 /**
- * THE ANCHOR A WRITE-BACK MOVES (rule 62).
+ * THE ANCHOR A FILED MODIFICATION IS ABOUT (rules 62 + 1).
  *
- * The workroom's manifest carries a COMMITTED delta, so the cell it lands on is
- * the one the read calls committed or total exposure — whatever the agent
- * labelled it. Nothing else in the strip is touched: a room that moved a figure
- * it did not compute would be worse than a room that moved none.
+ * The workroom's manifest carries a COMMITTED delta, so the cell it belongs
+ * beside is the one the read calls committed or total exposure — whatever the
+ * agent labelled it. The FIGURE DOES NOT MOVE: booked is the only committed
+ * (rule 1), and an unbooked version is not a number this cell may state. The
+ * delta lands next to it as a labelled chip instead.
  */
 function isExposureAnchor(a: Anchor): boolean {
   return /^(total\s+)?(committed|exposure|total\s+exposure|commitment)$/i.test(a.label.trim());
-}
-
-/** The anchor's figure, walked forward by a landed write-back. The value is a
- *  string the agent composed, so the delta is applied to the NUMBER inside it
- *  and re-set at the precision it was already written to — which is also what
- *  keeps the old and new strings the same length, and therefore rollable. */
-function withWriteBack(value: string, deltaMM: number): string {
-  if (!deltaMM) return value;
-  const m = value.match(/^(\D*)(\d+(?:\.\d+)?)(.*)$/);
-  if (!m) return value;
-  const [, head, digits, tail] = m;
-  const dp = digits.includes(".") ? digits.split(".")[1].length : 0;
-  return `${head}${(parseFloat(digits) + deltaMM).toFixed(dp)}${tail}`;
 }
 
 /** Split "$12.5M" / "1.42×" / "75 days" into the figure and its unit. Purple
@@ -83,16 +72,17 @@ function splitUnit(value: string): [string, string] {
 
 function AnchorCell({ a, deltaMM, washed }: { a: Anchor; deltaMM: number; washed: boolean }) {
   const moved = isExposureAnchor(a);
-  const [figure, unit] = splitUnit(moved ? withWriteBack(a.value, deltaMM) : a.value);
+  const [figure, unit] = splitUnit(a.value);
   const arrow = a.dir === "down" ? "↓" : a.dir === "up" ? "↑" : "";
   const arrowColor = a.dir === "down" ? STATUS.red.fg : STATUS.green.fg;
   return (
     <div className={`anchor ${moved && washed ? "washed" : ""}`} id={moved ? "ancExposure" : undefined}>
       <div className="l">{a.label}</div>
       <div className="v num">
-        {/* A FIGURE NEVER SWAPS, IT ROLLS (rule 61). The odometer owns the text
-            node, so a write-back landing behind the workroom's blur is watched
-            turning over rather than found already changed. */}
+        {/* THE BOOKED FIGURE, and the odometer still owns its text node so a
+            live sync landing a new committed is watched turning over rather
+            than found already changed (rule 61). What it no longer does is
+            roll on an execute: nothing was booked by one. */}
         {moved ? <Odo id="ancExpV" value={figure} /> : figure}
         {unit && <span className="u">{unit}</span>}
         {arrow && (
@@ -101,6 +91,9 @@ function AnchorCell({ a, deltaMM, washed }: { a: Anchor; deltaMM: number; washed
           </span>
         )}
       </div>
+      {/* THE FILED DELTA, ADJACENT AND LABELLED (rule 1). Never summed into the
+          figure above it: an unbooked version is a separate fact. */}
+      {moved && <FiledChip deltaMM={deltaMM} id="ancExpFiled" />}
       {a.sub && <div className="s">{a.sub}</div>}
     </div>
   );
@@ -197,9 +190,10 @@ export function AccountWorkspace({ bundle }: { bundle: BorrowerBundle }) {
   const ratingAnchor = anchors.find(isRatingAnchor);
   const rest = anchors.filter((a) => a !== ratingAnchor);
 
-  /* WRITE-BACK THROUGH THE GLASS (rule 62). An execute in the workroom walked
-     the committed figure forward; the anchor rolls to it while the room is
-     still open, and the violet wash settles on it ONCE when the glass lifts. */
+  /* THE FILED DELTA (rules 62 + 1). An execute in the workroom filed an unbooked
+     version; the anchor states what is BOOKED and carries the filed delta beside
+     it as a chip, and the violet wash settles on the cell ONCE when the glass
+     lifts — the wash marks the relationship as touched, not the figure as moved. */
   const deltaMM = (state.accountId && state.writeBacks[state.accountId]) || 0;
   const washing = !!state.accountId && state.washes.includes(state.accountId);
   useEffect(() => {

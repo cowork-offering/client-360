@@ -493,6 +493,24 @@ body.on-client .topnav {
   font-size: 11px;
   color: var(--ink-faint);
 }
+/* The filed delta on a worklist row (rule 1): a third line under the exposure
+   figure, not a second figure beside it.
+
+   IT SITS AFTER `.amt span` DELIBERATELY. The chip IS a span inside `.amt`, so
+   the caption rule above matches it and its parts at equal specificity; source
+   order is what keeps the brand violet on the amount. Moving this block up
+   silently greys the delta out. */
+#view-home .wlrow .amt .filedchip {
+  display: flex;
+  justify-content: flex-end;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--brand);
+}
+#view-home .wlrow .amt .filedchip .filedchip-w {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
 #view-home .wlrow .go {
   color: var(--ink-faint);
   font-size: 14px;

@@ -29,3 +29,10 @@ export function AppEntry() {
 export function dispatchOpenSheet(): void {
   appDispatch?.({ type: "SET_PANEL", panel: "actions" });
 }
+
+/** Land a workroom execute's committed delta the way `WorkroomHost` lands it.
+ *  The same reducer action, so what the cockpit's figures do with it is the
+ *  shipping behaviour and not a test's idea of it (rule 1). */
+export function dispatchWriteBack(accountId: string, committedDeltaMM: number): void {
+  appDispatch?.({ type: "WRITE_BACK", accountId, committedDeltaMM });
+}

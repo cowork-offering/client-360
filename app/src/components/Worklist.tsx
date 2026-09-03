@@ -8,6 +8,7 @@ import { REASON_META } from "./reasons";
 import { CopyPromptDialog } from "./CopyPromptDialog";
 import { flyName } from "./nameFlight";
 import { Odo } from "./Odometer";
+import { FiledChip } from "./FiledChip";
 import { mcpAvailable } from "../channel/mcp";
 import { CMDK_OPEN_EVENT } from "./CommandPalette";
 
@@ -203,13 +204,16 @@ export function Worklist() {
                   })()}
                 </span>
                 <span className="amt num">
-                  {/* The book's own figure, walked forward by a workroom
-                      execute and ROLLED into place (rules 61 + 62) — the same
-                      delta the hero anchor and the exposure total take. */}
+                  {/* THE BOOK'S OWN FIGURE, AND ONLY THAT (rule 1). It used to
+                      carry the workroom's committed delta summed into it, which
+                      made the row state an exposure the org had not booked. The
+                      delta is named under it instead, in the same chip the hero
+                      anchor and the exposure pane carry. */}
                   <b>
-                    <Odo value={fmtMoney((r.tce ?? 0) + (state.writeBacks[r.accountId] ?? 0) * 1e6)} />
+                    <Odo value={fmtMoney(r.tce ?? 0)} />
                   </b>
                   <span>total exposure</span>
+                  <FiledChip deltaMM={state.writeBacks[r.accountId] ?? 0} />
                 </span>
                 <span className="go">→</span>
               </div>

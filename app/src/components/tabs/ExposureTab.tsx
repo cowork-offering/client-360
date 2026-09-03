@@ -3,6 +3,7 @@ import { fmtMoney, fmtPct, fmtDate } from "../../data/format";
 import { fmtRatio, fmtRate, type Tone } from "../../data/finance";
 import { Pulse } from "../Pulse";
 import { Odo } from "../Odometer";
+import { FiledChip } from "../FiledChip";
 import { useApp } from "../../state/appState";
 import { collateralAssets, NO_PLEDGE_LINE, type CollateralAsset } from "../../domain/collateralAssets";
 import { isActiveFacility } from "../../data/worklist";
@@ -224,13 +225,13 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
     );
   }
 
-  /* WRITE-BACK THROUGH THE GLASS (rule 62), applied ONCE at the source. Every
-     figure on this pane is derived from `committed` — the strip, the drawn
-     percentage, the coverage ratio and the table total — so a delta applied to
-     the total alone would leave the pane disagreeing with itself, and with what
-     the room said out loud while staging it. If the commitment moved, the
-     utilisation and the coverage moved with it. */
-  const committed = (exp.totalCommitted ?? 0) + writeBackMM * 1e6;
+  /* BOOKED IS THE ONLY COMMITTED (rule 1, founder 2026-09-03). Every figure on
+     this pane is derived from `committed` — the strip, the drawn percentage, the
+     coverage ratio and the table total — and an execute files an UNBOOKED
+     version, so adding its delta in here would have the whole pane state a
+     utilisation and a coverage the org cannot reproduce. The delta is declared
+     beside the committed figure instead, and nothing derived from it moves. */
+  const committed = exp.totalCommitted ?? 0;
   const drawn = exp.totalOutstanding ?? 0;
   const avail = exp.totalAvailable ?? 0;
   const drawnPct = committed > 0 ? Math.round((drawn / committed) * 100) : 0;
@@ -270,7 +271,16 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
                 <Fig>{fmtMoney(committed)}</Fig>
               </Pulse>
             }
-            sub="Total commitment"
+            sub={
+              <>
+                Total commitment
+                {/* THE FILED DELTA, under the caption and never inside the
+                    figure (rule 1). Everything on this pane is derived from
+                    `committed`, so the one honest place for an unbooked
+                    version is beside it. */}
+                <FiledChip deltaMM={writeBackMM} id="expCommittedFiled" />
+              </>
+            }
           />
           <Figure
             label="Drawn"
