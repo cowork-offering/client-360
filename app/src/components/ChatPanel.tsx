@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { openFacilityRoom } from "./workroom/roomSession";
+import { smartOpeningFor } from "./workroom/route";
+import { openRelationshipRoom } from "./relationship/relSession";
+import { relOpeningForAccount } from "./relationship/RelationshipRoom";
 import { useApp, ACCOUNT_TABS } from "../state/appState";
 import type { AiMessage } from "../data/contract";
 import { formatProbe, newRequestId, probeChannels } from "../channel/adapter";
@@ -178,8 +182,38 @@ export function ChatPanelBody() {
   /** Chip click: send, and if the chip is registry-backed log it to the
    *  account timeline like any other triggered action (A31.3). Book-level
    *  chips have no registry action, so nothing is logged. */
+  /* THE ROOMS TOOK OVER THE PANEL'S WORK (founder, 2026-09-03: "the chips
+     still refer to our old list thingys"). A chip whose action the rooms now
+     carry opens the ROOM, exactly as the FAB does; the legacy panel modal
+     remains only for actions no room covers. */
+  const FACILITY_CHIP_ACTIONS = new Set(["loan-modification", "renewal", "new-facility-request"]);
+  const RELATIONSHIP_CHIP_ACTIONS = new Set([
+    "covenant-review",
+    "collateral-valuation",
+    "annual-review",
+    "risk-rating-review",
+    "create-service-request",
+  ]);
+
   async function sendSuggestion(s: Suggestion) {
     const action = ACTIONS_BY_ID[s.id];
+    if (account?.accountId && FACILITY_CHIP_ACTIONS.has(s.id)) {
+      const bundle = resolveBundle(data, account.accountId);
+      openFacilityRoom({
+        accountId: account.accountId,
+        accountName: account.name ?? "this relationship",
+        opening: smartOpeningFor({ data, bundle, accountName: account.name ?? "", productPackageId: null }),
+      });
+      return;
+    }
+    if (account?.accountId && RELATIONSHIP_CHIP_ACTIONS.has(s.id)) {
+      openRelationshipRoom({
+        accountId: account.accountId,
+        accountName: account.name ?? "this relationship",
+        opening: relOpeningForAccount({ data, accountId: account.accountId }),
+      });
+      return;
+    }
     // A33.1.2 — a chip for a panel-backed action opens the SAME modal the
     // Client Actions row and the activity next-step open.
     if (ACTIONS_BY_ID[s.id]?.hasPanel) {
