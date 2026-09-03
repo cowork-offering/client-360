@@ -1,0 +1,56 @@
+/* =============================================================================
+   THE PACKAGE ANCHOR — the header line, and the ask that runs before the route.
+
+   ITS OWN FILE. `workroom.css` is the room's stylesheet and this is one beat
+   inside it; keeping the beat's own rules together is what lets the beat be
+   read, reviewed and taken back out in one place. Everything here reuses the
+   room's existing tokens and the `.wk-pkg` card shape, so a package card in the
+   ask and a package card in the peek are the same object.
+   ============================================================================= */
+
+/* ------------------------------------------------- the header's package line
+
+   ONE QUIET LINE beside the room's word, on the glass from the first frame in
+   every state. It is a button because on a relationship staging more than one
+   package it is also the way back out of the one that was chosen. */
+.wk-pkgline {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 340px;
+  border: 0;
+  background: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.wk-pkgline:hover {
+  background: var(--neutral-bg);
+}
+.wk-pkgline-k {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-label);
+}
+.wk-pkgline-v {
+  font-size: 12px;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- the ask block
+
+   The framing sentence is STATIC SHELL COPY inside the block, so it survives
+   the tier above it fading: the question that frames a choice must not leave
+   the stage on the beat its own options land. */
+.wk-pkgask-h {
+  font-size: 12px;
+  color: var(--ink-muted);
+  padding-bottom: 2px;
+}

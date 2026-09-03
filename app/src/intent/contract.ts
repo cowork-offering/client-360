@@ -55,6 +55,12 @@ export interface IntentDoc {
   id: string;
   accountId: string;
   accountName: string;
+  /** THE PACKAGE THE WRITER ALREADY KNEW (2026-09-03). A relationship staging
+   *  more than one package makes the room ask which before anything binds; an
+   *  intent that NAMES one has already answered that question, and asking a
+   *  banker to re-pick what the instruction already said would be the room
+   *  ignoring what it was handed. Absent is the common case and it asks. */
+  productPackageId?: string;
   room: IntentRoom;
   route: IntentRoute;
   /** Banker-language instructions in the room's own grammar, one per change. */
@@ -89,6 +95,12 @@ const text = (v: unknown, cap: number): string | undefined => {
  *  relationship this cockpit can open, and a document carrying one is not an
  *  intent — better a silent refusal than a room opened on a guess. */
 const ACCOUNT_ID = /^001[A-Za-z0-9]{12,15}$/;
+
+/** Any Salesforce record id. The product package's own key prefix is the org's
+ *  to choose, so this checks the SHAPE and the room checks membership: an id
+ *  that names no package on the relationship anchors nothing, because
+ *  `workroomContextFor` resolves it against `packageRecords` before it binds. */
+const RECORD_ID = /^[A-Za-z0-9]{15,18}$/;
 
 /**
  * Read one store document as an intent, or refuse it.
@@ -152,6 +164,8 @@ export function readIntentDoc(id: string, raw: unknown): IntentDoc | null {
     createdAt: text(d.createdAt, MAX_FIELD_CHARS) ?? "",
     status,
   };
+  const pkg = typeof d.productPackageId === "string" ? d.productPackageId.trim() : "";
+  if (RECORD_ID.test(pkg)) doc.productPackageId = pkg;
   const openedAt = text(d.openedAt, MAX_FIELD_CHARS);
   const openedBy = text(d.openedBy, MAX_FIELD_CHARS);
   if (openedAt) doc.openedAt = openedAt;

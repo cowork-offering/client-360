@@ -62,6 +62,11 @@ export function openFacilityRoom(args: {
   accountId: string;
   accountName: string;
   opening: SmartOpening | null;
+  /** THE PACKAGE THE CALLER ALREADY KNEW. An intent that names one has already
+   *  answered the room's package question, so the room binds it and never asks.
+   *  Absent is the common case: the FAB and the mail row name a relationship,
+   *  and a relationship staging more than one package is asked about. */
+  productPackageId?: string | null;
 }): void {
   session = {
     accountId: args.accountId,
@@ -71,7 +76,7 @@ export function openFacilityRoom(args: {
     opening: args.opening,
     say: null,
     memberId: null,
-    productPackageId: null,
+    productPackageId: args.productPackageId ?? null,
   };
   emit();
 }

@@ -1,4 +1,5 @@
 import type { BorrowerBundle, C360Data, Facility } from "../../data/contract";
+import { mustChoosePackage } from "../../book/packages";
 import { bookedFacilities, facilityProduct } from "../../data/facilityStage";
 import { fmtMoney } from "../../data/format";
 import { isActiveFacility } from "../../data/worklist";
@@ -130,6 +131,13 @@ export function smartOpeningFor(args: {
 }): SmartOpening | null {
   const today = args.data.meta?.generatedAt ?? "";
   if (!today) return null;
+  /* A SIGNAL RANKED ACROSS EVERY PACKAGE IS NOT A SIGNAL (2026-09-02). With no
+     anchor the package filter below narrows nothing, so `deriveNextMove` ranked
+     maturity and utilisation over the WHOLE relationship and printed the winner
+     as "The package is drawn to 90% of commitment" on a book drawn to 8.9%. A
+     relationship staging several packages opens on the neutral question until
+     the banker says which one this runs in, which is what null already means. */
+  if (!args.productPackageId && mustChoosePackage(args.bundle, null)) return null;
   // BOOKED AND ACTIVE, scoped to the package the room stands in. A maturity on
   // a proposal is not a renewal this room can start, and a paid-off facility
   // has no maturity worth raising.

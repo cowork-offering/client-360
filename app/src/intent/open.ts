@@ -95,7 +95,17 @@ function enter(intent: IntentDoc, navigate: (accountId: string) => void): void {
      flight exists. One frame is enough; the flight's own 520ms runs underneath. */
   const raise = () => {
     if (intent.room === "facility" && FACILITY_ROUTES.has(intent.route)) {
-      openFacilityRoom({ accountId: intent.accountId, accountName: intent.accountName, opening: null });
+      /* AN INTENT THAT NAMES A PACKAGE BINDS IT (2026-09-03). The writer knew
+         which deal the instruction is about; a room that asked anyway would be
+         making the banker re-answer a question already on the document. An
+         intent WITHOUT one lands unanchored and the room asks, which is the
+         common case and the honest one. */
+      openFacilityRoom({
+        accountId: intent.accountId,
+        accountName: intent.accountName,
+        opening: null,
+        productPackageId: intent.productPackageId ?? null,
+      });
       bindFacilityRoute(intent.route as WorkroomMode, { say: null });
     } else {
       openRelationshipRoom({ accountId: intent.accountId, accountName: intent.accountName, opening: null });
