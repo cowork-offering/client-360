@@ -151,6 +151,16 @@ export interface RelFlowSpec {
   filedWord: string;
   /** The status line rotation under the execute mark. */
   loadSteps: string[];
+  /**
+   * THE TOOL KEY THE CLIENT FENCE IS ARMED WITH, where the route has one.
+   *
+   * `TOOL_OBJECT_FENCE` narrows a tool to fewer objects than the plain
+   * allowlist permits, and it can only ever subtract. A route that declares no
+   * key is validated exactly as it always was, which is why every review flow
+   * leaves this undefined: they write objects only they write, so the object
+   * table alone already fences them.
+   */
+  toolId?: string;
 }
 
 export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
@@ -224,6 +234,11 @@ export const REL_FLOWS: Record<RelRoute, RelFlowSpec> = {
   intake: {
     route: "intake",
     actionId: "relationship-intake",
+    // THE ONE ROUTE WHOSE IDENTITY IS WHAT IT MUST NOT TOUCH. The loan junction
+    // and the pledge are both legitimate creates on the object table, because
+    // the modification arm authors them, so the object fence alone would let an
+    // intake plan reach a facility and say nothing. This mirrors the Apex fence.
+    toolId: "relationship-intake",
     word: "Relationship Intake",
     icon: "package",
     covers:
@@ -1295,7 +1310,7 @@ export async function stageRelPlan(
      id the staging call could not have created, is not a plan a banker should
      be offered a token for. Both refuse BEFORE the gesture exists rather than
      after it is made. */
-  const violations = validatePlan(plan.steps);
+  const violations = validatePlan(plan.steps, REL_FLOWS[route].toolId);
   if (violations.length) {
     throw new RelFlowError(
       `The staged plan would write outside what this cockpit permits: ${violations.map((v) => v.reason).join("; ")}.`,

@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowerBundle, C360Data } from "../../data/contract";
 import type { OrgCatalog } from "../../channel/catalog";
-import type { StagePayloads } from "../../channel/writeTools";
-import { nextStep, relContextFor, relReadyLine, type Answers, type RelContext } from "./reviewFlows";
+import type { StagedOutput } from "../../actions/stagedPlan";
+import type { ExecuteResult, StagePayloads, ToolOutcome } from "../../channel/writeTools";
+import {
+  REL_FLOWS,
+  nextStep,
+  relContextFor,
+  relReadyLine,
+  stageRelPlan,
+  type Answers,
+  type RelContext,
+  type RelFlowDeps,
+} from "./reviewFlows";
 import { readRelRouteIntent, readsAsIntake, REL_ROUTE_WORD } from "./relRoute";
 import {
   EFFECTIVE_DATE_IS_FINAL,
@@ -835,5 +845,99 @@ describe("the copy is the room's own register", () => {
     const step = nextStep("intake", ctx, { intakeKind: "put something on the book" })!;
     expect(step.key).toBe("intakeKindPick");
     expect(step.kind).toBe("chips");
+  });
+});
+
+/* ---------------------------------------------------------------- the fence */
+
+/*  THE CLIENT FENCE, ARMED. The Apex guard refuses an intake write to the loan
+    junction or the pledge by name; this is the mirror of that refusal, and it
+    fires at the confirm gate before a banker is ever offered a token. It is a
+    per-TOOL fence rather than a per-object one because both junctions are
+    legitimate creates for the modification arm, so the object table alone would
+    let an intake plan reach a facility and never say a word. */
+
+const INTAKE_SCRIPT: Record<string, unknown> = {
+  intakeKind: "add a relationship covenant: minimum tangible net worth of 12M tested annually",
+  "covEffective.0": "2026-09-01",
+  "covNotes.0": "from the amended and restated agreement",
+  "covMore.0": "done",
+};
+
+function stagedPlanOf(steps: StagedOutput["steps"]): StagedOutput {
+  return {
+    stagingId: "a8a000",
+    planHash: "hash-abcd",
+    decisionToken: "6b3490fc91cf",
+    summary: "Files the intake.",
+    steps,
+    warnings: [],
+    suggestions: [],
+  };
+}
+
+function depsReturning(plan: StagedOutput): RelFlowDeps {
+  return {
+    available: () => true,
+    newKey: () => "idem-fence",
+    stage: async () => ({ ok: true, result: plan }) as ToolOutcome<StagedOutput>,
+    execute: async () =>
+      ({
+        ok: true,
+        result: { stagingId: "a8a000", terminalState: "success", outcome: "Filed.", steps: [] },
+      }) as ToolOutcome<ExecuteResult>,
+  };
+}
+
+describe("the intake route arms the per-tool fence", () => {
+  it("declares the tool key on the intake route and on no other", () => {
+    expect(REL_FLOWS.intake.toolId).toBe("relationship-intake");
+    for (const route of ["annual", "covenant", "valuation", "rating", "service"] as const) {
+      expect(REL_FLOWS[route].toolId, route).toBeUndefined();
+    }
+  });
+
+  it("refuses an intake plan that would pledge the asset to a facility", async () => {
+    const ctx = ctxFor();
+    const { answers } = drive(ctx, INTAKE_SCRIPT);
+    const deps = depsReturning(
+      stagedPlanOf([
+        { id: "collateral_create_0", type: "write", label: "File the asset", objectName: "LLC_BI__Collateral__c" },
+        { id: "pledge_0", type: "write", label: "Pledge it", objectName: "LLC_BI__Loan_Collateral2__c" },
+      ]),
+    );
+    await expect(stageRelPlan("intake", ctx, answers, "idem-fence", deps)).rejects.toThrow(
+      /relationship-intake may not write/,
+    );
+  });
+
+  it("refuses an intake plan that would attach the covenant to a loan", async () => {
+    const ctx = ctxFor();
+    const { answers } = drive(ctx, INTAKE_SCRIPT);
+    const deps = depsReturning(
+      stagedPlanOf([
+        { id: "covenant_create_0", type: "write", label: "File the covenant", objectName: "LLC_BI__Covenant2__c" },
+        { id: "attach_0", type: "write", label: "Attach it", objectName: "LLC_BI__Loan_Covenant__c" },
+      ]),
+    );
+    await expect(stageRelPlan("intake", ctx, answers, "idem-fence", deps)).rejects.toThrow(
+      /relationship-intake may not write/,
+    );
+  });
+
+  it("passes the five relationship objects the intake actually writes", async () => {
+    const ctx = ctxFor();
+    const { answers } = drive(ctx, INTAKE_SCRIPT);
+    const deps = depsReturning(
+      stagedPlanOf([
+        { id: "covenant_create_0", type: "write", label: "File the covenant", objectName: "LLC_BI__Covenant2__c" },
+        { id: "covenant_anchor_0", type: "write", label: "Anchor it", objectName: "LLC_BI__Account_Covenant__c" },
+        { id: "collateral_create_0", type: "write", label: "File the asset", objectName: "LLC_BI__Collateral__c" },
+        { id: "collateral_own_0", type: "write", label: "Own it", objectName: "LLC_BI__Account_Collateral__c" },
+        { id: "collateral_value_0", type: "write", label: "Value it", objectName: "LLC_BI__Collateral_Valuation__c" },
+      ]),
+    );
+    const staged = await stageRelPlan("intake", ctx, answers, "idem-fence", deps);
+    expect(staged.decisionToken).toBe("6b3490fc91cf");
   });
 });

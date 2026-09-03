@@ -271,6 +271,27 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     refusedOperations: ["updates of any kind: every field on this junction is non-updateable in the org", "deletion"],
   },
 
+  "LLC_BI__Account_Covenant__c": {
+    object: "LLC_BI__Account_Covenant__c",
+    label: "relationship covenant",
+    // THE MIRROR WAS MISSING THIS ONE (found 2026-09-03 building relationship intake). The Apex
+    // guard has carried it since 2026-08-31, when the founder corrected the modification arm to
+    // mint the account association nCino's own UI mints beside every covenant. This mirror never
+    // learned it, so the first plan whose steps named the object would have been refused at the
+    // confirm gate by our own belt-and-braces - the same failure the wave-2 comment below
+    // describes, one object later.
+    //
+    // It is the RELATIONSHIP junction, and it is the whole reason a covenant can exist without
+    // touching a facility: the package view of covenants is the union of this junction and the
+    // loan one, deduped by covenant id. Two required lookups, nothing else.
+    mayCreate: true,
+    mayUpdate: false,
+    createStates: [],
+    transitions: [],
+    refusedFields: [],
+    refusedOperations: ["updates of any kind", "deletion"],
+  },
+
   "LLC_BI__Legal_Entities__c": {
     object: "LLC_BI__Legal_Entities__c",
     label: "borrowing structure row",
@@ -390,6 +411,31 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
   },
 };
 
+/* -------------------------------------------------- per-tool object fences */
+
+/**
+ * Objects a NAMED tool may write, narrower than the table above (mirrors
+ * `C360WriteGuard.TOOL_CREATE_OBJECTS`). Subtraction only: a tool key can take
+ * objects away and can never add one, because a step still has to pass the
+ * object policy afterwards.
+ *
+ * `relationship-intake` is the first entry and the reason the mechanism exists.
+ * It files covenants and assets on the BORROWER: a covenant with its
+ * relationship junction and no loan junction, an asset with its ownership
+ * junction and no pledge. Both of those facility junctions are legitimate
+ * creates on the object table because the modification arm authors them, so the
+ * object fence alone would let intake reach a facility and say nothing.
+ */
+export const TOOL_OBJECT_FENCE: Record<string, string[]> = {
+  "relationship-intake": [
+    "LLC_BI__Covenant2__c",
+    "LLC_BI__Account_Covenant__c",
+    "LLC_BI__Collateral__c",
+    "LLC_BI__Account_Collateral__c",
+    "LLC_BI__Collateral_Valuation__c",
+  ],
+};
+
 /* ------------------------------------------------------------- validation */
 
 export interface AllowlistViolation {
@@ -428,7 +474,7 @@ function normalizeFields(fields: ValidatableStep["fields"]): StepFieldWrite[] {
   return (fields ?? []).map((f) => (typeof f === "string" ? { field: f } : f));
 }
 
-export function validateStep(step: ValidatableStep): AllowlistViolation[] {
+export function validateStep(step: ValidatableStep, toolId?: string): AllowlistViolation[] {
   const objectName = step.object ?? step.objectName;
   // Non-write steps touch nothing, so nothing to police.
   if (step.type !== "write" || !objectName) return [];
@@ -436,6 +482,24 @@ export function validateStep(step: ValidatableStep): AllowlistViolation[] {
   const policy = TRANSITION_ALLOWLIST[objectName];
   if (!policy) {
     return [{ stepId: step.id, object: objectName, reason: `${objectName} is not on the transition allowlist` }];
+  }
+
+  // A tool that fences itself by name is held to that fence first. Omitting the
+  // tool id leaves every existing caller on exactly the behaviour it had.
+  if (toolId) {
+    const fence = TOOL_OBJECT_FENCE[toolId];
+    if (!fence) {
+      return [{ stepId: step.id, object: objectName, reason: `no per-tool object fence is declared for ${toolId}` }];
+    }
+    if (!fence.includes(objectName)) {
+      return [
+        {
+          stepId: step.id,
+          object: objectName,
+          reason: `${toolId} may not write ${policy.label}: it writes only [${fence.join(", ")}]`,
+        },
+      ];
+    }
   }
 
   const out: AllowlistViolation[] = [];
@@ -495,6 +559,6 @@ export function validateStep(step: ValidatableStep): AllowlistViolation[] {
 }
 
 /** Validate a whole plan. An empty array means every step is allowlisted. */
-export function validatePlan(steps: ValidatableStep[]): AllowlistViolation[] {
-  return steps.flatMap(validateStep);
+export function validatePlan(steps: ValidatableStep[], toolId?: string): AllowlistViolation[] {
+  return steps.flatMap((step) => validateStep(step, toolId));
 }
