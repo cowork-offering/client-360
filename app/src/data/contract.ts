@@ -77,6 +77,7 @@ export const PROVENANCE = {
   "borrower.activity[].ts": { kind: "NCINO", source: "Event timestamp as recorded; rendered relative to meta.generatedAt" },
   "borrower.activity[].reference": { kind: "NCINO", source: "Source citation (message/record id). webLink absent until the M365 intake exists — rendered as plain text, never a fabricated link" },
   "borrower.requests[]": { kind: "NCINO", source: "Inbound client requests (A29 seam); live intake pending M365/Graph" },
+  "borrower.collateralValuations[]": { kind: "NCINO", source: "LLC_BI__Collateral_Valuation__c, the LATEST row per asset. A SIDE READ: Customer360Exposure returns no valuation fields, so these are transcribed from the live REST read of 2026-09-02 in knowledge/research/collateral-valuation-20260902.md §5. No valuation figure is carried; the money the read prints is the asset's own collateralValue. Absent on a bundle means no read looked, never that the asset was never valued" },
 
   "borrower.boom.ratios": { kind: "BOOM", source: "boom_get_ratios" },
   "borrower.boom.ratios.ebitda": { kind: "BOOM", source: "boom_get_ratios — spread EBITDA" },
@@ -381,6 +382,41 @@ export interface Collateral {
   lienPosition?: string;
   pledgedStatus?: string;
   isPrimary?: boolean;
+}
+
+/**
+ * THE LATEST VALUATION ON ONE ASSET (`LLC_BI__Collateral_Valuation__c`).
+ *
+ * A SIDE READ, AND SAID TO BE ONE. `Customer360Exposure` returns collateralId,
+ * name, description, amountPledged, lendable value and advanceRateSource, and
+ * NO dates at all — `data/observed-exposure-envelopes.json` is the verbatim
+ * capture that proves it, and the coverage suite fails the moment a valuation
+ * field appears inside a facility's pledge rows. So the valuation clock rides
+ * BESIDE the exposure block rather than inside it, and the bundles that carry
+ * one say where it was read.
+ *
+ * It hangs off the COLLATERAL, never the pledge: a cross-pledged asset is
+ * valued once, and four pledge rows of one asset share this row.
+ *
+ * The block retires the day the exposure tool carries these fields itself.
+ */
+export interface CollateralValuationRow {
+  /** The `LLC_BI__Collateral__c` id this valuation was struck against. */
+  collateralId: Id;
+  /** The org's `CV-` autonumber. */
+  valuationName?: string;
+  /** `LLC_BI__Valuation_Date__c` — the date the figure was struck. */
+  valuationDate?: string;
+  /** `LLC_BI__Type__c` — the basis. Fair market, orderly liquidation and book
+   *  value are three different numbers for one asset, so the basis travels. */
+  valuationType?: string;
+  /** `LLC_BI__Source__c` — where the number came from. */
+  valuationSource?: string;
+  /** `LLC_BI__Valuation_Frequency__c` — the revaluation cycle, in the org's own
+   *  words. The next date is derived from it only where the org stores none. */
+  valuationFrequency?: string;
+  /** `LLC_BI__Next_Revaluation_Due_Date__c` — the org's own next date. */
+  nextRevaluationDue?: string;
 }
 
 /** A `LLC_BI__Loan_Covenant__c` junction row. nCino canon: a renewal clones the
@@ -764,6 +800,9 @@ export interface BorrowerBundle {
   activity?: ActivityEntry[];
   /** Inbound client requests (A29 seam). */
   requests?: ClientRequest[];
+  /** The latest valuation per collateral record, where a read staged one.
+   *  ABSENT IS NOT "never valued": it means no read on this bundle looked. */
+  collateralValuations?: CollateralValuationRow[];
   signals?: StructuralSignals;
   boom?: Boom;
   verdict?: string;

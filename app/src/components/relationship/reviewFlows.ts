@@ -22,6 +22,7 @@ import {
   type WriteActionId,
 } from "../../channel/writeTools";
 import type { IconKind } from "../workroom/TypeIcon";
+import { fieldExamBodyOption } from "./fieldExam";
 import { NO_COMPLIANCE_ROW, relBookFor, type BookCovenant } from "./relBook";
 import type { RelRoute } from "./relRoute";
 
@@ -616,7 +617,13 @@ function valuationStep(ctx: RelContext, a: Answers): RelStep | null {
            on Hartwell inventory the asset reads $6.4MM at the 80 percent type
            rate and the pledge reads $4.0MM at the 50 percent policy rate.
            Printing the asset figure would print a number the bank does not
-           lend against. NO VALUATION DATE: the read carries none. */
+           lend against.
+
+           THE VALUATION CLOCK IS THE OPENING READ OF THIS ROUTE. The banker
+           picking assets to revalue is choosing on staleness, so when each was
+           last valued, on what basis, and when it falls due next is on the
+           option itself rather than a question later. `book.valuation` says
+           "No valuation on file" where the read stages none. */
         return {
           label: collateralLabel(c),
           value: c.collateralId!,
@@ -625,6 +632,7 @@ function valuationStep(ctx: RelContext, a: Answers): RelStep | null {
             typeof c.collateralValue === "number" ? fmtMoney(c.collateralValue) : null,
             book?.lendable ? `${book.lendable} lendable` : null,
             book?.advanceRateSource,
+            book?.valuation,
           ]
             .filter(Boolean)
             .join(" · "),
@@ -966,6 +974,10 @@ function serviceStep(ctx: RelContext, a: Answers): RelStep | null {
       key: "summary",
       ask: "And the request in full, as the servicing team needs to read it.",
       kind: "text",
+      /* A FIELD EXAM ASK GETS ITS BODY OFFERED, never written for it. Read off
+         the SUBJECT the banker has already answered, so it appears whether the
+         route was bound from the field exam offer or typed straight in. */
+      options: fieldExamBodyOption(a.requestType),
       placeholder: "The request, in full.",
       target: { object: "Case", field: "Description" },
     };

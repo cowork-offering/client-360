@@ -94,6 +94,12 @@ export interface BrainReadBlocks {
     pledged?: string;
     lendable?: string;
     scope: string;
+    /** THE ASSET'S VALUATION CLOCK, so a desk answering off this envelope can
+     *  say when a figure was struck and when it is due again rather than
+     *  reading a pledge amount back with no date on it. One line, built by
+     *  `data/collateralValuation.ts`, and absent on no asset: it says "No
+     *  valuation on file" where the read stages none. */
+    valuation?: string;
   }>;
   exposure?: { committed: string; drawn: string; available?: string; facilities: number };
   /** Pricing AS STORED. Rate only: this org stores no index name (see the

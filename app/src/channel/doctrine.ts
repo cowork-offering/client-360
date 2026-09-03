@@ -448,6 +448,7 @@ const VALUATION_BASIS: DoctrineBlock = {
     "Every valuation carries an as-of date. Policy states how long it stays good: monthly for A/R and inventory on a borrowing base, 12 to 24 months for machinery and equipment, 12 to 36 for CRE.",
     "LENDABLE VALUE IS TWO NUMBERS IN THIS ORG. The collateral record's lendable value is a formula over the collateral TYPE rate and ignores any pledge override; the pledge's own lendable value honours it. The credit figure is the PLEDGE figure. Never present the asset figure as the bank's.",
     "Filing a valuation does not move the collateral value. That roll-up is bound to nCino's own Add Valuation button and does not fire headlessly. Claim no coverage improvement from a filing.",
+    "A FIELD EXAM IS NOT A VALUATION AND THIS ROOM FILES NEITHER OF IT. Nothing on this cockpit schedules, records or reports a field examination, and this org's valuation source list carries no Field Exam value. Asked for one, say it is not something this room files, then name the two moves that exist: a service request staging the ask, or a covenant review on the borrowing base. Never answer it by reading the room's route list back.",
   ],
 };
 

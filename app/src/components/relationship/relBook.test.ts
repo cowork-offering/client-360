@@ -9,14 +9,16 @@ import { relContextFor, type RelContext } from "./reviewFlows";
    Two things this holds. First, that the book REMOVES QUESTIONS and never
    removes a decision: every verdict and every figure is offered with the org's
    own reading beside it and not one is answered on the banker's behalf. Second,
-   and harder, that every ABSENCE is honest: the read carries no valuation date
-   and no filed review, and the book says so rather than implying there is none.
+   and harder, that every ABSENCE is honest: an asset the read stages no
+   valuation for says so rather than borrowing a date, and the filed reviews are
+   named as UNREAD rather than implied to be none.
    ============================================================================= */
 
 const PACKAGE = "a5Fbb000000IHFJEA4";
 
-function ctxFor(covenants: unknown[]): RelContext {
+function ctxFor(covenants: unknown[], valuations?: unknown[]): RelContext {
   const bundle = {
+    collateralValuations: valuations,
     snapshot: { accountId: "001X", name: "Hartwell", productPackageId: PACKAGE, primaryRiskRating: "4" },
     exposure: {
       facilities: [
@@ -74,12 +76,35 @@ describe("the book reads what the relationship carries", () => {
     expect(book.assets[0].advanceRateSource).toBe("Pledge override");
   });
 
-  it("carries NO valuation date on any asset, because no read holds one", () => {
-    const book = relBookFor(ctxFor([]));
-    // An honest null. When Customer360Exposure starts returning
-    // LLC_BI__Valuation_Date__c this becomes a date and the staleness signal
-    // becomes sayable; until then it is not, and the room says nothing.
-    expect(book.assets.every((a) => a.lastValued === null)).toBe(true);
+  it("carries the valuation clock where the read stages one, and says so where it does not", () => {
+    // NO BLOCK IS NOT AN EMPTY HISTORY. Customer360Exposure returns no
+    // valuation field at all, so a bundle without the side read says the asset
+    // has none ON FILE rather than pretending it was never valued.
+    const silent = relBookFor(ctxFor([]));
+    expect(silent.assets[0].lastValued).toBeNull();
+    expect(silent.assets[0].valuation).toBe("No valuation on file · no next date on file");
+
+    const read = relBookFor(
+      ctxFor(
+        [],
+        [
+          {
+            collateralId: "a35A",
+            valuationName: "CV-0000000009",
+            valuationDate: "2026-06-30",
+            valuationType: "Book Value",
+            valuationSource: "Inventory Report",
+            valuationFrequency: "Monthly",
+            nextRevaluationDue: "2026-07-31",
+          },
+        ],
+      ),
+    );
+    expect(read.assets[0].lastValued).toBe("Jun 30, 2026");
+    expect(read.assets[0].valuation).toBe(
+      // The clock is the context's own (2026-09-02), never a wall clock.
+      "Last valued Jun 30, 2026 at $8M · Book Value, Inventory Report · next due Jul 31, 2026, 33 days past",
+    );
   });
 
   it("reads a row from EITHER signal: an id, or that row's own status", () => {

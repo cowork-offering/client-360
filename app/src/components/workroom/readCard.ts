@@ -1,3 +1,4 @@
+import { valuationLine, valuationsOf } from "../../data/collateralValuation";
 import type { BorrowerBundle, Covenant, Facility } from "../../data/contract";
 import { facilityProduct, shortFacilityName } from "../../data/facilityStage";
 import { fmtDate, fmtMoney, fmtPct } from "../../data/format";
@@ -269,6 +270,7 @@ function covenantsCard(src: ReadSource): ReadCardModel | null {
 
 function collateralCard(src: ReadSource): ReadCardModel | null {
   const facilities = scoped(src);
+  const valuations = valuationsOf(src.bundle);
   const groups: ReadGroup[] = [];
   let counted = 0;
   for (const f of facilities) {
@@ -281,6 +283,10 @@ function collateralCard(src: ReadSource): ReadCardModel | null {
         typeof c.advanceRate === "number" ? `${c.advanceRate}% advance` : null,
         c.lienPosition ? `lien ${c.lienPosition}` : null,
         c.pledgedStatus,
+        /* WHEN IT WAS LAST VALUED AND WHEN IT IS DUE AGAIN. A pledge figure
+           with no clock beside it reads the same whether the number was struck
+           last month or two years ago, and those are a different credit. */
+        valuationLine(c, src.generatedAt, valuations),
       ]
         .filter(Boolean)
         .join(" · "),
