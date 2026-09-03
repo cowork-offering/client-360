@@ -931,11 +931,54 @@ describe("the line that named the review is not an answer to its first question"
     expect(room.textContent).not.toContain("I could not read that as one of the values above");
   });
 
+  /* THE INTAKE IS THE EXCEPTION, because there naming the route and saying what
+     to do are ONE sentence. "add a relationship covenant: minimum liquidity of
+     5M tested quarterly" names the route in its first three words and answers
+     the first four questions in the rest, so dropping it would ask a banker who
+     has just said everything to say it again. */
+  it("keeps the intake's opening line, because it is the instruction", async () => {
+    const { room } = open({
+      route: "intake",
+      say: "add a relationship covenant: minimum liquidity of 5M tested quarterly",
+    });
+    await settle();
+    // Past the first question, which the line itself answered.
+    expect(liveAsk()).toContain("Which test is this covenant?");
+    expect(room.textContent).toContain("add a relationship covenant: minimum liquidity of 5M tested quarterly");
+  });
+
   it("still runs a line that names the route AND asks for something else", async () => {
     const { room } = open({ route: "covenant", say: "add a covenant on the relationship" });
     await settle();
     // The create gap is named: the line did more than bind, so it still runs.
     expect(room.textContent).toContain("The room can compose the covenant, and it cannot file it");
+  });
+});
+
+/* =============================================================================
+   WHAT THE HEADLESS DRIVE CAUGHT, 2026-09-03.
+
+   The org's own picklist values contain route words. "Appraisal" is one of the
+   fourteen values `LLC_BI__Source__c` holds AND the word the valuation route's
+   reader looks for, so answering the room's own question with the chip the room
+   had just put on the glass re-routed the room.
+   ============================================================================= */
+
+describe("a value the room itself offered is an answer, never a route switch", () => {
+  it("does not read the source chip as a request for a collateral valuation", async () => {
+    const { room, restarted } = open({ route: "valuation" });
+    await settle();
+    // The valuation route's own source step offers "Appraisal" as a chip. The
+    // trap is the same one on any route whose options carry a route word.
+    expect(room.textContent).toContain("Which collateral are we valuing?");
+    expect(restarted).toEqual([]);
+  });
+
+  it("keeps a bare route word switching when the room did not offer it", async () => {
+    const { room, restarted } = open({ route: "annual" });
+    await settle();
+    await type(room, "revalue the collateral");
+    expect(restarted).toEqual([{ route: "valuation", say: "revalue the collateral" }]);
   });
 });
 

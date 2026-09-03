@@ -17,6 +17,7 @@ import {
   firstOfNextMonth,
   inferOperator,
   intakeConfirmSentence,
+  intakeDossierRows,
   intakeKindOf,
   intakeRows,
   ownerOptions,
@@ -672,6 +673,44 @@ describe("the wire carries the frozen contract's keys and no others", () => {
   });
 });
 
+/* ---------------------------------------------------------- the seed figure */
+
+describe("a figure inside a model number is not the asset's value", () => {
+  it("takes a seed figure only where the line states one as a figure", () => {
+    // THE DRIVE CAUGHT THIS. "two Haas VF-4SS machining centres" carries a 4
+    // inside a model number, and reading it as the value files a machining
+    // centre worth four dollars.
+    const ctx = ctxFor();
+    const a: Answers = { intakeKind: "add collateral: two Haas VF-4SS machining centres" };
+    answer(a, "colType.0", "Equipment");
+    const [draft] = collateralDrafts(ctx, a);
+    expect(draft.description).toBe("two Haas VF-4SS machining centres");
+    expect(draft.value).toBeNull();
+  });
+
+  it("still takes one the line states plainly", () => {
+    const ctx = ctxFor();
+    for (const line of [
+      "add collateral: a forklift fleet, valued at 250000",
+      "add collateral: a forklift fleet worth $250,000",
+      "add collateral: a forklift fleet, 250K",
+    ]) {
+      const a: Answers = { intakeKind: line };
+      answer(a, "colType.0", "Equipment");
+      expect(collateralDrafts(ctx, a)[0].value, line).toBe(250_000);
+    }
+  });
+
+  it("keeps reading a bare figure inside an ANSWER, where the question asked for one", () => {
+    const ctx = ctxFor();
+    const a: Answers = { intakeKind: "collateral" };
+    answer(a, "colType.0", "Equipment");
+    answer(a, "colDescription.0", "A forklift fleet");
+    answer(a, "colValue.0", 4);
+    expect(collateralDrafts(ctx, a)[0].value).toBe(4);
+  });
+});
+
 /* ------------------------------------------------------------ the read-back */
 
 describe("the room says what it files and what it does not", () => {
@@ -707,6 +746,24 @@ describe("the room says what it files and what it does not", () => {
       "colMore.0": "done",
     });
     expect(intakeConfirmSentence(ctx, answers)).toContain(NO_PLEDGE_NO_LIEN);
+  });
+
+  it("names each record with the org's own name and the org's own id", () => {
+    const ctx = ctxFor();
+    const { answers } = drive(ctx, {
+      intakeKind: "covenant",
+      "covTest.0": "Minimum Liquidity",
+      "covTerms.0": ">= 5,000,000",
+      "covFrequency.0": "Quarterly",
+      "covEffective.0": "2026-09-01",
+      "covNotes.0": "__skipped__",
+      "covMore.0": "done",
+    });
+    expect(intakeDossierRows(ctx, answers, [{ recordName: "COV-000990", recordId: "a2Xbb0000COV0AAK" }])[0].value).toBe(
+      "COV-000990 · a2Xbb0000COV0AAK",
+    );
+    // A read-back that failed says so rather than hiding behind a label.
+    expect(intakeDossierRows(ctx, answers, [{ recordName: null }])[0].value).toBe("filed, unverified");
   });
 
   it("reads a covenant row back as the covenant it is", () => {

@@ -91,11 +91,17 @@ export function executedActivityEntry(input: ExecutedEntryInput): ActivityEntry 
     // would report a batch as if it were a single assessment.
     const written = (outcome.items ?? []).filter((i) => i.covenantId && i.written !== false);
     const bulkCovenants = actionId === "covenant-review" && written.length > 1;
+    /* THE INTAKE IS A BATCH TOO, and it authored rather than assessed. Naming
+       one of the records in the title would report N creates as a single one,
+       which is the same error the bulk covenant case exists to avoid. */
+    const authored = actionId === "relationship-intake" ? (outcome.items ?? []).length : 0;
     // Named: "Collateral valuation CV-0000000002 filed against COL-000758".
     // Unnamed: the read-back failed, and the title says exactly that.
     const title = bulkCovenants
       ? `${written.length} covenant assessments recorded`
-      : nameConfirmed
+      : authored > 1
+        ? `${authored} records authored on the relationship`
+        : nameConfirmed
         ? `${sentenceCase(label)} ${recordName} filed${against}`
         : `${sentenceCase(label)} filed${against}, name not confirmed`;
     return {

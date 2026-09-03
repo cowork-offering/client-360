@@ -40,7 +40,18 @@ make it sortable if you want, nothing reads it as a time.
 
 **Routes by room.**
 `facility`: `modify`, `renew`, `create`.
-`relationship`: `annual`, `covenant`, `valuation`, `rating`, `service`.
+`relationship`: `annual`, `covenant`, `valuation`, `rating`, `service`, `intake`.
+
+`intake` is the sixth and the only one that AUTHORS: it puts a covenant or a
+collateral asset onto the relationship, each with its account junction, neither
+one touching a facility. Its lines carry the whole instruction because its first
+question takes them whole, for example
+`add a relationship covenant: minimum liquidity of 5M tested quarterly` and
+`add collateral: two Haas VF-4SS machining centres`. The write arm behind it,
+`stage_relationship_intake` / `execute_relationship_intake`, is built to a frozen
+contract and is NOT deployed as this is written: an intent naming `intake` opens
+the room and drives the elicitation, and the confirm gate reports the tool as
+unavailable until the definition deploys.
 
 A relationship route on a facility document (or the reverse) is refused. Silently:
 a malformed document is not half-read and the cockpit behaves as though the
@@ -216,6 +227,8 @@ The capabilities declaration for the published cockpit. Pass it verbatim on the
           "execute_covenant_review",
           "stage_loan_modification",
           "execute_loan_modification",
+          "stage_relationship_intake",
+          "execute_relationship_intake",
           "stage_renewal"
         ]
       },

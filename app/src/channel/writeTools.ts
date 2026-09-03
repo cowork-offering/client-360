@@ -132,6 +132,16 @@ export interface ExecutedItem {
   /** Both: null means the read-back did not confirm the name — filed,
    *  unverified. Same semantic as the single-record case, per item. */
   recordName?: string | null;
+  /**
+   * THE ORG'S OWN ID FOR THIS RECORD, where the tool reports one per item.
+   *
+   * The two bulk tools that shipped before the intake name their records
+   * through fields of their own (`valuationId`, `covenantComplianceId`), which
+   * is why there was no generic key. The intake authors on two objects in one
+   * plan and reports the id it created against each entry, so the trail can
+   * name what was created rather than only how many.
+   */
+  recordId?: string;
   anchorName?: string | null;
   /** The org's own sentence for this item. */
   outcome?: string;
@@ -356,6 +366,7 @@ function toExecutedFacility(raw: Record<string, unknown>): ExecutedFacility {
 function toExecutedItem(raw: Record<string, unknown>): ExecutedItem {
   return {
     recordName: typeof raw.recordName === "string" ? raw.recordName : null,
+    recordId: str(raw.recordId),
     anchorName: typeof raw.anchorName === "string" ? raw.anchorName : null,
     outcome: str(raw.outcome),
     collateralId: str(raw.collateralId),

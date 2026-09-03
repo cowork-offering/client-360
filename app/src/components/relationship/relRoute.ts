@@ -352,12 +352,28 @@ function isRouteNaming(text: string): boolean {
   return text.trim().replace(/[?.!,]+$/, "").split(/\s+/).filter(Boolean).length <= ROUTE_NAMING_WORD_CAP;
 }
 
+/**
+ * TWO FIXED PHRASES THAT NAME A DOCUMENT RATHER THAN AN AMENDMENT.
+ *
+ * "the amended and restated credit agreement" and "the facility as amended" are
+ * what a banker calls the paper the terms are written on. `FACILITY_WORK` reads
+ * `amend\w*`, so a covenant note citing the agreement it came from was answered
+ * with the facility handoff and the note was dropped. Caught by the intake drive
+ * on 2026-09-03, on the one step where a banker quotes the agreement by name.
+ *
+ * THE PHRASES ARE REMOVED BEFORE THE TEST, not added to an exception list, so a
+ * line that asks for an amendment AND cites the agreement still hands off:
+ * "amend the equipment loan, see the amended and restated agreement" keeps its
+ * own verb.
+ */
+const DOCUMENT_AMENDMENT = /\bamended\s+and\s+restated\b|\bas\s+amended\b/gi;
+
 /** TRUE where the line asks for FACILITY work this room does not do. The room
  *  answers with the handoff rather than routing it into the nearest review. */
 export function asksForFacilityWork(text: string): boolean {
   const line = text.trim();
   if (!line) return false;
-  return FACILITY_WORK.test(line);
+  return FACILITY_WORK.test(line.replace(DOCUMENT_AMENDMENT, " "));
 }
 
 /** The one-line handoff, in the room's own register. Facility-context creation

@@ -39,6 +39,11 @@ export const CREATED_OBJECT: Record<string, { object: string; label: string }> =
   // The modification IS a facility: nCino clones the parent and the clone is
   // the record that was created. The parent is never the created record.
   "loan-modification": { object: "LLC_BI__Loan__c", label: "modification" },
+  /* THE INTAKE AUTHORS ON TWO OBJECTS, and the covenant is the one this map
+     names because it is the one a banker goes looking for: an asset is found
+     through the relationship it now hangs off. The trail's own title says how
+     many records were authored, so nothing here stands in for a batch. */
+  "relationship-intake": { object: "LLC_BI__Covenant2__c", label: "relationship intake" },
 };
 
 /** The record the write just created. Hero on a successful terminal state. */

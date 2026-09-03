@@ -115,8 +115,17 @@ export interface IntakeCollateralWire {
   ownerAccountId?: string | null;
 }
 
-/** THE FIVE OPERATORS THE ORG HOLDS on `Acnpex_Operator__c` ("Actual Must Be"),
- *  which the tool also maps onto `Financial_Indicator_Operator__c`. */
+/**
+ * THE FIVE OPERATORS THE ORG HOLDS on `Acnpex_Operator__c` ("Actual Must Be"),
+ * read off the live describe 2026-09-03 and byte-identical to this list.
+ *
+ * The tool ALSO maps each onto `Financial_Indicator_Operator__c`, whose own five
+ * values are worded ("Equals", "Greater Than", "Less Than", "Greater Tan or
+ * Equal To", "Less Than or Equal To" - the misspelling is the org's). The room
+ * never composes that second value: it sends the symbol and the mapping is the
+ * tool's, because a client guessing at a label with a typo in it would file a
+ * refusal.
+ */
 export const INTAKE_OPERATORS = ["<", "<=", "=", ">=", ">"] as const;
 export type IntakeOperator = (typeof INTAKE_OPERATORS)[number];
 
@@ -135,15 +144,14 @@ const VALUATION_BASIS = observedOptions("LLC_BI__Collateral_Valuation__c", "LLC_
 const VALUATION_SOURCE = observedOptions("LLC_BI__Collateral_Valuation__c", "LLC_BI__Source__c");
 
 /**
- * THE COVENANT FREQUENCIES, AND THIS IS A MIRROR.
+ * THE COVENANT FREQUENCIES, AND THIS IS A MIRROR THAT SAYS SO.
  *
  * `Customer360Catalog` carries eleven entries and `LLC_BI__Frequency__c` is not
- * one of them, so there is no live read for this set. The seven below are the
- * field's live-verified describe as `workroom/fieldCatalog.ts` records it
- * (`covenant.frequency`, source `live-verified`). They are copied rather than
- * imported because that module is the facility engine's fenced surface, and the
- * comment is the honesty: this drifts silently if the org's picklist moves, and
- * the fix is a twelfth catalog entry rather than a longer list here.
+ * one of them, so there is no live read for this set in the room. The seven
+ * below are the field's own describe, read off this org on 2026-09-03
+ * (`LLC_BI__Covenant2__c.LLC_BI__Frequency__c`, active values, in the org's own
+ * order). Verified is not the same as live: this drifts silently if the picklist
+ * moves, and the fix is a twelfth catalog entry rather than a longer list here.
  *
  * WHAT THE RELATIONSHIP ALREADY RUNS COMES FIRST regardless. A relationship that
  * tests quarterly is almost certainly adding a quarterly test.
@@ -282,6 +290,28 @@ const OPERATOR_WORDS: Array<{ match: RegExp; op: IntakeOperator }> = [
 export function readOperator(said: string): IntakeOperator | null {
   for (const o of OPERATOR_WORDS) if (o.match.test(said)) return o.op;
   return null;
+}
+
+/**
+ * A FIGURE THE OPENING LINE ACTUALLY STATED, or null.
+ *
+ * `readAmount` alone is too eager for a SEED. "add collateral: two Haas VF-4SS
+ * machining centres" carries a 4 inside a model number, and reading it as the
+ * asset's value files a forklift fleet worth four dollars. A seed figure has to
+ * LOOK like a figure: a currency mark, a thousands separator, a scale suffix, a
+ * ratio's x, a decimal, or a phrase that says this is the value. Inside an
+ * answer to the room's own question the eager read is right, because the
+ * question asked for a number and nothing else.
+ */
+export function readSeedAmount(said: string): number | null {
+  const stated =
+    /[$£€]\s*\d/.test(said) ||
+    /\d[\d,]*\.\d/.test(said) ||
+    /\d{1,3}(,\d{3})+/.test(said) ||
+    /\d\s*(mm|m|k|bn|b|million|billion|thousand)\b/i.test(said) ||
+    /\dx\b/i.test(said) ||
+    /\b(valued at|value of|worth|priced at|of)\s+\$?\d/i.test(said);
+  return stated ? readAmount(said) : null;
 }
 
 /** A figure a banker wrote, with the shorthand a banker actually types:
@@ -488,13 +518,17 @@ export function covenantDrafts(ctx: RelContext, a: Answers): CovenantDraft[] {
       readOperator(terms) ??
       readOperator(seed) ??
       inferred;
-    const threshold = num(at(a, "covThreshold", i)) ?? readAmount(terms) ?? (i === 0 ? readAmount(stripDates(seed)) : null);
+    const threshold =
+      num(at(a, "covThreshold", i)) ?? readAmount(terms) ?? (i === 0 ? readSeedAmount(stripDates(seed)) : null);
     const frequency = text(at(a, "covFrequency", i)) ?? readFrequency(terms) ?? (i === 0 ? readFrequency(seed) : null);
 
+    /* A DATE ANSWER IS A DATE. The chips write one; free text is read for one
+       and anything that is not one leaves the slot empty, so a covenant is never
+       filed with a sentence where its schedule anchor should be. */
     const picked = text(at(a, "covEffective", i));
     const effectiveDate =
-      text(at(a, "covEffectiveOther", i)) ??
-      (picked && picked !== OTHER_DATE ? picked : null) ??
+      readDate(text(at(a, "covEffectiveOther", i)) ?? "") ??
+      (picked && picked !== OTHER_DATE ? readDate(picked) : null) ??
       (i === 0 ? readDate(seed) : null);
 
     out.push({
@@ -535,11 +569,12 @@ export function collateralDrafts(ctx: RelContext, a: Answers): CollateralDraft[]
       index: i,
       collateralType,
       description: text(at(a, "colDescription", i)) ?? (i === 0 ? readDescription(seed) : null),
-      value: num(at(a, "colValue", i)) ?? (i === 0 ? readAmount(stripDates(seed)) : null),
+      value: num(at(a, "colValue", i)) ?? (i === 0 ? readSeedAmount(stripDates(seed)) : null),
       valuationBasis: text(at(a, "colBasis", i)),
       valuationSource: text(at(a, "colSource", i)),
       valuationDate:
-        text(at(a, "colValuationOther", i)) ?? (picked && picked !== OTHER_DATE ? picked : null),
+        readDate(text(at(a, "colValuationOther", i)) ?? "") ??
+        (picked && picked !== OTHER_DATE ? readDate(picked) : null),
       address: readAddress(text(at(a, "colAddress", i)) ?? ""),
       ownerAccountId: ownerId,
       ownerName: owners.find((o) => o.value === ownerId)?.label ?? ctx.accountName,
@@ -639,6 +674,13 @@ export function intakeStep(ctx: RelContext, a: Answers): RelStep | null {
       placeholder: "Name it, or say the whole thing and I will read it back.",
     };
   }
+  /* THE DISAMBIGUATION IS ASKED ONCE. Its two chips are the only answers a
+     banker can give it, so a second unreadable answer can only come from the
+     step counter's own probe walk, which answers every step with the skip
+     sentinel to count what is still to come. Returning null there is what makes
+     that walk terminate; `buildIntakePayload` still refuses a plan that does not
+     know which of the two it is filing, so nothing can be staged on a guess. */
+  if (!kind && answered(a, "intakeKindPick")) return null;
   if (!kind) {
     return {
       key: "intakeKindPick",
@@ -656,23 +698,32 @@ export function intakeStep(ctx: RelContext, a: Answers): RelStep | null {
 
 /* ----------------------------------------------------------- the covenants */
 
-function covenantChips(ctx: RelContext, i: number): StepOption[] {
+/** The org's own names, what this relationship already tests first, and what is
+ *  already on THIS plan named as such. The two facts are different and the chip
+ *  says whichever are true rather than one standing in for the other. */
+function covenantChips(ctx: RelContext, a: Answers): StepOption[] {
   const names = covenantTypeNames(ctx);
   const held = bookCovenantTypes(ctx);
   const heldSet = new Set(held.map((t) => t.toLowerCase()));
+  const staged = new Set(
+    covenantDrafts(ctx, a)
+      .map((d) => (d.typeName ?? "").toLowerCase())
+      .filter(Boolean),
+  );
   const ordered = [
     ...held.filter((t) => names.some((n) => n.toLowerCase() === t.toLowerCase())),
     ...names.filter((n) => !heldSet.has(n.toLowerCase())),
   ];
-  return ordered.slice(0, CHIP_CAP).map((n) => ({
-    label: n,
-    value: n,
-    detail: heldSet.has(n.toLowerCase())
-      ? i === 0
-        ? "already tested on this relationship"
-        : "already tested on this relationship, and already on this plan"
-      : undefined,
-  }));
+  return ordered.slice(0, CHIP_CAP).map((n) => {
+    const key = n.toLowerCase();
+    const detail = [
+      heldSet.has(key) ? "already tested on this relationship" : null,
+      staged.has(key) ? "already on this plan" : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    return { label: n, value: n, detail: detail || undefined };
+  });
 }
 
 function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
@@ -685,7 +736,7 @@ function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
   if (i >= INTAKE_CAP) return null;
 
   if (!has(a, "covTest", i) && !(i === 0 && draft?.typeName)) {
-    const chips = covenantChips(ctx, i);
+    const chips = covenantChips(ctx, a);
     const more = names.length - chips.length;
     return {
       key: `covTest.${i}`,
@@ -706,12 +757,19 @@ function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
      the catalog exactly, so a near miss here is a refusal at the confirm gate,
      which is a refusal the banker reads instead of a question they can answer. */
   if (!draft?.typeName) {
+    /* THE PICK IS ASKED ONCE. Its chips are the org's own names and a chips step
+       refuses anything else, so an answer that still does not resolve can only
+       come from the step counter's probe walk. The entry then contributes
+       nothing to the wire and the loop moves on rather than asking forever. */
+    if (has(a, "covPick", i)) {
+      return has(a, "covMore", i) ? null : morStep(`covMore.${i}`, i, "covenant", drafts.filter((d) => d.typeName).length);
+    }
     const said = text(at(a, "covTest", i)) ?? "";
     return {
       key: `covPick.${i}`,
       ask: UNKNOWN_COVENANT_TYPE(said),
       kind: "chips",
-      options: covenantChips(ctx, i),
+      options: covenantChips(ctx, a),
       placeholder: "Pick the org's own name for it.",
       target: { object: "LLC_BI__Covenant2__c", field: "LLC_BI__Covenant_Type__c" },
     };
@@ -763,7 +821,7 @@ function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Covenant2__c", field: "Acnpex_Operator__c" },
     };
   }
-  if (!draft.operator) {
+  if (!draft.operator && !has(a, "covOperator", i)) {
     return {
       key: `covOperator.${i}`,
       ask: `Which way does the ${draft.typeName} test run?`,
@@ -773,16 +831,22 @@ function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Covenant2__c", field: "Acnpex_Operator__c" },
     };
   }
-  if (draft.threshold === null) {
+  if (draft.threshold === null && !has(a, "covThreshold", i)) {
     return {
       key: `covThreshold.${i}`,
-      ask: `And the figure the ${draft.typeName} test ${OPERATOR_WORD[draft.operator]}?`,
+      /* THE DIRECTION MAY STILL BE OUTSTANDING HERE. The question above asks
+         for it and is asked once; a banker who answered it with nothing leaves
+         the room asking for the figure without a direction to name, and the
+         entry will not be filed without both. */
+      ask: draft.operator
+        ? `And the figure the ${draft.typeName} test ${OPERATOR_WORD[draft.operator]}?`
+        : `And the figure the ${draft.typeName} test is measured against?`,
       kind: "number",
       placeholder: "The threshold, from the approved credit agreement.",
       target: { object: "LLC_BI__Covenant2__c", field: "LLC_BI__Financial_Indicator_Value__c" },
     };
   }
-  if (!draft.frequency) {
+  if (!draft.frequency && !has(a, "covFrequency", i)) {
     return {
       key: `covFrequency.${i}`,
       ask: "How often is it tested?",
@@ -792,7 +856,14 @@ function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Covenant2__c", field: "LLC_BI__Frequency__c" },
     };
   }
-  if (!draft.effectiveDate) {
+  /* THE DATE IS ASKED TWICE AT MOST: once with the two offers, once on its own
+     where neither fitted and what the banker wrote was not a date. Past that the
+     entry is simply not complete, and `buildIntakePayload` refuses it by name
+     rather than the room asking a third time. Every step in this machine asks
+     ONCE for the same reason: a question already answered is never re-asked,
+     whatever the answer parsed to, which is also what makes the step counter's
+     own probe walk terminate. */
+  if (!draft.effectiveDate && !has(a, "covEffectiveOther", i)) {
     if (!has(a, "covEffective", i)) {
       return {
         key: `covEffective.${i}`,
@@ -818,7 +889,7 @@ function covenantIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "A note, or skip it.",
-      target: { object: "LLC_BI__Covenant2__c", field: "LLC_BI__Comments__c" },
+      target: { object: "LLC_BI__Covenant2__c", field: "LLC_BI__Notes__c" },
     };
   }
   if (!has(a, "covMore", i)) return morStep(`covMore.${i}`, i, "covenant", drafts.filter((d) => d.typeName).length);
@@ -926,6 +997,9 @@ function collateralIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
     };
   }
   if (!draft?.collateralType) {
+    if (has(a, "colPick", i)) {
+      return has(a, "colMore", i) ? null : morStep(`colMore.${i}`, i, "asset", drafts.filter((d) => d.collateralType).length);
+    }
     const said = text(at(a, "colType", i)) ?? "";
     const root = resolveFamily(said, names);
     return {
@@ -939,7 +1013,7 @@ function collateralIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Collateral__c", field: "LLC_BI__Collateral_Type__c" },
     };
   }
-  if (!draft.description) {
+  if (!draft.description && !has(a, "colDescription", i)) {
     return {
       key: `colDescription.${i}`,
       ask: "How is the asset described? This is what everyone downstream reads it under.",
@@ -948,14 +1022,14 @@ function collateralIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       target: { object: "LLC_BI__Collateral__c", field: "LLC_BI__Description__c" },
     };
   }
-  if (draft.value === null) {
+  if (draft.value === null && !has(a, "colValue", i)) {
     return {
       key: `colValue.${i}`,
       ask: `What is ${draft.description} worth?`,
       kind: "number",
       bounds: { min: 0.01, max: Number.MAX_SAFE_INTEGER, whole: false, refusal: VALUE_MUST_BE_POSITIVE },
       placeholder: "The value, in dollars.",
-      target: { object: "LLC_BI__Collateral__c", field: "LLC_BI__Collateral_Value__c" },
+      target: { object: "LLC_BI__Collateral__c", field: "LLC_BI__Value__c" },
     };
   }
   if (!has(a, "colBasis", i)) {
@@ -1011,7 +1085,7 @@ function collateralIntakeStep(ctx: RelContext, a: Answers): RelStep | null {
       kind: "text",
       optional: true,
       placeholder: "For example 1400 Industrial Parkway, Fort Wayne, IN 46802. Skip it where the asset has no address.",
-      target: { object: "LLC_BI__Collateral__c", field: "LLC_BI__Street__c" },
+      target: { object: "LLC_BI__Collateral__c", field: "LLC_BI__Street_Address__c" },
     };
   }
   if (!has(a, "colOwner", i)) {
@@ -1220,7 +1294,11 @@ export function intakeDossierRows(
   const rows = intakeRows(ctx, a);
   return rows.map((row, i) => {
     const item = items?.[i];
-    const named = (item?.recordId ?? item?.recordName ?? "").trim();
+    /* THE ORG'S OWN NAME AND THE ORG'S OWN ID, in that order, because the name
+       is what a banker reads and the id is what they paste into a search. A row
+       the org named neither way is `filed, unverified`, which is what a failed
+       verification read-back actually is and never a generic label over it. */
+    const named = [(item?.recordName ?? "").trim(), (item?.recordId ?? "").trim()].filter(Boolean).join(" · ");
     return { ...row, value: named || "filed, unverified" };
   });
 }

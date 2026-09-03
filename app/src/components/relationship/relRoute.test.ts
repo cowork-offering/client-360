@@ -222,6 +222,17 @@ describe("facility work", () => {
     expect(asksForFacilityWork("create a new collateral asset")).toBe(false);
   });
 
+  /* THE INTAKE DRIVE CAUGHT THIS, 2026-09-03. A covenant note citing the paper
+     the terms are written on is not a request to amend a facility, and the
+     handoff was eating the note. */
+  it("reads the agreement's own NAME as a document, not as an amendment", () => {
+    expect(asksForFacilityWork("from the amended and restated credit agreement")).toBe(false);
+    expect(asksForFacilityWork("the facility as amended in June")).toBe(false);
+    // A line that asks for an amendment AND cites the agreement still hands off.
+    expect(asksForFacilityWork("amend the equipment loan, see the amended and restated agreement")).toBe(true);
+    expect(asksForFacilityWork("amend the covenant on the equipment loan")).toBe(true);
+  });
+
   it("hands off in one professional line that names where the work lives", () => {
     expect(FACILITY_HANDOFF).toContain("Facility Actions");
     expect(FACILITY_HANDOFF).not.toMatch(/[—!]/);

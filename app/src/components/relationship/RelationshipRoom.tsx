@@ -1343,7 +1343,25 @@ export function RelationshipRoom({
          offers the discard as the explicit gesture it is. */
       /* THE OPEN TEXT STEP GETS ITS ANSWER. A route word inside a subject or a
          narrative is not a request to change review; see readRelRouteSwitch. */
-      const switchTo = router ? readRelRouteSwitch(text, route, { openTextStep: live?.kind === "text" }) : null;
+      /* AND SO DOES THE STEP WHOSE OWN CHIP THE BANKER JUST NAMED.
+
+         THE DRIVE CAUGHT THIS ON THE INTAKE. "Appraisal" is one of the fourteen
+         values `LLC_BI__Source__c` holds, and it is also the word the valuation
+         route's own reader looks for, so answering "where did the figure come
+         from" with the org's own value offered on the glass re-routed the room
+         to a collateral valuation. The same trap sits under "Real Estate
+         Evaluation" and under any picklist value a route word appears in.
+
+         A LINE THAT IS EXACTLY ONE OF THE LIVE STEP'S OWN OPTIONS BELONGS TO
+         THAT STEP. It is not a request for anything: it is the answer the room
+         put on the glass and the banker took. This narrows the switch reader
+         rather than widening it, and it can only ever fire where the room itself
+         offered the words. */
+      const onTheGlass = (live?.options ?? []).some(
+        (o) => !o.disabled && (o.value.toLowerCase() === text.toLowerCase() || o.label.toLowerCase() === text.toLowerCase()),
+      );
+      const switchTo =
+        router && !onTheGlass ? readRelRouteSwitch(text, route, { openTextStep: live?.kind === "text" }) : null;
       if (switchTo && router) {
         if (!order.length) {
           router.onRestart(switchTo, text);
@@ -1452,8 +1470,26 @@ export function RelationshipRoom({
        not already acted on.
 
        A line that names the route AND asks for something else still runs: only
-       the bare naming is dropped. */
-    if (route && readRelRouteIntent(line) === route && !readCreateAsk(line, route) && !isQuestion(line)) return;
+       the bare naming is dropped.
+
+       THE INTAKE IS THE EXCEPTION, AND IT IS NOT A SPECIAL CASE SO MUCH AS THE
+       SAME RULE READ PROPERLY. On the five reviews, naming the route and saying
+       what to do are two different sentences, so the naming carries nothing the
+       binder has not acted on. On the intake they are ONE sentence: "add a
+       relationship covenant: minimum liquidity of 5M tested quarterly" names the
+       route in its first three words and answers the first four questions in the
+       rest, and dropping it would throw the whole instruction away and ask a
+       banker who has just said everything to say it again. Its first step takes
+       the line as what it is. */
+    if (
+      route &&
+      route !== "intake" &&
+      readRelRouteIntent(line) === route &&
+      !readCreateAsk(line, route) &&
+      !isQuestion(line)
+    ) {
+      return;
+    }
     void say(line);
   }, [ask, awake, route, router?.say, say]);
 
