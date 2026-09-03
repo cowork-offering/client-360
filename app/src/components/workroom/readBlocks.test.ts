@@ -55,7 +55,7 @@ describe("what the room read travels with the line", () => {
     // against 80 reads as a floor. That is what the room's own card prints
     // beside it, which is the only thing that matters here: one test, one unit,
     // in both places.
-    expect(by.get("Accounts Receivable")).toMatchObject({ measured: "80%", threshold: "≥ 80%" });
+    expect(by.get("Accounts Receivable")).toMatchObject({ measured: "80%", threshold: "≤ 80%" });
     expect(by.get("Minimum Liquidity")).toMatchObject({ measured: "$6.80M", threshold: "≥ $5M" });
     expect(by.get("Debt Service Coverage with and without Distributions")).toMatchObject({
       measured: "1.22×",

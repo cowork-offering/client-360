@@ -917,3 +917,238 @@
 .pane .btn-q:active {
   transform: scale(0.97);
 }
+
+/* =============================================================================
+   THE DISCLOSURE LIST — the covenants pane and the collateral block.
+
+   ONE vocabulary, two surfaces (components/tabs/discloseKit.tsx). `.xrow` is
+   the thing the account holds, `.xsub` a row inside the opened block, and the
+   two column templates are the only thing a surface supplies — as custom
+   properties on the list, so a covenant row and a collateral row cannot drift
+   into different geometry.
+
+   ALIGNMENT IS THE DESIGN (founder, 2026-09-03): one line per row, nothing
+   wraps, figures right, text left, tabular numerals. A cell too narrow for its
+   content is cut with an ellipsis and carries the whole string in its title.
+
+   MATERIAL. Hairlines and one overlay tint, no fills, no gradients, no emoji.
+   Status colour comes from the tokens through `.st` and from nowhere else.
+   ============================================================================= */
+
+.pane .xlist {
+  margin-top: 20px;
+}
+.pane .xlist-kicker {
+  margin-bottom: 10px;
+}
+
+/* The two templates, per surface. */
+.pane .xlist-covenant {
+  --x-row-cols: minmax(190px, 2.4fr) 96px 116px 104px minmax(150px, 1.2fr) 112px 92px;
+  --x-sub-cols: minmax(190px, 2.4fr) 132px 132px 132px minmax(168px, 1.3fr);
+}
+.pane .xlist-collateral {
+  --x-row-cols: 116px 116px minmax(220px, 2.6fr) 116px 88px 116px 96px;
+  --x-sub-cols: minmax(190px, 2.4fr) 132px 132px 96px minmax(120px, 1fr);
+}
+
+.pane .xrow,
+.pane .xsub {
+  display: grid;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+}
+.pane .xrow {
+  grid-template-columns: var(--x-row-cols);
+}
+.pane .xsub {
+  grid-template-columns: var(--x-sub-cols);
+}
+
+.pane .xcell {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane .xcell.r {
+  text-align: right;
+}
+.pane .xmuted {
+  color: var(--ink-muted);
+}
+/* A second, quieter fact riding beside the first in the same cell: the org's
+   autonumber name, the open test period, an overridden rate. */
+.pane .xnote {
+  margin-left: 5px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+/* Two facts in one cell: the descriptor takes what is left, the record name
+   beside it keeps its width. Truncating the name would make it unreadable and
+   the name is the thing a banker quotes back to the org. */
+.pane .xcell.split {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+}
+.pane .xcell.split > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane .xcell.split > .xnote {
+  flex: none;
+}
+.pane .xvs {
+  color: var(--ink-faint);
+}
+
+/* The two headers share the table kicker the rest of the pane uses. */
+.pane .xhead,
+.pane .xsubhead {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--border);
+}
+.pane .xhead {
+  padding: 0 12px 9px;
+}
+.pane .xsubhead {
+  padding: 0 0 8px;
+}
+
+/* THE ROW IS A BUTTON. The whole row is the click target, it takes focus in
+   document order, and Enter and Space toggle it natively. */
+.pane button.xrow {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--row-divider);
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--dur-mid) var(--ease-out);
+}
+.pane button.xrow:hover {
+  background: var(--surface-overlay);
+}
+.pane button.xrow > .xcell:first-child,
+.pane .xsub:not(.xsubhead) > .xcell:first-child {
+  font-weight: 500;
+  color: var(--ink-strong);
+}
+
+/* The disclosure mark: a 5px triangle in the faint ink, turning a quarter when
+   the row opens. Drawn in borders, so it is one element and no asset. */
+.pane .xcaret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 9px;
+  vertical-align: middle;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 5px solid var(--ink-faint);
+  transition: transform var(--dur-mid) var(--ease-out);
+}
+.pane button.xrow.open .xcaret {
+  transform: rotate(90deg);
+}
+
+/* A count, not a state, so a hairline and never a fill. */
+.pane .xbadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.pane .xbadge[data-cov-attachment="loans"],
+.pane .xbadge[data-col-badge]:not([data-col-pledges="0"]) {
+  border-color: var(--accent-hairline);
+  color: var(--accent);
+}
+
+/* THE OPENED BLOCK. It settles open on the pane's own curve: 0fr to 1fr over
+   .26s, once. electric-glass.css switches it off with every other animation
+   under prefers-reduced-motion. */
+.pane .xexp {
+  display: grid;
+  grid-template-rows: 1fr;
+  border-bottom: 1px solid var(--row-divider);
+  background: var(--surface-overlay);
+  animation: xexpin 0.26s var(--ease-settle) both;
+}
+.pane .xexp-in {
+  overflow: hidden;
+  padding: 12px 12px 14px;
+}
+@keyframes xexpin {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
+.pane .xsub:not(.xsubhead) {
+  padding: 9px 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  border-bottom: 1px solid var(--row-divider);
+}
+.pane .xsub:not(.xsubhead):last-child {
+  border-bottom: 0;
+}
+
+.pane .xempty,
+.pane .xlatest {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+.pane .xlatest {
+  margin-top: 8px;
+}
+.pane .xlatest .kicker,
+.pane .xaction .kicker {
+  margin-right: 8px;
+}
+
+/* A quiet action on the opened block, never in the row. */
+.pane .xaction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--row-divider);
+}
+.pane .xaction-detail {
+  display: block;
+  flex-basis: 100%;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.pane .xaction-detail > span {
+  display: block;
+}

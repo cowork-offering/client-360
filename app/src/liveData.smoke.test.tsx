@@ -11,7 +11,7 @@ import { ACCOUNT_TABS } from "./state/appState";
 import { resetModalStack } from "./components/modalStack";
 import { readAnchors } from "./data/contract";
 import { collapseConnections } from "./data/graphAggregate";
-import { collateralRecords } from "./data/collateralRecords";
+import { collateralAssets } from "./domain/collateralAssets";
 import { packageRecords } from "./actions/schemas";
 import { resolveBundle } from "./actions/registry";
 import live from "../../artifact/live-data.json";
@@ -345,21 +345,25 @@ for (const [fileName, data] of FILES) {
         expect(new Set(ids).size).toBe(ids.length);
       });
 
-      it("shows every collateral record once, and none when there are none", () => {
+      it("shows every collateral ASSET once, and none when there are none", () => {
         const text = openTab("Exposure & Collateral");
-        const records = collateralRecords(bundle);
+        const assets = collateralAssets(bundle);
         expect(text).toContain("Collateral");
-        if (records.length === 0) {
+        if (assets.length === 0) {
           expect(text).toContain("No collateral pledged");
           return;
         }
-        for (const r of records) {
-          const hits = text.split(r.displayName).length - 1;
-          expect(hits, `${name}: ${r.displayName} appeared ${hits} times`).toBeGreaterThan(0);
+        for (const a of assets) {
+          // The asset is named by WHAT IT IS. The org's long description is on
+          // hover, never as the row's title (founder, 2026-09-03).
+          expect(text, `${name}: ${a.type} missing`).toContain(a.type);
+          if (a.collateralName) expect(text).toContain(a.collateralName);
+          if (a.description && a.description !== a.descriptor)
+            expect(text, `${name}: the long description is in the row`).not.toContain(a.description);
         }
-        // Never a row per pledge where a record is pledged more than once.
-        const multi = records.find((r) => r.pledgeRows > 1);
-        if (multi) expect(text).toContain(`${multi.securesFacilities.length} facilities`);
+        // One row per asset, with its pledge count — never a row per pledge.
+        const multi = assets.find((a) => a.pledges.length > 1);
+        if (multi) expect(text).toContain(`${multi.pledges.length} pledges`);
       });
 
       it("renders its covenants without losing or duplicating any", () => {
