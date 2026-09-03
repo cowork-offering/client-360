@@ -35,7 +35,9 @@ global with sharing class ExecuteRelationshipIntake {
     global class Request {
         @InvocableVariable(label='Idempotency Key' description='The same key the stage call used. Enforced by us: a replay reports the prior result and writes nothing.' required=true)
         global String idempotencyKey;
-        @InvocableVariable(label='Plan Id' description='The handle stage_relationship_intake returned.' required=true)
+        @InvocableVariable(label='Staging Id' description='The handle stage_relationship_intake returned. Named stagingId because that is the key every other execute tool in this package takes, and a client that has to remember which one of eight is spelled differently will eventually spell it wrong.' required=true)
+        global String stagingId;
+        @InvocableVariable(label='Plan Id' description='Alias for stagingId, accepted because the stage tool returns the handle under this name. Read only when stagingId is blank. Never required.')
         global String planId;
         @InvocableVariable(label='Plan Hash' description='Binds execution to the exact plan the banker confirmed. A mismatch is refused.' required=true)
         global String planHash;
@@ -114,7 +116,9 @@ global with sharing class ExecuteRelationshipIntake {
     }
 
     global class ExecuteResult {
-        @InvocableVariable(label='Plan Id')
+        @InvocableVariable(label='Staging Id' description='The staging row this run redeemed. Uniform across all execute_* tools; the activity trail reads it from here.')
+        global String stagingId;
+        @InvocableVariable(label='Plan Id' description='The same id under the name the stage tool returns it by.')
         global String planId;
         @InvocableVariable(label='Account Id')
         global String accountId;
@@ -191,8 +195,9 @@ global with sharing class ExecuteRelationshipIntake {
         if (String.isBlank(req.idempotencyKey)) {
             throw new ToolException('idempotencyKey is required and must match the key used at stage time.');
         }
-        if (String.isBlank(req.planId)) {
-            throw new ToolException('planId is required. It is the handle stage_relationship_intake returned.');
+        String handle = String.isNotBlank(req.stagingId) ? req.stagingId.trim() : (req.planId == null ? null : req.planId.trim());
+        if (String.isBlank(handle)) {
+            throw new ToolException('stagingId is required. It is the handle stage_relationship_intake returned, and planId is accepted as an alias for it.');
         }
         if (String.isBlank(req.planHash)) {
             throw new ToolException('planHash is required.');
@@ -204,7 +209,7 @@ global with sharing class ExecuteRelationshipIntake {
         }
 
         cm_Action_Staging__c stg = C360ActionStaging.claimForExecute(
-            req.planId, req.planHash, req.decisionToken, C360Plan.asId(req.approverUserId)
+            handle, req.planHash, req.decisionToken, C360Plan.asId(req.approverUserId)
         );
 
         List<C360Plan.Step> steps = C360Plan.deserializeSteps(stg.cm_Plan_JSON__c);
@@ -236,6 +241,7 @@ global with sharing class ExecuteRelationshipIntake {
         C360ActionStaging.recordOutcome(stg, steps, terminal, firstId);
 
         ExecuteResult r = new ExecuteResult();
+        r.stagingId = stg.Id;
         r.planId = stg.Id;
         r.accountId = accountId;
         r.anchorName = borrower.Name;
@@ -647,6 +653,7 @@ global with sharing class ExecuteRelationshipIntake {
     /** An idempotent replay reports the prior run and writes nothing. */
     private static ExecuteResult replay(cm_Action_Staging__c prior) {
         ExecuteResult r = new ExecuteResult();
+        r.stagingId = prior.Id;
         r.planId = prior.Id;
         r.terminalState = prior.cm_Status__c == 'Completed' ? C360Plan.TERMINAL_SUCCESS : C360Plan.TERMINAL_PARTIAL;
         r.replayed = true;

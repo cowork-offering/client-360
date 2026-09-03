@@ -52,8 +52,15 @@ steps, a plan hash, a single-use decision token, verification steps, and ZERO do
 `collateralJson` entry: `collateralType` (resolved against the org's own catalog exactly as the
 modification arm resolves it: exact name first, then containment), `description`, `value` (greater
 than zero), `valuationBasis?` (`LLC_BI__Type__c`), `valuationSource?` (`LLC_BI__Source__c`),
-`valuationDate?`, `street?`, `city?`, `state?` (two-letter, from the org's own picklist), `zip?`,
-`ownerAccountId?` (defaults to `accountId`).
+`valuationDate?`, `address?` (an OBJECT: `street?`, `city?`, `state?` two-letter from the org's own
+picklist, `zip?`), `ownerAccountId?` (defaults to `accountId`).
+
+**The address is one object, not four keys.** That is how the contract words it and how the room
+composes it, so it is the shape the tool reads. The four keys are still read from the top level of
+the entry when no `address` object is supplied, because a caller that spells them flat means the
+same thing and a silently dropped address is a fact the org never hears; the nested object wins
+where both are present. An `address` that is not a JSON object is refused by index rather than
+ignored. The state is validated against the org's own `LLC_BI__State__c` picklist either way.
 
 Returns: `ok`, `planId`, `planHash`, `decisionToken`, `summary`, `steps[]`, `warnings[]`,
 `provenanceJson`, `accountId`, `accountName`, `covenants[]`, `collateral[]`, `refusals[]`,
@@ -65,9 +72,16 @@ the supplied ones.
 
 ### `execute_relationship_intake` (`ExecuteRelationshipIntake.cls`)
 
-Takes `idempotencyKey`, `planId`, `planHash`, `decisionToken`, `approverUserId`, all
-`required=true`. No JSON is re-supplied: the values ride with the plan, as they do on every other
-execute tool, so what is written is what the banker saw hashed at the confirm gate.
+Takes `idempotencyKey`, `stagingId`, `planHash`, `decisionToken`, `approverUserId`, all
+`required=true`, plus `planId` as a non-required ALIAS for `stagingId`. `stagingId` is the key the
+other seven deployed execute tools take and the key the cockpit sends, and a pair that spells the
+handle differently from its seven siblings is a pair that gets called wrong. `planId` is still
+accepted because the stage tool returns the handle under that name; `stagingId` wins where both are
+present, and a request carrying neither is refused with a sentence naming both. The result answers
+under `stagingId` AND `planId`, the same id twice, because the activity trail reads `stagingId`.
+
+No JSON is re-supplied: the values ride with the plan, as they do on every other execute tool, so
+what is written is what the banker saw hashed at the confirm gate.
 
 Five inserts, one DML per object, in this order:
 
@@ -261,7 +275,9 @@ sf project deploy start --metadata-dir "$D" -o bankinggpt-at --dry-run \
   --tests C360WriteGuardTest \
   --tests StageExecuteCovenantReviewTest \
   --tests StageExecuteCollateralValuationTest \
-  --wait 45
+  --tests StageExecuteNewFacilityTest \
+  --tests StageHeldCreditActionsTest \
+  --wait 60
 ```
 
 Drop `--dry-run` for the real deploy. The `McpServerDefinition` goes in its own second job:
@@ -272,38 +288,34 @@ sf project deploy start \
   -o bankinggpt-at
 ```
 
-`C360TestFixture` and `C360Wave2Fixture` are already deployed and are not in the package. The four
+`C360TestFixture` and `C360Wave2Fixture` are already deployed and are not in the package. The six
 sibling test classes named in `--tests` are already in the org; they are re-run because
-`C360WriteGuard` changed and they are what proves it did not change behaviour.
+`C360WriteGuard` changed and they are what proves it did not change behaviour. Two of them,
+`StageExecuteNewFacilityTest` and `StageHeldCreditActionsTest`, joined the list when `mod-new-loan`
+deployed the new-facility arm on 2026-09-03.
 
 **Validation result, 2026-09-03**, on the exact bytes this branch commits:
 
 ```
-Deploy ID       0Afbb00000DnKxNCAV
+Deploy ID       0Afbb00000DnLbjCAF
 Target org      bankinggpt-at (fabian.goetzens@accenture.com.bankinggpt)
 checkOnly       true
 Status          Succeeded
 Components      4 / 4   errors 0
-Tests           135 / 135   errors 0   (118.4s)
+Tests           197 / 197   errors 0   (116.7s)
 Code coverage warnings 0
 
   OK   C360WriteGuard                     changed
   OK   StageRelationshipIntake            created
   OK   ExecuteRelationshipIntake          created
   OK   StageExecuteRelationshipIntakeTest created
-
-  PASS 12  StageExecuteRelationshipIntakeTest
-  PASS 58  StageExecuteLoanModificationTest
-  PASS 27  C360WriteGuardTest
-  PASS 20  StageExecuteCollateralValuationTest
-  PASS 18  StageExecuteCovenantReviewTest
 ```
 
-The four sibling suites are the regression proof for the guard change: 123 tests that were passing
+The six sibling suites are the regression proof for the guard change: 181 tests that were passing
 before it and are passing after it.
 
-On the shell side, `tsc --noEmit` is clean and the app suite is 3173 of 3173 across 109 files, 8 of
-them new in `toolFence.test.ts`.
+On the shell side, `tsc --noEmit` is clean, the app suite is 3233 of 3233 across 110 files, and the
+production bundle builds at 1.33 MiB.
 
 ---
 

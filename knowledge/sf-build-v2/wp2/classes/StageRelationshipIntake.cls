@@ -83,7 +83,7 @@ global with sharing class StageRelationshipIntake {
         global String rationale;
         @InvocableVariable(label='Covenants JSON' description='Optional JSON array, max 10: [{"covenantTypeName" (exact LLC_BI__Covenant_Type__c Name), "operator" (< <= = >= >), "threshold" (number), "frequency" (LLC_BI__Frequency__c value), "effectiveDate"? (YYYY-MM-DD, defaults to today), "nextEvaluationDate"? (YYYY-MM-DD), "notes"?}]. Each entry becomes one covenant on the relationship plus its relationship junction. No loan junction is written.')
         global String covenantsJson;
-        @InvocableVariable(label='Collateral JSON' description='Optional JSON array, max 10: [{"collateralType" (resolved against the org\'s own LLC_BI__Collateral_Type__c catalog), "description", "value" (number, greater than zero), "valuationBasis"? (LLC_BI__Type__c), "valuationSource"? (LLC_BI__Source__c), "valuationDate"? (YYYY-MM-DD), "street"?, "city"?, "state"? (two-letter, from the org picklist), "zip"?, "ownerAccountId"? (defaults to accountId)}]. Each entry becomes one asset plus its ownership junction, and a valuation row when a basis, a source or a date is supplied.')
+        @InvocableVariable(label='Collateral JSON' description='Optional JSON array, max 10: [{"collateralType" (resolved against the org\'s own LLC_BI__Collateral_Type__c catalog), "description", "value" (number, greater than zero), "valuationBasis"? (LLC_BI__Type__c), "valuationSource"? (LLC_BI__Source__c), "valuationDate"? (YYYY-MM-DD), "address"? (an object: {"street"?, "city"?, "state"? (two-letter, from the org picklist), "zip"?} - the same four keys are also read from the top level of the entry when no address object is supplied), "ownerAccountId"? (defaults to accountId)}]. Each entry becomes one asset plus its ownership junction, and a valuation row when a basis, a source or a date is supplied.')
         global String collateralJson;
     }
 
@@ -665,10 +665,26 @@ global with sharing class StageRelationshipIntake {
             a.value = decimalOf(m.get('value'));
             a.valuationBasis = text(m.get('valuationBasis'));
             a.valuationSource = text(m.get('valuationSource'));
-            a.street = text(m.get('street'));
-            a.city = text(m.get('city'));
-            a.state = text(m.get('state'));
-            a.zip = text(m.get('zip'));
+            /* THE ADDRESS TRAVELS AS ONE OBJECT. The contract words it as `address (optional:
+               street, city, state, zip)` and the room asks for it as one line, so the nested
+               object is the shape. The four flat keys are still read when no address object is
+               supplied, because a caller that spells them at the top level means the same thing
+               and a silently dropped address is a fact the org never hears. Nested wins where
+               both are present: it is the shape the contract names. */
+            Object addrRaw = m.get('address');
+            Map<String, Object> addr = null;
+            if (addrRaw != null) {
+                if (!(addrRaw instanceof Map<String, Object>)) {
+                    refusals.add(refusal(i, 'collateral', label,
+                        'address must be a JSON object carrying street, city, state and zip. It cannot be read as one.'));
+                    continue;
+                }
+                addr = (Map<String, Object>) addrRaw;
+            }
+            a.street = addressPart(m, addr, 'street');
+            a.city = addressPart(m, addr, 'city');
+            a.state = addressPart(m, addr, 'state');
+            a.zip = addressPart(m, addr, 'zip');
 
             String typeWord = text(m.get('collateralType'));
             if (String.isBlank(typeWord)) {
@@ -883,7 +899,8 @@ global with sharing class StageRelationshipIntake {
         if (valuations > 0) {
             warnings.add(
                 String.valueOf(valuations) + ' opening ' + (valuations == 1 ? 'valuation is' : 'valuations are') + ' filed alongside the ' +
-                (valuations == 1 ? 'asset' : 'assets') + ', marked Active and not the original value. nCino binds the collateral auto-update to its own ' +
+                (valuations == 1 ? 'asset' : 'assets') + ', marked Active and the original value, which is what the first valuation of an asset ' +
+                'created in this same transaction is. nCino binds the collateral auto-update to its own ' +
                 'Add Valuation button and it does not fire headlessly, so the asset value is the one this plan supplies and no rollup is claimed.'
             );
         }
@@ -1000,6 +1017,17 @@ global with sharing class StageRelationshipIntake {
 
     private static String text(Object v) {
         return v == null ? null : String.valueOf(v).trim();
+    }
+
+    /** One address part, from the nested object where there is one and from the flat key otherwise. */
+    private static String addressPart(Map<String, Object> entry, Map<String, Object> address, String key) {
+        if (address != null) {
+            String nested = text(address.get(key));
+            if (String.isNotBlank(nested)) {
+                return nested;
+            }
+        }
+        return text(entry.get(key));
     }
 
     private static Decimal decimalOf(Object v) {

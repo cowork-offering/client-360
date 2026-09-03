@@ -67,10 +67,14 @@ private class StageExecuteRelationshipIntakeTest {
             'valuationBasis' => 'Orderly Liquidation Value',
             'valuationSource' => 'Appraisal',
             'valuationDate' => '2026-08-31',
-            'street' => '1400 Industrial Parkway',
-            'city' => 'Kokomo',
-            'state' => 'IN',
-            'zip' => '46901'
+            // ONE OBJECT, not four keys. This is the shape the contract words and the shape the
+            // room sends; the flat spelling is a fallback and has a test of its own.
+            'address' => new Map<String, Object>{
+                'street' => '1400 Industrial Parkway',
+                'city' => 'Kokomo',
+                'state' => 'IN',
+                'zip' => '46901'
+            }
         };
     }
 
@@ -89,6 +93,17 @@ private class StageExecuteRelationshipIntakeTest {
     }
 
     private static ExecuteRelationshipIntake.Response executeStaged(String k, StageRelationshipIntake.StageResult staged) {
+        ExecuteRelationshipIntake.Request ex = new ExecuteRelationshipIntake.Request();
+        ex.idempotencyKey = k;
+        ex.stagingId = staged.planId;
+        ex.planHash = staged.planHash;
+        ex.decisionToken = staged.decisionToken;
+        ex.approverUserId = UserInfo.getUserId();
+        return ExecuteRelationshipIntake.run(new List<ExecuteRelationshipIntake.Request>{ ex })[0];
+    }
+
+    /** The same call under the older key, which the tool still answers to. */
+    private static ExecuteRelationshipIntake.Response executeStagedByAlias(String k, StageRelationshipIntake.StageResult staged) {
         ExecuteRelationshipIntake.Request ex = new ExecuteRelationshipIntake.Request();
         ex.idempotencyKey = k;
         ex.planId = staged.planId;
@@ -161,8 +176,13 @@ private class StageExecuteRelationshipIntakeTest {
         ];
         System.assert(asset.LLC_BI__Value__c == 2500000, String.valueOf(asset.LLC_BI__Value__c));
         System.assertEquals('CNC machining line, Kokomo plant', asset.LLC_BI__Description__c);
+        // THE ADDRESS CAME NESTED and reached the org. All four parts, because an address that
+        // arrives as three quarters of itself is a defect nobody sees until a banker reads it.
+        System.assertEquals('1400 Industrial Parkway', asset.LLC_BI__Street_Address__c,
+            'the nested address object must reach the asset');
         System.assertEquals('Kokomo', asset.LLC_BI__City__c);
         System.assertEquals('IN', asset.LLC_BI__State__c);
+        System.assertEquals('46901', asset.LLC_BI__Zip_Code__c);
         System.assertEquals(1, [
             SELECT COUNT() FROM LLC_BI__Account_Collateral__c
             WHERE LLC_BI__Collateral__c = :asset.Id AND LLC_BI__Account__c = :a.Id
@@ -215,6 +235,71 @@ private class StageExecuteRelationshipIntakeTest {
             SELECT COUNT() FROM LLC_BI__Collateral_Valuation__c
             WHERE LLC_BI__Collateral__c = :done.result.collateral[0].collateralId
         ]);
+    }
+
+    @IsTest
+    static void aFlatAddressIsStillReadWhereNoAddressObjectIsSupplied() {
+        C360TestFixture.armCalloutMock();
+        String k = key('flataddress');
+        // The four keys at the top level of the entry, which is what a caller that has not read
+        // the contract closely will send. It means the same thing, so it is read rather than lost.
+        Map<String, Object> flat = new Map<String, Object>{
+            'collateralType' => COLLATERAL_TYPE_NAME,
+            'description' => 'Warehouse, Fort Wayne',
+            'value' => 900000,
+            'street' => '1400 Industrial Parkway',
+            'city' => 'Fort Wayne',
+            'state' => 'IN',
+            'zip' => '46802'
+        };
+
+        Test.startTest();
+        StageRelationshipIntake.Response staged = stage(req(k, null, new List<Object>{ flat }));
+        System.assertEquals(true, staged.ok, 'stage should succeed, got ' + why(staged));
+        ExecuteRelationshipIntake.Response done = executeStaged(k, staged.result);
+        Test.stopTest();
+
+        System.assertEquals(true, done.ok, 'execute should succeed: ' + (done.error == null ? '' : done.error.message));
+        LLC_BI__Collateral__c asset = [
+            SELECT Id, LLC_BI__Street_Address__c, LLC_BI__City__c, LLC_BI__State__c, LLC_BI__Zip_Code__c
+            FROM LLC_BI__Collateral__c WHERE Id = :done.result.collateral[0].collateralId
+        ];
+        System.assertEquals('1400 Industrial Parkway', asset.LLC_BI__Street_Address__c);
+        System.assertEquals('Fort Wayne', asset.LLC_BI__City__c);
+        System.assertEquals('IN', asset.LLC_BI__State__c);
+        System.assertEquals('46802', asset.LLC_BI__Zip_Code__c);
+    }
+
+    @IsTest
+    static void executeAnswersToStagingIdAndStillToThePlanIdAlias() {
+        C360TestFixture.armCalloutMock();
+        String k = key('alias');
+
+        Test.startTest();
+        StageRelationshipIntake.Response staged = stage(req(k, new List<Object>{ covenantEntry(COVENANT_TYPE_NAME) }, null));
+        System.assertEquals(true, staged.ok, why(staged));
+
+        // NEITHER KEY, and the refusal names the one the caller should send.
+        ExecuteRelationshipIntake.Request bare = new ExecuteRelationshipIntake.Request();
+        bare.idempotencyKey = key('nohandle');
+        bare.planHash = staged.result.planHash;
+        bare.decisionToken = staged.result.decisionToken;
+        bare.approverUserId = UserInfo.getUserId();
+        ExecuteRelationshipIntake.Response refused =
+            ExecuteRelationshipIntake.run(new List<ExecuteRelationshipIntake.Request>{ bare })[0];
+        System.assertEquals(false, refused.ok, 'a request carrying no handle at all cannot execute');
+        System.assert(refused.error.message.contains('stagingId is required'), refused.error.message);
+        System.assert(refused.error.message.contains('planId'), 'the refusal names the alias too: ' + refused.error.message);
+
+        // THE ALIAS STILL WORKS. The pair shipped naming the handle planId and the room is not
+        // the only caller; a rename that breaks the old key is a rename that breaks a live client.
+        ExecuteRelationshipIntake.Response done = executeStagedByAlias(k, staged.result);
+        Test.stopTest();
+
+        System.assertEquals(true, done.ok, 'planId must still be accepted: ' + (done.error == null ? '' : done.error.message));
+        System.assertEquals(staged.result.planId, done.result.stagingId,
+            'the result answers under stagingId, as every other execute tool does');
+        System.assertEquals(staged.result.planId, done.result.planId, 'and under the alias, unchanged');
     }
 
     /* ------------------------------------------------------------- the refusals */
@@ -276,6 +361,62 @@ private class StageExecuteRelationshipIntakeTest {
         System.assertEquals('collateral', staged.result.refusals[0].kind);
         System.assert(
             staged.result.refusals[0].reason.contains('greater than zero'),
+            staged.result.refusals[0].reason
+        );
+    }
+
+    @IsTest
+    static void aStateTheOrgDoesNotHoldIsRefusedFromTheNestedAddress() {
+        C360TestFixture.armCalloutMock();
+        Map<String, Object> bad = collateralEntry(COLLATERAL_TYPE_NAME);
+        // The nested object is validated exactly as the flat keys were: the picklist is the org's
+        // and the entry is refused by index rather than filed with a state the org cannot store.
+        bad.put('address', new Map<String, Object>{
+            'street' => '1400 Industrial Parkway',
+            'city' => 'Kokomo',
+            'state' => 'ZZ',
+            'zip' => '46901'
+        });
+
+        Test.startTest();
+        StageRelationshipIntake.Response staged = stage(req(
+            key('badstate'),
+            new List<Object>{ covenantEntry(COVENANT_TYPE_NAME) },
+            new List<Object>{ bad }
+        ));
+        Test.stopTest();
+
+        System.assertEquals(true, staged.ok, 'the covenant still plans, got ' + why(staged));
+        System.assertEquals(0, staged.result.collateralCount, 'the asset is not filed with a state the org refuses');
+        System.assertEquals(1, staged.result.refusedCount);
+        System.assertEquals('collateral', staged.result.refusals[0].kind);
+        System.assertEquals(0, staged.result.refusals[0].index);
+        System.assert(
+            staged.result.refusals[0].reason.contains('ZZ') &&
+                staged.result.refusals[0].reason.contains('LLC_BI__State__c'),
+            'the refusal names the value and the org\'s picklist: ' + staged.result.refusals[0].reason
+        );
+    }
+
+    @IsTest
+    static void anAddressThatIsNotAnObjectIsRefusedRatherThanIgnored() {
+        C360TestFixture.armCalloutMock();
+        Map<String, Object> bad = collateralEntry(COLLATERAL_TYPE_NAME);
+        bad.put('address', '1400 Industrial Parkway, Fort Wayne, IN 46802');
+
+        Test.startTest();
+        StageRelationshipIntake.Response staged = stage(req(
+            key('addrstring'),
+            new List<Object>{ covenantEntry(COVENANT_TYPE_NAME) },
+            new List<Object>{ bad }
+        ));
+        Test.stopTest();
+
+        System.assertEquals(true, staged.ok, why(staged));
+        System.assertEquals(0, staged.result.collateralCount);
+        System.assertEquals(1, staged.result.refusedCount);
+        System.assert(
+            staged.result.refusals[0].reason.contains('address must be a JSON object'),
             staged.result.refusals[0].reason
         );
     }
