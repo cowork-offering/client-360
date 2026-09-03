@@ -189,7 +189,7 @@ import {
   type SettledRow,
 } from "./settle";
 import { useStageGate } from "./stage";
-import { FINALE_SWEEP_MS, finaleAttrs, railFiledLine, useFinale, withFinale } from "./finale";
+import { FINALE_SWEEP_MS, finaleAttrs, useFinale, withFinale } from "./finale";
 import { buildReadCard, planReadCard, readGap, type ReadCardModel, type ReadOptions, type ReadSource } from "./readCard";
 import { ReadCard } from "./ReadCardView";
 import { packageDeepLink } from "../DeepLink";
@@ -426,7 +426,7 @@ const HALO_LIFE_MS = 5600;
    the other half of the same claim: the change set is closed and the room is
    still here, which is what makes the two doors beside it an offer rather than
    an exit sign. */
-const AFTERGLOW_LINE = "The change set is closed. Nothing else is waiting on you.";
+const AFTERGLOW_LINE = "Next, the credit memo is generated and handed into the delegated approval process.";
 const FILED_PROMPT = "Anything else on this relationship?";
 /** The word stagger of the agent's speech (rule 65). */
 const WORD_STAGGER_MS = 26;
@@ -1541,10 +1541,6 @@ export function Workroom({
      rather than recomputed, so "View in nCino" and the card's header can never
      point at two different records - and where the card has no link, because the
      view carries no org address, neither does this (A29). */
-  const filedHref = useMemo(() => {
-    const card = items.find((i) => i.kind === "dossier");
-    return card?.kind === "dossier" ? card.dossier.packageHref : null;
-  }, [items]);
 
   const baseline = useMemo(
     () => ({
@@ -4215,15 +4211,13 @@ export function Workroom({
      "Can we gently and elegantly clean up the room, a cinematic kind of
      creation success with that card."
 
-     THE EXIT SET IS EVERYTHING ABOVE THE DOSSIER, fixed at this instant. The
-     dossier and the reply beside it are the filing's own output and stay; the
-     purpose footnote has not arrived yet and, because the set is fixed here,
-     never joins the drain when it does. */
+     THE EXIT SET IS EVERYTHING BUT THE DOSSIER, fixed at this instant
+     (founder, 2026-09-03, second pass: "the card which glows is basically only
+     in there"). The reply beside the card drains with the thread; a footnote
+     that arrives later is kept off the glass by the still state's own rule. */
   useEffect(() => {
     if (phase !== "filed") return;
-    const list = itemsRef.current;
-    const at = list.findIndex((i) => i.kind === "dossier");
-    beginFinale((at < 0 ? list : list.slice(0, at)).map((i) => i.id));
+    beginFinale(itemsRef.current.filter((i) => i.kind !== "dossier").map((i) => i.id));
   }, [beginFinale, phase]);
 
   /* ---- and the member the signal named is the one the lane opens on. */
@@ -5192,6 +5186,7 @@ export function Workroom({
         <div
           ref={roomRef}
           className="wk-room eg-glass eg-glass-workroom"
+          data-finale={finaleState === "off" ? undefined : finaleState}
           role="dialog"
           aria-modal="true"
           aria-label={title}
@@ -5465,34 +5460,16 @@ export function Workroom({
                 )}
                 {/* ============ THE QUIET AFTERGLOW (founder, 2026-09-03)
 
-                    One line and two doors, under the card. The line is the room
-                    saying it is finished rather than merely stopped; the doors
-                    are the two places a banker actually goes next, and both are
-                    the room's quietest control because a finale is not the place
-                    for a second button weight.
-
-                    THE LINK IS THE DOSSIER'S OWN `packageHref`. Nothing new is
-                    computed and no host is guessed: where the view carries no
-                    org address the card has no link and neither does this. */}
+                    One door and one quiet line, under the card (founder,
+                    2026-09-03, second pass). The dossier's own header keeps the
+                    org link; the afterglow adds nothing beside the close and
+                    the sentence about what happens next. */}
                 {finaleState === "still" && (
                   <div className="wk-afterglow" data-finale="afterglow">
-                    <span>{AFTERGLOW_LINE}</span>
-                    <div className="wk-ag-acts">
-                      {filedHref && (
-                        <a
-                          className="wk-dt"
-                          href={filedHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          data-deeplink="workroom-finale"
-                        >
-                          View in Salesforce
-                        </a>
-                      )}
-                      <button type="button" className="wk-dt" onClick={onClose}>
-                        Close the room
-                      </button>
-                    </div>
+                    <button type="button" className="wk-ag-close" onClick={onClose}>
+                      Close workroom
+                    </button>
+                    <span className="wk-ag-note">{AFTERGLOW_LINE}</span>
                   </div>
                 )}
               </section>
@@ -5535,7 +5512,7 @@ export function Workroom({
               {/* THE OFFER SLEEPS WITH THE COMPOSER (rule 30), and it is gone
                   entirely while a gate is open: a next move offered beside an
                   open card is a second decision on the table. */}
-              <div className="wk-sugg">
+              <div className="wk-sugg" hidden={phase === "filed"}>
                 {/* A next move offered while the ROUTE is still open would be a
                     fourth chip answering a different question. */}
                 {awake && suggestion && !ask && openGates === 0 && !thinking && phase === "work" && (
@@ -5554,7 +5531,7 @@ export function Workroom({
               </div>
 
               {/* The composer SLEEPS until the brief lands (rule 30). */}
-              <div className="wk-composer eg-pill">
+              <div className="wk-composer eg-pill" hidden={phase === "filed"}>
                 <input
                   ref={composerRef}
                   className="wk-txt"
@@ -5632,7 +5609,7 @@ export function Workroom({
           </div>
 
           {/* ============================= THE RIGHT LANE: detail, then manifest */}
-          <aside className="wk-col-r" aria-label={manifestHeading}>
+          <aside className="wk-col-r" aria-label={manifestHeading} data-finale={finaleState === "off" ? undefined : finaleState}>
             {/* THE FEED'S OWN PROGRESS (rule 3). How far through an intent's
                 instructions the room is belongs in the lane's head beside the
                 ledger, not in the thread: the thread is what was SAID, and a
@@ -5709,12 +5686,6 @@ export function Workroom({
                     finished with it: it goes off stage, aria-hidden, one class
                     from coming back, and an absence contract can still tell
                     "drained" from "never filed". */}
-                {finaleState === "still" && (
-                  <div className="wk-railfiled" data-rail="filed">
-                    <TypeIcon kind="commit" />
-                    <span>{railFiledLine(figures.count, vocabulary.filedWord, vocabulary.changeWord)}</span>
-                  </div>
-                )}
                 {entries.map((delta, i) => {
                   const filed = filedById.get(delta.id);
                   const drains = finaleState === "off" ? null : finaleAttrs(i, finaleState);

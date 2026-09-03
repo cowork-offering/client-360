@@ -67,13 +67,11 @@ function MailEntry({
   entry,
   row,
   index,
-  generatedAt,
   onOpen,
 }: {
   entry: ActivityEntry;
   row: NonNullable<ReturnType<typeof readMailRow>>;
   index: number;
-  generatedAt: string;
   onOpen: () => void;
 }) {
   const [shown, setShown] = useState(false);
@@ -89,7 +87,7 @@ function MailEntry({
           <b>{row.subject}</b>
           <span className="m" title={fmtDate(entry.ts)}>
             {row.from ? `${row.from} · ` : ""}
-            {fmtRelative(entry.ts, generatedAt)}
+            {fmtRelative(entry.ts, new Date().toISOString())}
           </span>
         </span>
         <button type="button" className="eg-btn-ink mopen" data-mail-open={entry.id} onClick={onOpen}>
@@ -123,12 +121,10 @@ function MailEntry({
 function TrailEntry({
   entry,
   index,
-  generatedAt,
   onOpen,
 }: {
   entry: ActivityEntry;
   index: number;
-  generatedAt: string;
   onOpen: () => void;
 }) {
   const meta = KIND_META[entry.kind] ?? KIND_META.RENDER_AUDIT;
@@ -150,7 +146,7 @@ function TrailEntry({
       <span className="m" title={fmtDate(entry.ts)}>
         {isUser && !entry.orgConfirmed
           ? `${entry.actor ?? "You"} · just now`
-          : fmtRelative(entry.ts, generatedAt)}
+          : fmtRelative(entry.ts, new Date().toISOString())}
       </span>
       {isRequest && <span className="m">{meta.label}</span>}
       {entry.summary && <span className="d">{entry.summary}</span>}
@@ -224,7 +220,6 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
                   entry={e}
                   row={row}
                   index={i}
-                  generatedAt={generatedAt}
                   onOpen={() =>
                     openMailRoom({
                       entry: e,
@@ -241,7 +236,6 @@ export function ActivityTab({ bundle }: { bundle: BorrowerBundle }) {
                   key={e.id}
                   entry={e}
                   index={i}
-                  generatedAt={generatedAt}
                   onOpen={() => setOpenId(e.id)}
                 />
               );

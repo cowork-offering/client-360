@@ -33,7 +33,7 @@ import {
   useSettleChoreography,
   type SettledRow,
 } from "../workroom/settle";
-import { FINALE_SWEEP_MS, finaleAttrs, railFiledLine, useFinale, withFinale } from "../workroom/finale";
+import { FINALE_SWEEP_MS, finaleAttrs, useFinale, withFinale } from "../workroom/finale";
 import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
 import { readCatalog, type OrgCatalog } from "../../channel/catalog";
@@ -248,7 +248,7 @@ const HALO_LIFE_MS = 5600;
 /* ---- the finale's two sentences (founder, 2026-09-03). The line under the card
    is the room saying it is FINISHED rather than merely stopped; the prompt is the
    other half of the same claim, and it is the facility room's word for word. */
-const REL_AFTERGLOW_LINE = "The review is closed. Nothing else is waiting on you.";
+const REL_AFTERGLOW_LINE = "Next, the review memo is generated and handed into the delegated approval process.";
 const REL_FILED_PROMPT = "Anything else on this relationship?";
 const WORD_STAGGER_MS = 26;
 
@@ -1833,9 +1833,7 @@ export function RelationshipRoom({
           slots under the card instead of joining the drain. */
   useEffect(() => {
     if (phase !== "filed") return;
-    const list = itemsRef.current;
-    const at = list.findIndex((i) => i.kind === "dossier");
-    beginFinale((at < 0 ? list : list.slice(0, at)).map((i) => i.id));
+    beginFinale(itemsRef.current.filter((i) => i.kind !== "dossier").map((i) => i.id));
   }, [beginFinale, phase]);
 
   /* ---- the halo breathes out ~5s after the dossier lands (rule 69). */
@@ -2015,6 +2013,7 @@ export function RelationshipRoom({
         <div
           ref={roomRef}
           className="wk-room rl-room eg-glass eg-glass-workroom"
+          data-finale={finaleState === "off" ? undefined : finaleState}
           role="dialog"
           aria-modal="true"
           aria-label={title}
@@ -2208,20 +2207,18 @@ export function RelationshipRoom({
                     invented. */}
                 {finaleState === "still" && (
                   <div className="wk-afterglow" data-finale="afterglow">
-                    <span>{REL_AFTERGLOW_LINE}</span>
-                    <div className="wk-ag-acts">
-                      <button type="button" className="wk-dt" onClick={onClose}>
-                        Close the room
-                      </button>
-                    </div>
+                    <button type="button" className="wk-ag-close" onClick={onClose}>
+                      Close workroom
+                    </button>
+                    <span className="wk-ag-note">{REL_AFTERGLOW_LINE}</span>
                   </div>
                 )}
               </section>
 
-              <div className="wk-sugg" />
+              <div className="wk-sugg" hidden={phase === "filed"} />
 
               {/* The composer SLEEPS until the room has read the relationship. */}
-              <div className="wk-composer eg-pill">
+              <div className="wk-composer eg-pill" hidden={phase === "filed"}>
                 <input
                   ref={composerRef}
                   className="wk-txt"
@@ -2276,7 +2273,7 @@ export function RelationshipRoom({
           </div>
 
           {/* ======================== THE RIGHT LANE: position, then the ledger */}
-          <aside className="wk-col-r" aria-label={laneHeading}>
+          <aside className="wk-col-r" aria-label={laneHeading} data-finale={finaleState === "off" ? undefined : finaleState}>
             {/* THE FEED'S OWN PROGRESS (rule 3), in the lane head beside the
                 ledger. The thread is what was SAID; a queue position is not. */}
             {feed.total > 0 && (
@@ -2340,14 +2337,6 @@ export function RelationshipRoom({
                 {/* THE RAIL DRAINS WITH THE THREAD. The answers stay MOUNTED as
                     they go off stage: they are the review's own record and an
                     absence contract must still be able to read them. */}
-                {finaleState === "still" && (
-                  <div className="wk-railfiled" data-rail="filed">
-                    <TypeIcon kind={flowSpec?.icon ?? "commit"} />
-                    <span>
-                      {railFiledLine(laneRows.length, flowSpec?.filedWord ?? "Filed", ["answer", "answers"])}
-                    </span>
-                  </div>
-                )}
                 {laneRows.map((row, i) => (
                   <div
                     {...withFinale({ className: "wk-ent" }, finaleState === "off" ? null : finaleAttrs(i, finaleState))}

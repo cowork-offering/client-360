@@ -2974,10 +2974,28 @@ body.wk-open #root {
     opacity: 0;
   }
   30% {
-    opacity: 0.42;
+    opacity: 0.46;
   }
   100% {
-    opacity: 0.12;
+    opacity: 0.3;
+  }
+}
+/* AND THEN IT KEEPS GLOWING (founder, 2026-09-03: "the card which glows"). After
+   the single pass the light breathes, slowly, the only thing moving on a glass
+   that is otherwise still. */
+.wk-room[data-finale="still"] .wk-ex[data-finale-card] .wk-rescard > .aura {
+  animation:
+    aurarot var(--wk-fin-sweep, 2600ms) linear var(--wk-fin-hold, 0ms) 1 both,
+    wk-fin-glow var(--wk-fin-sweep, 2600ms) var(--ease-out) var(--wk-fin-hold, 0ms) 1 both,
+    wk-fin-breathe 5200ms ease-in-out calc(var(--wk-fin-hold, 0ms) + var(--wk-fin-sweep, 2600ms)) infinite;
+}
+@keyframes wk-fin-breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 
@@ -3046,3 +3064,78 @@ body.wk-open #root {
    is ever left mid-exit by a keyframe that did not run, the card is simply
    present at its resting opacity, the sweep never starts and the aura goes back
    to being the halo it always was. */
+
+/* ---- the whole glass empties (founder, 2026-09-03, second pass): the right
+        lane wipes on the same wave, the composer is gone, and the card stands
+        alone in the centre of the room with one door under it. */
+.wk-col-r[data-finale="exhale"] {
+  pointer-events: none;
+  animation: wk-fin-rail 640ms var(--ease-out) 120ms both;
+}
+@keyframes wk-fin-rail {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(14px, 0, 0);
+    filter: blur(4px);
+  }
+}
+.wk-col-r[data-finale="still"] {
+  display: none;
+}
+.wk-room[data-finale="still"] .wk-body {
+  padding-right: 0;
+  transition: padding-right 400ms var(--ease-out);
+}
+.wk-room[data-finale="still"] .wk-thread {
+  align-items: center;
+}
+.wk-room[data-finale="still"] .wk-thread > .wk-ex[data-finale-card] {
+  width: 100%;
+  max-width: 640px;
+}
+/* Whatever arrives after the card (a late footnote) stays off the glass. */
+.wk-room[data-finale="still"] .wk-thread > :not([data-finale-card]):not(.wk-afterglow) {
+  display: none;
+}
+.wk-composer[hidden],
+.wk-sugg[hidden] {
+  display: none !important;
+}
+.wk-room[data-finale="still"] .wk-afterglow {
+  align-self: center;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+  margin-top: 6px;
+}
+.wk-ag-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 22px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-hairline);
+  background: var(--surface-raised);
+  box-shadow: var(--glass-rim), 0 10px 28px -14px rgba(0, 0, 0, 0.35);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.wk-ag-close:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--glass-rim), 0 14px 32px -14px rgba(0, 0, 0, 0.4);
+}
+.wk-ag-note {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  max-width: 420px;
+  line-height: 1.5;
+}

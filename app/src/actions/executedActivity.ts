@@ -332,8 +332,13 @@ export function historyActivityEntry(row: ActionHistoryRow, instanceUrl?: string
     return {
       ...base,
       kind: "ACTION_EXECUTED",
-      title: name ? `${label} ${name} filed` : `${label} filed, name not confirmed`,
-      summary: name ? undefined : "The org completed this but did not return the record name, so it is filed but unverified.",
+      /* THE HISTORY READ CARRIES IDS, NOT NAMES. A Completed row whose name
+         did not travel is still a completed, org-verified filing; the title
+         says what was filed and the record link carries the org's own name
+         (founder, 2026-09-03: "name not confirmed" on the trail read as a
+         failure on a filing the org had completed). */
+      title: name ? `${label} ${name} filed` : `${label} filed`,
+      summary: name ? undefined : "Completed in the org; the record carries its org-assigned name.",
       reference: row.resultRecordId
         ? { kind: "ncino-record", id: row.resultRecordId, label: object, source: "Customer 360", webLink: href ?? undefined }
         : undefined,

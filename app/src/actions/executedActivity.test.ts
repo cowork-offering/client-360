@@ -206,11 +206,11 @@ describe("the org's durable action trail (observed envelope 2026-07-26)", () => 
     expect(e.title).not.toContain("name not confirmed");
   });
 
-  it("treats a null name on a COMPLETED row as the verification failure it is", () => {
+  it("keeps a COMPLETED row a filing when the history read carried no name", () => {
     const e = historyActivityEntry({ ...ROW, resultRecordName: undefined })!;
     expect(e.kind).toBe("ACTION_EXECUTED");
-    expect(e.title).toBe("Collateral valuation filed, name not confirmed");
-    expect(e.summary).toContain("filed but unverified");
+    expect(e.title).toBe("Collateral valuation filed");
+    expect(e.summary).toContain("Completed in the org");
   });
 
   it("carries an unrecognised status verbatim rather than guessing at it", () => {

@@ -649,18 +649,18 @@ describe("the plan, the token and the dossier", () => {
     expect(room.querySelector(".wk-thread")!.getAttribute("data-finale")).toBe("still");
     expect(room.querySelector(".wk-rescard")!.closest("[data-finale-card]")).toBeTruthy();
 
-    // The rail says one line and its answers go off stage, still mounted.
-    expect(room.querySelector('[data-rail="filed"]')!.textContent).toContain("Filed · 4 answers");
+    // The rail wipes as a whole and its answers go off stage, still mounted.
+    expect(room.querySelector(".wk-col-r")!.getAttribute("data-finale")).toBe("still");
     const answers = [...room.querySelectorAll(".wk-ent")];
     expect(answers).toHaveLength(4);
     for (const answer of answers) expect(answer.getAttribute("data-finale")).toBe("gone");
 
-    // One line, one door, and no link where there is no record to link to.
+    // One door, one line about what comes next, and no link invented.
     const after = room.querySelector(".wk-afterglow")!;
-    expect(after.textContent).toContain("The review is closed");
+    expect(after.textContent).toContain("review memo");
     expect(after.querySelector("a")).toBeNull();
-    expect([...after.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Close the room"]);
-    expect(room.querySelector<HTMLInputElement>(".wk-txt")!.placeholder).toBe("Anything else on this relationship?");
+    expect([...after.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Close workroom"]);
+    expect(room.querySelector(".wk-composer")!.hasAttribute("hidden")).toBe(true);
   });
 
   it("gives no connector a surface of its own, and burns no token getting there", async () => {

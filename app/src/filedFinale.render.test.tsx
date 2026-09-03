@@ -114,16 +114,15 @@ describe("the room exhales when the card lands", () => {
     const { room, before } = await fileAPlan();
     expect(before).toBeGreaterThan(3);
 
-    /* THE COUNT. What is left on stage is the dossier and the drafted reply that
-       landed beside it - the filing's own tail - and nothing else. */
+    /* THE COUNT. What is left on stage is the dossier, alone (founder,
+       2026-09-03, second pass): the drafted reply drains with the rest. */
     const left = onStage(room);
-    expect(left).toHaveLength(2);
-    expect(left.some((el) => el.querySelector(".wk-rescard"))).toBe(true);
-    expect(left.some((el) => el.querySelector(".wk-reply"))).toBe(true);
+    expect(left).toHaveLength(1);
+    expect(left[0].querySelector(".wk-rescard")).toBeTruthy();
 
     // And everything the room WAS holding went, rather than simply never having
-    // been there: the two on stage are both new, appended by the filing itself.
-    expect(drained(room).length).toBe(before);
+    // been there: the one on stage is new, appended by the filing itself.
+    expect(drained(room).length).toBeGreaterThanOrEqual(before);
     for (const gone of drained(room)) expect(gone.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -169,10 +168,9 @@ describe("the card ascends alone", () => {
 });
 
 describe("the rail is filed too", () => {
-  it("says one quiet line and takes its staged cards off the stage", async () => {
+  it("wipes as a whole and takes its staged cards off the stage", async () => {
     const { room } = await fileAPlan();
-    const line = room.querySelector('[data-rail="filed"]')!;
-    expect(line.textContent).toContain("Filed · 2 changes");
+    expect(room.querySelector(".wk-col-r")!.getAttribute("data-finale")).toBe("still");
 
     const cards = [...room.querySelectorAll(".wk-ent")];
     expect(cards.length).toBe(2);
@@ -188,26 +186,24 @@ describe("the rail is filed too", () => {
 });
 
 describe("the quiet afterglow", () => {
-  it("offers the card's own door and closes the room on the second", async () => {
+  it("offers one door, closes the room on it, and names what comes next", async () => {
     const { room } = await fileAPlan();
     const after = room.querySelector(".wk-afterglow")!;
-    expect(after.textContent).toContain("The change set is closed");
-
-    const link = after.querySelector<HTMLAnchorElement>("a[data-deeplink='workroom-finale']")!;
-    /* ONE RECORD, ONE HREF. The door is read off the dossier the room is
-       holding, so it can never point somewhere the card's own header does not. */
-    const header = room.querySelector<HTMLAnchorElement>("a[data-deeplink='workroom-package']")!;
-    expect(link.getAttribute("href")).toBe(header.getAttribute("href"));
-    expect(link.getAttribute("rel")).toContain("noopener");
-
-    click([...after.querySelectorAll("button")].find((b) => /Close the room/.test(b.textContent ?? "")));
+    expect(after.textContent).toContain("credit memo");
+    /* ONE DOOR. The dossier's own header keeps the org link; the afterglow adds
+       nothing beside the close. */
+    expect(after.querySelector("a")).toBeNull();
+    const doors = [...after.querySelectorAll("button")];
+    expect(doors.map((b) => b.textContent)).toEqual(["Close workroom"]);
+    click(doors[0]);
     expect(closed).toBe(1);
   });
 
-  it("leaves the composer honestly alive rather than announcing the end twice", async () => {
+  it("takes the composer and the rail off the glass with everything else", async () => {
     const { room } = await fileAPlan();
-    const composer = room.querySelector<HTMLInputElement>(".wk-txt")!;
-    expect(composer.placeholder).toBe("Anything else on this relationship?");
+    expect(room.querySelector(".wk-composer")!.hasAttribute("hidden")).toBe(true);
+    expect(room.querySelector(".wk-col-r")!.getAttribute("data-finale")).toBe("still");
+    expect((room.matches(".wk-room") ? room : room.querySelector(".wk-room")!).getAttribute("data-finale")).toBe("still");
     expect(room.textContent).not.toContain("The workroom holds");
   });
 });
