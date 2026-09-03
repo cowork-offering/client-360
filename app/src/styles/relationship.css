@@ -209,3 +209,15 @@
 .wk-room.rl-room .wk-thread > .wk-step:first-child > .wk-tier:first-child > .wk-msg:first-child {
   margin-top: 26px;
 }
+
+/* AIR BETWEEN THE BUBBLES (founder, 2026-09-04: "a little bit of space between
+   the bubbles in the relationship actions, they are pretty tight"). The identity
+   chip hangs 21px above each bubble, so the 32px step gap the facility room
+   earns reads as 11px here, where the exchanges are short question-chip-answer
+   beats. The relationship room takes a wider step and thread gap. */
+.wk-room.rl-room .wk-step {
+  gap: 46px;
+}
+.wk-room.rl-room .wk-thread {
+  gap: 50px;
+}
