@@ -60,6 +60,10 @@ public with sharing class C360NewFacilities {
         'Construction', 'Equipment', 'Line of Credit', 'HELOC', 'Purchase', 'Deposit'
     };
 
+    /** Where the primary loan purpose actually lives. Not on the Loan. */
+    public static final String OBJ_LOAN_DETAIL = 'LLC_BI__Loan_Detail__c';
+    public static final String FLD_PRIMARY_PURPOSE = 'LLC_BI__Primary_Loan_Purpose__c';
+
     /** Confirmed RT-valid in the same read, and the only state a facility may be created with. */
     public static final String RT_CREATE_STAGE = 'Qualification';
     public static final String RT_CREATE_STATUS = 'Open';
@@ -233,17 +237,53 @@ public with sharing class C360NewFacilities {
                     nf.label + ' needs a term in months greater than zero. nCino prices on the amount and the term, and a facility with neither cannot be priced at all.'
                 );
             }
-            if (String.isBlank(nf.purpose)) {
-                throw new NewFacilityException(
-                    nf.label + ' needs a primary loan purpose. The org leaves it null on the Loan Detail it creates, and it gates LV12 on any later stage hop.'
-                );
-            }
+            assertPurpose(nf.purpose, nf.label);
             if (nf.amortizedTermMonths != null && nf.amortizedTermMonths <= 0) {
                 throw new NewFacilityException(nf.label + ' carries an amortised term of ' + String.valueOf(nf.amortizedTermMonths) + '. An amortisation is a count of months greater than zero.');
             }
             out.add(nf);
         }
         return out;
+    }
+
+    /* ------------------------------------------------------- the purpose field
+
+       THE OBJECT AND THE FIELD, confirmed by describing the org on 2026-09-03:
+
+         LLC_BI__Loan_Detail__c.LLC_BI__Primary_Loan_Purpose__c
+
+       `LLC_BI__Loan__c` carries NO primary-purpose field of its own. The only
+       purpose field on the loan is `cm_Purpose_of_Loan__c`, which is org-local
+       and is not what nCino reads.
+
+       AND IT IS A RESTRICTED PICKLIST, which is the fact that matters: 23 active
+       coded values (`business_expansion`, `equipment`, `refinance_our_loan`, ...)
+       and `restrictedPicklist = true`, so the ORG REJECTS anything else outright
+       rather than storing it the way the product picklist would. A banker's own
+       words are not a legal value, and a tool that let them through would stage a
+       plan the org refuses at the moment of the write.
+
+       So the value is checked HERE, against the org's own live describe, and a
+       refusal carries the legal list. */
+
+    /** The purpose check, against the org's own active values. */
+    public static void assertPurpose(String purpose, String who) {
+        if (String.isBlank(purpose)) {
+            throw new NewFacilityException(
+                who + ' needs a primary loan purpose. The org leaves it null on the Loan Detail it creates, and it gates LV12 on any later stage hop.'
+            );
+        }
+        Set<String> allowed = C360Picklist.activeValues(OBJ_LOAN_DETAIL, FLD_PRIMARY_PURPOSE);
+        if (allowed.isEmpty() || allowed.contains(purpose)) {
+            return;
+        }
+        List<String> sorted = new List<String>(allowed);
+        sorted.sort();
+        throw new NewFacilityException(
+            who + ' carries the primary loan purpose \'' + purpose + '\', which this org does not offer. ' +
+            FLD_PRIMARY_PURPOSE + ' is a RESTRICTED picklist here, so the org refuses anything outside its own list rather ' +
+            'than storing it. Available: ' + String.join(sorted, ', ') + '.'
+        );
     }
 
     /** The product check, in the create route's own words. */
@@ -480,10 +520,12 @@ public with sharing class C360NewFacilities {
         }
         if (anyPurpose) {
             out.add(
-                'The primary loan purpose lives on the Loan Detail, which nCino creates in its OWN transaction ' +
-                'moments after the facility is filed. This run writes it where the Loan Detail has already ' +
-                'appeared and reports it as a handoff where it has not: nothing inside the filing transaction ' +
-                'can see a record the org creates after that transaction commits.'
+                'The primary loan purpose lives on LLC_BI__Loan_Detail__c, which nCino creates in its OWN ' +
+                'transaction moments after the facility is filed. This run writes it where the Loan Detail has ' +
+                'already appeared and reports it as PENDING where it has not: nothing inside the filing ' +
+                'transaction can see a record the org creates after that transaction commits. ' +
+                'complete_new_facility_detail is the second hop that finishes it, and it writes nothing at all ' +
+                'when there is nothing left to write.'
             );
         }
         List<String> unpriced = new List<String>();

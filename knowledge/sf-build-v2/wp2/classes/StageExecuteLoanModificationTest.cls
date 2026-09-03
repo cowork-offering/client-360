@@ -2712,7 +2712,7 @@ private class StageExecuteLoanModificationTest {
 
     private static final String NEW_FACILITY_JSON =
         '[{"label":"new:1","product":"Equipment","amount":3000000,"termMonths":60,' +
-        '"purpose":"CNC line expansion","amortizedTermMonths":60,"firstPaymentDate":"2026-10-01"}]';
+        '"purpose":"business_expansion","amortizedTermMonths":60,"firstPaymentDate":"2026-10-01"}]';
 
     @IsTest
     static void aNetNewFacilityIsFiledOnTheNewVersionAndTheLabelledArmsLandOnIt() {
@@ -2816,7 +2816,7 @@ private class StageExecuteLoanModificationTest {
         C360TestFixture.armCalloutMock();
         StageLoanModification.Request r = stageReq(key('badprod'));
         r.newFacilitiesJson =
-            '[{"product":"Term","amount":3000000,"termMonths":60,"purpose":"CNC line expansion"}]';
+            '[{"product":"Term","amount":3000000,"termMonths":60,"purpose":"business_expansion"}]';
 
         Test.startTest();
         StageLoanModification.Response res = stage(r);

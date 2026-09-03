@@ -696,7 +696,7 @@ private class StageHeldCreditActionsTest {
 
     private static final String RENEWAL_NEW_FACILITY_JSON =
         '[{"label":"new:1","product":"Equipment","amount":3000000,"termMonths":60,' +
-        '"purpose":"CNC line expansion","amortizedTermMonths":60,"firstPaymentDate":"2026-10-01"}]';
+        '"purpose":"business_expansion","amortizedTermMonths":60,"firstPaymentDate":"2026-10-01"}]';
 
     @IsTest
     static void aRenewalPlansANetNewFacilityAndSaysItIsPlannedRatherThanFiled() {
@@ -740,7 +740,7 @@ private class StageHeldCreditActionsTest {
     static void bothRoutesRefuseTheSameOffCatalogProductWithTheSameSentence() {
         C360TestFixture.armCalloutMock();
         installBookedFacilities(1);
-        String bad = '[{"product":"Term","amount":3000000,"termMonths":60,"purpose":"CNC line expansion"}]';
+        String bad = '[{"product":"Term","amount":3000000,"termMonths":60,"purpose":"business_expansion"}]';
 
         StageRenewal.Request ren = renReq(C360Wave2Fixture.key('ren-badprod'));
         ren.newFacilitiesJson = bad;

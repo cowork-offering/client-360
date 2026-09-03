@@ -417,7 +417,17 @@ global with sharing class ExecuteNewFacility {
         out.loanDetailId = loan.LLC_BI__Loan_Detail__c;
         C360Plan.setState(steps, 'wait_loan_detail', C360Plan.STATE_VERIFIED, 'nCino created Loan Detail ' + loan.LLC_BI__Loan_Detail__c + '.');
 
+        // THE SAME WRITE, THROUGH THE SAME FENCE (2026-09-03). The Loan Detail
+        // joined C360WriteGuard when complete_new_facility_detail was built, and
+        // this is the other place in the package that writes the purpose. Two
+        // writes to one field with only one of them fenced is how a fence stops
+        // being one.
         String purpose = C360Plan.asString(v.get('primaryLoanPurpose'));
+        C360WriteGuard.assertAllowed(
+            C360WriteGuard.OBJ_LOAN_DETAIL,
+            C360WriteGuard.OP_UPDATE,
+            new Map<String, Object>{ 'LLC_BI__Primary_Loan_Purpose__c' => purpose }
+        );
         update as user new LLC_BI__Loan_Detail__c(Id = loan.LLC_BI__Loan_Detail__c, LLC_BI__Primary_Loan_Purpose__c = purpose);
         C360Plan.setState(steps, 'write_loan_purpose', C360Plan.STATE_VERIFIED, 'Primary loan purpose set to ' + purpose + '.');
 
