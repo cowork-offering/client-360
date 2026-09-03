@@ -364,7 +364,10 @@ public with sharing class C360WriteGuard {
     private static final Set<String> KNOWN_OBJECTS = new Set<String>{
         OBJ_CASE, OBJ_VALUATION, OBJ_REVIEW, OBJ_LOAN, OBJ_RISK_RATING, OBJ_COVENANT_COMPLIANCE,
         OBJ_PRODUCT_PACKAGE, OBJ_INVOLVEMENT, OBJ_COVENANT, OBJ_LOAN_COVENANT, OBJ_ACCOUNT_COVENANT,
-        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE, OBJ_POLICY_EXCEPTION
+        OBJ_FEE, OBJ_COLLATERAL, OBJ_ACCOUNT_COLLATERAL, OBJ_PLEDGE, OBJ_POLICY_EXCEPTION,
+        // The Loan Detail is UPDATE-ONLY here: nCino creates the row from its own
+        // after-commit flow and this package writes exactly one field on it.
+        OBJ_LOAN_DETAIL
     };
 
     /**

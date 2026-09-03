@@ -127,6 +127,7 @@ import {
   stagedNewFacilities,
   stagedNewFacilitySpecs,
 } from "./newFacilityArm";
+import { completeNewFacilityDetail } from "../../channel/writeTools";
 import { readCatalog, reconcileChips, type OrgCatalog } from "../../channel/catalog";
 import { bareMemberPick, readSteer } from "./steer";
 import {
@@ -4181,6 +4182,41 @@ export function Workroom({
             .map((m) => pricingDeclinedLine(m))
             .join(" ") || null,
       });
+      /* ============ THE SECOND HOP, FOR A PLAN THAT FILED A NEW FACILITY
+
+         The primary loan purpose lives on `LLC_BI__Loan_Detail__c`, which nCino
+         creates from an AFTER-COMMIT flow of its own. Nothing inside the
+         transaction that filed the facility could see it, so the org reported
+         the purpose as pending and `complete_new_facility_detail` finishes it.
+
+         IT IS ITS OWN HOP, and it runs HERE rather than inside either execute
+         leg: the 2026-08-31 governor fix exists to keep writes out of the engine
+         leg, and a third write pass bolted onto it would put the same
+         transaction back under the pressure that fix removed.
+
+         IT NEVER FAILS THE FILING. The plan is executed and the money is on the
+         version whatever this returns; what it decides is only which sentence
+         the executed card carries about the purpose. A plan that filed no new
+         facility never calls it at all. */
+      if (stagedNewFacilities(entries).length) {
+        try {
+          const finished = await completeNewFacilityDetail(staging.stagingId, context.approver);
+          if (finished.ok) {
+            agent(finished.result.outcome);
+          } else {
+            agent(
+              `The facility is filed and its purpose is not: ${finished.error.message} ` +
+                "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
+            );
+          }
+        } catch (e) {
+          agent(
+            `The facility is filed and its purpose is not: ${readableError(e)} ` +
+              "Nothing else is affected, and the purpose can be set in nCino or by running the same step again.",
+          );
+        }
+      }
+
       // WRITE-BACK THROUGH THE GLASS: the cockpit moves BEHIND the blur, while
       // the room is still open on the confirmation.
       if (committedDeltaMM) onExecuted?.(committedDeltaMM);

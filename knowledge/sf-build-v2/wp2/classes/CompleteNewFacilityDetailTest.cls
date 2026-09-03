@@ -175,7 +175,13 @@ private class CompleteNewFacilityDetailTest {
         System.assertEquals(true, done.ok, done.error == null ? '' : done.error.message);
 
         Test.startTest();
+        // THE DELTA, not the absolute: staging and executing above have already
+        // spent DML, and what is being proved is that THIS call spends none.
+        Integer dmlBefore = Limits.getDmlStatements();
+        Integer queriesBefore = Limits.getQueries();
         CompleteNewFacilityDetail.Response res = finish(staged.stagingId);
+        Integer dmlAfter = Limits.getDmlStatements();
+        Integer queriesAfter = Limits.getQueries();
         Test.stopTest();
 
         System.assertEquals(true, res.ok, res.error == null ? '' : res.error.message);
@@ -184,7 +190,9 @@ private class CompleteNewFacilityDetailTest {
         System.assertEquals(false, res.result.resumable);
         System.assertEquals(0, res.result.facilities.size(), 'No facility on the plan, no facility in the answer');
         System.assert(res.result.outcome.contains('no net-new facility'), res.result.outcome);
-        System.assertEquals(0, Limits.getDmlStatements(), 'The ordinary modification must cost this tool no write at all');
+        System.assertEquals(dmlBefore, dmlAfter, 'The ordinary modification must cost this tool no write at all');
+        System.assertEquals(1, queriesAfter - queriesBefore,
+            'And one read: the staging record, which is the only thing it needs to know there is nothing to do');
     }
 
     @IsTest
@@ -346,6 +354,100 @@ private class CompleteNewFacilityDetailTest {
             createRefused = true;
         }
         System.assertEquals(true, createRefused, 'nCino creates the Loan Detail; this package never does');
+        Test.stopTest();
+    }
+
+    @IsTest
+    static void aFacilityThatIsNoLongerOnTheVersionIsNAMEDRatherThanGuessedAt() {
+        C360TestFixture.armCalloutMock();
+        ExecuteLoanModification.engineOverride = new CloneEngine();
+        String k = key('gone');
+        StageLoanModification.StageResult staged = stageIt(k, FACILITY_JSON);
+        ExecuteLoanModification.Response done = executeIt(k, staged);
+        System.assertEquals(true, done.ok, done.error == null ? '' : done.error.message);
+
+        LLC_BI__Loan__c made = authored((Id) done.result.outputPackageId);
+        System.assertNotEquals(null, made, 'The arm filed the facility');
+        delete [SELECT Id FROM LLC_BI__Legal_Entities__c WHERE LLC_BI__Loan__c = :made.Id];
+        delete made;
+
+        Test.startTest();
+        CompleteNewFacilityDetail.Response res = finish(staged.stagingId);
+        Test.stopTest();
+
+        System.assertEquals(true, res.ok, res.error == null ? '' : res.error.message);
+        System.assertEquals('not_found', res.result.facilities[0].state);
+        System.assertEquals(0, res.result.writtenCount, 'Nothing is written for a facility nobody can find');
+        System.assert(res.result.facilities[0].verification.contains('No facility on the new package version matches'),
+            res.result.facilities[0].verification);
+        System.assert(res.result.outcome.contains('could not be matched'), res.result.outcome);
+    }
+
+    @IsTest
+    static void aPurposeTheOrgStoppedOfferingIsREFUSEDBeforeTheWrite() {
+        C360TestFixture.armCalloutMock();
+        Test.startTest();
+        Boolean refused = false;
+        try {
+            C360NewFacilities.assertPurpose('not_a_value_this_org_offers', 'new:1');
+        } catch (C360NewFacilities.NewFacilityException e) {
+            refused = true;
+            System.assert(e.getMessage().contains('RESTRICTED picklist'), e.getMessage());
+        }
+        System.assertEquals(true, refused, 'The org refuses it, so the tool refuses it first and names the list');
+        // And a blank one is its own refusal, in the words the create route uses.
+        Boolean blank = false;
+        try {
+            C360NewFacilities.assertPurpose('  ', 'new:1');
+        } catch (C360NewFacilities.NewFacilityException e) {
+            blank = true;
+            System.assert(e.getMessage().contains('needs a primary loan purpose'), e.getMessage());
+        }
+        System.assertEquals(true, blank);
+        C360NewFacilities.assertPurpose(PURPOSE, 'new:1');
+        Test.stopTest();
+    }
+
+    @IsTest
+    static void ANOTHERTOOLSPLANISREFUSEDBYNAME() {
+        C360TestFixture.armCalloutMock();
+        cm_Action_Staging__c row = new cm_Action_Staging__c(
+            cm_Action_Id__c = 'renewal',
+            cm_Idempotency_Key__c = key('foreign'),
+            cm_Status__c = 'Completed',
+            cm_Plan_Hash__c = 'h',
+            cm_Plan_JSON__c = '{"summary":"x","steps":[],"warnings":[],"provenance":{},"values":{}}',
+            cm_Result_Record_Id__c = parent().Id,
+            cm_Approver_User__c = UserInfo.getUserId()
+        );
+        insert row;
+
+        Test.startTest();
+        CompleteNewFacilityDetail.Response res = finish(row.Id);
+        Test.stopTest();
+
+        System.assertEquals(false, res.ok, 'Each tool finishes its own action or none');
+        System.assertEquals('VALIDATION_FAILED', res.error.code);
+        System.assert(res.error.message.contains('holds a renewal plan'), res.error.message);
+    }
+
+    @IsTest
+    static void aBlankStagingIdAndAMissingApproverAreBothRefused() {
+        C360TestFixture.armCalloutMock();
+        Test.startTest();
+        CompleteNewFacilityDetail.Request blank = new CompleteNewFacilityDetail.Request();
+        blank.approverUserId = UserInfo.getUserId();
+        CompleteNewFacilityDetail.Response noStaging =
+            CompleteNewFacilityDetail.run(new List<CompleteNewFacilityDetail.Request>{ blank })[0];
+        System.assertEquals(false, noStaging.ok);
+        System.assert(noStaging.error.message.contains('stagingId is required'), noStaging.error.message);
+
+        CompleteNewFacilityDetail.Request noApprover = new CompleteNewFacilityDetail.Request();
+        noApprover.stagingId = C360Wave2Fixture.fakeId(cm_Action_Staging__c.SObjectType);
+        CompleteNewFacilityDetail.Response missing =
+            CompleteNewFacilityDetail.run(new List<CompleteNewFacilityDetail.Request>{ noApprover })[0];
+        System.assertEquals(false, missing.ok);
+        System.assert(missing.error.message.contains('approverUserId is required'), missing.error.message);
         Test.stopTest();
     }
 }

@@ -82,36 +82,6 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     ],
   },
 
-  /* THE LOAN DETAIL (2026-09-03). nCino CREATES this row from an after-commit
-     flow, so a create is never ours: `mayCreate` is false and the org's own
-     automation owns it. What is ours is ONE field, the primary loan purpose,
-     which lives here and on no other object in this org.
-
-     NO createStates AND NO transitions: the field is a RESTRICTED picklist in
-     the org, so an illegal value is refused at the write by the org itself, and
-     a value list mirrored here would be a second copy going stale on its own.
-     What the mirror does own is the FIELD fence below. */
-  "LLC_BI__Loan_Detail__c": {
-    object: "LLC_BI__Loan_Detail__c",
-    label: "loan detail",
-    mayCreate: false,
-    mayUpdate: true,
-    createStates: [],
-    transitions: [],
-    refusedFields: [
-      { field: "LLC_BI__Loan__c", reason: "set once by nCino when it creates the row" },
-      { field: "RecordTypeId", reason: "the org's own automation owns it" },
-      { field: "OwnerId", reason: "the org's own automation owns it" },
-      { field: "LLC_BI__Application_Method__c", reason: "pre-filled by the org, never ours" },
-      { field: "LLC_BI__Additional_Loan_Purposes__c", reason: "the primary purpose is the only one this tool writes" },
-    ],
-    refusedOperations: [
-      "creation by us: nCino creates the Loan Detail from an after-commit flow",
-      "deletion of any kind",
-      "every field but the primary loan purpose",
-    ],
-  },
-
   "LLC_BI__LoanRenewal__c": {
     object: "LLC_BI__LoanRenewal__c",
     label: "renewal junction",
@@ -356,12 +326,20 @@ export const TRANSITION_ALLOWLIST: Record<string, ObjectPolicy> = {
     mayUpdate: true,
     createStates: [],
     transitions: [],
+    /* THE FIELD FENCE, WIDENED TO MATCH THE APEX GUARD (2026-09-03). The Apex
+       side learned this object the day `complete_new_facility_detail` shipped,
+       and the two lists must say the same thing: one field is this package's and
+       every other field on the row is nCino's. */
     refusedFields: [
       { field: "LLC_BI__Application_Method__c", reason: "the org defaults it on the record it creates" },
+      { field: "LLC_BI__Loan__c", reason: "set once by nCino when it creates the row" },
+      { field: "RecordTypeId", reason: "the org's own automation owns it" },
+      { field: "OwnerId", reason: "the org's own automation owns it" },
+      { field: "LLC_BI__Additional_Loan_Purposes__c", reason: "the primary purpose is the only one this tool writes" },
     ],
     refusedOperations: [
       "creation by us: the org's own after-commit flow owns it",
-      "any write other than the primary loan purpose the resume sets",
+      "any write other than the primary loan purpose the resume and complete_new_facility_detail set",
     ],
   },
 

@@ -136,13 +136,66 @@ export function readFirstPayment(line: string): string | null {
   return null;
 }
 
+/* ------------------------------------------------------------- the purpose
+
+   IT IS A RESTRICTED PICKLIST, and that is the fact everything here turns on.
+
+   Confirmed by describing the org on 2026-09-03:
+   `LLC_BI__Loan_Detail__c.LLC_BI__Primary_Loan_Purpose__c`, 23 active CODED
+   values (`business_expansion`, `equipment`, `refinance_our_loan`, ...) with
+   `restrictedPicklist = true`. The Loan itself carries no primary-purpose field
+   at all. So the org REFUSES a banker's own words rather than storing them, and
+   a room that put "CNC line expansion" on the wire would stage a plan the org
+   throws out at the moment of the write.
+
+   THE BANKER STILL TYPES THEIR OWN WORDS. What the room does is READ them onto
+   one of the org's values and SAY which one it read, and where nothing reads it
+   offers the values that fit. Nothing is invented and nothing is renamed in
+   silence: the card names the coded value the org will hold. */
+
+/** The org's own values, in the order a C&I banker meets them, with the words
+ *  that reach each. Read off the live describe on 2026-09-03. */
+const PURPOSES: Array<{ value: string; label: string; words: RegExp }> = [
+  { value: "business_expansion", label: "Business expansion", words: /\b(expansion|expand|expanding|growth|capacity|new\s+line|line\s+expansion)\b/i },
+  { value: "equipment", label: "Equipment", words: /\b(equipment|machinery|machine|plant|fleet|tooling)\b/i },
+  { value: "business_startup", label: "Business startup", words: /\b(start[- ]?up|startup|launch)\b/i },
+  { value: "business_acquisition", label: "Business acquisition", words: /\b(acquisition|acquire|buyout|purchase\s+of\s+the\s+business)\b/i },
+  { value: "business_credit_line", label: "Business credit line", words: /\b(working\s+capital|revolver|credit\s+line|liquidity)\b/i },
+  { value: "business_credit_line_increase", label: "Business credit line increase", words: /\bline\s+increase\b/i },
+  { value: "construction_owner_occupied", label: "Construction, owner occupied", words: /\bconstruction\b/i },
+  { value: "real_estate_purchase_owner_occupied", label: "Real estate purchase, owner occupied", words: /\b(real\s+estate|premises|building|campus)\b/i },
+  { value: "property_improvement_owner_occupied", label: "Property improvement, owner occupied", words: /\b(improvement|refurbish|fit[- ]?out|renovation)\b/i },
+  { value: "refinance_our_loan", label: "Refinance our loan", words: /\brefinanc\w*\s+(?:our|the\s+existing)\b/i },
+  { value: "refinance_other_lender", label: "Refinance another lender", words: /\brefinanc\w*\b/i },
+  { value: "other", label: "Other", words: /\bother\b/i },
+];
+
+/** Every purpose the room offers, for the chips. */
+export const PURPOSE_OPTIONS = PURPOSES.map((p) => ({ value: p.value, label: p.label }));
+
+/** How the room names a coded value on the card. */
+export const purposeLabel = (value: string): string =>
+  PURPOSES.find((p) => p.value === value)?.label ?? value;
+
+/** The org value a phrase reads onto, or null. An exact coded value passes
+ *  through untouched: a caller that already knows the org's word is not second
+ *  guessed. */
+export function readPurposeValue(said: string): string | null {
+  const text = said.trim();
+  if (!text) return null;
+  const exact = PURPOSES.find((p) => p.value === text.toLowerCase().replace(/\s+/g, "_"));
+  if (exact) return exact.value;
+  for (const p of PURPOSES) if (p.words.test(text)) return p.value;
+  return null;
+}
+
 /**
- * THE PURPOSE, which is the only free-text answer on the card.
+ * THE PURPOSE PHRASE, which is the only free-text the card gathers.
  *
  * "for CNC line expansion" is a purpose; "for the 15M line of credit" is a
  * target and never one, so the phrase is refused where it names a facility or a
- * figure. A purpose the room reads wrong is a purpose the credit file carries
- * wrong, and there is no describe to check it against.
+ * figure. What comes back is the banker's own words; {@link readPurposeValue}
+ * turns them into the value the org will hold.
  */
 export function readPurpose(line: string): string | null {
   const said = /\bfor\s+([^,;.]+)/i.exec(line);
@@ -249,7 +302,7 @@ export function newFacilityDelta(spec: NewFacilitySpec, args: NewFacilityArgs): 
     title: said,
     target: "the new package version",
     before: "not on this relationship",
-    after: `${spec.termMonths} month term, for ${spec.purpose}`,
+    after: `${spec.termMonths} month term, for ${purposeLabel(spec.purpose).toLowerCase()}`,
     newMember: true,
     committedDeltaMM: spec.amount / 1e6,
     map: [
@@ -257,7 +310,7 @@ export function newFacilityDelta(spec: NewFacilitySpec, args: NewFacilityArgs): 
       ["Product", spec.product],
       ["Amount", money(spec.amount)],
       ["Term", `${spec.termMonths} months`],
-      ["Primary loan purpose", spec.purpose],
+      ["Primary loan purpose", `${purposeLabel(spec.purpose)} (${spec.purpose})`],
       [
         "Pricing",
         priced
@@ -276,7 +329,7 @@ export function newFacilityDelta(spec: NewFacilitySpec, args: NewFacilityArgs): 
       field: ARM_FIELD,
       label: "New facility",
       value: encodeArm(arm),
-      display: `${said} is filed on the new package version, ${spec.termMonths} months, for ${spec.purpose}`,
+      display: `${said} is filed on the new package version, ${spec.termMonths} months, for ${purposeLabel(spec.purpose).toLowerCase()}`,
       facilityId: args.anchorId,
     },
     filed: {
@@ -381,13 +434,28 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
     };
   }
 
-  const purpose = readPurpose(line);
-  if (!purpose) {
+  const said = readPurpose(line);
+  if (!said) {
     return {
       kind: "ask",
       text:
         "What is the primary loan purpose? It goes on the Loan Detail nCino creates for the facility, and the org leaves it null, " +
-        "so nobody sets it unless this plan carries it.",
+        "so nobody sets it unless this plan carries it. The org holds a fixed list, so say it in your own words and I will " +
+        "tell you which of its values that lands on.",
+      options: PURPOSE_OPTIONS.slice(0, 6).map((o) => ({ label: o.label, say: withAnswer(line, `for ${o.label.toLowerCase()}`) })),
+    };
+  }
+  /* AND IT HAS TO BE ONE OF THE ORG'S OWN. The field is a RESTRICTED picklist,
+     so a phrase that reads onto nothing is asked about with the org's values
+     rather than sent up to be refused at the write. */
+  const purpose = readPurposeValue(said);
+  if (!purpose) {
+    return {
+      kind: "ask",
+      text:
+        `"${said}" is not one of the values this org offers for the primary loan purpose, and the field is a restricted ` +
+        "picklist so the org refuses anything outside its own list rather than storing it. Which of these is it?",
+      options: PURPOSE_OPTIONS.map((o) => ({ label: o.label, say: withAnswer(line.replace(said, o.label.toLowerCase()), "") })),
     };
   }
 
@@ -438,7 +506,8 @@ export function readNewFacility(ctx: NewFacilityContext): NewFacilityRead {
     spec,
     said:
       `${newFacilityTitle(spec)} goes onto the new version of this package, at Qualification with the borrower on its own structure, ` +
-      `over ${termMonths} months for ${purpose}. It is a new loan rather than a version of one, so nothing on the booked side of this ` +
+      `over ${termMonths} months. The org holds a fixed list of loan purposes and "${said}" reads onto ${purposeLabel(purpose)} ` +
+      `(${purpose}), which is what the plan carries. It is a new loan rather than a version of one, so nothing on the booked side of this ` +
       `relationship moves because of it, and booking it is nCino's own Submit for Approval like everything else on the version. ` +
       PURPOSE_HANDOFF,
   };

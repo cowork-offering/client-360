@@ -10,6 +10,7 @@ import {
   readNewFacilityTarget,
   readProduct,
   readPurpose,
+  readPurposeValue,
   readTermMonths,
   newFacilityCreateEntry,
   newFacilityFeeEntry,
@@ -63,6 +64,10 @@ describe("reading the founder's line", () => {
     expect(readAmount(LINE)).toBe(3_000_000);
     expect(readTermMonths(LINE)).toBe(60);
     expect(readPurpose(LINE)).toBe("CNC line expansion");
+    // AND THE ORG'S OWN VALUE IT READS ONTO. The field is a RESTRICTED picklist,
+    // so the banker's words are what the room reads and the coded value is what
+    // the plan carries.
+    expect(readPurposeValue("CNC line expansion")).toBe("business_expansion");
   });
 
   it("does not read the TERM as money, which is the decimal slip in the other direction", () => {
@@ -151,11 +156,13 @@ describe("the elicitation, which holds no state between turns", () => {
       product: "Equipment",
       amount: 3_000_000,
       termMonths: 60,
-      purpose: "CNC line expansion",
+      purpose: "business_expansion",
       amortizedTermMonths: 60,
       firstPaymentDate: "2026-10-01",
     });
     expect(read.said).toContain("$3MM Equipment goes onto the new version");
+    // AND IT NAMES THE ORG'S VALUE IT READ THE BANKER'S WORDS ONTO.
+    expect(read.said).toContain('"CNC line expansion" reads onto Business expansion (business_expansion)');
     expect(read.said).toContain("new loan rather than a version of one");
   });
 
@@ -206,7 +213,7 @@ describe("the card, and the wire under it", () => {
         product: "Equipment",
         amount: 3_000_000,
         termMonths: 60,
-        purpose: "CNC line expansion",
+        purpose: "business_expansion",
         amortizedTermMonths: 60,
         firstPaymentDate: "2026-10-01",
       },
@@ -230,7 +237,7 @@ describe("the card, and the wire under it", () => {
         product: "Equipment",
         amount: 3_000_000,
         termMonths: 60,
-        purpose: "CNC line expansion",
+        purpose: "business_expansion",
         amortizedTermMonths: 60,
         firstPaymentDate: "2026-10-01",
       },
@@ -320,7 +327,7 @@ const SPEC = {
   product: "Equipment",
   amount: 3_000_000,
   termMonths: 60,
-  purpose: "CNC line expansion",
+  purpose: "business_expansion",
   amortizedTermMonths: 60,
   firstPaymentDate: "2026-10-01",
 };

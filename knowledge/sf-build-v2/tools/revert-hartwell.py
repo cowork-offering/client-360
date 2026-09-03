@@ -52,6 +52,12 @@ for pass_n in range(1, 8):
         print(f'aggregate sweep pass {pass_n}: clean'); break
     print(f'aggregate sweep pass {pass_n}: {len(orphans)} orphans')
     delete(orphans, 'aggregates')
+# 3a. THE LOAN DETAIL ROWS ON THE CLONES AND ON ANY NET-NEW FACILITY.
+# nCino creates one per loan from its own after-commit flow, and it is the record
+# complete_new_facility_detail writes the primary loan purpose onto. It carries a
+# loan lookup, so it is swept with the loans rather than left behind as an orphan.
+delete(ids(f"SELECT Id FROM LLC_BI__Loan_Detail__c WHERE LLC_BI__Loan__c IN {inC}"), 'loan details')
+
 # 3b. NET-NEW COVENANTS, opt-in. The junction sweep above takes the covenant OFF the clone; the
 # LLC_BI__Covenant2__c record itself lives on the ACCOUNT and survives every step here, which is
 # correct for a covenant the relationship already held and wrong for one a drive minted. Pass the

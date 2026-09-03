@@ -161,6 +161,12 @@ export const TOOLS = {
      it does the room reports the tool as unavailable rather than pretending. */
   stageRelationshipIntake: "stage_relationship_intake",
   executeRelationshipIntake: "execute_relationship_intake",
+  /* THE SECOND HOP FOR A NET-NEW FACILITY'S PURPOSE (2026-09-03).
+     `LLC_BI__Primary_Loan_Purpose__c` lives on `LLC_BI__Loan_Detail__c`, which
+     nCino creates from an after-commit flow of its own, so nothing in the
+     transaction that files the facility can set it. This finishes it, in its own
+     hop so the 2026-08-31 governor fix stays intact. */
+  completeNewFacilityDetail: "complete_new_facility_detail",
   // Renewal STAGES only. There is no execute_renewal: the clone's collateral
   // aggregate has never been re-probed, so no execute tool was built.
   stageRenewal: "stage_renewal",

@@ -1,9 +1,10 @@
 # A new facility inside a modification and a renewal: the proposed addendum
 
-Branch `mod-new-loan`, written 2026-09-03 against the classes deployed to
-`bankinggpt-at` that morning (`0Afbb00000DnPfJCAV`, 9 components, 143 tests, 0
-failures, no coverage warnings) and the `McpServerDefinition` re-published alone
-(`0Afbb00000DnQQ5CAN`).
+Branch `mod-new-loan`, rebased on main after `intake-apex` merged, written
+2026-09-03 against the classes deployed to `bankinggpt-at`
+(`0Afbb00000DnVftCAF`, 153 tests, 0 failures, no coverage warnings) and the
+`McpServerDefinition` at 28 tools, published alone (`0Afbb00000DnVw1CAF`).
+The first wave went up as `0Afbb00000DnPfJCAV` / `0Afbb00000DnQQ5CAN`.
 
 **The founder's directive:** *"Do we allow new loans to be created as part of the
 modification and renewal? This should be fully possible."*
@@ -150,13 +151,12 @@ exist yet.
 `a4Wbb000001LZYTEA4` with `LLC_BI__Primary_Loan_Purpose__c` null and
 `purposeWritten` false. The tool claimed nothing it had not done.
 
-**Not adopted, and worth writing down as the next move:** filing the facilities in
-the ENGINE hop so the ARM hop, which is a genuinely separate transaction seconds
-later, could write the purpose onto a Loan Detail that had appeared by then. It
-would work. It also puts two inserts back into the leg the 2026-08-31 governor fix
-exists to keep writes out of, on a package where nCino's own automation already
-spends 46 of its 100-query budget. The trade is worth revisiting once there is a
-measured run to hang it on, not before.
+**Not adopted, and it stayed not adopted:** filing the facilities in the ENGINE
+hop so the ARM hop could write the purpose onto a Loan Detail that had appeared by
+then. It puts two inserts back into the leg the 2026-08-31 governor fix exists to
+keep writes out of. R48 solves the same problem with a THIRD hop that writes
+nothing it does not have to, which costs the same round trip and none of the
+budget.
 
 ---
 
@@ -216,20 +216,141 @@ The BOTH-GUARDS RULE is satisfied trivially rather than by omission: the tests
 prove the create passes the guard, and the guard is the one that was already
 there.
 
+
+
+---
+
+## R46. A facility this plan is creating is a SCOPE MEMBER, and its id is its label
+
+**New rule. It is what makes the later lines possible at all.**
+
+"add Elena Hartwell as limited guarantor on the new equipment loan" resolves a
+facility through `readScope`, and until this rule a facility the plan was
+creating was not there to resolve. It is now, as a synthetic member whose **id IS
+its label**. That is the whole trick and it is deliberate: the id the room
+resolves is the id the wire carries and the id the org resolves, so no third
+identifier exists to get out of step with the other two.
+
+`orgName` and `shortName` are null, because the org has not named it yet and
+nothing here may pretend to know what it will pick. `committed` carries the
+amount, so "the 3M loan" settles on it through the dollar qualifier exactly as it
+does for a booked member. The NEW reading runs first and only on a line that says
+NEW: without that word "the equipment loan" means what it always meant.
+
+**The cards are built in the shell and never by the parser**, for the reason the
+associate card is: the fenced engine resolves a facility against the PACKAGE, so a
+composed sentence would come back unresolved or, worse, resolved onto a booked
+member sharing the product word.
+
+**Four collisions the drive found**, each fixed where it lives rather than worked
+around: `armConfirmSentence` read a net-new facility as an exclusion and said the
+exact inverse of the card; `namesANewFacility` matched a line that TARGETED the
+facility rather than asking for one; `NEW_ASSET` matched the word qualifying the
+FACILITY, so "pledge the Fort Wayne inventory to the new loan" asked what kind of
+asset it was; and the collateral surface reads a product word as an asset kind, so
+"add a 1% origination fee on the new equipment loan" opened a pledge. Only the
+new-facility fee case is lifted in front of `openCreate`; every fee on a booked
+member reads exactly where it always did.
+
+**`facilityIds` is stripped of labels in `armPayload`, and only there.** It is the
+credit action's member SELECTION and the org validates every entry as a booked
+facility, while the fenced engine's own scalar-leak backstop reads the same union
+and must keep seeing it whole.
+
+**Not adopted:** a synthetic id minted client-side and rewritten at execute time.
+Two identifiers for one record, and the first thing that goes wrong with them is
+that half the code reads the wrong one.
+
+---
+
+## R47. The purpose is a RESTRICTED picklist, and it lives on a record nCino has not created yet
+
+**New rule. It closes R44, and it corrects it.**
+
+R44 said the purpose was a handoff. It was right about the timing and WRONG about
+the value. Describing the org on 2026-09-03 settled both halves:
+
+| | |
+|---|---|
+| the object | `LLC_BI__Loan_Detail__c` |
+| the field | `LLC_BI__Primary_Loan_Purpose__c` |
+| the type | picklist, **`restrictedPicklist = true`**, 23 active coded values |
+| on the Loan | **nothing.** The Loan's only purpose field is the org-local `cm_Purpose_of_Loan__c`, which is not what nCino reads |
+
+**The restriction was a live defect in what shipped that morning.** The purpose
+travelled as free text, so "CNC line expansion" would have been refused by the org
+at the moment of the write. It was never caught by the first org proof, because
+that run never reached the write: the Loan Detail did not exist yet. It is
+validated against the org's own describe now, on both stage tools, and the refusal
+carries the legal list.
+
+**The banker still types their own words.** The room READS them onto one of the
+org's values and SAYS which one: "CNC line expansion" reads onto Business
+expansion (`business_expansion`), and the card names the coded value the org will
+hold. A phrase that reads onto nothing is asked about with the org's values rather
+than sent up to be refused.
+
+---
+
+## R48. `complete_new_facility_detail` is its own hop, and it writes nothing it does not have to
+
+**New rule. The second hop, and the reason it is a second one.**
+
+nCino creates the Loan Detail from an AFTER-COMMIT flow about four seconds after
+the facility is filed. It is structurally invisible to the transaction that
+inserted the loan, and wave 4 proved a spin-wait burns the CPU ceiling and can
+never see it. So execute files the facility and reports the purpose as PENDING,
+and this tool finishes it.
+
+**It is a hop rather than a tail on the arm.** The 2026-08-31 governor fix exists
+to keep writes out of the engine leg, and the arm hop already sits at about 52 of
+nCino's own 100-query budget. A third write pass bolted onto either would put the
+same transaction back under the pressure that fix removed.
+
+**It takes the plan and nothing else.** The staging record names the clone, the
+clone names the new package version, and the facilities on that version with NO
+chain row pointing at them are the net-new ones. A caller cannot hand it a facility
+the plan never created, because a caller hands it nothing at all.
+
+**Idempotence is a READ, not a fence.** A purpose that already reads back correct
+is not re-written, a Loan Detail that has not appeared is reported rather than
+waited for, and a plan carrying no net-new facility returns having performed no
+DML and exactly one query: the staging record it needed to know there was nothing
+to do. That last one is asserted, not asserted about.
+
+**The guards moved together.** `LLC_BI__Loan_Detail__c` joined `C360WriteGuard`
+(`KNOWN_OBJECTS`, an empty update-transition map because the ORG's restricted
+picklist is the real fence, and a forbidden-field list that leaves exactly one
+field writable) and `app/src/actions/transitionAllowlist.ts` in the same commit.
+The mirror already carried the object from the create route's own resume; what
+changed is that both lists now say the same thing about which fields are ours.
+`ExecuteNewFacility`'s own purpose write was routed through the same fence, because
+two writes to one field with only one of them fenced is how a fence stops being one.
+
+**The room calls it after a successful execute, for a plan that carries new
+facilities, and never otherwise.** It cannot fail the filing: the money is on the
+version whatever it returns, and what it decides is only which sentence the
+executed card carries.
+
+---
+
+## The org proof of the purpose hop, 2026-09-03
+
+| | |
+|---|---|
+| staging | `a8abb00001O1v9TAAR` |
+| new package version | `a5Fbb000000J5yTEAS` |
+| the new facility | `a4Zbb000002IBofEAG` |
+| its Loan Detail | `a4Wbb000001LaeDEAS` |
+| hop 1 | pending: the org had not created the child yet |
+| hop 2, eight seconds later | written |
+| hop 3 | already_set, and no DML |
+| SOQL | `LLC_BI__Primary_Loan_Purpose__c` = `business_expansion` |
+| revert | 7 clones, 12 chain rows, 1 loan detail and the package deleted; baseline verified |
+
 ---
 
 ## What this batch did NOT change, and why
-
-**The covenant and borrowing-structure lanes in the room.** `readNewFacilityTarget`
-turns "on the new equipment loan" into `new:1` and is unit-tested; it is not yet
-called from the covenant and involvement lanes, which resolve scope through the
-create grammar's own member reader. Wiring it means teaching `readScope` about a
-member that is not on the package yet, which is a change to the scope contract
-rather than an addition beside it, and it belongs in its own pass.
-
-On the ORG the path is proven: the live run staged
-`covenantAddsJson: [{..., "targetLoanId": "new:1"}]` and the covenant came back
-junctioned to the loan the run had just created.
 
 **Policy exceptions and the four scalars.** Neither takes a label. A scalar on a
 new facility is its own amount and term, which the facility already carries, and a

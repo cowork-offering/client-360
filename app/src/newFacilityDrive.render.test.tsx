@@ -268,7 +268,7 @@ describe("the drive file, replayed", () => {
         product: "Equipment",
         amount: 3_000_000,
         termMonths: 60,
-        purpose: "CNC line expansion",
+        purpose: "business_expansion",
         amortizedTermMonths: 60,
         firstPaymentDate: "2026-10-01",
       },
