@@ -1,7 +1,26 @@
-import { useState } from "react";
-import type { BorrowerBundle, Covenant, CovenantChallenge } from "../../data/contract";
-import { fmtDate } from "../../data/format";
-import { covenantCushion, fmtCovThreshold, fmtCovVal, type Tone } from "../../data/finance";
+/* =============================================================================
+   THE COVENANTS PANE — the account's covenants, and the loans each one binds.
+
+   FOUNDER READ (2026-09-03, on #pane-covenants): "just list out the account
+   covenants, and then click on the covenant and you see to which loans the
+   covenant is associated, because covenants are never only on the loan, they
+   get by default added to the Account. And then have a clear row for each loan
+   with information, keep it elegant, all in one row, all aligned."
+
+   So the pane is ONE list, not three tables. A covenant appears exactly once —
+   the account is where nCino puts it — and the loans it is associated to are
+   the covenant's own detail, opened in place. The old shape repeated a covenant
+   under every facility it bound, which read as duplicates of the same test and
+   is what "pretty untidy" was pointing at.
+
+   The row, the caret, the badge and the opened block come from discloseKit, the
+   same primitives the collateral block runs on. Alignment is the design and it
+   is declared once, in panes.css.
+   ============================================================================= */
+
+import type { BorrowerBundle, Covenant, CovenantChallenge, Facility } from "../../data/contract";
+import { fmtDate, fmtMoney } from "../../data/format";
+import { fmtCovThreshold, fmtCovVal, type Tone } from "../../data/finance";
 import {
   ADMINISTRATIVE_EXCEPTION_NOTE,
   administrativeExceptions,
@@ -9,16 +28,29 @@ import {
   financialBreaches,
   severityTone,
 } from "../../domain/covenantStatus";
+import {
+  covenantAttachment,
+  covenantMeasure,
+  openTestPeriod,
+  type CovenantLoanRow,
+} from "../../domain/covenantAttachment";
 import { Pulse } from "../Pulse";
-import { groupCovenants } from "../../data/collateralRecords";
+import {
+  DiscloseEmpty,
+  DiscloseHead,
+  DiscloseList,
+  DisclosePanel,
+  DiscloseRow,
+  DiscloseSub,
+  DiscloseSubHead,
+  useDisclosure,
+} from "./discloseKit";
 import {
   Callout,
   EmptyPane,
   Fig,
   Figure,
   Figures,
-  Gap,
-  Meter,
   Note,
   Pane,
   PaneCard,
@@ -26,6 +58,9 @@ import {
   Status,
   type StatusTone,
 } from "./paneKit";
+import { useState } from "react";
+
+const KIND = "covenant";
 
 const EXPLAIN =
   "Explain these covenants: which is tightest, and how much cushion is left.";
@@ -38,6 +73,12 @@ const STATUS_WORD: Record<Tone, StatusTone> = {
   purple: "acc",
   neutral: "mut",
 };
+
+const TYPE_TITLE =
+  "The kind of test, from the unit its threshold is stated in. nCino's own covenant category is not carried by this read.";
+
+const PER_COVENANT_TITLE =
+  "Compliance is held on the covenant in nCino, not on the loan junction, so this is the covenant's own latest test.";
 
 function challengeView(ch: CovenantChallenge, type?: string): { tone: Tone; label: string } {
   const bi = ch.boomImplied ?? null;
@@ -54,126 +95,181 @@ function challengeView(ch: CovenantChallenge, type?: string): { tone: Tone; labe
   return { tone: "green", label: `Boom-implied ${val} · corroborates` };
 }
 
-/** The effective challenge, on the covenant's own second line. It is an
- *  annotation on a row, so it renders as a sub-row inside the same table rather
- *  than as a chip floating beside one. */
+/** The SR 11-7 effective challenge. It belongs to the covenant, not to the row:
+ *  it lives inside the opened block as a quiet action, so the covenant line
+ *  stays one line and the affordance survives the rebuild. */
 function EffectiveChallenge({ ch, type }: { ch?: CovenantChallenge; type?: string }) {
   const [open, setOpen] = useState(false);
   if (!ch) return null;
   const { tone, label } = challengeView(ch, type);
   const bi = ch.boomImplied ?? null;
-  const detail = bi && (bi.formula || bi.inputs != null || bi.period);
+  const detail = Boolean(bi && (bi.formula || bi.inputs != null || bi.period));
 
   return (
-    <tr className="subrow">
-      <td colSpan={7}>
-        <span
-          style={{
-            display: "inline-flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          <span className="kicker">Effective challenge</span>
-          {detail ? (
-            <button type="button" className="btn-q" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-              <Status tone={STATUS_WORD[tone]}>{label}</Status>
-            </button>
-          ) : (
-            <Status tone={STATUS_WORD[tone]}>{label}</Status>
+    <div className="xaction" data-cov-challenge>
+      <span className="kicker">Effective challenge</span>
+      {detail ? (
+        <button type="button" className="btn-q" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          <Status tone={STATUS_WORD[tone]}>{label}</Status>
+        </button>
+      ) : (
+        <Status tone={STATUS_WORD[tone]}>{label}</Status>
+      )}
+      {detail && open && (
+        <span className="xaction-detail">
+          {bi?.formula && (
+            <span>
+              <b>Formula </b>
+              {bi.formula}
+            </span>
+          )}
+          {bi?.period && (
+            <span>
+              <b>Period </b>
+              {bi.period}
+            </span>
           )}
         </span>
-        {detail && open && (
-          <span style={{ display: "block", marginTop: 6, color: "var(--ink)" }}>
-            {bi?.formula && (
-              <span style={{ display: "block" }}>
-                <b>Formula </b>
-                {bi.formula}
-              </span>
-            )}
-            {bi?.period && (
-              <span style={{ display: "block" }}>
-                <b>Period </b>
-                {bi.period}
-              </span>
-            )}
-          </span>
-        )}
-      </td>
-    </tr>
+      )}
+    </div>
   );
 }
 
-/** The column names, once. Both covenant sections render the SAME six columns
- *  under the SAME header: a facility-scoped covenant is not a lesser covenant,
- *  and values under nothing are values nobody can read (validation audit
- *  2026-07-27, finding 2). */
-function CovenantHeader() {
+/** The covenant's latest test, as one string: "1.38× vs ≥ 1.25×". */
+function latestTest(cov: Covenant) {
+  if (cov.actualValue == null) return "—";
   return (
-    <thead>
-      <tr data-cov-header>
-        <th>Covenant</th>
-        <th className="r">Actual</th>
-        <th className="r">Threshold</th>
-        <th className="r">Cushion</th>
-        <th>Headroom</th>
-        <th className="r">Next test</th>
-        <th>Status</th>
-      </tr>
-    </thead>
+    <>
+      <Fig>{fmtCovVal(cov.actualValue, cov.covenantType)}</Fig> <span className="xvs">vs</span>{" "}
+      {fmtCovThreshold(cov.covenantType, cov.actualValue, cov.thresholdValue)}
+    </>
   );
 }
 
-/** One covenant, in full. ONE definition, so the relationship table and the
- *  facility groups cannot drift apart again. */
-function CovenantRow({ cov, challenge }: { cov: Covenant; challenge?: CovenantChallenge }) {
-  const cush = covenantCushion(cov.covenantType, cov.actualValue, cov.thresholdValue);
+function loanCells(row: CovenantLoanRow, cov: Covenant) {
+  return [
+    {
+      content: row.facility,
+      title: row.unresolved
+        ? `${row.fullName}. The junction names this loan; the exposure read does not carry it, so its figures are absent rather than guessed.`
+        : row.fullName,
+    },
+    { content: row.committed != null ? <Fig>{fmtMoney(row.committed)}</Fig> : "—", align: "r" as const },
+    { content: row.outstanding != null ? <Fig>{fmtMoney(row.outstanding)}</Fig> : "—", align: "r" as const },
+    { content: row.maturityDate ? fmtDate(row.maturityDate) : "—", align: "r" as const },
+    { content: latestTest(cov), align: "r" as const, title: PER_COVENANT_TITLE },
+  ];
+}
+
+/** One covenant: the line, and the loans it is associated to underneath it. */
+function CovenantItem({
+  cov,
+  facilities,
+  relationship,
+  challenge,
+  open,
+  onToggle,
+}: {
+  cov: Covenant;
+  facilities: readonly Facility[] | undefined;
+  relationship?: string | null;
+  challenge?: CovenantChallenge;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const verdict = classifyCovenant(cov);
   const word = STATUS_WORD[severityTone(verdict.severity)];
+  const attach = covenantAttachment(cov, facilities, relationship);
+  const period = openTestPeriod(cov);
+  const showPeriod = Boolean(period && period.toLowerCase() !== verdict.label.toLowerCase());
+  const name = cov.covenantType ?? "Covenant";
   const next = cov.nextEvaluationDate
     ? fmtDate(cov.nextEvaluationDate)
     : cov.daysUntilNextEvaluation != null
       ? `${Math.round(cov.daysUntilNextEvaluation)} days`
       : "—";
 
-  return (
-    <>
-      <tr data-cov-row>
-        <td>{cov.covenantType ?? "Covenant"}</td>
-        <td className="r">
-          <Pulse id={`covenant.${cov.covenantId}.actualValue`}>
-            <Fig>{fmtCovVal(cov.actualValue, cov.covenantType)}</Fig>
-          </Pulse>
-        </td>
-        <td className="r">
-          <Pulse id={`covenant.${cov.covenantId}.thresholdValue`}>
-            <Fig>{fmtCovThreshold(cov.covenantType, cov.actualValue, cov.thresholdValue)}</Fig>
-          </Pulse>
-        </td>
-        <td className="r">
-          {cush.cushion != null ? (
-            <Fig>{`${cush.cushion < 0 ? "−" : ""}${fmtCovVal(Math.abs(cush.cushion), cov.covenantType)}`}</Fig>
-          ) : (
-            "—"
-          )}
-        </td>
-        <td style={{ minWidth: 90 }}>
-          <Meter
-            pct={cush.safe === false ? 0 : cush.pct}
-            tone={word === "bad" ? "bad" : word === "warn" ? "warn" : "good"}
-          />
-        </td>
-        <td className="r">{next}</td>
-        {/* nCino's own verdict, in nCino's own words, with what it means on hover. */}
-        <td>
+  const cells = [
+    { content: name, title: name },
+    { content: covenantMeasure(cov), title: TYPE_TITLE, muted: true },
+    {
+      content: (
+        <Pulse id={`covenant.${cov.covenantId}.thresholdValue`}>
+          <Fig>{fmtCovThreshold(cov.covenantType, cov.actualValue, cov.thresholdValue)}</Fig>
+        </Pulse>
+      ),
+      align: "r" as const,
+    },
+    { content: cov.frequency ?? "—", muted: true },
+    {
+      content: (
+        <>
           <Status tone={word} data-cov-status data-cov-status-kind={verdict.kind} title={verdict.explanation}>
             {verdict.label}
           </Status>
-        </td>
-      </tr>
-      <EffectiveChallenge ch={challenge} type={cov.covenantType} />
-    </>
+          {showPeriod && (
+            <span
+              className="xnote"
+              data-cov-period
+              title="The status on the latest compliance row: the open test period."
+            >
+              · {period}
+            </span>
+          )}
+        </>
+      ),
+    },
+    { content: next, align: "r" as const },
+    {
+      content: (
+        <span className="xbadge" data-cov-badge data-cov-attachment={attach.kind}>
+          {attach.badge}
+        </span>
+      ),
+      align: "r" as const,
+    },
+  ];
+
+  return (
+    <div className="xitem" data-cov-item>
+      <DiscloseRow kind={KIND} cells={cells} open={open} onToggle={onToggle} label={name} />
+      {open && (
+        <DisclosePanel kind={KIND}>
+          {attach.rows.length > 0 ? (
+            <>
+              <DiscloseSubHead
+                kind={KIND}
+                cells={[
+                  { content: "Facility" },
+                  { content: "Commitment", align: "r" },
+                  { content: "Drawn", align: "r" },
+                  { content: "Maturity", align: "r" },
+                  { content: "Latest test", align: "r" },
+                ]}
+              />
+              {attach.rows.map((row, i) => (
+                <DiscloseSub key={row.loanId ?? i} kind={KIND} cells={loanCells(row, cov)} />
+              ))}
+            </>
+          ) : (
+            <>
+              <DiscloseEmpty kind={KIND}>{attach.emptyLine}</DiscloseEmpty>
+              {/* The measured figure has to survive somewhere: a covenant that
+                  binds no loan is still the one a banker asks the cushion
+                  question about. Absent stays absent. */}
+              {cov.actualValue != null && (
+                <p className="xlatest num" data-cov-latest>
+                  <span className="kicker">Latest test</span>
+                  {latestTest(cov)}
+                  {cov.lastEvaluationDate ? `, as nCino evaluated on ${fmtDate(cov.lastEvaluationDate)}` : ""}
+                </p>
+              )}
+            </>
+          )}
+          <EffectiveChallenge ch={challenge} type={cov.covenantType} />
+        </DisclosePanel>
+      )}
+    </div>
   );
 }
 
@@ -197,10 +293,13 @@ function DataQualityNote({ bundle }: { bundle: BorrowerBundle }) {
 export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
   const covs: Covenant[] = bundle.covenants?.covenants ?? [];
   const grade = bundle.snapshot?.primaryRiskRating;
+  const relationship = bundle.snapshot?.name;
+  const facilities = bundle.exposure?.facilities;
+  const disclosure = useDisclosure();
+
   const challengeById = new Map<string, CovenantChallenge>();
   for (const ch of bundle.covenantChallenge ?? []) if (ch.covenantId) challengeById.set(ch.covenantId, ch);
 
-  const groups = groupCovenants(covs);
   // TWO callouts, never one. A measured miss is credit deterioration; an
   // administrative Exception is a missing document. Merging them was the defect.
   const breached = financialBreaches(covs);
@@ -213,54 +312,37 @@ export function CovenantsTab({ bundle }: { bundle: BorrowerBundle }) {
 
         <Figures>
           <Figure label="Risk rating" value={grade != null ? `Grade ${grade}` : "—"} sub="nCino primary" />
-          <Gap title="Probability of default · not in this view" provenance="Held in the risk warehouse" />
         </Figures>
 
         {covs.length ? (
-          <>
-            <div className="kicker" style={{ margin: "20px 0 10px" }}>
-              {/* Grouped only when the read says how these covenants are scoped.
-                  Absent means unknown, and one honest list beats a wrong guess. */}
-              {groups.grouped ? "Account covenants" : "Financial covenants"}
-            </div>
-            <table className="dt num">
-              <CovenantHeader />
-              <tbody>
-                {(groups.grouped ? groups.account : covs).map((c, i) => (
-                  <CovenantRow
-                    key={c.covenantId ?? i}
-                    cov={c}
-                    challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
-                  />
-                ))}
-              </tbody>
-            </table>
-
-            {/* FACILITY COVENANTS, named by the loan they bind. Rendered only
-                when the read tells us which loans a covenant is attached to.
-                Grouping by facility is the deal grammar and stays; the columns
-                are the relationship table's, because the covenant is the same
-                instrument wherever it is attached. */}
-            {groups.byFacility.map((f) => (
-              <div key={f.loanId ?? f.loanName}>
-                <div className="kicker" style={{ margin: "22px 0 10px" }}>
-                  Facility covenants · {f.loanName}
-                </div>
-                <table className="dt num">
-                  <CovenantHeader />
-                  <tbody>
-                    {f.covenants.map((c, i) => (
-                      <CovenantRow
-                        key={c.covenantId ?? i}
-                        cov={c}
-                        challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </>
+          <DiscloseList kind={KIND} kicker="Account covenants">
+            <DiscloseHead
+              kind={KIND}
+              cells={[
+                { content: "Covenant" },
+                { content: "Type", title: TYPE_TITLE },
+                { content: "Test", align: "r" },
+                { content: "Frequency" },
+                { content: "Status" },
+                { content: "Next due", align: "r" },
+                { content: "Loans", align: "r" },
+              ]}
+            />
+            {covs.map((c, i) => {
+              const key = c.covenantId ?? `cov-${i}`;
+              return (
+                <CovenantItem
+                  key={key}
+                  cov={c}
+                  facilities={facilities}
+                  relationship={relationship}
+                  challenge={c.covenantId ? challengeById.get(c.covenantId) : undefined}
+                  open={disclosure.isOpen(key)}
+                  onToggle={() => disclosure.toggle(key)}
+                />
+              );
+            })}
+          </DiscloseList>
         ) : (
           <EmptyPane
             title="No active covenants"

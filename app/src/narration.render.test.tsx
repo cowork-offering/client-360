@@ -709,7 +709,7 @@ describe("the greeting reads as a lead, the items and a close", () => {
     await settle();
 
     const rails = [...opening(room).querySelectorAll(".wk-narr-row-v")].map((v) => v.textContent);
-    expect(rails).toEqual(["1.38× vs ≥ 1.25×", "2.42× vs ≤ 3.00×", "80% vs ≥ 80%"]);
+    expect(rails).toEqual(["1.38× vs ≥ 1.25×", "2.42× vs ≤ 3.00×", "80% vs ≤ 80%"]);
     // Six figures, and the model wrote none of them.
     expect(GREETING_UNBOUND).not.toMatch(/1\.38|2\.42|80%/);
   });

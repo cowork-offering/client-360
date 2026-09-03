@@ -54,7 +54,10 @@ describe("fmtCovVal renders a covenant in ITS OWN unit", () => {
   it("prints the Hartwell advance test as a percent, not a multiple", () => {
     // The literal defect from the validation audit: 80 rendered "80.00×".
     expect(fmtCovVal(80, "Accounts Receivable")).toBe("80%");
-    expect(fmtCovThreshold("Accounts Receivable", 80, 80)).toBe("≥ 80%");
+    // A CEILING. The org's own operator on COV-000650 is `<=`; the read does
+    // not carry it, so the family carries the direction and the magnitude
+    // fallback (which read a floor at equality) never gets a say.
+    expect(fmtCovThreshold("Accounts Receivable", 80, 80)).toBe("≤ 80%");
     expect(fmtCovVal(79.5, "Accounts Receivable")).toBe("79.5%");
   });
 

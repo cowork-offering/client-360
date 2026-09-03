@@ -115,13 +115,23 @@ export const STATUS: Record<Tone, { fg: string; bg: string }> = {
   neutral: { fg: "var(--neutral-fg)", bg: "var(--neutral-bg)" },
 };
 
+/* The bank's own word for the direction, which outranks the family: "Minimum
+   Accounts Receivable" is a floor whatever an A/R test usually is. Read first,
+   so a named direction can never be overruled by a family hint. */
+const SAID_CAP = ["maximum", " max", "not to exceed", "no more than", "limit", "cap on"];
+const SAID_FLOOR = ["minimum", " min", "not less than", "no less than", "at least"];
+
 const CAP_HINTS = [
   "leverage", "debt-to-worth", "debt to worth", "debt/worth", "capex", "fixed asset",
-  "fixed-asset", "loan-to-value", "loan to value", "ltv", "concentration", "limit", "maximum", " max",
+  "fixed-asset", "loan-to-value", "loan to value", "ltv", "concentration",
+  // An advance rate and a borrowing-base percentage are CEILINGS: the org's own
+  // `Acnpex_Operator__c` on the A/R covenant reads `<=`. The read does not carry
+  // the operator, so the family has to (covenant research, 2026-09-02 §7).
+  "accounts receivable", "receivables", "borrowing base", "advance rate",
 ];
 const FLOOR_HINTS = [
   "coverage", "dsc", "dscr", "liquidity", "tangible net worth", "net worth",
-  "current ratio", "minimum", " min", "working capital",
+  "current ratio", "working capital",
 ];
 
 export function covenantDirection(
@@ -130,6 +140,8 @@ export function covenantDirection(
   threshold: number | null | undefined,
 ): "cap" | "floor" {
   const t = (type || "").toLowerCase();
+  for (const h of SAID_CAP) if (t.includes(h)) return "cap";
+  for (const h of SAID_FLOOR) if (t.includes(h)) return "floor";
   for (const h of CAP_HINTS) if (t.includes(h)) return "cap";
   for (const h of FLOOR_HINTS) if (t.includes(h)) return "floor";
   if (actual != null && threshold != null) return actual >= threshold ? "floor" : "cap";

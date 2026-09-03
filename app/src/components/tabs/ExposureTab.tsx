@@ -4,8 +4,18 @@ import { fmtRatio, fmtRate, type Tone } from "../../data/finance";
 import { Pulse } from "../Pulse";
 import { Odo } from "../Odometer";
 import { useApp } from "../../state/appState";
-import { collateralRecords } from "../../data/collateralRecords";
+import { collateralAssets, NO_PLEDGE_LINE, type CollateralAsset } from "../../domain/collateralAssets";
 import { isActiveFacility } from "../../data/worklist";
+import {
+  DiscloseEmpty,
+  DiscloseHead,
+  DiscloseList,
+  DisclosePanel,
+  DiscloseRow,
+  DiscloseSub,
+  DiscloseSubHead,
+  useDisclosure,
+} from "./discloseKit";
 import {
   EmptyPane,
   Fig,
@@ -65,6 +75,131 @@ const STATUS_WORD: Record<Tone, StatusTone> = {
   neutral: "mut",
 };
 
+/* =============================================================================
+   THE ACCOUNT'S COLLATERAL — the same gesture as the covenants pane.
+
+   FOUNDER READ (2026-09-03): "Why is the collateral name that long? Should it
+   not be Collateral Type and Sub-type and address information? ... I would like
+   to have the account collaterals shown here nicely and not confusing; clicking
+   onto it shows the active pledges."
+
+   So the asset is named by WHAT IT IS — the org's type and sub-type — with its
+   own description shortened to a descriptor beside it and the whole paragraph
+   kept on hover. The long prose as the row's title was the confusion.
+
+   The valuation DATE is not in this list because the exposure read does not
+   carry one: `LLC_BI__Collateral_Valuation__c` is not on the wire, and a column
+   of dashes is the untidiness this pass is removing.
+   ============================================================================= */
+
+const COLLATERAL = "collateral";
+
+const OVERRIDE_TITLE =
+  "The pledge's own advance rate. nCino takes the override first, then the auto-applied rate, then the collateral type's.";
+
+function AccountCollateral({ assets }: { assets: CollateralAsset[] }) {
+  const disclosure = useDisclosure();
+  return (
+    <DiscloseList kind={COLLATERAL}>
+      <DiscloseHead
+        kind={COLLATERAL}
+        cells={[
+          { content: "Type" },
+          { content: "Sub-type" },
+          { content: "What it is" },
+          { content: "Value", align: "r" },
+          { content: "Advance", align: "r" },
+          { content: "Lendable", align: "r" },
+          { content: "Pledges", align: "r" },
+        ]}
+      />
+      {assets.map((a) => {
+        const open = disclosure.isOpen(a.key);
+        return (
+          <div className="xitem" data-col-item key={a.key}>
+            <DiscloseRow
+              kind={COLLATERAL}
+              open={open}
+              onToggle={() => disclosure.toggle(a.key)}
+              label={`${a.type}${a.subType ? ` ${a.subType}` : ""}`}
+              cells={[
+                { content: a.type, title: a.collateralType },
+                { content: a.subType ?? "—", muted: !a.subType },
+                {
+                  content: (
+                    <>
+                      <span>{a.descriptor ?? "—"}</span>
+                      {a.collateralName && <span className="xnote">{a.collateralName}</span>}
+                    </>
+                  ),
+                  title: a.description ?? undefined,
+                  split: true,
+                },
+                { content: <Fig>{fmtMoney(a.value)}</Fig>, align: "r" },
+                { content: a.advanceRate != null ? <Fig>{fmtPct(a.advanceRate, 0)}</Fig> : "—", align: "r" },
+                { content: <Fig>{fmtMoney(a.lendableValue)}</Fig>, align: "r" },
+                {
+                  content: (
+                    <span className="xbadge" data-col-badge data-col-pledges={a.pledges.length}>
+                      {a.badge}
+                    </span>
+                  ),
+                  align: "r",
+                },
+              ]}
+            />
+            {open && (
+              <DisclosePanel kind={COLLATERAL}>
+                {a.pledges.length ? (
+                  <>
+                    <DiscloseSubHead
+                      kind={COLLATERAL}
+                      cells={[
+                        { content: "Facility" },
+                        { content: "Commitment", align: "r" },
+                        { content: "Pledged", align: "r" },
+                        { content: "Lien" },
+                        { content: "Advance", align: "r" },
+                      ]}
+                    />
+                    {a.pledges.map((p, i) => (
+                      <DiscloseSub
+                        key={p.loanId ?? i}
+                        kind={COLLATERAL}
+                        cells={[
+                          { content: p.facility, title: p.fullName },
+                          { content: p.committed != null ? <Fig>{fmtMoney(p.committed)}</Fig> : "—", align: "r" },
+                          { content: p.pledged != null ? <Fig>{fmtMoney(p.pledged)}</Fig> : "—", align: "r" },
+                          { content: p.lienPosition ?? "—" },
+                          {
+                            content:
+                              p.advanceRate != null ? (
+                                <>
+                                  <Fig>{fmtPct(p.advanceRate, 0)}</Fig>
+                                  {p.overridden && <span className="xnote">override</span>}
+                                </>
+                              ) : (
+                                "—"
+                              ),
+                            align: "r",
+                            title: p.advanceRateSource ? `${p.advanceRateSource}. ${OVERRIDE_TITLE}` : OVERRIDE_TITLE,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </>
+                ) : (
+                  <DiscloseEmpty kind={COLLATERAL}>{NO_PLEDGE_LINE}</DiscloseEmpty>
+                )}
+              </DisclosePanel>
+            )}
+          </div>
+        );
+      })}
+    </DiscloseList>
+  );
+}
+
 export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
   const { state } = useApp();
   const writeBackMM = (state.accountId && state.writeBacks[state.accountId]) || 0;
@@ -118,7 +253,7 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
     .map((f) => ({ name: f.name ?? f.loanId ?? "Facility", note: f.coverageNote as string }));
 
   const pledges: Collateral[] = facs.flatMap((f) => f.collateral ?? []);
-  const records = collateralRecords(bundle);
+  const assets = collateralAssets(bundle);
 
   return (
     <Pane id="exposure">
@@ -356,49 +491,17 @@ export function ExposureTab({ bundle }: { bundle: BorrowerBundle }) {
         </PaneCard>
       </div>
 
-      {/* COLLATERAL RECORDS. One row per piece of security, not per pledge: the
+      {/* THE ACCOUNT'S COLLATERAL. One row per ASSET, not per pledge: the
           exposure read returns a pledge per facility, so a warehouse securing
-          three loans arrives three times. A banker reads their collateral once,
-          with what it is worth and what it secures. */}
+          three loans arrives three times. A banker reads their collateral once
+          — type, sub-type and what it actually is — and opens it to see the
+          active pledges. Same list primitive as the covenants pane. */}
       <PaneCard>
         <div className="kicker" style={{ marginBottom: 12 }}>
           Collateral
         </div>
-        {records.length ? (
-          <table className="dt num">
-            <thead>
-              <tr>
-                <th>Collateral</th>
-                <th>Type</th>
-                <th className="r">Value</th>
-                <th className="r">Advance</th>
-                <th className="r">Lendable</th>
-                <th>Lien</th>
-                <th>Secures</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r, i) => (
-                <tr key={r.collateralId ?? i}>
-                  <td>{r.displayName}</td>
-                  <td>{r.collateralType ?? "—"}</td>
-                  <td className="r">
-                    <Fig>{fmtMoney(r.currentValue)}</Fig>
-                  </td>
-                  <td className="r">{r.advanceRate != null ? <Fig>{fmtPct(r.advanceRate, 0)}</Fig> : "—"}</td>
-                  <td className="r">
-                    <Fig>{fmtMoney(r.lendableValue)}</Fig>
-                  </td>
-                  <td>{r.lienPosition ?? "—"}</td>
-                  <td>
-                    {r.securesFacilities.length === 1
-                      ? r.securesFacilities[0]
-                      : `${r.securesFacilities.length} facilities`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {assets.length ? (
+          <AccountCollateral assets={assets} />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
             <Gap title="No collateral pledged" provenance="Customer360Exposure — 0 Loan_Collateral2 rows" />
