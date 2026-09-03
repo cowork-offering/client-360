@@ -165,20 +165,19 @@ export function Worklist() {
                   </span>
                 </span>
                 <span className="sts">
-                  {/* THE ROW STAYS CLEAN (founder, 2026-09-03: the grades,
-                      requests and maturities floating in the card read as
-                      clutter). One quiet info dot summarises what needs
-                      attention; the detail lives in its hover card. The single
-                      most urgent reason keeps one word on the row so triage
-                      still works at a glance. */}
+                  {/* THE ROW STAYS CLEAN (founder, 2026-09-03, twice: the
+                      grades, requests, maturities and then the breach word
+                      floating in the card read as clutter). Nothing sits on the
+                      row but one quiet info dot, in line before the exposure
+                      figure; every status lives in its hover column, one under
+                      the other, the bad ones in red. */}
                   {(() => {
                     const sts = statusesFor(r);
-                    const lead = sts.find((s) => s.tone === "bad") ?? sts.find((s) => s.tone === "warn");
+                    const urgent = sts.some((s) => s.tone === "bad") ? "bad" : sts.some((s) => s.tone === "warn") ? "warn" : "";
                     return (
                       <>
-                        {lead && <span className={`st ${lead.tone}`}>{lead.text}</span>}
-                        {(sts.length > (lead ? 1 : 0) || r.riskRating != null) && (
-                          <span className="wl-info" tabIndex={0} aria-label="Details for this relationship">
+                        {(sts.length > 0 || r.riskRating != null) && (
+                          <span className={`wl-info${urgent ? ` ${urgent}` : ""}`} tabIndex={0} aria-label="Details for this relationship">
                             <svg viewBox="0 0 16 16" aria-hidden="true">
                               <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
                               <path d="M8 7.2v3.4M8 5.05v.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -191,7 +190,7 @@ export function Worklist() {
                                 </span>
                               )}
                               {sts.map((s) => (
-                                <span key={s.text} className="wl-pop-row">
+                                <span key={s.text} className={`wl-pop-row ${s.tone}`}>
                                   <span>{s.text.split(" · ")[0]}</span>
                                   <b>{s.text.includes(" · ") ? s.text.split(" · ").slice(1).join(" · ") : ""}</b>
                                 </span>

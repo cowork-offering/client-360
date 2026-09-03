@@ -601,3 +601,16 @@ a.wk-opt:hover {
 .wl-pop-row + .wl-pop-row {
   border-top: 1px solid var(--row-divider);
 }
+.wl-pop-row.bad,
+.wl-pop-row.bad b {
+  color: var(--critical);
+}
+.wl-pop-row.warn b {
+  color: var(--warning);
+}
+.wl-info.bad {
+  color: var(--critical);
+}
+.wl-info.warn {
+  color: var(--warning);
+}

@@ -1,7 +1,7 @@
 import type { BorrowerBundle } from "../../data/contract";
 import { fmtPct } from "../../data/format";
 import { partyGraph } from "../../data/graphAggregate";
-import { EmptyPane, Gap, Note, OwnershipTree, Pane, PaneCard, SecHead, type TreeNode } from "./paneKit";
+import { EmptyPane, Note, OwnershipTree, Pane, PaneCard, SecHead, type TreeNode } from "./paneKit";
 
 const EXPLAIN =
   "Explain the ownership structure and who guarantees this credit.";
@@ -44,17 +44,6 @@ export function GraphTab({ bundle }: { bundle: BorrowerBundle }) {
         <Note note={graph.note} />
       </PaneCard>
 
-      <div className="pane-grid">
-        <PaneCard>
-          <div className="kicker" style={{ marginBottom: 8 }}>
-            Decision ledger
-          </div>
-          <Gap
-            title="Decision ledger not wired in this artifact"
-            provenance="Lives in the deal workspace / experience-mcp (recall_decisions)"
-          />
-        </PaneCard>
-      </div>
     </Pane>
   );
 }
