@@ -25,6 +25,11 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const OUT = process.argv[2] ?? "/tmp/c360-finale-drive";
+/* WITH `video`, THE DRIVE RECORDS INSTEAD OF FREEZING. A still can prove where a
+   beat stands; only a take can show that the whole thing reads as one motion, and
+   the two cannot be captured in the same pass - freezing the frame is exactly
+   what a recording must not do. */
+const VIDEO = process.argv.includes("video");
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const ROOT = `${HERE}../../`;
 const stub = readFileSync(`${HERE}lib/stub-connector.js`, "utf8");
@@ -152,7 +157,11 @@ const port = server.address().port;
 const TARGET = `http://127.0.0.1:${port}/`;
 
 const browser = await chromium.launch({ args: ["--disable-dev-shm-usage", "--disable-gpu", "--no-sandbox"] });
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 940 }, deviceScaleFactor: 2 });
+const ctx = await browser.newContext({
+  viewport: { width: 1440, height: 940 },
+  deviceScaleFactor: VIDEO ? 1 : 2,
+  ...(VIDEO ? { recordVideo: { dir: OUT, size: { width: 1440, height: 940 } } } : {}),
+});
 await ctx.addInitScript({ content: stub });
 const page = await ctx.newPage();
 const errors = [];
@@ -203,6 +212,7 @@ await page.evaluate(() => {
    than on a sleep that would have to guess when the org's answer lands. */
 let caught = false;
 try {
+  if (VIDEO) throw new Error("recording: the beats are the take, not four stills");
   /* ATTACHED, not visible: an item mid-exhale is fading to nothing inside a
      track that is collapsing to nothing, so a visibility wait would sit out the
      whole beat it is here to catch. */
@@ -281,10 +291,15 @@ await sleep(2600);
 beats.after = await readFinale(page);
 beats.afterShot = await shot("finale-4-afterglow");
 
+/* THE TAKE IS FLUSHED BY CLOSING THE CONTEXT, and `saveAs` has to be called
+   while the browser is still up: the file does not exist until the context goes,
+   and the handle does not work once the browser has. */
+const video = VIDEO ? page.video() : null;
 await ctx.close();
+if (video) await video.saveAs(`${OUT}/finale.webm`);
 await browser.close();
 server.close();
 
-const report = { target: TARGET, at: new Date().toISOString(), caughtMidExhale: caught, beats, errors };
+const report = { target: TARGET, at: new Date().toISOString(), video: VIDEO, caughtMidExhale: caught, beats, errors };
 writeFileSync(`${OUT}/report.json`, JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));

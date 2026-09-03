@@ -3004,6 +3004,7 @@ body.wk-open #root {
   flex-wrap: wrap;
   font-size: 11.5px;
   color: var(--ink-faint);
+  /* A beat behind the card, so the doors arrive under a card that has arrived. */
   animation: wk-fin-after 520ms var(--ease-settle) 260ms both;
 }
 @keyframes wk-fin-after {
@@ -3039,13 +3040,9 @@ body.wk-open #root {
   animation: wk-fin-after 420ms var(--ease-settle) both;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  /* The global kill-switch has already stopped every animation here, which is
-     the whole of the reduced-motion path: the drain never runs (the finale
-     lands straight on `still` in JS), the card is simply present, and there is
-     no sweep. Only the aura needs saying, because its resting opacity comes
-     from the halo class and an unfired keyframe would leave it at zero. */
-  .wk-ex[data-finale-card] .wk-rescard > .aura {
-    opacity: 0;
-  }
-}
+/* NOTHING IS NEEDED FOR REDUCED MOTION, and that is the point of doing the beat
+   in JS. The global kill-switch in electric-glass.css stops every animation
+   above; the finale lands straight on `still` rather than draining, so no node
+   is ever left mid-exit by a keyframe that did not run, the card is simply
+   present at its resting opacity, the sweep never starts and the aura goes back
+   to being the halo it always was. */

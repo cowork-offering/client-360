@@ -196,9 +196,13 @@ export function finaleAttrs(index: number, state: FinaleState): FinaleAttrs | nu
   if (state === "still") return { className: "wk-fin-gone", "data-finale": "gone", "aria-hidden": "true" };
   return {
     className: "wk-fin-out",
-    /* THE ITEM'S OWN PLACE IN THE WAVE, read by the stylesheet as the exit's
-       delay, so the beat and {@link FINALE_STAGGER_MS} are one number. */
-    style: { "--wk-fin-at": `${finaleHoldMs(index)}ms` } as CSSProperties,
+    /* THE EXIT'S TWO NUMBERS, ridden down to the stylesheet rather than written
+       there as well: the item's own place in the wave, and how long its sink
+       takes. Both live here, so the beat and the sheet cannot drift apart. */
+    style: {
+      "--wk-fin-at": `${finaleHoldMs(index)}ms`,
+      "--wk-fin-ms": `${FINALE_EXHALE_MS}ms`,
+    } as CSSProperties,
     "data-finale": "exhale",
     "aria-hidden": "true",
   };

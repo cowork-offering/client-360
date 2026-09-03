@@ -151,7 +151,10 @@ describe("what an item the finale covers renders as", () => {
     expect(out.className).toBe("wk-fin-out");
     expect(out["data-finale"]).toBe("exhale");
     expect(out["aria-hidden"]).toBe("true");
-    expect(out.style).toEqual({ "--wk-fin-at": `${2 * FINALE_STAGGER_MS}ms` });
+    expect(out.style).toEqual({
+      "--wk-fin-at": `${2 * FINALE_STAGGER_MS}ms`,
+      "--wk-fin-ms": `${FINALE_EXHALE_MS}ms`,
+    });
 
     const gone = finaleAttrs(2, "still")!;
     expect(gone.className).toBe("wk-fin-gone");
@@ -167,7 +170,11 @@ describe("what an item the finale covers renders as", () => {
     };
     const merged = withFinale(settled, finaleAttrs(1, "exhale"));
     expect(merged.className).toBe("wk-ex wk-ex-gone wk-fin-out");
-    expect(merged.style).toEqual({ "--wk-settle-ms": "420ms", "--wk-fin-at": `${FINALE_STAGGER_MS}ms` });
+    expect(merged.style).toEqual({
+      "--wk-settle-ms": "420ms",
+      "--wk-fin-at": `${FINALE_STAGGER_MS}ms`,
+      "--wk-fin-ms": `${FINALE_EXHALE_MS}ms`,
+    });
     expect(merged["aria-hidden"]).toBe("true");
   });
 
