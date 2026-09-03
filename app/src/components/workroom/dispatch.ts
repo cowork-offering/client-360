@@ -1251,11 +1251,25 @@ export function committedSentence(args: {
   delta: WorkroomDelta;
   /** The package's committed total before this entry landed, in dollars. */
   before: number;
+  /**
+   * AND AFTER IT, in dollars. BOTH ARE THE MANIFEST'S OWN.
+   *
+   * FOUNDER, 2026-09-03, twice: "$54M" under a rate card on a plan already at
+   * $51M, and "$57M" under a covenant card on a plan at $54M. Each time the
+   * room DERIVED the total here - the before it was handed plus this delta's
+   * own movement - and each time the before it was handed was stale.
+   *
+   * IT IS NOT DERIVED ANY MORE. `figuresFor` is the one place a package total
+   * is computed, the room reads it twice around the entry landing, and this
+   * function prints the two numbers it is given. A total that is wrong now is
+   * wrong in `figuresFor`, where the rail would show it wrong too.
+   */
+  after: number;
 }): string {
-  const moved = (args.delta.committedDeltaMM ?? 0) * 1_000_000;
-  const sentence = moved
-    ? `That takes the package from ${fmtMoney(args.before)} to ${fmtMoney(args.before + moved)}. `
-    : `The package total holds at ${fmtMoney(args.before)}. `;
+  const sentence =
+    args.after !== args.before
+      ? `That takes the package from ${fmtMoney(args.before)} to ${fmtMoney(args.after)}. `
+      : `The package total holds at ${fmtMoney(args.after)}. `;
   if (PACKAGE_MOVED.test(args.reply)) return args.reply.replace(PACKAGE_MOVED, sentence).trim();
   if (PACKAGE_HELD.test(args.reply)) return args.reply.replace(PACKAGE_HELD, sentence).trim();
   return args.reply;

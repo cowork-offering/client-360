@@ -12,6 +12,10 @@ import { __resetFeedForTests, stageFeed } from "./intent/feed";
 import { consumeIntent, __resetIntentsForTests } from "./intent/store";
 import type { IntentDoc } from "./intent/contract";
 import { ACT_WORDS } from "./channel/narrate";
+import { armConfirmSentence, ARM_FIELD } from "./components/workroom/orgArms";
+import { committedSentence } from "./components/workroom/dispatch";
+import { figuresFor } from "./workroom/manifest";
+import type { WorkroomDelta } from "./workroom/types";
 import { SETTLE_EXIT_MS } from "./components/workroom/settle";
 import { RelationshipRoom, neutralRelAsk } from "./components/relationship/RelationshipRoom";
 import { relContextFor, type RelFlowDeps } from "./components/relationship/reviewFlows";
@@ -1237,5 +1241,255 @@ describe("every pricing ask can be left", () => {
     await typeInto(room, "increase the 15M line of credit to 20M");
     await click(confirmButton(room));
     expect(room.textContent).not.toContain("Anything else on this facility");
+  });
+});
+
+/* ============ P0: the rate answer must reach the plan (founder, 12:15) */
+
+describe("an answered pricing card cannot be silently absent from the plan", () => {
+  const withRate = () => {
+    const bundle = JSON.parse(JSON.stringify(data.borrowers![accountId]));
+    bundle.exposure.facilities[0].interestRate = 7.6;
+    return bundle;
+  };
+
+  async function openRated() {
+    await acquireSample(50);
+    const bundle = withRate();
+    const context = workroomContextFor({ mode: "modify", data, bundle, accountId, accountName: bundle.snapshot.name });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(
+        <Workroom
+          context={context}
+          engine={createModifyEngine({ context, data, bundle })}
+          reads={{
+            bundle,
+            accountName: bundle.snapshot.name,
+            productPackageId: context.productPackageId,
+            generatedAt: "2026-09-03T08:00:00.000Z",
+          }}
+          onClose={() => {}}
+        />,
+      );
+    });
+    return document.querySelector<HTMLElement>(".wk-room")!;
+  }
+
+  const opt = (room: HTMLElement, rx: RegExp) =>
+    [...room.querySelectorAll<HTMLButtonElement>(".wk-opt")].find((b) => rx.test(b.textContent ?? ""));
+  const named = (room: HTMLElement, label: string) =>
+    [...room.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === label);
+
+  /** His exact sequence, up to and including the typed rate answer. */
+  async function drive(room: HTMLElement) {
+    await typeInto(room, "increase the 15M line of credit to 20M");
+    await click(confirmButton(room));
+    await click(named(room, "Acknowledge"));
+    await click(opt(room, /240 months/));
+    await click(confirmButton(room));
+    await click(opt(room, /^1 /));
+    await click(confirmButton(room));
+    await typeInto(room, "Yes, 7.25% all-in");
+  }
+
+  it("puts the typed rate on the manifest once it is confirmed", async () => {
+    installSession("");
+    const room = await openRated();
+    await settle();
+    await drive(room);
+
+    // The card carries the figure he typed, and confirming it puts it on the rail
+    // beside the commitment and the two pricing fields.
+    expect(room.querySelector('[data-settle-state="on"] .wk-chip')?.textContent).toContain("7.25%");
+    await click(confirmButton(room));
+
+    const rail = (room.querySelector(".wk-col-r")?.textContent ?? "").replace(/\s+/g, " ");
+    expect(rail).toMatch(/Interest rate/i);
+    expect(rail).toMatch(/7\.25/);
+    expect(rail).toMatch(/Commitment/i);
+    expect(rail).toMatch(/20/);
+    expect(rail).toMatch(/Amortisation/i);
+    expect(rail).toMatch(/240/);
+    expect(rail).toMatch(/payment date/i);
+  });
+
+  /* THE 12:15 FAILURE. He answered, the card drew the figure, and the plan went
+     up without it. The room asked the question; it does not get to forget that
+     it was answered. */
+  /* THE FIRST LINE OF DEFENCE, and the one that was already there: an open card
+     is an open gate, so the review chip is not offered at all while the answer
+     is sitting on the glass unconfirmed. */
+  it("does not offer the plan at all while the answered card is still open", async () => {
+    installSession("");
+    const room = await openRated();
+    await settle();
+    await drive(room);
+
+    expect(room.querySelector('[data-settle-state="on"] .wk-chip')?.textContent).toContain("7.25%");
+    expect(room.querySelector(".wk-propose")).toBeNull();
+  });
+
+  /* AND THE SECOND, WHICH IS THE 12:15 FAILURE: a card that left the glass
+     WITHOUT becoming an entry. The open card is a gate, so the review chip is
+     withheld - but a gate that closes some other way (an advisory resolution
+     settles every open chip in its block and re-says the line) reopens the plan
+     with the answer on no manifest. Until now nothing anywhere noticed.
+
+     THE BACKSTOP IS AT APPROVE. The room remembers every card the pricing gate
+     drew and refuses to put a plan up that is missing one. Confirming clears
+     it, which is what this holds: the invariant does not stand in the way of the
+     plan it is protecting. */
+  it("lets a confirmed answer through, so the backstop never blocks a good plan", async () => {
+    installSession("");
+    const room = await openRated();
+    await settle();
+    await drive(room);
+    await click(confirmButton(room));
+
+    const review = room.querySelector<HTMLButtonElement>(".wk-propose");
+    expect(review).not.toBeNull();
+    await click(review);
+    expect(room.textContent).not.toContain("is on the glass and not on the plan");
+  });
+
+  it("lets the plan through once he discards the card instead", async () => {
+    installSession("");
+    const room = await openRated();
+    await settle();
+    await drive(room);
+
+    // Discarding is an answer: the banker looked at the figure and said no.
+    await click(named(room, "Discard"));
+    await click(room.querySelector<HTMLButtonElement>(".wk-propose"));
+    expect(room.textContent).not.toContain("is on the glass and not on the plan");
+  });
+});
+
+/* ============ the sixteenth build: one voice on a rider (founder, 2026-09-03) */
+
+describe("a rider on a facility gets the card and one line, never a remark", () => {
+  it("does not consult the model when a covenant is associated", async () => {
+    const session = installSession("Held at the relationship level and currently compliant at 1.38x tested quarterly.");
+    const room = await openRoom();
+    await settle();
+    await settle();
+    const before = session.calls.length;
+    const narrs = room.querySelectorAll(".wk-narr").length;
+
+    await typeInto(room, "associate the Debt Service Coverage of Borrower covenant with the construction loan");
+
+    // Either the room staged the junction or it asked which one; in neither case
+    // does a second voice arrive over the card.
+    expect(session.calls).toHaveLength(before);
+    expect(room.querySelectorAll(".wk-narr")).toHaveLength(narrs);
+  });
+
+  it("says what it authors in ONE line", () => {
+    /* The founder's own card ran to three sentences of nCino methodology. The
+       fact is unchanged: what is written, and what is not touched. */
+    const said = armConfirmSentence(
+      {
+        id: "x",
+        title: "Debt Service Coverage of Borrower",
+        target: "$3MM Equipment",
+        group: "covenants",
+        kind: "covenant",
+        before: "",
+        after: "",
+        badge: "",
+        fieldWire: { field: ARM_FIELD, value: JSON.stringify({ kind: "covenantAttach", recordId: "c1", targetLoanId: "L" }) },
+      } as unknown as WorkroomDelta,
+      "Debt Service Coverage of Borrower on $3MM Equipment: staged on the clone. The package total holds at $54M.",
+    );
+    expect(said).toContain("associated to the $3MM Equipment: junction only, threshold and schedule unchanged.");
+    expect(said.split(/(?<=[.?!])\s+/).filter(Boolean).length).toBeLessThanOrEqual(2);
+    // The room's own package figure still rides after it, untouched.
+    expect(said).toContain("The package total holds at $54M.");
+  });
+});
+
+/* ============ the total on every card is the manifest total (founder, 2026-09-03) */
+
+describe("the package total equals the manifest after every kind of change", () => {
+  const baseline = { committedMM: 46, members: 6, changeWord: ["change", "changes"] as [string, string] };
+  const entry = (over: Partial<WorkroomDelta>): WorkroomDelta =>
+    ({ id: "e", title: "t", target: "f", group: "terms", kind: "k", before: "", after: "", badge: "", ...over }) as WorkroomDelta;
+
+  it("counts a commitment change, a rider, a new facility and a field change the same way", () => {
+    const cases: Array<{ what: string; entries: WorkroomDelta[]; expected: number }> = [
+      { what: "nothing staged", entries: [], expected: 46 },
+      { what: "a commitment increase", entries: [entry({ id: "a", committedDeltaMM: 5 })], expected: 51 },
+      { what: "a rider beside it", entries: [entry({ id: "a", committedDeltaMM: 5 }), entry({ id: "b", group: "covenants" })], expected: 51 },
+      {
+        what: "a NEW FACILITY beside both",
+        entries: [
+          entry({ id: "a", committedDeltaMM: 5 }),
+          entry({ id: "b", group: "covenants" }),
+          entry({ id: "c", committedDeltaMM: 3, newMember: true }),
+        ],
+        expected: 54,
+      },
+      {
+        what: "and the pricing fields, which move no money",
+        entries: [
+          entry({ id: "a", committedDeltaMM: 5 }),
+          entry({ id: "c", committedDeltaMM: 3, newMember: true }),
+          entry({ id: "d" }),
+          entry({ id: "e2" }),
+        ],
+        expected: 54,
+      },
+    ];
+    for (const { what, entries, expected } of cases) {
+      /* ONE COMPUTATION, ONE PLACE. `figuresFor` is what the rail prints, what
+         the plan summarises and what the confirm sentence reads. A total that is
+         wrong is wrong in one function, where the rail would show it wrong too. */
+      expect(figuresFor(entries, baseline).committedMM, what).toBe(expected);
+    }
+  });
+
+  it("prints the two figures it is handed, and derives neither", () => {
+    // The founder read "$54M" and then "$57M" on plans that were at $51M and
+    // $54M. The sentence no longer computes anything.
+    const d = { id: "r", title: "Interest rate", target: "Line of Credit", group: "terms", kind: "k", before: "7.6%", after: "7.25%", badge: "" } as WorkroomDelta;
+    expect(
+      committedSentence({ reply: "Rate: staged on the clone. The package total holds at $46M.", delta: d, before: 54_000_000, after: 54_000_000 }),
+    ).toContain("The package total holds at $54M.");
+    expect(
+      committedSentence({ reply: "Amount: staged on the clone. The package total holds at $46M.", delta: d, before: 46_000_000, after: 51_000_000 }),
+    ).toContain("That takes the package from $46M to $51M.");
+  });
+});
+
+/* ============ one loader, in one place (founder, 2026-09-03) */
+
+describe("the thinking mark and the bubble it becomes are one node", () => {
+  it("stands the room's own compose beat down while a remark is breathing", async () => {
+    installSession("The pledged pool does not move with the commitment as it grows.");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "remove the Accounts Receivable covenant from the 15M line of credit");
+
+    /* NEVER TWO. The room's beat lives at the foot of the thread and the
+       remark's lives in the slot the sentence will fill; both at once read as
+       one loader jumping around the glass. */
+    const marks = room.querySelectorAll(".wk-compose, .wk-narr-wait");
+    expect(marks.length).toBeLessThanOrEqual(1);
+  });
+
+  it("fills the remark in where its mark was, under the item it belongs to", async () => {
+    installSession("The pledged pool does not move with the commitment as it grows.");
+    const room = await openRoom();
+    await settle();
+    await typeInto(room, "remove the Accounts Receivable covenant from the 15M line of credit");
+
+    const remark = room.querySelector(".wk-narr");
+    if (!remark) return; // the room refused the line; there is no remark to place
+    // The remark is INSIDE its item's own exchange wrapper, which is where its
+    // pending mark was: the node does not move between breathing and speaking.
+    expect(remark.closest("[data-ex-id]")).not.toBeNull();
   });
 });

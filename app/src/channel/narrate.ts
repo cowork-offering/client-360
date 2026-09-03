@@ -879,17 +879,69 @@ export function guardFigures(
       return { text: span.text };
     });
 
-  const next: NarrationBlock[] = blocks.map((block) => {
-    if (block.kind === "line") return { kind: "line", spans: check(block.spans) };
-    if (block.kind === "bullets") return { kind: "bullets", items: block.items.map(check) };
-    if (block.kind === "entity") {
-      return {
-        kind: "entity",
-        rows: block.rows.map((row) => ({ ...row, label: check(row.label), spans: check(row.spans) })),
-      };
+  /* ============ AN INVENTED FIGURE TAKES ITS SENTENCE WITH IT (2026-09-03)
+
+     "total package commitment holds at $49M drawn and $17.97M available" - two
+     figures on no card and in no read, under a covenant card, in front of a
+     credit officer. De-emphasising them and marking the remark was the old
+     answer: it left both numbers on the glass, in the room's own typography,
+     for a banker to read past a footnote.
+
+     A SENTENCE THE ROOM CANNOT GROUND IS NOT SHOWN. The mark still names what
+     went, so the reduction is visible rather than silent, and a figure that IS
+     grounded is untouched: this only ever removes what nobody read. */
+  const ungroundedSentence = (spans: NarrationSpan[]): boolean =>
+    figuresIn(spans.map((s) => s.text).join("")).some((f) => !grounded.has(f.key));
+
+  const kept = (spans: NarrationSpan[]): NarrationSpan[] => {
+    const sentences = sentencesOf(spans);
+    const held = sentences.filter((sentence) => {
+      if (!ungroundedSentence(sentence)) return true;
+      for (const f of figuresIn(sentence.map((s) => s.text).join("")).filter((x) => !grounded.has(x.key))) {
+        if (!loose.includes(f.text)) loose.push(f.text);
+      }
+      return false;
+    });
+    if (held.length === sentences.length) return spans;
+    const out: NarrationSpan[] = [];
+    held.forEach((sentence, i) => {
+      if (i) out.push({ text: " " });
+      out.push(...sentence);
+    });
+    return out;
+  };
+
+  const next: NarrationBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === "line") {
+      const spans = kept(block.spans);
+      if (spans.length) next.push({ kind: "line", spans });
+      continue;
     }
-    return block;
-  });
+    if (block.kind === "bullets") {
+      const items = block.items.filter((i) => !ungroundedSentence(i)).map(check);
+      for (const dropped of block.items.filter((i) => ungroundedSentence(i))) {
+        for (const f of figuresIn(dropped.map((s) => s.text).join("")).filter((x) => !grounded.has(x.key))) {
+          if (!loose.includes(f.text)) loose.push(f.text);
+        }
+      }
+      if (items.length) next.push({ kind: "bullets", items });
+      continue;
+    }
+    if (block.kind === "entity") {
+      /* A ROW'S CLAUSE IS HELD THE SAME WAY, and its LABEL is not: the label is
+         the entity's name and the rail beside it is the room's own figure. */
+      const rows = block.rows.filter((row) => !ungroundedSentence(row.spans));
+      for (const dropped of block.rows.filter((row) => ungroundedSentence(row.spans))) {
+        for (const f of figuresIn(dropped.spans.map((s) => s.text).join("")).filter((x) => !grounded.has(x.key))) {
+          if (!loose.includes(f.text)) loose.push(f.text);
+        }
+      }
+      if (rows.length) next.push({ kind: "entity", rows: rows.map((row) => ({ ...row, label: check(row.label) })) });
+      continue;
+    }
+    next.push(block);
+  }
 
   if (loose.length) next.push({ kind: "mark", text: `${FIGURE_MARK}: ${loose.join(", ")}` });
   return { blocks: next, ungrounded: loose };
@@ -1438,7 +1490,7 @@ export interface NarratableItem {
  * the chips are the interaction, and a remark under them would talk over the
  * question the room just asked.
  */
-export function subjectFor(item: NarratableItem, said?: string): NarrateSubject | null {
+export function subjectFor(item: NarratableItem, said?: string, opts?: { routine?: boolean }): NarrateSubject | null {
   if (item.kind === "read" && item.card) {
     return {
       act: "answered",
@@ -1464,11 +1516,19 @@ export function subjectFor(item: NarratableItem, said?: string): NarrateSubject 
        covenant, a pledge, a party or a refusal is not: those are the cards a
        colleague comments on, and they are exactly where the model earns its
        sentence. */
+    /* AND A RIDER ON A FACILITY IS ROUTINE TOO (founder, 2026-09-03). A
+       covenant associated to the new loan, a party added to it, a pledge, a fee:
+       the label lanes stage each of them as a card that carries the record, the
+       facility and what it authors. There is nothing left for a colleague to
+       add, and on the sixteenth build the model added a paragraph anyway - with
+       two figures nobody had read in it. The ROOM says which cards those are,
+       because only the room knows what an arm is. */
     const routine =
-      deltas.length > 0 &&
-      !refusals.length &&
-      !item.advisories?.length &&
-      deltas.every((d) => d.group === "terms" && (d.op === undefined || d.op === "change"));
+      opts?.routine === true ||
+      (deltas.length > 0 &&
+        !refusals.length &&
+        !item.advisories?.length &&
+        deltas.every((d) => d.group === "terms" && (d.op === undefined || d.op === "change")));
     return {
       act: deltas.length ? "staged" : "refused",
       sentence: said ?? rows.map((r) => r.label).join("; "),

@@ -1049,6 +1049,24 @@ export function Workroom({
    *  Checked again at approve time, because a plan that lost the change the
    *  pricing was FOR is a version nobody meant to file. */
   const pricingCause = useRef(new Map<string, { id: string; title: string; target: string }>());
+  /* ============ AND WHAT THE GATE PRODUCED (founder, 2026-09-03, 12:15)
+
+     Staging record a8abb00001O2gwGAAR: twenty two steps and NO rate anywhere in
+     them. He had answered the rate ask by typing "Yes, 7.25% all-in", the card
+     had shown 7.25%, and the $20M clone read 7.6 in the org afterwards.
+
+     THE WIRE WAS NEVER THE PROBLEM. `ratePlan.render.test.ts` holds it: the
+     composed sentence parses to `requestedRate`, and `requestedRate` reaches the
+     payload beside the two pricing FIELDS. What happened is simpler and worse -
+     THE CARD WAS NEVER CONFIRMED. A pricing answer stages a card like any other
+     line, the card waits for a Confirm, and nothing anywhere checked that the
+     answer the banker gave had actually become an entry.
+
+     SO EVERY CARD THE GATE PRODUCES IS REMEMBERED HERE, and approve refuses
+     until each of them is on the plan or off the glass. An answer that reached a
+     card and then went missing is the one failure this room may not have: the
+     banker answered, the room drew the figure, and the org filed without it. */
+  const pricingAnswered = useRef(new Map<string, { id: string; title: string; target: string }>());
   const rateIndexOf = useRef(new Map<string, RateIndex>());
   /** Which facilities have already heard the "no index name" aside. Once each. */
   const rateIndexSaid = useRef(new Set<string>());
@@ -2089,7 +2107,17 @@ export function Workroom({
     // writing beside, so a chip block inherits the line that announced it.
     const prior = items[items.length - 2];
     const said = prior && prior.kind === "agent" ? prior.text : undefined;
-    const subject = subjectFor(last as unknown as Parameters<typeof subjectFor>[0], said);
+    /* A RIDER ON A FACILITY SAYS THE WHOLE OF ITSELF ON ITS CARD (founder,
+       2026-09-03). The label lanes stage a covenant association, a party, a
+       pledge and a fee as arm entries; each card carries the record, the
+       facility and what it authors, and on the sixteenth build the model added a
+       paragraph under one of them with two figures nobody had read. Only the
+       room knows what an arm is, so the room is what says so. */
+    const rider =
+      last.kind === "chips" &&
+      last.chips.length > 0 &&
+      last.chips.every((c) => !c.delta || !!armOf(c.delta));
+    const subject = subjectFor(last as unknown as Parameters<typeof subjectFor>[0], said, { routine: rider });
     if (!subject) return;
     /* ============ THE REVIEW MOMENT IS A STAGED MOMENT (founder, 2026-09-03)
 
@@ -2659,6 +2687,9 @@ export function Workroom({
       if (index) rateIndexOf.current.delete(need.memberId);
       const rider = need.slot === "rate" ? (index ? rateIndexNote(index) : "") : PRICING_WHY;
       const carded: WorkroomDelta = { ...taken, caveat: [taken.caveat, rider].filter(Boolean).join(" ") };
+      /* THE ANSWER REACHED A CARD. From here it is on the plan or the room says
+         so at approve; it is never quietly absent. */
+      pricingAnswered.current.set(carded.id, { id: carded.id, title: carded.title, target: carded.target });
       setItems((prev) => [
         ...prev,
         {
@@ -4058,7 +4089,8 @@ export function Workroom({
     (blockId: string, chipKey: string, delta: WorkroomDelta) => {
       /* THE MANIFEST AS IT STANDS RIGHT NOW, not as it stood when this handler
          was built. See `entriesRef`: this is the commitment drop. */
-      const staged = addEntry(entriesRef.current, delta);
+      const before = entriesRef.current;
+      const staged = addEntry(before, delta);
       entriesRef.current = staged;
       const { reply, challenge, options } = engine.acknowledge(delta, staged);
       /* ------------------------------- THE COMMITTED TOTAL IS THIS ENTRY'S (E4c)
@@ -4088,14 +4120,19 @@ export function Workroom({
          It is computed here from the manifest as it stands RIGHT NOW - the
          baseline plus every committed move on it - so a rate card confirmed
          after a commitment card says what the package actually reads at. */
-      const stagedTotal =
-        (baseline.committedMM + staged.reduce((n, e) => n + (e.committedDeltaMM ?? 0), 0) - (delta.committedDeltaMM ?? 0)) *
-        1e6;
+      /* ONE COMPUTATION, ONE PLACE. `figuresFor` is what the rail prints and
+         what the plan summarises, so the confirm sentence reads the same
+         function around the entry landing rather than doing its own sum. A new
+         facility, a rider, a scalar and a carry exclusion all move the total
+         through the same field, and all four are counted the same way. */
+      const totalBefore = figuresFor(before, baseline).committedMM * 1e6;
+      const totalAfter = figuresFor(staged, baseline).committedMM * 1e6;
       const said = cutTail(
         committedSentence({
           reply: armConfirmSentence(delta, reply),
           delta,
-          before: stagedTotal,
+          before: totalBefore,
+          after: totalAfter,
         }),
         vocabulary.nextMove,
         true,
@@ -4209,6 +4246,10 @@ export function Workroom({
          ended in one has exactly as little left to read on it as one that ended
          in a confirm. The row says which it was. */
       if (chip.delta) {
+        /* A DISCARD IS AN ANSWER TOO. The banker looked at the figure the gate
+           drew and said no; approve must not then hold the plan hostage to a
+           card they deliberately dropped. */
+        pricingAnswered.current.delete(chip.delta.id);
         settleChip(blockId, chip.key, "discarded");
         const line = `Dropped. ${chip.delta.title} on ${chip.delta.target} is not staged and the package has not moved. ${tailNow(vocabulary.nextMove)}`.trim();
         settleExchange(rowForDelta(chip.delta, "discarded"), { upTo: blockId, land: () => agent(line) });
@@ -4248,6 +4289,8 @@ export function Workroom({
 
   const drop = useCallback(
     (delta: WorkroomDelta) => {
+      // Taking it off the rail is the same decision as discarding the card.
+      pricingAnswered.current.delete(delta.id);
       setEntries((prev) => removeEntry(prev, delta.id));
       setToast("Removed from the manifest");
       agent(`${delta.title} on ${delta.target} is out of the manifest. The package reads as it did before it landed.`);
@@ -4292,9 +4335,19 @@ export function Workroom({
    * approve, the plan is not the one they built, and the room says WHICH
    * facility lost its change rather than filing a version nobody meant.
    */
-  const lostPricingCause = useCallback((): { title: string; target: string } | null => {
+  const lostPricingCause = useCallback((): { title: string; target: string; answer: boolean } | null => {
     for (const [, cause] of pricingCause.current) {
-      if (!entriesRef.current.some((e) => e.id === cause.id)) return { title: cause.title, target: cause.target };
+      if (!entriesRef.current.some((e) => e.id === cause.id)) {
+        return { title: cause.title, target: cause.target, answer: false };
+      }
+    }
+    /* AND EVERY ANSWER THE GATE DREW A CARD FOR. A card the banker never
+       confirmed is not on the plan, and the room asked the question: it does not
+       get to forget that it was answered. */
+    for (const [, given] of pricingAnswered.current) {
+      if (!entriesRef.current.some((e) => e.id === given.id)) {
+        return { title: given.title, target: given.target, answer: true };
+      }
     }
     return null;
   }, []);
@@ -4306,8 +4359,11 @@ export function Workroom({
     const lost = lostPricingCause();
     if (lost) {
       agent(
-        `${lost.title} on ${lost.target} is not on the plan any more, and the pricing I asked about was for it. ` +
-          `I will not put this up until that change is back on the manifest: say it again and confirm it, or discard the pricing rows that belong to it.`,
+        lost.answer
+          ? `${lost.title} on ${lost.target} is on the glass and not on the plan: the card I drew for your answer was never confirmed. ` +
+              `Confirm it and it files with the rest, or discard it and I will put the plan up without it.`
+          : `${lost.title} on ${lost.target} is not on the plan any more, and the pricing I asked about was for it. ` +
+              `I will not put this up until that change is back on the manifest: say it again and confirm it, or discard the pricing rows that belong to it.`,
       );
       setFlow(null);
       return;
@@ -5040,7 +5096,20 @@ export function Workroom({
                 ))}
                 {/* THE ROOM IS COMPOSING. One beat, the app's own: the ">"
                     breathing inside the goo, and nothing else to read. */}
-                {thinking && (
+                {/* ONE LOADER AT A TIME (founder, 2026-09-03: "the > loader
+                    appears below a card, then it fills out a bubble above a
+                    card, there is a lot going on in the order of execution").
+
+                    There were two marks: the ROOM's own compose beat, at the
+                    foot of the thread, and the REMARK's pending mark, which
+                    lives in the slot the remark itself will fill. They took
+                    turns, in different places, and read as one loader jumping.
+
+                    The remark's mark is the one that becomes a bubble, and it is
+                    already in the right position. So while a remark is pending
+                    the room's own beat stands down: whatever is breathing on the
+                    glass is where the sentence will land. */}
+                {thinking && !narration.pending && (
                   <div className="wk-compose" role="status" aria-label="Composing an answer">
                     <LiquidMark />
                     <span>Composing…</span>

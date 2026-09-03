@@ -208,7 +208,12 @@ describe("the remark lands under the card, in the room's own bubble", () => {
   });
 
   it("renders a bullet list as list items, never as hyphens in a paragraph", async () => {
-    installSession(async () => "Three tests move:\n- DSC at 1.25x\n- Minimum liquidity at $2.0MM");
+    /* THE BULLETS CARRY NO FIGURES (founder, 2026-09-03). A figure the room
+       cannot ground now takes its bullet with it rather than being printed
+       without emphasis, so a fixture that leaned on ungrounded numbers was
+       testing the guard rather than the SHAPE. The shape is what this holds:
+       a hyphen run renders as list items and never as hyphens in a paragraph. */
+    installSession(async () => "Three tests move:\n- the coverage ratio\n- the liquidity floor");
     const room = await openRoom(reply(CLARIFY));
     await settle();
     await typeInto(room, "take the line of credit to 20000000");
@@ -492,7 +497,12 @@ describe("an entity reads as a line item with the book's figure beside it", () =
   });
 
   it("keeps a plain bullet run in the bullet list, never in the row list", async () => {
-    installSession(async () => "Three tests move:\n- DSC at 1.25x\n- Minimum liquidity at $2.0MM");
+    /* THE BULLETS CARRY NO FIGURES (founder, 2026-09-03). A figure the room
+       cannot ground now takes its bullet with it rather than being printed
+       without emphasis, so a fixture that leaned on ungrounded numbers was
+       testing the guard rather than the SHAPE. The shape is what this holds:
+       a hyphen run renders as list items and never as hyphens in a paragraph. */
+    installSession(async () => "Three tests move:\n- the coverage ratio\n- the liquidity floor");
     const room = await openRoom(reply(CLARIFY));
     await settle();
     await typeInto(room, "take the line of credit to 20000000");
