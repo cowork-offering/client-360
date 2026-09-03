@@ -14,6 +14,17 @@ const EXPLAIN =
  *  in data/worklist.ts and the legacy artifact's 270-day watch window (A26.1). */
 const MATURITY_WINDOW_DAYS = 270;
 
+/** The org's loan names lead with the account's own name; on the account's own
+ *  page that prefix says nothing, so the instrument reads the product half. */
+function shortFacility(name: string | undefined, account: string | undefined): string {
+  if (!name) return "Facility";
+  const trimmed = account && name.startsWith(account + " - ") ? name.slice(account.length + 3) : name;
+  return trimmed.replace(/\$([0-9,]+)\.00\b/, (_, digits: string) => {
+    const n = Number(digits.replace(/,/g, ""));
+    return n >= 1_000_000 ? "$" + (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M" : "$" + digits;
+  });
+}
+
 type Severity = "Critical" | "Watch" | "Info";
 interface Ews {
   title: string;
@@ -198,7 +209,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
           it. */}
       {/* The two instruments share one row (founder, 2026-09-03). */}
       <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap" }}>
-      <PaneCard style={{ maxWidth: 380, flex: "1 1 300px" }}>
+      <PaneCard style={{ flex: "1 1 300px" }}>
         <div className="kicker">Renewal clock</div>
         {days != null ? (
           <>
@@ -245,7 +256,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
               </div>
             </div>
             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: "var(--ink)", textWrap: "pretty" }}>
-              {nearest?.name ?? "Facility"} matures {fmtDate(nearest?.maturityDate)}.
+              {shortFacility(nearest?.name, bundle.snapshot?.name)} matures {fmtDate(nearest?.maturityDate)}.
             </p>
             {pkgRows.length > 1 && (
               <div style={{ marginTop: 12, borderTop: "1px solid var(--row-divider)" }}>
@@ -274,7 +285,7 @@ export function SignalsTab({ bundle }: { bundle: BorrowerBundle }) {
       </PaneCard>
 
       {/* Next review of the relationship, on the trail's own footing. */}
-      <PaneCard style={{ maxWidth: 380, flex: "1 1 300px" }}>
+      <PaneCard style={{ flex: "1 1 300px" }}>
         <div className="kicker">Next review</div>
         {nextReview ? (
           <>
