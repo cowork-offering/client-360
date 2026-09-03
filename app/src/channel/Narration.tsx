@@ -119,6 +119,10 @@ export interface NarrationHook {
   /** Narrate what the room just did, under the item that carries it. */
   narrate(id: string, subject: NarrateSubject, line?: string): void;
   viewFor(id: string): NarrationView | undefined;
+  /** IS A REMARK BREATHING SOMEWHERE. The room reads it to stand its own
+   *  compose beat down: two loaders in two places, taking turns, read as one
+   *  loader jumping around the glass. */
+  pending: boolean;
 }
 
 export function useNarration(deps: NarrationDeps): NarrationHook {
@@ -286,6 +290,7 @@ export function useNarration(deps: NarrationDeps): NarrationHook {
       open: (id, subject) => run(id, subject, "", true),
       narrate: (id, subject, line = "") => run(id, subject, line, false),
       viewFor: (id) => views[id],
+      pending: Object.values(views).some((v) => v.pending),
       hush,
       unhush,
     }),

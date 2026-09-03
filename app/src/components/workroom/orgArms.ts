@@ -430,13 +430,18 @@ export function armConfirmSentence(delta: WorkroomDelta, reply: string): string 
        opposite: "$3MM Equipment will not carry onto the new version" is the
        exact inverse of what the card stages. The purpose handoff rides the
        confirm as well, because the confirm is where the banker decides. */
+    /* ONE LINE (founder, 2026-09-03). Each of these ran to three sentences of
+       nCino methodology under a card that already carried the field, the
+       facility and both figures. The FACT each one exists to carry is the same
+       in every case: what is authored, and what is NOT touched. That is one
+       clause and one clause. */
     arm.kind === "newFacility"
-      ? `${delta.title} is filed on the new package version beside the clones, at Qualification with the borrower on its own borrowing structure. It is a new loan rather than a version of one, so it carries no chain row and nothing on the booked side of this relationship moves because of it.`
+      ? `${delta.title} is filed on the new package version at Qualification: a new loan, not a version of one, and nothing booked moves for it.`
       : arm.kind === "covenantAttach"
-      ? `${delta.title} is associated to the ${delta.target} on the new version. The covenant record itself is not touched: the threshold, the frequency and the schedule stay exactly as the borrower holds them, and what this authors is the junction alone.`
+      ? `${delta.title} associated to the ${delta.target}: junction only, threshold and schedule unchanged.`
       : arm.kind === "pledgeExclusion"
-        ? `${delta.title} will not carry onto the new version of ${delta.target}. The booked facility keeps the pledge exactly as it holds it today, the asset and the borrower's ownership of it are not touched, and nothing is deleted anywhere.`
-        : `${delta.title} will not carry onto the new version of ${delta.target}. The booked loan keeps it, the covenant record itself is not touched, and the clone simply starts without that junction.`;
+        ? `${delta.title} will not carry onto the new version of ${delta.target}: the booked pledge and the asset are untouched.`
+        : `${delta.title} will not carry onto the new version of ${delta.target}: the booked loan keeps it, the clone starts without the junction.`;
   return rest ? `${lede} ${rest}` : lede;
 }
 

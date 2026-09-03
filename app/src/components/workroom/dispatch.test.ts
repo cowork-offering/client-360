@@ -950,6 +950,7 @@ describe("the committed total moves only on a commitment change (E4c)", () => {
       reply: reply("That takes the package from $49M to $54M."),
       delta: exclusion("x", CONSTRUCTION, HOLDINGS),
       before: 54_000_000,
+      after: 54_000_000,
     });
     expect(said).toContain("The package total holds at $54M.");
     expect(said).not.toContain("from $49M to $54M");
@@ -962,7 +963,7 @@ describe("the committed total moves only on a commitment change (E4c)", () => {
       delta({ id: "f", group: "terms", title: "Facility fee" }),
       delta({ id: "x", group: "terms", title: "Policy exception" }),
     ]) {
-      const said = committedSentence({ reply: reply("That takes the package from $49M to $54M."), delta: d, before: 49_000_000 });
+      const said = committedSentence({ reply: reply("That takes the package from $49M to $54M."), delta: d, before: 49_000_000, after: 49_000_000 });
       expect(said).toContain("The package total holds at $49M.");
     }
   });
@@ -972,12 +973,13 @@ describe("the committed total moves only on a commitment change (E4c)", () => {
       reply: reply("The package total holds at $49M."),
       delta: { ...commitment("a", LOC, 20_000_000), committedDeltaMM: 5 },
       before: 49_000_000,
+      after: 54_000_000,
     });
     expect(said).toContain("That takes the package from $49M to $54M.");
   });
 
   it("leaves a reply that carries no package sentence alone", () => {
-    expect(committedSentence({ reply: "Staged on the clone.", delta: delta({ id: "a" }), before: 49_000_000 })).toBe(
+    expect(committedSentence({ reply: "Staged on the clone.", delta: delta({ id: "a" }), before: 49_000_000, after: 49_000_000 })).toBe(
       "Staged on the clone.",
     );
   });

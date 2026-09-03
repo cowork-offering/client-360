@@ -14,6 +14,7 @@ import {
   shouldNarrate,
   subjectFor,
   type NarrateSubject,
+  type NarrationBlock,
 } from "./narrate";
 import type { BrainEnvelope } from "./brainLane";
 
@@ -653,11 +654,26 @@ describe("a figure the room cannot point at is not endorsed", () => {
     expect(narrationText(out.blocks)).toContain(FIGURE_MARK);
   });
 
-  it("renders a drifted figure WITHOUT emphasis, and keeps the words", () => {
+  /* THE WORDS NO LONGER STAY (founder, 2026-09-03). "total package commitment
+     holds at $49M drawn and $17.97M available" reached a credit officer with
+     nothing but a footnote under it. De-emphasis left both numbers on the glass
+     in the room's own typography; a sentence the room cannot ground is not
+     shown at all now, and the mark still names what went. */
+  /** What the reader meets, with the room's own mark left out of it. */
+  const prose = (blocks: NarrationBlock[]) => narrationText(blocks.filter((b) => b.kind !== "mark"));
+
+  it("DROPS the sentence a drifted figure is in, and says which figure it was", () => {
     const out = guarded("The exception records an **80 percent** advance.");
-    const line = out.blocks.find((b) => b.kind === "line");
-    expect(line?.kind === "line" ? line.spans.some((s) => s.bold) : true).toBe(false);
-    expect(narrationText(out.blocks)).toContain("80 percent");
+    expect(prose(out.blocks)).not.toContain("80 percent");
+    expect(out.ungrounded).toContain("80 percent");
+    // The mark stays, so the reduction is visible rather than silent.
+    expect(narrationText(out.blocks)).toContain(FIGURE_MARK);
+  });
+
+  it("leaves a sentence beside it alone, where that one IS grounded", () => {
+    const out = guarded("The exception records an **80 percent** advance. The pool does not grow with it.");
+    expect(prose(out.blocks)).not.toContain("80 percent");
+    expect(prose(out.blocks)).toContain("The pool does not grow with it.");
   });
 
   it("marks a figure the model DERIVED, which is on no read at all", () => {
@@ -697,10 +713,18 @@ describe("a figure the room cannot point at is not endorsed", () => {
     );
     const out = guardFigures(blocks, env, exceptionCard);
     expect(out.ungrounded).toEqual(["$5.2MM"]);
-    const entity = out.blocks.find((b) => b.kind === "entity");
-    // The RAIL is the room's own figure, resolved out of the envelope. It is
-    // never marked: marking it would be the room marking itself.
-    expect(entity?.kind === "entity" ? entity.rows[0].value : "").toBe("$15.0M");
+    /* THE ROW GOES WITH ITS CLAUSE (founder, 2026-09-03). A row whose sentence
+       the room cannot ground is a row that would print the model's number
+       beside the room's own, which is worse than saying nothing: the reader
+       cannot tell which of the two the bank stands behind. The mark names what
+       went, and a row whose clause IS grounded keeps its rail. */
+    expect(out.blocks.some((b) => b.kind === "entity")).toBe(false);
+    expect(narrationText(out.blocks)).toContain(FIGURE_MARK);
+
+    const clean = resolveEntities(parseNarration("- **Line of Credit**: it carries the increase on its own."), env);
+    const kept = guardFigures(clean, env, exceptionCard);
+    const row = kept.blocks.find((b) => b.kind === "entity");
+    expect(row?.kind === "entity" ? row.rows[0].value : "").toBe("$15.0M");
   });
 
   it("says nothing at all about a remark carrying no figures", () => {

@@ -377,9 +377,13 @@ describe("associating an existing covenant (P1)", () => {
     const read = attachCtx();
     if (read?.kind !== "attach") throw new Error("expected an attach");
     const said = armConfirmSentence(read.delta, "Staged on the clone. The package total holds at $49.0M.");
-    expect(said).toContain("The covenant record itself is not touched");
-    expect(said).toContain("the threshold, the frequency and the schedule stay exactly as the borrower holds them");
-    expect(said).toContain("what this authors is the junction alone");
+    /* ONE LINE (founder, 2026-09-03). The arm confirms each ran to three
+       sentences of methodology under a card that already carried the record,
+       the facility and what it authors. The FACT is unchanged: what is
+       written, and what is not touched. */
+    expect(said).toContain("junction only, threshold and schedule unchanged");
+    expect(said).toContain("threshold and schedule unchanged");
+    expect(said).toContain("junction only");
   });
 });
 
@@ -391,7 +395,11 @@ describe("the confirm sentence", () => {
       "Minimum Liquidity on Line of Credit ($15M): on the booked facility to not carried, staged on the clone. The package total holds at $49.0M. What else?",
     );
     expect(said).toContain("will not carry onto the new version of Line of Credit ($15M)");
-    expect(said).toContain("The booked loan keeps it");
+    /* ONE LINE (founder, 2026-09-03). The arm confirms each ran to three
+       sentences of methodology under a card that already carried the record,
+       the facility and what it authors. The FACT is unchanged: what is
+       written, and what is not touched. */
+    expect(said).toContain("the booked loan keeps it, the clone starts without the junction");
     expect(said).not.toContain("staged on the clone");
     // The engine still owns the package figure and the next move.
     expect(said).toContain("The package total holds at $49.0M.");
@@ -401,8 +409,12 @@ describe("the confirm sentence", () => {
   it("says the pledge stays on the booked facility and the asset is not touched", () => {
     const delta = pledgeExclusionDelta(BOOK.assets[0], { facilityId: LOC, facilityLabel: "Line of Credit ($15M)" });
     const said = armConfirmSentence(delta, "Pledge staged on the clone. The package total holds at $49.0M.");
-    expect(said).toContain("The booked facility keeps the pledge exactly as it holds it today");
-    expect(said).toContain("nothing is deleted anywhere");
+    /* ONE LINE (founder, 2026-09-03). The arm confirms each ran to three
+       sentences of methodology under a card that already carried the record,
+       the facility and what it authors. The FACT is unchanged: what is
+       written, and what is not touched. */
+    expect(said).toContain("the booked pledge and the asset are untouched");
+    expect(said).toContain("the booked pledge and the asset are untouched");
     expect(said).toContain("The package total holds at $49.0M.");
   });
 
@@ -443,7 +455,7 @@ describe("the confirm sentence", () => {
         delta,
         `${delta.title} on Purchase: pledged to the booked facility, and carried onto the clone today to not carried onto the new version, staged on the clone. The package total holds at $46M. What else should change?`,
       );
-      expect(said).toContain("nothing is deleted anywhere");
+      expect(said).toContain("the booked pledge and the asset are untouched");
       // NOT ONE WORD OF THE ENGINE'S OPENING CLAUSE COMES BACK.
       expect(said).not.toContain("staged on the clone");
       expect(said).not.toContain("pledged to the booked facility");

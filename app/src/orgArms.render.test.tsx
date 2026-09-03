@@ -177,8 +177,12 @@ describe("a covenant carry exclusion on a modification (P2)", () => {
 
     expect(rail(room)).toContain("Accounts Receivable");
     expect(rail(room)).toContain("not carried onto the new version");
-    expect(said(room)).toContain("The booked loan keeps it");
-    expect(said(room)).toContain("the covenant record itself is not touched");
+    /* ONE LINE (founder, 2026-09-03). The arm confirms each ran to three
+       sentences of methodology under a card that already carried the record,
+       the facility and what it authors. The FACT is unchanged: what is
+       written, and what is not touched. */
+    expect(said(room)).toContain("the booked loan keeps it, the clone starts without the junction");
+    expect(said(room)).toContain("the clone starts without the junction");
     expect(said(room)).not.toContain("staged on the clone");
   });
 
@@ -268,8 +272,12 @@ describe("a pledge carry exclusion on a modification (P2 + P4)", () => {
     await typeInto(room, "remove the accounts receivable pledge from the 15M line of credit");
     await click(byText(/^Confirm$/));
 
-    expect(said(room)).toContain("The booked facility keeps the pledge exactly as it holds it today");
-    expect(said(room)).toContain("nothing is deleted anywhere");
+    /* ONE LINE (founder, 2026-09-03). The arm confirms each ran to three
+       sentences of methodology under a card that already carried the record,
+       the facility and what it authors. The FACT is unchanged: what is
+       written, and what is not touched. */
+    expect(said(room)).toContain("the booked pledge and the asset are untouched");
+    expect(said(room)).toContain("the booked pledge and the asset are untouched");
     expect(rail(room)).toContain("not carried onto the new version");
   });
 });
@@ -284,9 +292,13 @@ describe("associating an existing covenant, in the room (P1)", () => {
 
     expect(rail(room)).toContain("Debt Service Coverage of Borrower");
     expect(rail(room)).toContain("associated to this facility");
-    expect(said(room)).toContain("is associated to the");
-    expect(said(room)).toContain("The covenant record itself is not touched");
-    expect(said(room)).toContain("what this authors is the junction alone");
+    /* ONE LINE (founder, 2026-09-03). The arm confirms each ran to three
+       sentences of methodology under a card that already carried the record,
+       the facility and what it authors. The FACT is unchanged: what is
+       written, and what is not touched. */
+    expect(said(room)).toContain("associated to the");
+    expect(said(room)).toContain("junction only, threshold and schedule unchanged");
+    expect(said(room)).toContain("junction only");
   });
 
   it("keeps the handoff on a renewal, and names the route that carries the arm", async () => {
