@@ -35,6 +35,7 @@ import {
 } from "../workroom/settle";
 import type { BrainEnvelope, BrainMail, BrainReply, BrainTurn } from "../../channel/brainLane";
 import { UNREADABLE_CLARIFY, askBrain, brainReachable, isDegrade } from "../../channel/brainLane";
+import { readCatalog, type OrgCatalog } from "../../channel/catalog";
 import { Narration, useNarration } from "../../channel/Narration";
 import { subjectFor } from "../../channel/narrate";
 import { ManifestRail } from "../rail/ManifestRail";
@@ -81,6 +82,7 @@ import {
   nextStep,
   readCreateAsk,
   relContextFor,
+  relReadyLine,
   relRouteBlock,
   reviewableCovenants,
   routeAvailability,
@@ -95,6 +97,7 @@ import {
   type RelStep,
   type StagedRelPlan,
 } from "./reviewFlows";
+import { intakeRows } from "./intakeFlows";
 import {
   bindRelRoute,
   closeRelationshipRoom,
@@ -448,6 +451,12 @@ interface LaneRow {
 }
 
 function laneRowsFor(route: RelRoute, ctx: RelContext, answers: Answers, order: string[]): LaneRow[] {
+  /* THE INTAKE LANE READS AS WHAT IS BEING FILED, one row per covenant and one
+     per asset, rather than one row per answer. Eleven rows behind three
+     covenants is a transcript; the banker is filing covenants, so the lane says
+     covenants. The rows come from the same drafts the payload is built from, so
+     the lane and the wire cannot describe different things. */
+  if (route === "intake") return intakeRows(ctx, answers);
   const covenants = reviewableCovenants(ctx);
   const assets = valuableCollateral(ctx);
   const rows: LaneRow[] = [];
@@ -507,9 +516,13 @@ const LANE_LABELS: Record<string, string> = {
   requestType: "Subject",
   summary: "Request",
   detail: "Detail",
+  intakeKind: "Intake",
+  intakeKindPick: "Intake",
 };
 
 function iconForAnswer(route: RelRoute, group: string): IconKind {
+  if (group.startsWith("cov")) return "covenant";
+  if (group.startsWith("col")) return "collateral";
   if (group.startsWith("covenant")) return "covenant";
   if (group === "records" || group === "recordValues") return "collateral";
   if (group === "valuationDate" || group === "detail") return "maturity";
@@ -835,11 +848,11 @@ export function RelationshipRoom({
           kind: "agent",
           id: nextId("ready"),
           step: mine,
-          text: `That is everything the ${REL_ROUTE_WORD[flowSpec.route]} needs. Review the plan below, then file it.`,
+          text: relReadyLine(flowSpec.route, ctx, answers),
         },
       ];
     });
-  }, [flowSpec, phase, ready, routeBlock]);
+  }, [answers, ctx, flowSpec, phase, ready, routeBlock]);
 
   /**
    * THE STEP THAT WAS JUST ANSWERED, OFF THE STAGE, UNDER ONE ROW.
@@ -1289,7 +1302,7 @@ export function RelationshipRoom({
         }
         const mine = step + 1;
         const five =
-          "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request. Pick one above, or name which of the five this is.";
+          "I can run the annual review, the covenant review, a collateral valuation, the risk-rating review or a service request, and I can put a new covenant or a new asset onto the relationship. Pick one above, or name which of the six this is.";
         setStep(mine);
         setItems((prev) => [...prev, relBankerLine(mine, (said ?? heard).trim(), opts?.fed)]);
         /* FACILITY WORK IS FACILITY WORK BEFORE A ROUTE IS BOUND TOO.
@@ -1426,7 +1439,25 @@ export function RelationshipRoom({
          offers the discard as the explicit gesture it is. */
       /* THE OPEN TEXT STEP GETS ITS ANSWER. A route word inside a subject or a
          narrative is not a request to change review; see readRelRouteSwitch. */
-      const switchTo = router ? readRelRouteSwitch(text, route, { openTextStep: live?.kind === "text" }) : null;
+      /* AND SO DOES THE STEP WHOSE OWN CHIP THE BANKER JUST NAMED.
+
+         THE DRIVE CAUGHT THIS ON THE INTAKE. "Appraisal" is one of the fourteen
+         values `LLC_BI__Source__c` holds, and it is also the word the valuation
+         route's own reader looks for, so answering "where did the figure come
+         from" with the org's own value offered on the glass re-routed the room
+         to a collateral valuation. The same trap sits under "Real Estate
+         Evaluation" and under any picklist value a route word appears in.
+
+         A LINE THAT IS EXACTLY ONE OF THE LIVE STEP'S OWN OPTIONS BELONGS TO
+         THAT STEP. It is not a request for anything: it is the answer the room
+         put on the glass and the banker took. This narrows the switch reader
+         rather than widening it, and it can only ever fire where the room itself
+         offered the words. */
+      const onTheGlass = (live?.options ?? []).some(
+        (o) => !o.disabled && (o.value.toLowerCase() === text.toLowerCase() || o.label.toLowerCase() === text.toLowerCase()),
+      );
+      const switchTo =
+        router && !onTheGlass ? readRelRouteSwitch(text, route, { openTextStep: live?.kind === "text" }) : null;
       if (switchTo && router) {
         if (!order.length) {
           router.onRestart(switchTo, text);
@@ -1535,8 +1566,26 @@ export function RelationshipRoom({
        not already acted on.
 
        A line that names the route AND asks for something else still runs: only
-       the bare naming is dropped. */
-    if (route && readRelRouteIntent(line) === route && !readCreateAsk(line, route) && !isQuestion(line)) return;
+       the bare naming is dropped.
+
+       THE INTAKE IS THE EXCEPTION, AND IT IS NOT A SPECIAL CASE SO MUCH AS THE
+       SAME RULE READ PROPERLY. On the five reviews, naming the route and saying
+       what to do are two different sentences, so the naming carries nothing the
+       binder has not acted on. On the intake they are ONE sentence: "add a
+       relationship covenant: minimum liquidity of 5M tested quarterly" names the
+       route in its first three words and answers the first four questions in the
+       rest, and dropping it would throw the whole instruction away and ask a
+       banker who has just said everything to say it again. Its first step takes
+       the line as what it is. */
+    if (
+      route &&
+      route !== "intake" &&
+      readRelRouteIntent(line) === route &&
+      !readCreateAsk(line, route) &&
+      !isQuestion(line)
+    ) {
+      return;
+    }
     void say(line);
   }, [ask, awake, route, router?.say, say]);
 
@@ -2386,6 +2435,13 @@ function RelFlowCard({
 }) {
   const plan: StagedOutput | null = flow.staging?.plan ?? null;
   const refused = (plan?.covenants ?? []).filter((c) => c.state && c.state !== "planned");
+  /* WHAT THE PLAN WOULD NOT TAKE, BY INDEX, IN THE ORG'S OWN WORDS.
+     A covenant the org already holds is refused by its id, which is what the
+     covenant review reports. A CREATE has no id yet, so the intake reports its
+     refusals against the position in the list the room sent, and the room reads
+     them out in the same block: an unknown type name, a value at or below zero,
+     a date the org cannot hold. Verbatim, and never summarised into a count. */
+  const byIndex = plan?.refusals ?? [];
   const held = plan?.executionHeld === true;
 
   /* ONE CARD, MORPHING (founder, 2026-09-03). The same rule as the facility
@@ -2437,7 +2493,7 @@ function RelFlowCard({
       {/* BEFORE YOU FILE. The org's own warnings and its own per-covenant
           refusals, verbatim. Advice, never a gate: the approval below is live
           whether it is read or not. */}
-      {(plan?.warnings?.length || refused.length > 0) && (
+      {(plan?.warnings?.length || refused.length > 0 || byIndex.length > 0) && (
         <div className="rl-warn">
           <div className="rl-warn-k">Before you file</div>
           {(plan?.warnings ?? []).map((w) => (
@@ -2448,6 +2504,12 @@ function RelFlowCard({
           {refused.map((c: StagedCovenant) => (
             <div className="rl-warn-t" key={c.covenantId}>
               {c.covenantName ?? c.covenantType ?? c.covenantId}: {c.reason ?? "not assessable in this plan"}
+            </div>
+          ))}
+          {byIndex.map((r) => (
+            <div className="rl-warn-t" key={`refusal-${r.index}-${r.reason}`}>
+              {r.index >= 0 ? `Number ${r.index + 1} on the list: ` : ""}
+              {r.reason}
             </div>
           ))}
         </div>
@@ -2577,10 +2639,28 @@ export function RelationshipRoomHost() {
   }, [data, state.livePatches, accountId]);
 
   const accountName = session?.accountName ?? null;
+
+  /* THE ORG'S OWN CHIP SETS, ONE READ PER HOST MOUNT (`Workroom.tsx` does the
+     same and `readCatalog` is its own cache, so the two rooms share the round
+     trip). Only the INTAKE route reads it: it is the one route that files a
+     type by NAME, so the names have to be the org's. Null leaves the intake
+     asking the banker to write the name, which is the channel-none doctrine
+     applied to a catalog, and every other route is untouched. */
+  const [catalog, setCatalog] = useState<OrgCatalog | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readCatalog().then((c) => {
+      if (live) setCatalog(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const ctx = useMemo<RelContext | null>(() => {
     if (!accountId || !accountName) return null;
-    return relContextFor({ data, bundle, accountId, accountName });
-  }, [accountId, accountName, bundle, data]);
+    return relContextFor({ data, bundle, accountId, accountName, catalog });
+  }, [accountId, accountName, bundle, catalog, data]);
 
   /* ONE MAIL READ PER ROOM OPEN, MADE HERE (SAMPLE-CHANNEL spec, and the same
      hook the facility room uses). The founder's "when there is an email

@@ -20,7 +20,7 @@
 import { callTool, SERVERS, unwrapInvocableOne, type McpFailure } from "./mcp";
 import type { PlanStep, StagedCovenant, StagedFacility, StagedItem, StagedOutput, StepType } from "../actions/stagedPlan";
 
-/** The eight deployed write actions, and the tools each one runs on. */
+/** The deployed write actions, and the tools each one runs on. */
 export const WRITE_TOOLS = {
   "collateral-valuation": { stage: "stage_collateral_valuation", execute: "execute_collateral_valuation", heldReason: null },
   "create-service-request": { stage: "stage_service_request", execute: "execute_service_request", heldReason: null },
@@ -56,6 +56,22 @@ export const WRITE_TOOLS = {
   "covenant-review": {
     stage: "stage_covenant_review",
     execute: "execute_covenant_review",
+    heldReason: null,
+  },
+  /* RELATIONSHIP INTAKE (2026-09-03). The only write arm that AUTHORS on the
+     relationship rather than acting on what the org already holds: a covenant
+     with an account junction and no loan junction, and a collateral asset with
+     its ownership junction and no pledge.
+
+     THE PAIR IS BUILT TO THE FROZEN CONTRACT and is not deployed as this ships,
+     which is exactly the state `new-facility-request` and the rest of wave 2
+     were built in. Nothing here is held: the ORG remains the authority, so a
+     staged plan carrying `executionHeld: true` blocks the gesture whatever this
+     map says, and a tool the connector does not yet publish fails as the
+     unavailable tool it is rather than as a room that pretended. */
+  "relationship-intake": {
+    stage: "stage_relationship_intake",
+    execute: "execute_relationship_intake",
     heldReason: null,
   },
   // EXECUTE HELD. `execute` is null, not a name we hope exists: the tool was
@@ -116,6 +132,16 @@ export interface ExecutedItem {
   /** Both: null means the read-back did not confirm the name — filed,
    *  unverified. Same semantic as the single-record case, per item. */
   recordName?: string | null;
+  /**
+   * THE ORG'S OWN ID FOR THIS RECORD, where the tool reports one per item.
+   *
+   * The two bulk tools that shipped before the intake name their records
+   * through fields of their own (`valuationId`, `covenantComplianceId`), which
+   * is why there was no generic key. The intake authors on two objects in one
+   * plan and reports the id it created against each entry, so the trail can
+   * name what was created rather than only how many.
+   */
+  recordId?: string;
   anchorName?: string | null;
   /** The org's own sentence for this item. */
   outcome?: string;
@@ -340,6 +366,7 @@ function toExecutedFacility(raw: Record<string, unknown>): ExecutedFacility {
 function toExecutedItem(raw: Record<string, unknown>): ExecutedItem {
   return {
     recordName: typeof raw.recordName === "string" ? raw.recordName : null,
+    recordId: str(raw.recordId),
     anchorName: typeof raw.anchorName === "string" ? raw.anchorName : null,
     outcome: str(raw.outcome),
     collateralId: str(raw.collateralId),
@@ -777,6 +804,40 @@ export interface StagePayloads {
      *  belonging to another relationship, each by name. */
     covenantAttachesJson?: string | null;
   };
+  /**
+   * RELATIONSHIP INTAKE, built to the frozen contract (2026-09-03).
+   *
+   * ANCHORED ON THE ACCOUNT and on nothing else. There is no `productPackageId`
+   * on this wire and that is the point: a relationship-level covenant belongs to
+   * the borrower rather than to a package version, and an owned asset is the
+   * borrower's whether the package exists or not. Both are the reason the two
+   * `CREATE_GAPS` existed at all.
+   *
+   * THE TWO LISTS TRAVEL AS JSON STRINGS, exactly as `covenantAddsJson` and
+   * `pledgeAddsJson` do on the modification wire, because the invocable declares
+   * them as strings. Either may be omitted; a request carrying neither has
+   * nothing to file and the tool refuses it.
+   *
+   *   covenantsJson   [{covenantTypeName, operator, threshold, frequency,
+   *                     effectiveDate, nextEvaluationDate?, notes?}], max 10.
+   *                   `covenantTypeName` is matched against the org's own
+   *                   LLC_BI__Covenant_Type__c names, so a near miss is refused
+   *                   by index rather than filed as something else. `operator`
+   *                   is one of < <= = >= > and rides `Acnpex_Operator__c`,
+   *                   mapped onto `Financial_Indicator_Operator__c`.
+   *   collateralJson  [{collateralType, description, value, valuationBasis?,
+   *                     valuationSource?, valuationDate?, address?,
+   *                     ownerAccountId?}], max 10. `ownerAccountId` defaults to
+   *                   `accountId`; the ownership junction is the only link
+   *                   collateral has to an account.
+   */
+  "relationship-intake": {
+    idempotencyKey: string;
+    accountId: string;
+    rationale?: string;
+    covenantsJson?: string | null;
+    collateralJson?: string | null;
+  };
   renewal: FacilityAnchor & {
     idempotencyKey: string;
     rationale?: string;
@@ -817,7 +878,12 @@ export async function stageAction<K extends WriteActionId>(
     { cache: false },
   );
   return unwrapToolOutcome<StagedOutput>(res.payload, (r) => ({
-    stagingId: String(r.stagingId ?? ""),
+    /* `planId` IS THE SAME THING UNDER THE INTAKE CONTRACT'S OWN NAME. Every
+       tool deployed before it answers under `stagingId` and reaches this
+       fallback never; the intake pair names the staging row `planId`, and a
+       client that read an empty string there would offer a token bound to
+       nothing. */
+    stagingId: String(r.stagingId ?? r.planId ?? ""),
     planHash: String(r.planHash ?? ""),
     decisionToken: typeof r.decisionToken === "string" ? r.decisionToken : null,
     replayed: r.replayed === true,
@@ -841,6 +907,14 @@ export async function stageAction<K extends WriteActionId>(
       : undefined,
     assessedCount: typeof r.assessedCount === "number" ? r.assessedCount : undefined,
     refusedCount: typeof r.refusedCount === "number" ? r.refusedCount : undefined,
+    refusals: Array.isArray(r.refusals)
+      ? (r.refusals as Array<Record<string, unknown>>)
+          .map((x) => ({
+            index: typeof x.index === "number" ? x.index : -1,
+            reason: String(x.reason ?? ""),
+          }))
+          .filter((x) => x.reason !== "")
+      : undefined,
     scopeCount: typeof r.scopeCount === "number" ? r.scopeCount : undefined,
     createsPackage: r.createsPackage === true,
     plannedPackageName: typeof r.plannedPackageName === "string" ? r.plannedPackageName : undefined,

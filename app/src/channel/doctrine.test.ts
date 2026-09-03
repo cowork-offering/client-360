@@ -309,7 +309,7 @@ describe("the figure rules travel on every remark (2026-09-02)", () => {
    without anyone saying so.
    ============================================================================= */
 
-const REL_BLOCKS = ["covenant-testing", "valuation-basis", "annual-review", "risk-rating", "coverage-math"] as const;
+const REL_BLOCKS = ["covenant-testing", "valuation-basis", "annual-review", "risk-rating", "coverage-math", "intake"] as const;
 
 describe("the relationship room's doctrine slices", () => {
   const ON_ITS_OWN_WORDS: Record<(typeof REL_BLOCKS)[number], string> = {
@@ -318,6 +318,7 @@ describe("the relationship room's doctrine slices", () => {
     "annual-review": "run the annual review on this relationship",
     "risk-rating": "downgrade them a notch to special mention",
     "coverage-math": "what is the availability on the borrowing base",
+    intake: "add a covenant to the relationship",
   };
 
   for (const id of REL_BLOCKS) {
@@ -489,4 +490,5 @@ const ON_ITS_OWN_WORDS_REL: Record<(typeof REL_BLOCKS)[number], string> = {
   "annual-review": "run the annual review on this relationship",
   "risk-rating": "downgrade them a notch to special mention",
   "coverage-math": "what is the availability on the borrowing base",
+  intake: "register a net-new asset the borrower owns",
 };

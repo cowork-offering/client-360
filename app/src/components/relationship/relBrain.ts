@@ -8,6 +8,7 @@ import { buildReadBlocks, threadDigest } from "../workroom/readBlocks";
 import type { ReadSource } from "../workroom/readCard";
 import { relEntities, type RelBook } from "./relBook";
 import { CREATE_GAPS, DUAL_RATING_NOT_CARRIED, OVERRIDE_NEEDS_A_REASON, type RelContext } from "./reviewFlows";
+import { NO_PLEDGE_NO_LIEN } from "./intakeFlows";
 import { FACILITY_HANDOFF, REL_ROUTE_WORD, type RelRoute } from "./relRoute";
 
 /* =============================================================================
@@ -26,8 +27,8 @@ import { FACILITY_HANDOFF, REL_ROUTE_WORD, type RelRoute } from "./relRoute";
    room it replaced.
    ============================================================================= */
 
-/** The five routes, as words a reply may NAME while the question is open. */
-export const REL_ROUTE_WORDS = new Set<string>(["annual", "covenant", "valuation", "rating", "service"]);
+/** The six routes, as words a reply may NAME while the question is open. */
+export const REL_ROUTE_WORDS = new Set<string>(["annual", "covenant", "valuation", "rating", "service", "intake"]);
 
 /** What each review produces, in the org's own terms. Read from the room's own
  *  route vocabulary rather than written a second time. */
@@ -37,6 +38,8 @@ const PRODUCES: Record<RelRoute, string> = {
   valuation: "a valuation on collateral that already exists",
   rating: "a risk-rating review against the relationship",
   service: "a service request case",
+  intake:
+    "a covenant authored on the relationship, or a collateral asset the borrower owns, each with its account junction and neither one touching a facility",
 };
 
 /** The facilities the relationship carries, scoped to its package. The same
@@ -58,11 +61,20 @@ function relFileable(route: RelRoute | null): BrainFileable {
   const cannot: BrainFileable["cannot"] = [
     { what: "any change to a facility", why: FACILITY_HANDOFF },
   ];
+  /* THE TWO CREATE GAPS ARE THE COVENANT AND VALUATION ROUTES', NOT THE ROOM'S.
+     They say that the route the desk is answering for cannot author, which is
+     true of a review and false of the intake: the intake route exists precisely
+     to file those two. Naming them on an intake line would have the desk refuse
+     the thing the banker is standing in the middle of doing. */
   if (route === "covenant" || route === null) {
     cannot.push({ what: CREATE_GAPS.covenant.what, why: CREATE_GAPS.covenant.line });
   }
   if (route === "valuation" || route === null) {
     cannot.push({ what: CREATE_GAPS.collateral.what, why: CREATE_GAPS.collateral.line });
+  }
+  if (route === "intake") {
+    cannot.push({ what: "a pledge, a lien or an advance rate", why: NO_PLEDGE_NO_LIEN });
+    cannot.push({ what: "a threshold nobody gave you", why: "The threshold comes from the approved credit agreement. Propose what this relationship already tests; never set one." });
   }
   /* THE OVERRIDE IS OFF THIS LIST. It was on it, on the reasoning that the
      input's wire name had never been observed; it is deployed and tested, so

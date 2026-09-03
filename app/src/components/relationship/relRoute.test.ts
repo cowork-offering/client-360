@@ -53,9 +53,19 @@ function due(days: number, type = "Debt Service Coverage", id = "cov-1"): Covena
   };
 }
 
-describe("the five routes", () => {
-  it("offers exactly five, in the governance calendar's order", () => {
-    expect(REL_ROUTE_CHIPS.map((c) => c.route)).toEqual(["annual", "covenant", "valuation", "rating", "service"]);
+describe("the six routes", () => {
+  /* THE FIVE REVIEWS IN THE GOVERNANCE CALENDAR'S ORDER, then the one that
+     AUTHORS. The intake is not a review and sits last for that reason: a banker
+     scanning for a review meets the five first. */
+  it("offers exactly six, the five reviews first and the intake last", () => {
+    expect(REL_ROUTE_CHIPS.map((c) => c.route)).toEqual([
+      "annual",
+      "covenant",
+      "valuation",
+      "rating",
+      "service",
+      "intake",
+    ]);
   });
 
   it("names each route in banker grammar", () => {
@@ -210,6 +220,17 @@ describe("facility work", () => {
     // facility words.
     expect(asksForFacilityWork("add a covenant on the relationship")).toBe(false);
     expect(asksForFacilityWork("create a new collateral asset")).toBe(false);
+  });
+
+  /* THE INTAKE DRIVE CAUGHT THIS, 2026-09-03. A covenant note citing the paper
+     the terms are written on is not a request to amend a facility, and the
+     handoff was eating the note. */
+  it("reads the agreement's own NAME as a document, not as an amendment", () => {
+    expect(asksForFacilityWork("from the amended and restated credit agreement")).toBe(false);
+    expect(asksForFacilityWork("the facility as amended in June")).toBe(false);
+    // A line that asks for an amendment AND cites the agreement still hands off.
+    expect(asksForFacilityWork("amend the equipment loan, see the amended and restated agreement")).toBe(true);
+    expect(asksForFacilityWork("amend the covenant on the equipment loan")).toBe(true);
   });
 
   it("hands off in one professional line that names where the work lives", () => {

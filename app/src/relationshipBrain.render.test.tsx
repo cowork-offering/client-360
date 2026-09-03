@@ -353,7 +353,7 @@ describe("with no bridge the room is exactly the room that shipped", () => {
     await type(room, "the client called about their plans for next quarter");
 
     expect(bound).toHaveLength(0);
-    expect(room.textContent).toMatch(/Pick one above, or name which of the five this is/);
+    expect(room.textContent).toMatch(/Pick one above, or name which of the six this is/);
   });
 
   it("still answers a read from the book", async () => {

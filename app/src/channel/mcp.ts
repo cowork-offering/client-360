@@ -154,6 +154,13 @@ export const TOOLS = {
   // for Approval run (LV06), which the plan's warnings state.
   stageLoanModification: "stage_loan_modification",
   executeLoanModification: "execute_loan_modification",
+  /* RELATIONSHIP INTAKE (2026-09-03). The pair that authors on the relationship:
+     a covenant with an account junction and no loan junction, and a collateral
+     asset with its ownership junction and no pledge. Built to the frozen
+     contract; the connector publishes it when the definition deploys, and until
+     it does the room reports the tool as unavailable rather than pretending. */
+  stageRelationshipIntake: "stage_relationship_intake",
+  executeRelationshipIntake: "execute_relationship_intake",
   // Renewal STAGES only. There is no execute_renewal: the clone's collateral
   // aggregate has never been re-probed, so no execute tool was built.
   stageRenewal: "stage_renewal",

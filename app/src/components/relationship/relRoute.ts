@@ -30,7 +30,7 @@ import { classifyCovenant } from "../../domain/covenantStatus";
    on either would be a suggestion the data never made.
    ============================================================================= */
 
-export type RelRoute = "annual" | "covenant" | "valuation" | "rating" | "service";
+export type RelRoute = "annual" | "covenant" | "valuation" | "rating" | "service" | "intake";
 
 /** The neutral form, when the relationship gives the room nothing to lead on.
  *  It names the register the room is in rather than listing five nouns: the
@@ -58,6 +58,11 @@ export const REL_ROUTE_CHIPS: readonly RelRouteChip[] = [
   { label: "Collateral valuation", route: "valuation" },
   { label: "Risk-rating review", route: "rating" },
   { label: "Service request", route: "service" },
+  /* THE SIXTH IS NOT A REVIEW AND IT SITS LAST FOR THAT REASON. The five above
+     act on what the org already holds; this one puts a covenant or an asset onto
+     the relationship. A banker scanning the chips for a review should meet the
+     five first, and the one that authors after them. */
+  { label: "Add a covenant or an asset", route: "intake" },
 ];
 
 /** The room's own word for a route, for the sentence that refuses to switch and
@@ -68,6 +73,7 @@ export const REL_ROUTE_WORD: Record<RelRoute, string> = {
   valuation: "collateral valuation",
   rating: "risk-rating review",
   service: "service request",
+  intake: "relationship intake",
 };
 
 /* ------------------------------------------------------------ smart opening */
@@ -192,6 +198,28 @@ const VALUATION =
   /\b(valuation|revalue|re-?value|appraisal|appraise)\b|\bcollateral\s+(value|review)\b|\bvalue\s+(the\s+|these\s+|this\s+)?(collateral|assets?|security)\b/i;
 /** "risk rating", "re-rate", "downgrade", "upgrade the grade". */
 const RATING = /\b(risk[-\s]?rating|re-?rate|re-?rating|downgrade|upgrade|regrade)\b|\brating\s+review\b/i;
+/**
+ * A LINE THAT PUTS SOMETHING ONTO THE RELATIONSHIP.
+ *
+ * BOTH HALVES ARE REQUIRED: a create verb, and the thing being created. That is
+ * what keeps this off the five reviews. "covenant review" carries no create verb
+ * and "add the certificate to the file" names nothing this room authors, so
+ * neither reaches here.
+ *
+ * IT IS READ FIRST, ahead of every review word, because "add a relationship
+ * covenant" is a create that happens to contain the word covenant and the
+ * covenant review would otherwise take it. A line that names a review EXPLICITLY
+ * ("run the covenant review and add one") still reads as the create it opens
+ * with, which is the same specificity rule the rest of this reader follows.
+ */
+const INTAKE_VERB = /\b(add|adds|adding|create|creates|creating|author|file|register|record|put|set\s+up|new)\b/i;
+const INTAKE_NOUN =
+  /\b(covenants?|tests?|collateral|assets?|security|equipment|inventory|receivables?|property|real\s*estate|building|vehicle|machinery)\b/i;
+/** Words that make a create line facility work rather than relationship intake.
+ *  A pledge, a lien and a facility are the facility room's, and the handoff that
+ *  already exists says so. */
+const INTAKE_NOT_HERE = /\b(pledge\w*|lien|secure\s+the|facility|loan|line\s+of\s+credit|clone|renewal)\b/i;
+
 /** "service request", "raise a ticket", "the client asked for a payoff quote". */
 const SERVICE = /\b(service\s+request|servicing\s+request|raise\s+a\s+(ticket|request)|payoff|statement\s+request|open\s+a\s+ticket)\b/i;
 
@@ -271,11 +299,20 @@ const FACILITY_WORK =
 export function readRelRouteIntent(text: string): RelRoute | null {
   const line = text.trim();
   if (!line) return null;
+  if (readsAsIntake(line)) return "intake";
   if (SERVICE.test(line)) return "service";
   if (VALUATION.test(line)) return "valuation";
   if (RATING.test(line)) return "rating";
   if (ANNUAL.test(line)) return "annual";
   return COVENANT.test(line) ? "covenant" : null;
+}
+
+/** TRUE where a line asks this room to AUTHOR a covenant or an asset. */
+export function readsAsIntake(text: string): boolean {
+  const line = text.trim();
+  if (!line) return false;
+  if (INTAKE_NOT_HERE.test(line)) return false;
+  return INTAKE_VERB.test(line) && INTAKE_NOUN.test(line);
 }
 
 /**
@@ -315,12 +352,28 @@ function isRouteNaming(text: string): boolean {
   return text.trim().replace(/[?.!,]+$/, "").split(/\s+/).filter(Boolean).length <= ROUTE_NAMING_WORD_CAP;
 }
 
+/**
+ * TWO FIXED PHRASES THAT NAME A DOCUMENT RATHER THAN AN AMENDMENT.
+ *
+ * "the amended and restated credit agreement" and "the facility as amended" are
+ * what a banker calls the paper the terms are written on. `FACILITY_WORK` reads
+ * `amend\w*`, so a covenant note citing the agreement it came from was answered
+ * with the facility handoff and the note was dropped. Caught by the intake drive
+ * on 2026-09-03, on the one step where a banker quotes the agreement by name.
+ *
+ * THE PHRASES ARE REMOVED BEFORE THE TEST, not added to an exception list, so a
+ * line that asks for an amendment AND cites the agreement still hands off:
+ * "amend the equipment loan, see the amended and restated agreement" keeps its
+ * own verb.
+ */
+const DOCUMENT_AMENDMENT = /\bamended\s+and\s+restated\b|\bas\s+amended\b/gi;
+
 /** TRUE where the line asks for FACILITY work this room does not do. The room
  *  answers with the handoff rather than routing it into the nearest review. */
 export function asksForFacilityWork(text: string): boolean {
   const line = text.trim();
   if (!line) return false;
-  return FACILITY_WORK.test(line);
+  return FACILITY_WORK.test(line.replace(DOCUMENT_AMENDMENT, " "));
 }
 
 /** The one-line handoff, in the room's own register. Facility-context creation

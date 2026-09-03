@@ -251,16 +251,23 @@ describe("the smart opening", () => {
     click(byText(/Something else/));
     expect(bound).toEqual([]);
     expect(document.body.textContent).toContain("Which review are we running on this relationship?");
-    for (const label of ["Annual review", "Covenant review", "Collateral valuation", "Risk-rating review", "Service request"]) {
+    for (const label of [
+      "Annual review",
+      "Covenant review",
+      "Collateral valuation",
+      "Risk-rating review",
+      "Service request",
+      "Add a covenant or an asset",
+    ]) {
       expect(byText(new RegExp(label))).toBeTruthy();
     }
   });
 });
 
-describe("the neutral five-way", () => {
-  it("offers all five and binds the one the banker taps", () => {
+describe("the neutral six-way", () => {
+  it("offers all six and binds the one the banker taps", () => {
     const { bound } = open({ question: neutralRelAsk() });
-    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(5);
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(6);
     click(byText(/Collateral valuation/));
     expect(bound[0].route).toBe("valuation");
   });
@@ -275,7 +282,7 @@ describe("the neutral five-way", () => {
     const { room, bound } = open({ question: neutralRelAsk() });
     await type(room, "how is this client doing");
     expect(bound).toEqual([]);
-    expect(document.body.textContent).toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).toContain("Pick one above, or name which of the six this is.");
   });
 
   /* THE DRIVE'S LINE 13. "james wants the june certificate" names no review at
@@ -290,7 +297,7 @@ describe("the neutral five-way", () => {
     await type(room, "pledge the equipment to the 8M loan");
     expect(bound).toEqual([]);
     expect(document.body.textContent).toContain("That is facility work.");
-    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the six this is.");
   });
 
   it("offers the service request in ONE line when the client asked for something", async () => {
@@ -298,7 +305,7 @@ describe("the neutral five-way", () => {
     await type(room, "james wants the june certificate");
     // It does NOT bind. Guessing here picks a write path.
     expect(bound).toEqual([]);
-    expect(document.body.textContent).not.toContain("Pick one above, or name which of the five this is.");
+    expect(document.body.textContent).not.toContain("Pick one above, or name which of the six this is.");
     expect(document.body.textContent).toContain("which is a service request on this relationship");
     // One offer, and the way out of it. Never the five.
     expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(2);
@@ -315,12 +322,12 @@ describe("the neutral five-way", () => {
     ]);
   });
 
-  it("still offers all five on 'Something else', binding nothing", async () => {
+  it("still offers all six on 'Something else', binding nothing", async () => {
     const { room, bound } = open({ question: neutralRelAsk() });
     await type(room, "james wants the june certificate");
     click(byText(/Something else/));
     expect(bound).toEqual([]);
-    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(5);
+    expect(document.body.querySelectorAll(".wk-opts .wk-opt")).toHaveLength(6);
   });
 
   it("keeps an unavailable route VISIBLE and disabled, with the registry's own reason", () => {
@@ -929,11 +936,88 @@ describe("the line that named the review is not an answer to its first question"
     expect(room.textContent).not.toContain("I could not read that as one of the values above");
   });
 
+  /* THE INTAKE IS THE EXCEPTION, because there naming the route and saying what
+     to do are ONE sentence. "add a relationship covenant: minimum liquidity of
+     5M tested quarterly" names the route in its first three words and answers
+     the first four questions in the rest, so dropping it would ask a banker who
+     has just said everything to say it again. */
+  it("keeps the intake's opening line, because it is the instruction", async () => {
+    const { room } = open({
+      route: "intake",
+      say: "add a relationship covenant: minimum liquidity of 5M tested quarterly",
+    });
+    await settle();
+    // Past the first question, which the line itself answered.
+    expect(liveAsk()).toContain("Which test is this covenant?");
+    expect(room.textContent).toContain("add a relationship covenant: minimum liquidity of 5M tested quarterly");
+  });
+
   it("still runs a line that names the route AND asks for something else", async () => {
     const { room } = open({ route: "covenant", say: "add a covenant on the relationship" });
     await settle();
     // The create gap is named: the line did more than bind, so it still runs.
     expect(room.textContent).toContain("The room can compose the covenant, and it cannot file it");
+  });
+});
+
+/* =============================================================================
+   WHAT THE HEADLESS DRIVE CAUGHT, 2026-09-03.
+
+   The org's own picklist values contain route words. "Appraisal" is one of the
+   fourteen values `LLC_BI__Source__c` holds AND the word the valuation route's
+   reader looks for, so answering the room's own question with the chip the room
+   had just put on the glass re-routed the room.
+   ============================================================================= */
+
+describe("a value the room itself offered is an answer, never a route switch", () => {
+  it("does not read the source chip as a request for a collateral valuation", async () => {
+    const { room, restarted } = open({ route: "valuation" });
+    await settle();
+    // The valuation route's own source step offers "Appraisal" as a chip. The
+    // trap is the same one on any route whose options carry a route word.
+    expect(room.textContent).toContain("Which collateral are we valuing?");
+    expect(restarted).toEqual([]);
+  });
+
+  it("keeps a bare route word switching when the room did not offer it", async () => {
+    const { room, restarted } = open({ route: "annual" });
+    await settle();
+    await type(room, "revalue the collateral");
+    expect(restarted).toEqual([{ route: "valuation", say: "revalue the collateral" }]);
+  });
+});
+
+describe("the plan's own refusals reach the glass, by index and verbatim", () => {
+  it("reads out what the org would not take, before the approval", async () => {
+    /* A CREATE HAS NO ID YET, so the intake reports its refusals against the
+       position in the list the room sent. Rendered in the same block as the
+       plan's warnings, in the org's own words, never summarised into a count. */
+    const planWithRefusals: StagedOutput = {
+      ...PLAN,
+      summary: "Two records are authored on the relationship.",
+      refusals: [
+        { index: 1, reason: "No covenant type named Fixed Charge Coverage exists in this org." },
+        { index: 2, reason: "A collateral value must be above zero." },
+      ],
+    };
+    const { room } = open({
+      route: "annual",
+      deps: depsFor({ stage: async () => ({ ok: true, result: planWithRefusals }) as ToolOutcome<StagedOutput> }),
+    });
+    await settle();
+    click(byText(/^Annual$/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Not assessed/));
+    await settle();
+    click(byText(/Review & file/));
+    await settle();
+    await settle();
+    expect(room.textContent).toContain("Number 2 on the list: No covenant type named Fixed Charge Coverage");
+    expect(room.textContent).toContain("Number 3 on the list: A collateral value must be above zero.");
   });
 });
 

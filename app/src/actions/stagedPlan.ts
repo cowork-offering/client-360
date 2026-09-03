@@ -142,6 +142,16 @@ export interface StagedOutput {
   assessedCount?: number;
   /** Covenants carrying an assessment that cannot be written, one reason each. */
   refusedCount?: number;
+  /**
+   * WHAT THE PLAN WOULD NOT TAKE, BY INDEX, in the org's own words.
+   *
+   * The bulk covenant review reports its refusals per covenant id, because a
+   * covenant already exists and has one. A CREATE has no id yet, so the intake
+   * pair reports its refusals against the position in the list the caller sent:
+   * "the third covenant names a type this org does not hold". The room renders
+   * them beside the plan's own warnings, verbatim.
+   */
+  refusals?: Array<{ index: number; reason: string }>;
   /** Covenants the package aggregates, before any member selection. */
   scopeCount?: number;
   /** Hash over the ordered steps plus resolved field values. Immutable.
