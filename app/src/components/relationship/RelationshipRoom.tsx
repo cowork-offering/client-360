@@ -94,6 +94,8 @@ import {
   useRelationshipRoom,
 } from "./relSession";
 import { newRequestId } from "../../channel/adapter";
+import { ComposerPlus } from "../composer/ComposerPlus";
+import { EMPTY_BOOK } from "../workroom/elicit";
 import "../../styles/workroom.css";
 import "../../styles/relationship.css";
 
@@ -564,6 +566,9 @@ export function RelationshipRoom({
   const [filing, setFiling] = useState(false);
   const [sealed, setSealed] = useState(false);
   const [draft, setDraft] = useState("");
+  /** The composer input, so the plus menu can write into it and land the caret
+   *  on the placeholder it left behind. */
+  const composerRef = useRef<HTMLInputElement | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [lit, setLit] = useState(false);
   /* THE ENTRY CHOREOGRAPHY, IN THIS ROOM'S VOCABULARY (founder, 2026-09-01).
@@ -1819,6 +1824,7 @@ export function RelationshipRoom({
               {/* The composer SLEEPS until the room has read the relationship. */}
               <div className="wk-composer eg-pill">
                 <input
+                  ref={composerRef}
                   className="wk-txt"
                   value={draft}
                   disabled={!awake || phase === "filed"}
@@ -1841,6 +1847,7 @@ export function RelationshipRoom({
                   }}
                   aria-label="Answer the review"
                 />
+                <ComposerPlus room="relationship" members={[]} facilities={[]} book={EMPTY_BOOK} disabled={!awake || phase === "filed"} input={composerRef} onDraft={setDraft} />
                 <button
                   type="button"
                   className="wk-send"
