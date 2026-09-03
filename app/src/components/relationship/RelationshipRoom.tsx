@@ -1988,7 +1988,7 @@ export function RelationshipRoom({
         <div className="wk-scrim" onClick={onClose} role="presentation" />
         <div
           ref={roomRef}
-          className="wk-room eg-glass eg-glass-workroom"
+          className="wk-room rl-room eg-glass eg-glass-workroom"
           role="dialog"
           aria-modal="true"
           aria-label={title}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { askDesk, deskAvailable } from "../channel/deskAsk";
 import { openFacilityRoom } from "./workroom/roomSession";
 import { smartOpeningFor } from "./workroom/route";
 import { openRelationshipRoom } from "./relationship/relSession";
@@ -245,6 +246,38 @@ export function ChatPanelBody() {
     setSendState("sending");
     setFailure(null);
     setLastQuestion(prompt);
+
+    // THE SESSION BRAIN FIRST (founder, 2026-09-03): the desk answers with the
+    // whole relationship in view, page-agnostic, exactly like the rooms. The
+    // gateway path below stays as the fallback where no session is attached.
+    if (account?.accountId && deskAvailable()) {
+      const bundle = resolveBundle(data, account.accountId);
+      if (bundle) {
+        try {
+          const answerText = await askDesk({
+            data,
+            bundle,
+            accountName: account.name ?? "this relationship",
+            question: prompt,
+          });
+          dispatch({
+            type: "PUSH_MESSAGE",
+            message: {
+              id: `${requestId}-answer`,
+              role: "agent",
+              text: answerText,
+              ts: new Date().toISOString(),
+              context: { accountId: account.accountId },
+            },
+          });
+          setStreamedId(`${requestId}-answer`);
+          setSendState("idle");
+          return;
+        } catch {
+          // The door refused or the session is gone; the gateway path answers.
+        }
+      }
+    }
 
     // LIVE PATH — ask the credit copilot through the connector, grounded in the
     // staged bundle, and render the answer in-thread.

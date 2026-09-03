@@ -200,3 +200,12 @@
    ROOM's height and scrolls inside it, so every answer is on the rail and the
    head still states the whole review. A fold on top of a scroller would be two
    answers to one question. */
+
+/* The relationship room's first exchange breathes off the header (founder,
+   2026-09-03: the first bubble sat too close to the pop-up's chrome). The
+   facility room earns its tighter 8px with a history chip in between; this
+   room has none, so the first step takes real air. */
+.wk-room.rl-room .wk-thread > .wk-step:first-child > .wk-msg:first-child,
+.wk-room.rl-room .wk-thread > .wk-step:first-child > .wk-tier:first-child > .wk-msg:first-child {
+  margin-top: 26px;
+}
