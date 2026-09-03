@@ -277,7 +277,7 @@ describe("a question about guarantors is answered with the guarantors", () => {
       graph: {
         ...HARTWELL.graph,
         legalEntities: (HARTWELL.graph?.legalEntities ?? []).filter(
-          (e) => e.borrowerType !== "Borrower" || cniLoanIds.has(e.loanId),
+          (e) => e.borrowerType !== "Borrower" || cniLoanIds.has(e.loanId ?? undefined),
         ),
       },
     };
