@@ -466,7 +466,8 @@ describe("the graph edges reach the borrower (founder, 2026-09-03)", () => {
     const borrower = container!.querySelector("#oBorrower")!;
     expect(borrower).not.toBeNull();
     expect(borrower.querySelector("b")?.textContent).toBe("Hartwell Precision Manufacturing LLC");
-    expect(borrower.textContent).toContain("Borrower · 7 facilities");
+    // The org grew a second package (2026-09-03): nine facilities now, not seven.
+    expect(borrower.textContent).toContain("Borrower · 9 facilities");
   });
 
   it("paints the stroke over MEASURED space, so a straight edge still renders", () => {
@@ -576,10 +577,19 @@ describe("a client email proposes its action (founder: when is the action coming
    `scripts/anchor-snapshot-packages.mjs` derives the anchor from the facilities
    and refuses where it cannot. This pins the result, so a regenerated bundle
    that drops the key fails here rather than in the room.
+
+   HARTWELL IS NOW THE DELIBERATE EXCEPTION (2026-09-03). The org grew a real
+   second package on Hartwell, and `anchor-snapshot-packages.mjs` correctly
+   REFUSES to derive a single anchor where two exist: that refusal is the whole
+   point, and it is the state the greeting's package-ask question exists to
+   handle. Every OTHER borrower still carries exactly one package and one
+   anchor; Hartwell is the one relationship this fixture ships unanchored.
    ============================================================================= */
 
 describe("every relationship in the shipped fixture is anchored on its own package", () => {
-  const borrowers = Object.entries((live as unknown as C360Data).borrowers ?? {});
+  const allBorrowers = Object.entries((live as unknown as C360Data).borrowers ?? {});
+  const HARTWELL_ID = "001bb00001I7FPNAA3";
+  const borrowers = allBorrowers.filter(([id]) => id !== HARTWELL_ID);
 
   it("carries a snapshot productPackageId on all of them", () => {
     expect(borrowers.length).toBeGreaterThan(0);
@@ -598,8 +608,11 @@ describe("every relationship in the shipped fixture is anchored on its own packa
     }
   });
 
-  it("anchors Hartwell on the id the addendum names", () => {
-    const hartwell = borrowers.find(([, b]) => (b.snapshot?.name ?? "").startsWith("Hartwell"))!;
-    expect(hartwell[1].snapshot!.productPackageId).toBe("a5Fbb000000IHFJEA4");
+  it("refuses to anchor Hartwell, which now stages two packages of its own", () => {
+    const hartwell = allBorrowers.find(([, b]) => (b.snapshot?.name ?? "").startsWith("Hartwell"))!;
+    expect(hartwell[1].snapshot?.productPackageId).toBeUndefined();
+    const onFacilities = [...new Set((hartwell[1].exposure?.facilities ?? []).map((f) => f.productPackageId).filter(Boolean))];
+    expect(onFacilities.sort()).toEqual(["a5Fbb000000IHFJEA4", "a5Fbb000000J6BNEA0"].sort());
+    expect(packageRecords(resolveBundle(live as unknown as C360Data, HARTWELL_ID))).toHaveLength(2);
   });
 });
