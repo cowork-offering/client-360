@@ -135,6 +135,14 @@ export function KpiBand() {
               {live.storedAt != null && (
                 <span style={{ color: "var(--ink-faint)" }}> Last good data, {fmtClock(new Date(live.storedAt).toISOString())}.</span>
               )}
+              {/* THE RAW CODE, QUIETLY (founder, 2026-09-03: the banner sat on
+                  screen with no way to tell which layer had failed). The
+                  platform's code and its own message, trimmed, so a screenshot
+                  names the layer without a console. */}
+              <span data-live-code={live.failure.code} style={{ color: "var(--ink-faint)", fontSize: 10.5, marginLeft: 6 }}>
+                {live.failure.code}
+                {live.failure.message ? `: ${live.failure.message.slice(0, 140)}` : ""}
+              </span>
             </span>
           )}
           {live.failure && live.retry && (

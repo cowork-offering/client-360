@@ -274,7 +274,10 @@ export async function runSyncSweep(opts: SweepOptions): Promise<SyncResult> {
       // unreachability claim.
       if ((outcome.e as McpFailure)?.retryable === true) unreachable += 1;
       line.state = "failed";
-      line.detail = (outcome.e as McpFailure)?.fix ?? KEPT;
+      // The platform's code and message ride behind the fix sentence, so a
+      // failed line names its layer (founder, 2026-09-03).
+      const f = outcome.e as McpFailure | undefined;
+      line.detail = f ? `${f.fix} (${f.code}${f.message ? `: ${f.message.slice(0, 140)}` : ""})` : KEPT;
       emit();
       return;
     }
