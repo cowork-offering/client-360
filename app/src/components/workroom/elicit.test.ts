@@ -98,9 +98,11 @@ describe("the book is read off the bundle the room already holds", () => {
     const dsc = book.covenants.find((c) => c.type === "Debt Service Coverage of Borrower")!;
     expect(dsc.threshold).toBe(1.25);
     expect(dsc.frequency).toBe("Quarterly");
-    // An EMPTY attachedLoans list is the org saying the covenant hangs off the
-    // relationship. It is an answer, not a gap.
-    expect(dsc.accountLevel).toBe(true);
+    // The org grew a second package (2026-09-03) and attached COV-000646 to the
+    // new CRE loan, so this is no longer an empty attachedLoans list read as
+    // the covenant hanging off the relationship: it hangs off a loan now, one
+    // outside this room's C&I scope, which is why accountLevel reads false.
+    expect(dsc.accountLevel).toBe(false);
   });
 
   it("carries the assets the deal pledges, deduped, with the facilities they reach", () => {

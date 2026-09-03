@@ -56,9 +56,9 @@ describe("what the room read travels with the line", () => {
     // beside it, which is the only thing that matters here: one test, one unit,
     // in both places.
     expect(by.get("Accounts Receivable")).toMatchObject({ measured: "80%", threshold: "≤ 80%" });
-    expect(by.get("Minimum Liquidity")).toMatchObject({ measured: "$6.80M", threshold: "≥ $5M" });
+    expect(by.get("Minimum Liquidity")).toMatchObject({ measured: "$6.20M", threshold: "≥ $5M" });
     expect(by.get("Debt Service Coverage with and without Distributions")).toMatchObject({
-      measured: "1.22×",
+      measured: "1.31×",
       threshold: "≥ 1.15×",
     });
     // A test the org carries no threshold for says so, and carries no measure.
@@ -86,17 +86,17 @@ describe("what the room read travels with the line", () => {
   });
 
   it("sends ONE row per party per role, never the org's row per loan", () => {
-    /* The org writes the involvement once per loan: the pinned read carries 22
-       rows for 5 parties, 14 of them guaranty rows. Sent raw, the desk answered
-       a guarantor question with "14 guaranty rows are on this package", which is
+    /* The org writes the involvement once per loan: the pinned read carries 26
+       rows for 5 parties, 16 of them guaranty rows. Sent raw, the desk answered
+       a guarantor question with "16 guaranty rows are on this package", which is
        a sentence about nCino's storage shape and not about the credit. */
     const raw = src.bundle!.graph!.legalEntities!;
-    expect(raw.length).toBe(22);
+    expect(raw.length).toBe(26);
     const rows = blocks.involvements!;
     expect(rows.map((r) => [r.name, r.role, r.facilities])).toEqual([
-      ["Hartwell Precision Manufacturing LLC", "Borrower", 6],
+      ["Hartwell Precision Manufacturing LLC", "Borrower", 9],
       ["Hartwell Industrial Holdings LLC", "Guarantor", 6],
-      ["James Hartwell", "Guarantor", 6],
+      ["James Hartwell", "Guarantor", 8],
       ["Elena Hartwell", "Limited Guarantor", 2],
       ["Hartwell Logistics LLC", "Related Entity", 1],
     ]);

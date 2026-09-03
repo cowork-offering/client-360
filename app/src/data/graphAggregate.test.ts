@@ -76,7 +76,7 @@ describe("Hartwell — the org stores every connection twice", () => {
    ONE INVOLVEMENT REPEATED ONCE PER FACILITY.
 
    The shape these three cases were written against: six identical Borrower rows
-   and nothing else. The org read moved on (2026-09-02: 22 rows, five parties,
+   and nothing else. The org read moved on (2026-09-03: 26 rows, five parties,
    four roles), so the SHAPE is proved on a fixture built to be that shape and
    the real book is proved right underneath it.
    -------------------------------------------------------------------------- */
@@ -125,20 +125,20 @@ describe("one involvement repeated once per facility", () => {
   });
 });
 
-describe("Hartwell: 22 org rows, five parties, four roles", () => {
+describe("Hartwell: 26 org rows, five parties, four roles", () => {
   const raw = HARTWELL.graph?.legalEntities ?? [];
   const rows = aggregateInvolvements(raw);
 
   it("starts from the whole book the org actually holds", () => {
-    expect(raw).toHaveLength(22);
+    expect(raw).toHaveLength(26);
     expect(new Set(raw.map((e) => e.accountName)).size).toBe(5);
   });
 
   it("aggregates to one row per party per role, with the facility count", () => {
     expect(rows.map((r) => [r.accountName, r.borrowerType, r.facilityCount])).toEqual([
-      ["Hartwell Precision Manufacturing LLC", "Borrower", 7],
+      ["Hartwell Precision Manufacturing LLC", "Borrower", 9],
       ["Hartwell Industrial Holdings LLC", "Guarantor", 6],
-      ["James Hartwell", "Guarantor", 6],
+      ["James Hartwell", "Guarantor", 8],
       ["Elena Hartwell", "Limited Guarantor", 2],
       ["Hartwell Logistics LLC", "Related Entity", 1],
     ]);
@@ -254,15 +254,15 @@ describe("Hartwell — a guarantor signal repeated once per facility", () => {
   const raw = (HARTWELL.signals?.guarantorSignals ?? []) as Array<Record<string, unknown>>;
   const rows = aggregateGuarantorSignals(raw);
 
-  it("starts from 14 real org rows for 3 guarantors", () => {
-    expect(raw).toHaveLength(14);
+  it("starts from 16 real org rows for 3 guarantors", () => {
+    expect(raw).toHaveLength(16);
     expect(new Set(raw.map((g) => g.guarantorName)).size).toBe(3);
   });
 
   it("aggregates to one row per guarantor, with the facility count", () => {
     expect(rows).toHaveLength(3);
     expect(rows.map((r) => [r.guarantorName, r.facilityCount])).toEqual([
-      ["James Hartwell", 6],
+      ["James Hartwell", 8],
       ["Hartwell Industrial Holdings LLC", 6],
       ["Elena Hartwell", 2],
     ]);
@@ -305,14 +305,14 @@ describe("Hartwell — one edge per party, every one of them onto the borrower",
     expect(g.edges.map((e) => e.name)).not.toContain(HARTWELL_BORROWER);
     // The borrower's own seven-facility involvement is the node's label, not an
     // eighth edge looping back on itself.
-    expect(g.borrowerLabel).toBe("Borrower · 7 facilities");
+    expect(g.borrowerLabel).toBe("Borrower · 9 facilities");
   });
 
   it("draws James Hartwell onto the borrower as an unlimited guarantor", () => {
     const james = g.edges.find((e) => e.name === "James Hartwell")!;
     expect(james).toBeDefined();
     expect(james.roles).toEqual(["Owner", "Guarantor"]);
-    expect(james.label).toBe("Owner · Guarantor · Unlimited · 6 facilities");
+    expect(james.label).toBe("Owner · Guarantor · Unlimited · 8 facilities");
     expect(james.ownershipPercent).toBe(60);
     expect(james.direction).toBe("toBorrower");
   });
@@ -321,7 +321,7 @@ describe("Hartwell — one edge per party, every one of them onto the borrower",
     const named = new Set(
       (HARTWELL.graph?.legalEntities ?? []).map((e) => (e.accountName ?? "").trim()).filter(Boolean),
     );
-    // Five names on 22 rows: the borrower is the target node, the other four
+    // Five names on 26 rows: the borrower is the target node, the other four
     // are edges. Not one of them may end up drawn nowhere.
     expect(named.size).toBe(5);
     for (const n of named) {
@@ -341,7 +341,7 @@ describe("Hartwell — one edge per party, every one of them onto the borrower",
     expect(g.edges.map((e) => [e.name, e.label, e.ownershipPercent])).toEqual([
       ["Hartwell Industrial Holdings LLC", "Parent · Guarantor · Unlimited · 6 facilities", 100],
       ["Hartwell Logistics LLC", "Affiliated Company · Related Entity", null],
-      ["James Hartwell", "Owner · Guarantor · Unlimited · 6 facilities", 60],
+      ["James Hartwell", "Owner · Guarantor · Unlimited · 8 facilities", 60],
       ["Elena Hartwell", "Co-Owner · Limited Guarantor · Limited · 2 facilities", 40],
     ]);
   });
