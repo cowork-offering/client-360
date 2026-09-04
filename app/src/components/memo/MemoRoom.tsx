@@ -3,13 +3,24 @@ import { Portal } from "../Portal";
 import { BrandGlyph } from "../brand";
 import { TypeIcon } from "../workroom/TypeIcon";
 import { finaleAttrs, useFinale, withFinale, FINALE_SWEEP_MS } from "../workroom/finale";
+import { settleAttrs } from "../workroom/settle";
+import { Words } from "../workroom/Words";
 import { renderMemo, renderPlanFor, sectionsFrom, type MemoSection, type RenderPlan } from "../../memo/renderMemo";
 import { applyMemoOverrides, memoDateFrom, usesFromChanges, MEMO_TYPE_FOR, type MemoOverrides } from "../../memo/overrides";
 import { NARRATIVE_SPECS, narrativePrompt, narrativesFromReply, specFor, type NarrativeSpec } from "../../memo/narrative";
 import { attestedCount, fullyAttested, type MemoDraft, type MemoSectionRecord } from "../../memo/store";
+import { reviewerFor, withReviewShell } from "../../memo/reviewShell";
+import {
+  applyEditedSections,
+  attestationFrom,
+  bindReviewBridge,
+  liftReview,
+  type ReviewFrame,
+  type ReviewFrameWindow,
+} from "../../memo/reviewBridge";
 import { NOT_WIRED_LINE, notWired } from "../../memo/publish";
 import type { RoomPublication as MemoPublication } from "../../memo/publishAdapter";
-import type { MemoChange, MemoDossier, MemoNarratives } from "../../memo/types";
+import type { MemoAttestation, MemoChange, MemoDossier, MemoNarratives } from "../../memo/types";
 import { fmtMoney } from "../../data/format";
 import type { MemoGreeting } from "./memoGreeting";
 import type { MemoRequestSource, MemoTrigger } from "./memoSession";
@@ -27,11 +38,15 @@ import "../../styles/memo.css";
    because they are about to write to the org. This one puts the DOCUMENT there,
    because the memo IS the work: the banker reads it while they talk about it.
 
-   THE PANE IS WIDER THAN THE RAIL WAS, and deliberately so (58/42 at desktop).
-   A credit memo is a page of tables and a manifest is a list of chips; the same
-   252px lane would have made the room's own product unreadable. Under 1080px
-   the pane stacks under the conversation rather than shrinking to a column
-   neither surface can use.
+   THE PANE TAKES THE WHOLE RIGHT LANE (66/34 at desktop, founder 2026-09-04:
+   "we do not need the approve / flag chips, we have that inline panel in there
+   anyway; use that space and make the credit memo interface wider"). The room
+   used to hang its own Approve / Flag rail off the frame's edge, which was a
+   second set of controls for a decision the memo already offers under each
+   section; the rail is gone, its 138px went to the document, and the room now
+   LISTENS to the memo's own review shell (`memo/reviewBridge.ts`). Under
+   1080px the pane stacks under the conversation rather than shrinking to a
+   column neither surface can use.
 
    THE RENDERER IS INSTANT AND DETERMINISTIC. `renderMemo(dossier)` produces the
    whole document with no model in the room, from the bundle and the executed
@@ -42,9 +57,11 @@ import "../../styles/memo.css";
    glass came from a system of record, always.
 
    DRAFT UNTIL ATTESTED. The memo carries the plugin's own classification banner
-   from the first frame and the room never removes it. What the room adds is the
-   per-section sign-off and the count above the pane, and the publish door stays
-   shut, with its reason on it, until every section is approved.
+   from the first frame and the room never removes it. The per-section sign-off
+   is the MEMO'S (the plugin's review shell, injected into the frame by
+   `memo/reviewShell.ts`), and what the room adds is the count above the pane
+   and the door under it, which stays shut, with its reason on it, until every
+   section has been reviewed as drafted or reviewed after an edit.
    ============================================================================= */
 
 /* -----------------------------------------------------------------------------
@@ -83,6 +100,16 @@ export interface MemoDeps {
   /** The store, injected so the round-trip is testable against a fake db. */
   save?: (draft: MemoDraft) => Promise<MemoDraft>;
   saveAttestations?: (draft: MemoDraft) => Promise<void>;
+  /**
+   * THE FRAME THE MEMO IS BEING READ IN, where the caller has one.
+   *
+   * jsdom never loads a `srcdoc` frame, so a test that had to reach through
+   * `iframe.contentWindow` could not drive the memo's own review panel at all
+   * and would be left asserting against a mock of it. This is the seam: hand
+   * the room a document with the memo in it and a window the vendored shell
+   * has run against, and the room reads the REAL shell's state.
+   */
+  frame?: ReviewFrame | null;
 }
 
 export interface MemoRoomProps {
@@ -159,13 +186,21 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
   const [narratives, setNarratives] = useState<MemoNarratives>(() => ({}));
   /** Prose still arriving, for the module currently streaming. */
   const [streaming, setStreaming] = useState<MemoNarratives>(() => ({}));
-  /** Per-section sign-off. */
+  /** Per-section sign-off, lifted out of the memo's own review shell. */
   const [sectionState, setSectionState] = useState<Record<string, MemoSectionRecord>>({});
-  /** The banker is writing a note on a flag. */
-  const [flagging, setFlagging] = useState<string | null>(null);
-  const [note, setNote] = useState("");
   /** Reading a stored memo rather than this session's draft. */
   const [readingStored, setReadingStored] = useState(false);
+
+  /* THE MAP AND THE EDITS LIVE IN REFS, NOT IN STATE, and that is the whole
+     reason the pane does not flicker. A `srcdoc` change RELOADS the frame:
+     folding the sign-offs into the rendered html as state would reload the
+     document on every approval, throwing away the reader's place and the
+     shell's own edit in progress. So the map is read at the moment the memo is
+     rebuilt for a reason of its own (a narrative landing, a steered section)
+     and never causes that rebuild. `sectionState` carries the same facts for
+     the count and the door, where a re-render is exactly what is wanted. */
+  const attestation = useRef<MemoAttestation>({});
+  const edits = useRef<Record<string, string>>({});
 
   const overrides: MemoOverrides = useMemo(
     () => ({
@@ -182,11 +217,19 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
     [ctx.generatedAt, ctx.trigger, ctx.user, changes, dossier],
   );
 
+  /** Who the badges name. The view's own user, on the room's only clock. */
+  const reviewer = useMemo(
+    () => reviewerFor(ctx.user, memoDateFrom(ctx.generatedAt), ctx.generatedAt),
+    [ctx.user, ctx.generatedAt],
+  );
+
   /** The dossier the pane is rendering: the room's own, with whatever prose has
-   *  landed folded into it. Never mutated; the renderer sees a new object. */
+   *  landed folded into it, and the sign-offs so far. Never mutated; the
+   *  renderer sees a new object. */
   const liveDossier = useMemo<MemoDossier>(() => {
     const prose = { ...(dossier.canon.narratives ?? {}), ...narratives, ...streaming };
-    return { ...dossier, canon: { ...dossier.canon, narratives: prose } };
+    // The map is read here, not depended on: see the refs above.
+    return { ...dossier, canon: { ...dossier.canon, narratives: prose }, attestation: attestation.current };
   }, [dossier, narratives, streaming]);
 
   const rendered = useMemo(() => renderMemo(liveDossier), [liveDossier]);
@@ -194,8 +237,19 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
   const plan: RenderPlan = useMemo(() => renderPlanFor(dossier), [dossier]);
   const sections = useMemo(() => sectionsFrom(html), [html]);
 
-  /** What the pane shows: this session's memo, or the stored one, read-only. */
-  const paneHtml = readingStored && latest?.html ? latest.html : html;
+  /**
+   * WHAT THE PANE SHOWS: this session's memo, or the stored one.
+   *
+   * Either way it goes in with the plugin's review shell around it and the
+   * sign-offs replayed, so the checklist a banker is looking at survives a
+   * narrative arrival, a steer, and coming back to a memo a week later.
+   */
+  const paneHtml = useMemo(() => {
+    const source = readingStored && latest?.html ? latest.html : html;
+    const map = readingStored && latest ? attestationFrom(latest.sections) : attestation.current;
+    return withReviewShell(source, { reviewer, attestation: map, readOnly: readingStored });
+  }, [html, readingStored, latest, reviewer]);
+
   const paneSections = useMemo(
     () => (readingStored && latest ? latest.sections : sections.map((s) => recordFor(s, sectionState))),
     [readingStored, latest, sections, sectionState],
@@ -281,7 +335,9 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
       renderPlan: plan,
       sections: sections.map((s) => recordFor(s, sectionState)),
       narratives,
-      html,
+      /* THE BANKER'S WORDS OUTRANK THE RENDERER'S. Where a section was edited
+         in the frame, what is stored is the section as the banker left it. */
+      html: applyEditedSections(html, edits.current),
       htmlStored: true,
     }),
     [ctx, plan, sections, sectionState, narratives, html],
@@ -329,26 +385,24 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
 
   /* ------------------------------------------------------- the attestation */
 
-  const attest = useCallback(
-    (id: string, decision: "approved" | "flagged", text?: string) => {
-      const section = sections.find((s) => s.id === id);
-      if (!section) return;
-      setSectionState((prev) => ({
-        ...prev,
-        [id]: {
-          id,
-          title: section.title,
-          status: decision,
-          note: text?.trim() || undefined,
-          by: ctx.user ?? undefined,
-          at: ctx.generatedAt,
-        },
-      }));
-      setFlagging(null);
-      setNote("");
-    },
-    [sections, ctx.user, ctx.generatedAt],
-  );
+  /** The sections the pane is showing, for the lift. A ref so the bridge is
+   *  bound once per document rather than once per token of prose. */
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+
+  /**
+   * THE MEMO SAID SOMETHING; THE ROOM HEARD IT.
+   *
+   * Called once when the frame is bound and again after every approve, edit,
+   * undo and review-all inside it. Everything the room knows about the
+   * sign-off enters here and nowhere else.
+   */
+  const lift = useCallback((frame: ReviewFrame) => {
+    const read = liftReview(frame, sectionsRef.current);
+    attestation.current = read.attestation;
+    edits.current = { ...edits.current, ...read.edits };
+    setSectionState((prev) => (sameRecords(prev, read.records) ? prev : read.records));
+  }, []);
 
   /* WRITING THE ATTESTATION BACK IS BOOKKEEPING, NEVER A GATE. The glass has
      already recorded it; a store that refused the write leaves the room exactly
@@ -409,7 +463,9 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
 
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   useKeepScroll(frameRef, paneHtml);
-  const offsets = useSectionOffsets(frameRef, paneHtml, paneSections.length);
+  /* A STORED MEMO IS NOT BOUND. Its sign-offs belong to the session that took
+     them, and lifting them would fold another memo's map into this one's. */
+  useReviewBridge(frameRef, paneHtml, deps?.frame ?? null, lift, !readingStored);
 
   const publishReason = !attested
     ? `${progress.total - progress.done} section${progress.total - progress.done === 1 ? "" : "s"} still to attest`
@@ -443,16 +499,31 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
           <div className="wk-body mm-body">
             <div className="wk-col-l mm-col-l">
               <section className="wk-thread" data-finale={finaleState === "still" ? "still" : undefined}>
+                {/* THE SAME EXCHANGE THE OTHER TWO ROOMS RENDER (founder,
+                    2026-09-04: the memo room's conversation was bare text).
+                    `settleAttrs` for the wrapper, `.wk-msg.wk-agent` /
+                    `.wk-msg.wk-banker` for the side and the identity chip that
+                    hangs above it on hover, `.wk-bub` for the bubble, and
+                    `<Words>` for the word-by-word speech. Not one class of its
+                    own: three rooms, one grammar. */}
                 {items.map((item, i) => {
                   const inWave = finaleState === "off" ? null : finaleAttrs(i, finaleState);
+                  const attrs = settleAttrs("on");
                   return (
                     <div
                       key={item.id}
                       data-ex-id={item.id}
-                      {...withFinale({ className: `mm-ex ${item.settled ? "mm-settled" : ""}`.trim() }, inWave)}
+                      {...withFinale(
+                        { ...attrs, className: `${attrs.className}${item.settled ? " mm-settled" : ""}` },
+                        inWave,
+                      )}
                     >
-                      <div className={`wk-msg ${item.who === "banker" ? "wk-you" : ""}`}>
-                        <span className="wk-bub">{item.text}</span>
+                      <div className="wk-ex-in">
+                        <div className={`wk-msg wk-${item.who}`} data-who={item.who === "banker" ? "You" : "Agent"}>
+                          <div className="wk-bub">
+                            {item.who === "agent" ? <Words text={item.text} /> : item.text}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -462,7 +533,7 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
                     memo has been drafted: a chip that repeats work already on
                     the glass is the fourth chip the rooms' rule 30 bans. */}
                 {!drafted && !published && (
-                  <div className="mm-chips">
+                  <div className="wk-opts mm-chips">
                     {greeting.chips.map((chip) => (
                       <button
                         type="button"
@@ -544,8 +615,11 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
               data-finale={finaleState === "off" ? undefined : finaleState}
             >
               <div className="mm-pane-h">
+                {/* ONE QUIET LINE, FROM THE SHELL'S OWN COUNTS. The decision
+                    is under each section, in the memo; this is the room saying
+                    how far the work has got. */}
                 <span className="mm-prog" data-progress={`${progress.done}/${progress.total}`}>
-                  {progress.done} of {progress.total} sections attested
+                  {progress.done} of {progress.total} sections reviewed
                 </span>
                 <span className="mm-plan">{planSentence(plan)}</span>
               </div>
@@ -571,72 +645,13 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
                   className="mm-doc"
                   title="Credit memo"
                   /* SAME ORIGIN, ON PURPOSE. The memo's own stylesheet has to
-                     apply and the room has to be able to measure its section
-                     anchors; a sandboxed frame would give it neither. Nothing
-                     in the document is executable: the renderer emits tables
-                     and inline styles, and the shell's own scripts are the
-                     plugin's section controls. */
+                     apply and the room has to be able to read the review
+                     shell's state out of the frame; a sandboxed frame would
+                     give it neither. What executes in there is the plugin's
+                     own: the section controls, the progress pill, and the
+                     review shell this room listens to. */
                   srcDoc={paneHtml}
                 />
-                <div className="mm-edge" aria-label="Attestation">
-                  {paneSections.map((section, i) => {
-                    const top = offsets[section.id];
-                    const state = section.status;
-                    return (
-                      <div
-                        className={`mm-ctl mm-${state}`}
-                        key={section.id}
-                        data-section={section.id}
-                        style={top != null ? ({ position: "absolute", top: `${top}px` } as CSSProperties) : undefined}
-                      >
-                        <span className="mm-ctl-n">{section.title}</span>
-                        {readingStored ? (
-                          <span className="mm-ctl-s">{state}</span>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="mm-ok"
-                              aria-label={`Approve ${section.title}`}
-                              onClick={() => attest(section.id, "approved")}
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              className="mm-flag"
-                              aria-label={`Flag ${section.title}`}
-                              onClick={() => setFlagging(section.id)}
-                            >
-                              Flag
-                            </button>
-                          </>
-                        )}
-                        {flagging === section.id && (
-                          <div className="mm-note">
-                            <input
-                              className="mm-note-i"
-                              value={note}
-                              autoFocus
-                              placeholder="What is wrong with it?"
-                              aria-label={`Note on ${section.title}`}
-                              onChange={(e) => setNote(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key !== "Enter") return;
-                                e.preventDefault();
-                                attest(section.id, "flagged", note);
-                              }}
-                            />
-                            <button type="button" className="mm-note-b" onClick={() => attest(section.id, "flagged", note)}>
-                              Flag it
-                            </button>
-                          </div>
-                        )}
-                        <i className="mm-dot" aria-hidden="true" data-at={i} />
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
 
               <div className="mm-foot">
@@ -728,6 +743,19 @@ function recordFor(section: MemoSection, state: Record<string, MemoSectionRecord
   return state[section.id] ?? { id: section.id, title: section.title, status: "draft" };
 }
 
+/** TRUE where a lift said nothing new. The bridge reads the shell on every
+ *  bind as well as on every change, so most reads say exactly what the room
+ *  already knew; setting state on those would re-render the room for nothing. */
+function sameRecords(a: Record<string, MemoSectionRecord>, b: Record<string, MemoSectionRecord>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((k) => {
+    const x = a[k];
+    const y = b[k];
+    return !!y && x.status === y.status && x.note === y.note && x.by === y.by && x.at === y.at;
+  });
+}
+
 /** The render plan, in the one line above the pane. */
 function planSentence(plan: RenderPlan): string {
   return `${plan.modules.length} module${plan.modules.length === 1 ? "" : "s"} on`;
@@ -774,57 +802,49 @@ function usePrefersReducedMotion(): boolean {
 }
 
 /**
- * WHERE EACH SECTION SITS INSIDE THE FRAME.
+ * LISTEN TO THE MEMO'S OWN REVIEW SHELL.
  *
- * The edge controls are ALIGNED TO THE SECTION ANCHORS, which means measuring
- * the document the renderer produced: `sectionsFrom()` gives the ids, and the
- * frame gives each id an offset. The frame is same-origin (srcdoc), so this is
- * a read of its own DOM and never a message across a boundary.
+ * The frame is same-origin (srcdoc), so this is a read of its own window and
+ * never a message across a boundary. It is re-bound on every new document,
+ * because a `srcdoc` change is a new window with a new shell in it.
  *
- * AN UNMEASURED PANE IS NOT A BROKEN ONE. jsdom does not load a srcdoc frame,
- * and a browser has not laid one out on the first commit either; both come back
- * empty and the controls fall into natural document order down the edge, which
- * is a usable rail and not a pile at the top.
+ * `injected` is the seam. Where the caller hands the room a frame, that frame
+ * IS the frame: it is how the suite drives the vendored shell's own buttons in
+ * jsdom, which never loads a srcdoc document at all.
  */
-function useSectionOffsets(
+function useReviewBridge(
   frame: React.RefObject<HTMLIFrameElement | null>,
   html: string,
-  count: number,
-): Record<string, number> {
-  const [offsets, setOffsets] = useState<Record<string, number>>({});
-
+  injected: ReviewFrame | null,
+  onChange: (frame: ReviewFrame) => void,
+  active: boolean,
+): void {
   useEffect(() => {
+    if (!active) return;
+    if (injected) return bindReviewBridge(injected, onChange);
+
     const el = frame.current;
     if (!el) return;
-    let alive = true;
+    let unbind: (() => void) | null = null;
 
-    const measure = () => {
-      if (!alive) return;
+    const bind = () => {
+      unbind?.();
+      unbind = null;
       const doc = el.contentDocument;
-      if (!doc) return;
-      const nodes = doc.querySelectorAll<HTMLElement>("section[data-mod]");
-      if (!nodes.length) return;
-      const scrolled = doc.documentElement?.scrollTop ?? doc.body?.scrollTop ?? 0;
-      const next: Record<string, number> = {};
-      nodes.forEach((node) => {
-        const id = node.getAttribute("data-mod");
-        if (id) next[id] = Math.max(0, node.offsetTop - scrolled);
-      });
-      setOffsets(next);
+      const win = el.contentWindow as unknown as ReviewFrameWindow | null;
+      // A frame that has not laid its document down yet is not an error: the
+      // `load` below is the same call again, a moment later.
+      if (!doc || !win) return;
+      unbind = bindReviewBridge({ doc, win }, onChange);
     };
 
-    measure();
-    el.addEventListener("load", measure);
-    const doc = el.contentDocument;
-    doc?.addEventListener("scroll", measure, { passive: true });
+    bind();
+    el.addEventListener("load", bind);
     return () => {
-      alive = false;
-      el.removeEventListener("load", measure);
-      doc?.removeEventListener("scroll", measure);
+      el.removeEventListener("load", bind);
+      unbind?.();
     };
-  }, [frame, html, count]);
-
-  return offsets;
+  }, [frame, html, injected, onChange, active]);
 }
 
 /**
