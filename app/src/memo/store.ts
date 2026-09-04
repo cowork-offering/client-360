@@ -30,8 +30,17 @@ import { db } from "../channel/dbDoor";
 import type { MemoNarratives } from "./types";
 import type { RenderPlan } from "./renderMemo";
 
-/** Where one section stands. `draft` until a banker has looked at it. */
-export type MemoSectionStatus = "draft" | "approved" | "flagged";
+/**
+ * Where one section stands. `draft` until a banker has looked at it.
+ *
+ * `approved` and `edited` are the memo review shell's own two words for a
+ * section that has been signed off: reviewed as drafted, or reviewed after
+ * the banker rewrote its narrative. Both are carried rather than flattened,
+ * because "the AI wrote this and I agreed" and "I wrote this" are not the same
+ * sentence in an SR 11-7 record. `flagged` is the room's retired edge control
+ * and survives only so a memo stored before 2026-09-04 still reads back.
+ */
+export type MemoSectionStatus = "draft" | "approved" | "edited" | "flagged";
 
 /** One attestable section of the memo: a manifest module, and its sign-off. */
 export interface MemoSectionRecord {
@@ -71,14 +80,17 @@ export interface MemoDraft {
 const versionsPath = (packageId: string) => `memos/${packageId}/versions`;
 const memoPath = (packageId: string, memoId: string) => `${versionsPath(packageId)}/${memoId}`;
 
+/** Reviewed as drafted, or reviewed after an edit. Both are a sign-off. */
+const reviewed = (s: MemoSectionRecord): boolean => s.status === "approved" || s.status === "edited";
+
 /** How many sections are attested, and out of how many. The progress line. */
 export function attestedCount(sections: readonly MemoSectionRecord[]): { done: number; total: number } {
-  return { done: sections.filter((s) => s.status === "approved").length, total: sections.length };
+  return { done: sections.filter(reviewed).length, total: sections.length };
 }
 
-/** Every section approved, and there is at least one. The publish gate. */
+/** Every section reviewed, and there is at least one. The publish gate. */
 export const fullyAttested = (sections: readonly MemoSectionRecord[]): boolean =>
-  sections.length > 0 && sections.every((s) => s.status === "approved");
+  sections.length > 0 && sections.every(reviewed);
 
 /**
  * WRITE THE DRAFT, WITH ITS HTML IF THE STORE WILL TAKE IT.

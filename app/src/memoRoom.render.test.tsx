@@ -18,6 +18,7 @@ import { renderPlanFor, sectionsFrom, renderMemo } from "./memo/renderMemo";
 import { applyMemoOverrides, memoDateFrom, MEMO_TYPE_FOR } from "./memo/overrides";
 import { NOT_WIRED_LINE } from "./memo/publish";
 import type { MemoDraft } from "./memo/store";
+import type { ReviewFrame, ReviewFrameWindow } from "./memo/reviewBridge";
 import type { FiledLine } from "./components/workroom/FiledList";
 import type { ActionHistoryRow, ActionStep, BorrowerBundle, C360Data } from "./data/contract";
 import type { MemoChange } from "./memo/types";
@@ -28,11 +29,17 @@ import type { MemoChange } from "./memo/types";
    What is proved here is the ROOM and its two doors: that the facility room
    offers the memo without pretending it is a fourth route, that a finale hands
    its ledger over, that the greeting states what the ORG says was executed and
-   says so honestly when the org says nothing, that the reading pane holds the
-   memo the renderer produced with its DRAFT banner and one attestation control
-   per section, that the publish door stays shut with its reason on it until
-   every section is approved, and that what comes back from the writeback seam
-   is the truth about this build.
+   says so honestly when the org says nothing, that the conversation speaks in
+   the same bubbles the other two rooms speak in, that the reading pane holds
+   the memo the renderer produced with its DRAFT banner and the memo's OWN
+   review panel under every section, that the publish door stays shut with its
+   reason on it until every section has been reviewed, and that what comes back
+   from the writeback seam is the truth about this build.
+
+   THE SIGN-OFF IS DRIVEN THROUGH THE MEMO'S OWN BUTTONS. jsdom never loads a
+   `srcdoc` frame, so `attach()` parses the document the pane is showing, runs
+   the review shell the room injected into it, and hands the result back to the
+   room as `deps.frame`. What the assertions click is `review-shell.js`.
 
    The renderer is proved in memo/parity.test.ts, the substitution seam in
    memo/overrides.test.ts, the change list and the greeting's sentences in
@@ -150,6 +157,9 @@ interface Mounted {
   prompts: string[];
   published: MemoDraft[];
   saved: MemoDraft[];
+  /** Open the memo the pane is showing as the frame it is being read in, run
+   *  its own review shell against it, and give the room the seam. */
+  attach: () => ReviewFrame;
 }
 
 function openRoom(
@@ -203,20 +213,42 @@ function openRoom(
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => {
-    root!.render(
-      <MemoRoom
-        ctx={ctxFor(args.ctx)}
-        dossier={dossier}
-        changes={changes}
-        greeting={greeting}
-        latest={args.latest ?? null}
-        deps={deps}
-        onClose={() => {}}
-      />,
-    );
-  });
-  return { room: document.querySelector<HTMLElement>(".mm-room")!, prompts, published, saved };
+  const paint = (extra: Partial<MemoDeps> = {}) => {
+    act(() => {
+      root!.render(
+        <MemoRoom
+          ctx={ctxFor(args.ctx)}
+          dossier={dossier}
+          changes={changes}
+          greeting={greeting}
+          latest={args.latest ?? null}
+          deps={{ ...deps, ...extra }}
+          onClose={() => {}}
+        />,
+      );
+    });
+  };
+  paint();
+
+  /* THE FRAME, AS A BROWSER WOULD HAVE IT. Only the two scripts the room
+     injected are executed: the reviewer assignment and the review shell, in
+     the order the document puts them in. The memo's own progress pill is left
+     alone because jsdom has no IntersectionObserver, and the bridge's
+     behaviour with a pill already on the hook is proved in
+     `memo/reviewBridge.test.ts`. */
+  const attach = (): ReviewFrame => {
+    const srcdoc = document.querySelector<HTMLIFrameElement>(".mm-doc")!.getAttribute("srcdoc")!;
+    const doc = new DOMParser().parseFromString(srcdoc, "text/html");
+    const win: ReviewFrameWindow = {};
+    for (const script of [...doc.querySelectorAll("script")].slice(-2)) {
+      new Function("window", "document", script.textContent ?? "")(win, doc);
+    }
+    const frame: ReviewFrame = { doc, win };
+    paint({ frame });
+    return frame;
+  };
+
+  return { room: document.querySelector<HTMLElement>(".mm-room")!, prompts, published, saved, attach };
 }
 
 /** Type into a controlled input the way React sees it: the native value setter,
@@ -239,6 +271,15 @@ async function type(room: HTMLElement, selector: string, value: string, enter = 
 const click = async (el: Element | null) => {
   await act(async () => {
     (el as HTMLButtonElement).click();
+    await Promise.resolve();
+  });
+};
+
+/** Press one of the memo's own review controls, inside the frame. The bridge
+ *  reads the shell one microtask later, which is still inside the click. */
+const press = async (root: ParentNode, selector: string) => {
+  await act(async () => {
+    root.querySelector<HTMLElement>(selector)!.click();
     await Promise.resolve();
   });
 };
@@ -400,6 +441,54 @@ describe("the greeting on the glass", () => {
   });
 });
 
+/* ======================================================= THE CONVERSATION */
+
+describe("the conversation", () => {
+  it("speaks in the rooms' own bubbles, with the identity chip above each one", async () => {
+    const { room } = openRoom({ rows: [trailRow(STEPS)] });
+    const bubbles = () => [...room.querySelectorAll<HTMLElement>(".wk-thread .wk-msg")];
+
+    /* THE SAME GRAMMAR AS THE OTHER TWO ROOMS (founder, 2026-09-04). Not one
+       class of this room's own: the wrapper, the bubble, the side and the
+       identity chip are all the shared primitives. */
+    expect(bubbles().length).toBeGreaterThanOrEqual(2);
+    expect(bubbles().every((b) => !!b.querySelector(".wk-bub"))).toBe(true);
+    expect(bubbles().every((b) => b.className.includes("wk-agent") || b.className.includes("wk-banker"))).toBe(true);
+
+    const greeting = bubbles()[0];
+    expect(greeting.className).toContain("wk-agent");
+    // The chip is `content: attr(data-who)` in workroom.css, so the attribute
+    // IS the chip: no attribute, no chip, which is what this room had.
+    expect(greeting.dataset.who).toBe("Agent");
+    // And the agent speaks word by word rather than pasting (rule 65).
+    expect(greeting.querySelectorAll(".wk-bub .wk-w").length).toBeGreaterThan(3);
+    expect(text(room.querySelector(".wk-thread"))).toContain("Since the last memo on");
+
+    // Every exchange is the shared settle wrapper, so the collapse is theirs too.
+    expect(room.querySelector('.wk-thread > .wk-ex[data-settle-state="on"] > .wk-ex-in .wk-msg')).toBeTruthy();
+    // The chips are the shared option row, not a fourth kind of control.
+    expect(room.querySelector(".wk-opts.mm-chips .wk-opt.mm-chip")).toBeTruthy();
+
+    await click([...room.querySelectorAll(".mm-chip")].find((c) => text(c) === "Draft")!);
+
+    // THE BANKER HANGS ON THE OTHER SIDE, with their own chip on it.
+    const banker = bubbles().find((b) => b.className.includes("wk-banker"))!;
+    expect(banker.dataset.who).toBe("You");
+    expect(text(banker)).toBe("Draft it.");
+    expect(banker.querySelector(".wk-bub")).toBeTruthy();
+
+    // AND THE REMARK UNDER EACH ARRIVING SECTION IS THE SAME BUBBLE.
+    const remark = bubbles().filter((b) => text(b).endsWith("written."));
+    expect(remark.length).toBeGreaterThan(0);
+    expect(remark[0].className).toContain("wk-agent");
+    expect(remark[0].dataset.who).toBe("Agent");
+    expect(remark[0].querySelectorAll(".wk-bub .wk-w").length).toBeGreaterThan(1);
+
+    // The settled exchanges stay mounted, dimmed, one class from coming back.
+    expect(room.querySelectorAll(".wk-thread > .wk-ex.mm-settled").length).toBeGreaterThan(0);
+  });
+});
+
 /* ======================================================== THE READING PANE */
 
 describe("the reading pane", () => {
@@ -415,7 +504,7 @@ describe("the reading pane", () => {
     expect(html).toContain("Fabian Goetzens");
   });
 
-  it("carries one edge control per section the renderer anchored", () => {
+  it("carries the memo's OWN review panel per section, and no rail of its own", () => {
     const dossier = buildMemoDossier({ bundle, changes: [], instanceUrl: data.meta?.instanceUrl ?? null });
     const expected = sectionsFrom(
       applyMemoOverrides(renderMemo(dossier).html, {
@@ -425,18 +514,29 @@ describe("the reading pane", () => {
       }),
     );
 
-    const { room } = openRoom();
-    const controls = [...room.querySelectorAll<HTMLElement>(".mm-ctl")];
+    const { room, attach } = openRoom();
+    /* THE ROOM'S OWN APPROVE / FLAG RAIL IS GONE (founder, 2026-09-04). The
+       reading pane is the whole right lane and the decision lives under the
+       section, in the document, where the banker is reading. */
+    expect(room.querySelector(".mm-edge")).toBeNull();
+    expect(room.querySelector(".mm-ctl")).toBeNull();
+
+    const frame = attach();
+    const controls = [...frame.doc.querySelectorAll(".rv-ctrl")];
     expect(controls).toHaveLength(expected.length);
-    expect(controls.map((c) => c.dataset.section)).toEqual(expected.map((s) => s.id));
-    // Every one of them offers the two decisions, and nothing else.
-    expect(controls.every((c) => !!c.querySelector(".mm-ok") && !!c.querySelector(".mm-flag"))).toBe(true);
+    expect(controls.every((c) => !!c.querySelector(".rv-approve"))).toBe(true);
+    // One sticky bar, naming the banker, with review-all on it and the CLI's
+    // hand-off (Export sign-offs) taken off the glass.
+    expect(text(frame.doc.querySelector(".rv-bar .rv-id"))).toContain("Fabian Goetzens");
+    expect(frame.doc.querySelector(".rv-all")).toBeTruthy();
+    const srcdoc = room.querySelector<HTMLIFrameElement>(".mm-doc")!.getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toContain(".rv-bar .rv-export{display:none!important}");
   });
 
-  it("states the attestation progress and the render plan, and keeps suppressed quiet", () => {
-    const { room } = openRoom({ rows: [trailRow(STEPS)] });
-    const total = room.querySelectorAll(".mm-ctl").length;
-    expect(text(room.querySelector(".mm-prog"))).toBe(`0 of ${total} sections attested`);
+  it("states the review progress and the render plan, and keeps suppressed quiet", () => {
+    const { room, attach } = openRoom({ rows: [trailRow(STEPS)] });
+    const total = attach().doc.querySelectorAll(".rv-ctrl").length;
+    expect(text(room.querySelector(".mm-prog"))).toBe(`0 of ${total} sections reviewed`);
     expect(text(room.querySelector(".mm-plan"))).toMatch(/^\d+ modules on$/);
 
     // SUPPRESSED IS NOT A GAP: one line, collapsed, with the reasons inside it.
@@ -450,41 +550,62 @@ describe("the reading pane", () => {
 /* ======================================================== THE ATTESTATION */
 
 describe("the publish door", () => {
-  it("is shut, with its reason on it, until every section is approved", async () => {
-    const { room } = openRoom({ rows: [trailRow(STEPS)] });
-    const controls = [...room.querySelectorAll<HTMLElement>(".mm-ctl")];
+  it("is shut, with its reason on it, until the memo says every section is reviewed", async () => {
+    const { room, attach } = openRoom({ rows: [trailRow(STEPS)] });
+    const frame = attach();
+    const total = frame.doc.querySelectorAll(".rv-ctrl").length;
 
     /* THE DOOR IS NOT THERE UNTIL THE WORK IS DONE (founder, 2026-09-04): no
-       greyed button, one quiet line of where the attestation stands. */
+       greyed button, one quiet line of where the review stands. */
     expect(room.querySelector(".mm-publish")).toBeNull();
-    expect(text(room.querySelector(".mm-why"))).toBe(`${controls.length} sections still to attest`);
+    expect(text(room.querySelector(".mm-why"))).toBe(`${total} sections still to attest`);
 
-    // One approval is not enough, and the count says how far there is to go.
-    await click(controls[0].querySelector(".mm-ok"));
+    // One sign-off, taken inside the memo, and the room hears it.
+    await press(frame.doc, ".rv-approve");
     expect(room.querySelector(".mm-publish")).toBeNull();
-    expect(text(room.querySelector(".mm-prog"))).toBe(`1 of ${controls.length} sections attested`);
+    expect(text(room.querySelector(".mm-prog"))).toBe(`1 of ${total} sections reviewed`);
 
-    for (const control of [...room.querySelectorAll<HTMLElement>(".mm-ctl")].slice(1)) {
-      await click(control.querySelector(".mm-ok"));
-    }
+    await press(frame.doc, ".rv-all");
 
     expect(room.querySelector<HTMLButtonElement>(".mm-publish")!.disabled).toBe(false);
     expect(room.querySelector(".mm-why")).toBeNull();
-    expect(text(room.querySelector(".mm-prog"))).toBe(`${controls.length} of ${controls.length} sections attested`);
+    expect(text(room.querySelector(".mm-prog"))).toBe(`${total} of ${total} sections reviewed`);
   });
 
-  it("a flag is not an approval, and it keeps the banker's own words", async () => {
-    const { room } = openRoom();
-    const control = room.querySelector<HTMLElement>(".mm-ctl")!;
-    await click(control.querySelector(".mm-flag"));
+  it("shuts again when the banker undoes one, because the shell is the truth", async () => {
+    const { room, attach } = openRoom({ rows: [trailRow(STEPS)] });
+    const frame = attach();
+    await press(frame.doc, ".rv-all");
+    expect(room.querySelector(".mm-publish")).toBeTruthy();
 
-    await type(room, ".mm-note-i", "the Kokomo appraisal is stale", false);
-    await click(room.querySelector(".mm-note-b"));
-
-    const flagged = room.querySelector<HTMLElement>(".mm-ctl")!;
-    expect(flagged.className).toContain("mm-flagged");
+    await press(frame.doc, ".rv-undo");
     expect(room.querySelector(".mm-publish")).toBeNull();
-    expect(text(room.querySelector(".mm-prog"))).toMatch(/^0 of \d+ sections attested$/);
+    expect(text(room.querySelector(".mm-why"))).toBe("1 section still to attest");
+  });
+
+  it("takes the banker's own words out of the frame and into what gets published", async () => {
+    const { room, attach, published } = openRoom({ rows: [trailRow(STEPS)] });
+    const frame = attach();
+    const edited = frame.doc.querySelector<HTMLElement>("section[data-mod] .rv-edit")!.closest("section")!;
+    const modId = edited.getAttribute("data-mod")!;
+
+    await press(edited, ".rv-edit");
+    edited.querySelector<HTMLElement>("[data-editable]")!.innerHTML = "<p>The Kokomo appraisal is stale.</p>";
+    await press(edited, ".rv-save");
+
+    // An edit IS a sign-off: it is the banker's paragraph now, not the model's.
+    expect(text(room.querySelector(".mm-prog"))).toMatch(/^1 of \d+ sections reviewed$/);
+
+    await press(frame.doc, ".rv-all");
+    await click(room.querySelector(".mm-publish"));
+
+    const section = published[0].sections.find((sec) => sec.id === modId)!;
+    expect(section.status).toBe("edited");
+    expect(section.note).toBe("Revised in review");
+    expect(section.by).toBe("Fabian Goetzens");
+    // And the published memo carries what the banker wrote, not the draft.
+    expect(published[0].html).toContain("The Kokomo appraisal is stale.");
+    expect(published[0].html).not.toContain("rv-ctrl");
   });
 });
 
@@ -492,10 +613,8 @@ describe("the publish door", () => {
 
 describe("the finale", () => {
   it("exhales into one card and says the truth about this build's writeback", async () => {
-    const { room, published, saved } = openRoom({ rows: [trailRow(STEPS)] });
-    for (const control of [...room.querySelectorAll<HTMLElement>(".mm-ctl")]) {
-      await click(control.querySelector(".mm-ok"));
-    }
+    const { room, attach, published, saved } = openRoom({ rows: [trailRow(STEPS)] });
+    await press(attach().doc, ".rv-all");
     await click(room.querySelector(".mm-publish"));
 
     // The seam was called with the draft the room is holding.

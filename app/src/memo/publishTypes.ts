@@ -82,7 +82,10 @@ export interface MemoSection {
    *  out; what the reading pane shows is the memo's full markup. */
   html: string;
   provenance?: MemoProvenance[];
-  status?: "draft" | "approved" | "flagged";
+  /** The review shell's own vocabulary: reviewed as drafted, or reviewed after
+   *  the banker rewrote the narrative. `flagged` is the room's retired edge
+   *  control, kept so a memo stored before 2026-09-04 still reads back. */
+  status?: "draft" | "approved" | "edited" | "flagged";
   note?: string;
 }
 
