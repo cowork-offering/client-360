@@ -91,15 +91,15 @@ const ARC: {
   domId?: string;
 }[] = [
   // FIVE SEATS ON THE QUARTER ARC (founder, 2026-09-04: the credit memo is a
-  // room of its own and gets its own chip). 22.5deg steps on r=96, the chat at
+  // room of its own and gets its own chip). 22.5deg steps on r=124 (founder, 2026-09-04: more air between the chips), the chat at
   // the top and the cloud at the horizontal exactly where they were.
-  { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -96 },
-  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -37, ty: -89, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
-  { act: "memo", label: "Credit memo", aria: "Credit memo workroom", tx: -68, ty: -68, icon: "memo", domId: "actMemo" },
-  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -89, ty: -37, icon: "person", domId: "actRelationship" },
+  { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -124 },
+  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -47, ty: -115, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
+  { act: "memo", label: "Credit memo", aria: "Credit memo workroom", tx: -88, ty: -88, icon: "memo", domId: "actMemo" },
+  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -115, ty: -47, icon: "person", domId: "actRelationship" },
   // THE CLOUD AT THE HORIZONTAL (founder, 2026-09-01). It is not a fourth room:
   // it is the door to the org, and it opens a second tier rather than routing.
-  { act: "salesforce", label: "Salesforce", aria: "Salesforce records", tx: -96, ty: 0, icon: "cloud", domId: "actSalesforce" },
+  { act: "salesforce", label: "Salesforce", aria: "Salesforce records", tx: -124, ty: 0, icon: "cloud", domId: "actSalesforce" },
 ];
 
 /** THE SECOND TIER — the cloud's own two doors.
@@ -124,8 +124,8 @@ const SF_TIER: {
   ty: number;
   domId: string;
 }[] = [
-  { key: "account", label: "Account page", aria: "Open the Account page in Salesforce", icon: "building", tx: -132, ty: -40, domId: "sfAccount" },
-  { key: "package", label: "Latest package", aria: "Open the latest Product Package in Salesforce", icon: "package", tx: -150, ty: -4, domId: "sfPackage" },
+  { key: "account", label: "Account page", aria: "Open the Account page in Salesforce", icon: "building", tx: -160, ty: -40, domId: "sfAccount" },
+  { key: "package", label: "Latest package", aria: "Open the latest Product Package in Salesforce", icon: "package", tx: -178, ty: -4, domId: "sfPackage" },
 ];
 
 /** The honest reason a tier bubble is dead. It is a title, never a toast: the

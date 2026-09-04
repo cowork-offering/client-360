@@ -112,8 +112,8 @@ describe("the arc's cloud seat", () => {
     expect(sat).toBeTruthy();
     expect(sat.getAttribute("data-act")).toBe("salesforce");
     // The offsets ARE the five-satellite recipe (2026-09-04): 22.5deg steps on
-    // r=96, the chat at the top and the cloud at the horizontal.
-    expect(sat.getAttribute("style")).toContain("--tx: -96px");
+    // r=124, the chat at the top and the cloud at the horizontal.
+    expect(sat.getAttribute("style")).toContain("--tx: -124px");
     expect(sat.getAttribute("style")).toContain("--ty: 0px");
   });
 
