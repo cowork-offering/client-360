@@ -697,6 +697,49 @@ export interface RequestAsk {
 }
 
 /**
+ * One step of an executed plan, read back off the org's staging record
+ * (`Customer360ActionHistory`, `steps`). The credit memo has to state what was
+ * done on the relationship to any viewer at any later time, and the session that
+ * did it is long gone by then, so the memo's facility-change module reads this
+ * rather than the panel's own echo.
+ *
+ * `before` and `after` are only present where the confirmed PLAN held the value.
+ * An add carries an `after`; a carry exclusion carries a `before` and no `after`,
+ * because a modification deletes nothing and the removal IS the absence. A step
+ * from a plan that keys its values per record rather than per step carries
+ * neither, and the label and the verification carry the story instead.
+ */
+export interface ActionStep {
+  id: string;
+  /** write, verification, wait, handoff or observed_side_effect. */
+  type?: string;
+  label?: string;
+  objectName?: string;
+  targetLoanId?: string;
+  /** The org's name for the target facility, or the plan label of a net-new one
+   *  that had no id when the plan was confirmed. */
+  targetLabel?: string;
+  field?: string;
+  before?: string;
+  after?: string;
+  /** What the execution proved when it re-read the org. Falls back to the plan's
+   *  verification query on a step that never ran. */
+  verification?: string;
+  /** pending, waiting, filed_unverified, verified, failed, skipped_not_attempted. */
+  state?: string;
+  /** The record this step created, where the execution named one. */
+  orgRecordId?: string;
+}
+
+/** Changes split by who asked for them. `derived` counts the pricing
+ *  prerequisites nCino requires once a commitment or a term moves: real writes,
+ *  but crediting them to the banker would overstate what was asked for. */
+export interface ActionChangeCounts {
+  requested?: number;
+  derived?: number;
+}
+
+/**
  * One row of the DURABLE action trail, read back from the org
  * (`Customer360ActionHistory`). Distinct from the session-local echo the panel
  * mints at execute time: this survives a reload, a republish and a new banker.
@@ -720,6 +763,16 @@ export interface ActionHistoryRow {
   collateralId?: string;
   /** Whether the staging row still carries its plan hash. */
   planHashPresent?: boolean;
+  /** The confirmed plan's own summary sentence, verbatim. */
+  summary?: string;
+  /** The executed plan, step by step. Present on Completed and Partial rows the
+   *  read returned steps for: a Staged row executed nothing, an older row needs
+   *  `includeSteps`, and a row past the response's step budget carries none. */
+  steps?: readonly ActionStep[];
+  /** How many steps the plan holds. Larger than `steps.length` means the per-row
+   *  cap trimmed the list; present with no `steps` means the budget dropped it. */
+  stepCount?: number;
+  changeCounts?: ActionChangeCounts;
 }
 
 export interface ActivityDetail {

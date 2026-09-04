@@ -7,7 +7,14 @@
    the fix copy for the affected section.
    ============================================================================= */
 
-import type { ActionHistoryRow, BorrowerBundle, C360Data, Id } from "../data/contract";
+import type {
+  ActionChangeCounts,
+  ActionHistoryRow,
+  ActionStep,
+  BorrowerBundle,
+  C360Data,
+  Id,
+} from "../data/contract";
 import { buildGroundedPrompt } from "../data/grounding";
 import {
   callTool,
@@ -133,11 +140,49 @@ export function normalizeStamp(raw: unknown): string | undefined {
   return Number.isNaN(Date.parse(v)) ? undefined : v;
 }
 
+/** A finite number or nothing. The org returns null for a count it could not
+ *  derive, and NaN in a memo would be worse than a missing figure. */
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+/** Map one executed plan step. A step without an id cannot be addressed by the
+ *  memo's section provenance, so it is dropped rather than rendered anonymously. */
+function toStep(raw: Record<string, unknown>): ActionStep | null {
+  const id = text(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    type: text(raw.type),
+    label: text(raw.label),
+    objectName: text(raw.objectName),
+    targetLoanId: text(raw.targetLoanId),
+    targetLabel: text(raw.targetLabel),
+    field: text(raw.field),
+    before: text(raw.before),
+    after: text(raw.after),
+    verification: text(raw.verification),
+    state: text(raw.state),
+    orgRecordId: text(raw.orgRecordId),
+  };
+}
+
+/** The requested/derived split, or nothing. An action whose plan shape carries
+ *  no counts returns null, which is not the same fact as "it changed nothing". */
+function toChangeCounts(raw: unknown): ActionChangeCounts | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const requested = num(r.requested);
+  const derived = num(r.derived);
+  return requested === undefined && derived === undefined ? undefined : { requested, derived };
+}
+
 /** Map one wire row defensively. A row without a stagingId cannot be deduped
  *  against the session echo, so it is dropped rather than double-rendered. */
 function toHistoryRow(raw: Record<string, unknown>): ActionHistoryRow | null {
   const stagingId = text(raw.stagingId);
   if (!stagingId) return null;
+  const steps = Array.isArray(raw.steps)
+    ? raw.steps.map((s) => toStep((s ?? {}) as Record<string, unknown>)).filter((s): s is ActionStep => s !== null)
+    : undefined;
   return {
     stagingId,
     actionId: text(raw.actionId),
@@ -152,6 +197,10 @@ function toHistoryRow(raw: Record<string, unknown>): ActionHistoryRow | null {
     productPackageId: text(raw.productPackageId),
     collateralId: text(raw.collateralId),
     planHashPresent: raw.planHashPresent === true,
+    summary: text(raw.summary),
+    steps,
+    stepCount: num(raw.stepCount),
+    changeCounts: toChangeCounts(raw.changeCounts),
   };
 }
 
