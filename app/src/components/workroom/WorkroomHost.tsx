@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { resolveApproverUserId } from "../../channel/writeTools";
 import { resolveBundle } from "../../actions/registry";
 import { noteFiled } from "../../intent/open";
+import { consumedIntent } from "../../intent/store";
 import { workroomActivityEntry } from "../../actions/executedActivity";
 import { askBrain, brainReachable, type BrainEnvelope } from "../../channel/brainLane";
 import { bookedFacilities } from "../../data/facilityStage";
@@ -15,6 +16,9 @@ import { stageAction } from "../../channel/writeTools";
 import { armStage } from "./orgArms";
 import type { WorkroomContext, WorkroomExecution, WorkroomMode } from "../../workroom/types";
 import { anchorFacilityRoom, bindFacilityRoute, closeFacilityRoom, useFacilityRoom } from "./roomSession";
+import { openMemoRoom } from "../memo/memoSession";
+import { changesFromFiled } from "../memo/carry";
+import type { FiledLine } from "./FiledList";
 import { Workroom, neutralAsk, smartAsk, type WorkroomRouter } from "./Workroom";
 import type { ReadSource } from "./readCard";
 
@@ -33,6 +37,13 @@ import type { ReadSource } from "./readCard";
  *  this is; binding the answer REBUILDS the room on that engine here, keyed on
  *  the route, so a session can never quietly change engine underneath a
  *  manifest. */
+/** The request source the room was opened on, or null. Null is the common case
+ *  and it is not a gap: most rooms are opened by a banker, not by an instruction. */
+function sourceOfConsumedIntent(accountId: string) {
+  const intent = consumedIntent();
+  return intent && intent.accountId === accountId ? intent.context.source : null;
+}
+
 export function WorkroomHost() {
   /* TWO DOORS, ONE ROOM. `useWorkroom` is the caller that named a mode — the
      command palette, a deep link. `useFacilityRoom` is the unified entry, which
@@ -207,6 +218,34 @@ export function WorkroomHost() {
     closeWorkroom();
   }, [context, dispatch]);
 
+  /* THE MEMO DOOR, FROM THE ROUTE QUESTION. The banker has already answered the
+     package question by the time the door is on the glass (the routes wait on
+     it), so the memo opens on the anchor this room is standing on and never has
+     to ask again. The facility room closes: one room at a time on the glass. */
+  const openMemo = useCallback(
+    (filed?: readonly FiledLine[]) => {
+      if (!context) return;
+      openMemoRoom({
+        accountId: context.accountId,
+        accountName: context.accountName,
+        productPackageId: context.productPackageId ?? null,
+        /* THE MEMO'S TYPE IS THE ACTION THAT TRIGGERED IT. A room opened from
+           the route question has not filed anything, so its trigger is the
+           neutral one; a room opened from the finale names what was just done. */
+        trigger: filed ? context.mode : "adhoc",
+        carried: filed ? changesFromFiled(filed) : null,
+        /* WHERE THE REQUEST CAME FROM, where an intent opened this session and
+           named it. Read off the intent the banker actually took, and only when
+           it is about this relationship: a stale consumed intent from another
+           account would put someone else's email on this memo. */
+        source: sourceOfConsumedIntent(context.accountId),
+      });
+      closeFacilityRoom();
+      closeWorkroom();
+    },
+    [context],
+  );
+
   const router = useMemo<WorkroomRouter | undefined>(() => {
     if (!session) return undefined;
     return {
@@ -219,8 +258,9 @@ export function WorkroomHost() {
       preselectMemberId: session.memberId,
       onBind: (route: WorkroomMode, opts) => bindFacilityRoute(route, opts),
       onRestart: (route: WorkroomMode, say: string) => bindFacilityRoute(route, { say }),
+      onMemo: () => openMemo(),
     };
-  }, [session]);
+  }, [session, openMemo]);
 
   if (!context || !engine) return null;
   // Keyed on the context so switching modes or packages rebuilds the room and
@@ -247,6 +287,9 @@ export function WorkroomHost() {
          room — the close button, Escape, the scrim — comes through this one
          prop, so arming the wash here catches all three. */
       onClose={close}
+      /* THE SECOND DOOR IN THE AFTERGLOW. The room hands over the ledger its
+         card is showing and this opens the memo room on it. */
+      onDraftMemo={openMemo}
       onAnchor={(choice) =>
         session
           ? anchorFacilityRoom(choice.id)

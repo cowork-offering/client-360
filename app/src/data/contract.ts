@@ -720,6 +720,37 @@ export interface ActionHistoryRow {
   collateralId?: string;
   /** Whether the staging row still carries its plan hash. */
   planHashPresent?: boolean;
+  /**
+   * THE EXECUTED PLAN'S OWN STEPS, where the org read carries them.
+   *
+   * OPTIONAL BY DESIGN, AND ABSENT TODAY. `Customer360ActionHistory` returns
+   * ids, status and result and nothing about what a plan actually did; Phase B
+   * extends it to parse `cm_Plan_JSON__c` / `cm_Tracker_JSON__c` on Completed
+   * rows and expose these. Everything that reads them branches on their
+   * absence, because a room that assumed them would state a change list it
+   * never read (memo requirements, non-negotiable 1).
+   */
+  steps?: ActionPlanStep[];
+}
+
+/**
+ * ONE STEP OF AN EXECUTED PLAN, as the org will hand it back.
+ *
+ * Every field is optional: this is a read of a JSON blob the staging row
+ * carries, and a step that held no `before` was a CREATE. That distinction is
+ * the same one `MemoChange` makes, because this is what a `MemoChange` is built
+ * from and the two shapes are deliberately one shape.
+ */
+export interface ActionPlanStep {
+  id?: string;
+  label?: string;
+  target?: { kind?: string; id?: string; name?: string };
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  /** The re-query that proved the write landed. */
+  verification?: string;
+  /** The org id of the record the step created or updated. */
+  orgId?: string;
 }
 
 export interface ActivityDetail {

@@ -42,8 +42,16 @@ if (leaked.length) {
   process.exit(1);
 }
 
-console.log(`bundle: dist/cockpit.html — ${bytes.toLocaleString()} bytes (${mib.toFixed(3)} MiB)`);
-if (mib > 1.5) {
-  console.error(`FAIL: bundle ${mib.toFixed(3)} MiB exceeds 1.5 MiB budget`);
+console.log(`bundle: dist/cockpit.html \u2014 ${bytes.toLocaleString()} bytes (${mib.toFixed(3)} MiB)`);
+
+// OUR OWN LOAD DISCIPLINE, NOT A PLATFORM LIMIT. The artifact platform allows
+// 16 MiB; this budget exists so a page that a banker opens over a hotel
+// connection stays a page and not a download. It moved from 1.5 to 1.75 MiB on
+// 2026-09-04 to admit the credit memo renderer (110 KB of vendored code, shell
+// and manifest) that the memo room renders from. Anything that asks for the
+// next 250 KB has to justify itself the same way this did.
+const BUDGET_MIB = 1.75;
+if (mib > BUDGET_MIB) {
+  console.error(`FAIL: bundle ${mib.toFixed(3)} MiB exceeds ${BUDGET_MIB} MiB budget`);
   process.exit(1);
 }

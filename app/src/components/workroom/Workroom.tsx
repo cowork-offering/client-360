@@ -311,6 +311,19 @@ export interface WorkroomRouter {
   /** The banker asked for a different route with a manifest already staged and
    *  then took the discard. The room is REBUILT, never quietly re-engined. */
   onRestart: (route: WorkroomMode, say: string) => void;
+  /**
+   * THE CREDIT MEMO DOOR, under the three routes.
+   *
+   * NOT A FOURTH CHIP, and deliberately not one. The three routes pick the
+   * ENGINE this session runs on: each one stages a plan and writes to the org.
+   * Writing the memo binds no engine, stages nothing and writes nothing; it is
+   * a different kind of act on the same package, so it gets its own quiet door
+   * under the row rather than a seat in it. It also opens the MEMO room and
+   * closes this one, which no chip in that row does.
+   *
+   * Absent leaves the room byte-identical to the room before this door existed.
+   */
+  onMemo?: () => void;
 }
 
 type ThreadItem = { id: string; step: number } & (
@@ -857,6 +870,7 @@ export function Workroom({
   approverUserId,
   onFiled,
   onClose,
+  onDraftMemo,
   onAnchor,
   onExecuted,
   settleDeps = LIVE_SETTLE,
@@ -945,6 +959,15 @@ export function Workroom({
    *  Which implementation arrives is WorkroomHost's decision, not the shell's. */
   engine: WorkroomEngine;
   onClose: () => void;
+  /**
+   * THE MEMO DOOR IN THE AFTERGLOW, and the ledger it carries.
+   *
+   * The room hands over the SAME filed lines the card is showing, so the memo
+   * room's greeting can state the exact change set in the seconds before the
+   * org read carries it. Absent leaves the afterglow with the one door it has
+   * always had.
+   */
+  onDraftMemo?: (filed: readonly FiledLine[]) => void;
   /** The banker chose which package to work in. The room does not anchor
    *  itself: it is REOPENED on the chosen package, which rebuilds the engine and
    *  the manifest with it. */
@@ -5135,6 +5158,17 @@ export function Workroom({
             ))}
           </div>
         )}
+        {/* THE MEMO DOOR. It waits on the package exactly as the routes do,
+            because a memo is about one package version and nothing else, and it
+            sits UNDER the row so the three-route decision keeps its own line. */}
+        {ask && !packagePending && router?.onMemo && (
+          <div className="wk-memodoor">
+            <button type="button" className="wk-memobtn" data-door="memo" onClick={() => router.onMemo?.()}>
+              Credit memo
+            </button>
+            <span className="wk-memonote">Draft the memo for this package. Nothing is staged.</span>
+          </div>
+        )}
         <div className="wk-posfoot">
           <div className="wk-srctray">
             {brief.sources.map((s) => (
@@ -5513,6 +5547,22 @@ export function Workroom({
                     <button type="button" className="wk-ag-close" onClick={onClose}>
                       Close workroom
                     </button>
+                    {/* THE SECOND DOOR, and it is second on purpose. Closing the
+                        room is what most filings end with and it keeps the first
+                        position it has always had; the memo is the move a banker
+                        makes NEXT, on the version they just filed, and it opens
+                        the memo room carrying this ledger so the greeting can
+                        state the exact changes before the org read catches up. */}
+                    {onDraftMemo && filedLines && (
+                      <button
+                        type="button"
+                        className="wk-ag-memo"
+                        data-door="memo"
+                        onClick={() => onDraftMemo(filedLines)}
+                      >
+                        Draft the credit memo
+                      </button>
+                    )}
                     <span className="wk-ag-note">{AFTERGLOW_LINE}</span>
                   </div>
                 )}

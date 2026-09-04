@@ -1,0 +1,413 @@
+/* =============================================================================
+   THE CREDIT MEMO ROOM. ONLY WHAT IS NEW.
+
+   THE ROOM IS THE WORKROOM'S SHEET. Everything it shares with the other two
+   rooms is addressed by the SAME class name and styled once, in workroom.css:
+   `.wk-room`, `.wk-glass-sheet`, `.wk-head`, `.wk-thread`, `.wk-msg`, `.wk-bub`,
+   `.wk-opt`, `.wk-composer`, `.wk-afterglow`, `.wk-rescard`, `.aura`. Nothing is
+   restated here, because a second copy of the recipe is how three rooms stop
+   being one room.
+
+   THE GLASS CENSUS IS UNCHANGED BY THIS FILE. The only blurred surface the room
+   opens is `.wk-room` itself, cut from the one sheet by
+   `.eg-glass.eg-glass-workroom` and painted by `.wk-glass-sheet`, exactly as the
+   other two rooms open it. Every surface below is CONTENT: opaque, hairline
+   border, card shadow, and not one `backdrop-filter` among them. That is what
+   keeps the frost / liquid switch and the rim contract intact.
+
+   WHAT IS IN THIS FILE is the one thing this room has and the others do not:
+
+     .mm-body    the 42 / 58 split, because the right lane holds a DOCUMENT
+     .mm-pane    the reading pane, its head, its suppressed line and its foot
+     .mm-frame   the framed memo and the attestation rail down its edge
+     .mm-ctl     one edge control per section, aligned to the section anchor
+     .mm-final   the card the pane exhales into
+
+   ONE MOTION RULE. Arrivals ride `wk-in` on the settle curve like every other
+   block in the rooms, and the global reduced-motion kill-switch in
+   electric-glass.css switches all of it off.
+   ============================================================================= */
+
+/* --------------------------------------------------------------- the split
+
+   THE OTHER TWO ROOMS RESERVE THE LANE OUT OF THE PADDING (`.wk-body` carries
+   `padding-right: 292px`) because a 252px rail of chips reads as part of the
+   one canvas. A memo does not: it is a page, it needs width, and it needs an
+   edge to hang controls off. So this room takes the padding back and splits the
+   body into two real tracks. */
+.mm-body {
+  padding-right: 0;
+  display: grid;
+  grid-template-columns: 42% 58%;
+  align-items: stretch;
+  gap: 0;
+}
+
+/* The conversation keeps its own rhythm; only its ceiling changes, because the
+   column is now a track rather than a centred measure. */
+.mm-col-l {
+  max-width: none;
+  padding: 22px 20px 26px 26px;
+}
+
+/* ---------------------------------------------------------- the reading pane */
+.mm-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+  padding: 22px 26px 26px 6px;
+}
+
+/* THE PROGRESS SITS WHERE THE RAIL HEAD SAT (requirements, section 5). Same
+   altitude, same weight, different noun: the other rooms count staged changes,
+   this one counts attested sections. */
+.mm-pane-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mm-prog {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.mm-plan {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* ONE QUIET EXPANDABLE LINE. Suppressed is not a gap, so it is not a warning
+   and it is not a list on the glass: it is a line a credit officer opens when
+   they want to know why the memo has the sections it has. */
+.mm-supp {
+  font-size: 10.8px;
+  color: var(--ink-faint);
+}
+.mm-supp > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 2px 0;
+}
+.mm-supp > summary::-webkit-details-marker {
+  display: none;
+}
+.mm-supp > summary::before {
+  content: "› ";
+  color: var(--ink-label);
+}
+.mm-supp[open] > summary::before {
+  content: "⌄ ";
+}
+.mm-supp ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mm-supp li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.mm-supp li b {
+  font-weight: 600;
+  color: var(--ink-body);
+}
+.mm-supp li span {
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------------- the document
+
+   THE MEMO SCROLLS INSIDE ITS OWN FRAME. The room never scrolls: the
+   conversation has its own scroller and so does this, which is what makes the
+   two readable side by side while prose is landing in one of them. */
+.mm-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  animation: wk-in 550ms var(--ease-settle) both;
+}
+.mm-doc {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+/* --------------------------------------------------- the attestation edge
+
+   A SLIM CONTROL PER SECTION, DOWN THE EDGE, aligned to the section anchor the
+   renderer stamped. Absolute placement lands when the frame has been measured;
+   before that (and in jsdom, which does not load a srcdoc frame at all) the
+   controls fall into document order down the rail, which is a usable list and
+   not a pile at the top. */
+.mm-edge {
+  position: relative;
+  width: 138px;
+  flex: 0 0 138px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.mm-edge::-webkit-scrollbar {
+  display: none;
+}
+.mm-ctl {
+  width: 138px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--row-divider);
+  transition: border-color 200ms var(--ease-settle);
+}
+.mm-ctl-n {
+  flex: 1 1 100%;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mm-ctl-s {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+.mm-ok,
+.mm-flag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-muted);
+}
+.mm-ok:hover {
+  border-color: #1f7a3a;
+  color: #1f7a3a;
+}
+.mm-flag:hover {
+  border-color: #b45309;
+  color: #b45309;
+}
+/* THE STATE IS ON THE BORDER, NOT ON A BADGE. A rail of twenty badges is a rail
+   nobody reads; a rail of twenty borders is a shape the eye takes in at once. */
+.mm-approved {
+  border-color: #1f7a3a;
+}
+.mm-flagged {
+  border-color: #b45309;
+}
+.mm-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-label);
+}
+.mm-approved .mm-dot {
+  background: #1f7a3a;
+}
+.mm-flagged .mm-dot {
+  background: #b45309;
+}
+.mm-note {
+  flex: 1 1 100%;
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.mm-note-i {
+  flex: 1;
+  min-width: 0;
+  font-size: 10.5px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+.mm-note-b {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 7px;
+  border: 1px solid #b45309;
+  color: #b45309;
+  background: transparent;
+}
+
+/* ------------------------------------------------------------- the door
+
+   ONE BUTTON, AND ITS REASON WHEN IT IS SHUT. A disabled control that does not
+   say why is a control the banker argues with. */
+.mm-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mm-publish {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  color: #fff;
+  background: var(--accent);
+  transition: opacity 200ms var(--ease-settle);
+}
+.mm-publish:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.mm-why {
+  font-size: 10.8px;
+  color: var(--ink-faint);
+}
+
+/* ---------------------------------------------------------- the exchanges
+
+   SETTLED EXCHANGES COLLAPSE (rule 1), and they stay mounted while they do it:
+   the room's history is one class away from coming back, never a re-render. */
+.mm-ex {
+  animation: wk-in 480ms var(--ease-settle) both;
+}
+.mm-settled .wk-bub {
+  opacity: 0.44;
+}
+.mm-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* --------------------------------------------------------------- the finale
+
+   THE PANE EXHALES INTO ONE CARD. The drain itself is the shared choreography
+   (`finale.ts` and its `.wk-fin-*` classes in workroom.css); what this adds is
+   where the card stands once the room is clear, and that the pane goes with the
+   rest of the room rather than surviving it. */
+.mm-pane[data-finale="exhale"] {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 600ms var(--ease-settle),
+    transform 600ms var(--ease-settle);
+}
+.mm-pane[data-finale="still"] {
+  display: none;
+}
+.mm-room[data-finale="still"] .mm-body {
+  grid-template-columns: 1fr;
+}
+.mm-final {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  pointer-events: none;
+}
+.mm-final .wk-rescard {
+  pointer-events: auto;
+  max-width: 460px;
+  animation: wk-in 640ms var(--ease-settle) both;
+  animation-delay: var(--wk-fin-hold, 0ms);
+}
+
+/* ----------------------------------------------------------------- narrow
+
+   BELOW THE PANE'S OWN WIDTH THE SPLIT HAS NOWHERE TO BE. The pane stacks under
+   the conversation rather than shrinking into a column that can hold neither a
+   memo nor a rail. */
+@media (max-width: 1080px) {
+  .mm-body {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(0, auto);
+    overflow-y: auto;
+  }
+  .mm-pane {
+    padding: 0 20px 22px;
+    min-height: 62vh;
+  }
+  .mm-edge {
+    width: 120px;
+    flex-basis: 120px;
+  }
+  .mm-ctl {
+    width: 120px;
+    position: static !important;
+  }
+}
+
+/* ============================================ THE DOORS INTO THIS ROOM
+
+   TWO CONTROLS THAT LIVE IN THE FACILITY ROOM AND BELONG TO THIS ONE, so they
+   are styled here beside what they open rather than buried in the other room's
+   sheet. Both are QUIET: neither competes with the decision it sits beside.
+
+     .wk-memodoor  under the three route chips, while the room is still asking
+                   which route this is. A memo is not a fourth route (it binds
+                   no engine and stages nothing), so it is not a fourth chip.
+     .wk-ag-memo   the second door in the afterglow, beside Close workroom,
+                   which keeps the first position it has always had. */
+.wk-memodoor {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.wk-memobtn {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 9px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--ink-muted);
+  transition:
+    border-color 200ms var(--ease-settle),
+    color 200ms var(--ease-settle);
+}
+.wk-memobtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.wk-memonote {
+  font-size: 10.6px;
+  color: var(--ink-faint);
+}
+.wk-ag-memo {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-muted);
+  transition:
+    border-color 200ms var(--ease-settle),
+    color 200ms var(--ease-settle);
+}
+.wk-ag-memo:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

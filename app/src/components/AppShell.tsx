@@ -12,6 +12,7 @@ import { CommandPalette } from "./CommandPalette";
 import { EmptyState } from "./ui";
 import { WorkroomHost } from "./workroom/WorkroomHost";
 import { RelationshipRoomHost } from "./relationship/RelationshipRoom";
+import { MemoRoomHost } from "./memo/MemoRoomHost";
 import { buildWorklistRows } from "../data/worklistRows";
 import { useKeepAlive } from "../channel/keepAlive";
 
@@ -145,6 +146,10 @@ export function AppShell() {
           take the room down. The two sessions are independent stores and only
           one is ever open. */}
       <RelationshipRoomHost />
+      {/* The third, and the last of the rooms. Same reason, same independence:
+          the memo session is its own store, and the doors that open it close
+          whichever room they were standing in. */}
+      <MemoRoomHost />
     </div>
   );
 }
