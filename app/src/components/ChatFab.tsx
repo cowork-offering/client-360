@@ -14,6 +14,7 @@ import { packageRecords } from "../actions/schemas";
 import { packageDeepLink, recordDeepLink } from "./DeepLink";
 import { openFacilityRoom } from "./workroom/roomSession";
 import { openRelationshipRoom } from "./relationship/relSession";
+import { openMemoRoom } from "./memo/memoSession";
 import { relOpeningForAccount } from "./relationship/RelationshipRoom";
 import { smartOpeningFor } from "./workroom/route";
 import { sowSeed } from "./workroom/seed";
@@ -51,7 +52,7 @@ import "../styles/chat.css";
    No satellite here has an onClick of its own.
    ============================================================================= */
 
-type ArcAct = "chat" | "facility" | "relationship" | "salesforce";
+type ArcAct = "chat" | "facility" | "memo" | "relationship" | "salesforce";
 
 /** The arc: four satellites on a 96px radius, evenly spread across the quarter,
  *  staggered 28ms apart by index.
@@ -89,9 +90,13 @@ const ARC: {
   icon?: IconName;
   domId?: string;
 }[] = [
+  // FIVE SEATS ON THE QUARTER ARC (founder, 2026-09-04: the credit memo is a
+  // room of its own and gets its own chip). 22.5deg steps on r=96, the chat at
+  // the top and the cloud at the horizontal exactly where they were.
   { act: "chat", label: "Assist", aria: "Assist chat", tx: 0, ty: -96 },
-  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -48, ty: -83, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
-  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -83, ty: -48, icon: "person", domId: "actRelationship" },
+  { act: "facility", label: "Facility Actions", aria: "Facility Actions", tx: -37, ty: -89, actionId: "loan-modification", icon: "modify", domId: "actFacility" },
+  { act: "memo", label: "Credit memo", aria: "Credit memo workroom", tx: -68, ty: -68, icon: "memo", domId: "actMemo" },
+  { act: "relationship", label: "Relationship", aria: "Relationship Actions", tx: -89, ty: -37, icon: "person", domId: "actRelationship" },
   // THE CLOUD AT THE HORIZONTAL (founder, 2026-09-01). It is not a fourth room:
   // it is the door to the org, and it opens a second tier rather than routing.
   { act: "salesforce", label: "Salesforce", aria: "Salesforce records", tx: -96, ty: 0, icon: "cloud", domId: "actSalesforce" },
@@ -553,6 +558,14 @@ export function ChatFab() {
           accountName,
           opening: smartOpeningFor({ data, bundle, accountName, productPackageId: null }),
         });
+        return;
+      }
+      if (act === "memo") {
+        // THE MEMO ROOM, from the arc: no route to bind, the room reads the org
+        // for what was done on the relationship and opens on the package it
+        // finds (the greeting names it). Same seed, same gate as the others.
+        sowSeed(document.querySelector('.arcbtn[data-act="memo"]'));
+        openMemoRoom({ accountId, accountName, productPackageId: null, trigger: "adhoc" });
         return;
       }
       if (act === "relationship") {
