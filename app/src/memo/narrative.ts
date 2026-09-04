@@ -145,7 +145,7 @@ export const specFor = (module: string): NarrativeSpec | undefined =>
 
 /** The voice, in the plugin's own style rules, plus the two rules the cockpit
  *  adds: trace every figure, and surface a gap rather than filling it. */
-export const MEMO_DOCTRINE = [
+const MEMO_DOCTRINE = [
   "You are drafting one section of a commercial credit memo for a bank credit committee.",
   "Voice: active, specific, sober. No marketing language, no exclamation points, no emoji, no hedging.",
   "Lead every paragraph with its conclusion. Plain prose only: no headings, no bullet characters, no markdown.",
@@ -169,7 +169,7 @@ const money = (n: unknown): string | null =>
  * renderer put in the memo's own tables, which is why prose written against it
  * can never disagree with the document it sits inside.
  */
-export function figuresBlock(dossier: MemoDossier): string {
+function figuresBlock(dossier: MemoDossier): string {
   const c = dossier.canon;
   const lines: string[] = [];
   lines.push(

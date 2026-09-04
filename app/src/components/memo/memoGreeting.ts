@@ -193,7 +193,7 @@ export function shortDate(iso: string | undefined): string | undefined {
 }
 
 /** An org id, short enough to sit in a sentence and long enough to be one id. */
-export const shortId = (id: string): string => (id.length > 8 ? `${id.slice(0, 8)}…` : id);
+const shortId = (id: string): string => (id.length > 8 ? `${id.slice(0, 8)}…` : id);
 
 /** The room's word for what an action did. The org's own action id wins over
  *  the trigger, because the row is what actually happened. */
@@ -311,7 +311,7 @@ export function planLine(plan: RenderPlan): string {
 }
 
 /** THE ASK. One question, three chips at most, and never a fourth. */
-export const MEMO_ASK = "Draft it, or steer me first?";
+const MEMO_ASK = "Draft it, or steer me first?";
 
 /** The line the room says when the trail carries no step detail for this
  *  package. Said out loud, because a memo that quietly drafted on no change
