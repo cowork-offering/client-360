@@ -7,7 +7,14 @@
    the fix copy for the affected section.
    ============================================================================= */
 
-import type { ActionHistoryRow, ActionPlanStep, BorrowerBundle, C360Data, Id } from "../data/contract";
+import type {
+  ActionChangeCounts,
+  ActionHistoryRow,
+  ActionStep,
+  BorrowerBundle,
+  C360Data,
+  Id,
+} from "../data/contract";
 import { buildGroundedPrompt } from "../data/grounding";
 import {
   callTool,
@@ -133,11 +140,49 @@ export function normalizeStamp(raw: unknown): string | undefined {
   return Number.isNaN(Date.parse(v)) ? undefined : v;
 }
 
+/** A finite number or nothing. The org returns null for a count it could not
+ *  derive, and NaN in a memo would be worse than a missing figure. */
+const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
+/** Map one executed plan step. A step without an id cannot be addressed by the
+ *  memo's section provenance, so it is dropped rather than rendered anonymously. */
+function toStep(raw: Record<string, unknown>): ActionStep | null {
+  const id = text(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    type: text(raw.type),
+    label: text(raw.label),
+    objectName: text(raw.objectName),
+    targetLoanId: text(raw.targetLoanId),
+    targetLabel: text(raw.targetLabel),
+    field: text(raw.field),
+    before: text(raw.before),
+    after: text(raw.after),
+    verification: text(raw.verification),
+    state: text(raw.state),
+    orgRecordId: text(raw.orgRecordId),
+  };
+}
+
+/** The requested/derived split, or nothing. An action whose plan shape carries
+ *  no counts returns null, which is not the same fact as "it changed nothing". */
+function toChangeCounts(raw: unknown): ActionChangeCounts | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const requested = num(r.requested);
+  const derived = num(r.derived);
+  return requested === undefined && derived === undefined ? undefined : { requested, derived };
+}
+
 /** Map one wire row defensively. A row without a stagingId cannot be deduped
  *  against the session echo, so it is dropped rather than double-rendered. */
 function toHistoryRow(raw: Record<string, unknown>): ActionHistoryRow | null {
   const stagingId = text(raw.stagingId);
   if (!stagingId) return null;
+  const steps = Array.isArray(raw.steps)
+    ? raw.steps.map((s) => toStep((s ?? {}) as Record<string, unknown>)).filter((s): s is ActionStep => s !== null)
+    : undefined;
   return {
     stagingId,
     actionId: text(raw.actionId),
@@ -152,42 +197,11 @@ function toHistoryRow(raw: Record<string, unknown>): ActionHistoryRow | null {
     productPackageId: text(raw.productPackageId),
     collateralId: text(raw.collateralId),
     planHashPresent: raw.planHashPresent === true,
-    steps: planSteps(raw.steps),
+    summary: text(raw.summary),
+    steps,
+    stepCount: num(raw.stepCount),
+    changeCounts: toChangeCounts(raw.changeCounts),
   };
-}
-
-/**
- * THE EXECUTED PLAN'S STEPS, where the row carries them.
- *
- * UNDEFINED IS THE ANSWER TODAY and it is not a failure: the deployed read
- * returns no step detail, so every consumer branches on absence and says so
- * out loud rather than inventing a change list. Phase B lands the field; this
- * maps it the moment it arrives, so nothing downstream waits on a second edit.
- *
- * Defensive to the same degree the rest of this file is: a step with neither a
- * label nor a target is not a step anybody can render, and it is dropped rather
- * than shown as a blank row.
- */
-function planSteps(raw: unknown): ActionPlanStep[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: ActionPlanStep[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const r = item as Record<string, unknown>;
-    const t = (r.target ?? {}) as Record<string, unknown>;
-    const step: ActionPlanStep = {
-      id: text(r.id),
-      label: text(r.label),
-      target: { kind: text(t.kind), id: text(t.id), name: text(t.name) },
-      before: r.before && typeof r.before === "object" ? (r.before as Record<string, unknown>) : undefined,
-      after: r.after && typeof r.after === "object" ? (r.after as Record<string, unknown>) : undefined,
-      verification: text(r.verification),
-      orgId: text(r.orgId) ?? text(r.recordId),
-    };
-    if (!step.label && !step.target?.name) continue;
-    out.push(step);
-  }
-  return out;
 }
 
 /**
@@ -204,13 +218,14 @@ export async function fetchActionHistory(
   accountId: Id,
   limit = 25,
   /**
-   * PHASE B'S TWO NEW INPUTS, sent only when a caller asks for them.
+   * THE TWO INPUTS THE READ GAINED WITH THE STEP DETAIL (Phase B, 9434378).
    *
-   * The sweep's call is byte-identical to the one it has always made: an org
-   * running the current read would refuse an unknown invocable variable and the
-   * whole trail would go dark (the `limit` defect, 2026-09-03). The memo room is
-   * the only caller that asks for step detail, and it degrades honestly when the
-   * read answers without it.
+   * `includeSteps` lifts the 90-day window the read otherwise applies to step
+   * detail; `productPackageId` narrows the trail to one package and the
+   * versions it forked into. Both are sent ONLY when a caller asks for them, so
+   * the sweep's own call stays byte-identical to the one it has always made:
+   * an org one deploy behind refuses an unknown invocable variable and takes
+   * the whole trail down with it (the `limit` defect, 2026-09-03).
    */
   opts: { includeSteps?: boolean; productPackageId?: string | null } = {},
 ): Promise<{ rows: ActionHistoryRow[]; storedAt?: number }> {

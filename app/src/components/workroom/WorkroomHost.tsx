@@ -17,7 +17,7 @@ import { armStage } from "./orgArms";
 import type { WorkroomContext, WorkroomExecution, WorkroomMode } from "../../workroom/types";
 import { anchorFacilityRoom, bindFacilityRoute, closeFacilityRoom, useFacilityRoom } from "./roomSession";
 import { openMemoRoom } from "../memo/memoSession";
-import { changesFromFiled } from "../memo/carry";
+import { changesFromFiled, splitOfFiled } from "../memo/carry";
 import type { FiledLine } from "./FiledList";
 import { Workroom, neutralAsk, smartAsk, type WorkroomRouter } from "./Workroom";
 import type { ReadSource } from "./readCard";
@@ -234,6 +234,7 @@ export function WorkroomHost() {
            neutral one; a room opened from the finale names what was just done. */
         trigger: filed ? context.mode : "adhoc",
         carried: filed ? changesFromFiled(filed) : null,
+        carriedSplit: filed ? splitOfFiled(filed) : null,
         /* WHERE THE REQUEST CAME FROM, where an intent opened this session and
            named it. Read off the intent the banker actually took, and only when
            it is about this relationship: a stale consumed intent from another

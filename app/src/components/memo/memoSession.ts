@@ -43,6 +43,9 @@ export interface MemoSession {
   trigger: MemoTrigger;
   /** The finale's ledger, where a finale opened this. Null from the FAB. */
   carried: MemoChange[] | null;
+  /** How that ledger split between what the banker asked for and what the room
+   *  derived. The trail carries its own split; this is the handover's. */
+  carriedSplit: { requested: number; derived: number } | null;
   source: MemoRequestSource | null;
 }
 
@@ -61,6 +64,7 @@ export function openMemoRoom(args: {
   trigger?: MemoTrigger;
   /** The filed changes, where the caller is a finale that just filed them. */
   carried?: readonly MemoChange[] | null;
+  carriedSplit?: { requested: number; derived: number } | null;
   source?: MemoRequestSource | null;
 }): void {
   session = {
@@ -69,6 +73,7 @@ export function openMemoRoom(args: {
     productPackageId: args.productPackageId,
     trigger: args.trigger ?? "adhoc",
     carried: args.carried?.length ? [...args.carried] : null,
+    carriedSplit: args.carriedSplit ?? null,
     source: args.source ?? null,
   };
   emit();

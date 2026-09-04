@@ -1,5 +1,5 @@
-import type { ActionHistoryRow, ActionPlanStep } from "../../data/contract";
-import type { MemoChange } from "../../memo/types";
+import type { ActionHistoryRow, ActionStep } from "../../data/contract";
+import type { MemoChange, MemoChangeFields } from "../../memo/types";
 import type { RenderPlan } from "../../memo/renderMemo";
 import type { MemoTrigger } from "./memoSession";
 
@@ -11,39 +11,172 @@ import type { MemoTrigger } from "./memoSession";
    memo can be opened at any time by any viewer and it still states what was
    recently executed. That is what this file composes.
 
-   THE ORG READ IS THE SOURCE, THE HANDOVER IS THE FALLBACK, AND THE ROOM SAYS
-   WHICH. `Customer360ActionHistory` returns ids and status today; Phase B adds
-   the executed plan's STEPS to its Completed rows. So there are three states
-   and the greeting reads differently in each:
+   THE TRAIL CARRIES THE STEPS NOW (Phase B, 9434378).
+   `Customer360ActionHistory` returns, for an executed row, the plan's own steps
+   with the field that moved, the value on each side, the org's read-back
+   sentence and the id of the record it wrote. So the change list the memo is
+   built on is READ, not handed over, and a viewer who never saw the filing gets
+   the same memo as the banker who filed it.
 
-     steps present     the room states the executed changes, from the trail.
-     steps absent,
-     opened from a
-     finale            the room says the org read carries no step detail yet and
-                       works from the ledger the finale handed over.
-     steps absent,
-     opened cold       the room says the same thing and drafts the memo on the
-                       package as it stands. It never guesses what changed.
+   TWO INPUTS RIDE THE READ. `includeSteps` lifts the 90-day window the read
+   otherwise applies to step detail, and `productPackageId` narrows the trail to
+   one package and the versions it forked into. The host sends both.
+
+   THE FALLBACK IS NARROW NOW, AND STILL HONEST. A row that genuinely carries no
+   steps is a row nothing can be built from: an older execution outside the
+   window, a plan shape that never held steps, a row the per-row budget trimmed.
+   Then, and only then, the room says so and works from the ledger a finale
+   handed over, or states the package as it stands. A banker always knows which
+   of the three the memo is standing on.
 
    THE BUDGET IS THE FOUNDER'S (2026-09-02): one lead line and at most four
    lines under it. Everything the greeting could say and does not is in the
    memo, which is on the glass beside it.
    ============================================================================= */
 
-/** The chip the greeting offers. `open` is present only where a memo exists. */
-export interface MemoChip {
-  id: "draft" | "steer" | "open";
-  label: string;
+/* -------------------------------------------------- which rows a memo reads */
+
+/**
+ * THE THREE ACTIONS A CREDIT MEMO IS WRITTEN ABOUT.
+ *
+ * A collateral valuation and a covenant review are executed actions with steps
+ * on the same trail, and neither one is a credit event this memo reports. So
+ * the room reads the trail for the three that ARE, and a package whose newest
+ * executed row is a valuation opens on the honest "nothing changed" line rather
+ * than on a memo about a re-appraisal.
+ */
+export const MEMO_ACTION_IDS: ReadonlySet<string> = new Set([
+  "loan-modification",
+  "renewal",
+  "new-facility-request",
+]);
+
+/* ------------------------------------------------ steps, as memo changes */
+
+/** The step types that WROTE something. A wait, a verification query and a
+ *  handoff are the plan's machinery, not changes to the relationship, and a
+ *  memo that listed them as changes would be describing its own plumbing. */
+const WRITING_TYPES: ReadonlySet<string> = new Set(["write", "observed_side_effect"]);
+
+/** The step states that did NOT land. A failed write is not a change, and a
+ *  step nobody attempted is not one either. */
+const UNLANDED_STATES: ReadonlySet<string> = new Set(["failed", "skipped_not_attempted"]);
+
+/** True for a step that changed the org. A plan whose steps declare no type at
+ *  all is taken at face value: dropping every step of it would be worse than
+ *  listing a wait. */
+function wrote(step: ActionStep, typed: boolean): boolean {
+  if (step.state && UNLANDED_STATES.has(step.state)) return false;
+  if (!typed) return true;
+  return !step.type || WRITING_TYPES.has(step.type);
 }
 
-export interface MemoGreeting {
-  lead: string;
-  /** At most four. The render plan, and whatever honesty the read demands. */
-  lines: string[];
-  ask: string;
-  chips: MemoChip[];
-  /** True where the greeting is standing on the org's own step detail. */
-  fromOrg: boolean;
+/** Which dossier field a step's field name is about. The dossier's own
+ *  `sidesFor` reads exactly these three by name; anything else rides through
+ *  under the org's own field name, where it is evidence and not arithmetic. */
+function dossierKey(field: string | undefined): "commitment" | "outstanding" | "maturity" | null {
+  if (!field) return null;
+  if (/maturity/i.test(field)) return "maturity";
+  if (/balance|outstanding|drawn/i.test(field)) return "outstanding";
+  if (/amount|commit|limit/i.test(field)) return "commitment";
+  return null;
+}
+
+/**
+ * A printed org value, as a number.
+ *
+ * The trail carries what the org showed, which is a STRING: "$5,000,000",
+ * "7500000", "$7.5MM". The dossier's exposure arithmetic needs a number for the
+ * two money fields and nothing else, so this parses conservatively and returns
+ * null on anything it is not sure of. A null keeps the string on the change
+ * under its own field name, and the memo's figures come from the bundle.
+ */
+export function parseOrgNumber(value: string | undefined): number | null {
+  if (!value) return null;
+  const m = /^\s*\$?\s*(-?[\d,]+(?:\.\d+)?)\s*(MM|M|K|B)?\s*$/i.exec(value);
+  if (!m) return null;
+  const base = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(base)) return null;
+  const suffix = (m[2] ?? "").toUpperCase();
+  return base * (suffix === "K" ? 1e3 : suffix === "B" ? 1e9 : suffix === "M" || suffix === "MM" ? 1e6 : 1);
+}
+
+/** One side of one step, keyed the way the dossier reads it. */
+function sideOf(step: ActionStep, which: "before" | "after"): MemoChangeFields | null {
+  const printed = step[which];
+  if (printed == null) return null;
+  const key = dossierKey(step.field);
+  if (key === "maturity") return { maturity: printed };
+  if (key) {
+    const n = parseOrgNumber(printed);
+    return n == null ? { [step.field ?? key]: printed } : { [key]: n };
+  }
+  return { [step.field ?? "value"]: printed };
+}
+
+/**
+ * THE EXECUTED STEPS, AS THE MEMO'S CHANGE LIST.
+ *
+ * ONE CHANGE PER TARGET, not one per step. The trail is FIELD level: a single
+ * amendment to one facility arrives as a commitment step, a maturity step and
+ * whatever pricing the org required alongside them. The dossier reads a change's
+ * `before` as that facility's whole existing side (`dossier.ts`, `sidesFor`), so
+ * three field steps on one loan have to arrive as one change carrying three
+ * fields. Split into three, the second and third would be invisible to the
+ * exposure arithmetic.
+ *
+ * A TARGET WITH NO `before` ON ANY STEP WAS CREATED, and the absence is
+ * preserved rather than filled: that is exactly how the dossier recognises a new
+ * facility, and a `before` of zero would read as a facility that used to exist.
+ */
+export function changesFromSteps(steps: readonly ActionStep[]): MemoChange[] {
+  const typed = steps.some((s) => !!s.type);
+  const landed = steps.filter((s) => wrote(s, typed));
+  const order: string[] = [];
+  const byTarget = new Map<string, { steps: ActionStep[]; loanId?: string; label?: string }>();
+
+  for (const step of landed) {
+    const key = step.targetLoanId ?? step.targetLabel ?? step.objectName ?? step.id;
+    if (!byTarget.has(key)) {
+      order.push(key);
+      byTarget.set(key, { steps: [], loanId: step.targetLoanId, label: step.targetLabel });
+    }
+    const group = byTarget.get(key)!;
+    group.steps.push(step);
+    group.loanId = group.loanId ?? step.targetLoanId;
+    group.label = group.label ?? step.targetLabel;
+  }
+
+  return order.map((key) => {
+    const group = byTarget.get(key)!;
+    const first = group.steps[0];
+    let before: MemoChangeFields | undefined;
+    let after: MemoChangeFields | undefined;
+    for (const step of group.steps) {
+      const b = sideOf(step, "before");
+      if (b) before = { ...before, ...b };
+      const a = sideOf(step, "after");
+      if (a) after = { ...after, ...a };
+    }
+    return {
+      id: first.id,
+      /* THE PLAN'S OWN LABEL, and the org's field name behind it where the plan
+         did not write one. Never a sentence composed here: the memo quotes the
+         plan a banker confirmed. */
+      label: group.steps.map((s) => s.label).find(Boolean) ?? group.label ?? first.field ?? first.id,
+      target: {
+        kind: first.objectName ?? (group.loanId ? "facility" : "package"),
+        id: group.loanId,
+        name: group.label,
+      },
+      before,
+      after,
+      /* THE ORG'S OWN READ-BACK SENTENCE. It is the proof the write landed, and
+         it is carried verbatim: the room never paraphrases a verification. */
+      verification: group.steps.map((s) => s.verification).find(Boolean),
+      orgId: group.steps.map((s) => s.orgRecordId).find(Boolean),
+    };
+  });
 }
 
 /* ------------------------------------------------------- reading the trail */
@@ -69,10 +202,6 @@ export function actionWord(actionId: string | undefined, trigger: MemoTrigger): 
   if (/modif/i.test(id)) return "a modification";
   if (/renew/i.test(id)) return "a renewal";
   if (/new-facility|new_facility|origination/i.test(id)) return "a new facility";
-  if (/annual-review|annual_review/i.test(id)) return "an annual review";
-  if (/risk-rating|risk_rating/i.test(id)) return "a risk rating review";
-  if (/covenant/i.test(id)) return "a covenant review";
-  if (/valuation/i.test(id)) return "a collateral valuation";
   return trigger === "renew"
     ? "a renewal"
     : trigger === "create"
@@ -82,53 +211,73 @@ export function actionWord(actionId: string | undefined, trigger: MemoTrigger): 
         : "an action";
 }
 
-/** One executed plan step, as a `MemoChange`. The two shapes are one shape;
- *  this is the coercion, not a translation. */
-export function changeFromStep(step: ActionPlanStep, at: number): MemoChange {
-  return {
-    id: step.id ?? `step-${at}`,
-    label: step.label ?? step.target?.name ?? `Step ${at + 1}`,
-    target: { kind: step.target?.kind ?? "record", id: step.target?.id, name: step.target?.name },
-    before: step.before,
-    after: step.after,
-    verification: step.verification,
-    orgId: step.orgId,
-  };
-}
-
 export interface ExecutedRead {
-  /** The newest Completed row on this package, or null. */
+  /** The newest executed credit action on this package, or null. */
   row: ActionHistoryRow | null;
-  /** Its steps as changes. Empty where the read carried none. */
+  /** Its steps as changes. Empty where the row carried no step detail. */
   changes: MemoChange[];
   /** Whether the row actually carried step detail. */
   hasSteps: boolean;
+  /** The row's own requested/derived split, where the plan shape held one. */
+  split: { requested: number; derived: number } | null;
+  /** Present where the per-row cap trimmed the list, so the greeting can say
+   *  the memo is standing on part of a longer plan rather than all of it. */
+  trimmed: number | null;
 }
 
 /**
- * THE LAST THING THE ORG RECORDS AGAINST THIS PACKAGE.
+ * THE LAST CREDIT ACTION THE ORG RECORDS AGAINST THIS PACKAGE.
  *
- * Newest Completed row first. A row for another package is not this memo's
- * business, so a package anchor filters; a row with no package on it is kept
- * only when the room has no anchor either, which is the honest reading of a
- * trail that does not say which package it touched.
+ * Completed, one of the three memo actions, newest first. A row for another
+ * package is not this memo's business, so a package anchor filters; a row with
+ * no package on it is kept only when the room has no anchor either, which is
+ * the honest reading of a trail that does not say which package it touched.
+ *
+ * THE ROW WITH STEPS WINS OVER THE ROW WITHOUT. The read returns step detail for
+ * executed rows inside its window and, with `includeSteps`, beyond it; a newer
+ * row that came back bare while an older one carries its plan is a worse memo
+ * than the older one, so the newest row CARRYING STEPS is preferred and the
+ * newest row overall is the fallback.
  */
 export function executedRead(rows: readonly ActionHistoryRow[] | undefined, packageId: string | null): ExecutedRead {
   const candidates = (rows ?? [])
     .filter((r) => r.status === "Completed")
+    .filter((r) => MEMO_ACTION_IDS.has(r.actionId ?? ""))
     .filter((r) => (packageId ? !r.productPackageId || r.productPackageId === packageId : true));
   // The read hands rows back newest first; sorting on the stamp keeps that true
   // for a caller that merged two reads, and is a no-op for the sweep's own.
   const sorted = [...candidates].sort((a, b) => (b.executedAt ?? "").localeCompare(a.executedAt ?? ""));
-  const row = sorted[0] ?? null;
+  const row = sorted.find((r) => (r.steps?.length ?? 0) > 0) ?? sorted[0] ?? null;
   const steps = row?.steps ?? [];
-  return { row, changes: steps.map(changeFromStep), hasSteps: steps.length > 0 };
+  const counts = row?.changeCounts;
+  const split =
+    counts && (counts.requested !== undefined || counts.derived !== undefined)
+      ? { requested: counts.requested ?? 0, derived: counts.derived ?? 0 }
+      : null;
+  const trimmed = row?.stepCount != null && row.stepCount > steps.length ? row.stepCount : null;
+  return { row, changes: changesFromSteps(steps), hasSteps: steps.length > 0, split, trimmed };
 }
 
 /* ---------------------------------------------------------- the greeting */
 
+/** The chip the greeting offers. `open` is present only where a memo exists. */
+export interface MemoChip {
+  id: "draft" | "steer" | "open";
+  label: string;
+}
+
+export interface MemoGreeting {
+  lead: string;
+  /** At most four. The render plan, and whatever honesty the read demands. */
+  lines: string[];
+  ask: string;
+  chips: MemoChip[];
+  /** True where the greeting is standing on the org's own step detail. */
+  fromOrg: boolean;
+}
+
 /** How many of the filed changes the banker asked for, and how many the room
- *  added on its own. Only a finale handover carries this; the trail does not. */
+ *  added on its own. */
 export interface ChangeSplit {
   requested: number;
   derived: number;
@@ -164,9 +313,9 @@ export function planLine(plan: RenderPlan): string {
 /** THE ASK. One question, three chips at most, and never a fourth. */
 export const MEMO_ASK = "Draft it, or steer me first?";
 
-/** The line the room says when the org read carries no step detail. It is the
- *  honest one and it is said out loud, because a memo that quietly drafted on
- *  no change list would look exactly like a memo that had read one. */
+/** The line the room says when the trail carries no step detail for this
+ *  package. Said out loud, because a memo that quietly drafted on no change
+ *  list would look exactly like a memo that had read one. */
 export const NO_STEP_DETAIL = "The org read carries no step detail yet";
 
 export function memoGreeting(input: MemoGreetingInput): MemoGreeting {
@@ -179,9 +328,20 @@ export function memoGreeting(input: MemoGreetingInput): MemoGreeting {
   if (executed.hasSteps && executed.row) {
     fromOrg = true;
     const when = shortDate(executed.row.executedAt ?? executed.row.createdDate);
+    /* THE COUNT IS THE ORG'S OWN SPLIT WHERE THE ROW CARRIES ONE, and the
+       number of changes the memo was actually built from where it does not.
+       Never both, and never a recount of the same set under two names. */
+    const count = executed.split
+      ? countPhrase(executed.split.requested + executed.split.derived, executed.split)
+      : countPhrase(executed.changes.length);
     lead = `Since the last memo on this package: ${actionWord(executed.row.actionId, input.trigger)} filed${
       when ? ` ${when}` : ""
-    } (${countPhrase(executed.changes.length)}), ${version}; drafting the memo for that version.`;
+    } (${count}), ${version}; drafting the memo for that version.`;
+    if (executed.trimmed) {
+      lines.push(
+        `The plan holds ${executed.trimmed} steps and the read returned the first ${executed.row.steps?.length ?? 0}; the memo stands on those.`,
+      );
+    }
   } else if (carried?.length) {
     lead = `${NO_STEP_DETAIL}, so I am working from what this session just filed: ${countPhrase(
       carried.length,
@@ -200,6 +360,6 @@ export function memoGreeting(input: MemoGreetingInput): MemoGreeting {
   if (input.hasStoredMemo) chips.push({ id: "open", label: "Open latest memo" });
 
   // THE BUDGET IS A CAP, NOT A TARGET (founder, 2026-09-02). Four is the most
-  // the room may say; it says one, and the memo says the rest.
+  // the room may say; it says one or two, and the memo says the rest.
   return { lead, lines: lines.slice(0, 4), ask: MEMO_ASK, chips, fromOrg };
 }

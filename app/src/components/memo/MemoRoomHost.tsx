@@ -27,9 +27,9 @@ import { executedRead, memoGreeting } from "./memoGreeting";
      the bundle          the relationship, as the cockpit staged it. Without it
                          there is no dossier and the room does not open.
      the action trail    what the org records against this package. The sweep
-                         has usually loaded it; the room asks again WITH STEP
-                         DETAIL, which is Phase B's input and which today's
-                         deployed read simply ignores.
+                         has usually loaded it, WITHOUT step detail; the room
+                         asks again with `includeSteps` and the package anchor,
+                         which is the read the memo is actually built on.
      the stored memo     the last memo written for this package, if the artifact
                          has a store at all.
 
@@ -72,9 +72,10 @@ export function MemoRoomHost() {
   const packageId = session?.productPackageId ?? packages[0]?.id ?? null;
   const packageName = packages.find((p) => p.id === packageId)?.label ?? null;
 
-  /* THE TRAIL, WITH STEP DETAIL WHERE THE ORG CARRIES IT. The sweep's rows are
-     the floor; this asks once more for the same account with `includeSteps`, so
-     the greeting can state the executed changes the moment Phase B lands them. */
+  /* THE TRAIL, WITH STEP DETAIL. The sweep's rows are the floor and they carry
+     no steps: `includeSteps` is what lifts the read's 90-day window on step
+     detail, and `productPackageId` narrows the trail to this package and the
+     versions it forked into. This is the read the change list comes from. */
   const [orgRows, setOrgRows] = useState<ActionHistoryRow[] | null>(null);
   useEffect(() => {
     if (!accountId) {
@@ -137,10 +138,11 @@ export function MemoRoomHost() {
       trigger: session?.trigger ?? "adhoc",
       executed,
       carried: session?.carried ?? null,
+      carriedSplit: session?.carriedSplit ?? null,
       plan: renderPlanFor(dossier),
       hasStoredMemo: latest !== null,
     });
-  }, [dossier, packageId, session?.trigger, session?.carried, executed, latest]);
+  }, [dossier, packageId, session?.trigger, session?.carried, session?.carriedSplit, executed, latest]);
 
   const deps = useMemo<MemoDeps>(
     () => ({ narrate: memoNarrator(), save: saveMemoDraft, saveAttestations }),
