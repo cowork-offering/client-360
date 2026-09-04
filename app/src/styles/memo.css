@@ -411,3 +411,17 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* DENSER GLASS FOR THE MEMO ROOM (founder, 2026-09-04: "for this workroom in
+   particular it is too transparent, 15% more dense"). One flat veil on the
+   pane's own sheet, in both frost and liquid, so the reading pane reads as
+   paper rather than as the book behind it. The sheet stays childless in the
+   DOM; this is a pseudo-element on it. */
+.wk-room.mm-room .wk-glass-sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(250, 251, 255, 0.15);
+  pointer-events: none;
+}

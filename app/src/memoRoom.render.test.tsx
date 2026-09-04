@@ -365,18 +365,18 @@ describe("the greeting on the glass", () => {
   it("states what the org says was executed", () => {
     const { room } = openRoom({ rows: [trailRow(STEPS)] });
     const said = text(room.querySelector(".wk-thread"));
-    expect(said).toContain("Since the last memo on this package");
+    expect(said).toContain("Since the last memo on");
     expect(said).toContain("a modification filed 3 Sep");
     expect(said).toContain("2 changes");
-    expect(said).toContain("Render plan:");
+    /* The render plan stands above the pane, not in the thread (founder, 2026-09-04). */
+    expect(said).not.toContain("Render plan:");
     expect(said).toContain("Draft it, or steer me first?");
   });
 
   it("says the honest line when the org read carries no step detail", () => {
     const { room } = openRoom({ rows: [trailRow(undefined)], carried: changesFromFiled(FILED) });
     const said = text(room.querySelector(".wk-thread"));
-    expect(said).toContain("The org read carries no step detail yet");
-    expect(said).toContain("what this session just filed");
+    expect(said).toContain("Working from what this session just filed");
   });
 
   it("offers Draft and Steer, and the stored memo only when there is one", () => {
@@ -452,15 +452,16 @@ describe("the reading pane", () => {
 describe("the publish door", () => {
   it("is shut, with its reason on it, until every section is approved", async () => {
     const { room } = openRoom({ rows: [trailRow(STEPS)] });
-    const button = room.querySelector<HTMLButtonElement>(".mm-publish")!;
     const controls = [...room.querySelectorAll<HTMLElement>(".mm-ctl")];
 
-    expect(button.disabled).toBe(true);
+    /* THE DOOR IS NOT THERE UNTIL THE WORK IS DONE (founder, 2026-09-04): no
+       greyed button, one quiet line of where the attestation stands. */
+    expect(room.querySelector(".mm-publish")).toBeNull();
     expect(text(room.querySelector(".mm-why"))).toBe(`${controls.length} sections still to attest`);
 
     // One approval is not enough, and the count says how far there is to go.
     await click(controls[0].querySelector(".mm-ok"));
-    expect(room.querySelector<HTMLButtonElement>(".mm-publish")!.disabled).toBe(true);
+    expect(room.querySelector(".mm-publish")).toBeNull();
     expect(text(room.querySelector(".mm-prog"))).toBe(`1 of ${controls.length} sections attested`);
 
     for (const control of [...room.querySelectorAll<HTMLElement>(".mm-ctl")].slice(1)) {
@@ -482,7 +483,7 @@ describe("the publish door", () => {
 
     const flagged = room.querySelector<HTMLElement>(".mm-ctl")!;
     expect(flagged.className).toContain("mm-flagged");
-    expect(room.querySelector<HTMLButtonElement>(".mm-publish")!.disabled).toBe(true);
+    expect(room.querySelector(".mm-publish")).toBeNull();
     expect(text(room.querySelector(".mm-prog"))).toMatch(/^0 of \d+ sections attested$/);
   });
 });

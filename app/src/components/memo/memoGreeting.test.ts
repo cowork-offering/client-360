@@ -200,11 +200,10 @@ describe("the greeting", () => {
   it("states the executed changes when the trail carries steps", () => {
     const g = memoGreeting({ ...base, executed: executedRead([row()], PACKAGE) });
     expect(g.fromOrg).toBe(true);
-    expect(g.lead).toContain("Since the last memo on this package");
+    expect(g.lead).toContain("Since the last memo on version a5Fbb000…");
     expect(g.lead).toContain("a new facility filed 3 Sep");
     expect(g.lead).toContain("6 changes: 4 requested, 2 derived");
-    expect(g.lead).toContain("version a5Fbb000…");
-    expect(g.lead).toContain("drafting the memo for that version");
+    expect(g.lead).toContain("Drafting the memo for that version");
   });
 
   it("says the honest line and works from the handover when the trail carries no steps", () => {
@@ -216,21 +215,26 @@ describe("the greeting", () => {
       carriedSplit: { requested: 1, derived: 0 },
     });
     expect(g.fromOrg).toBe(false);
-    expect(g.lead).toContain(NO_STEP_DETAIL);
-    expect(g.lead).toContain("what this session just filed: 1 change");
+    expect(g.lead).toContain("Working from what this session just filed on version a5Fbb000…: 1 change");
   });
 
   it("says the honest line and states the package as it stands when nothing was handed over", () => {
     const g = memoGreeting({ ...base, executed: executedRead([], PACKAGE) });
     expect(g.lead).toContain(NO_STEP_DETAIL);
-    expect(g.lead).toContain("as it stands rather than what changed");
+    expect(g.lead).toContain("as booked");
+  });
+
+  it("says the package by its org name when the host knows it", () => {
+    const g = memoGreeting({ ...base, packageName: "Hartwell Industrial C&I Credit Package", executed: executedRead([row()], PACKAGE) });
+    expect(g.lead).toContain("Since the last memo on Hartwell Industrial C&I Credit Package");
+    expect(g.lead).not.toContain("a5Fbb000");
   });
 
   it("keeps to the founder's budget: one lead line and at most four under it", () => {
     const g = memoGreeting({ ...base, executed: executedRead([row({ stepCount: 91 })], PACKAGE) });
     expect(g.lines.length).toBeGreaterThan(0);
     expect(g.lines.length).toBeLessThanOrEqual(4);
-    expect(g.lines.some((l) => l.startsWith("Render plan:"))).toBe(true);
+    expect(g.lines.some((l) => l.startsWith("Render plan:"))).toBe(false);
     expect(g.ask).toBe("Draft it, or steer me first?");
   });
 

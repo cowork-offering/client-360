@@ -84,7 +84,11 @@ export function MemoRoomHost() {
       return;
     }
     let alive = true;
-    fetchActionHistory(accountId, 25, { includeSteps: true, productPackageId: packageId })
+    /* THE PUBLISHED TOOL SCHEMA STILL NAMES ONLY accountId AND maxResults (the API
+       catalog lags the Apex deploy), so the two new inputs are not sent yet: the
+       read's default already returns steps for executed rows of the last 90 days,
+       and executedRead narrows to the package on this side. */
+    fetchActionHistory(accountId, 25)
       .then(({ rows }) => {
         if (alive) setOrgRows(rows);
       })
@@ -136,6 +140,7 @@ export function MemoRoomHost() {
     if (!dossier) return null;
     return memoGreeting({
       packageId,
+      packageName,
       trigger: session?.trigger ?? "adhoc",
       executed,
       carried: session?.carried ?? null,

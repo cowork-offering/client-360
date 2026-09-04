@@ -285,6 +285,8 @@ export interface ChangeSplit {
 
 export interface MemoGreetingInput {
   packageId: string | null;
+  /** The org's own name for the package. The greeting says this, never an id. */
+  packageName?: string | null;
   trigger: MemoTrigger;
   executed: ExecutedRead;
   /** The finale's own ledger, where a finale opened the room. */
@@ -316,11 +318,11 @@ const MEMO_ASK = "Draft it, or steer me first?";
 /** The line the room says when the trail carries no step detail for this
  *  package. Said out loud, because a memo that quietly drafted on no change
  *  list would look exactly like a memo that had read one. */
-export const NO_STEP_DETAIL = "The org read carries no step detail yet";
+export const NO_STEP_DETAIL = "Nothing filed on this package since the last memo";
 
 export function memoGreeting(input: MemoGreetingInput): MemoGreeting {
   const { executed, carried, packageId } = input;
-  const version = packageId ? `version ${shortId(packageId)}` : "this package";
+  const version = input.packageName ?? (packageId ? `version ${shortId(packageId)}` : "this package");
   const lines: string[] = [];
   let lead: string;
   let fromOrg = false;
@@ -334,24 +336,25 @@ export function memoGreeting(input: MemoGreetingInput): MemoGreeting {
     const count = executed.split
       ? countPhrase(executed.split.requested + executed.split.derived, executed.split)
       : countPhrase(executed.changes.length);
-    lead = `Since the last memo on this package: ${actionWord(executed.row.actionId, input.trigger)} filed${
+    lead = `Since the last memo on ${version}: ${actionWord(executed.row.actionId, input.trigger)} filed${
       when ? ` ${when}` : ""
-    } (${count}), ${version}; drafting the memo for that version.`;
+    }, ${count}. Drafting the memo for that version.`;
     if (executed.trimmed) {
       lines.push(
         `The plan holds ${executed.trimmed} steps and the read returned the first ${executed.row.steps?.length ?? 0}; the memo stands on those.`,
       );
     }
   } else if (carried?.length) {
-    lead = `${NO_STEP_DETAIL}, so I am working from what this session just filed: ${countPhrase(
+    lead = `Working from what this session just filed on ${version}: ${countPhrase(
       carried.length,
       input.carriedSplit,
-    )}, ${version}; drafting the memo for that version.`;
+    )}. Drafting the memo for that version.`;
   } else {
-    lead = `${NO_STEP_DETAIL}, and nothing was handed over, so this memo states ${version} as it stands rather than what changed.`;
+    lead = `${NO_STEP_DETAIL}, so the memo states ${version} as booked.`;
   }
 
-  lines.push(planLine(input.plan));
+  /* THE RENDER PLAN IS NOT A SENTENCE HERE (founder, 2026-09-04: the greeting
+     read as clutter). It stands above the reading pane, where the modules are. */
 
   const chips: MemoChip[] = [
     { id: "draft", label: "Draft" },

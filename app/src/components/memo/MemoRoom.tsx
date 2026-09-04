@@ -640,16 +640,22 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
               </div>
 
               <div className="mm-foot">
-                <button
-                  type="button"
-                  className="mm-publish"
-                  disabled={!attested || busy || published}
-                  title={publishReason ?? undefined}
-                  onClick={() => void onPublish()}
-                >
-                  Publish to nCino and submit for approval
-                </button>
-                {publishReason && <span className="mm-why">{publishReason}</span>}
+                {/* THE BUTTON ARRIVES WHEN THE WORK IS DONE (founder, 2026-09-04:
+                    like Review and execute, it appears rather than sits greyed).
+                    Until then the foot carries one quiet line of where the
+                    attestation stands. */}
+                {attested && !published ? (
+                  <button
+                    type="button"
+                    className="mm-publish"
+                    disabled={busy}
+                    onClick={() => void onPublish()}
+                  >
+                    Publish to nCino and submit for approval
+                  </button>
+                ) : (
+                  publishReason && !published && <span className="mm-why">{publishReason}</span>
+                )}
               </div>
             </aside>
           </div>
