@@ -1,0 +1,612 @@
+{
+  "_README": "HARNESS FIXTURE — canon deal facts for test/build-memo.mjs. Not shipped to seats; the plugin's own runtime data lives in credit-memo-agent/assets/. Data is real: identity + deal + covenants pulled from the BankingGPT nCino sandbox (Account 001bb00001DLtRMAA1); financial spread from Boom file 01f7b073 (completed FY2024 vs FY2023, US$). This canon is an EARLIER vintage than assets/boom-ratios.json — it models Piedmont at ~breakeven EBITDA, so EBITDA-based ratios (leverage, FCCR) compute to NS; render NS/— and move on, never fabricate. The harness exercises the renderer, not data currency.",
+  "borrower": {
+    "name": "Piedmont Precision Components, Inc.",
+    "salesforceAccountId": "001bb00001DLtRMAA1",
+    "instanceUrl": "https://bankinggpt.lightning.force.com",
+    "naics": "332710",
+    "naicsDesc": "Machine Shops",
+    "segment": "C&I",
+    "hq": "Greensboro, NC",
+    "employees": 182,
+    "customerSince": "2009-04-15",
+    "fye": "2025-12-31",
+    "asOf": "2025-12-31",
+    "currentRiskRating": "5 — Pass/Watch",
+    "profile": "Privately held precision-machining manufacturer (founded 1998) producing high-tolerance components for aerospace, defense, and medical-device end markets. ~110,000 sq ft, 182 employees, AS9100D / ISO 13485 certified."
+  },
+  "creditAction": {
+    "productPackageName": "Piedmont Precision C&I Credit Package",
+    "creditEvent": "existing_material",
+    "tier": "core",
+    "description": "Existing Relationship — annual review with new money. Two facilities: a secured renewal of the $7.5M Working Capital revolver and a new-money $5.0M Equipment Term Loan (Mazak CNC).",
+    "flags": {
+      "has_new_money": true,
+      "has_revolver": true,
+      "has_revolver_increase": true,
+      "has_guarantor": true,
+      "guarantor_types": [
+        "individual"
+      ],
+      "has_financial_covenants": true,
+      "collateral_types": [
+        "blanket_lien",
+        "equipment"
+      ],
+      "has_real_estate": false,
+      "has_deposits": false,
+      "is_syndicated": false,
+      "is_peg": false,
+      "is_lft": false,
+      "is_public": false,
+      "exposure_total": 12500000,
+      "sbe_threshold_breached": false
+    },
+    "packageId": "a5Fbb000000HA1NEAW"
+  },
+  "loans": [
+    {
+      "id": "RCF",
+      "name": "Piedmont Precision — Working Capital Revolver",
+      "type": "Revolving Line of Credit",
+      "productType": "Senior Secured Working Capital RCF",
+      "purpose": "Working capital and letters of credit for aerospace/defense/medical precision-component production.",
+      "isNewMoney": false,
+      "isIncrease": true,
+      "isRenewal": true,
+      "existing": {
+        "commitment": 5000000,
+        "outstanding": 4250000,
+        "maturity": "2026-07-15"
+      },
+      "proposed": {
+        "commitment": 7500000,
+        "outstanding": 4250000,
+        "maturity": "2027-07-15"
+      },
+      "rateIndex": "SOFR",
+      "rateSpread": 225,
+      "allInRate": 7.5,
+      "amortization": "Interest-Only",
+      "collateral": "A/R + inventory + all-asset blanket lien",
+      "lienPosition": "1st",
+      "riskRating": "5",
+      "ncinoId": "a4Zbb000001zEQTEA2",
+      "_note": "Existing $5.0M booked revolver (in AFS), increased +$2.5M to $7.5M and renewed."
+    },
+    {
+      "id": "TLA",
+      "name": "Piedmont Precision — Equipment Term Loan (New Money)",
+      "type": "Term Loan",
+      "productType": "Senior Secured Equipment Term Loan",
+      "purpose": "New-money financing for 3× Mazak INTEGREX CNC machining + inspection equipment (Q3-2026 delivery).",
+      "isNewMoney": true,
+      "isIncrease": false,
+      "existing": {
+        "commitment": 0,
+        "outstanding": 0,
+        "maturity": null
+      },
+      "proposed": {
+        "commitment": 5000000,
+        "outstanding": 5000000,
+        "maturity": "2031-07-15"
+      },
+      "rateIndex": "SOFR",
+      "rateSpread": 260,
+      "allInRate": 7.85,
+      "amortization": "Amortizing over 7 years, quarterly",
+      "collateral": "Purchase-money security interest in the financed CNC equipment + all-asset blanket lien",
+      "lienPosition": "1st",
+      "riskRating": "5",
+      "ncinoId": "a4Zbb000001vaxREAQ"
+    }
+  ],
+  "exposureSummary": {
+    "_note": "Acme Bank exposure. Existing = the $5.0M booked WC revolver ($4.25M drawn, serviced in AFS). Proposed = $7.5M revolver (after +$2.5M increase) + $5.0M new Equipment TL = $12.5M.",
+    "existing": {
+      "commitment": 5000000,
+      "outstanding": 4250000
+    },
+    "proposed": {
+      "commitment": 12500000,
+      "outstanding": 4250000
+    },
+    "changeInExposure": {
+      "commitment": 7500000,
+      "outstanding": 0,
+      "note": "$2.5M revolver increase ($5.0M -> $7.5M) + new $5.0M Equipment Term Loan = $7.5M new money.",
+      "newFundedDebt": 5000000
+    }
+  },
+  "creditApprovalSummary": {
+    "hrbDesignation": "Not HRB",
+    "hvcreApplicable": false,
+    "ureExceptions": 0,
+    "pastDueFinancialStatements": "0 of 4",
+    "csgFeedbackComplete": true,
+    "csgFlags": false
+  },
+  "spread": {
+    "_note": "Boom spread, file 01f7b073 (completed). Two REAL annual periods only (FY2023, FY2024); US$. adjusted_ebitda = operating_profit + D&A → ~breakeven in FY2024 (-$19K), so leverage/FCCR compute to NS. net_income = continuing operations, net of tax. Discontinued operation nearly wound down (FY24 residual -$111K vs FY23 -$7.24M).",
+    "periods": [
+      "FY2023",
+      "FY2024",
+      "FY2025"
+    ],
+    "incomeStatement": {
+      "sales_revenue": [
+        56000000,
+        60000000,
+        64500000
+      ],
+      "cost_of_sales": [
+        40800000,
+        45400000,
+        50600000
+      ],
+      "gross_profit": [
+        15200000,
+        14600000,
+        13900000
+      ],
+      "general_and_admin_expenses": [
+        10800000,
+        11000000,
+        11200000
+      ],
+      "operating_profit": [
+        4400000,
+        3600000,
+        2700000
+      ],
+      "depreciation_amortization": [
+        2000000,
+        2200000,
+        2400000
+      ],
+      "adjusted_ebitda": [
+        6400000,
+        5800000,
+        5100000
+      ],
+      "interest_expense": [
+        950000,
+        1010000,
+        1080000
+      ],
+      "pretax_income": [
+        3450000,
+        2590000,
+        1620000
+      ],
+      "net_income": [
+        2725000,
+        2046000,
+        1280000
+      ]
+    },
+    "balanceSheet": {
+      "cash_and_equivalents": [
+        3100000,
+        3900000,
+        4950000
+      ],
+      "accounts_receivable": [
+        7700000,
+        8450000,
+        9200000
+      ],
+      "inventory": [
+        9900000,
+        10950000,
+        12000000
+      ],
+      "total_current_assets": [
+        21300000,
+        24000000,
+        26950000
+      ],
+      "ppe_net": [
+        13800000,
+        15600000,
+        18500000
+      ],
+      "goodwill": [
+        0,
+        0,
+        0
+      ],
+      "total_assets": [
+        36100000,
+        40046000,
+        46876000
+      ],
+      "accounts_payable": [
+        4000000,
+        4400000,
+        4800000
+      ],
+      "current_portion_ltd": [
+        4900000,
+        5200000,
+        5650000
+      ],
+      "total_current_liabilities": [
+        11100000,
+        12000000,
+        13050000
+      ],
+      "long_term_debt": [
+        9000000,
+        10000000,
+        14500000
+      ],
+      "total_debt": [
+        13900000,
+        15200000,
+        20150000
+      ],
+      "total_liabilities": [
+        20100000,
+        22000000,
+        27550000
+      ],
+      "total_equity": [
+        16000000,
+        18046000,
+        19326000
+      ]
+    },
+    "cashFlow": {
+      "operating_cash_flow": [
+        4800000,
+        4200000,
+        3600000
+      ],
+      "capital_expenditures": [
+        2100000,
+        2600000,
+        5400000
+      ],
+      "free_cash_flow": [
+        2700000,
+        1600000,
+        -1800000
+      ]
+    }
+  },
+  "trends": {
+    "_note": "FY2023-FY2025 actuals + Proposed (pro forma +$5.0M Equipment TL). EBITDA margin softening 11.4%->7.9%.",
+    "periods": [
+      "FY2023",
+      "FY2024",
+      "FY2025",
+      "Proposed"
+    ],
+    "ebitda": [
+      6400000,
+      5800000,
+      5100000,
+      5100000
+    ],
+    "totalFundedDebt": [
+      13900000,
+      15200000,
+      20150000,
+      25150000
+    ],
+    "riskRating": [
+      "5",
+      "5",
+      "5",
+      "5"
+    ],
+    "riskBand": [
+      "Pass/Watch",
+      "Pass/Watch",
+      "Pass/Watch",
+      "Pass/Watch"
+    ],
+    "pdPct": [
+      1.6,
+      1.7,
+      1.85,
+      1.95
+    ]
+  },
+  "covenants": [
+    {
+      "name": "Minimum Debt Service Coverage",
+      "operator": ">=",
+      "direction": "minimum",
+      "trigger": 1.25,
+      "unit": "x",
+      "frequency": "Quarterly",
+      "type": "Financial",
+      "active": true,
+      "actual": 1.42,
+      "status": "Compliant",
+      "definition": "(EBITDA − unfinanced CapEx − cash taxes − distributions) / (interest + scheduled principal).",
+      "_note": "nCino-reported actual 1.42x vs 1.25x trigger = ~13.6% cushion. Binding constraint."
+    },
+    {
+      "name": "Maximum Debt-to-Worth",
+      "operator": "<=",
+      "direction": "maximum",
+      "trigger": 3.0,
+      "unit": "x",
+      "frequency": "Quarterly",
+      "type": "Financial",
+      "active": true,
+      "actual": 2.18,
+      "status": "Compliant",
+      "definition": "Total liabilities / tangible net worth.",
+      "_note": "nCino-reported 2.18x (picks up the post-retirement obligation); a pure funded-debt/equity recompute from the Boom spread is ~0.09x. Flag the basis difference for the RM."
+    },
+    {
+      "name": "Minimum Liquidity",
+      "operator": ">=",
+      "direction": "minimum",
+      "trigger": 5000000,
+      "unit": "$",
+      "frequency": "Monthly",
+      "type": "Financial",
+      "active": true,
+      "actual": 8200000,
+      "status": "Compliant",
+      "definition": "Cash plus undrawn revolver availability."
+    },
+    {
+      "name": "Maximum Annual CapEx",
+      "operator": "<=",
+      "direction": "maximum",
+      "trigger": 7500000,
+      "unit": "$",
+      "frequency": "Annually",
+      "type": "Financial",
+      "active": true,
+      "actual": 1250000,
+      "status": "Compliant",
+      "definition": "Total capital expenditures during the fiscal year."
+    }
+  ],
+  "covenantFlagRules": {
+    "_note": "Drives the Covenant Compliance visual.",
+    "materialChangePct": 10,
+    "withinBreachPct": 10,
+    "legend": {
+      "caution": "⚠ within 10% of trigger",
+      "breach": "RED FILL = breach",
+      "pass": "Compliant"
+    }
+  },
+  "sensitivity": {
+    "_note": "IRIS-placeholder sensitivity on the binding DSC covenant. Base = FY2024 actual.",
+    "scenarios": [
+      {
+        "name": "Base (FY2024 actual)",
+        "revenueDelta": 0.0,
+        "gmDeltaBps": 0,
+        "dsc": 1.42,
+        "covenantBreaches": []
+      },
+      {
+        "name": "Downside — revenue −5%",
+        "revenueDelta": -0.05,
+        "gmDeltaBps": 0,
+        "dsc": 1.28,
+        "covenantBreaches": []
+      },
+      {
+        "name": "Stress — revenue −5%, GM −100bps",
+        "revenueDelta": -0.05,
+        "gmDeltaBps": -100,
+        "dsc": 1.18,
+        "covenantBreaches": [
+          "Minimum Debt Service Coverage"
+        ]
+      }
+    ]
+  },
+  "revolver": {
+    "_note": "STUB (AFS not in a source system). $7.5M WC revolver, 12 trailing months, modeled around the real $4.25M FY2024 draw (~57% utilization). Replace when AFS lands.",
+    "_stub": true,
+    "commitment": 7500000,
+    "months": [
+      "Jan-24",
+      "Feb-24",
+      "Mar-24",
+      "Apr-24",
+      "May-24",
+      "Jun-24",
+      "Jul-24",
+      "Aug-24",
+      "Sep-24",
+      "Oct-24",
+      "Nov-24",
+      "Dec-24"
+    ],
+    "fundedBalance": [
+      3800000,
+      4100000,
+      4600000,
+      5000000,
+      4800000,
+      4400000,
+      4200000,
+      4500000,
+      4900000,
+      4600000,
+      4300000,
+      4250000
+    ],
+    "high": 5000000,
+    "low": 3800000,
+    "average": 4454000,
+    "daysAtZero": 0,
+    "consecutiveDaysAtZero": 0
+  },
+  "paymentHistory": {
+    "_note": "STUB (AFS not in a source system). Clean.",
+    "_stub": true,
+    "asOf": "2024-12-31",
+    "buckets": {
+      "current": true,
+      "d30_60": 0,
+      "d60_90": 0,
+      "d90_plus": 0
+    },
+    "events": []
+  },
+  "balanceTrend": {
+    "_note": "STUB (AFS). No deposit relationship → Current Balance Trend module suppresses. Revolver balance only.",
+    "_stub": true,
+    "months": [
+      "Jan-24",
+      "Feb-24",
+      "Mar-24",
+      "Apr-24",
+      "May-24",
+      "Jun-24",
+      "Jul-24",
+      "Aug-24",
+      "Sep-24",
+      "Oct-24",
+      "Nov-24",
+      "Dec-24"
+    ],
+    "balances": [
+      3800000,
+      4100000,
+      4600000,
+      5000000,
+      4800000,
+      4400000,
+      4200000,
+      4500000,
+      4900000,
+      4600000,
+      4300000,
+      4250000
+    ]
+  },
+  "peers": {
+    "_note": "CapIQ/IBIS placeholder — aerospace/defense precision manufacturers (not distributors). Low-priority module.",
+    "_stub": true,
+    "naics": "332710",
+    "revenueBand": "$30M–$150M",
+    "set": [
+      {
+        "name": "Ducommun",
+        "ticker": "DCO",
+        "revenueLTM": 780000000,
+        "ebitdaMarginPct": 12.5,
+        "leverage": 3.1,
+        "dsc": 1.8
+      },
+      {
+        "name": "CPI Aerostructures",
+        "ticker": "CVU",
+        "revenueLTM": 95000000,
+        "ebitdaMarginPct": 7.5,
+        "leverage": 2.6,
+        "dsc": 1.5
+      },
+      {
+        "name": "Innovative Solutions",
+        "ticker": "ISSC",
+        "revenueLTM": 47000000,
+        "ebitdaMarginPct": 30.0,
+        "leverage": 0.4,
+        "dsc": 6.0
+      },
+      {
+        "name": "Optex Systems",
+        "ticker": "OPXS",
+        "revenueLTM": 33000000,
+        "ebitdaMarginPct": 9.0,
+        "leverage": 0.6,
+        "dsc": 3.2
+      }
+    ],
+    "medians": {
+      "ebitdaMarginPct": 10.75,
+      "leverage": 1.6,
+      "dsc": 2.5,
+      "revenueYoYPct": 5.0
+    }
+  },
+  "industryOutlook": {
+    "naics": "332710",
+    "marketSize": "$40B+ (US precision machining / contract manufacturing)",
+    "cagrPct": 4.5,
+    "cyclicality": "Moderate — tied to aerospace/defense build rates and medical-device demand; defense backlog dampens the cycle.",
+    "outlook": "Stable-to-improving. Commercial aerospace build-rate recovery and sustained defense spending support high-tolerance machining demand; reshoring of precision supply chains is a tailwind for AS9100D/ISO-13485 shops.",
+    "drivers": [
+      "Commercial aerospace build rates",
+      "Defense procurement / backlog",
+      "Medical-device demand",
+      "Supply-chain reshoring"
+    ],
+    "mode": "C"
+  },
+  "guarantor": {
+    "type": "individual",
+    "name": "Margaret Holloway",
+    "guarantyType": "Joint & Several",
+    "_note": "Individual guarantor (principal). Personal financial statement on file; corporate-style spread trend not applicable."
+  },
+  "narratives": {
+    "execSummary": "<p>Piedmont Precision Components seeks a <strong>$5.0M equipment term loan</strong> to fund three Mazak INTEGREX multi-tasking CNC machines, alongside a <strong>$2.5M increase &amp; renewal</strong> of its existing $5.0M working-capital revolver (to $7.5M). The borrower is a 26-year aerospace/defense precision machinist (AS9100D / ISO 13485) with a diversified blue-chip customer base and a multi-year contracted backlog. FY2025 revenue reached <strong>$64.5M</strong> (+7.5% YoY), but adjusted EBITDA margin softened to ~7.9% ($5.1M) on elevated labor and new-program qualification costs, lifting leverage to ~3.9x (~4.9x pro forma). Liquidity ($8.2M) and DSC (1.42x) remain inside covenant, and the unlimited guaranty of principal Margaret Holloway provides additional support. Recommended for approval at a <strong>5 — Pass/Watch</strong> risk rating, with close monitoring of the margin trend.</p>",
+    "requestDetails": "<p><strong>Purpose.</strong> $5.0M new-money equipment term loan (7-year, monthly amortization) to acquire three Mazak INTEGREX i-450 multi-tasking CNC centers supporting a newly awarded defense program. Concurrently, the existing $5.0M working-capital revolver is increased by $2.5M to $7.5M and renewed for 364 days.</p><p><strong>Sources &amp; Uses.</strong> Uses: $5.0M equipment + $2.5M incremental working capital = $7.5M new money. Sources: $5.0M Acme Bank equipment term loan + $2.5M revolver increase.</p>",
+    "borrowerDescription": "<p>Founded in 1998 and headquartered in Greensboro, NC, Piedmont Precision Components is a privately held precision-machining manufacturer producing high-tolerance components for aerospace, defense, and medical-device end markets. The company operates a ~110,000 sq ft facility with 182 employees and holds AS9100D and ISO 13485 certifications. Ownership rests with founder-CEO Margaret Holloway, who provides a personal guaranty.</p>",
+    "strengthsRisks": "<p><strong>Strengths.</strong> Long-tenured (since 2009) relationship; AS9100D/ISO 13485 certifications create high customer switching costs; multi-year contracted backlog; tangible collateral coverage from late-model CNC equipment; full guaranty of the principal.</p><p><strong>Risks &amp; Mitigants.</strong> EBITDA margin softened to ~7.9% in FY2025 (from ~11% in FY2023) on new-program ramp and labor inflation, lifting leverage to ~3.9x (mitigant: contracted price escalators and backlog conversion in FY2026); customer concentration in defense primes (mitigant: diversified program mix, long program lifecycles); equipment-purchase execution risk (mitigant: established Mazak platform, vendor install support).</p>",
+    "managementOwnership": "<p>Margaret Holloway (founder, President &amp; CEO; 100% owner) leads a stable senior team averaging 12+ years of tenure. No management changes occurred during the review period. Ms. Holloway provides an unlimited personal guaranty of the facilities.</p>",
+    "financialCommentary": "<p>FY2025 revenue of $64.5M grew ~7.5% year-over-year, but profitability softened: gross margin compressed to ~21.6% and adjusted EBITDA margin declined to ~7.9% ($5.1M, from ~9.7% in FY2024) on elevated direct labor, training, and first-article qualification costs ahead of full-rate production. Total funded debt of $20.2M (pro forma $25.2M including the $5.0M equipment loan) puts leverage at ~3.9x EBITDA (~4.9x pro forma) — elevated for the rating but supported by tangible collateral and a contracted backlog. Management projects EBITDA-margin recovery in FY2026 as the new program reaches full rate and qualification spend rolls off; the margin trajectory is the key monitoring item.</p>",
+    "recommendation": "<p><strong>Recommendation.</strong> Approve the $5.0M equipment term loan and the $2.5M increase &amp; renewal of the working-capital revolver (to $7.5M) at a 5 — Pass/Watch risk rating. The credit is supported by tangible collateral, a contracted backlog, the principal's guaranty, and covenant headroom (DSC 1.42x vs 1.25x; liquidity $8.2M vs $5.0M), tempered by softening margins and elevated pro forma leverage.</p><p><strong>Conditions &amp; Monitoring.</strong> Quarterly financial reporting with covenant compliance certificate; annual field exam of working-capital collateral; first-lien UCC on the financed equipment. Watch item: FY2025 EBITDA-margin recovery toward management plan in FY2026; revisit the risk rating if margin softening continues beyond Q2-2026.</p>",
+    "guarantorProfile": "<p>Margaret Holloway provides an unlimited continuing guaranty of the Piedmont facilities. As founder and sole shareholder, her interests are fully aligned with the borrower. A current personal financial statement is on file; updated PFS and tax returns are a standard reporting condition.</p>",
+    "globalCashFlow": "<p>On a combined basis, borrower operating cash flow plus guarantor liquidity covers pro forma fixed charges. Global debt-service coverage is supported primarily at the operating-company level, with the guaranty providing secondary support. A formal global cash-flow model will be maintained in IRIS once the connector lands.</p>",
+    "collateralBlanket": "<p>The working-capital line is secured by a first-priority blanket lien on all business assets, including accounts receivable and inventory, supported by a borrowing-base certificate and periodic field exams.</p>",
+    "collateralEquipment": "<p>The equipment term loan is secured by a first-priority purchase-money security interest in the three financed Mazak INTEGREX CNC machines, plus the borrower's existing late-model machine tools. Orderly-liquidation coverage is supported by the active secondary market for Mazak multi-tasking equipment.</p>"
+  },
+  "attestation": {
+    "executive_summary": {
+      "status": "approved",
+      "approvedBy": "Dana Reyes",
+      "approvedRole": "RM",
+      "approvedDate": "2026-06-05"
+    },
+    "request_details": {
+      "status": "approved",
+      "approvedBy": "Dana Reyes",
+      "approvedRole": "RM",
+      "approvedDate": "2026-06-05"
+    },
+    "borrower_description": {
+      "status": "edited",
+      "approvedBy": "Dana Reyes",
+      "approvedRole": "RM",
+      "approvedDate": "2026-06-05",
+      "editNote": "tightened backlog language"
+    },
+    "industry_analysis": {
+      "status": "approved",
+      "approvedBy": "Dana Reyes",
+      "approvedRole": "RM",
+      "approvedDate": "2026-06-05"
+    },
+    "management_ownership": {
+      "status": "approved",
+      "approvedBy": "Dana Reyes",
+      "approvedRole": "RM",
+      "approvedDate": "2026-06-06"
+    },
+    "trend_reporting": {
+      "status": "approved",
+      "approvedBy": "Alan Okafor",
+      "approvedRole": "Credit Officer",
+      "approvedDate": "2026-06-06"
+    }
+  }
+}

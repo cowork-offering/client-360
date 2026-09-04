@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Commercial Credit Memo — Piedmont Precision Components, Inc.</title>
+<style>
+:root{
+  --brand-primary:#2E0A4F; --brand-secondary:#2E0A4F; --accent:#A100FF; --body:#1A1A1A;
+  --slate:#E2E0E5; --tint:#F5F2FA; --pass:#1F7A3A; --watch:#B45309;
+  --breach:#A8211B; --paper:#FFFFFF; --muted:#6B6B6B;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"DM Sans","Inter","SF Pro Text","Segoe UI",system-ui,sans-serif;color:var(--body);background:#F5F5F4;font-size:10.5pt;line-height:1.45;}
+.page{width:8.5in;min-height:11in;padding:0.95in 0.8in 0.8in;margin:0 auto 24px;background:var(--paper);position:relative;page-break-after:always;box-shadow:0 1px 6px rgba(0,0,0,.08);}
+.classification{position:absolute;top:0;left:0;right:0;background:var(--brand-primary);color:#fff;font-size:7pt;letter-spacing:.08em;text-align:center;padding:4px;text-transform:uppercase;font-weight:600;}
+.page-footer{position:absolute;bottom:0.4in;left:0.8in;right:0.8in;border-top:1px solid var(--slate);padding-top:6px;font-size:7pt;color:var(--muted);display:flex;justify-content:space-between;}
+h1,h2,h3,h4{color:var(--brand-primary);font-weight:700;}
+.section-header{border-bottom:2px solid var(--accent);padding-bottom:6px;margin-bottom:14px;display:flex;align-items:baseline;justify-content:space-between;}
+.section-eyebrow{font-size:7.5pt;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);font-weight:600;}
+.section-title{font-size:15pt;}
+.subhead{font-size:10.5pt;color:var(--brand-secondary);font-weight:700;margin:14px 0 6px;}
+.kpi-strip{display:flex;gap:10px;margin:16px 0;}
+.kpi-card{flex:1;border:1px solid var(--slate);border-radius:6px;padding:10px 12px;background:var(--tint);}
+.kpi-label{font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.kpi-value{font-size:15pt;font-weight:700;color:var(--brand-primary);}
+.kpi-sub{font-size:8pt;color:var(--muted);}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:9pt;}
+th{background:var(--brand-primary);color:#fff;text-align:left;padding:6px 8px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em;}
+td{padding:5px 8px;border-bottom:1px solid var(--slate);}
+td.numeric,th.numeric{text-align:right;font-variant-numeric:tabular-nums;}
+.changed{background:var(--tint);}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:7.5pt;font-weight:600;}
+.badge-pass{background:rgba(31,122,58,.12);color:var(--pass);}
+.badge-watch{background:rgba(180,83,9,.12);color:var(--watch);}
+.badge-breach{background:rgba(168,33,27,.12);color:var(--breach);}
+.cell-watch{background:rgba(180,83,9,.14);}
+.cell-breach{background:rgba(168,33,27,.16);}
+.cell-nonpass{background:rgba(168,33,27,.12);}
+.callout{background:var(--tint);border-left:3px solid var(--accent);padding:10px 14px;margin:12px 0;font-size:9.5pt;}
+.source-line{font-size:7.5pt;color:var(--muted);font-style:italic;margin-top:8px;}
+.rec-link{color:var(--accent);text-decoration:none;border-bottom:1px dotted currentColor;}
+.rec-link:hover{color:var(--brand-primary);}
+.provenance{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px;padding-top:7px;border-top:1px solid var(--slate);}
+.provenance .prov-label{font-size:6.5pt;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-right:2px;}
+.prov-chip{display:inline-flex;align-items:center;gap:4px;font-size:7pt;line-height:1;padding:3px 7px;border-radius:10px;border:1px solid var(--slate);color:var(--muted);text-decoration:none;white-space:nowrap;}
+a.prov-chip:hover{filter:brightness(0.92);}
+.prov-chip .prov-mark{width:13px;height:13px;border-radius:3px;flex-shrink:0;color:#fff;font-size:6pt;font-weight:700;line-height:1;display:inline-flex;align-items:center;justify-content:center;letter-spacing:-.02em;}
+.prov-chip.live{border-color:currentColor;}
+.prov-chip.stub{border-style:dashed;}
+.prov-chip .prov-tag{font-size:6pt;text-transform:uppercase;letter-spacing:.04em;opacity:.75;}
+.prov-chip .prov-ext{font-size:7pt;opacity:.7;}
+.gap{color:var(--breach);font-style:italic;}
+.two-col{display:flex;gap:20px;}
+.two-col>div{flex:1;}
+.legend{font-size:7.5pt;color:var(--muted);margin-top:4px;}
+.stat-row{display:flex;gap:18px;font-size:8.5pt;margin-top:8px;}
+.stat-row b{color:var(--brand-primary);}
+ul{margin:6px 0 6px 18px;} li{margin-bottom:3px;font-size:9.5pt;}
+p{margin:6px 0;}
+.cover{display:flex;flex-direction:column;justify-content:center;min-height:9in;}
+.cover .wordmark{margin-bottom:4pt;}
+.cover .cover-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding-bottom:18px;border-bottom:2px solid var(--accent);}
+.cover .wordmark svg{height:40pt;width:auto;display:block;}
+.cover .cmr-mark{flex-shrink:0;text-align:left;}
+.cover .cmr-mark img{height:26px;width:auto;display:block;margin-bottom:5px;}
+.cover .cmr-mark .cmr-cap{font-size:7pt;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+.cover .doc-type{font-size:12pt;color:var(--brand-secondary);margin-top:26px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;}
+.cover .borrower{font-size:24pt;font-weight:700;margin-top:8px;color:var(--body);line-height:1.1;}
+.cover .cover-sub{font-size:10.5pt;color:var(--muted);margin-top:6px;}
+.cover .meta{margin-top:26px;font-size:9.5pt;color:var(--body);display:grid;grid-template-columns:1fr 1fr;gap:0 30px;max-width:6.3in;}
+.cover .meta>div{padding:6px 0;border-bottom:1px solid var(--slate);}
+.cover .meta strong{color:var(--brand-secondary);font-weight:600;}
+.cover .meta div{margin-bottom:3px;}
+.cover .draft{margin-top:28px;display:inline-block;background:var(--tint);color:var(--brand-primary);font-weight:700;font-size:9pt;padding:8px 14px;border-radius:6px;letter-spacing:.04em;}
+.toc li{font-size:10pt;margin-bottom:5px;}
+.toc .muted{color:var(--muted);font-size:8.5pt;}
+/* ===== Per-section attestation (human-in-the-loop sign-off) ===== */
+.attestation{display:flex;align-items:center;gap:8px;font-size:8pt;margin:-6px 0 12px;padding:5px 10px;border-radius:5px;border:1px solid var(--slate);}
+.attestation .att-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.attestation strong{color:inherit;}
+.attestation.att-pending{background:rgba(180,83,9,.08);border-color:rgba(180,83,9,.35);color:var(--watch);}
+.attestation.att-pending .att-dot{background:var(--watch);}
+.attestation.att-approved,.attestation.att-edited{background:rgba(31,122,58,.08);border-color:rgba(31,122,58,.35);color:var(--pass);}
+.attestation.att-approved .att-dot,.attestation.att-edited .att-dot{background:var(--pass);}
+.attestation .att-meta{color:var(--muted);font-style:italic;}
+.cover .attest-summary{margin-top:16px;font-size:8.5pt;color:var(--body);max-width:5in;}
+.cover .attest-summary .bar{height:7px;border-radius:4px;background:var(--slate);overflow:hidden;margin:6px 0;}
+.cover .attest-summary .bar>span{display:block;height:100%;background:var(--pass);}
+.cover .attest-summary .note{font-style:italic;color:var(--muted);margin-top:5px;}
+@media print{body{background:#fff;}.page{box-shadow:none;margin:0 auto;}}
+/* floating section-progress indicator (screen only) */
+#memo-progress{position:fixed;top:50%;right:14px;transform:translateY(-50%);z-index:9000;width:226px;max-height:78vh;overflow-y:auto;overflow-x:hidden;background:#fff;border:1px solid var(--slate);border-radius:9px;box-shadow:0 3px 14px rgba(0,0,0,.11);padding:9px;font-size:8pt;}
+#memo-progress.dragged{transform:none;}
+#memo-progress .mp-head{display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--brand-primary);font-size:7pt;text-transform:uppercase;letter-spacing:.07em;padding:1px 4px 7px;border-bottom:1px solid var(--slate);margin-bottom:4px;}
+#memo-progress .mp-count{background:var(--tint);color:var(--brand-primary);border-radius:8px;padding:1px 6px;}
+#memo-progress .mp-legend{display:flex;gap:9px;padding:3px 5px 6px;font-size:6.5pt;color:var(--muted);}
+#memo-progress .mp-legend span{display:inline-flex;align-items:center;gap:3px;}
+.mp-row{display:flex;align-items:center;gap:7px;width:100%;background:none;border:0;text-align:left;padding:4px 5px;border-radius:5px;cursor:pointer;color:var(--body);font:inherit;}
+.mp-row:hover{background:var(--tint);}
+.mp-row.active{background:var(--tint);}
+.mp-row.active .mp-name{color:var(--brand-primary);font-weight:600;}
+.mp-ticks{display:inline-flex;gap:4px;flex-shrink:0;align-items:center;width:26px;}
+/* layout-reviewed: dot fills Accenture purple when seen */
+.mp-tick{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--slate);background:#fff;flex-shrink:0;}
+.mp-struct.on{background:var(--brand-primary);border-color:var(--brand-primary);}
+/* signed-off: a Accenture-purple checkmark */
+.mp-narr{width:11px;height:11px;border:0;background:none;display:inline-flex;align-items:center;justify-content:center;}
+.mp-narr::after{content:'✓';font-size:10px;font-weight:800;line-height:1;color:var(--slate);}
+.mp-narr.on::after{color:var(--brand-primary);}
+#memo-progress .mp-progress{height:4px;border-radius:3px;background:var(--slate);overflow:hidden;margin:1px 3px 7px;}
+#memo-progress .mp-progress>span{display:block;height:100%;background:var(--brand-primary);transition:width .35s ease;}
+.mp-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media print{#memo-progress{display:none;}}
+/* interactive chart tooltip */
+#chart-tip{position:fixed;z-index:9500;background:var(--brand-primary);color:#fff;font-size:8pt;font-weight:600;padding:4px 9px;border-radius:5px;pointer-events:none;opacity:0;transition:opacity .08s;white-space:nowrap;box-shadow:0 2px 9px rgba(0,0,0,.32);}
+svg [data-tip]{cursor:pointer;transition:filter .1s;}
+svg [data-tip]:hover{filter:brightness(1.2);}
+@media print{#chart-tip{display:none;}}
+/* combined panel: collapsible header + zoom-tools slot (zoom injected by the preview only) */
+#memo-progress .mp-bar{display:flex;align-items:center;flex-wrap:nowrap;gap:4px;padding:1px 2px 7px;border-bottom:1px solid var(--slate);margin-bottom:5px;cursor:move;user-select:none;}
+#memo-progress .mp-bar button,#memo-progress #mp-tools{cursor:auto;}
+#memo-progress .mp-collapse{cursor:pointer;}
+#memo-progress .mp-collapse{background:none;border:0;color:var(--brand-primary);cursor:pointer;font-size:11px;line-height:1;padding:2px 3px;}
+#memo-progress .mp-title{font-weight:700;color:var(--brand-primary);font-size:7.5pt;text-transform:uppercase;letter-spacing:.07em;}
+#memo-progress .mp-count{background:var(--tint);color:var(--brand-primary);border-radius:8px;padding:1px 6px;font-size:7pt;font-weight:700;}
+#memo-progress #mp-tools{margin-left:auto;display:flex;gap:3px;align-items:center;}
+#memo-progress.collapsed{width:auto;}
+#memo-progress.collapsed .mp-body{display:none;}
+#memo-progress.collapsed .mp-bar{border-bottom:0;margin-bottom:0;padding-bottom:1px;}
+/* chart view toggle + flag-for-agent (interactive memo only) */
+.chart-toggle{display:flex;align-items:center;gap:5px;margin:8px 0 6px;}
+.chart-toggle .cv-lbl{font-size:6.5pt;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;}
+.cv-btn{background:#fff;border:1px solid var(--slate);color:var(--muted);border-radius:10px;padding:3px 9px;font-size:7pt;font-weight:600;cursor:pointer;line-height:1;}
+.cv-btn.active{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff;}
+.cv-flag{margin-left:auto;background:#fff;border:1px dashed var(--slate);color:var(--muted);border-radius:10px;padding:3px 9px;font-size:7pt;font-weight:600;cursor:pointer;line-height:1;}
+.cv-flag.on{background:#FDF3E7;border:1px solid #B45309;color:#B45309;}
+.mp-flag{color:#B45309;font-size:9px;margin-left:4px;flex-shrink:0;}
+@media print{.chart-toggle{display:none!important;}.chart-view[hidden]{display:none!important;}}
+/* paged-document print rules — clean PDF pagination, never split a table/chart/section element */
+@page{size:letter;margin:0;}
+@media print{
+  .page{break-after:page;page-break-after:always;}
+  table,.kpi-strip,.kpi-card,.callout,svg,.provenance,.attestation,.stat-row{break-inside:avoid;page-break-inside:avoid;}
+  tr,.subhead{break-inside:avoid;page-break-inside:avoid;}
+  .subhead{break-after:avoid;page-break-after:avoid;}
+}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="page">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="cover">
+    <div class="cover-head">
+      <div class="cmr-mark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii00MCAtNDAgMTQzMTkgNzk1IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkNyZWRpdCBNZW1vIFJlaW52ZW50ZWQgd2l0aCBBY2NlbnR1cmUiPjxnIGZpbGw9IiMwQTBBMEYiPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTQwNSAtMTJRMzExIC0xMiAyNDEuMCAxNC4wUTE3MSA0MCAxMjUgODhRNzggMTM2IDU1LjAgMjAzLjVRMzIgMjcxIDMyIDM1M1YzNjFRMzIgNDQzIDU5LjUgNTEwLjVRODcgNTc4IDEzNiA2MjZRMTg1IDY3NCAyNTIuMCA3MDAuMFEzMTkgNzI2IDM5NyA3MjZRNDY3IDcyNiA1MjUuMCA3MDkuNVE1ODMgNjkzIDYyNyA2NjBRNjcwIDYyNiA2OTYuNSA1NzQuMFE3MjMgNTIyIDcyOSA0NTFINTE4UTUxMiA1MDYgNDgyLjAgNTM1LjBRNDUyIDU2NCAzOTggNTY0UTMyOSA1NjQgMjg4LjUgNTEyLjBRMjQ4IDQ2MCAyNDggMzYyVjM1NFEyNDggMjU3IDI4Ny41IDIwNC41UTMyNyAxNTIgNDAxIDE1MlE0NTUgMTUyIDQ5MC41IDE4MC41UTUyNiAyMDkgNTM0IDI2OUg3MzhRNzMzIDIwMCA3MDYuMCAxNDcuMFE2NzkgOTQgNjM2IDU5UTU5MiAyNCA1MzMuMCA2LjBRNDc0IC0xMiA0MDUgLTEyWiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDc3MSw3MTUpIHNjYWxlKDEsLTEpIiBkPSJNNjkgNzE1SDM0OVE0OTAgNzE1IDU2NS4wIDY1OC41UTY0MCA2MDIgNjQwIDQ4OFY0ODRRNjQwIDQwNyA2MDMuNSAzNjIuNVE1NjcgMzE4IDUxMSAyOTZMNjgyIDBINDY2TDMyMSAyNTZIMjczVjBINjlaTTMzOSAzODlRMzkxIDM4OSA0MTYuNSA0MTEuMFE0NDIgNDMzIDQ0MiA0NzZWNDgwUTQ0MiA1MjQgNDE2LjAgNTQyLjVRMzkwIDU2MSAzNDAgNTYxSDI3M1YzODlaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTQ4MCw3MTUpIHNjYWxlKDEsLTEpIiBkPSJNNjkgNzE1SDU2M1Y1NTdIMjczVjQzNEg1MDRWMjg4SDI3M1YxNThINTc5VjBINjlaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjEwNCw3MTUpIHNjYWxlKDEsLTEpIiBkPSJNMzIyIDE1OFE0MTQgMTU4IDQ1Ni4wIDIwNi41UTQ5OCAyNTUgNDk4IDM1NVYzNjNRNDk4IDQ2NiA0NTYuMCA1MTEuNVE0MTQgNTU3IDMyMCA1NTdIMjc1VjE1OFpNNjkgNzE1SDMyOVE1MTkgNzE1IDYxNS41IDYyMy41UTcxMiA1MzIgNzEyIDM2NlYzNThRNzEyIDI3NCA2ODcuNSAyMDguMFE2NjMgMTQyIDYxNSA5NlE1NjYgNDkgNDk0LjAgMjQuNVE0MjIgMCAzMjggMEg2OVoiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyODU5LDcxNSkgc2NhbGUoMSwtMSkiIGQ9Ik03MyA3MTVIMjgwVjBINzNaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzIyMyw3MTUpIHNjYWxlKDEsLTEpIiBkPSJNMjA2IDU1N0gyMVY3MTVINTk3VjU1N0g0MTJWMEgyMDZaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNDA2Miw3MTUpIHNjYWxlKDEsLTEpIiBkPSJNNjkgNzE1SDMzNkw0NzMgMzM0TDYxMCA3MTVIODcyVjBINjY4VjQ0NUw0OTMgMEg0MjVMMjUyIDQ0NVYwSDY5WiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDUwMTYsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTY5IDcxNUg1NjNWNTU3SDI3M1Y0MzRINTA0VjI4OEgyNzNWMTU4SDU3OVYwSDY5WiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDU2NDAsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTY5IDcxNUgzMzZMNDczIDMzNEw2MTAgNzE1SDg3MlYwSDY2OFY0NDVMNDkzIDBINDI1TDI1MiA0NDVWMEg2OVoiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSg2NTk0LDcxNSkgc2NhbGUoMSwtMSkiIGQ9Ik00MTAgMTQ5UTQ4NiAxNDkgNTMwLjAgMjAzLjVRNTc0IDI1OCA1NzQgMzU1VjM2M1E1NzQgNDU5IDUyOS41IDUxMi4wUTQ4NSA1NjUgNDA5IDU2NVEzMzMgNTY1IDI4OS4wIDUxMi41UTI0NSA0NjAgMjQ1IDM2MlYzNTRRMjQ1IDI1NiAyOTAuMCAyMDIuNVEzMzUgMTQ5IDQxMCAxNDlaTTQwNiAtMTJRMzE5IC0xMiAyNTAuMCAxNS4wUTE4MSA0MiAxMzIgOTBRODMgMTM4IDU3LjAgMjA1LjBRMzEgMjcyIDMxIDM1M1YzNjFRMzEgNDQzIDYwLjAgNTEwLjBRODkgNTc3IDE0MCA2MjVRMTkxIDY3MyAyNjAuMCA2OTkuMFEzMjkgNzI1IDQwOSA3MjVRNDkxIDcyNSA1NjAuNSA3MDAuMFE2MzAgNjc1IDY4MSA2MjlRNzMxIDU4MiA3NTkuNSA1MTUuNVE3ODggNDQ5IDc4OCAzNjZWMzU4UTc4OCAyNzUgNzYxLjAgMjA3LjBRNzM0IDEzOSA2ODQgOTFRNjM0IDQyIDU2My41IDE1LjBRNDkzIC0xMiA0MDYgLTEyWiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDc2MzQsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTY5IDcxNUgzNDlRNDkwIDcxNSA1NjUuMCA2NTguNVE2NDAgNjAyIDY0MCA0ODhWNDg0UTY0MCA0MDcgNjAzLjUgMzYyLjVRNTY3IDMxOCA1MTEgMjk2TDY4MiAwSDQ2NkwzMjEgMjU2SDI3M1YwSDY5Wk0zMzkgMzg5UTM5MSAzODkgNDE2LjUgNDExLjBRNDQyIDQzMyA0NDIgNDc2VjQ4MFE0NDIgNTI0IDQxNi4wIDU0Mi41UTM5MCA1NjEgMzQwIDU2MUgyNzNWMzg5WiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDgzNDMsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTY5IDcxNUg1NjNWNTU3SDI3M1Y0MzRINTA0VjI4OEgyNzNWMTU4SDU3OVYwSDY5WiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDg5NjcsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTczIDcxNUgyODBWMEg3M1oiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSg5MzMxLDcxNSkgc2NhbGUoMSwtMSkiIGQ9Ik02OSA3MTVIMzAwTDUyOSAzMTJWNzE1SDcwOFYwSDUxMEwyNDkgNDQ5VjBINjlaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTA4MTcuMTQ3MDU4ODIzNTMsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTY5IDcxNUg1NjNWNTU3SDI3M1Y0MzRINTA0VjI4OEgyNzNWMTU4SDU3OVYwSDY5WiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDExNDQxLjE0NzA1ODgyMzUzLDcxNSkgc2NhbGUoMSwtMSkiIGQ9Ik02OSA3MTVIMzAwTDUyOSAzMTJWNzE1SDcwOFYwSDUxMEwyNDkgNDQ5VjBINjlaIi8+PHBhdGggdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTIyMzAuMTQ3MDU4ODIzNTMsNzE1KSBzY2FsZSgxLC0xKSIgZD0iTTIwNiA1NTdIMjFWNzE1SDU5N1Y1NTdINDEyVjBIMjA2WiIvPjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEyODYwLjE0NzA1ODgyMzUzLDcxNSkgc2NhbGUoMSwtMSkiIGQ9Ik02OSA3MTVINTYzVjU1N0gyNzNWNDM0SDUwNFYyODhIMjczVjE1OEg1NzlWMEg2OVoiLz48cGF0aCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMzQ4NC4xNDcwNTg4MjM1Myw3MTUpIHNjYWxlKDEsLTEpIiBkPSJNMzIyIDE1OFE0MTQgMTU4IDQ1Ni4wIDIwNi41UTQ5OCAyNTUgNDk4IDM1NVYzNjNRNDk4IDQ2NiA0NTYuMCA1MTEuNVE0MTQgNTU3IDMyMCA1NTdIMjc1VjE1OFpNNjkgNzE1SDMyOVE1MTkgNzE1IDYxNS41IDYyMy41UTcxMiA1MzIgNzEyIDM2NlYzNThRNzEyIDI3NCA2ODcuNSAyMDguMFE2NjMgMTQyIDYxNSA5NlE1NjYgNDkgNDk0LjAgMjQuNVE0MjIgMCAzMjggMEg2OVoiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTAxMzAsMCkgc2NhbGUoNDIuMDU4ODIzNTI5NDExNzcpIj48cG9seWdvbiBmaWxsPSIjQTEwMEZGIiBwb2ludHM9Ijk1LjEsMTIgMTA0LjUsOC41IDk1LjEsNC45IDk1LjEsMCAxMTEuMiw2LjUgMTExLjIsMTAuNSA5NS4xLDE3IiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtOTUuMSwwKSIvPjwvZz48L3N2Zz4=" alt="Credit Memo Reinvented" /><div class="cmr-cap">an Accenture accelerator</div></div>
+    </div><!-- /cover-head -->
+    <div class="doc-type">Commercial Credit Memorandum</div>
+    <div class="borrower">Piedmont Precision Components, Inc.</div>
+    <div class="cover-sub">Machine Shops · NAICS 332710</div>
+    <div class="meta">
+      <div><strong>Credit Action:</strong> Piedmont Precision C&I Credit Package</div>
+      <div><strong>Memo Type:</strong> Existing Relationship — Material Credit Event</div>
+      <div><strong>NAICS:</strong> 332710 — Machine Shops</div>
+      <div><strong>Relationship Manager:</strong> Demo Commercial RM</div>
+      <div><strong>Credit Officer:</strong> Demo Credit Officer</div>
+      <div><strong>Prepared:</strong> May 30, 2026</div>
+    </div>
+    <div class="draft">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+    
+    <div class="attest-summary">
+      <div><strong>Section review:</strong> 5 of 14 sections reviewed (1 edited) · 9 pending</div>
+      <div class="note">Section-level attestation records preparer/reviewer verification of the AI-drafted content. It is not credit-committee approval, which remains a separate gate (see classification banner).</div>
+    </div>
+  </div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Piedmont Precision Components, Inc.</span></div>
+</section>
+
+<!-- TABLE OF CONTENTS (generated from the render plan) -->
+<section class="page">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-title">Table of Contents</span></div>
+  <ol class="toc"><li>Executive Summary <span class="muted">— existing exposure table, proposed exposure table, change in exposure, credit approval summary, compliance due diligence, commentary</span></li><li>Credit Request / Transaction Overview <span class="muted">— purpose request summary, sources and uses</span></li><li>Collateral <span class="muted">— blanket lien, equipment</span></li><li>Covenant and Conditions <span class="muted">— covenant compliance table, conditions and monitoring</span></li><li>Borrower/Company Profile <span class="muted">— general summary, strengths risks mitigants, key changes, csg feedback</span></li><li>Management Ownership & Overview <span class="muted">— overview, key changes</span></li><li>Industry & Peer Analysis <span class="muted">— market outlook, industry changes, peer comparison</span></li><li>Risk Rating (internal)</li><li>Financial Analysis <span class="muted">— key metrics table, spreading trends, revolver usage trend, sensitivity analysis, cash flow analysis</span></li><li>Guarantor Profile</li><li>Risk and Mitigants</li><li>Due Diligence Summary <span class="muted">— ews summary, entity verification, internet search, lexisnexis, credit bureau, sbfe, leading indicators commentary</span></li><li>Account Summary and Credit Recommendation</li><li>Appendix</li></ol>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 2</span></div>
+</section>
+
+<!-- MODULE SLOTS — the orchestrator/memo-writer injects only ON modules here, in order -->
+
+<section class="page" data-mod="executive_summary" data-modname="Executive Summary">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Executive Summary</span><span class="section-title">Executive Summary</span></div>
+  <div class="attestation att-approved"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Reviewed by Dana Reyes, RM · Jun 5, 2026</span></div>
+  
+    <div class="kpi-strip">
+      <div class="kpi-card"><div class="kpi-label">Revenue</div><div class="kpi-value">$64.5M</div><div class="kpi-sub">7.5% YoY</div></div>
+      <div class="kpi-card"><div class="kpi-label">Adj. EBITDA</div><div class="kpi-value">$5.1M</div><div class="kpi-sub">7.9% margin</div></div>
+      <div class="kpi-card"><div class="kpi-label">Total Leverage</div><div class="kpi-value">3.95x</div><div class="kpi-sub"></div></div>
+      <div class="kpi-card"><div class="kpi-label">DSCR</div><div class="kpi-value">1.42x</div><div class="kpi-sub">>= 1.25x covenant</div></div>
+    </div>
+    <div class="subhead">Existing Exposure</div><table><thead><tr><th>Facility</th><th>Borrower</th><th>Purpose</th><th class="numeric">Bank Exposure</th><th class="numeric">Outstanding</th><th>Maturity</th><th>PRISM</th></tr></thead><tbody><tr><td><a class="rec-link" href="https://bankinggpt.lightning.force.com/lightning/r/LLC_BI__Loan__c/a4Zbb000001zEQTEA2/view" target="_blank" rel="noopener">Piedmont Precision — Working Capital Revolver</a></td><td>Piedmont Precision Components, Inc.</td><td>Working capital and letters of credit fo…</td><td class="numeric">$5.0M</td><td class="numeric">$4.3M</td><td>Jul 15, 2026</td><td>5</td></tr><tr><td colspan="3"><strong>Total</strong></td><td class="numeric"><strong>$5.0M</strong></td><td class="numeric"><strong>$4.3M</strong></td><td colspan="2"></td></tr></tbody></table>
+    <div class="subhead">Proposed Exposure</div><table><thead><tr><th>Facility</th><th>Borrower</th><th>Purpose</th><th class="numeric">Bank Exposure</th><th class="numeric">Outstanding</th><th>Maturity</th><th>PRISM</th></tr></thead><tbody><tr class="changed"><td><a class="rec-link" href="https://bankinggpt.lightning.force.com/lightning/r/LLC_BI__Loan__c/a4Zbb000001zEQTEA2/view" target="_blank" rel="noopener">Piedmont Precision — Working Capital Revolver</a></td><td>Piedmont Precision Components, Inc.</td><td>Working capital and letters of credit fo…</td><td class="numeric">$7.5M</td><td class="numeric">$4.3M</td><td>Jul 15, 2027</td><td>5</td></tr><tr class="changed"><td><a class="rec-link" href="https://bankinggpt.lightning.force.com/lightning/r/LLC_BI__Loan__c/a4Zbb000001vaxREAQ/view" target="_blank" rel="noopener">Piedmont Precision — Equipment Term Loan</a></td><td>Piedmont Precision Components, Inc.</td><td>New-money financing for 3× Mazak INTEGRE…</td><td class="numeric">$5.0M</td><td class="numeric">$5.0M</td><td>Jul 15, 2031</td><td>5</td></tr><tr><td colspan="3"><strong>Total</strong></td><td class="numeric"><strong>$12.5M</strong></td><td class="numeric"><strong>$4.3M</strong></td><td colspan="2"></td></tr></tbody></table>
+    <div class="callout"><strong>Change in Exposure:</strong> Bank commitment +$7.5M — $2.5M revolver increase ($5.0M -> $7.5M) + new $5.0M Equipment Term Loan = $7.5M new money.</div>
+    
+    
+    <div class="two-col">
+      <div><div class="subhead">Credit Approval Summary</div><table><tbody><tr><td>HRB Designation</td><td>Not HRB</td></tr><tr><td>HVCRE Applicable?</td><td>No</td></tr><tr><td>Underwriting Requirement Exceptions</td><td>0</td></tr><tr><td>Past-Due Financial Statements</td><td>0 of 4</td></tr></tbody></table></div>
+      <div><div class="subhead">Compliance &amp; Due Diligence</div><table><tbody><tr><td>CSG Feedback Complete?</td><td><span class="badge badge-pass">Yes</span></td></tr><tr><td>CSG Flags?</td><td><span class="badge badge-pass">None</span></td></tr></tbody></table></div>
+    </div>
+    <div class="subhead">Executive Summary Commentary</div><div class="rte-narrative" data-editable><p>Piedmont Precision Components seeks a <strong>$5.0M equipment term loan</strong> to fund three Mazak INTEGREX multi-tasking CNC machines, alongside a <strong>$2.5M increase &amp; renewal</strong> of its existing $5.0M working-capital revolver (to $7.5M). The borrower is a 26-year aerospace/defense precision machinist (AS9100D / ISO 13485) with a diversified blue-chip customer base and a multi-year contracted backlog. FY2025 revenue reached <strong>$64.5M</strong> (+7.5% YoY), but adjusted EBITDA margin softened to ~7.9% ($5.1M) on elevated labor and new-program qualification costs, lifting leverage to ~3.9x (~4.9x pro forma). Liquidity ($8.2M) and DSC (1.42x) remain inside covenant, and the unlimited guaranty of principal Margaret Holloway provides additional support. Recommended for approval at a <strong>5 — Pass/Watch</strong> risk rating, with close monitoring of the margin trend.</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a><a class="prov-chip live" style="color:#5B3FA0" href="https://app.boom.build" target="_blank" rel="noopener"><span class="prov-mark" style="background:#5B3FA0">B</span><span>Boom</span><span class="prov-ext">↗</span></a><span class="prov-chip live" style="color:#0B6BCB"><span class="prov-mark" style="background:#0B6BCB">IR</span><span>IRIS</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 3</span></div>
+</section>
+<section class="page" data-mod="request_details" data-modname="Credit Request / Transaction Overview">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Credit Request / Transaction Overview</span><span class="section-title">Credit Request / Transaction Overview</span></div>
+  <div class="attestation att-approved"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Reviewed by Dana Reyes, RM · Jun 5, 2026</span></div>
+  <div class="subhead">Purpose / Request Summary</div>
+    <div class="rte-narrative" data-editable><p><strong>Purpose.</strong> $5.0M new-money equipment term loan (7-year, monthly amortization) to acquire three Mazak INTEGREX i-450 multi-tasking CNC centers supporting a newly awarded defense program. Concurrently, the existing $5.0M working-capital revolver is increased by $2.5M to $7.5M and renewed for 364 days.</p><p><strong>Sources &amp; Uses.</strong> Uses: $5.0M equipment + $2.5M incremental working capital = $7.5M new money. Sources: $5.0M Acme Bank equipment term loan + $2.5M revolver increase.</p></div>
+    <div class="subhead">Facility Terms</div>
+    <table><thead><tr><th>Facility</th><th>Purpose</th><th class="numeric">Commitment</th><th>Maturity</th><th>Action</th></tr></thead><tbody><tr><td><a class="rec-link" href="https://bankinggpt.lightning.force.com/lightning/r/LLC_BI__Loan__c/a4Zbb000001zEQTEA2/view" target="_blank" rel="noopener">Piedmont Precision — Working Capital Revolver</a></td><td>Working capital and letters of credit for aerospace/defense/medical precision-component production.</td><td class="numeric">$7.5M</td><td>Jul 15, 2027</td><td>Renewal</td></tr><tr><td><a class="rec-link" href="https://bankinggpt.lightning.force.com/lightning/r/LLC_BI__Loan__c/a4Zbb000001vaxREAQ/view" target="_blank" rel="noopener">Piedmont Precision — Equipment Term Loan</a></td><td>New-money financing for 3× Mazak INTEGREX CNC machining + inspection equipment (Q3-2026 delivery).</td><td class="numeric">$5.0M</td><td>Jul 15, 2031</td><td><span class="badge badge-watch">New money</span></td></tr></tbody></table>
+    <div class="subhead">Sources &amp; Uses</div>
+    <table><thead><tr><th>Uses</th><th class="numeric">Amount</th><th>Sources</th><th class="numeric">Amount</th></tr></thead><tbody>
+      <tr><td>Equipment — 3× Mazak INTEGREX CNC</td><td class="numeric">$5.0M</td><td>bank equipment term loan</td><td class="numeric">$5.0M</td></tr>
+      <tr><td><strong>Total uses</strong></td><td class="numeric"><strong>$5.0M</strong></td><td><strong>Total sources</strong></td><td class="numeric"><strong>$5.0M</strong></td></tr>
+    </tbody></table>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 4</span></div>
+</section>
+<section class="page" data-mod="collateral" data-modname="Collateral">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Collateral</span><span class="section-title">Collateral</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  <div class="subhead">Blanket Lien</div><div class="rte-narrative" data-editable><p>The working-capital line is secured by a first-priority blanket lien on all business assets, including accounts receivable and inventory, supported by a borrowing-base certificate and periodic field exams.</p></div><div class="subhead">Equipment</div><div class="rte-narrative" data-editable><p>The equipment term loan is secured by a first-priority purchase-money security interest in the three financed Mazak INTEGREX CNC machines, plus the borrower's existing late-model machine tools. Orderly-liquidation coverage is supported by the active secondary market for Mazak multi-tasking equipment.</p></div><div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 5</span></div>
+</section>
+<section class="page" data-mod="covenant_conditions" data-modname="Covenant and Conditions">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Covenant and Conditions</span><span class="section-title">Covenant and Conditions</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  
+    <div class="subhead">Covenant Compliance</div><table><thead><tr><th>Covenant</th><th>Trigger</th><th class="numeric">Actual</th><th class="numeric">Cushion</th><th>Flag</th></tr></thead><tbody><tr><td>Minimum Debt Service Coverage</td><td>>= 1.25x</td><td class="numeric">1.42x</td><td class="numeric">14%</td><td><span class="badge badge-pass">Compliant</span></td></tr><tr><td>Maximum Debt-to-Worth</td><td><= 3.00x</td><td class="numeric">2.18x</td><td class="numeric">27%</td><td><span class="badge badge-pass">Compliant</span></td></tr><tr><td>Minimum Liquidity</td><td>>= $5.0M</td><td class="numeric">$8.2M</td><td class="numeric">64%</td><td><span class="badge badge-pass">Compliant</span></td></tr><tr><td>Maximum Annual CapEx</td><td><= $7.5M</td><td class="numeric">$1.3M</td><td class="numeric">83%</td><td><span class="badge badge-pass">Compliant</span></td></tr></tbody></table>
+    <div class="rte-narrative" data-editable><p class="gap">[Covenant terms &amp; headroom commentary — pending; complete in the per-section review.]</p></div>
+    <div class="subhead">Conditions &amp; Monitoring</div><div class="rte-narrative" data-editable><p class="gap">[Conditions &amp; monitoring — pending; complete in the per-section review.]</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a><span class="prov-chip live" style="color:#0B6BCB"><span class="prov-mark" style="background:#0B6BCB">IR</span><span>IRIS</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 6</span></div>
+</section>
+<section class="page" data-mod="borrower_description" data-modname="Borrower/Company Profile">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Borrower/Company Profile</span><span class="section-title">Borrower/Company Profile</span></div>
+  <div class="attestation att-edited"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Edited &amp; reviewed by Dana Reyes, RM · Jun 5, 2026</span><span class="att-meta">— tightened backlog language</span></div>
+  
+    <div class="subhead">General Summary</div>
+    <div class="rte-narrative" data-editable><p>Founded in 1998 and headquartered in Greensboro, NC, Piedmont Precision Components is a privately held precision-machining manufacturer producing high-tolerance components for aerospace, defense, and medical-device end markets. The company operates a ~110,000 sq ft facility with 182 employees and holds AS9100D and ISO 13485 certifications. Ownership rests with founder-CEO Margaret Holloway, who provides a personal guaranty.</p></div>
+    
+    
+    
+    
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 7</span></div>
+</section>
+<section class="page" data-mod="management_ownership" data-modname="Management Ownership &amp; Overview">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Management Ownership & Overview</span><span class="section-title">Management Ownership & Overview</span></div>
+  <div class="attestation att-approved"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Reviewed by Dana Reyes, RM · Jun 6, 2026</span></div>
+  
+    <div class="subhead">Overview</div>
+    <div class="rte-narrative" data-editable><p>Margaret Holloway (founder, President &amp; CEO; 100% owner) leads a stable senior team averaging 12+ years of tenure. No management changes occurred during the review period. Ms. Holloway provides an unlimited personal guaranty of the facilities.</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 8</span></div>
+</section>
+<section class="page" data-mod="industry_analysis" data-modname="Industry &amp; Peer Analysis">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Industry & Peer Analysis</span><span class="section-title">Industry & Peer Analysis</span></div>
+  <div class="attestation att-approved"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Reviewed by Dana Reyes, RM · Jun 5, 2026</span></div>
+  
+    <div class="subhead">Market Outlook</div>
+    <p>Stable-to-improving. Commercial aerospace build-rate recovery and sustained defense spending support high-tolerance machining demand; reshoring of precision supply chains is a tailwind for AS9100D/ISO-13485 shops. Market size $40B+ (US precision machining / contract manufacturing); ~4.5% CAGR; cyclicality: Moderate — tied to aerospace/defense build rates and medical-device demand; defense backlog dampens the cycle.</p>
+    <div class="rte-narrative" data-editable></div>
+    <div class="subhead">Peer Comparison</div><table><thead><tr><th>Peer</th><th class="numeric">Revenue (LTM)</th><th class="numeric">EBITDA Margin</th><th class="numeric">Leverage</th><th class="numeric">DSC</th></tr></thead><tbody><tr><td>Ducommun <span style="color:var(--muted)">(DCO)</span></td><td class="numeric">$780.0M</td><td class="numeric">12.5%</td><td class="numeric">3.10x</td><td class="numeric">1.80x</td></tr><tr><td>CPI Aerostructures <span style="color:var(--muted)">(CVU)</span></td><td class="numeric">$95.0M</td><td class="numeric">7.5%</td><td class="numeric">2.60x</td><td class="numeric">1.50x</td></tr><tr><td>Innovative Solutions <span style="color:var(--muted)">(ISSC)</span></td><td class="numeric">$47.0M</td><td class="numeric">30.0%</td><td class="numeric">0.40x</td><td class="numeric">6.00x</td></tr><tr><td>Optex Systems <span style="color:var(--muted)">(OPXS)</span></td><td class="numeric">$33.0M</td><td class="numeric">9.0%</td><td class="numeric">0.60x</td><td class="numeric">3.20x</td></tr><tr><td><strong>Peer median</strong></td><td></td><td class="numeric"><strong>10.8%</strong></td><td class="numeric"><strong>1.60x</strong></td><td class="numeric"><strong>2.50x</strong></td></tr></tbody></table><div class="legend">Peer set: same NAICS (332710), revenue band $30M–$150M.</div>
+    <div class="provenance"><span class="prov-label">Sources</span><span class="prov-chip live" style="color:#C8102E"><span class="prov-mark" style="background:#C8102E">IQ</span><span>S&amp;P Capital IQ</span></span><span class="prov-chip live" style="color:#00833E"><span class="prov-mark" style="background:#00833E">IB</span><span>IBISWorld</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 9</span></div>
+</section>
+<section class="page" data-mod="risk_rating_internal" data-modname="Risk Rating (internal)">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Risk Rating (internal)</span><span class="section-title">Risk Rating (internal)</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  
+    <div class="kpi-strip">
+      <div class="kpi-card"><div class="kpi-label">Current Rating</div><div class="kpi-value">5 — Pass/Watch</div></div>
+      <div class="kpi-card"><div class="kpi-label">Proposed Rating</div><div class="kpi-value">5 — Pass/Watch</div><div class="kpi-sub">No change</div></div>
+      <div class="kpi-card"><div class="kpi-label">Direction</div><div class="kpi-value">Stable</div></div>
+    </div>
+    <div class="subhead">Risk Rating Trend</div><table><thead><tr><th>Period</th><th>Rating</th><th class="numeric">PD</th></tr></thead><tbody><tr><td>FY2023</td><td>5 — Pass/Watch</td><td class="numeric">1.60%</td></tr><tr><td>FY2024</td><td>5 — Pass/Watch</td><td class="numeric">1.70%</td></tr><tr><td>FY2025</td><td>5 — Pass/Watch</td><td class="numeric">1.85%</td></tr><tr><td>Proposed</td><td>5 — Pass/Watch (Proposed)</td><td class="numeric">1.95%</td></tr></tbody></table>
+    <div class="subhead">Rating Factors</div>
+    <table><thead><tr><th>Factor</th><th>Assessment</th></tr></thead><tbody><tr><td>Financial strength</td><td><span class="badge badge-watch">Watch</span></td></tr><tr><td>Collateral coverage</td><td><span class="badge badge-pass">Pass</span></td></tr><tr><td>Guarantor support</td><td><span class="badge badge-pass">Pass</span></td></tr><tr><td>Management &amp; ownership</td><td><span class="badge badge-watch">Watch</span></td></tr><tr><td>Industry / market position</td><td><span class="badge badge-pass">Pass</span></td></tr></tbody></table>
+    <div class="subhead">Rating Rationale</div>
+    <div class="rte-narrative" data-editable><p class="gap">[Risk rating rationale — pending; complete in the per-section review.]</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a><span class="prov-chip live" style="color:#0B6BCB"><span class="prov-mark" style="background:#0B6BCB">IR</span><span>IRIS</span></span><span class="prov-chip live" style="color:#0B5AA2"><span class="prov-mark" style="background:#0B5AA2">M</span><span>Moody's</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 10</span></div>
+</section>
+<section class="page" data-mod="financial_commentary" data-modname="Financial Analysis">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Financial Analysis</span><span class="section-title">Financial Analysis</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  
+    <div class="subhead">Current Performance</div>
+    <div class="rte-narrative" data-editable><p>FY2025 revenue of $64.5M grew ~7.5% year-over-year, but profitability softened: gross margin compressed to ~21.6% and adjusted EBITDA margin declined to ~7.9% ($5.1M, from ~9.7% in FY2024) on elevated direct labor, training, and first-article qualification costs ahead of full-rate production. Total funded debt of $20.2M (pro forma $25.2M including the $5.0M equipment loan) puts leverage at ~3.9x EBITDA (~4.9x pro forma) — elevated for the rating but supported by tangible collateral and a contracted backlog. Management projects EBITDA-margin recovery in FY2026 as the new program reaches full rate and qualification spend rolls off; the margin trajectory is the key monitoring item.</p></div>
+    <div class="subhead">Key Metrics — Last 3 Fiscal Years + Pro Forma</div>
+      <table><thead><tr><th>Metric</th><th class="numeric">FY2023</th><th class="numeric">FY2024</th><th class="numeric">FY2025</th><th class="numeric">Pro Forma</th></tr></thead><tbody>
+      <tr><td>Revenue</td><td class="numeric">$56.0M</td><td class="numeric">$60.0M</td><td class="numeric">$64.5M</td><td class="numeric">$64.5M <span class="legend">(unchanged)</span></td></tr>
+      <tr><td>Adjusted EBITDA</td><td class="numeric">$6.4M</td><td class="numeric">$5.8M</td><td class="numeric">$5.1M</td><td class="numeric">$5.1M <span class="legend">(unchanged)</span></td></tr>
+      <tr><td>Debt ÷ EBITDA</td><td class="numeric">2.17x</td><td class="numeric">2.62x</td><td class="numeric">3.95x</td><td class="numeric">5.42x</td></tr>
+      <tr><td>Cash &amp; Equivalents</td><td class="numeric">$3.1M</td><td class="numeric">$3.9M</td><td class="numeric">$5.0M</td><td class="numeric"><span class="gap">not modeled</span></td></tr>
+      <tr><td>Free Cash Flow</td><td class="numeric">$6.9M</td><td class="numeric">$6.8M</td><td class="numeric">$9.0M</td><td class="numeric"><span class="gap">not modeled</span></td></tr>
+      <tr><td>Debt Service Coverage</td><td class="numeric"><span class="gap">flagged for RM</span></td><td class="numeric"><span class="gap">flagged for RM</span></td><td class="numeric">1.42x</td><td class="numeric"><span class="gap">not modeled</span></td></tr>
+      </tbody></table>
+      <div class="legend">Revenue, Adjusted EBITDA, and Free Cash Flow (operating cash flow less capital expenditures) trace to the Boom spread. Debt ÷ EBITDA is computed (total bank debt ÷ Adjusted EBITDA); the Pro Forma column adds this action's new money to the latest period's debt. Debt Service Coverage is the most recent covenant-test actual — prior-period DSC and all Pro Forma figures are not separately modeled and are flagged for RM completion rather than estimated.</div>
+    <div class="chart-views" data-default="dollars">
+        <div class="chart-toggle"><span class="cv-lbl">Chart view</span><button class="cv-btn active" data-cv="dollars">$ Revenue / EBITDA</button><button class="cv-btn" data-cv="margin">Margin %</button></div>
+        <div class="chart-view" data-view="dollars"><div class="subhead">Spreading Trends — Revenue &amp; Adjusted EBITDA ($M)</div><svg viewBox="0 0 520 170" style="width:100%;height:auto;border:1px solid #D6D3D1;border-radius:6px;background:#fff"><rect x="40" y="3" width="9" height="9" fill="#2E0A4F"/><text x="53" y="11" font-size="7.5" fill="#1A1A1A">Revenue</text><rect x="160" y="3" width="9" height="9" fill="#A100FF"/><text x="173" y="11" font-size="7.5" fill="#1A1A1A">Adj. EBITDA</text><rect x="66.0" y="44.8" width="41.6" height="99.2" fill="#2E0A4F" data-tip="Revenue · FY2023: 56.0"/><rect x="118.0" y="132.7" width="41.6" height="11.3" fill="#A100FF" data-tip="Adj. EBITDA · FY2023: 6.4"/><text x="118.0" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">FY2023</text><rect x="222.0" y="37.7" width="41.6" height="106.3" fill="#2E0A4F" data-tip="Revenue · FY2024: 60.0"/><rect x="274.0" y="133.7" width="41.6" height="10.3" fill="#A100FF" data-tip="Adj. EBITDA · FY2024: 5.8"/><text x="274.0" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">FY2024</text><rect x="378.0" y="29.7" width="41.6" height="114.3" fill="#2E0A4F" data-tip="Revenue · FY2025: 64.5"/><rect x="430.0" y="135.0" width="41.6" height="9.0" fill="#A100FF" data-tip="Adj. EBITDA · FY2025: 5.1"/><text x="430.0" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">FY2025</text></svg><div class="rte-narrative" data-editable></div></div>
+        <div class="chart-view" data-view="margin" hidden><div class="subhead">Spreading Trends — Margin % (Gross &amp; EBITDA)</div><svg viewBox="0 0 520 180" style="width:100%;height:auto;border:1px solid #D6D3D1;border-radius:6px;background:#fff"><rect x="42" y="3" width="9" height="9" fill="#2E0A4F"/><text x="55" y="11" font-size="7.5" fill="#1A1A1A">Gross Margin %</text><rect x="182" y="3" width="9" height="9" fill="#A100FF"/><text x="195" y="11" font-size="7.5" fill="#1A1A1A">EBITDA Margin %</text><line x1="42" y1="138.3" x2="508" y2="138.3" stroke="#D6D3D1" stroke-width="1"/><text x="38" y="141.30769230769232" font-size="6.5" fill="#9b9b9b" text-anchor="end">0%</text><polyline points="42.0,33.7 275.0,44.5 508.0,55.2" fill="none" stroke="#2E0A4F" stroke-width="2.5"/><circle cx="42.0" cy="33.7" r="3.5" fill="#2E0A4F" data-tip="Gross Margin % · FY2023: 27.1%"/><circle cx="275.0" cy="44.5" r="3.5" fill="#2E0A4F" data-tip="Gross Margin % · FY2024: 24.3%"/><circle cx="508.0" cy="55.2" r="3.5" fill="#2E0A4F" data-tip="Gross Margin % · FY2025: 21.6%"/><polyline points="42.0,94.3 275.0,101.0 508.0,107.8" fill="none" stroke="#A100FF" stroke-width="2.5"/><circle cx="42.0" cy="94.3" r="3.5" fill="#A100FF" data-tip="EBITDA Margin % · FY2023: 11.4%"/><circle cx="275.0" cy="101.0" r="3.5" fill="#A100FF" data-tip="EBITDA Margin % · FY2024: 9.7%"/><circle cx="508.0" cy="107.8" r="3.5" fill="#A100FF" data-tip="EBITDA Margin % · FY2025: 7.9%"/><text x="42.0" y="172" font-size="6.5" fill="#6B6B6B" text-anchor="middle">FY2023</text><text x="275.0" y="172" font-size="6.5" fill="#6B6B6B" text-anchor="middle">FY2024</text><text x="508.0" y="172" font-size="6.5" fill="#6B6B6B" text-anchor="middle">FY2025</text></svg><div class="legend">View: margin % — surfaces EBITDA-margin compression toward breakeven (the core finding the $-view hides).</div><div class="rte-narrative alt-view" data-editable></div></div>
+      </div>
+    <div class="subhead">Revolver Usage Trend — Existing $7.5M RCF</div><svg viewBox="0 0 520 170" style="width:100%;height:auto;border:1px solid #D6D3D1;border-radius:6px;background:#fff">
+      <line x1="36" y1="42.635004542826465" x2="450" y2="42.635004542826465" stroke="#A8211B" stroke-width="1" stroke-dasharray="3 3"/><text x="454" y="45.635004542826465" font-size="7.5" fill="#A8211B">High 66.67%</text><line x1="36" y1="73.90286611051458" x2="450" y2="73.90286611051458" stroke="#2E0A4F" stroke-width="1" stroke-dasharray="3 3"/><text x="454" y="76.90286611051458" font-size="7.5" fill="#2E0A4F">Avg 59.39%</text><line x1="36" y1="111.35557941686628" x2="450" y2="111.35557941686628" stroke="#1F7A3A" stroke-width="1" stroke-dasharray="3 3"/><text x="454" y="114.35557941686628" font-size="7.5" fill="#1F7A3A">Low 50.67%</text>
+      <polyline points="36.0,111.4 73.6,94.2 111.3,65.6 148.9,42.6 186.5,54.1 224.2,77.0 261.8,88.5 299.5,71.3 337.1,48.4 374.7,65.6 412.4,82.8 450.0,85.6" fill="none" stroke="#A100FF" stroke-width="2"/>
+      <circle cx="36" cy="111.35557941686628" r="2.5" fill="#A100FF" data-tip="Jan-24: 50.67%"/><circle cx="73.63636363636364" cy="94.17543569835632" r="2.5" fill="#A100FF" data-tip="Feb-24: 54.67%"/><circle cx="111.27272727272728" cy="65.57049640703727" r="2.5" fill="#A100FF" data-tip="Mar-24: 61.33%"/><circle cx="148.9090909090909" cy="42.635004542826465" r="2.5" fill="#A100FF" data-tip="Apr-24: 66.67%"/><circle cx="186.54545454545456" cy="54.10275047493186" r="2.5" fill="#A100FF" data-tip="May-24: 64%"/><circle cx="224.1818181818182" cy="76.99529197984637" r="2.5" fill="#A100FF" data-tip="Jun-24: 58.67%"/><circle cx="261.8181818181818" cy="88.46303791195176" r="2.5" fill="#A100FF" data-tip="Jul-24: 56%"/><circle cx="299.45454545454544" cy="71.28289419344182" r="2.5" fill="#A100FF" data-tip="Aug-24: 60%"/><circle cx="337.0909090909091" cy="48.390352688527315" r="2.5" fill="#A100FF" data-tip="Sep-24: 65.33%"/><circle cx="374.72727272727275" cy="65.57049640703727" r="2.5" fill="#A100FF" data-tip="Oct-24: 61.33%"/><circle cx="412.3636363636364" cy="82.7506401255472" r="2.5" fill="#A100FF" data-tip="Nov-24: 57.33%"/><circle cx="450" cy="85.58536383910135" r="2.5" fill="#A100FF" data-tip="Dec-24: 56.67%"/>
+      <text x="36" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">Jan-24</text><text x="111.27272727272728" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">Mar-24</text><text x="186.54545454545456" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">May-24</text><text x="261.8181818181818" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">Jul-24</text><text x="337.0909090909091" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">Sep-24</text><text x="412.3636363636364" y="162" font-size="6.5" fill="#6B6B6B" text-anchor="middle">Nov-24</text>
+      <text x="450" y="14" font-size="7.5" fill="#2E0A4F" text-anchor="end">Days at zero: 0</text>
+    </svg><div class="stat-row"><span>Commitment <b>$7.5M</b></span><span>High <b>66.67%</b></span><span>Avg <b>59.39%</b></span><span>Low <b>50.67%</b></span><span>Days at zero <b>0</b></span></div><div class="legend">12-month utilization trend from AFS servicing.</div>
+    
+    <div class="subhead">Future Outlook</div>
+    <div class="rte-narrative" data-editable><p class="gap">[Future outlook — pending; complete in the per-section review.]</p></div>
+    <div class="subhead">Sensitivity Analysis</div><table><thead><tr><th>Scenario</th><th class="numeric">Revenue Δ</th><th class="numeric">GM Δ</th><th class="numeric">DSC</th><th>Covenant</th></tr></thead><tbody><tr><td>Base (FY2024 actual)</td><td class="numeric">—</td><td class="numeric">—</td><td class="numeric ">1.42x</td><td><span class="badge badge-pass">Pass</span></td></tr><tr><td>Downside — revenue −5%</td><td class="numeric">-5%</td><td class="numeric">—</td><td class="numeric cell-watch">1.28x</td><td><span class="badge badge-pass">Pass</span></td></tr><tr><td>Stress — revenue −5%, GM −100bps</td><td class="numeric">-5%</td><td class="numeric">-100 bps</td><td class="numeric cell-breach">1.18x</td><td><span class="badge badge-breach">1 breach</span></td></tr></tbody></table><div class="legend">A revenue −5% / gross-margin −100bps stress pressures debt-service coverage toward the 1.25x floor — the deal's key sensitivity.</div>
+    <div class="subhead">Cash Flow Analysis</div>
+      <div class="rte-narrative" data-editable><p>On a combined basis, borrower operating cash flow plus guarantor liquidity covers pro forma fixed charges. Global debt-service coverage is supported primarily at the operating-company level, with the guaranty providing secondary support. A formal global cash-flow model will be maintained in IRIS once the connector lands.</p></div>
+      <table><tbody>
+        <tr><td>Borrower adjusted EBITDA (FY2025)</td><td class="numeric">$5.1M</td></tr>
+        <tr><td>Guarantor cash-flow support</td><td class="numeric">[PFS — flagged for RM]</td></tr>
+        <tr><td>Pro forma fixed charges (interest + scheduled principal)</td><td class="numeric">~$2.5M</td></tr>
+        <tr><td>Global debt-service coverage</td><td class="numeric">1.42x</td></tr>
+      </tbody></table>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#5B3FA0" href="https://app.boom.build" target="_blank" rel="noopener"><span class="prov-mark" style="background:#5B3FA0">B</span><span>Boom</span><span class="prov-ext">↗</span></a><span class="prov-chip live" style="color:#0B6BCB"><span class="prov-mark" style="background:#0B6BCB">IR</span><span>IRIS</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 11</span></div>
+</section>
+<section class="page" data-mod="guarantor_profile" data-modname="Guarantor Profile">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Guarantor Profile</span><span class="section-title">Guarantor Profile</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  <table><tbody>
+      <tr><td>Guarantor</td><td>Margaret Holloway</td></tr>
+      <tr><td>Type</td><td>Individual (principal)</td></tr>
+      <tr><td>Guaranty</td><td>Unlimited, Continuing (individual guarantor — joint &amp; several not applicable)</td></tr>
+      <tr><td>Relationship to borrower</td><td>Founder &amp; 100% owner</td></tr>
+    </tbody></table>
+    <div class="rte-narrative" data-editable><p>Margaret Holloway provides an unlimited continuing guaranty of the Piedmont facilities. As founder and sole shareholder, her interests are fully aligned with the borrower. A current personal financial statement is on file; updated PFS and tax returns are a standard reporting condition.</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 12</span></div>
+</section>
+<section class="page" data-mod="risk_mitigants" data-modname="Risk and Mitigants">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Risk and Mitigants</span><span class="section-title">Risk and Mitigants</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  
+    <table><thead><tr><th>Risk</th><th>Mitigant</th><th>Residual</th></tr></thead><tbody><tr><td>Margin compression</td><td>Contracted price escalators; backlog conversion; qualification-cost roll-off underway</td><td><span class="badge badge-watch">Watch</span></td></tr><tr><td>Customer / program concentration</td><td>Long program lifecycles; growing medical-device diversification (~20% of revenue)</td><td><span class="badge badge-pass">Low</span></td></tr><tr><td>Key-man concentration (principal)</td><td>Unlimited personal guaranty; stable senior team (12+ yr avg. tenure)</td><td><span class="badge badge-watch">Watch</span></td></tr><tr><td>Leverage above peer median</td><td>Tangible equipment &amp; blanket-lien collateral coverage (112%–185%)</td><td><span class="badge badge-watch">Watch</span></td></tr><tr><td>Thin working-capital coverage during ramp</td><td>Revolver increase to $7.5M; borrowing-base monitoring via periodic field exams</td><td><span class="badge badge-pass">Low</span></td></tr></tbody></table>
+    <div class="rte-narrative" data-editable><p class="gap">[Risk and mitigants summary — pending; complete in the per-section review.]</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 13</span></div>
+</section>
+<section class="page" data-mod="leading_indicators" data-modname="Due Diligence Summary">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Due Diligence Summary</span><span class="section-title">Due Diligence Summary</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  <div class="subhead">Early Warning Signals (EWS) Summary</div><div class="rte-narrative" data-editable><p class="gap">[Early Warning Signals (EWS) Summary — pending; complete in the per-section review.]</p></div><div class="subhead">Entity Verification (Secretary of State)</div><div class="rte-narrative" data-editable><p class="gap">[Entity Verification (Secretary of State) — pending; complete in the per-section review.]</p></div><div class="subhead">Internet Search</div><div class="rte-narrative" data-editable><p class="gap">[Internet Search — pending; complete in the per-section review.]</p></div><div class="subhead">LexisNexis</div><div class="rte-narrative" data-editable><p class="gap">[LexisNexis — pending; complete in the per-section review.]</p></div><div class="subhead">Credit Bureau</div><div class="rte-narrative" data-editable><p class="gap">[Credit Bureau — pending; complete in the per-section review.]</p></div><div class="subhead">Small Business Financial Exchange (SBFE)</div><div class="rte-narrative" data-editable><p class="gap">[Small Business Financial Exchange (SBFE) — pending; complete in the per-section review.]</p></div><div class="subhead">Leading Indicators Commentary</div><div class="rte-narrative" data-editable><p class="gap">[Leading Indicators Commentary — pending; complete in the per-section review.]</p></div><div class="provenance"><span class="prov-label">Sources</span><span class="prov-chip live" style="color:#9E1B32"><span class="prov-mark" style="background:#9E1B32">LN</span><span>LexisNexis</span></span><span class="prov-chip live" style="color:#0B5AA2"><span class="prov-mark" style="background:#0B5AA2">M</span><span>Moody's</span></span><span class="prov-chip live" style="color:#C8102E"><span class="prov-mark" style="background:#C8102E">IQ</span><span>S&amp;P Capital IQ</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 14</span></div>
+</section>
+<section class="page" data-mod="forward_looking_recommendation" data-modname="Account Summary and Credit Recommendation">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Account Summary and Credit Recommendation</span><span class="section-title">Account Summary and Credit Recommendation</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  
+    <div class="rte-narrative" data-editable><p><strong>Recommendation.</strong> Approve the $5.0M equipment term loan and the $2.5M increase &amp; renewal of the working-capital revolver (to $7.5M) at a 5 — Pass/Watch risk rating. The credit is supported by tangible collateral, a contracted backlog, the principal's guaranty, and covenant headroom (DSC 1.42x vs 1.25x; liquidity $8.2M vs $5.0M), tempered by softening margins and elevated pro forma leverage.</p><p><strong>Conditions &amp; Monitoring.</strong> Quarterly financial reporting with covenant compliance certificate; annual field exam of working-capital collateral; first-lien UCC on the financed equipment. Watch item: FY2025 EBITDA-margin recovery toward management plan in FY2026; revisit the risk rating if margin softening continues beyond Q2-2026.</p></div>
+    <div class="provenance"><span class="prov-label">Sources</span><a class="prov-chip live" style="color:#1798C1" href="https://bankinggpt.lightning.force.com/lightning/r/Account/001bb00001DLtRMAA1/view" target="_blank" rel="noopener"><span class="prov-mark" style="background:#1798C1">n</span><span>nCino</span><span class="prov-ext">↗</span></a><a class="prov-chip live" style="color:#5B3FA0" href="https://app.boom.build" target="_blank" rel="noopener"><span class="prov-mark" style="background:#5B3FA0">B</span><span>Boom</span><span class="prov-ext">↗</span></a><span class="prov-chip live" style="color:#0B6BCB"><span class="prov-mark" style="background:#0B6BCB">IR</span><span>IRIS</span></span><span class="prov-chip live" style="color:#5B6470"><span class="prov-mark" style="background:#5B6470">AF</span><span>AFS</span></span></div>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 15</span></div>
+</section>
+<section class="page" data-mod="appendix" data-modname="Appendix">
+  <div class="classification">INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</div>
+  <div class="section-header"><span class="section-eyebrow">Appendix</span><span class="section-title">Appendix</span></div>
+  <div class="attestation att-pending"><span class="att-dot"></span><span><strong>AI-drafted</strong> · Pending reviewer verification</span></div>
+  
+    <div class="subhead">Supporting Documents</div>
+    <table id="cmr-appendix-table"><thead><tr><th>Document</th><th>Status</th><th></th></tr></thead><tbody id="cmr-appendix-rows"><tr><td class="cmr-doc-name">Personal Financial Statement — Margaret Holloway</td><td class="cmr-doc-status">Outstanding</td><td style="white-space:nowrap"><button type="button" data-cmr-rename style="margin-right:6px">Rename</button><button type="button" data-cmr-delete>Remove</button></td></tr><tr><td class="cmr-doc-name">Equipment quotes — 3× Mazak INTEGREX i-450</td><td class="cmr-doc-status">On file</td><td style="white-space:nowrap"><button type="button" data-cmr-rename style="margin-right:6px">Rename</button><button type="button" data-cmr-delete>Remove</button></td></tr><tr><td class="cmr-doc-name">UCC-1 filing confirmation</td><td class="cmr-doc-status">On file</td><td style="white-space:nowrap"><button type="button" data-cmr-rename style="margin-right:6px">Rename</button><button type="button" data-cmr-delete>Remove</button></td></tr><tr><td class="cmr-doc-name">CPA-reviewed FY2025 financial statements</td><td class="cmr-doc-status">On file</td><td style="white-space:nowrap"><button type="button" data-cmr-rename style="margin-right:6px">Rename</button><button type="button" data-cmr-delete>Remove</button></td></tr></tbody></table>
+    <div class="two-col" style="margin-top:8px">
+      <div><input type="text" id="cmr-appendix-new-name" placeholder="Document name" style="width:100%;padding:5px 8px;border:1px solid var(--slate);border-radius:4px"></div>
+      <div style="display:flex;gap:8px">
+        <select id="cmr-appendix-new-status" style="padding:5px 8px;border:1px solid var(--slate);border-radius:4px"><option>On file</option><option>Outstanding</option><option>Pending review</option></select>
+        <button type="button" id="cmr-appendix-add">+ Add document</button>
+      </div>
+    </div>
+    <div class="legend">Illustrative supporting-document index — not yet wired to nCino DocMan attachment storage.</div>
+    <script>(function(){
+      var tbody = document.getElementById('cmr-appendix-rows');
+      if (!tbody) return;
+      function wireRow(row) {
+        var ren = row.querySelector('[data-cmr-rename]');
+        var del = row.querySelector('[data-cmr-delete]');
+        if (ren) ren.addEventListener('click', function () {
+          var cell = row.querySelector('.cmr-doc-name');
+          var v = prompt('Rename document', cell.textContent);
+          if (v) cell.textContent = v;
+        });
+        if (del) del.addEventListener('click', function () { row.remove(); });
+      }
+      Array.prototype.forEach.call(tbody.querySelectorAll('tr'), wireRow);
+      var addBtn = document.getElementById('cmr-appendix-add');
+      if (addBtn) addBtn.addEventListener('click', function () {
+        var nameInput = document.getElementById('cmr-appendix-new-name');
+        var statusSel = document.getElementById('cmr-appendix-new-status');
+        var name = (nameInput.value || '').trim();
+        if (!name) return;
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td class="cmr-doc-name"></td><td class="cmr-doc-status"></td><td style="white-space:nowrap"><button type="button" data-cmr-rename style="margin-right:6px">Rename</button><button type="button" data-cmr-delete>Remove</button></td>';
+        tr.querySelector('.cmr-doc-name').textContent = name;
+        tr.querySelector('.cmr-doc-status').textContent = statusSel.value;
+        tbody.appendChild(tr);
+        wireRow(tr);
+        nameInput.value = '';
+      });
+    })();</script>
+  <div class="page-footer"><span>INTERNAL — DRAFT, PENDING CREDIT COMMITTEE REVIEW</span><span>Page 16</span></div>
+</section>
+<!-- ===== CONDITIONALITY ENGINE: SUPPRESSED =====
+  SUPPRESSED: executive_summary/global_exposure
+  SUPPRESSED: executive_summary/sbe_inclusion
+  SUPPRESSED: executive_summary/tall_tree_ratings
+  SUPPRESSED: executive_summary/peg_exposure
+  SUPPRESSED: request_details/capitalization_table
+  SUPPRESSED: collateral/unsecured
+  SUPPRESSED: collateral/specific_ucc
+  SUPPRESSED: collateral/real_estate
+  SUPPRESSED: financial_commentary/current_balance_trend
+  SUPPRESSED: adjustment_retained_earnings
+  SUPPRESSED: peg_assessment
+  SUPPRESSED: leveraged_finance_ev
+  SUPPRESSED: syndications
+  SUPPRESSED: leading_indicators/public_debt_ratings
+  SUPPRESSED: leading_indicators/real_estate_taxes
+===== END SUPPRESSED ===== -->
+
+
+<!-- interactive chart tooltip (cursor-following; reads data-tip from chart shapes) -->
+<script>
+(function(){
+  var tip=document.createElement('div'); tip.id='chart-tip'; document.body.appendChild(tip); var cur=null;
+  document.addEventListener('mouseover',function(e){
+    var el=e.target;
+    if(el && el.getAttribute && el.getAttribute('data-tip')){
+      cur=el; tip.textContent=el.getAttribute('data-tip'); tip.style.opacity='1';
+      if(el.tagName==='circle' && !el.getAttribute('data-r0')){ el.setAttribute('data-r0',el.getAttribute('r')); el.setAttribute('r',(parseFloat(el.getAttribute('r'))+2.5).toFixed(1)); }
+    }
+  });
+  document.addEventListener('mousemove',function(e){ if(tip.style.opacity==='1'){ tip.style.left=(e.clientX+13)+'px'; tip.style.top=(e.clientY-12)+'px'; } });
+  document.addEventListener('mouseout',function(e){
+    if(e.target===cur){ tip.style.opacity='0'; var el=cur; cur=null; if(el.tagName==='circle' && el.getAttribute('data-r0')){ el.setAttribute('r',el.getAttribute('data-r0')); el.removeAttribute('data-r0'); } }
+  });
+})();
+</script>
+
+<!-- chart view toggle + flag-for-agent -->
+<script>
+(function(){
+  window.RV_FLAGS = window.RV_FLAGS || {};
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('.cv-btn');
+    if (b) {
+      var wrap = b.closest('.chart-views');
+      wrap.querySelectorAll('.chart-view').forEach(function(v){ v.hidden = v.getAttribute('data-view') !== b.getAttribute('data-cv'); });
+      wrap.querySelectorAll('.cv-btn').forEach(function(x){ x.classList.toggle('active', x === b); });
+      return;
+    }
+    var f = e.target.closest('.cv-flag');
+    if (f) {
+      var sec = f.closest('section.page'); var mod = sec ? sec.getAttribute('data-mod') : null;
+      var on = !f.classList.contains('on');
+      f.classList.toggle('on', on);
+      f.textContent = on ? '⚑ Flagged for agent' : '⚑ Flag for agent';
+      var wrap = f.closest('.chart-views');
+      var vis = wrap ? wrap.querySelector('.chart-view:not([hidden])') : null;
+      if (mod) { if (on) window.RV_FLAGS[mod] = { view: vis ? vis.getAttribute('data-view') : null }; else delete window.RV_FLAGS[mod]; }
+      if (window.__memoFlagSync) window.__memoFlagSync();
+    }
+  });
+})();
+</script>
+
+<!-- floating section-progress indicator (client-side; reads attestation state from the DOM) -->
+<div id="memo-progress" aria-label="Section progress"></div>
+<script>
+(function(){
+  var secs = [].slice.call(document.querySelectorAll('section.page[data-mod]'));
+  var nav = document.getElementById('memo-progress');
+  if(!secs.length){ if(nav) nav.style.display='none'; return; }
+  var isAttested = function(s){ var a=s.querySelector('.attestation'); return !!(a && (a.classList.contains('att-approved')||a.classList.contains('att-edited'))); };
+  // header bar (collapse toggle · title · count · tools slot for preview zoom)
+  var bar=document.createElement('div'); bar.className='mp-bar';
+  bar.innerHTML='<button class="mp-collapse" title="Collapse / expand">▾</button><span class="mp-title">Memo</span><span class="mp-count">0/0</span><span id="mp-tools"></span>';
+  nav.appendChild(bar);
+  var bodyEl=document.createElement('div'); bodyEl.className='mp-body'; nav.appendChild(bodyEl);
+  var pbar=document.createElement('div'); pbar.className='mp-progress'; pbar.innerHTML='<span></span>'; bodyEl.appendChild(pbar);
+  var leg=document.createElement('div'); leg.className='mp-legend';
+  leg.innerHTML='<span><span class="mp-tick mp-struct on"></span>Layout</span><span><span class="mp-tick mp-narr on"></span>Signed off</span>';
+  bodyEl.appendChild(leg);
+  var rows = secs.map(function(s){
+    var name = s.getAttribute('data-modname') || s.getAttribute('data-mod');
+    var b=document.createElement('button'); b.className='mp-row';
+    b.innerHTML='<span class="mp-ticks"><span class="mp-tick mp-struct" title="Layout reviewed"></span><span class="mp-tick mp-narr'+(isAttested(s)?' on':'')+'" title="Signed off"></span></span><span class="mp-name">'+name+'</span><span class="mp-flag" title="Flagged for agent follow-up" hidden>⚑</span>';
+    b.addEventListener('click',function(){ s.scrollIntoView({behavior:'smooth',block:'start'}); });
+    bodyEl.appendChild(b);
+    return {s:s,row:b};
+  });
+  var count=function(){ return rows.filter(function(r){return r.row.querySelector('.mp-narr').classList.contains('on');}).length; };
+  // Re-read each section's attestation and repaint the "Signed off" ticks + count + progress bar.
+  // Called initially AND whenever the review shell flips a section badge (Approve / Approve all / Undo).
+  function syncSignoff(){
+    rows.forEach(function(r){ r.row.querySelector('.mp-narr').classList.toggle('on', isAttested(r.s)); });
+    var c=count();
+    bar.querySelector('.mp-count').textContent=c+'/'+rows.length;
+    pbar.firstChild.style.width=(rows.length?Math.round(c/rows.length*100):0)+'%';
+  }
+  syncSignoff();
+  window.__memoProgressSync=syncSignoff; // optional direct hook for the review shell
+  // flag-for-agent sync: shows the ⚑ next to a section the reviewer flagged (chart toggle etc.)
+  window.__memoFlagSync=function(){ rows.forEach(function(r){ var mod=r.s.getAttribute('data-mod'); var fl=window.RV_FLAGS&&window.RV_FLAGS[mod]; var el=r.row.querySelector('.mp-flag'); if(el) el.hidden=!fl; }); };
+  // Live sync: the review shell sets .attestation → att-approved/att-edited/att-pending on each
+  // Approve / Edit / Undo. Watch that class so the pill's Signed-off ticks track it in real time.
+  var moAtt=new MutationObserver(syncSignoff);
+  rows.forEach(function(r){ var a=r.s.querySelector('.attestation'); if(a) moAtt.observe(a,{attributes:true,attributeFilter:['class']}); });
+  // collapse toggle (persisted)
+  var KEY='memoProgCollapsed';
+  if(localStorage.getItem(KEY)==='1') nav.classList.add('collapsed');
+  bar.querySelector('.mp-collapse').addEventListener('click',function(){
+    nav.classList.toggle('collapsed');
+    var c=nav.classList.contains('collapsed'); localStorage.setItem(KEY,c?'1':'0');
+    this.textContent=c?'▸':'▾';
+  });
+  bar.querySelector('.mp-collapse').textContent=nav.classList.contains('collapsed')?'▸':'▾';
+  // scroll-spy: tick Layout on first view, highlight active section
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ var r=rows.filter(function(x){return x.s===e.target;})[0]; if(r) r.row.querySelector('.mp-struct').classList.add('on'); } });
+    var vis=rows.filter(function(r){ var bx=r.s.getBoundingClientRect(); return bx.top<window.innerHeight*0.5 && bx.bottom>0; });
+    rows.forEach(function(r){ r.row.classList.remove('active'); });
+    if(vis.length){ vis[0].row.classList.add('active'); vis[0].row.scrollIntoView({block:'nearest'}); }
+  },{threshold:[0,0.15,0.5]});
+  rows.forEach(function(r){ io.observe(r.s); });
+  // draggable — grab the header bar; position persists
+  var PKEY='memoProgPos';
+  function place(x,y){ var w=nav.offsetWidth,h=nav.offsetHeight; x=Math.max(4,Math.min(window.innerWidth-w-4,x)); y=Math.max(4,Math.min(window.innerHeight-h-4,y)); nav.classList.add('dragged'); nav.style.left=x+'px'; nav.style.top=y+'px'; nav.style.right='auto'; }
+  try{ var sp=JSON.parse(localStorage.getItem(PKEY)); if(sp&&typeof sp.x==='number') place(sp.x,sp.y); }catch(e){}
+  var drag=null;
+  bar.addEventListener('mousedown',function(e){ if(e.target.closest('button')) return; var r=nav.getBoundingClientRect(); drag={dx:e.clientX-r.left,dy:e.clientY-r.top}; e.preventDefault(); });
+  window.addEventListener('mousemove',function(e){ if(!drag) return; place(e.clientX-drag.dx, e.clientY-drag.dy); });
+  window.addEventListener('mouseup',function(){ if(!drag) return; drag=null; var r=nav.getBoundingClientRect(); localStorage.setItem(PKEY,JSON.stringify({x:r.left,y:r.top})); });
+})();
+</script>
+
+<!-- zoom controls — shipped in the memo itself (not just the dev preview). Injected INTO the
+     progress panel's #mp-tools slot; body zoom scales the page, the panel counter-zooms (1/f) so it
+     stays a constant size. Cmd/Ctrl + wheel also zooms. Choice persists in localStorage. -->
+<style>
+#mp-tools{gap:2px!important}
+#mp-tools .zb{background:var(--brand-primary,#2E0A4F);color:#fff;border:0;border-radius:3px;padding:2px 5px;font:700 8.5px/1 system-ui,sans-serif;cursor:pointer}
+#mp-tools .zb:hover{opacity:.85}
+#mp-tools .zlvl{font:600 8px/1 system-ui,sans-serif;color:#5C5A60;min-width:26px;text-align:center}
+@media print{#mp-tools{display:none!important}}
+</style>
+<script>
+(function(){
+  function init(){
+    var tools=document.getElementById('mp-tools'); var prog=document.getElementById('memo-progress');
+    if(!tools){ return setTimeout(init,120); }
+    if(tools.dataset.zoom){ return; } tools.dataset.zoom='1';
+    var KEY='memoZoom';
+    function apply(f){ f=Math.max(.4,Math.min(1.6,f)); document.body.style.zoom=f; if(prog) prog.style.zoom=(1/f); localStorage.setItem(KEY,f); var l=document.getElementById('zlvl'); if(l) l.textContent=Math.round(f*100)+'%'; }
+    function fit(){ apply(Math.min(1,(window.innerWidth-28)/816)); localStorage.removeItem(KEY); }
+    /* default view = comfortable read-the-whole-narrative zoom (~75%), not full-width fit */
+    function auto(){ apply(Math.min(.75,(window.innerWidth-28)/816)); localStorage.removeItem(KEY); }
+    tools.innerHTML='<button class="zb" data-z="out" title="Zoom out">–</button><span class="zlvl" id="zlvl">100%</span><button class="zb" data-z="in" title="Zoom in">+</button><button class="zb" data-z="fit" title="Fit to width">Fit</button>';
+    tools.addEventListener('click',function(e){ var z=e.target.getAttribute('data-z'); if(!z) return; var cur=parseFloat(localStorage.getItem(KEY)||document.body.style.zoom||'1'); if(z==='in')apply(cur+0.1); else if(z==='out')apply(cur-0.1); else fit(); });
+    var s=localStorage.getItem(KEY); if(s)apply(parseFloat(s)); else auto();
+    window.addEventListener('resize',function(){ if(!localStorage.getItem(KEY)) auto(); });
+    window.addEventListener('wheel',function(e){ if(e.ctrlKey||e.metaKey){ e.preventDefault(); var cur=parseFloat(localStorage.getItem(KEY)||document.body.style.zoom||'1'); apply(cur + (e.deltaY<0?0.08:-0.08)); } }, {passive:false});
+  }
+  if(document.readyState!=='loading') init(); else document.addEventListener('DOMContentLoaded',init);
+})();
+</script>
+
+<!-- hyperlink fix — sandboxed artifact iframes block plain target="_blank" anchor navigation.
+     Intercept link clicks and open via window.open (a user-gesture popup the host's allow-popups
+     permits, and which works in the popped-out browser); fall back to top-level navigation. -->
+<script>
+(function(){
+  document.addEventListener('click',function(e){
+    var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;
+    if(!a) return;
+    var href=a.getAttribute('href');
+    if(!href || href.charAt(0)==='#' || /^javascript:/i.test(href)) return;
+    e.preventDefault();
+    var w=null; try{ w=window.open(href,'_blank','noopener'); }catch(_){}
+    if(!w){ try{ window.top.location.href=href; }catch(_){ window.location.href=href; } }
+  }, true);
+})();
+</script>
+
+</body>
+</html>

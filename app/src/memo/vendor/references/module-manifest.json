@@ -1,0 +1,151 @@
+{
+  "_README": "The declarative module library for the Acme Bank credit memo. The orchestrator derives a deal-context flag set (see conditionality.md), evaluates each module's renderWhen against it, and emits an ordered render plan. This replaces the legacy fixed 13-section memo: ONE manifest expands or contracts to cover the 80+ legacy templates. Components inherit their parent's gating, then apply their own renderWhen.",
+  "_CHANGELOG_2026-08-21": "Genericized-template restructure (14 approved items, credit-memo-reinvented PR): renamed Request Details/Borrower Description/Management & Ownership/Industry Analysis/Leading Indicators/Forward Looking Recommendation for the industry-standard template; retired the Trend Reporting module and redistributed its components (risk_rating_trends -> new Risk Rating (internal) module; covenant_compliance_trends -> new Covenant and Conditions module; spreading_trends/revolver_usage_trend/current_balance_trend -> Financial Analysis; payment_history dropped as not relevant); retired Financial Model/Sensitivity and Global Cash Flow as standalone modules and folded them into Financial Analysis as the Future Outlook (nested Sensitivity Analysis) and Cash Flow Analysis sub-sections; added three new modules (Risk Rating (internal), Risk and Mitigants, Appendix); moved Conditions & Monitoring out of the Recommendation module into the new Covenant and Conditions module; added a peer_comparison component to Industry & Peer Analysis (previously an enhanced-tier-only, low-priority component of the retired Trend Reporting module).",
+
+  "schemaVersion": "1.0",
+  "creditEvents": ["annual_review", "existing_nonmaterial", "existing_material", "new_relationship"],
+
+  "predicateGrammar": "renderWhen is one of: \"always\"; a flag name (true); \"!flag\"; \"flag==value\"; \"flag!=value\"; \"flagArray includes 'x'\"; an array of clauses combined with AND; or {\"any\":[...]} for OR. credit_event and tier are matched with ==.",
+
+  "ncinoSections": "Each module optionally declares an ncinoSection — the nCino credit-memo section bucket it writes to on narrative sync (ncino_sync_memo_sections). The renderer groups ON modules into these 7 buckets and emits a Salesforce-RTE-safe HTML fragment per bucket (semantic tags only: p/strong/em/ul/ol/li/a/table; no class/style/SVG). The Experience MCP owns the bucket-id -> cm_* field-API-name map (executive_summary->cm_Deal_Summary_Loan__c, product_request_overview->cm_Relationship_Product_Request_Overview__c, background->cm_Background_Loan__c, financial_analysis->cm_Financial_Analysis_Loan__c, covenant_analysis->cm_Covenant_Analysis__c, collateral_analysis->cm_Collateral_Analysis_Collateral_Mgmt__c, risk_assessment->cm_Risk_Analysis_Loan__c). Modules with no ncinoSection (chrome) are omitted from the sync.",
+
+  "flags": {
+    "credit_event": "enum(annual_review|existing_nonmaterial|existing_material|new_relationship)",
+    "tier": "enum(core|enhanced)",
+    "has_new_money": "bool",
+    "has_revolver": "bool",
+    "has_revolver_increase": "bool",
+    "has_guarantor": "bool",
+    "guarantor_types": "array",
+    "has_financial_covenants": "bool",
+    "collateral_types": "array",
+    "has_real_estate": "bool",
+    "has_deposits": "bool",
+    "is_syndicated": "bool",
+    "is_peg": "bool",
+    "is_lft": "bool",
+    "is_public": "bool",
+    "segment": "string",
+    "exposure_total": "number",
+    "sbe_threshold_breached": "bool",
+    "has_retained_earnings_adj": "bool"
+  },
+
+  "modules": [
+    { "id": "relationship_name_tbe", "name": "Relationship Name / TBE", "order": 10, "renderWhen": "always" },
+    { "id": "table_of_contents", "name": "Table of Contents", "order": 20, "renderWhen": "always", "generated": true },
+
+    { "id": "executive_summary", "name": "Executive Summary", "order": 30, "renderWhen": "always", "ncinoSection": "executive_summary",
+      "components": [
+        { "id": "existing_exposure_table", "renderWhen": { "any": ["credit_event==annual_review", "credit_event==existing_nonmaterial", "credit_event==existing_material"] } },
+        { "id": "proposed_exposure_table", "renderWhen": { "any": ["has_new_money", "has_revolver_increase", "credit_event==new_relationship"] } },
+        { "id": "change_in_exposure", "renderWhen": { "any": ["credit_event==existing_nonmaterial", "credit_event==existing_material"] } },
+        { "id": "credit_approval_summary", "renderWhen": "always" },
+        { "id": "compliance_due_diligence", "renderWhen": "always" },
+        { "id": "commentary", "renderWhen": "always" },
+        { "id": "global_exposure", "renderWhen": "tier==enhanced" },
+        { "id": "sbe_inclusion", "renderWhen": "tier==enhanced" },
+        { "id": "tall_tree_ratings", "renderWhen": "tier==enhanced" },
+        { "id": "peg_exposure", "renderWhen": "is_peg" }
+      ]
+    },
+
+    { "id": "request_details", "name": "Credit Request / Transaction Overview", "order": 40, "ncinoSection": "product_request_overview",
+      "renderWhen": { "any": ["has_new_money", "credit_event==new_relationship"] },
+      "components": [
+        { "id": "purpose_request_summary", "renderWhen": "always" },
+        { "id": "sources_and_uses", "renderWhen": "always" },
+        { "id": "capitalization_table", "renderWhen": "tier==enhanced" }
+      ]
+    },
+
+    { "id": "collateral", "name": "Collateral", "order": 50, "renderWhen": "always", "ncinoSection": "collateral_analysis",
+      "components": [
+        { "id": "unsecured", "renderWhen": "collateral_types includes 'unsecured'" },
+        { "id": "blanket_lien", "renderWhen": "collateral_types includes 'blanket_lien'" },
+        { "id": "specific_ucc", "renderWhen": "collateral_types includes 'specific_ucc'" },
+        { "id": "equipment", "renderWhen": "collateral_types includes 'equipment'" },
+        { "id": "real_estate", "renderWhen": "has_real_estate" }
+      ]
+    },
+
+    { "id": "covenant_conditions", "name": "Covenant and Conditions", "order": 60, "renderWhen": "always", "ncinoSection": "covenant_analysis",
+      "_note": "Replaces the covenant_compliance_trends component of the retired Trend Reporting module, plus absorbs Conditions & Monitoring (moved out of the Recommendation module — conditions of approval belong beside the covenant package they condition).",
+      "components": [
+        { "id": "covenant_compliance_table", "renderWhen": "has_financial_covenants" },
+        { "id": "conditions_and_monitoring", "renderWhen": "always" }
+      ]
+    },
+
+    { "id": "borrower_description", "name": "Borrower/Company Profile", "order": 70, "renderWhen": "always", "ncinoSection": "background",
+      "components": [
+        { "id": "general_summary", "renderWhen": "always" },
+        { "id": "strengths_risks_mitigants", "renderWhen": "always" },
+        { "id": "key_changes", "renderWhen": { "any": ["credit_event==existing_nonmaterial", "credit_event==existing_material", "credit_event==annual_review"] } },
+        { "id": "csg_feedback", "renderWhen": { "any": ["credit_event==existing_material", "credit_event==new_relationship"] } }
+      ]
+    },
+
+    { "id": "management_ownership", "name": "Management Ownership & Overview", "order": 80, "renderWhen": "always", "ncinoSection": "background",
+      "components": [
+        { "id": "overview", "renderWhen": "always" },
+        { "id": "key_changes", "renderWhen": { "any": ["credit_event==existing_nonmaterial", "credit_event==existing_material", "credit_event==annual_review"] } }
+      ]
+    },
+
+    { "id": "industry_analysis", "name": "Industry & Peer Analysis", "order": 90, "renderWhen": "always", "ncinoSection": "background",
+      "components": [
+        { "id": "market_outlook", "renderWhen": "always" },
+        { "id": "industry_changes", "renderWhen": { "any": ["credit_event==existing_nonmaterial", "credit_event==existing_material"] } },
+        { "id": "peer_comparison", "renderWhen": "always" }
+      ]
+    },
+
+    { "id": "risk_rating_internal", "name": "Risk Rating (internal)", "order": 100, "renderWhen": "always", "ncinoSection": "risk_assessment",
+      "_note": "New module. Absorbs the risk_rating_trends component of the retired Trend Reporting module." },
+
+    { "id": "financial_commentary", "name": "Financial Analysis", "order": 110, "renderWhen": "always", "ncinoSection": "financial_analysis",
+      "_note": "Restructured (formerly 'Financial Commentary'). Sub-sections: (1) Current Performance + Key Metrics table + spreading trend, absorbed from the retired Trend Reporting module; (2) Future Outlook, with Sensitivity Analysis nested beneath it, absorbed from the retired Financial Model/Sensitivity module; (3) Cash Flow Analysis, absorbed from the retired Global Cash Flow module. Payment Performance is dropped — not relevant to this analysis.",
+      "components": [
+        { "id": "key_metrics_table", "renderWhen": "always" },
+        { "id": "spreading_trends", "renderWhen": "always" },
+        { "id": "revolver_usage_trend", "renderWhen": "has_revolver" },
+        { "id": "current_balance_trend", "renderWhen": "has_deposits" },
+        { "id": "sensitivity_analysis", "renderWhen": "always" },
+        { "id": "cash_flow_analysis", "renderWhen": "always" }
+      ]
+    },
+
+    { "id": "guarantor_profile", "name": "Guarantor Profile", "order": 120, "renderWhen": "has_guarantor", "ncinoSection": "risk_assessment" },
+
+    { "id": "risk_mitigants", "name": "Risk and Mitigants", "order": 130, "renderWhen": "always", "ncinoSection": "risk_assessment",
+      "_note": "New module." },
+
+    { "id": "adjustment_retained_earnings", "name": "Adjustment to Retained Earnings", "order": 140, "renderWhen": "has_retained_earnings_adj", "ncinoSection": "financial_analysis" },
+
+    { "id": "peg_assessment", "name": "PEG Assessment", "order": 150, "renderWhen": "is_peg", "ncinoSection": "risk_assessment" },
+    { "id": "leveraged_finance_ev", "name": "Leveraged Finance EV Memo", "order": 151, "renderWhen": "is_lft", "ncinoSection": "risk_assessment" },
+    { "id": "syndications", "name": "Left Lead / Participation Syndications", "order": 152, "renderWhen": "is_syndicated", "ncinoSection": "product_request_overview" },
+
+    { "id": "leading_indicators", "name": "Due Diligence Summary", "order": 160, "renderWhen": "always", "ncinoSection": "risk_assessment",
+      "_note": "WCM UW framework module (Due Diligence). Sub-modules gated to show conditionality — public_debt_ratings/real_estate_taxes suppress for a private, non-RE borrower like Piedmont.",
+      "components": [
+        { "id": "ews_summary", "renderWhen": "always" },
+        { "id": "entity_verification", "renderWhen": "always" },
+        { "id": "internet_search", "renderWhen": "always" },
+        { "id": "lexisnexis", "renderWhen": "always" },
+        { "id": "credit_bureau", "renderWhen": "always" },
+        { "id": "sbfe", "renderWhen": "always" },
+        { "id": "public_debt_ratings", "renderWhen": "is_public" },
+        { "id": "real_estate_taxes", "renderWhen": "has_real_estate" },
+        { "id": "leading_indicators_commentary", "renderWhen": "always" }
+      ]
+    },
+
+    { "id": "forward_looking_recommendation", "name": "Account Summary and Credit Recommendation", "order": 170, "renderWhen": "always", "ncinoSection": "risk_assessment",
+      "_note": "Conditions & Monitoring moved out of this module into Covenant and Conditions (above)." },
+
+    { "id": "appendix", "name": "Appendix", "order": 180, "renderWhen": "always",
+      "_note": "New module. Supporting-document placeholder index (add/rename/remove) — not an nCino narrative bucket, so no ncinoSection." }
+  ]
+}

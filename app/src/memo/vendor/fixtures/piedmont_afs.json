@@ -1,0 +1,102 @@
+{
+  "_source": "AFS-STUB",
+  "externalUniqueId": "001bb00001DLtRMAA1",
+  "revolverUsage": {
+    "facility": "Senior Secured Working Capital RCF",
+    "commitment": 7500000,
+    "months": [
+      "Jan-24",
+      "Feb-24",
+      "Mar-24",
+      "Apr-24",
+      "May-24",
+      "Jun-24",
+      "Jul-24",
+      "Aug-24",
+      "Sep-24",
+      "Oct-24",
+      "Nov-24",
+      "Dec-24"
+    ],
+    "fundedBalance": [
+      3800000,
+      4100000,
+      4600000,
+      5000000,
+      4800000,
+      4400000,
+      4200000,
+      4500000,
+      4900000,
+      4600000,
+      4300000,
+      4250000
+    ],
+    "utilizationPct": [
+      50.67,
+      54.67,
+      61.33,
+      66.67,
+      64,
+      58.67,
+      56,
+      60,
+      65.33,
+      61.33,
+      57.33,
+      56.67
+    ],
+    "high": 5000000,
+    "low": 3800000,
+    "average": 4454000,
+    "highPct": 66.67,
+    "lowPct": 50.67,
+    "averagePct": 59.39,
+    "daysAtZero": 0,
+    "consecutiveDaysAtZero": 0
+  },
+  "paymentHistory": {
+    "_note": "STUB (AFS not in a source system). Clean.",
+    "_stub": true,
+    "asOf": "2024-12-31",
+    "buckets": {
+      "current": true,
+      "d30_60": 0,
+      "d60_90": 0,
+      "d90_plus": 0
+    },
+    "events": []
+  },
+  "balanceTrend": {
+    "_note": "STUB (AFS). No deposit relationship → Current Balance Trend module suppresses. Revolver balance only.",
+    "_stub": true,
+    "months": [
+      "Jan-24",
+      "Feb-24",
+      "Mar-24",
+      "Apr-24",
+      "May-24",
+      "Jun-24",
+      "Jul-24",
+      "Aug-24",
+      "Sep-24",
+      "Oct-24",
+      "Nov-24",
+      "Dec-24"
+    ],
+    "balances": [
+      3800000,
+      4100000,
+      4600000,
+      5000000,
+      4800000,
+      4400000,
+      4200000,
+      4500000,
+      4900000,
+      4600000,
+      4300000,
+      4250000
+    ]
+  }
+}
