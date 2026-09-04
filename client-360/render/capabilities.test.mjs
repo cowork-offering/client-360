@@ -34,6 +34,38 @@ test("the gateway and mail grants are the tool names the page itself calls", () 
   assert.deepEqual(serverEntry(caps, SERVERS.m365).tools, channelToolNames(["mailSearch"]));
 });
 
+test("the memo writeback grants are the tool names the page itself calls", () => {
+  // The room writes to four systems through two connectors. A name that drifted
+  // here is refused `not_in_manifest` at the moment a banker presses publish,
+  // with a half-written memo across the systems that did accept their call.
+  const caps = committed();
+  assert.deepEqual(
+    serverEntry(caps, SERVERS.experience).tools,
+    channelToolNames([
+      "syncMemoSections",
+      "publishCreditMemo",
+      "finalizeCreditMemo",
+      "submitForApproval",
+      "ncinoNotify",
+      "recordDecision",
+      "logAuditEvent",
+      "recallDecisions",
+      "covenantGrade",
+    ])
+  );
+  assert.deepEqual(
+    serverEntry(caps, SERVERS.afs).tools,
+    channelToolNames(["afsLoanSummary", "afsPaymentHistory", "afsRevolverUtilization", "afsCreateWorkpackage"])
+  );
+});
+
+test("all five connectors are declared, by display name", () => {
+  assert.deepEqual(
+    committed().mcp.servers.map((s) => s.server),
+    [SERVERS.customer360, SERVERS.gateway, SERVERS.m365, SERVERS.experience, SERVERS.afs]
+  );
+});
+
 test("sample and db are declared, and nothing else is", () => {
   assert.deepEqual(Object.keys(committed()).sort(), ["db", "mcp", "sample"]);
   assert.deepEqual(committed().sample, {});

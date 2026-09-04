@@ -20,6 +20,7 @@
 import type { ActionHistoryRow, ActivityEntry } from "../data/contract";
 import type { ExecuteResult } from "../channel/writeTools";
 import type { WorkroomExecution } from "../workroom/types";
+import type { MemoPublication } from "../memo/publishTypes";
 import { CREATED_OBJECT, recordDeepLink } from "../components/DeepLink";
 
 export interface ExecutedEntryInput {
@@ -290,6 +291,103 @@ export function workroomActivityEntry(input: WorkroomFiledInput): ActivityEntry 
         .filter(Boolean)
         .join(" "),
     },
+  };
+}
+
+/* ------------------------------------------------ the memo, in the same trail
+
+   A30, EXTENDED TO THE MEMO ROOM (2026-09-04). A published memo is the same
+   class of event as an executed plan: records now exist in the bank's systems
+   because a named person pressed publish. It belongs on the Activity timeline,
+   and the reference is the nFORMS document, because that is the thing a banker
+   opens when they ask "show me the memo".
+
+   THE TITLE NEVER OVERSTATES. Four systems are written independently, so the
+   entry says which of them landed. "Published and submitted for approval" is
+   claimed only when the document and the approval both completed; a publish
+   whose submit failed says so, and a publish the connectors only simulated says
+   that too, because a trail row is the last place a partial write should read
+   as a whole one.                                                            */
+
+export interface MemoPublishedInput {
+  /** The publication report, verbatim. No system is re-read to write this. */
+  publication: MemoPublication;
+  /** The package in banker language. */
+  packageName?: string;
+  /** The identity that published. */
+  actor?: string;
+  /** Session clock: the banker just did this, on this clock (A10 carve-out). */
+  now?: () => Date;
+}
+
+/**
+ * The trail entry for one memo publication, or null where nothing was
+ * attempted (the phase C stub, which runs no lane at all).
+ */
+export function memoPublishedActivityEntry(input: MemoPublishedInput): ActivityEntry | null {
+  const { publication, packageName, actor } = input;
+  const lanes = publication.lanes ?? [];
+  if (!lanes.length) return null;
+  const now = (input.now ?? (() => new Date()))();
+  const landed = (lane: string) => lanes.some((l) => l.lane === lane && l.status === "done");
+  const against = packageName ? ` on ${packageName}` : "";
+
+  const base = {
+    // One publication, one entry, however many times the room re-renders.
+    id: `memo-${publication.memoId}`,
+    ts: now.toISOString(),
+    actor: actor ?? "You",
+    sessionLocal: true,
+    reference: publication.nforms
+      ? {
+          kind: "ncino-record",
+          id: publication.nforms.templateId,
+          label: "nFORMS__Form_Template__c",
+          source: "Experience / nCino",
+          // Absent leaves this undefined and the popup renders the id as plain
+          // text rather than a fabricated link (A29).
+          webLink: publication.nforms.generateUrl,
+        }
+      : undefined,
+  };
+
+  const detail = {
+    body: [
+      ...lanes.filter((l) => l.status !== "skipped").map((l) => `${l.lane}: ${l.detail}`),
+      publication.afs ? `AFS workpackage ${publication.afs.workpackageId}.` : null,
+      publication.approval?.notified?.length ? `Notified ${publication.approval.notified.join(", ")}.` : null,
+      publication.simulated
+        ? "At least one connector answered from fixtures: it reported the write and the system of record did not change."
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  };
+
+  if (!lanes.some((l) => l.status === "done")) {
+    return {
+      ...base,
+      kind: "ACTION_EXECUTION_FAILED",
+      title: `Credit memo publish did not complete${against}`,
+      summary: lanes.find((l) => l.status === "failed")?.detail,
+      detail,
+    };
+  }
+
+  const title = landed("document")
+    ? landed("approval")
+      ? `Credit memo published and submitted for approval${against}`
+      : `Credit memo published${against}, not submitted for approval`
+    : `Credit memo narrative synced to nCino${against}`;
+
+  return {
+    ...base,
+    kind: "ACTION_EXECUTED",
+    title,
+    summary: publication.simulated
+      ? "Reported by the connector as a simulated write: nothing changed in the system of record."
+      : undefined,
+    detail,
   };
 }
 

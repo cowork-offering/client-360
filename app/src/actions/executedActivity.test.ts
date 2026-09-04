@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createdRecordId, executedActivityEntry, historyActivityEntry, mergeTrail } from "./executedActivity";
+import { createdRecordId, executedActivityEntry, historyActivityEntry, memoPublishedActivityEntry, mergeTrail } from "./executedActivity";
+import type { LaneOutcome, MemoPublication } from "../memo/publishTypes";
 import type { ExecuteResult } from "../channel/writeTools";
 
 const OK: ExecuteResult = {
@@ -307,5 +308,91 @@ describe("a loan modification in the trail", () => {
     })!;
     expect(e.detail?.body).toContain("Replayed under the same idempotency key; nothing was written twice.");
     expect(e.reference?.id).toBe("a4Zbb000002Br6HEAS");
+  });
+});
+
+/* --------------------------------------------------- the memo publication */
+
+const laneRow = (lane: LaneOutcome["lane"], status: LaneOutcome["status"], detail = "ok"): LaneOutcome => ({
+  lane,
+  system: lane === "servicing" ? "afs" : lane === "ledger" ? "ledger" : lane === "document" ? "nforms" : "ncino",
+  status,
+  detail,
+});
+
+const PUBLICATION: MemoPublication = {
+  memoId: "memo-0001",
+  packageId: "a5FPACKAGE00001",
+  status: "published",
+  publishedAt: "2026-09-04T12:00:00Z",
+  nforms: {
+    templateId: "a77TEMPLATE0001",
+    templateName: "Acme Bank Credit Memo (Agent)",
+    generateUrl: "https://example.my.salesforce.com/apex/nFORMS__HtmlFormGenerator?contextId=a5FPACKAGE00001",
+  },
+  sections: { synced: ["deal_summary"], unmapped: [], truncated: [] },
+  approval: { submittedAt: "2026-09-04T12:00:00Z", processInstanceId: "04gPROCESS0001", notified: ["credit.lead@example.com"] },
+  afs: { workpackageId: "32590" },
+  lanes: [
+    laneRow("sections", "done", "1 of 1 narrative sections written to the package."),
+    laneRow("document", "done", "Published to the credit-memo template."),
+    laneRow("finalize", "done"),
+    laneRow("approval", "done", "Submitted for credit approval."),
+    laneRow("notify", "done"),
+    laneRow("ledger", "done"),
+    laneRow("servicing", "done"),
+  ],
+};
+
+describe("the trail entry for a published memo", () => {
+  it("claims the publish and the submit only when both landed, and links the nFORMS document", () => {
+    const e = memoPublishedActivityEntry({ publication: PUBLICATION, packageName: "Piedmont C&I Package", actor: "A Banker", now: NOW })!;
+    expect(e.kind).toBe("ACTION_EXECUTED");
+    expect(e.title).toBe("Credit memo published and submitted for approval on Piedmont C&I Package");
+    expect(e.id).toBe("memo-memo-0001");
+    expect(e.actor).toBe("A Banker");
+    expect(e.sessionLocal).toBe(true);
+    expect(e.reference).toMatchObject({
+      kind: "ncino-record",
+      id: "a77TEMPLATE0001",
+      label: "nFORMS__Form_Template__c",
+      source: "Experience / nCino",
+    });
+    expect(e.reference?.webLink).toContain("nFORMS__HtmlFormGenerator");
+    expect(e.detail?.body).toContain("AFS workpackage 32590.");
+    expect(e.detail?.body).toContain("Notified credit.lead@example.com.");
+  });
+
+  it("does not claim an approval that was held", () => {
+    const lanes = PUBLICATION.lanes.map((l) => (l.lane === "approval" ? { ...l, status: "skipped" as const } : l));
+    const e = memoPublishedActivityEntry({ publication: { ...PUBLICATION, status: "partial", lanes }, now: NOW })!;
+    expect(e.title).toBe("Credit memo published, not submitted for approval");
+    expect(e.detail?.body).not.toContain("approval:");
+  });
+
+  it("falls back to the narrative when the document never published", () => {
+    const lanes = PUBLICATION.lanes.map((l) =>
+      l.lane === "document" || l.lane === "approval" ? { ...l, status: "failed" as const } : l,
+    );
+    const e = memoPublishedActivityEntry({ publication: { ...PUBLICATION, status: "partial", lanes }, now: NOW })!;
+    expect(e.title).toBe("Credit memo narrative synced to nCino");
+  });
+
+  it("records an attempt where nothing landed as a failure, not as silence", () => {
+    const lanes = PUBLICATION.lanes.map((l) => ({ ...l, status: "failed" as const, detail: "the connector refused" }));
+    const e = memoPublishedActivityEntry({ publication: { ...PUBLICATION, status: "failed", lanes }, now: NOW })!;
+    expect(e.kind).toBe("ACTION_EXECUTION_FAILED");
+    expect(e.title).toBe("Credit memo publish did not complete");
+    expect(e.summary).toBe("the connector refused");
+  });
+
+  it("says out loud when the connectors only simulated the writes", () => {
+    const e = memoPublishedActivityEntry({ publication: { ...PUBLICATION, simulated: true }, now: NOW })!;
+    expect(e.summary).toContain("simulated write");
+    expect(e.detail?.body).toContain("the system of record did not change");
+  });
+
+  it("logs nothing for a publication that ran no lane at all", () => {
+    expect(memoPublishedActivityEntry({ publication: { memoId: "m", packageId: "p", status: "not-wired", lanes: [] }, now: NOW })).toBeNull();
   });
 });

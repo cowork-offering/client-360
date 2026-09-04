@@ -20,7 +20,8 @@ full artifact replace.
 ## PREREQUISITE, before STEP 0: the viewer's connectors, by exact name
 
 The rendered page calls the viewer's own claude.ai connectors by display name: `Customer 360`,
-`IDB Gateway`, `Microsoft 365`. If the viewer's Customer 360 connector carries any other name,
+`IDB Gateway`, `Microsoft 365`, and, for the memo room's writeback, `Experience / nCino` and `AFS`.
+If the viewer's Customer 360 connector carries any other name,
 the page reports offline and every sync line fails even though this session's tools work. When
 the badge says offline or the sync reports every line unreachable, ask the viewer to check the
 connector's name under claude.ai Settings > Connectors before anything else.
@@ -445,8 +446,9 @@ artifact is published with a capabilities manifest, so every publish and every r
 
 That file is generated from the org's own `Customer360` McpServerDefinition plus
 `app/src/channel/mcp.ts`, and a release gate fails the build when it drifts
-(`node client-360/render/capabilities.mjs --check`). It declares three connectors by **display
-name** (`Customer 360` with 28 tools, `IDB Gateway` with 3, `Microsoft 365` with 1), plus `sample`
+(`node client-360/render/capabilities.mjs --check`). It declares five connectors by **display
+name** (`Customer 360` with 28 tools, `IDB Gateway` with 3, `Microsoft 365` with 1,
+`Experience / nCino` with 9 and `AFS` with 4), plus `sample`
 (the room's Ask lane) and `db` (the intent store, which is also what makes the published page
 organization-internal).
 
@@ -463,8 +465,8 @@ the page says "the publisher forgot the manifest", so a missing grant looks exac
 cockpit. If a banker reports the cockpit is offline, check the publish call's `capabilities` first.
 
 **What the manifest asks of the banker.** Opening a cockpit published with it raises **two consent
-prompts, once each**: one for the connectors (Customer 360, IDB Gateway, Microsoft 365, listed
-together) and one for the database that holds the intent store. Answer both and the room is online;
+prompts, once each**: one for the connectors (Customer 360, IDB Gateway, Microsoft 365,
+Experience / nCino and AFS, listed together) and one for the database that holds the intent store. Answer both and the room is online;
 answer neither and it reads offline exactly as it does with no manifest at all.
 
 **The grant is PER VIEWER.** Your consent is not the next banker's. Whoever opens the URL is asked
