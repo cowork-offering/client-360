@@ -422,6 +422,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: rgba(250, 251, 255, 0.15);
+  /* Lifted from 0.15 to 0.30 on the founder's second look (2026-09-04). */
+  background: rgba(250, 251, 255, 0.3);
   pointer-events: none;
 }
