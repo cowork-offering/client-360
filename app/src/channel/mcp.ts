@@ -93,6 +93,14 @@ export const SERVERS = {
   customer360: "Customer 360",
   gateway: "IDB Gateway",
   m365: "Microsoft 365",
+  /* THE MEMO ROOM'S TWO WRITEBACK CONNECTORS (2026-09-04). The Experience
+     connector owns the nCino credit-memo surface (the cm_* narrative fields,
+     the nFORMS document, the approval submit and the notice) plus the
+     Experience decision and audit ledger; AFS owns servicing. They are named
+     here exactly as the viewer's connector list spells them: a display name,
+     never an id, and a differently named connector is invisible to the page. */
+  experience: "Experience / nCino",
+  afs: "AFS",
 } as const;
 
 /** Upstream tool names exactly as `listTools()` returns them.
@@ -170,6 +178,27 @@ export const TOOLS = {
   // Renewal STAGES only. There is no execute_renewal: the clone's collateral
   // aggregate has never been re-probed, so no execute tool was built.
   stageRenewal: "stage_renewal",
+  /* THE MEMO WRITEBACK (2026-09-04), on "Experience / nCino". Upstream names
+     exactly, observed live on 2026-09-04 (app/src/memo/OBSERVED.md). The first
+     five WRITE to the system of record and are never auto-retried; the ledger
+     pair writes to Snowflake; the last two are reads the memo room draws on. */
+  syncMemoSections: "ncino_sync_memo_sections",
+  publishCreditMemo: "ncino_publish_credit_memo",
+  finalizeCreditMemo: "ncino_finalize_credit_memo",
+  submitForApproval: "ncino_submit_for_approval",
+  ncinoNotify: "ncino_notify",
+  recordDecision: "record_decision",
+  logAuditEvent: "log_audit_event",
+  recallDecisions: "recall_decisions",
+  // Deterministic: the grade is the connector's comparison, never the model's.
+  covenantGrade: "deal_covenant_grade",
+  /* SERVICING (2026-09-04), on "AFS". Every one of these DEFAULTS its key to
+     the AFS sample loan, which belongs to a real and different borrower, so
+     nothing here is ever called without a mapping (app/src/memo/afsMapping.ts). */
+  afsLoanSummary: "loan_summary",
+  afsPaymentHistory: "payment_history",
+  afsRevolverUtilization: "revolver_utilization",
+  afsCreateWorkpackage: "create_workpackage",
 } as const;
 
 /** The six per-account detail tools, in the order the app stages them. */
@@ -520,6 +549,36 @@ export function watchTool(
    OBSERVED shapes (founder's live session 2026-07-25). Each unwrapper is
    defensive: an envelope that does not match reports a failure rather than
    silently yielding undefined figures.                                      */
+
+/**
+ * A PLAIN MCP TOOL'S JSON RESULT.
+ *
+ * The Customer 360 tools answer in the Salesforce invocable envelope, which the
+ * unwrappers below take apart. The two memo-writeback connectors are ordinary
+ * MCP servers: each tool answers with its own JSON object. Through this
+ * session's tool bridge that object arrives whole (OBSERVED.md), but the
+ * ARTIFACT bridge has not been observed carrying one, so this reads the three
+ * places the runtime contract allows a result to live rather than assuming the
+ * first: `payload`, then `structuredContent`, then a single JSON text block.
+ *
+ * Returns undefined when none of them carries an object, which every caller
+ * treats as a failed call rather than as an empty success.
+ */
+export function unwrapJson<T = Record<string, unknown>>(result: McpOk<unknown>): T | undefined {
+  const asObject = (v: unknown): T | undefined =>
+    typeof v === "object" && v !== null && !Array.isArray(v) ? (v as T) : undefined;
+
+  const direct = asObject(result.payload) ?? asObject((result.raw as { structuredContent?: unknown })?.structuredContent);
+  if (direct) return direct;
+
+  const block = (result.raw?.content ?? [])[0] as { text?: unknown } | undefined;
+  if (typeof block?.text !== "string") return undefined;
+  try {
+    return asObject(JSON.parse(block.text));
+  } catch {
+    return undefined;
+  }
+}
 
 /** One element of the Salesforce invocable envelope. */
 export type InvocableSlot<T> = { ok: true; data: T } | { ok: false; error: string };

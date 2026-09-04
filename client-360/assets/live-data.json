@@ -8,7 +8,8 @@
     "anchorAccountId": "001bb00001DLtRMAA1",
     "accent": "#6B1CC4",
     "userId": "005bb00000ftouDAAQ",
-    "instanceUrl": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com"
+    "instanceUrl": "https://accenture-d8--bankinggpt.sandbox.my.salesforce.com",
+    "userEmail": "fabian.goetzens@accenture.com"
   },
   "portfolio": {
     "accounts": [

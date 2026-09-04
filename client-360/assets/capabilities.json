@@ -47,6 +47,29 @@
         "tools": [
           "outlook_email_search"
         ]
+      },
+      {
+        "server": "Experience / nCino",
+        "tools": [
+          "ncino_sync_memo_sections",
+          "ncino_publish_credit_memo",
+          "ncino_finalize_credit_memo",
+          "ncino_submit_for_approval",
+          "ncino_notify",
+          "record_decision",
+          "log_audit_event",
+          "recall_decisions",
+          "deal_covenant_grade"
+        ]
+      },
+      {
+        "server": "AFS",
+        "tools": [
+          "loan_summary",
+          "payment_history",
+          "revolver_utilization",
+          "create_workpackage"
+        ]
       }
     ]
   },

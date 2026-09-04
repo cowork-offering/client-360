@@ -191,7 +191,7 @@ function openRoom(
     },
     publish: async (draft) => {
       published.push(draft);
-      return { status: "not-wired", reason: NOT_WIRED_LINE };
+      return { memoId: draft.memoId, packageId: draft.packageId, status: "not-wired" as const, lanes: [], reason: NOT_WIRED_LINE };
     },
     save: async (draft) => {
       saved.push(draft);

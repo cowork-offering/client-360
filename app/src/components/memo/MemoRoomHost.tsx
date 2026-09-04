@@ -7,6 +7,7 @@ import { askSession, sampleAvailable } from "../../channel/sampleDoor";
 import { buildMemoDossier } from "../../memo/dossier";
 import { renderPlanFor } from "../../memo/renderMemo";
 import { latestMemo, saveAttestations, saveMemoDraft, type MemoDraft } from "../../memo/store";
+import { publishDraft } from "../../memo/publishAdapter";
 import type { ActionHistoryRow } from "../../data/contract";
 import { MemoRoom, type MemoContext, type MemoDeps, type MemoNarrator } from "./MemoRoom";
 import { closeMemoRoom, useMemoRoom } from "./memoSession";
@@ -145,8 +146,16 @@ export function MemoRoomHost() {
   }, [dossier, packageId, session?.trigger, session?.carried, session?.carriedSplit, executed, latest]);
 
   const deps = useMemo<MemoDeps>(
-    () => ({ narrate: memoNarrator(), save: saveMemoDraft, saveAttestations }),
-    [],
+    () => ({
+      narrate: memoNarrator(),
+      save: saveMemoDraft,
+      saveAttestations,
+      /* THE REAL LANES (phase D), through the adapter: the acting banker and the
+         approval address come off the view's meta, never off the page. */
+      publish: (draft) =>
+        publishDraft(draft, { accountId: draft.accountId, packageId: draft.packageId, meta: data.meta }),
+    }),
+    [data.meta],
   );
 
   if (!session || !bundle || !dossier || !greeting) return null;

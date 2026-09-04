@@ -59,6 +59,7 @@ export const PROVENANCE = {
   "borrower.snapshot.primaryRiskRating": { kind: "NCINO", source: "Customer360Snapshot — nCino risk grade" },
   "borrower.snapshot.computedRiskRating": { kind: "NCINO", source: "Customer360Snapshot — the org's computed grade. Rendered only when staged; the cockpit derives no grade of its own" },
   "borrower.exposure.facilities[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan__c" },
+  "borrower.snapshot.afs": { kind: "GAP", source: "The AFS servicing key (bank/obligor/obligation) for this borrower. Not modelled in nCino: it travels with the relationship or it is absent, and absent renders the servicing gap marker rather than the AFS sample loan" },
   "borrower.exposure.facilities[].collateral[]": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Loan_Collateral2__c" },
   "borrower.exposure.facilities[].collateral[].collateralId": { kind: "NCINO", source: "Customer360Exposure — LLC_BI__Collateral__c record id from the pledge junction. The only valid anchor for a valuation write; absent means the id was not staged and the action is blocked" },
   "borrower.exposure.facilities[].totalLendableValue": { kind: "NCINO", source: "Customer360Exposure — the facility's PLEDGED SHARE, Σ LLC_BI__Amount_Pledged__c over the included pledges. NOT the summed whole-collateral lendable, which double-counts a cross-pledged asset. Null when no pledged share is recorded" },
@@ -216,6 +217,10 @@ export interface Meta {
   instanceUrl?: string;
   /** DISPLAY name of the viewer. Rendered, never sent to a tool. */
   user?: string;
+  /** The signed-in banker's email (from the sObject connector's getUserInfo). The memo
+   *  room routes the approval and its notification to it; absent means the room
+   *  asks before publishing. */
+  userEmail?: string;
   /**
    * The SALESFORCE USER ID (005…) of the connector identity, staged by the
    * assembler. This is the ONLY value the execute tools accept as
@@ -314,6 +319,28 @@ export interface Snapshot {
   computedRiskRating?: string;
   primaryStage?: string;
   note?: string;
+  /**
+   * WHERE THIS BORROWER'S SERVICING LIVES IN AFS (2026-09-04).
+   *
+   * AFS is keyed by bank/obligor/obligation and knows nothing about a
+   * Salesforce account id, so the mapping has to travel with the relationship.
+   * ABSENT IS THE NORMAL STATE and it means exactly one thing: we do not know,
+   * so the servicing module renders its gap marker. It must never fall back to
+   * the AFS tools' own defaults, which resolve to the sample loan of a
+   * DIFFERENT borrower.
+   */
+  afs?: AfsCoordinates;
+}
+
+/** The AFS servicing key for one obligation. Read by the memo room's servicing
+ *  adapter and by the workpackage it stages at the end of a publish. */
+export interface AfsCoordinates {
+  bank: string;
+  obligor: string;
+  obligation: string;
+  /** Loan officer code: drives officer-view visibility on a staged package. */
+  officer?: string;
+  assignmentUnit?: string;
 }
 
 export interface Covenant {

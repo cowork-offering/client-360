@@ -7,7 +7,8 @@ import { renderMemo, renderPlanFor, sectionsFrom, type MemoSection, type RenderP
 import { applyMemoOverrides, memoDateFrom, usesFromChanges, MEMO_TYPE_FOR, type MemoOverrides } from "../../memo/overrides";
 import { NARRATIVE_SPECS, narrativePrompt, narrativesFromReply, specFor, type NarrativeSpec } from "../../memo/narrative";
 import { attestedCount, fullyAttested, type MemoDraft, type MemoSectionRecord } from "../../memo/store";
-import { publishMemo, NOT_WIRED_LINE, type MemoPublication } from "../../memo/publish";
+import { NOT_WIRED_LINE, notWired } from "../../memo/publish";
+import type { RoomPublication as MemoPublication } from "../../memo/publishAdapter";
 import type { MemoChange, MemoDossier, MemoNarratives } from "../../memo/types";
 import { fmtMoney } from "../../data/format";
 import type { MemoGreeting } from "./memoGreeting";
@@ -150,7 +151,7 @@ const STREAM_FRAME_MS = 400;
 
 export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClose }: MemoRoomProps) {
   const narrate = deps?.narrate;
-  const publish = deps?.publish ?? publishMemo;
+  const publish = deps?.publish ?? ((d) => Promise.resolve({ ...notWired(d.memoId, d.packageId), reason: NOT_WIRED_LINE }));
 
   /* ------------------------------------------------------------- the memo */
 
@@ -677,19 +678,23 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
                   <span>Version</span>
                   <b>{ctx.packageId ?? "not anchored"}</b>
                 </div>
-                {publication?.memoRecordId && (
+                {publication?.nforms?.templateId && (
                   <div className="rc-r">
                     <TypeIcon kind="package" />
-                    <span>nCino memo</span>
-                    <b>{publication.memoRecordId}</b>
+                    <span>nFORMS memo</span>
+                    <b>{publication.nforms.templateId}</b>
                   </div>
                 )}
                 <div className="rc-line" />
                 <div className="rc-f">
-                  <span className="ok">✓</span>
-                  {publication?.status === "published"
-                    ? `Submitted for approval${publication.approvalQueue ? ` to ${publication.approvalQueue}` : ""}.`
-                    : NOT_WIRED_LINE}
+                  <span className={publication?.status === "published" && !publication.simulated ? "ok" : ""}>
+                    {publication?.status === "published" && !publication.simulated ? "✓" : "·"}
+                  </span>
+                  {/* "SUBMITTED" ONLY WHEN THE ORG SAW IT. A fixture answer or a
+                      failed lane reads as its own sentence, never as a publication. */}
+                  {publication?.status === "published" && !publication.simulated
+                    ? `Submitted for approval${publication.approval?.queue ? ` to ${publication.approval.queue}` : ""}.`
+                    : (publication?.reason ?? NOT_WIRED_LINE)}
                 </div>
               </div>
             </div>

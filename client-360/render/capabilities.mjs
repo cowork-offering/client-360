@@ -7,9 +7,11 @@
 // intent lane never subscribes, and every governed action is refused before it reaches the org.
 // The declaration therefore has to be derived, never typed from memory.
 //
-//   Customer 360  <- the org's own McpServerDefinition, via tool-names.mjs (org order, all of them)
-//   IDB Gateway   <- app/src/channel/mcp.ts TOOLS.boomRatios / boomSpread / llm
-//   Microsoft 365 <- app/src/channel/mcp.ts TOOLS.mailSearch
+//   Customer 360      <- the org's own McpServerDefinition, via tool-names.mjs (org order, all of them)
+//   IDB Gateway       <- app/src/channel/mcp.ts TOOLS.boomRatios / boomSpread / llm
+//   Microsoft 365     <- app/src/channel/mcp.ts TOOLS.mailSearch
+//   Experience / nCino <- app/src/channel/mcp.ts, the memo writeback and ledger tools
+//   AFS               <- app/src/channel/mcp.ts, the servicing reads and create_workpackage
 //
 // plus `sample` (the room's own Ask lane) and `db` (the intent store, and what makes the published
 // page organization-internal).
@@ -37,11 +39,28 @@ export const SERVERS = {
   customer360: "Customer 360",
   gateway: "IDB Gateway",
   m365: "Microsoft 365",
+  experience: "Experience / nCino",
+  afs: "AFS",
 };
 
 /** `TOOLS` keys in app/src/channel/mcp.ts, by the server that answers them. */
 const GATEWAY_KEYS = ["boomRatios", "boomSpread", "llm"];
 const M365_KEYS = ["mailSearch"];
+/** The memo room's writeback, in the order the publish sequence fires them,
+ *  then the two the room reads from. */
+const EXPERIENCE_KEYS = [
+  "syncMemoSections",
+  "publishCreditMemo",
+  "finalizeCreditMemo",
+  "submitForApproval",
+  "ncinoNotify",
+  "recordDecision",
+  "logAuditEvent",
+  "recallDecisions",
+  "covenantGrade",
+];
+/** Servicing: three reads and the workpackage the publish stages at the end. */
+const AFS_KEYS = ["afsLoanSummary", "afsPaymentHistory", "afsRevolverUtilization", "afsCreateWorkpackage"];
 
 /**
  * Read the named `TOOLS` entries out of the page's own channel module. Regex rather than a TS
@@ -94,6 +113,8 @@ export function buildCapabilities({ manifestPath = MANIFEST_PATH, channelPath = 
         { server: SERVERS.customer360, tools: manifestToolNames(manifestPath) },
         { server: SERVERS.gateway, tools: channelToolNames(GATEWAY_KEYS, channelPath) },
         { server: SERVERS.m365, tools: channelToolNames(M365_KEYS, channelPath) },
+        { server: SERVERS.experience, tools: channelToolNames(EXPERIENCE_KEYS, channelPath) },
+        { server: SERVERS.afs, tools: channelToolNames(AFS_KEYS, channelPath) },
       ],
     },
     sample: {},
