@@ -422,7 +422,8 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  /* Lifted from 0.15 to 0.30 on the founder's second look (2026-09-04). */
-  background: rgba(250, 251, 255, 0.3);
+  /* 0.15, then 0.30, then 0.40 on the founder's third look (2026-09-04: the
+     memo room only; the book behind it was still confusing). */
+  background: rgba(250, 251, 255, 0.4);
   pointer-events: none;
 }
