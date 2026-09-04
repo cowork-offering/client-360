@@ -5,7 +5,7 @@
    FINAL value on the first render. Animation is a progressive enhancement and
    never gates content, so the smoke tests read real figures, not "0". */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
@@ -20,6 +20,57 @@ function canAnimate(): boolean {
   return typeof requestAnimationFrame === "function" && !prefersReducedMotion();
 }
 
+/* =============================================================================
+   ONE LOOP FOR EVERY TWEEN ON THE PAGE (founder, 2026-09-04: the cockpit "seems
+   to overload").
+
+   `useCountUp` used to open a requestAnimationFrame loop of its own. That is
+   fine for one figure and wrong for a KPI band, an exposure table and a hero
+   that mount together: each loop is its own callback, its own setState and its
+   own React commit, and the browser runs all of them in the same frame anyway.
+   Five figures counting up was five renders a frame where one would do.
+
+   SO THERE IS ONE LOOP AND A SET OF SUBSCRIBERS. It starts on the first
+   subscriber and stops on the last, so a settled page holds no rAF at all; a
+   loop that runs forever to do nothing is the thing this file is trying to stop
+   other people from writing.
+   ============================================================================= */
+
+/** One tween's frame. Return false when it is finished. */
+type Tick = (now: number) => boolean;
+
+const ticks = new Set<Tick>();
+let pumpHandle = 0;
+
+function pump(now: number): void {
+  pumpHandle = 0;
+  // Iterate a copy: a tween that finishes removes itself, and one that starts
+  // another must not run twice in the frame it was added.
+  for (const tick of [...ticks]) {
+    let alive = false;
+    try {
+      alive = tick(now);
+    } catch {
+      alive = false;
+    }
+    if (!alive) ticks.delete(tick);
+  }
+  if (ticks.size) pumpHandle = requestAnimationFrame(pump);
+}
+
+/** Add a tween to the shared loop. Returns the removal, which is idempotent. */
+export function onAnimationFrame(tick: Tick): () => void {
+  ticks.add(tick);
+  if (!pumpHandle) pumpHandle = requestAnimationFrame(pump);
+  return () => {
+    ticks.delete(tick);
+    if (!ticks.size && pumpHandle) {
+      cancelAnimationFrame(pumpHandle);
+      pumpHandle = 0;
+    }
+  };
+}
+
 /** Ease-out cubic — decelerating, the banking-appropriate curve. */
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -27,7 +78,6 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
  *  when motion is reduced or rAF is unavailable. */
 export function useCountUp(target: number, durationMs = 420): number {
   const [value, setValue] = useState(() => (canAnimate() ? 0 : target));
-  const frame = useRef(0);
 
   useEffect(() => {
     if (!canAnimate()) {
@@ -35,13 +85,11 @@ export function useCountUp(target: number, durationMs = 420): number {
       return;
     }
     const start = performance.now();
-    const tick = (now: number) => {
+    return onAnimationFrame((now) => {
       const t = Math.min(1, (now - start) / durationMs);
       setValue(target * easeOut(t));
-      if (t < 1) frame.current = requestAnimationFrame(tick);
-    };
-    frame.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame.current);
+      return t < 1;
+    });
   }, [target, durationMs]);
 
   return value;

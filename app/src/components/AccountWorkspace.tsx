@@ -163,18 +163,55 @@ function useRingDraw(accountId: string | null) {
 function useWatermarkLean(hero: React.RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     if (prefersReducedMotion()) return;
-    const onMove = (e: PointerEvent) => {
-      const el = hero.current;
-      const wm = el?.querySelector<HTMLElement>(".acct-wm");
-      if (!el || !wm) return;
-      const r = el.getBoundingClientRect();
-      if (e.clientY < r.top - 80 || e.clientY > r.bottom + 80) return;
-      const dx = ((e.clientX - r.left) / r.width - 0.5) * -6;
-      const dy = ((e.clientY - r.top) / r.height - 0.5) * -4;
+
+    /* READ ONCE, WRITE ON A FRAME (founder, 2026-09-04: the cockpit "seems to
+       overload"). This handler used to call getBoundingClientRect on every
+       pointermove, which forces a synchronous layout of the whole document
+       between the browser's own hit test and its next paint, hundreds of times
+       a second, on the thread the pointer lives on, to move a watermark six
+       pixels. The rect is measured when the pointer ARRIVES and on the two
+       things that can move the hero underneath it; the move handler only
+       records where the pointer is, and a single scheduled frame does the
+       write. Identical depth, no reflow. */
+    let rect: DOMRect | null = null;
+    let at: { x: number; y: number } | null = null;
+    let queued = false;
+
+    const measure = () => {
+      rect = hero.current?.getBoundingClientRect() ?? null;
+    };
+
+    const paint = () => {
+      queued = false;
+      const wm = hero.current?.querySelector<HTMLElement>(".acct-wm");
+      if (!wm || !rect || !at) return;
+      if (at.y < rect.top - 80 || at.y > rect.bottom + 80) return;
+      const dx = ((at.x - rect.left) / rect.width - 0.5) * -6;
+      const dy = ((at.y - rect.top) / rect.height - 0.5) * -4;
       wm.style.transform = `translate(${dx.toFixed(1)}px,${dy.toFixed(1)}px)`;
     };
+
+    const onMove = (e: PointerEvent) => {
+      at = { x: e.clientX, y: e.clientY };
+      if (rect === null) measure();
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(paint);
+    };
+
+    const invalidate = () => {
+      rect = null;
+    };
+
+    measure();
     document.addEventListener("pointermove", onMove, { passive: true });
-    return () => document.removeEventListener("pointermove", onMove);
+    window.addEventListener("scroll", invalidate, { passive: true });
+    window.addEventListener("resize", invalidate, { passive: true });
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      window.removeEventListener("scroll", invalidate);
+      window.removeEventListener("resize", invalidate);
+    };
   }, [hero]);
 }
 

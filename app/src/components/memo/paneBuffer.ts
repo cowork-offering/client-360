@@ -45,6 +45,20 @@ export interface BufferPane {
   scrollTo: (top: number) => void;
   /** Paint the pane's part in the swap. The stylesheet owns what that means. */
   role: (role: PaneRole) => void;
+  /**
+   * THE FRAME THE READER IS NOT LOOKING AT GOES EMPTY.
+   *
+   * Two frames is how the pane never blanks; two LOADED frames is a memo
+   * composited twice, and a memo is a long document with its own stylesheet,
+   * its own layout and its own compositor layers. Once the dissolve is over the
+   * outgoing document has no reader and no job, so it is dropped and the next
+   * present builds a fresh one in an empty frame.
+   *
+   * Optional: a fake in the suite that only wants to prove the swap does not
+   * have to implement it, and a pane that cannot unload simply keeps its
+   * document, which is what the room did before this existed.
+   */
+  unload?: () => void;
 }
 
 export interface PaneBuffers {
@@ -59,6 +73,17 @@ export interface PaneBuffers {
   present: (html: string) => void;
   /** Which pane the reader is looking at. */
   visible: () => 0 | 1;
+  /**
+   * TRUE WHILE A DOCUMENT IS BEING BUILT AND HAS NOT LANDED YET.
+   *
+   * The room asks this before it spends a frame rebuilding the memo. A live
+   * preview that regenerates a whole document faster than the browser can parse
+   * one is not a preview, it is a queue: every superseded write throws away a
+   * parse that was already half done, and the thread it was thrown away on is
+   * the one the composer types into. While this is true the room holds what it
+   * has; the next frame it releases is the newest text, not a backlog.
+   */
+  pending: () => boolean;
   /** The document currently on the glass, or null before the first one. */
   shown: () => string | null;
   dispose: () => void;
@@ -102,6 +127,10 @@ export function createPaneBuffers(args: {
   /** The document being built in the hidden pane, or null when none is. */
   let pending: string | null = null;
   let unbind: (() => void) | null = null;
+  /** A document has been written into a frame and its load has not fired yet.
+   *  Covers the FIRST document too, which has no `pending` because there is
+   *  nothing to supersede, and which is the longest parse of the session. */
+  let loading = false;
   let fade = 0;
   let fadeEnd: (() => void) | null = null;
   let alive = true;
@@ -136,8 +165,10 @@ export function createPaneBuffers(args: {
       unbind = panes[vis].onLoad(() => {
         unbind?.();
         unbind = null;
+        loading = false;
         if (alive) args.onReady?.(panes[vis], vis);
       });
+      loading = true;
       panes[vis].write(html);
       return;
     }
@@ -148,6 +179,7 @@ export function createPaneBuffers(args: {
     unbind = panes[next].onLoad(() => {
       unbind?.();
       unbind = null;
+      loading = false;
       if (!alive) return;
       /* THE READER'S PLACE, CARRIED ACROSS BEFORE ANYONE SEES THE NEW PAGE. A
          document that dissolved in at the top and then jumped to the covenant
@@ -164,12 +196,19 @@ export function createPaneBuffers(args: {
       if (reduced || fadeMs <= 0) {
         panes[from].role("hidden");
         panes[next].role("visible");
+        panes[from].unload?.();
         return;
       }
       panes[next].role("arriving");
       fadeEnd = () => {
         panes[from].role("hidden");
         panes[next].role("visible");
+        /* AFTER THE VISIBLE ONE HAS PAINTED, NEVER BEFORE. Unloading while the
+           dissolve is still running would take the outgoing document off the
+           glass mid-fade, which is the flash this whole file exists to remove.
+           At this point the arriving frame is opaque and the other one is at
+           zero, so what is dropped is a document nobody can see. */
+        panes[from].unload?.();
       };
       fade = timer.set(() => {
         const end = fadeEnd;
@@ -177,15 +216,18 @@ export function createPaneBuffers(args: {
         end?.();
       }, fadeMs);
     });
+    loading = true;
     panes[next].write(html);
   };
 
   return {
     present,
     visible: () => vis,
+    pending: () => loading,
     shown: () => shown,
     dispose: () => {
       alive = false;
+      loading = false;
       unbind?.();
       unbind = null;
       timer.clear(fade);

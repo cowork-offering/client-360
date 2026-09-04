@@ -1,0 +1,287 @@
+#!/usr/bin/env node
+/* Customer 360, the LOOK GATE for the liquid pass.
+ *
+ * FOUNDER, 2026-09-04 (through the coordinator): the liquid glass itself has to
+ * run smooth. Every cheaper filter is a claim that the material is unchanged,
+ * and a claim about a material is settled by looking at it, not by reasoning
+ * about primitives. So: the same six surfaces, at 2x, before and after, and a
+ * per-pixel difference with a number on it.
+ *
+ *   node liquid-shots.mjs --out reference/liquid-shots/before --template /tmp/cockpit-BEFORE.html
+ *   node liquid-shots.mjs --out reference/liquid-shots/after
+ *   node liquid-shots.mjs --diff reference/liquid-shots/before --against reference/liquid-shots/after
+ *   node liquid-shots.mjs --out .../calm --mode calm      (what calm actually looks like)
+ *
+ * `--mode` is the value the cockpit's own `?refract=` takes: 3 for liquid (the
+ * default here), 0 for frost, `calm` for the quiet material. Shooting calm
+ * against liquid is how "calm changes exactly this much" stops being a claim.
+ *
+ * THE DIFF RUNS IN CHROMIUM, on purpose: the probe harness has playwright and
+ * nothing else, and a PNG decoder is exactly the kind of dependency a
+ * self-contained artifact's toolchain should not grow. Both images go onto a
+ * canvas in a blank page and the comparison is eleven lines of JS.
+ *
+ * 2x IS THE POINT. A displacement field, a rim mask and a blur radius are all
+ * things that survive a 1x screenshot and show at 2x, which is also the density
+ * every machine this is demoed on actually has.
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
+
+import { serveDir } from "./lib/serve.mjs";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, "..", "..");
+
+/* THE STATED THRESHOLD. Under these the material is the same material.
+   A mean absolute difference of one part in 255 is below what a display can
+   show and well below what an eye can find; the tail matters more than the
+   mean, so the share of pixels off by more than 8/255 is capped too. */
+export const LOOK_GATE = { meanAbs: 1.0, pctOver8: 0.5 };
+
+const SURFACES = [
+  {
+    id: "landing",
+    what: "the worklist, the weave and the bar over it",
+    go: async () => {}
+  },
+  {
+    id: "landing-bar",
+    what: "the top bar's lens with the headline sliding under it",
+    clip: ".topbar",
+    go: async (page) => { await page.evaluate(() => window.scrollTo(0, 220)); await page.waitForTimeout(500); }
+  },
+  {
+    id: "client",
+    what: "the client hero, its weave and its anchors",
+    go: async (page, sel) => { await page.click(sel.rowHartwell); await page.waitForTimeout(2200); }
+  },
+  {
+    id: "client-arc",
+    what: "the arc open: four satellites on the small lens",
+    go: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1600);
+      await page.click("#fab");
+      await page.waitForTimeout(900);
+    }
+  },
+  {
+    id: "room",
+    what: "the workroom pane, the biggest lens in the app",
+    go: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1400);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actFacility");
+      await page.waitForTimeout(2600);
+    }
+  },
+  {
+    id: "room-rail",
+    what: "a rail chip, where the small lens reads as thickness",
+    clip: ".wk-ent",
+    go: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1400);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actFacility");
+      await page.waitForTimeout(2000);
+      await page.evaluate(async (S) => {
+        const P = window.__P;
+        const pkg = await P.until(() => P.el(S.workroomPackageButton), 6000, 60);
+        if (pkg) pkg.click();
+        const fac = await P.until(() => P.el(S.workroomFacility), 6000, 60);
+        if (fac) fac.click();
+        await P.sleep(1400);
+      }, sel);
+      await page.waitForTimeout(600);
+    }
+  }
+];
+
+function args(argv) {
+  const o = {};
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("--")) o[a.slice(2)] = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : true;
+  }
+  return o;
+}
+
+async function shoot(o) {
+  const template = o.template ? path.resolve(o.template) : path.join(ROOT, "app", "dist", "cockpit.html");
+  if (!fs.existsSync(template)) { console.error(`FAIL: no bundle at ${template}`); process.exit(1); }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c360-shots-"));
+  execFileSync("node", [
+    path.join(ROOT, "app", "scripts", "assemble-artifact.mjs"),
+    path.join(ROOT, "artifact", "live-data.json"),
+    path.join(dir, "index.html"),
+    template
+  ], { stdio: "inherit" });
+
+  const T = JSON.parse(fs.readFileSync(path.join(HERE, "targets.port.json"), "utf8"));
+  const out = path.resolve(o.out);
+  fs.mkdirSync(out, { recursive: true });
+
+  const server = await serveDir(dir);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const surface of SURFACES) {
+      const ctx = await browser.newContext({
+        viewport: T.viewport,
+        deviceScaleFactor: 2,
+        /* THE MOTION IS OFF FOR THE SHOT, and only for the shot. Every arrival
+           in this app is a real animation, so a screenshot taken while one is
+           running is a comparison of two different moments rather than of two
+           materials. What is being judged here is the still material: the tint,
+           the frost, the rim, the bend. */
+        reducedMotion: "reduce",
+        colorScheme: "light"
+      });
+      await ctx.addInitScript({ path: path.join(HERE, "lib", "inject.js") });
+      await ctx.addInitScript({ path: path.join(HERE, "lib", "stub-connector.js") });
+      const page = await ctx.newPage();
+      await page.goto(server.url + `?refract=${o.mode ?? "3"}`, { waitUntil: "load" });
+      await page.waitForFunction(() => !!window.__P);
+      await page.waitForTimeout(1800);
+
+      await surface.go(page, T.sel).catch((e) => console.log(`[shots] ${surface.id}, setup: ${e.message}`));
+
+      const target = surface.clip ? await page.$(surface.clip) : null;
+      const file = path.join(out, `${surface.id}.png`);
+      if (surface.clip && !target) {
+        console.log(`[shots] ${surface.id}: SKIPPED, ${surface.clip} not on the page`);
+      } else if (target) {
+        await target.screenshot({ path: file });
+        console.log(`[shots] ${surface.id}, ${surface.what}`);
+      } else {
+        await page.screenshot({ path: file });
+        console.log(`[shots] ${surface.id}, ${surface.what}`);
+      }
+      await ctx.close();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  console.log(`[shots] wrote ${out}`);
+}
+
+async function diff(o) {
+  const a = path.resolve(o.diff);
+  const b = path.resolve(o.against);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto("about:blank");
+
+  const rows = [];
+  try {
+    for (const surface of SURFACES) {
+      const fa = path.join(a, `${surface.id}.png`);
+      const fb = path.join(b, `${surface.id}.png`);
+      if (!fs.existsSync(fa) || !fs.existsSync(fb)) {
+        rows.push({ id: surface.id, note: "missing on one side" });
+        continue;
+      }
+      const one = "data:image/png;base64," + fs.readFileSync(fa).toString("base64");
+      const two = "data:image/png;base64," + fs.readFileSync(fb).toString("base64");
+      const r = await page.evaluate(async ([srcA, srcB]) => {
+        const load = (src) => new Promise((res, rej) => {
+          const img = new Image();
+          img.onload = () => res(img);
+          img.onerror = rej;
+          img.src = src;
+        });
+        const [ia, ib] = await Promise.all([load(srcA), load(srcB)]);
+        if (ia.width !== ib.width || ia.height !== ib.height) {
+          return { note: `size ${ia.width}x${ia.height} vs ${ib.width}x${ib.height}` };
+        }
+        const draw = (img) => {
+          const c = document.createElement("canvas");
+          c.width = img.width;
+          c.height = img.height;
+          c.getContext("2d").drawImage(img, 0, 0);
+          return c.getContext("2d").getImageData(0, 0, img.width, img.height).data;
+        };
+        const da = draw(ia);
+        const db = draw(ib);
+        let sum = 0, max = 0, over2 = 0, over8 = 0;
+        /* WHERE the difference is, not just how much of it there is. A mean
+           inside the gate can still hide one patch that is completely wrong, and
+           a bounding box is the cheapest way to be told which part of the page
+           to go and look at. */
+        let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+        const pixels = ia.width * ia.height;
+        for (let i = 0; i < da.length; i += 4) {
+          const d = Math.max(
+            Math.abs(da[i] - db[i]),
+            Math.abs(da[i + 1] - db[i + 1]),
+            Math.abs(da[i + 2] - db[i + 2]),
+          );
+          sum += d;
+          if (d > max) max = d;
+          if (d > 2) over2 += 1;
+          if (d > 8) {
+            over8 += 1;
+            const px = (i / 4) % ia.width;
+            const py = Math.floor((i / 4) / ia.width);
+            if (px < x0) x0 = px;
+            if (py < y0) y0 = py;
+            if (px > x1) x1 = px;
+            if (py > y1) y1 = py;
+          }
+        }
+        return {
+          width: ia.width,
+          height: ia.height,
+          meanAbs: Math.round((sum / pixels) * 1000) / 1000,
+          maxAbs: max,
+          pctOver2: Math.round((over2 / pixels) * 100000) / 1000,
+          pctOver8: Math.round((over8 / pixels) * 100000) / 1000,
+          box: x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
+        };
+      }, [one, two]);
+      rows.push({ id: surface.id, ...r });
+    }
+  } finally {
+    await browser.close();
+  }
+
+  const head = ["surface", "size", "mean", "max", "% >2", "% >8", "where >8/255 is", "verdict"];
+  const cells = rows.map((r) => [
+    r.id,
+    r.note ? "-" : `${r.width}x${r.height}`,
+    r.note ? "-" : r.meanAbs.toFixed(3),
+    r.note ? "-" : String(r.maxAbs),
+    r.note ? "-" : r.pctOver2.toFixed(3),
+    r.note ? "-" : r.pctOver8.toFixed(3),
+    r.note || !r.box ? "-" : `${r.box.w}x${r.box.h} at ${r.box.x},${r.box.y}`,
+    r.note ? r.note : (r.meanAbs <= LOOK_GATE.meanAbs && r.pctOver8 <= LOOK_GATE.pctOver8 ? "held" : "CHANGED")
+  ]);
+  const w = head.map((h, i) => Math.max(h.length, ...cells.map((c) => c[i].length)));
+  const line = (c) => c.map((v, i) => (i === 0 ? v.padEnd(w[i]) : v.padStart(w[i]))).join("  ");
+  console.log("\n" + [line(head), w.map((n) => "-".repeat(n)).join("  "), ...cells.map(line)].join("\n"));
+  console.log(`\ngate: mean <= ${LOOK_GATE.meanAbs}/255 and pixels off by more than 8/255 <= ${LOOK_GATE.pctOver8}%\n`);
+
+  if (o.out) fs.writeFileSync(o.out, JSON.stringify({ gate: LOOK_GATE, rows }, null, 2));
+
+  const changed = rows.filter((r) => !r.note && !(r.meanAbs <= LOOK_GATE.meanAbs && r.pctOver8 <= LOOK_GATE.pctOver8));
+  if (o.check && changed.length) process.exit(1);
+}
+
+const o = args(process.argv);
+if (o.diff) await diff(o);
+else if (o.out) await shoot(o);
+else {
+  console.error("usage: liquid-shots.mjs --out <dir> [--template <bundle>]\n       liquid-shots.mjs --diff <dirA> --against <dirB> [--check] [--out report.json]");
+  process.exit(1);
+}

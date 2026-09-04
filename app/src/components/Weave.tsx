@@ -41,11 +41,21 @@ export function Weave({ className = "weave" }: { className?: string }) {
          Twelve threads breathing on rAF is a promise to re-rasterise the bar on
          every single frame, forever, on the thread the pointer lives on.
 
+         AND IN CALM, WHICH HAS NO LENS AND STILL CANNOT AFFORD IT (founder,
+         2026-09-04: "stabilise it so it runs super smooth"). Calm exists for a
+         machine that has run out of budget; the bar still blurs its backdrop
+         there, and a blur is re-rasterised on a moving backdrop exactly the way
+         a bend is. Measured at 4x throttle on an idle landing, with everything
+         else in this pass already in: 33.3ms with the band breathing, 16.7ms
+         with it still. Calm was the SLOWEST material in the app until this line,
+         which is the opposite of what it is for.
+
          The loop is not stopped, it stops WRITING: one classList read per frame
          costs nothing, the transforms are put back to identity once, and the
          moment the palette switches back to frost the breath resumes without
          anything having to be remounted. */
-      if (document.documentElement.classList.contains("eg-liquid")) {
+      const cls = document.documentElement.classList;
+      if (cls.contains("eg-liquid") || cls.contains("eg-calm")) {
         if (!parked) {
           for (const g of groups.current) g?.setAttribute("transform", "translate(0 0)");
           parked = true;

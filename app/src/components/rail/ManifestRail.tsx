@@ -31,6 +31,7 @@
    shared, not because the census is being dodged.
    ============================================================================= */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { pauseGroupWhenOffscreen } from "../../perf/motionGate";
 import "../../styles/rail.css";
 
 /** One chip of travel per arrow press: a keyboard step should read as one row
@@ -95,6 +96,28 @@ export function ManifestRail({ heading, count, action, label, newest = null, chi
     }
     readEdges();
   }, [newest, readEdges]);
+
+  /* A CHIP THE RAIL HAS SCROLLED PAST COSTS NOTHING (founder, 2026-09-04,
+     through the coordinator: the liquid glass itself has to run smooth).
+
+     The rail is a CLIPPED scroller, which is the one case the app's shared
+     off-screen observer cannot see on its own: a chip fifteen rows up is still
+     well inside the viewport and still completely invisible. Each chip carries a
+     url() reference filter in liquid (a CPU rasterisation of its whole backdrop
+     whenever that backdrop changes) and its own arrival animation. Watching
+     them against the RAIL rather than the window is what makes "off screen"
+     mean what it looks like, and `eg-off` then takes the lens and the motion off
+     exactly the chips nobody can see.
+
+     THE CHILDREN ARE THE ROOM'S, not the rail's, so there is no ref to hang on
+     them; the stack is read from the DOM after each commit instead. Re-observing
+     an element the observer already holds is a no-op in the platform, so a rail
+     that re-rendered without changing costs one loop over a dozen nodes. */
+  useEffect(() => {
+    const stack = vp.current?.firstElementChild;
+    if (!stack) return;
+    return pauseGroupWhenOffscreen(stack.children, vp.current);
+  }, [children]);
 
   /* KEYBOARD REACHABLE. A scrollable region that only a mouse wheel can move is
      a wall to anyone on a keyboard; the region takes focus and the arrows,

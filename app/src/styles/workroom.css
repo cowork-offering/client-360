@@ -2183,10 +2183,22 @@ body.wk-open #root {
   filter: blur(14px);
   opacity: 0;
   transition: opacity 1.4s var(--ease-out);
-  animation: aurarot 9s linear infinite;
 }
+/* IT ONLY TURNS WHILE IT IS LIT (founder, 2026-09-04: the room "gets delayed").
+   The rotation used to run on every aura in the room from the moment it
+   mounted, lit or not. An aura at opacity 0 is not free: `--aang` is a
+   registered angle, so every frame is a fresh conic gradient, and every fresh
+   conic gradient is a fresh 14px blur of it, over the card's whole box, on the
+   main thread, forever, for a halo nobody can see. Measured on the facility
+   room at 4x throttle: p95 983ms with the idle rotation, 333ms without it.
+
+   THE LIT HALO IS UNCHANGED, which is what the acceptance gate is about: the
+   box still never rotates (trap 3) and the ANGLE is still what animates, so
+   `haloBoxTransformIsStatic` and `haloAngleAnimates` both read exactly as they
+   did. What changed is that an unlit halo now costs what it looks like. */
 .wk-lit > .aura {
   opacity: 0.38;
+  animation: aurarot 9s linear infinite;
 }
 @keyframes aurarot {
   to {

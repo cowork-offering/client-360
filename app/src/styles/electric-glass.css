@@ -744,6 +744,53 @@ html.eg-liquid .eg-glass-satellite {
   backdrop-filter: url(#eg-liquid-soft) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
 }
 
+/* ============================================================================
+   THE LENS IS PAID FOR PER FRAME, SO IT IS ONLY ON WHEN IT CAN BE SEEN.
+
+   FOUNDER, 2026-09-04 (through the coordinator): calm and frost are the safety
+   net, not the answer. The LIQUID glass itself has to run smooth.
+
+   ABLATION, on this bundle, liquid at 4x CPU throttle (design/probes/perf.mjs
+   --ablate). The lens is not one cost among several; on the two surfaces a demo
+   lives on it is very nearly the whole bill:
+
+     landing, idle     p95 233ms with the lens, 50ms without it, 50ms with no
+                       backdrop-filter at all. The plain frost underneath is
+                       free by comparison.
+     client, tabs      p95 667ms with, 183ms without, 167ms with no backdrop.
+
+   Standing still, that cost is paid ONCE and cached. It is paid AGAIN on every
+   frame the backdrop underneath changes, which is exactly what a scroll is. So:
+
+     WHILE THE PAGE MOVES        every lens drops to the frost it already sits
+                                 on, and comes back 140ms after the last scroll
+                                 event (perf/scrollGate.ts). The bend is a rim
+                                 effect measured in single pixels and the eye is
+                                 tracking content, not inspecting chrome.
+     WHILE A RAIL CHIP IS OUT OF the same, from the shared IntersectionObserver
+     ITS OWN SCROLLER            rooted on the rail itself (perf/motionGate.ts,
+                                 rail/ManifestRail.tsx). The manifest is the one
+                                 clipped scroller with lensed content in it: a
+                                 chip fifteen rows up is inside the viewport and
+                                 completely invisible, and it was still a full
+                                 CPU filter pass. The arc satellites and the two
+                                 pane sheets need no rule here: they exist only
+                                 while they are on the screen.
+
+   BOTH ARE THE SAME DECLARATION: the plain blur that is already the floor for
+   every liquid surface. Nothing about the tint, the rim, the hairline or the
+   layout moves, so there is no reflow and no visible switch. The bend fades
+   out of a moving image and back into a still one. */
+html.eg-scrolling.eg-liquid.eg-refract-pane .eg-glass-workroom .wk-glass-sheet,
+html.eg-scrolling.eg-liquid .topbar,
+html.eg-scrolling.eg-liquid .wk-ent,
+html.eg-scrolling.eg-liquid .eg-glass-satellite,
+html.eg-liquid .wk-ent.eg-off {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+
 /* The narrator sliver keeps the app's own frost, off the lens for the reason it
    is off the bend and off the triple rim: at a 7px radius a rim mask has
    nowhere to land. */
@@ -767,10 +814,28 @@ html.eg-liquid .eg-glass-micro {
 
    They keep their resting appearance and stop moving. The weave does the same
    thing from its own rAF loop (Weave.tsx); the blooms simply do not move at all
-   any more. The room's own goo, its skeletons and the aura are all ABOVE the
-   pane's backdrop rather than behind it, and they cost the lens nothing. */
+   any more.
+
+   AND ONE THAT LOOPS *INSIDE* A LENS, WHICH THE FIRST PASS MISSED (founder,
+   2026-09-04, through the coordinator: the liquid glass itself has to run
+   smooth). `.dot-live::after` is the 2.4s pulse on the live dot, and the live
+   dot is IN the top bar, the one surface on the landing that carries a url()
+   reference filter. The rule above is about backdrops, and this is not a
+   backdrop; it is worse. An element repainting inside a lensed surface makes
+   that surface repaint, and a surface with a reference filter that repaints
+   re-runs the filter, on the CPU, over its whole region. A cockpit sitting on
+   the worklist with nobody touching it was re-rasterising the top bar's lens
+   sixty times a second to breathe a seven-pixel dot. Measured at 4x throttle on
+   an idle landing: p95 233ms with the lens carrying that loop, 50ms without a
+   lens at all.
+
+   THE DOT STAYS. It is the ring around it that stops, at its resting frame,
+   which is a 1.5px ring at 30%, the same thing it looks like for most of the
+   pulse anyway. The room's own goo, its skeletons and the aura are all ABOVE
+   the pane's backdrop rather than behind it, and they cost the lens nothing. */
 html.eg-liquid .fab::after,
-html.eg-liquid .pane .empty .wm {
+html.eg-liquid .pane .empty .wm,
+html.eg-liquid .dot-live::after {
   animation: none;
 }
 
@@ -869,4 +934,172 @@ html.eg-liquid .whisper:hover::before {
   html.eg-liquid .whisper::before {
     display: none;
   }
+}
+
+/* ============================================================================
+   CALM (founder, 2026-09-04: "when I share via video there is latency, stuff
+   gets delayed, the system seems to overload; stabilise it so it runs super
+   smooth, in all instances"), BEHIND `html.eg-calm`.
+
+   THE PAGE PUTS ITSELF HERE. `perf/calmSensor.ts` watches its own frame times
+   and drops the cockpit into this material after two seconds of missed frames;
+   the palette's "Glass: calm" asks for it outright, and "Glass: auto" is the
+   way back to liquid-with-a-sensor. It is a MATERIAL, not a degraded mode: the
+   layout, the type, the rims, the hairlines, the ink and every arrival
+   animation are the ones the cockpit always had.
+
+   FOUR THINGS CHANGE, AND ONLY FOUR.
+
+     1  NO BEND.       `applyGlass` takes `eg-refract` and `eg-liquid` off, so
+                       not one url() reference filter is rasterised. That is the
+                       single most expensive thing the page can do: Chromium
+                       runs it on the CPU, per backdrop pixel, on every change
+                       to the backdrop, which during a share is every frame.
+     2  THE LOWEST     Every sheet drops to the radius LIQUID uses, carrying
+        BLUR IN THE    frost's tint over it. The brief said "half the frost",
+        APP.           and half the frost is 14 to 18px, which measured SLOWER
+                       than liquid's own 7 to 10px: a backdrop blur is paid per
+                       pixel per frame and the radius is most of the bill, so a
+                       rescue material that costs more than the material it is
+                       rescuing you from is not a rescue. Measured at 4x on an
+                       idle landing: liquid steady p95 16.8ms, calm-at-half-frost
+                       33.4ms. Frost's tint is opaque enough to carry the
+                       separation on its own at this radius; the blur is only
+                       there so the edge of what is behind does not read as a
+                       cut-out.
+     3  NOTHING LOOPS. Every decorative infinite animation stops at its resting
+                       frame. What survives is what MEANS something at that
+                       moment: the working mark's breath, the skeleton shimmer
+                       under a read in flight, the sync spinner while a call is
+                       actually out, and the finale's single rainbow pass.
+     4  ONE SPECULAR.  The sweep is a liquid rule and does not match here, which
+                       is correct: it is the one piece of motion whose whole job
+                       is to show off a bend that is no longer there.
+
+   IT IS NOT REDUCED MOTION. A reader who asked for no motion gets the kill
+   switch at the top of this file; calm is a page that has run out of budget,
+   not a person who has asked for stillness, so entrances still animate and the
+   room still arrives the way it always did.
+   ========================================================================== */
+
+/* 1 + 2. THE SHEETS, AT THE LOWEST RADIUS IN THE APP. Same two-declaration
+   shape the bend uses (the -webkit- line first, for pre-18 WebKit), minus the
+   url() line that is the whole cost. The radii are LIQUID's, stated as numbers
+   for the same reason liquid states its own: this is not a scale derived from
+   the frost, it is the floor, and deriving it from anything would let it drift
+   back up the first time the frost moved. */
+html.eg-calm .eg-glass,
+html.eg-calm .topbar,
+html.eg-calm .whisper,
+html.eg-calm .wk-notice,
+html.eg-calm .wk-ent,
+html.eg-calm .wk-rescard,
+html.eg-calm .wk-toast,
+html.eg-calm .eg-glass-chip,
+html.eg-calm .eg-glass-satellite,
+html.eg-calm .eg-glass-micro,
+html.eg-calm .wk-hist,
+html.eg-calm .wk-propose,
+html.eg-calm .eg-glass-workroom .wk-glass-sheet {
+  --eg-rblur: 9px;
+  --eg-rsat: var(--eg-sat, 1.8);
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+/* The hand-rolled surfaces never set --eg-blur, so they state their own half,
+   exactly as they do under the bend. */
+html.eg-calm .topbar {
+  --eg-rsat: 1.85;
+}
+html.eg-calm .eg-glass-chip,
+html.eg-calm .eg-glass-satellite,
+html.eg-calm .eg-glass-micro,
+html.eg-calm .wk-hist,
+html.eg-calm .wk-propose {
+  /* A chip is small and sits on top of everything, so it keeps a little more
+     body than a sheet does. The same step liquid takes, for the same reason. */
+  --eg-rblur: 7px;
+}
+html.eg-calm .wk-hist {
+  --eg-rsat: 1.6;
+}
+html.eg-calm .wk-propose {
+  --eg-rsat: 1.7;
+}
+html.eg-calm .wk-notice,
+html.eg-calm .wk-ent,
+html.eg-calm .wk-rescard {
+  --eg-rsat: 1.8;
+}
+html.eg-calm .eg-glass-workroom .wk-glass-sheet {
+  /* The room is the biggest piece of glass and the one the reading happens on,
+     so it keeps the extra step liquid gives it too. */
+  --eg-rblur: 10px;
+  --eg-rsat: 1.7;
+}
+
+/* 3. THE LOOPS THAT STOP. Named one by one rather than swept with a wildcard:
+   a blanket rule would also stop the arrivals, and an entrance that never
+   arrives is a bug, not a saving. `animation: none` leaves each element at its
+   resting frame, which is what every one of these was designed to look like
+   before its first keyframe. */
+html.eg-calm .dot-live::after,      /* the live pulse in the bar */
+html.eg-calm .fab::after,           /* the FAB's 7s halo */
+html.eg-calm .pane .empty .wm,      /* the empty pane's watermark breath */
+html.eg-calm .c360-ambient-a,       /* the two 60px-blurred ambient blooms */
+html.eg-calm .c360-ambient-b,
+html.eg-calm .goo i,                /* the metaball blobs behind the mark */
+html.eg-calm .wk-orbit i,           /* the compile card's orbiting glow */
+html.eg-calm .aura {                /* the rotating conic halo */
+  animation: none;
+}
+
+/* THE TWO SVG FILTERS THAT ARE NOT BACKDROPS. `#wk-goo` is a real blur plus a
+   colour matrix over live content, re-run every frame the blobs move; with the
+   blobs stopped it is a still image being recomputed for nothing. The blobs
+   keep their positions and their tint, so the mark still has a halo. */
+html.eg-calm .goo,
+html.eg-calm .wk-orbit {
+  filter: none;
+}
+
+/* WHAT KEEPS MOVING, AND WHY EACH ONE EARNS IT.
+
+   THE MARK BREATHES. It is the one thing on the glass that says the room is
+   working, and a still mark during a draft is a room that looks hung.
+   The skeleton shimmer and the sync spinner are the same claim about a read
+   that is genuinely in flight; neither runs when nothing is happening.
+   THE FINALE'S SWEEP is a single iteration and needs no rule here: it is
+   already `1 both` and lands on a resting frame. What calm takes off it is the
+   breath that follows, which is decoration on a card the banker has finished
+   with. */
+html.eg-calm .wk-room[data-finale="still"] .wk-ex[data-finale-card] .wk-rescard > .aura {
+  animation:
+    aurarot var(--wk-fin-sweep, 2600ms) linear var(--wk-fin-hold, 0ms) 1 both,
+    wk-fin-glow var(--wk-fin-sweep, 2600ms) var(--ease-out) var(--wk-fin-hold, 0ms) 1 both;
+}
+
+/* ============================================================================
+   PAUSED, RATHER THAN STOPPED: the hidden document and the off-screen element.
+
+   `perf/motionGate.ts` writes both classes. `animation-play-state` rather than
+   `animation: none` on purpose: a page that comes back from a slide deck picks
+   its loops up mid-stride instead of snapping to a resting frame, and a card
+   scrolled back into the thread does the same.
+
+   THE HIDDEN RULE IS DELIBERATELY A WILDCARD. Every animation in the document
+   qualifies, arrivals included: nobody is watching any of them, and an arrival
+   that was mid-flight when the tab went away should finish where it left off.
+   ========================================================================== */
+html.eg-hidden *,
+html.eg-hidden *::before,
+html.eg-hidden *::after {
+  animation-play-state: paused !important;
+}
+.eg-off,
+.eg-off *,
+.eg-off *::before,
+.eg-off *::after {
+  animation-play-state: paused !important;
 }

@@ -158,6 +158,17 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--mm-fade, 240ms) var(--ease-settle);
+  /* SEALED (founder, 2026-09-04: the room gets "delayed" while it drafts).
+     `contain: strict` tells the engine that nothing inside this frame can
+     affect anything outside it: a memo re-laying itself out as a section lands
+     cannot invalidate the room's layout, and the frame paints into its own box.
+     Size containment is safe because the rule above states the size (inset 0,
+     100% by 100%) rather than taking it from the document inside.
+
+     ON THE BASE RULE, NOT ON `[data-role="visible"]`, because toggling
+     containment is itself a relayout: putting it on the state that changes
+     three times a section would have paid a layout to save one. */
+  contain: strict;
 }
 .mm-doc[data-role="visible"] {
   opacity: 1;

@@ -573,12 +573,16 @@ a.wk-opt:hover {
   flex-direction: column;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.94);
+  /* OPAQUE, AND NO SECOND BLUR (founder, 2026-09-04: the page "seems to
+     overload"). This card appears on hover OVER a sheet that is already
+     blurring its own backdrop, so its 14px was a second backdrop pass over
+     pixels that had just been through one, paid per frame, on the pointer's
+     own thread, at the exact moment the pointer is moving. At .94 white over a
+     blur there was nothing legible behind it to soften anyway; at 1 it reads
+     identically and costs a fill. */
+  background: rgb(255, 255, 255);
   border: 1px solid var(--glass-hairline);
   box-shadow: var(--glass-rim), 0 12px 32px -12px rgba(0, 0, 0, 0.25);
-  /* autoprefixer: ignore next */
-  -webkit-backdrop-filter: blur(14px) saturate(1.6);
-  backdrop-filter: blur(14px) saturate(1.6);
 }
 .wl-info:hover .wl-pop,
 .wl-info:focus-visible .wl-pop {

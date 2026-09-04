@@ -1,0 +1,82 @@
+{
+  "gate": {
+    "meanAbs": 1,
+    "pctOver8": 0.5
+  },
+  "rows": [
+    {
+      "id": "landing",
+      "width": 2720,
+      "height": 1800,
+      "meanAbs": 0.023,
+      "maxAbs": 3,
+      "pctOver2": 0.001,
+      "pctOver8": 0,
+      "box": null
+    },
+    {
+      "id": "landing-bar",
+      "width": 2720,
+      "height": 106,
+      "meanAbs": 1.046,
+      "maxAbs": 13,
+      "pctOver2": 11.424,
+      "pctOver8": 0.057,
+      "box": {
+        "x": 241,
+        "y": 21,
+        "w": 542,
+        "h": 10
+      }
+    },
+    {
+      "id": "client",
+      "width": 2720,
+      "height": 1800,
+      "meanAbs": 0.484,
+      "maxAbs": 255,
+      "pctOver2": 0.444,
+      "pctOver8": 0.423,
+      "box": {
+        "x": 294,
+        "y": 890,
+        "w": 2141,
+        "h": 887
+      }
+    },
+    {
+      "id": "client-arc",
+      "width": 2720,
+      "height": 1800,
+      "meanAbs": 0.484,
+      "maxAbs": 255,
+      "pctOver2": 0.444,
+      "pctOver8": 0.423,
+      "box": {
+        "x": 294,
+        "y": 890,
+        "w": 2142,
+        "h": 887
+      }
+    },
+    {
+      "id": "room",
+      "width": 2720,
+      "height": 1800,
+      "meanAbs": 0.114,
+      "maxAbs": 19,
+      "pctOver2": 0.103,
+      "pctOver8": 0.025,
+      "box": {
+        "x": 347,
+        "y": 28,
+        "w": 2144,
+        "h": 1752
+      }
+    },
+    {
+      "id": "room-rail",
+      "note": "missing on one side"
+    }
+  ]
+}

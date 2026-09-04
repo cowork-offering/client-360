@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { Portfolio } from "../data/contract";
 import { SERVERS, TOOLS, unwrapInvocableOne, watchTool, type McpFailure } from "./mcp";
 
@@ -16,8 +16,40 @@ export interface LivePortfolio {
 /** The book does not move second to second, so this sits well above the
  *  platform's ~30s polling floor. It exists so an expired MCP session heals
  *  itself: the watch re-reads on its own and the next good event clears the
- *  banner, instead of the failure standing until the view remounts. */
-export const PORTFOLIO_REFETCH_MS = 60_000;
+ *  banner, instead of the failure standing until the view remounts.
+ *
+ *  TWO MINUTES SINCE 2026-09-04, from one (founder: the cockpit "seems to
+ *  overload" on a shared screen). A refetch is not just a request: it is a
+ *  result delivered into React, a KPI band re-rendered and four figures counted
+ *  up again, and doing that every minute behind a demo buys nothing: the
+ *  portfolio a banker is talking over does not move while they talk. Two
+ *  minutes is still four times inside the observed idle expiry this exists to
+ *  survive, which is the only thing the interval was ever for. */
+export const PORTFOLIO_REFETCH_MS = 120_000;
+
+/* ------------------------------------------------------- the hidden document
+
+   A cockpit behind a slide deck must not poll. The platform throttles timers on
+   a hidden page but does not stop a watch, and the cost of a refetch is never
+   the request alone: it is the render it lands. So the watch is TORN DOWN when
+   the page goes away and REGISTERED AGAIN when it comes back, which also makes
+   the return a fresh read rather than a two-minute-old one. A quick tab flip is
+   served from the watch's own cache (staleTime) and costs nothing at all. */
+function subscribeVisibility(cb: () => void): () => void {
+  if (typeof document === "undefined") return () => {};
+  document.addEventListener("visibilitychange", cb);
+  return () => document.removeEventListener("visibilitychange", cb);
+}
+
+function documentVisible(): boolean {
+  return typeof document === "undefined" || document.visibilityState !== "hidden";
+}
+
+/** TRUE while the page is on screen. Server snapshot is `true`: a render with
+ *  no document is a render with no watch to pause. */
+export function usePageVisible(): boolean {
+  return useSyncExternalStore(subscribeVisibility, documentVisible, () => true);
+}
 
 /** Keep the home KPI band current from Customer360Portfolio.
  *
@@ -30,6 +62,7 @@ export const PORTFOLIO_REFETCH_MS = 60_000;
  *  with a staleness note, and only an authz denial retracts it. */
 export function useLivePortfolio(enabled: boolean): LivePortfolio {
   const [live, setLive] = useState<LivePortfolio>({});
+  const visible = usePageVisible();
   // Bumped by the banner's Retry: a new value tears the watch down and
   // registers it again, which is the only way to recover a registration that
   // failed outright.
@@ -41,7 +74,7 @@ export function useLivePortfolio(enabled: boolean): LivePortfolio {
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !visible) return;
     // Store the (synchronous) unsubscribe before anything can fire.
     const stop = watchTool(
       SERVERS.customer360,
@@ -79,7 +112,7 @@ export function useLivePortfolio(enabled: boolean): LivePortfolio {
       },
     );
     return stop;
-  }, [enabled, attempt]);
+  }, [enabled, attempt, visible]);
 
   return { ...live, retry };
 }

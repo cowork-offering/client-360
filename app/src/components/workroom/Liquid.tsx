@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import { BrandGlyph } from "../brand";
+import { useOffscreenPause } from "../../perf/motionGate";
 import "../../styles/liquid.css";
 
 /* =============================================================================
@@ -29,10 +31,19 @@ export function GooFilter() {
   );
 }
 
-/** The mark, breathing, with the goo behind it. `mini` is the in-thread size. */
+/** The mark, breathing, with the goo behind it. `mini` is the in-thread size.
+ *
+ *  IT STOPS WHEN IT SCROLLS AWAY (founder, 2026-09-04: the room gets "delayed").
+ *  A thread accumulates marks, and every one of them keeps three blobs moving
+ *  through an SVG metaball filter whether it is on the glass or four screens up.
+ *  The shared observer pauses the ones nobody is looking at and resumes them a
+ *  screen before they come back, so a mark is always already breathing by the
+ *  time it is seen. */
 export function LiquidMark({ mini = true }: { mini?: boolean }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  useOffscreenPause(ref);
   return (
-    <span className={`liquidmark ${mini ? "mini" : ""}`.trim()}>
+    <span ref={ref} className={`liquidmark ${mini ? "mini" : ""}`.trim()}>
       <span className="goo" aria-hidden="true">
         <i />
         <i />
@@ -58,8 +69,15 @@ export function LiquidMark({ mini = true }: { mini?: boolean }) {
    working, and that is the difference the banker reads.
    ============================================================================= */
 export function Orbit({ still = false }: { still?: boolean }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  useOffscreenPause(ref);
   return (
-    <span className={`wk-orbit${still ? " wk-orbit-still" : ""}`} aria-hidden="true" data-orbit={still ? "still" : "circling"}>
+    <span
+      ref={ref}
+      className={`wk-orbit${still ? " wk-orbit-still" : ""}`}
+      aria-hidden="true"
+      data-orbit={still ? "still" : "circling"}
+    >
       <i />
       <i />
       <i />

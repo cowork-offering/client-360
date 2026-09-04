@@ -230,9 +230,18 @@ export function steerTarget(text: string, sections: readonly MemoSection[]): str
    THE ROOM
    ----------------------------------------------------------------------------- */
 
-/** How often the pane re-renders while prose is streaming into it. The whole
- *  memo is rebuilt on every re-render, so a per-token rebuild would spend the
- *  room's frame budget on a document nobody is reading yet. */
+/** THE FLOOR on how often the pane re-renders while prose is streaming into it.
+ *  The whole memo is rebuilt on every re-render, so a per-token rebuild would
+ *  spend the room's frame budget on a document nobody is reading yet.
+ *
+ *  IT IS A FLOOR AND NOT THE WHOLE RULE (founder, 2026-09-04: the room "gets
+ *  delayed" while it drafts). A fixed 400ms is a promise the machine may not be
+ *  able to keep: on a laptop under a screen share one rebuild is a full memo
+ *  render, a review shell, and a browser parsing an entire document, which can
+ *  take longer than the interval. The room then generated a second document
+ *  before the first had landed, threw away a parse that was half done, and did
+ *  it again, on the same thread the composer types into. So the pane's own
+ *  readiness is the second half of the rule: see `busy` below. */
 const STREAM_FRAME_MS = 400;
 
 export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClose }: MemoRoomProps) {
@@ -432,6 +441,10 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
   /** Ask for one module's prose and stream it into the pane. TRUE where the
    *  desk answered; false leaves the memo's own pending placeholder where it
    *  sits, which is the honest render of a section nobody wrote. */
+  /** Whether the reading pane is mid-parse. Filled by `usePaneBuffers` further
+   *  down the body; a ref because the streaming callback is created before it. */
+  const paneBusy = useRef<() => boolean>(() => false);
+
   const writeSection = useCallback(
     async (spec: NarrativeSpec, title: string, steer?: string | null): Promise<boolean> => {
       if (!narrate) return false;
@@ -446,6 +459,12 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
           onText: (text) => {
             const now = Date.now();
             if (now - last < STREAM_FRAME_MS) return;
+            /* THE PANE SETS THE PACE IT CAN ACTUALLY KEEP. While a document is
+               still being parsed, another rebuild would replace it before it
+               landed: the reader sees nothing sooner and the main thread does
+               the work twice. The text is not lost: it is still in `reply`,
+               and the section lands in full below whatever happened here. */
+            if (paneBusy.current()) return;
             last = now;
             setStreaming(narrativesFromReply(spec, text));
           },
@@ -784,7 +803,7 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
     [bindTo],
   );
 
-  usePaneBuffers({ a: paneA, b: paneB, html: paneHtml, reduced, onReady: onPaneReady });
+  usePaneBuffers({ a: paneA, b: paneB, html: paneHtml, reduced, onReady: onPaneReady, busy: paneBusy });
 
   /* WHERE THE WORDS WILL LAND, MARKED WHERE THE BANKER IS READING. */
   useEffect(() => {
@@ -1269,13 +1288,33 @@ function paneFor(el: HTMLIFrameElement): BufferPane {
     const doc = el.contentDocument;
     return doc?.scrollingElement ?? doc?.documentElement ?? null;
   };
+  /* WHAT THIS FRAME IS SUPPOSED TO BE SHOWING, or null when it has been
+     emptied. Blanking a frame fires its `load` exactly the way a real document
+     does, and that event would otherwise reach the buffer's own handler and
+     swap an empty page onto the glass. The load is only the load we asked for
+     when the frame is carrying the document we last wrote. */
+  let want: string | null = null;
   return {
     write: (html) => {
+      want = html;
       el.srcdoc = html;
     },
     onLoad: (cb) => {
-      el.addEventListener("load", cb);
-      return () => el.removeEventListener("load", cb);
+      const guarded = () => {
+        if (want !== null && el.srcdoc === want) cb();
+      };
+      el.addEventListener("load", guarded);
+      return () => el.removeEventListener("load", guarded);
+    },
+    /* TWO FRAMES, ONE DOCUMENT (founder, 2026-09-04: the room gets "delayed"
+       while it drafts). The pane needs two frames to swap without blanking; it
+       does not need two MEMOS resident, each with its own stylesheet, layout
+       and compositor layers, for the whole of a seven-section draft. Once the
+       dissolve is over the frame that lost is emptied, and the next present
+       parses into an empty frame exactly as the first one did. */
+    unload: () => {
+      want = null;
+      el.srcdoc = "";
     },
     scrollTop: () => scroller()?.scrollTop ?? null,
     scrollTo: (top) => {
@@ -1303,6 +1342,8 @@ function usePaneBuffers(args: {
   html: string;
   reduced: boolean;
   onReady: (el: HTMLIFrameElement) => void;
+  /** Filled with "is a document still being parsed", for the stream pacing. */
+  busy?: React.MutableRefObject<() => boolean>;
 }): void {
   const { a, b, html, reduced } = args;
   const ready = useRef(args.onReady);
@@ -1324,10 +1365,15 @@ function usePaneBuffers(args: {
       },
     });
     buffers.current = built;
+    if (args.busy) args.busy.current = () => built.pending();
     return () => {
       built.dispose();
       buffers.current = null;
+      if (args.busy) args.busy.current = () => false;
     };
+    // `busy` is a ref container and is stable; depending on it would rebuild the
+    // buffers on every render and blank the pane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a, b, reduced]);
 
   useEffect(() => {

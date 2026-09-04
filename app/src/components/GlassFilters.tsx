@@ -131,24 +131,57 @@ export function GlassFilters() {
             TWO COMPOSITES CLOSE IT, not one. The centre pass can smear its own
             10px of transparent edge before the ring is ever applied, so the
             result goes over the lightly-bent image AND then over the untouched
-            source. Corners stay corners. */}
+            source. Corners stay corners.
+
+            ============================================================
+            THE FLUIDITY PASS (founder, 2026-09-04, through the
+            coordinator: the liquid glass itself has to run smooth).
+
+            ONE NOISE FIELD, NOT TWO. Every primitive here is paid over the
+            whole filter region on every frame that touches the surface, and
+            feTurbulence is the most expensive of them: it is Perlin noise
+            evaluated per pixel, per octave. There were two of them, plus a
+            smoothing blur each, to get two bends of different wavelengths.
+
+            They are now ONE field read through DIFFERENT CHANNELS. A
+            fractalNoise field's four channels are four independent noise
+            images, so the base bend takes (R, G) and the rim takes (B, R):
+            the rim's x is a channel the base never touched, and its y is
+            the base's x, which is a different AXIS. Nothing is correlated
+            along the axis it displaces, which is the only thing the second
+            field was ever buying. Two primitives out of eleven, and the two
+            most expensive ones.
+
+            THE ALPHA CHANNEL IS DELIBERATELY NOT ONE OF THEM. Filter
+            primitives operate on premultiplied colour; a blurred alpha read
+            as a displacement is a channel whose meaning has changed under
+            the blur. R, G and B are safe and there are exactly three of
+            them, which is what the two displacements need.
+
+            THE REGION IS THE ELEMENT, EXACTLY. It was -4% / 108%, which on a
+            1330px pane is 8 percent more pixels through every primitive
+            above. For a BACKDROP filter the input image is the element's own
+            box and there is nothing outside it but transparent black, so the
+            margin was buying a smear of nothing; the closing composite over
+            the untouched source is what keeps the corners, and it did that
+            before this changed. */}
         <filter
           id="eg-liquid"
-          x="-4%"
-          y="-4%"
-          width="108%"
-          height="108%"
+          x="0%"
+          y="0%"
+          width="100%"
+          height="100%"
           colorInterpolationFilters="sRGB"
         >
+          {/* the field, once. Between the two wavelengths it replaces. */}
+          <feTurbulence type="fractalNoise" baseFrequency="0.005" numOctaves={1} seed={7} result="lqN" />
+          <feGaussianBlur in="lqN" stdDeviation="2.2" result="lqNs" />
+
           {/* life: a small bend everywhere, so the middle is glass and not a window */}
-          <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves={1} seed={7} result="lqN" />
-          <feGaussianBlur in="lqN" stdDeviation="2" result="lqNs" />
           <feDisplacementMap in="SourceGraphic" in2="lqNs" scale={10} xChannelSelector="R" yChannelSelector="G" result="lqBase" />
 
-          {/* the rim field: longer wavelength, far bigger throw, ONE pass */}
-          <feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves={1} seed={11} result="lqE" />
-          <feGaussianBlur in="lqE" stdDeviation="2.5" result="lqEs" />
-          <feDisplacementMap in="lqBase" in2="lqEs" scale={56} xChannelSelector="R" yChannelSelector="G" result="lqHeavy" />
+          {/* the rim: far bigger throw, ONE pass, other channels of the same field */}
+          <feDisplacementMap in="lqBase" in2="lqNs" scale={56} xChannelSelector="B" yChannelSelector="R" result="lqHeavy" />
 
           {/* the ring, built from the element's own alpha */}
           <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="lqCoreSoft" />
@@ -161,23 +194,25 @@ export function GlassFilters() {
 
         {/* THE SAME LENS AT CHIP SCALE. A 40px satellite has no room for a 10px
             ring or a 56px throw: both are scaled to the geometry, or the pill
-            stops being a pill. Its region stays at 8 percent because 8 percent
-            of 40px is three pixels. */}
+            stops being a pill.
+
+            ONE FIELD AND THE ELEMENT'S OWN BOX, for the reasons written out on
+            the big lens above. The region was 8 percent, which is three pixels
+            on a 40px satellite and nothing anyone can see; what it cost was 16
+            percent more pixels through six primitives on every satellite in the
+            arc at once. */}
         <filter
           id="eg-liquid-soft"
-          x="-8%"
-          y="-8%"
-          width="116%"
-          height="116%"
+          x="0%"
+          y="0%"
+          width="100%"
+          height="100%"
           colorInterpolationFilters="sRGB"
         >
-          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves={1} seed={7} result="lsN" />
-          <feGaussianBlur in="lsN" stdDeviation="1.5" result="lsNs" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.009" numOctaves={1} seed={7} result="lsN" />
+          <feGaussianBlur in="lsN" stdDeviation="1.6" result="lsNs" />
           <feDisplacementMap in="SourceGraphic" in2="lsNs" scale={6} xChannelSelector="R" yChannelSelector="G" result="lsBase" />
-
-          <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves={1} seed={11} result="lsE" />
-          <feGaussianBlur in="lsE" stdDeviation="1.8" result="lsEs" />
-          <feDisplacementMap in="lsBase" in2="lsEs" scale={22} xChannelSelector="R" yChannelSelector="G" result="lsHeavy" />
+          <feDisplacementMap in="lsBase" in2="lsNs" scale={22} xChannelSelector="B" yChannelSelector="R" result="lsHeavy" />
 
           <feGaussianBlur in="SourceAlpha" stdDeviation="3.5" result="lsCoreSoft" />
           <feComposite in="SourceAlpha" in2="lsCoreSoft" operator="out" result="lsRim" />

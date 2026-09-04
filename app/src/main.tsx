@@ -8,30 +8,63 @@ import { acquireSample } from "./channel/sampleDoor";
 import { acquireDb } from "./channel/dbDoor";
 import { installSampleGateReadout } from "./channel/sampleMetrics";
 import { installIntentReadout, startIntentWatch } from "./intent/store";
-import { bootGlass, setGlass, type GlassMode } from "./glassMode";
+import { bootGlass, enterCalm, setGlass, watchGlassPreference, type GlassPreference } from "./glassMode";
+import { startCalmSensor } from "./perf/calmSensor";
+import { startHiddenPause } from "./perf/motionGate";
+import { startScrollGate } from "./perf/scrollGate";
 
 /* THE GLASS MODE IS DECIDED IN ONE PLACE, AND IT IS NOT THIS ONE.
 
-   `glassMode.ts` owns the precedence (query, then localStorage, then liquid),
-   the class names and the persistence; this file only asks it to run before
-   React mounts, so the first paint is already in the right material and no
-   surface flashes frost on its way to glass.
+   `glassMode.ts` owns the precedence (query, then localStorage, then auto), the
+   class names and the persistence; this file only asks it to run before React
+   mounts, so the first paint is already in the right material and no surface
+   flashes frost on its way to glass.
 
-   LIQUID IS THE DEFAULT AS OF 2026-09-03. `?refract=0` forces the frost the
-   cockpit shipped with and `?refract=1` the subtle bend, both for previews.
+   AUTO IS THE DEFAULT AS OF 2026-09-04, and auto paints liquid. `?refract=0`
+   forces the frost the cockpit shipped with, `?refract=1` the subtle bend and
+   `?refract=calm` the quiet material, all three for previews.
 
-   `window.c360Glass("liquid" | "subtle" | "frost")` flips it live, and
-   `window.c360Refract(on, liquid)` is kept as a shim over it because it is in
-   the compare-page notes and in muscle memory. Neither is how the founder
-   switches mid-demo: that is the command palette. */
+   `window.c360Glass("auto" | "liquid" | "subtle" | "frost" | "calm")` flips it
+   live, and `window.c360Refract(on, liquid)` is kept as a shim over it because
+   it is in the compare-page notes and in muscle memory. Neither is how the
+   founder switches mid-demo: that is the command palette.
+
+   THE SENSOR IS ARMED BEHIND `auto`, WHICH IS THE DEFAULT (founder, 2026-09-04:
+   "stabilise it so it runs super smooth, in all instances"). Auto boots into
+   liquid and watches its own frame times; two bad seconds and it drops to calm
+   for the session. An explicit choice from the palette disarms it, because a
+   viewer who asked for liquid on a struggling machine has been told what it
+   costs and has asked anyway. */
 declare global {
   interface Window {
-    c360Glass?: (mode: GlassMode) => GlassMode;
+    c360Glass?: (pref: GlassPreference) => string;
     c360Refract?: (on: boolean, liquid?: boolean) => { refract: boolean; liquid: boolean };
   }
 }
 
-bootGlass();
+let stopSensor: (() => void) | null = null;
+
+/** Arm behind `auto`, disarm behind everything else. Idempotent both ways. */
+function armSensor(pref: GlassPreference): void {
+  stopSensor?.();
+  stopSensor = null;
+  if (pref !== "auto") return;
+  stopSensor = startCalmSensor({
+    onCalm: () => {
+      stopSensor = null;
+      enterCalm();
+    },
+  });
+}
+
+armSensor(bootGlass());
+watchGlassPreference(armSensor);
+startHiddenPause();
+/* THE LENS COMES OFF WHILE THE PAGE MOVES, in every mode that has one. A url()
+   backdrop filter is re-rasterised on the CPU on every frame the backdrop
+   changes, and a scroll changes it on every frame; see perf/scrollGate.ts. */
+startScrollGate();
+
 window.c360Glass = setGlass;
 window.c360Refract = (on: boolean, liquid = false) => {
   const mode = setGlass(!on ? "frost" : liquid ? "liquid" : "subtle");

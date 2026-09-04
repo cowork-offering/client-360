@@ -84,6 +84,22 @@
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--dur-mid) var(--ease-out);
 }
+/* A CARD BELOW THE FOLD IS NOT LAID OUT, STYLED OR PAINTED (founder,
+   2026-09-04: the page "seems to overload"). An Activity or Exposure pane runs
+   several screens deep and every one of those rows was being laid out on every
+   tab switch; `content-visibility: auto` defers the ones nobody has scrolled to
+   yet, and `contain-intrinsic-size: auto` keeps the scrollbar honest by
+   remembering each card's real height once it has been measured.
+
+   THE ORG-FLOW CARD IS EXCLUDED, and this is the reason: content-visibility
+   applies PAINT containment at all times, not only while the card is skipped,
+   and the graph's route layer is `overflow: visible` on purpose, and its curves
+   are drawn outside the layer that owns them. A contained graph card would clip
+   its own routes. Nothing else in a pane paints outside its card. */
+.pane .card:not(:has(.oflowlayer)) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 260px;
+}
 .pane .card:hover {
   box-shadow: var(--shadow-card-hover);
 }

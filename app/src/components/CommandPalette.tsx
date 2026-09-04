@@ -8,7 +8,7 @@ import { relOpeningForAccount } from "./relationship/RelationshipRoom";
 import { mcpAvailable } from "../channel/mcp";
 import { MIN_QUERY, searchAccounts, type AccountMatch } from "../book/search";
 import { announce, bookHas, openAccountLive } from "../book/dynamicBook";
-import { currentGlass, setGlass } from "../glassMode";
+import { currentGlass, currentPreference, setGlass } from "../glassMode";
 import "../styles/cmdk.css";
 
 /* =============================================================================
@@ -218,23 +218,44 @@ export function CommandPalette() {
        of it. The choice is written to localStorage so the next open keeps it,
        and a browser that refuses storage still gets the switch for this view.
 
-       ONLY THE TWO MODES A HUMAN WOULD ASK FOR. `?refract=1`, the subtle bend,
-       is a preview lane for judging the two lenses side by side and it has no
-       row: nobody stands in front of a client and asks for the middle one. */
+       ONLY THE MODES A HUMAN WOULD ASK FOR. `?refract=1`, the subtle bend, is a
+       preview lane for judging the two lenses side by side and it has no row:
+       nobody stands in front of a client and asks for the middle one.
+
+       FOUR ROWS SINCE 2026-09-04, because the page now has an opinion of its
+       own. AUTO is the default and the one to come back to: liquid, with the
+       frame sensor behind it, dropping to calm if this machine cannot hold the
+       glass. CALM is that material asked for outright; the founder who knows
+       the next hour is a screen share does not have to wait to be rescued. */
     const glass = currentGlass();
+    const pref = currentPreference();
+    out.push({
+      id: "view:glass-auto",
+      label: "Glass: auto",
+      kind: "View",
+      aka: `adaptive liquid until it stutters then calm ${pref === "auto" ? "current active" : "switch back"}`,
+      run: () => setGlass("auto"),
+    });
     out.push({
       id: "view:glass-liquid",
       label: "Glass: liquid",
       kind: "View",
-      aka: `refraction bend lens ${glass === "liquid" ? "current active on" : "switch turn on"}`,
+      aka: `refraction bend lens ${pref === "liquid" ? "current active on" : "switch turn on"}`,
       run: () => setGlass("liquid"),
     });
     out.push({
       id: "view:glass-frost",
       label: "Glass: frost",
       kind: "View",
-      aka: `plain blur no refraction ${glass === "frost" ? "current active" : "switch turn off"}`,
+      aka: `plain blur no refraction ${pref === "frost" ? "current active" : "switch turn off"}`,
       run: () => setGlass("frost"),
+    });
+    out.push({
+      id: "view:glass-calm",
+      label: "Glass: calm",
+      kind: "View",
+      aka: `quiet screen share presenting still no bend half blur ${glass === "calm" ? "current active" : "switch"}`,
+      run: () => setGlass("calm"),
     });
 
     return out;

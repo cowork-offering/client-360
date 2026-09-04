@@ -2,9 +2,15 @@
 /* Assemble the publishable cockpit artifact: inject a data file into the
  * template's inert application/json slot.
  *
- * Usage: node assemble-artifact.mjs [dataFile] [outFile]
- *   dataFile default: ../artifact/live-data.json
- *   outFile  default: /tmp/c360-publish.html
+ * Usage: node assemble-artifact.mjs [dataFile] [outFile] [templateFile]
+ *   dataFile     default: ../artifact/live-data.json
+ *   outFile      default: /tmp/c360-publish.html
+ *   templateFile default: ../artifact/customer-360-template.html
+ *
+ * The template argument exists for MEASUREMENT, never for publishing: the perf
+ * probe assembles the bundle it just built (app/dist/cockpit.html) so a run
+ * measures the working tree. Promotion is still release-artifact.mjs and only
+ * release-artifact.mjs.
  *
  * HARD LESSON (2026-07-27): the bundle's own JS contains the literal
  * "__C360_DATA__" (load.ts PLACEHOLDER) and even the comment form of the
@@ -23,7 +29,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..", "..");
 const dataFile = process.argv[2] ?? resolve(root, "artifact", "live-data.json");
 const outFile = process.argv[3] ?? "/tmp/c360-publish.html";
-const templateFile = resolve(root, "artifact", "customer-360-template.html");
+const templateFile = process.argv[4] ?? resolve(root, "artifact", "customer-360-template.html");
 
 const FULL_TAG = '<script id="c360-data" type="application/json">/*__C360_DATA__*/</script>';
 

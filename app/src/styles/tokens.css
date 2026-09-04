@@ -566,11 +566,23 @@ body {
   animation: c360-slide-in var(--dur-mid) var(--ease-out) both;
 }
 
-/* Hover elevation for cards + rows — 1px lift, transform/shadow only. */
+/* Hover elevation for cards + rows: 1px lift, transform/shadow only.
+
+   WILL-CHANGE ONLY WHILE IT IS ABOUT TO CHANGE (founder, 2026-09-04: the page
+   "seems to overload"). This class is on every worklist row and every pane card,
+   and a standing `will-change: transform` puts EVERY ONE of them on its own
+   compositor layer for the whole life of the page: dozens of layers to hold a
+   one-pixel lift that at most one of them is doing at a time. Hover is the hint:
+   the promotion happens on pointer-enter, a frame before the transform it is
+   for, and the layer is handed back when the pointer leaves. */
 .c360-hover-lift {
   transition:
     box-shadow var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
+}
+.c360-hover-lift:hover,
+.c360-hover-lift:focus-visible,
+.c360-hover-lift:focus-within {
   will-change: transform;
 }
 .c360-hover-lift:hover {
@@ -584,17 +596,19 @@ body {
 .c360-dial {
   transition: stroke-dashoffset var(--dur-dial) var(--ease-out);
 }
-/* Horizontal meter: full-width track child, revealed via scaleX from the left. */
+/* Horizontal meter: full-width track child, revealed via scaleX from the left.
+   NO will-change on either meter: Chromium promotes an element for as long as a
+   transform transition is actually running, which is the 640ms these tween for,
+   so the hint only moved the promotion earlier, at the price of a permanent
+   compositor layer per meter, on a pane that can carry a dozen of them. */
 .c360-meter-x {
   transform-origin: left center;
   transition: transform var(--dur-dial) var(--ease-out);
-  will-change: transform;
 }
 /* Vertical chart bar: grown via scaleY from the baseline. */
 .c360-meter-y {
   transform-origin: bottom center;
   transition: transform var(--dur-dial) var(--ease-out);
-  will-change: transform;
 }
 /* The one bar carrying inline text (drawn-vs-committed) cannot scale without
    distorting its label, so it animates width — a single 640ms entry tween on
@@ -835,12 +849,14 @@ body {
   pointer-events: none;
   z-index: 0;
 }
+/* Same argument as the meters: the drift is a running animation, which is
+   promoted on its own, and calm stops it altogether. A standing hint on a 60px
+   blur is a large layer the compositor keeps whether it moves or not. */
 .c360-ambient span {
   position: absolute;
   display: block;
   border-radius: 50%;
   filter: blur(60px);
-  will-change: transform, opacity;
 }
 .c360-ambient-a {
   width: 46%;
