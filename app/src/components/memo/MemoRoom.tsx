@@ -61,7 +61,8 @@ export interface MemoContext {
   user?: string | null;
   /** `meta.generatedAt`. The room's only clock. */
   generatedAt: string;
-  instanceUrl?: string | null;
+  /** Where the request came from, where an instruction opened this session.
+   *  Null is the common case: most memos are asked for by a banker. */
   source?: MemoRequestSource | null;
 }
 
@@ -207,6 +208,10 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
   const [items, setItems] = useState<ThreadItem[]>(() => [
     { id: nextId(), who: "agent", text: greeting.lead },
     ...greeting.lines.map((line) => ({ id: nextId(), who: "agent" as Speaker, text: line })),
+    /* WHERE THE REQUEST CAME FROM, in one line, when an instruction opened this
+       session. A memo written off a client email should say so on its face: the
+       credit officer reading it later is entitled to know what asked for it. */
+    ...(sourceLine(ctx.source) ? [{ id: nextId(), who: "agent" as Speaker, text: sourceLine(ctx.source)! }] : []),
     { id: nextId(), who: "agent", text: greeting.ask },
   ]);
   const [draft, setDraft] = useState("");
@@ -262,6 +267,37 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
     [narrate, dossier, narratives, say],
   );
 
+  /* ------------------------------------------------------------ the store */
+
+  const buildDraft = useCallback(
+    (): MemoDraft => ({
+      memoId: `memo-${ctx.packageId ?? ctx.accountId}-${ctx.generatedAt}`,
+      accountId: ctx.accountId,
+      packageId: ctx.packageId ?? ctx.accountId,
+      trigger: ctx.trigger,
+      generatedAt: ctx.generatedAt,
+      generator: "cockpit",
+      renderPlan: plan,
+      sections: sections.map((s) => recordFor(s, sectionState)),
+      narratives,
+      html,
+      htmlStored: true,
+    }),
+    [ctx, plan, sections, sectionState, narratives, html],
+  );
+
+  const saveAttest = deps?.saveAttestations;
+  const save = deps?.save;
+  const latestDraft = useRef(buildDraft);
+  latestDraft.current = buildDraft;
+  useEffect(() => {
+    if (!saveAttest || !Object.keys(sectionState).length) return;
+    /* THE BUILDER IS READ THROUGH A REF ON PURPOSE. The write is triggered by an
+       ATTESTATION and by nothing else; depending on the builder itself would
+       fire it on every render the memo changes, which is every token of prose. */
+    void saveAttest(latestDraft.current());
+  }, [sectionState, saveAttest]);
+
   /** Draft every narrative section the render plan switched on, in order. */
   const runDraft = useCallback(async () => {
     if (busy) return;
@@ -284,26 +320,11 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
     }
     setDrafted(true);
     setBusy(false);
-  }, [busy, plan, narrate, sections, writeSection, say]);
-
-  /* ------------------------------------------------------------ the store */
-
-  const buildDraft = useCallback(
-    (): MemoDraft => ({
-      memoId: `memo-${ctx.packageId ?? ctx.accountId}-${ctx.generatedAt}`,
-      accountId: ctx.accountId,
-      packageId: ctx.packageId ?? ctx.accountId,
-      trigger: ctx.trigger,
-      generatedAt: ctx.generatedAt,
-      generator: "cockpit",
-      renderPlan: plan,
-      sections: sections.map((s) => recordFor(s, sectionState)),
-      narratives,
-      html,
-      htmlStored: true,
-    }),
-    [ctx, plan, sections, sectionState, narratives, html],
-  );
+    /* THE DRAFT OUTLIVES THE VIEW. A memo that were only stored on publication
+       would leave "Open latest memo" with nothing to open for every memo a
+       banker started and came back to. */
+    if (save) void save(latestDraft.current());
+  }, [busy, plan, narrate, sections, writeSection, say, save]);
 
   /* ------------------------------------------------------- the attestation */
 
@@ -331,15 +352,6 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
   /* WRITING THE ATTESTATION BACK IS BOOKKEEPING, NEVER A GATE. The glass has
      already recorded it; a store that refused the write leaves the room exactly
      as it is (memo/store.ts). */
-  const saveAttest = deps?.saveAttestations;
-  const save = deps?.save;
-  useEffect(() => {
-    if (!saveAttest || !Object.keys(sectionState).length) return;
-    void saveAttest(buildDraft());
-    // The draft is rebuilt from state the effect already depends on through
-    // `sectionState`; keying on the whole builder would write on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionState, saveAttest]);
 
   /* --------------------------------------------------------- the composer */
 
@@ -691,6 +703,14 @@ export function MemoRoom({ ctx, dossier, changes, greeting, latest, deps, onClos
 /* -----------------------------------------------------------------------------
    SMALL THINGS THE ROOM NEEDS
    ----------------------------------------------------------------------------- */
+
+/** What asked for this memo, in one line, or nothing at all. */
+function sourceLine(source: MemoRequestSource | null | undefined): string | null {
+  if (!source) return null;
+  const what = source.subject ? `"${source.subject}"` : null;
+  const who = source.from ? ` from ${source.from}` : "";
+  return `This one was asked for by ${source.kind}${who}${what ? `: ${what}` : ""}.`;
+}
 
 /** A section's record, from the sign-off state or as it stands: draft. */
 function recordFor(section: MemoSection, state: Record<string, MemoSectionRecord>): MemoSectionRecord {

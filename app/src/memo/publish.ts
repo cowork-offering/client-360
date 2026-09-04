@@ -41,26 +41,16 @@ export interface MemoPublication {
  *  apology and no retry: a capability that is not in this build is a fact. */
 export const NOT_WIRED_LINE = "Writeback lane not connected in this build.";
 
-/** The producer behind the seam. Phase D swaps the default for the real one. */
-export type MemoPublisher = (draft: MemoDraft) => Promise<MemoPublication>;
-
-const stub: MemoPublisher = async () => ({ status: "not-wired", reason: NOT_WIRED_LINE });
-
-let publisher: MemoPublisher = stub;
-
 /**
  * PUBLISH THE MEMO TO nCINO AND SUBMIT THE PACKAGE FOR APPROVAL.
  *
- * The room calls this and branches on `status`. It never inspects what is
- * behind the seam, which is what lets Phase D land the connector without
- * touching the room, and what lets the room's finale test drive a real
- * publication against an injected publisher.
+ * THIS FUNCTION IS THE SEAM, and Phase D's whole job on this side is to fill
+ * its body. The room calls it and branches on `status`; it never inspects what
+ * is behind it, which is why landing the connector touches no component. The
+ * room takes a publisher as an injected dep too, which is how the suite drives
+ * a published outcome without a connector; this is what the cockpit passes when
+ * nothing is injected.
  */
-export function publishMemo(draft: MemoDraft): Promise<MemoPublication> {
-  return publisher(draft);
-}
-
-/** Phase D's door, and the suite's. Passing undefined restores the stub. */
-export function setMemoPublisher(next: MemoPublisher | undefined): void {
-  publisher = next ?? stub;
+export async function publishMemo(_draft: MemoDraft): Promise<MemoPublication> {
+  return { status: "not-wired", reason: NOT_WIRED_LINE };
 }

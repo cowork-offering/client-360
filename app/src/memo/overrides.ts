@@ -2,10 +2,10 @@
    THE SUBSTITUTION SEAM: the memo says THIS borrower's facts, not the demo's.
 
    THE VENDORED RENDERER CARRIES LITERALS. It was written to render one fixture
-   for one demo, so seven values in it are typed into the source rather than
+   for one demo, so eight values in it are typed into the source rather than
    read off the dossier: the two names on the cover, the prepared date, the memo
-   type, a Sources and Uses row naming a specific machine, the guarantor's
-   relationship line, and a pro forma fixed-charge figure. Rendering a Hartwell
+   type, two rows naming a specific machine, the guarantor's relationship line,
+   and a pro forma fixed-charge figure. Rendering a Hartwell
    memo through it unchanged puts Piedmont's demo furniture under Hartwell's
    name, which is the one thing a credit memo may never do.
 
@@ -75,9 +75,7 @@ export interface MemoOverrides {
  *
  * `find` is what appears in the RENDERED html (so a `{{PLACEHOLDER}}` is listed
  * by the value the renderer substituted into it, not by the placeholder name).
- * `replace` returns what should stand there for this dossier, or null to leave
- * the vendored value alone, which no entry does today and which exists so a
- * future entry can be listed and deliberately not substituted.
+ * `replace` returns what should stand there for this dossier.
  */
 export interface LiteralSpec {
   id: string;
@@ -87,7 +85,7 @@ export interface LiteralSpec {
   find: string | RegExp;
   /** Why it cannot stay. One sentence, for whoever reads this table next. */
   why: string;
-  replace: (o: MemoOverrides, matched: RegExpMatchArray | null) => string | null;
+  replace: (o: MemoOverrides, matched: RegExpMatchArray | null) => string;
 }
 
 /** The marker, wrapped so a substituted cell reads as a gap and not as prose. */
@@ -118,7 +116,7 @@ export function esc(s: string): string {
 }
 
 /**
- * THE INVENTORY. Seven literals, found by reading the vendored renderer in
+ * THE INVENTORY. Eight literals, found by reading the vendored renderer in
  * Phase A and re-read against `renderMemo.vendor.mjs` on 2026-09-04.
  */
 export const HARDCODED_LITERALS: readonly LiteralSpec[] = [
@@ -203,16 +201,12 @@ export function applyMemoOverrides(html: string, overrides: MemoOverrides): stri
   for (const spec of HARDCODED_LITERALS) {
     if (typeof spec.find === "string") {
       if (!out.includes(spec.find)) continue;
-      const value = spec.replace(overrides, null);
-      if (value === null) continue;
-      out = out.split(spec.find).join(value);
+      out = out.split(spec.find).join(spec.replace(overrides, null));
       continue;
     }
     const match = spec.find.exec(out);
     if (!match) continue;
-    const value = spec.replace(overrides, match);
-    if (value === null) continue;
-    out = out.slice(0, match.index) + value + out.slice(match.index + match[0].length);
+    out = out.slice(0, match.index) + spec.replace(overrides, match) + out.slice(match.index + match[0].length);
   }
   return out;
 }

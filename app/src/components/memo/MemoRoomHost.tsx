@@ -159,7 +159,6 @@ export function MemoRoomHost() {
     trigger: session.trigger,
     user: data.meta?.user ?? null,
     generatedAt: data.meta?.generatedAt ?? "",
-    instanceUrl: data.meta?.instanceUrl ?? null,
     source: session.source,
   };
 
