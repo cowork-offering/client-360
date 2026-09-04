@@ -477,15 +477,19 @@ describe("the conversation", () => {
     expect(text(banker)).toBe("Draft it.");
     expect(banker.querySelector(".wk-bub")).toBeTruthy();
 
-    // AND THE REMARK UNDER EACH ARRIVING SECTION IS THE SAME BUBBLE.
-    const remark = bubbles().filter((b) => text(b).endsWith("written."));
-    expect(remark.length).toBeGreaterThan(0);
-    expect(remark[0].className).toContain("wk-agent");
-    expect(remark[0].dataset.who).toBe("Agent");
-    expect(remark[0].querySelectorAll(".wk-bub .wk-w").length).toBeGreaterThan(1);
+    /* AND THE LINE THAT CLOSES THE DRAFT IS THE SAME BUBBLE. The per-section
+       receipts are gone: the work is a timeline while it happens and one
+       compact row afterwards (founder, 2026-09-04), so what the agent says at
+       the end is a sentence about the memo rather than a seventh "X written." */
+    const closing = bubbles().filter((b) => text(b).startsWith("The memo is drafted"));
+    expect(closing).toHaveLength(1);
+    expect(closing[0].className).toContain("wk-agent");
+    expect(closing[0].dataset.who).toBe("Agent");
+    expect(closing[0].querySelectorAll(".wk-bub .wk-w").length).toBeGreaterThan(1);
 
-    // The settled exchanges stay mounted, dimmed, one class from coming back.
-    expect(room.querySelectorAll(".wk-thread > .wk-ex.mm-settled").length).toBeGreaterThan(0);
+    // The settled exchanges stay mounted and summonable, under their own row.
+    expect(room.querySelectorAll('.wk-thread > .wk-ex[data-settle-state="settled"]').length).toBeGreaterThan(0);
+    expect(room.querySelector(".wk-thread .wk-settled")).toBeTruthy();
   });
 });
 
@@ -655,8 +659,11 @@ describe("drafting and steering", () => {
       expect(prompt).toContain("FIGURES (the memo's own; use these and no others)");
       expect(prompt).toContain("Hartwell Precision Manufacturing LLC");
     }
-    // Each arrival is announced in one short line, and the chips have retired.
-    expect(text(room.querySelector(".wk-thread"))).toContain("written.");
+    /* EVERY SECTION IS A ROW ON THE TIMELINE, and every one of them landed. */
+    const rows = [...room.querySelectorAll<HTMLElement>(".mm-tl-row")];
+    expect(rows.length).toBe(prompts.length);
+    expect(rows.every((r) => r.dataset.state === "done")).toBe(true);
+    // And the chips have retired now the memo is on the glass.
     expect(room.querySelector(".mm-chip")).toBeNull();
   });
 

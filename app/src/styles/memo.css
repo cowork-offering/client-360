@@ -137,16 +137,38 @@
 .mm-frame {
   flex: 1;
   min-height: 0;
-  display: flex;
+  position: relative;
   animation: wk-in 550ms var(--ease-settle) both;
 }
+
+/* TWO FRAMES, EXACTLY ONE OF THEM ON THE GLASS (founder, 2026-09-04: "right
+   now it flickers and updates"). They are stacked rather than laid out side by
+   side, so the pane is one document deep at every moment; `paneBuffer.ts` owns
+   which is which and this owns what that looks like. A `srcdoc` reload is
+   invisible because it happens in the one at opacity zero. */
 .mm-doc {
-  flex: 1;
-  min-width: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-raised);
   box-shadow: var(--shadow-card);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mm-fade, 240ms) var(--ease-settle);
+}
+.mm-doc[data-role="visible"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* THE DISSOLVE. The arriving document sits ON TOP of the one it replaces and
+   fades up over it, so the reader never sees the frame's own background. */
+.mm-doc[data-role="arriving"] {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 2;
 }
 
 /* ------------------------------------------------------------- the door
@@ -178,6 +200,124 @@
   color: var(--ink-faint);
 }
 
+/* ------------------------------------------------------ the working exchange
+
+   FOUNDER, 2026-09-04: "when it drafts or steers, gentle loading with the >
+   getting filled; right now it flickers and updates, not sexy. [...] it should
+   be more like a timeline, think of when a connector connects in Claude Cowork,
+   elegant, always showing only the latest two interactions, and clear that it
+   is working on something."
+
+   ONE LEAD LINE AND ONE ROW PER SECTION. No card, no border, no second surface:
+   the timeline stands in the thread at the altitude of a bubble, in the room's
+   quietest type, and the only thing that moves on it is the row being written.
+   Everything below is opacity, colour and a clip; nothing reflows as a row
+   changes state, because a list that resized under the reader while it worked
+   would be exactly the jitter this replaces. */
+.mm-work {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 100%;
+  padding: 2px 0;
+}
+.mm-work-lead {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.mm-tl {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mm-tl-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  transition: color 240ms var(--ease-settle), opacity 240ms var(--ease-settle);
+}
+.mm-tl-row[data-state="queued"] {
+  opacity: 0.62;
+}
+.mm-tl-row[data-state="writing"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.mm-tl-row[data-state="done"] {
+  color: var(--ink-muted);
+}
+/* A LINE THE BANKER TYPED WHILE THIS RAN. It is not a section of the memo, so
+   it does not sit in the same column of type: it is the next thing that will
+   happen, said in their words. */
+.mm-tl-row[data-kind="steer"] .mm-tl-t {
+  font-style: italic;
+}
+
+/* THE MARK. A quiet dot ahead, a check behind, and the room's own breathing
+   mark on the row being written, with a second copy of the ">" over it in the
+   accent, clipped from the left to the draft's overall progress. That is the
+   founder's "> getting filled", and it is the room's existing vocabulary at a
+   smaller radius rather than a new loader. */
+.mm-tl-mark {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-label);
+}
+.mm-tl-dot {
+  font-size: 11px;
+  line-height: 1;
+}
+.mm-tl-row[data-state="done"] .mm-tl-dot {
+  color: var(--accent);
+  font-size: 10px;
+}
+.mm-tl-mark .liquidmark.mini {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+.mm-tl-mark .liquidmark.mini .goo i {
+  width: 13px;
+  height: 13px;
+}
+.mm-tl-fill {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--accent);
+  clip-path: inset(0 calc(100% - var(--mm-p, 0) * 100%) 0 0);
+  transition: clip-path 420ms var(--ease-settle);
+}
+.mm-tl-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mm-tl-s {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  opacity: 0.8;
+}
+
 /* ---------------------------------------------------------- the exchanges
 
    THE BUBBLES ARE THE ROOMS' OWN (founder, 2026-09-04). `.wk-ex`, `.wk-ex-in`,
@@ -186,14 +326,12 @@
    once in workroom.css and this room addresses them by the same names. Nothing
    about an exchange is restated here.
 
-   SETTLED EXCHANGES COLLAPSE (rule 1), and they stay mounted while they do it:
-   the room's history is one class away from coming back, never a re-render.
-   This room's reading of "collapsed" is a dimmed bubble rather than a summary
-   row, because a memo session has no what/how vocabulary to summarise into and
-   the credit officer is entitled to read the whole conversation back. */
-.mm-settled .wk-bub {
-  opacity: 0.44;
-}
+   SETTLED EXCHANGES COLLAPSE (rule 1), and they stay mounted while they do it.
+   This room used to read "collapsed" as a dimmed bubble, so a draft plus three
+   steers was twenty faded lines a banker could neither read nor dismiss. It is
+   the rooms' own choreography now: `.wk-ex-out` / `.wk-ex-gone` for the exit
+   and one `.wk-settled` row in its place, both styled in workroom.css, both
+   summonable. Nothing about either is restated here. */
 /* HEADROOM FOR THE FIRST EXCHANGE. The identity chip hangs 21px above its
    bubble and the thread's own 14px of top padding is less than that, so item
    zero would have its chip sliced by the scroller's edge. The same eight

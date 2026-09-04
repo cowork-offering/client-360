@@ -24,6 +24,7 @@
    ============================================================================= */
 
 import { sectionsFrom, type MemoSection } from "./renderMemo";
+import { WRITING_CLASS, WRITING_TAG_CLASS } from "./writingMark";
 import type { MemoSectionRecord } from "./store";
 import type { MemoAttestation, MemoAttestationEntry } from "./types";
 import type { MemoReviewer } from "./reviewShell";
@@ -166,6 +167,12 @@ export function liftReview(frame: ReviewFrame, sections: readonly MemoSection[])
  * because none of that is the memo. What is left is the renderer's section
  * with the narrative the banker retyped inside it, and the badge the shell
  * flipped, which IS part of the record.
+ *
+ * THE ROOM'S OWN WRITING MARK COMES OFF WITH IT (`writingMark.ts`). It is
+ * painted onto the live document rather than into the html, but a banker can
+ * edit a section while a LATER one is being written, and a memo that carried
+ * the word "writing" into the record would be the room leaking its own
+ * choreography into a credit document.
  */
 export function editedSectionHtml(doc: Document, modId: string): string | null {
   if (!MOD_ID.test(modId)) return null;
@@ -175,7 +182,9 @@ export function editedSectionHtml(doc: Document, modId: string): string | null {
   clone.querySelectorAll(".rv-ctrl").forEach((n) => n.remove());
   clone.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
   clone.querySelectorAll(".rv-narr-edit").forEach((n) => n.classList.remove("rv-narr-edit"));
+  clone.querySelectorAll(`.${WRITING_TAG_CLASS}`).forEach((n) => n.remove());
   clone.classList.remove("rv-editing");
+  clone.classList.remove(WRITING_CLASS);
   return clone.outerHTML;
 }
 
