@@ -733,6 +733,44 @@ html.eg-liquid .topbar {
   backdrop-filter: url(#eg-liquid) blur(var(--eg-rblur)) saturate(var(--eg-rsat));
 }
 
+/* AND THE ONE ROOM THAT CANNOT AFFORD IT: the memo room.
+ *
+ * FOUNDER, 2026-09-05: "we need to ensure the rooms are smooth without
+ * rendering issues without loosing the current look and feel."
+ *
+ * MEASURED (design/probes/perf.mjs, paired, liquid at 4x, the memo-room scene).
+ * With the lens on this room's sheet the pane holds 16.8ms at rest on some runs
+ * and 700 to 1600ms on others; taking the lens off THIS ROOM ONLY put the scene
+ * p95 at 250ms against 750ms and the at-rest p95 at 16.8ms against 716ms, which
+ * is the whole of what taking EVERY backdrop-filter in the app off achieves.
+ *
+ * WHY THIS ROOM AND NOT THE OTHERS: it is the only one with an iframe in it.
+ * The reading pane is a real document in a real frame, and a frame composites
+ * on its own account; ablating the frame out of the room (`--ablate no-memo-
+ * frame`) took the same at-rest p95 from 1150ms to 16.8ms with the lens still
+ * on. So the frame keeps the sheet's backdrop dirty forever, and the sheet then
+ * re-rasterises a CPU reference filter over 1.16 million pixels on every frame
+ * that nobody asked for. Promoting the frame onto its own compositor layer
+ * (`--ablate memo-frame-layer`) does NOT break that coupling: 550ms at rest.
+ * There is no CSS lever that decouples them; there is only paying or not.
+ *
+ * AND IT IS THE ROOM WITH THE LEAST BEND TO LOSE. The founder asked for this
+ * pane to be denser three times on 2026-09-04, ending at a flat 0.40 veil over
+ * the whole sheet (memo.css, `.wk-room.mm-room .wk-glass-sheet::after`) because
+ * "the book behind it was still confusing"; and its right-hand lane is covered
+ * edge to edge by an opaque document. A displacement measured in single pixels,
+ * under a 40 percent veil, half of it behind opaque paper. The look gate reads
+ * the difference rather than this paragraph: design/probes/liquid-shots.mjs,
+ * surfaces `memo-draft` and `memo-done`.
+ *
+ * The tint, the blur, the saturation, the veil, the rim and the hairline are
+ * untouched: this drops the url() and nothing else. */
+html.eg-liquid.eg-refract-pane .wk-room.mm-room .wk-glass-sheet {
+  /* autoprefixer: ignore next */
+  -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+  backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat));
+}
+
 /* THE SMALL LENS: the rail chips and the arc satellites. The chips moved off
    the big filter on the way here, which is also the right call on its own
    terms: a 200px chip given a pane's throw melts rather than bends. */

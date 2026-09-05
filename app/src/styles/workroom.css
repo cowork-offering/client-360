@@ -302,8 +302,12 @@ body.wk-open #root {
   flex-direction: column;
   gap: 32px;
 }
+/* BACKWARDS, NOT BOTH, for the reason `.wk-w` is (see the word-speech beat):
+   the forwards half of `both` would leave this wrapper holding `blur(0px)` and
+   a render surface for as long as the tier is on the stage. The exits below
+   keep their forwards fill, because an exit has to stay gone. */
 .wk-tier-in {
-  animation: wk-tier-in 520ms var(--ease-settle) both;
+  animation: wk-tier-in 520ms var(--ease-settle) backwards;
 }
 /* THE ARRIVAL IS CARRIED ONCE. The question tier is a bubble and already has
    the room's own entrance; the facilities are rows and stagger themselves. Only
@@ -318,11 +322,6 @@ body.wk-open #root {
     opacity: 0;
     transform: translate3d(0, 8px, 0) scale(0.985);
     filter: blur(5px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: none;
   }
 }
 /* Mid-exit: still laid out, shimmering out, and taking no clicks on its way. */
@@ -348,7 +347,7 @@ body.wk-open #root {
 }
 /* Summoned back. Quieter than the first arrival: it is a re-read, not news. */
 .wk-tier-back {
-  animation: wk-tier-in 340ms var(--ease-settle) both;
+  animation: wk-tier-in 340ms var(--ease-settle) backwards;
 }
 /* ==================================================== THE SETTLE CHOREOGRAPHY
    An exchange that has been decided leaves the stage (founder, 2026-09-03) and
@@ -739,16 +738,31 @@ body.wk-open #root {
   color: var(--ink-body);
 }
 /* THE AGENT SPEAKS, never pastes (rule 65): each word condenses out of the
-   glass on a 26ms stagger. Layout is pre-settled, so nothing reflows. */
+   glass on a 26ms stagger. Layout is pre-settled, so nothing reflows.
+
+   THE BEAT ENDS, AND SO DOES THE FILTER. This used to hold `filter: blur(4px)`
+   on the element and animate `to { filter: none }` with a FORWARDS fill, which
+   looks correct and is not: a forwards fill goes on applying the INTERPOLATED
+   end value, and a blur interpolated toward `none` lands on `blur(0px)`, which
+   is a filter. So every word the agent had ever spoken went on carrying a
+   filter that did nothing, and a filter is a render surface: the census read 32
+   of them in the facility room, 52 in the memo room and 64 in the relationship
+   room, with a compositor layer count that tracked the number almost exactly
+   (48, 76, 117). The population only grows, because a room never forgets a
+   sentence.
+
+   The from-state moved INTO the keyframe and the fill is BACKWARDS, so the
+   stagger's delay still shows the blurred word and the span reverts to its own
+   unfiltered style the moment the beat is over. The interpolation is the one
+   that was there before, blur(4px) to none, so this is pixel-identical while it
+   runs and free once it has run. */
 .wk-w {
-  opacity: 0;
-  filter: blur(4px);
-  animation: wkw 380ms var(--ease-out) forwards;
+  animation: wkw 380ms var(--ease-out) backwards;
 }
 @keyframes wkw {
-  to {
-    opacity: 1;
-    filter: none;
+  from {
+    opacity: 0;
+    filter: blur(4px);
   }
 }
 .wk-bub b,
@@ -2703,7 +2717,8 @@ body.wk-open #root {
    transition off. Everything hidden AT REST and revealed only by a keyframe is
    restored explicitly here, or the kill would hide content. */
 @media (prefers-reduced-motion: reduce) {
-  .wk-w,
+  /* `.wk-w` is not in this list: its from-state lives in its keyframe now, so
+     a word with no animation is already a word at rest. */
   .wk-rescard .rc-h,
   .wk-rescard .rc-r,
   .wk-rescard .rc-f,
@@ -2852,20 +2867,22 @@ body.wk-open #root {
 }
 /* A SPAN ONLY ANIMATES WHEN IT MOUNTS. React reconciles the remark's spans by
    index, so the ones already on the glass keep their nodes and their animation
-   does not re-run; only the words the pacer has just released are new. */
+   does not re-run; only the words the pacer has just released are new.
+
+   AND IT STOPS COSTING WHEN IT HAS MOUNTED, for the reason `.wk-w` above does:
+   the fill was `both`, and the forwards half of `both` left every released word
+   holding `blur(0px)` for the life of the remark. Backwards keeps the half that
+   is doing the work (the from-state, under the stagger) and drops the half that
+   was only leaving litter. */
 .wk-narr-live .wk-narr-line span,
 .wk-narr-live .wk-narr-list li,
 .wk-narr-live .wk-narr-row {
-  animation: wk-word-in 120ms var(--ease-out) both;
+  animation: wk-word-in 120ms var(--ease-out) backwards;
 }
 @keyframes wk-word-in {
   from {
     opacity: 0;
     filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    filter: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -103,6 +103,56 @@ const SURFACES = [
       }, sel);
       await page.waitForTimeout(600);
     }
+  },
+  {
+    /* THE OTHER TWO ROOMS. They were not on this list, which is why a rooms
+       pass could change them without the gate noticing. */
+    id: "relationship-room",
+    what: "the relationship room, its pane and its first question",
+    go: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1400);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actRelationship");
+      await page.waitForTimeout(2800);
+    }
+  },
+  {
+    id: "memo-draft",
+    what: "the memo room mid-draft, prose landing in the reading pane",
+    go: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1400);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actMemo");
+      await page.waitForTimeout(2000);
+      await page.evaluate(async () => {
+        const P = window.__P;
+        const draft = await P.until(() => document.querySelector('[data-chip="draft"]'), 8000, 80);
+        if (draft) draft.click();
+        await P.sleep(4000);
+      });
+    }
+  },
+  {
+    id: "memo-done",
+    what: "the memo room with the draft finished on the glass",
+    go: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1400);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actMemo");
+      await page.waitForTimeout(2000);
+      await page.evaluate(async () => {
+        const P = window.__P;
+        const draft = await P.until(() => document.querySelector('[data-chip="draft"]'), 8000, 80);
+        if (draft) draft.click();
+        await P.sleep(14000);
+      });
+    }
   }
 ];
 

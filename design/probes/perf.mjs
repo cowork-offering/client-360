@@ -129,7 +129,42 @@ const ABLATIONS = {
      sentence is twenty-five of them overlapping on a 26ms stagger. */
   "no-word-blur": `.wk-w { opacity: 1 !important; filter: none !important; animation: none !important; }
     .wk-narr-live .wk-narr-line span, .wk-narr-live .wk-narr-list li, .wk-narr-live .wk-narr-row {
-      opacity: 1 !important; filter: none !important; animation: none !important; }`
+      opacity: 1 !important; filter: none !important; animation: none !important; }`,
+
+  /* THE SAME BEAT, WITHOUT WHAT IT LEAVES BEHIND. `wkw` ends on `filter: none`,
+     but it is a `forwards` fill, and a forwards fill keeps applying the
+     INTERPOLATED end value: interpolating a blur toward `none` lands on
+     `blur(0px)`, which is not `none`. So every word the agent has ever spoken
+     goes on carrying a filter that does nothing and holds a render surface
+     open, for the life of the room. The census reads them: 32 spans in the
+     facility room, 52 in the memo room, 64 in the relationship room, and a
+     compositor layer count that tracks the number.
+
+     This ablation keeps the 380ms blur-in exactly as designed and removes only
+     the residue, by moving the identical from-state into the keyframe and
+     filling BACKWARDS so the element reverts to its own (unfiltered) style when
+     the beat is over. Pixel-identical by construction; the difference it
+     measures is purely what the leftovers cost. */
+  "word-blur-rest": `@keyframes wkw-rest { from { opacity: 0; filter: blur(4px); } }
+    .wk-w { opacity: 1; filter: none; animation-name: wkw-rest; animation-fill-mode: backwards; }`,
+
+  /* THE MEMO DOCUMENT ITSELF, out of the room. Diagnostic only: it answers
+     whether the frame is what keeps the pane's lens dirty, or whether the lens
+     is simply expensive in a room this size regardless of what is in it. */
+  "no-memo-frame": `.mm-doc { display: none !important; }`,
+
+  /* THE FRAME ON ITS OWN COMPOSITED LAYER. If the frame is the invalidator,
+     promoting it should stop its repaints reaching the sheet's backdrop root,
+     at the price of one layer and no pixels at all. */
+  "memo-frame-layer": `.mm-doc { will-change: transform; }`,
+
+  /* THE LENS OFF THE MEMO ROOM ONLY, every other room keeping it. The memo
+     room is the one the founder asked to make denser three times, ending at a
+     0.40 veil over the whole sheet, and its right-hand lane is covered by an
+     opaque document. It is the room with the least bend to lose. */
+  "no-memo-lens": `html.eg-liquid.eg-refract-pane .wk-room.mm-room .wk-glass-sheet {
+    -webkit-backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat)) !important;
+    backdrop-filter: blur(var(--eg-rblur)) saturate(var(--eg-rsat)) !important; }`
 };
 
 /* HOW LONG THE PAGE IS WATCHED DOING NOTHING, after each scene's gestures are
@@ -281,6 +316,78 @@ const SCENES = [
       framesLoaded: Array.prototype.slice.call(document.querySelectorAll(".mm-doc"))
         .filter((f) => (f.getAttribute("srcdoc") || "").length > 0).length
     }))
+  },
+  {
+    /* JUST THE KEYSTROKES. The room is already open and settled when the tape
+       starts (see `pre`), so this p95 is the one thing a banker judges the
+       cockpit on before anything else: whether the letters keep up with the
+       fingers. One `input` event per character, which is what a keyboard does
+       and what React re-renders on. */
+    id: "room-typing",
+    what: "a sentence typed into an open facility room, one key at a time",
+    pre: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1200);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actFacility");
+      await page.waitForTimeout(1800);
+      await page.evaluate(async (S) => {
+        const P = window.__P;
+        const pkg = await P.until(() => P.el(S.workroomPackageButton), 6000, 60);
+        if (pkg) pkg.click();
+        const fac = await P.until(() => P.el(S.workroomFacility), 6000, 60);
+        if (fac) fac.click();
+        await P.sleep(1400);
+      }, sel);
+    },
+    run: async (page, sel) => {
+      await page.evaluate(async (S) => {
+        const P = window.__P;
+        const box = P.el(S.workroomInput);
+        if (!box) return;
+        const line = "Increase the Line of Credit to $19M and hold the covenant";
+        for (let i = 1; i <= line.length; i++) {
+          P.type(box, line.slice(0, i));
+          await P.sleep(45);
+        }
+      }, sel);
+    },
+    witness: (page, sel) => page.evaluate((S) => ({
+      roomOpen: !!document.querySelector(".wk-root"),
+      typed: (P => { const b = P.el(S.workroomInput); return b ? b.value.length : 0; })(window.__P)
+    }), sel)
+  },
+  {
+    /* THE THIRD ROOM. It was missing from this list and it is the one the
+       census finds heaviest: it is the talkiest of the three, and every
+       sentence it speaks leaves its words behind. */
+    id: "relationship-room",
+    what: "the relationship room open, a question asked and answered",
+    run: async (page, sel) => {
+      await page.click(sel.rowHartwell);
+      await page.waitForTimeout(1200);
+      await page.click("#fab");
+      await page.waitForTimeout(500);
+      await page.click("#actRelationship");
+      await page.waitForTimeout(2200);
+      await page.evaluate(async (S) => {
+        const P = window.__P;
+        const box = await P.until(() => P.el(S.workroomInput), 6000, 60);
+        if (!box) return;
+        P.type(box, "Who signs for Hartwell?");
+        const send = P.el(S.workroomSend);
+        if (send) send.click();
+        await P.sleep(4000);
+      }, sel);
+    },
+    witness: (page) => page.evaluate(() => ({
+      roomOpen: !!document.querySelector(".rl-room"),
+      /* THE POPULATION THAT GROWS. Every one of these is a span the agent
+         spoke, and until the residue was fixed every one held a filter. */
+      spokenWords: document.querySelectorAll(".wk-w").length,
+      running: (() => { try { return document.getAnimations().filter((a) => a.playState === "running").length; } catch { return null; } })()
+    }))
   }
 ];
 
@@ -346,6 +453,17 @@ async function measure(browser, url, mode, rate, scene, sel, viewport, ablate) {
   // Boot, KPI count-up and the entry choreography are a scene of their own and
   // are not this one: every measurement starts from a settled page.
   await page.waitForTimeout(2500);
+
+  /* WHAT THE SCENE NEEDS TO EXIST, MEASURED BY NOBODY. A room has to be open
+     before a banker can type into it, and opening one is a React mount of a
+     whole pane: at 4x throttle that commit is tens of milliseconds by
+     arithmetic. Rolling it into the same p95 as the keystrokes hides the one
+     number the founder actually feels. A scene with a `pre` gets it done, and
+     settled, before the tape starts. */
+  if (scene.pre) {
+    await scene.pre(page, sel).catch((e) => errors.push("pre: " + String(e && e.message ? e.message : e)));
+    await page.waitForTimeout(1200);
+  }
 
   const glass = await page.evaluate(() => window.__PERF.glass());
   const token = await page.evaluate(() => window.__PERF.mark());
